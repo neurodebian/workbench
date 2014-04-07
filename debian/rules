@@ -1,0 +1,24 @@
+#!/usr/bin/make -f
+# -*- makefile -*-
+
+srcpkg = $(shell LC_ALL=C dpkg-parsechangelog | grep '^Source:' | cut -d ' ' -f 2,2)
+debver = $(shell LC_ALL=C dpkg-parsechangelog | grep '^Version:' | cut -d ' ' -f 2,2 )
+uver = $(shell echo $(debver) | cut -d '-' -f 1,1 )
+
+export  http_proxy=http://127.0.0.1:9/
+export  https_proxy=http://127.0.0.1:9/
+
+# export DEB_LDFLAGS_MAINT_APPEND = -Wl,--as-needed
+
+ifneq (,$(findstring noopt,$(DEB_BUILD_OPTIONS)))
+    export CFLAGS += -O0
+else
+    export CFLAGS += -O2
+endif
+
+# Uncomment this to turn on verbose mode.
+export DH_VERBOSE=1
+
+# Default mega-rule
+%:
+	dh $@ --parallel --sourcedirectory=src

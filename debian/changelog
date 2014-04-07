@@ -1,0 +1,5 @@
+connectome-workbench (0.85.0-1~pre1) UNRELEASED; urgency=low
+
+  * Initial packaging
+
+ -- Yaroslav Halchenko <debian@onerussian.com>  Mon, 07 Apr 2014 15:57:55 -0400
