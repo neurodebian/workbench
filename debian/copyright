@@ -1,42 +1,40 @@
 Format: http://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
 Upstream-Name: Connectome Workbench
 Source: http://www.humanconnectome.org/software/get-connectome-workbench.html
-Copyright: Copyright 2014 Washington University School of Medicine
-License: GPL-2+
 
 Files: *
-Copyright: Copyright 2014 Washington University School of Medicine
+Copyright: 2014 Washington University School of Medicine
 License: GPL-2+
 
 Files: Quazip/*
-Copyright: Copyright 2005-2011 Sergey A. Tachenov
-           Copyright 1998-2005 Gilles Vollant
-           Copyright 1990-2000 Info-ZIP
+Copyright: 2005-2011 Sergey A. Tachenov
+           1998-2005 Gilles Vollant
+           1990-2000 Info-ZIP
 License: LGPL-2.0+ and Zlib
 
 Files: Qwt/*
-Copyright: Copyright 1997 Josef Wilgen
-           Copyright 2002 Uwe Rathmann
+Copyright: 1997 Josef Wilgen
+           2002 Uwe Rathmann
 License: Qwt-1.0
 
 Files: GlfFont/glf.* src/Resources/*.glf
-Copyright: Copyright 2000 Romka Graphics
-           Copyright 2014 Washington University School of Medicine
+Copyright: 2000 Romka Graphics
+           2014 Washington University School of Medicine
 License: GPL-2+
 
 Files: Common/Base64.* Common/DataCompressZLib.* Common/MathFunctions.* Nifti/Matrix4x4.cxx
-Copyright: Copyright 1993-2008 Ken Martin, Will Schroeder, Bill Lorensen
-           Copyright 2014 Washington University School of Medicine
+Copyright: 1993-2008 Ken Martin, Will Schroeder, Bill Lorensen
+           2014 Washington University School of Medicine
 License: VTK-BSD-3-Clause and GPL-2+
 
 Files: GuiQt/WuQDialog.cxx
-Copyright: Copyright 2014 Washington University School of Medicine
-           Copyright 2012 Digia Plc and/or its subsidiary(-ies).
+Copyright: 2014 Washington University School of Medicine
+           2012 Digia Plc and/or its subsidiary(-ies).
 License: GPL-2+
 
 Files: Files/SignedDistanceHelper.cxx src/Algorithms/AlgorithmVolumeToSurfaceMapping.cxx
-Copyright: Copyright 2014 Washington University School of Medicine
-           Copyright 1970-2003, Wm. Randolph Franklin
+Copyright: 2014 Washington University School of Medicine
+           1970-2003, Wm. Randolph Franklin
 License: GPL-2+ and PNPOLY-BSD-3-Clause
 
 License: GPL-2+
@@ -133,7 +131,7 @@ License: Qwt-1.0
 License: VTK-BSD-3-Clause
  Redistribution and use in source and binary forms, with or without modification,
  are permitted provided that the following conditions are met:
- 
+ .
  * Redistributions of source code must retain the above copyright notice, this list
  of conditions and the following disclaimer.
  .
