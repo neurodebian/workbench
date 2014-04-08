@@ -1,0 +1,13 @@
+--- a/src/Desktop/CMakeLists.txt
++++ b/src/Desktop/CMakeLists.txt
+@@ -108,6 +108,10 @@ Quazip
+ ${QT_LIBRARIES}
+ ${ZLIB_LIBRARIES}
+ #${LIBS}
++# Because of linking Operations providing ShowScene needing OSMESA
++${OSMESA_OFFSCREEN_LIBRARY}
++${OSMESA_GL_LIBRARY}
++${OSMESA_GLU_LIBRARY}
+ )
+ 
+ IF(WIN32)
