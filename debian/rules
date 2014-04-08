@@ -22,3 +22,8 @@ export DH_VERBOSE=1
 # Default mega-rule
 %:
 	dh $@ --parallel --sourcedirectory=src
+
+override_dh_auto_configure:
+	OSMESA_DIR=/usr \
+    dh_auto_configure -- \
+      -DBUILD_SHARED_LIBS:BOOL=ON
