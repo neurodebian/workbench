@@ -16,6 +16,8 @@ else
     export CFLAGS += -O2
 endif
 
+export DEB_LDFLAGS_MAINT_APPEND = -Wl,--as-needed
+
 # Uncomment this to turn on verbose mode.
 export DH_VERBOSE=1
 
@@ -25,5 +27,5 @@ export DH_VERBOSE=1
 
 override_dh_auto_configure:
 	OSMESA_DIR=/usr \
-    dh_auto_configure -- \
-      -DBUILD_SHARED_LIBS:BOOL=ON
+     dh_auto_configure --
+#-DBUILD_SHARED_LIBS:BOOL=ON

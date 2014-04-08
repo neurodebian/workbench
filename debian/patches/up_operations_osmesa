@@ -1,0 +1,51 @@
+--- a/src/CommandLine/CMakeLists.txt
++++ b/src/CommandLine/CMakeLists.txt
+@@ -55,6 +55,7 @@ ENDIF (APPLE)
+ TARGET_LINK_LIBRARIES(${EXE_NAME}
+ Commands
+ Operations
++Operations-osmesa
+ Algorithms
+ OperationsBase
+ Brain
+--- a/src/Operations/CMakeLists.txt
++++ b/src/Operations/CMakeLists.txt
+@@ -55,7 +55,6 @@ OperationProbtrackXDotConvert.h
+ OperationSetMapName.h
+ OperationSetMapNames.h
+ OperationSetStructure.h
+-OperationShowScene.h
+ OperationSpecFileMerge.h
+ OperationSurfaceClosestVertex.h
+ OperationSurfaceCoordinatesToMetric.h
+@@ -114,7 +113,6 @@ OperationProbtrackXDotConvert.cxx
+ OperationSetMapName.cxx
+ OperationSetMapNames.cxx
+ OperationSetStructure.cxx
+-OperationShowScene.cxx
+ OperationSpecFileMerge.cxx
+ OperationSurfaceClosestVertex.cxx
+ OperationSurfaceCoordinatesToMetric.cxx
+@@ -161,8 +159,21 @@ ${CMAKE_SOURCE_DIR}/Common
+ #
+ # Mesa Library used by show scene command
+ #
++# Placed into a separate library so that Operations
++# could be dynamically linked without linking against
++# OSMESA, so that Desktop build would not require
++# linking against OSMESA
++ADD_LIBRARY(Operations-osmesa
++	OperationShowScene.h
++    OperationShowScene.cxx
++)
++
+ IF (OSMESA_FOUND)
+-    ADD_DEFINITIONS(${OSMESA_DEFINITION})
++    SET_TARGET_PROPERTIES(Operations-osmesa PROPERTIES COMPILE_FLAGS ${OSMESA_DEFINITION})
++    TARGET_LINK_LIBRARIES(Operations-osmesa
++      ${OSMESA_OFFSCREEN_LIBRARY}
++      ${OSMESA_GL_LIBRARY}
++      ${OSMESA_GLU_LIBRARY})
+     INCLUDE_DIRECTORIES(${OSMESA_INCLUDE_DIRECTORY})
+ ENDIF (OSMESA_FOUND)
+ 

@@ -1,0 +1,215 @@
+From: Yaroslav Halchenko <debian@onerussian.com>
+Subject: Reorder linking and actually "install" generated .so
+
+ For now disabled since incomplete.  Corresponding changes in debian/rules also commented out
+
+Last-Update: 2014-04-08
+
+--- a/src/Desktop/CMakeLists.txt
++++ b/src/Desktop/CMakeLists.txt
+@@ -87,7 +87,10 @@ ENDIF (NOT APPLE)
+ # Libraries that are linked
+ #
+ TARGET_LINK_LIBRARIES(${EXE_NAME}
++${QT_LIBRARIES}
++${ZLIB_LIBRARIES}
+ GuiQt
++Quazip
+ Operations
+ Algorithms
+ OperationsBase
+@@ -104,9 +107,6 @@ FilesBase
+ Scenes
+ Xml
+ Common
+-Quazip
+-${QT_LIBRARIES}
+-${ZLIB_LIBRARIES}
+ #${LIBS}
+ )
+ 
+--- a/src/Brain/CMakeLists.txt
++++ b/src/Brain/CMakeLists.txt
+@@ -289,3 +289,7 @@ ${CMAKE_SOURCE_DIR}/Scenes
+ ${CMAKE_SOURCE_DIR}/Xml
+ ${CMAKE_SOURCE_DIR}/Common
+ )
++
++TARGET_LINK_LIBRARIES(Brain ${OPENGL_LIBRARIES} GlfFont)
++
++WORKBENCH_INSTALL_LIBRARY(Brain)
+--- a/src/GuiQt/CMakeLists.txt
++++ b/src/GuiQt/CMakeLists.txt
+@@ -425,3 +425,6 @@ ${CMAKE_SOURCE_DIR}/Scenes
+ ${CMAKE_SOURCE_DIR}/Xml
+ ${CMAKE_SOURCE_DIR}/Common
+ )
++
++TARGET_LINK_LIBRARIES(GuiQt ${QT_LIBRARIES} Qwt)
++WORKBENCH_INSTALL_LIBRARY(GuiQt)
+--- a/src/Operations/CMakeLists.txt
++++ b/src/Operations/CMakeLists.txt
+@@ -156,6 +156,8 @@ ${CMAKE_SOURCE_DIR}/Xml
+ ${CMAKE_SOURCE_DIR}/Common
+ )
+ 
++TARGET_LINK_LIBRARIES(Operations Quazip)
++
+ #
+ # Mesa Library used by show scene command
+ #
+@@ -177,3 +179,5 @@ IF (OSMESA_FOUND)
+     INCLUDE_DIRECTORIES(${OSMESA_INCLUDE_DIRECTORY})
+ ENDIF (OSMESA_FOUND)
+ 
++WORKBENCH_INSTALL_LIBRARY(Operations)
++WORKBENCH_INSTALL_LIBRARY(Operations-osmesa)
+--- a/src/CMakeLists.txt
++++ b/src/CMakeLists.txt
+@@ -22,8 +22,7 @@ ADD_DEFINITIONS(-DVELAB_INTERNAL_RELEASE
+ # statement or else an infinite loop will occur indicating
+ # that the compiler has been redefined.
+ #
+- 
+- 
++
+ 
+ IF(APPLE)
+     ADD_DEFINITIONS(-DCARET_OS_MACOSX)
+@@ -282,6 +281,12 @@ ENDIF (EXISTS $ENV{OSMESA_DIR})
+ 
+ #=============================================================================
+ 
++# Helper macro to install all the internal libraries uniformly
++FUNCTION(WORKBENCH_INSTALL_LIBRARY _lib)
++  INSTALL(TARGETS ${_lib}
++     LIBRARY DESTINATION lib COMPONENT libraries
++     ARCHIVE DESTINATION lib/static COMPONENT libraries)
++ENDFUNCTION()
+ 
+ #
+ # All subdirectories that will be configured for building
+--- a/src/Algorithms/CMakeLists.txt
++++ b/src/Algorithms/CMakeLists.txt
+@@ -221,3 +221,5 @@ ${CMAKE_SOURCE_DIR}/Xml
+ ${CMAKE_SOURCE_DIR}/Charting
+ ${CMAKE_SOURCE_DIR}/Common
+ )
++
++WORKBENCH_INSTALL_LIBRARY(Algorithms)
+--- a/src/Charting/CMakeLists.txt
++++ b/src/Charting/CMakeLists.txt
+@@ -58,3 +58,4 @@ ${CMAKE_SOURCE_DIR}/Common
+ ${CMAKE_SOURCE_DIR}/Scenes
+ )
+ 
++WORKBENCH_INSTALL_LIBRARY(Charting)
+--- a/src/Cifti/CMakeLists.txt
++++ b/src/Cifti/CMakeLists.txt
+@@ -74,3 +74,4 @@ ${CMAKE_SOURCE_DIR}/Nifti
+ ${CMAKE_SOURCE_DIR}/Xml
+ ${CMAKE_SOURCE_DIR}/Common
+ )
++WORKBENCH_INSTALL_LIBRARY(Cifti)
+--- a/src/Commands/CMakeLists.txt
++++ b/src/Commands/CMakeLists.txt
+@@ -67,3 +67,4 @@ ${CMAKE_SOURCE_DIR}/Scenes
+ ${CMAKE_SOURCE_DIR}/Xml
+ ${CMAKE_SOURCE_DIR}/Common
+ )
++WORKBENCH_INSTALL_LIBRARY(Commands)
+--- a/src/Common/CMakeLists.txt
++++ b/src/Common/CMakeLists.txt
+@@ -188,3 +188,4 @@ ADD_CUSTOM_COMMAND(
+     DEPENDS ApplicationInformation.cxx.in ${CMAKE_SOURCE_DIR}/CMakeScripts/git_commit_info.cmake.in ${CMAKE_SOURCE_DIR}/../.git/HEAD ${CMAKE_SOURCE_DIR}/../.git/index
+     COMMENT "Setting commit info"
+ )
++WORKBENCH_INSTALL_LIBRARY(Common)
+--- a/src/FilesBase/CMakeLists.txt
++++ b/src/FilesBase/CMakeLists.txt
+@@ -57,3 +57,4 @@ ${CMAKE_SOURCE_DIR}/Common
+ ${CMAKE_SOURCE_DIR}/Palette
+ ${CMAKE_SOURCE_DIR}/Xml
+ )
++WORKBENCH_INSTALL_LIBRARY(FilesBase)
+--- a/src/Files/CMakeLists.txt
++++ b/src/Files/CMakeLists.txt
+@@ -219,3 +219,6 @@ ${CMAKE_SOURCE_DIR}/Scenes
+ ${CMAKE_SOURCE_DIR}/Xml
+ ${CMAKE_SOURCE_DIR}/Common
+ )
++
++WORKBENCH_INSTALL_LIBRARY(Files)
++TARGET_LINK_LIBRARIES(Files ${QT_LIBRARIES})
+--- a/src/Gifti/CMakeLists.txt
++++ b/src/Gifti/CMakeLists.txt
+@@ -50,3 +50,4 @@ ${CMAKE_SOURCE_DIR}/Nifti
+ ${CMAKE_SOURCE_DIR}/Xml
+ ${CMAKE_SOURCE_DIR}/Common
+ )
++WORKBENCH_INSTALL_LIBRARY(Gifti)
+--- a/src/GlfFont/CMakeLists.txt
++++ b/src/GlfFont/CMakeLists.txt
+@@ -27,3 +27,4 @@ INCLUDE_DIRECTORIES(
+ ${CMAKE_SOURCE_DIR}/Common
+ ${CMAKE_SOURCE_DIR}/GlfFont
+ )
++WORKBENCH_INSTALL_LIBRARY(GlfFont)
+--- a/src/Nifti/CMakeLists.txt
++++ b/src/Nifti/CMakeLists.txt
+@@ -48,3 +48,5 @@ ${CMAKE_SOURCE_DIR}/Palette
+ ${CMAKE_SOURCE_DIR}/Cifti
+ ${CMAKE_SOURCE_DIR}/Xml
+ )
++
++WORKBENCH_INSTALL_LIBRARY(Nifti)
+--- a/src/OperationsBase/CMakeLists.txt
++++ b/src/OperationsBase/CMakeLists.txt
+@@ -41,3 +41,4 @@ ${CMAKE_SOURCE_DIR}/Scenes
+ ${CMAKE_SOURCE_DIR}/Xml
+ ${CMAKE_SOURCE_DIR}/Common
+ )
++WORKBENCH_INSTALL_LIBRARY(OperationsBase)
+--- a/src/Palette/CMakeLists.txt
++++ b/src/Palette/CMakeLists.txt
+@@ -42,3 +42,4 @@ ${CMAKE_SOURCE_DIR}/Palette
+ ${CMAKE_SOURCE_DIR}/Common
+ ${CMAKE_SOURCE_DIR}/Xml
+ )
++WORKBENCH_INSTALL_LIBRARY(Palette)
+--- a/src/Quazip/CMakeLists.txt
++++ b/src/Quazip/CMakeLists.txt
+@@ -60,3 +60,4 @@ unzip.c
+ zip.c
+ )
+ 
++WORKBENCH_INSTALL_LIBRARY(Quazip)
+--- a/src/Qwt/CMakeLists.txt
++++ b/src/Qwt/CMakeLists.txt
+@@ -191,3 +191,4 @@ ${SOURCE_FILES}
+ ${MOC_SOURCE_FILES}
+ )
+ 
++WORKBENCH_INSTALL_LIBRARY(Qwt)
+--- a/src/Scenes/CMakeLists.txt
++++ b/src/Scenes/CMakeLists.txt
+@@ -96,3 +96,4 @@ ${CMAKE_SOURCE_DIR}/Common
+ ${CMAKE_SOURCE_DIR}/Xml
+ )
+ 
++WORKBENCH_INSTALL_LIBRARY(Scenes)
+--- a/src/Tests/CMakeLists.txt
++++ b/src/Tests/CMakeLists.txt
+@@ -147,3 +147,4 @@ ${CMAKE_SOURCE_DIR}/Scenes
+ ${CMAKE_SOURCE_DIR}/Xml
+ ${CMAKE_SOURCE_DIR}/Common
+ )
++WORKBENCH_INSTALL_LIBRARY(Tests)
+--- a/src/Xml/CMakeLists.txt
++++ b/src/Xml/CMakeLists.txt
+@@ -45,3 +45,5 @@ ${CMAKE_SOURCE_DIR}/Xml
+ ${CMAKE_SOURCE_DIR}/Common
+ )
+ 
++WORKBENCH_INSTALL_LIBRARY(Xml)
++TARGET_LINK_LIBRARIES(Xml ${QT_LIBRARIES})
