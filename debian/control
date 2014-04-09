@@ -14,6 +14,7 @@ Vcs-Browser: http://github.com/neurodebian/workbench
 Package: connectome-workbench
 Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends}
+Recommends: caret
 Suggests: ffmpeg
 Description: brain visualization, analysis and discovery tool
  Connectome Workbench is a brain visualization, analysis and discovery
@@ -28,7 +29,8 @@ Description: brain visualization, analysis and discovery tool
 Package: connectome-workbench-dbg
 Architecture: any
 Section: debug
-Depends: ${shlibs:Depends}, ${misc:Depends}
+Depends: ${shlibs:Depends}, ${misc:Depends},
+         connectome-workbench (= ${binary:Version})
 Description: brain visualization, analysis and discovery tool -- debug symbols
  Connectome Workbench is a brain visualization, analysis and discovery
  tool for fMRI and dMRI brain imaging data, including functional and

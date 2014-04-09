@@ -31,6 +31,21 @@ override_dh_auto_configure:
 		-DCMAKE_SKIP_RPATH:BOOL=OFF
 #-DBUILD_SHARED_LIBS:BOOL=ON
 
+override_dh_auto_install:
+	dh_auto_build
+
+	: # Sloppy man pages for now. Improve with templates
+	mkdir -p debian/tmp/usr/share/man/man1
+	help2man --no-info --help-option=-help --version-string=$(uver) \
+		-n "visualization and discovery tool used to map neuroimaging data" \
+		debian/tmp/usr/bin/workbench \
+		>| debian/tmp/usr/share/man/man1/workbench.1
+
+	help2man --no-info --help-option=-all-commands-help --version-string=$(uver) \
+		-n "command-line program for performing a variety of algorithmic tasks using volume, surface, and grayordinate data" \
+		debian/tmp/usr/bin/wb_command \
+		>| debian/tmp/usr/share/man/man1/wb_command.1
+
 override_dh_install:
 	dh_install
 	install -m 0644 icons/linux/workbench_128x128x32.png debian/connectome-workbench/usr/share/pixmaps/connectome-workbench.png
