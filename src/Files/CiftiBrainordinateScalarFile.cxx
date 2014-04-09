@@ -224,30 +224,7 @@ CiftiBrainordinateScalarFile::setChartingEnabled(const int32_t tabIndex,
 void
 CiftiBrainordinateScalarFile::getSupportedChartDataTypes(std::vector<ChartDataTypeEnum::Enum>& chartDataTypesOut) const
 {
-    chartDataTypesOut.clear();
-    
-    switch (getMapIntervalUnits()) {
-        case NiftiTimeUnitsEnum::NIFTI_UNITS_HZ:
-            CaretLogSevere("Units - HZ not supported");
-            CaretAssertMessage(0, "Units - HZ not supported");
-            break;
-        case NiftiTimeUnitsEnum::NIFTI_UNITS_MSEC:
-            chartDataTypesOut.push_back(ChartDataTypeEnum::CHART_DATA_TYPE_TIME_SERIES);
-            break;
-        case NiftiTimeUnitsEnum::NIFTI_UNITS_PPM:
-            CaretLogSevere("Units - PPM not supported");
-            CaretAssertMessage(0, "Units - PPM not supported");
-            break;
-        case NiftiTimeUnitsEnum::NIFTI_UNITS_SEC:
-            chartDataTypesOut.push_back(ChartDataTypeEnum::CHART_DATA_TYPE_TIME_SERIES);
-            break;
-        case NiftiTimeUnitsEnum::NIFTI_UNITS_UNKNOWN:
-            chartDataTypesOut.push_back(ChartDataTypeEnum::CHART_DATA_TYPE_DATA_SERIES);
-            break;
-        case NiftiTimeUnitsEnum::NIFTI_UNITS_USEC:
-            chartDataTypesOut.push_back(ChartDataTypeEnum::CHART_DATA_TYPE_TIME_SERIES);
-            break;
-    }
+    helpGetSupportedBrainordinateChartDataTypes(chartDataTypesOut);
 }
 
 /**
@@ -342,24 +319,6 @@ CiftiBrainordinateScalarFile::loadChartDataForVoxelAtCoordinate(const float xyz[
 {
     ChartDataCartesian* chartData = helpLoadChartDataForVoxelAtCoordinate(xyz);
     return chartData;
-}
-
-/**
- * @return The CaretMappableDataFile that implements this interface.
- */
-CaretMappableDataFile*
-CiftiBrainordinateScalarFile::getCaretMappableDataFile()
-{
-    return dynamic_cast<CaretMappableDataFile*>(this);
-}
-
-/**
- * @return The CaretMappableDataFile that implements this interface.
- */
-const CaretMappableDataFile*
-CiftiBrainordinateScalarFile::getCaretMappableDataFile() const
-{
-    return dynamic_cast<const CaretMappableDataFile*>(this);
 }
 
 /**

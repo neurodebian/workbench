@@ -67,11 +67,13 @@ OperationFileInformation::getParameters()
     
     ret->createOptionalParameter(2, "-no-map-info", "do not show map information for files that support maps");
     
-    ret->createOptionalParameter(3, "-only-step-interval", "print only the interval between maps");
+    ret->createOptionalParameter(3, "-only-step-interval", "suppress normal output, print the interval between maps");
+
+    ret->createOptionalParameter(4, "-only-number-of-maps", "suppress normal output, print the number of maps");
 
     AString helpText("List information about the content of a data file.  "
-                     "The information listed is dependent upon the type of "
-                     "data file.");
+                     "Only one -only option may be specified.  "
+                     "The information listed when no -only option is present is dependent upon the type of data file.");
     
     ret->setHelpText(helpText);
     
@@ -93,6 +95,10 @@ OperationFileInformation::useParameters(OperationParameters* myParams,
     
     bool onlyTimestep = myParams->getOptionalParameter(3)->m_present;
 
+    bool onlyNumMaps = myParams->getOptionalParameter(4)->m_present;
+    
+    if (onlyTimestep && onlyNumMaps) throw OperationException("only one -only option may be specified");
+
     CaretPointer<CaretDataFile> caretDataFile(CaretDataFileHelper::readAnyCaretDataFile(dataFileName));
     
     if (onlyTimestep)
@@ -103,7 +109,17 @@ OperationFileInformation::useParameters(OperationParameters* myParams,
         float start, step;
         mappableFile->getMapIntervalStartAndStep(start, step);
         std::cout << step << std::endl;
-    } else {
+    }
+    if (onlyNumMaps)
+    {
+        CaretMappableDataFile* mappableFile = dynamic_cast<CaretMappableDataFile*>(caretDataFile.getPointer());
+        if (mappableFile == NULL) throw OperationException("file does not support maps");//TODO: also give error on things that it doesn't make sense on
+        int numMaps = mappableFile->getNumberOfMaps();
+        if (numMaps < 1) throw OperationException("file does not support maps");
+        std::cout << numMaps << std::endl;
+    }
+    if (!onlyTimestep && !onlyNumMaps)
+    {
         DataFileContentInformation dataFileContentInformation;
         dataFileContentInformation.setOptionFlag(DataFileContentInformation::OPTION_SHOW_MAP_INFORMATION,
                                                 showMapInformationFlag);
