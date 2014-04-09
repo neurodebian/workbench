@@ -1,0 +1,21 @@
+--- a/src/CMakeScripts/git_commit_info.cmake.in
++++ b/src/CMakeScripts/git_commit_info.cmake.in
+@@ -11,7 +11,7 @@ IF(GIT_FOUND)
+         OUTPUT_STRIP_TRAILING_WHITESPACE
+     )
+ ELSE(GIT_FOUND)
+-    SET(commit "unknown")
++    SET(commit "unknown (NeuroDebian build from source)")
+     SET(commit_date "unknown")
+ ENDIF(GIT_FOUND)
+ IF(WIN32)
+--- a/src/Common/CMakeLists.txt
++++ b/src/Common/CMakeLists.txt
+@@ -185,6 +185,6 @@ ADD_CUSTOM_COMMAND(
+         -DOUTFILE="${CMAKE_BINARY_DIR}/Common/ApplicationInformation.cxx"
+         -P "${CMAKE_SOURCE_DIR}/CMakeScripts/git_commit_info.cmake.in"
+     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/..
+-    DEPENDS ApplicationInformation.cxx.in ${CMAKE_SOURCE_DIR}/CMakeScripts/git_commit_info.cmake.in ${CMAKE_SOURCE_DIR}/../.git/HEAD ${CMAKE_SOURCE_DIR}/../.git/index
++    DEPENDS ApplicationInformation.cxx.in ${CMAKE_SOURCE_DIR}/CMakeScripts/git_commit_info.cmake.in # ${CMAKE_SOURCE_DIR}/../.git/HEAD ${CMAKE_SOURCE_DIR}/../.git/index
+     COMMENT "Setting commit info"
+ )
