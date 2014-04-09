@@ -6,6 +6,8 @@ Uploaders: Yaroslav Halchenko <debian@onerussian.com>, Michael Hanke <michael.ha
 Build-Depends: debhelper (>= 9),
                help2man, cmake,
                libosmesa6-dev,
+               libqt4-dev,
+               libqtwebkit-dev,
 Standards-Version: 3.9.6
 Homepage: http://www.nitrc.org/projects/workbench/
 Vcs-Git: git://github.com/neurodebian/workbench -b debian
