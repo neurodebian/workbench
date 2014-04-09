@@ -32,7 +32,7 @@ override_dh_auto_configure:
 #-DBUILD_SHARED_LIBS:BOOL=ON
 
 override_dh_auto_install:
-	dh_auto_build
+	dh_auto_install
 
 	: # Sloppy man pages for now. Improve with templates
 	mkdir -p debian/tmp/usr/share/man/man1
@@ -48,7 +48,7 @@ override_dh_auto_install:
 
 override_dh_install:
 	dh_install
-	install -m 0644 icons/linux/workbench_128x128x32.png debian/connectome-workbench/usr/share/pixmaps/connectome-workbench.png
+	install -D -m 0644 icons/linux/workbench_128x128x32.png debian/connectome-workbench/usr/share/pixmaps/connectome-workbench.png
 
 override_dh_strip:
 	dh_strip --dbg-package=connectome-workbench-dbg
