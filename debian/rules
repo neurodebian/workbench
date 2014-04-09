@@ -30,3 +30,10 @@ override_dh_auto_configure:
      dh_auto_configure -- \
 		-DCMAKE_SKIP_RPATH:BOOL=OFF
 #-DBUILD_SHARED_LIBS:BOOL=ON
+
+override_dh_install:
+	dh_install
+	install -m 0644 icons/linux/workbench_128x128x32.png debian/connectome-workbench/usr/share/pixmaps/connectome-workbench.png
+
+override_dh_strip:
+	dh_strip --dbg-package=connectome-workbench-dbg
