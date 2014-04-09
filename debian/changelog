@@ -1,5 +1,5 @@
-connectome-workbench (0.85+git24-gff1307f-1) UNRELEASED; urgency=low
+connectome-workbench (0.85+git26-g72866b8-1) UNRELEASED; urgency=low
 
-  * Initial packaging
+  * Initial packaging, not yet finalized for Debian proper
 
- -- Yaroslav Halchenko <debian@onerussian.com>  Wed, 09 Apr 2014 01:05:31 -0400
+ -- Yaroslav Halchenko <debian@onerussian.com>  Wed, 09 Apr 2014 17:54:20 -0400
