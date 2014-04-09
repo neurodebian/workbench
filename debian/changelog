@@ -1,5 +1,5 @@
-connectome-workbench (0.85.0-1~pre1) UNRELEASED; urgency=low
+connectome-workbench (0.85+git24-gff1307f-1) UNRELEASED; urgency=low
 
   * Initial packaging
 
- -- Yaroslav Halchenko <debian@onerussian.com>  Mon, 07 Apr 2014 15:57:55 -0400
+ -- Yaroslav Halchenko <debian@onerussian.com>  Wed, 09 Apr 2014 01:05:31 -0400
