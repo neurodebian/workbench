@@ -27,7 +27,7 @@ Copyright: 1993-2008 Ken Martin, Will Schroeder, Bill Lorensen
            2014 Washington University School of Medicine
 License: VTK-BSD-3-Clause and GPL-2+
 
-Files: GuiQt/WuQDialog.cxx
+Files: GuiQt/WuQDialog.cxx Brain/GlfFontTextRenderer.cxx
 Copyright: 2014 Washington University School of Medicine
            2012 Digia Plc and/or its subsidiary(-ies).
 License: GPL-2+
@@ -79,13 +79,13 @@ License: LGPL-2.0+
  `/usr/share/common-licenses/LGPL-2'.
 
 License: Zlib
-  This software is provided 'as-is', without any express or implied
-  warranty.  In no event will the authors be held liable for any damages
-  arising from the use of this software.
+ This software is provided 'as-is', without any express or implied
+ warranty.  In no event will the authors be held liable for any damages
+ arising from the use of this software.
  .
-  Permission is granted to anyone to use this software for any purpose,
-  including commercial applications, and to alter it and redistribute it
-  freely, subject to the following restrictions:
+ Permission is granted to anyone to use this software for any purpose,
+ including commercial applications, and to alter it and redistribute it
+ freely, subject to the following restrictions:
  .
   1. The origin of this software must not be misrepresented; you must not
      claim that you wrote the original software. If you use this software
