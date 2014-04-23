@@ -24,8 +24,10 @@
 #undef __SPEC_FILE_MANAGEMENT_DIALOG_DECLARE__
 
 #include <QAction>
+#include <QApplication>
 #include <QBrush>
 #include <QCheckBox>
+#include <QClipboard>
 #include <QDialogButtonBox>
 #include <QFontDatabase>
 #include <QGridLayout>
@@ -206,10 +208,10 @@ m_specFile(specFile)
     /*
      * Load icons.
      */
-    m_iconOpenFile   = WuQtUtilities::loadIcon(":/spec_file_dialog_load_icon.png");
-    m_iconOptions    = WuQtUtilities::loadIcon(":/spec_file_dialog_options_icon.png");
-    m_iconReloadFile = WuQtUtilities::loadIcon(":/spec_file_dialog_reload_icon.png");
-    m_iconRemoveFile = WuQtUtilities::loadIcon(":/spec_file_dialog_delete_icon.png");
+    m_iconOpenFile   = WuQtUtilities::loadIcon(":/SpecFileDialog/load_icon.png");
+    m_iconOptions    = WuQtUtilities::loadIcon(":/SpecFileDialog/options_icon.png");
+    m_iconReloadFile = WuQtUtilities::loadIcon(":/SpecFileDialog/reload_icon.png");
+    m_iconRemoveFile = WuQtUtilities::loadIcon(":/SpecFileDialog/delete_icon.png");
     
     /*
      * Open Spec File or Manage Files?
@@ -1909,7 +1911,7 @@ SpecFileManagementDialog::fileOptionsActionSelected(int rowIndex)
         if (caretDataFile != NULL) {
             caretMappableDataFile = dynamic_cast<CaretMappableDataFile*>(caretDataFile);
         }
-        
+        QAction* copyFilePathToClipboardAction = NULL;
         QAction* editMetaDataAction = NULL;
         QAction* setFileNameAction = NULL;
         QAction* setStructureAction = NULL;
@@ -1922,6 +1924,7 @@ SpecFileManagementDialog::fileOptionsActionSelected(int rowIndex)
             case MODE_MANAGE_FILES:
             case MODE_SAVE_FILES_WHILE_QUITTING:
                 if (caretDataFile != NULL) {
+                    copyFilePathToClipboardAction = menu.addAction("Copy File's Path to Clipboard");
                     editMetaDataAction = menu.addAction("Edit Metadata...");
                     setFileNameAction = menu.addAction("Set File Name...");
                     //                unloadFileAction = menu.addAction("Unload File");
@@ -1952,6 +1955,9 @@ SpecFileManagementDialog::fileOptionsActionSelected(int rowIndex)
              * (such as setFileNameAction) may be NULL and with out this test,
              * those NULL actions would match.
              */
+        }
+        else if (selectedAction == copyFilePathToClipboardAction) {
+            copyFilePathToClipboard(caretDataFile);
         }
         else if (selectedAction == setFileNameAction) {
             changeFileName(&menu,
@@ -1993,6 +1999,18 @@ SpecFileManagementDialog::fileOptionsActionSelected(int rowIndex)
         }
     }
 }
+
+/**
+ * Copy the file's path to the clipboard.
+ */
+void
+SpecFileManagementDialog::copyFilePathToClipboard(const CaretDataFile* caretDataFile)
+{
+    CaretAssert(caretDataFile);
+    QApplication::clipboard()->setText(caretDataFile->getFileName().trimmed(),
+                                       QClipboard::Clipboard);
+}
+
 
 /**
  * Change the name of a file.

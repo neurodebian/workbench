@@ -39,6 +39,7 @@
 #include "AlgorithmCiftiFalseCorrelation.h"
 #include "AlgorithmCiftiFindClusters.h"
 #include "AlgorithmCiftiGradient.h"
+#include "AlgorithmCiftiLabelAdjacency.h"
 #include "AlgorithmCiftiLabelToROI.h"
 #include "AlgorithmCiftiMerge.h"
 #include "AlgorithmCiftiMergeDense.h"
@@ -121,6 +122,7 @@
 #include "OperationCiftiConvert.h"
 #include "OperationCiftiConvertToScalar.h"
 #include "OperationCiftiEstimateFWHM.h"
+#include "OperationCiftiLabelExportTable.h"
 #include "OperationCiftiLabelImport.h"
 #include "OperationCiftiMath.h"
 #include "OperationCiftiPalette.h"
@@ -146,6 +148,7 @@
 #include "OperationMetricMerge.h"
 #include "OperationMetricPalette.h"
 #include "OperationMetricVertexSum.h"
+#include "OperationNiftiConvert.h"
 #include "OperationNiftiInformation.h"
 #include "OperationProbtrackXDotConvert.h"
 #include "OperationSetMapName.h"
@@ -163,6 +166,7 @@
 #include "OperationSurfaceVertexAreas.h"
 #include "OperationVolumeCapturePlane.h"
 #include "OperationVolumeCreate.h"
+#include "OperationVolumeLabelExportTable.h"
 #include "OperationVolumeLabelImport.h"
 #include "OperationVolumeMath.h"
 #include "OperationVolumePalette.h"
@@ -184,7 +188,6 @@
 #include "CommandClassCreateOperation.h"
 #include "CommandC11xTesting.h"
 #include "CommandGiftiConvert.h"
-#include "CommandNiftiConvert.h"
 #include "CommandUnitTest.h"
 #include "ProgramParameters.h"
 
@@ -243,6 +246,7 @@ CommandOperationManager::CommandOperationManager()
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmCiftiFalseCorrelation()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmCiftiFindClusters()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmCiftiGradient()));
+    this->commandOperations.push_back(new CommandParser(new AutoAlgorithmCiftiLabelAdjacency()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmCiftiLabelToROI()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmCiftiMerge()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmCiftiMergeDense()));
@@ -325,6 +329,7 @@ CommandOperationManager::CommandOperationManager()
     this->commandOperations.push_back(new CommandParser(new AutoOperationCiftiConvert()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationCiftiConvertToScalar()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationCiftiEstimateFWHM()));
+    this->commandOperations.push_back(new CommandParser(new AutoOperationCiftiLabelExportTable()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationCiftiLabelImport()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationCiftiMath()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationCiftiPalette()));
@@ -350,6 +355,7 @@ CommandOperationManager::CommandOperationManager()
     this->commandOperations.push_back(new CommandParser(new AutoOperationMetricMerge()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationMetricPalette()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationMetricVertexSum()));
+    this->commandOperations.push_back(new CommandParser(new AutoOperationNiftiConvert()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationNiftiInformation()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationProbtrackXDotConvert()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationSetMapName()));
@@ -369,6 +375,7 @@ CommandOperationManager::CommandOperationManager()
     this->commandOperations.push_back(new CommandParser(new AutoOperationSurfaceVertexAreas()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationVolumeCapturePlane()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationVolumeCreate()));
+    this->commandOperations.push_back(new CommandParser(new AutoOperationVolumeLabelExportTable()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationVolumeLabelImport()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationVolumeMath()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationVolumePalette()));
@@ -388,7 +395,6 @@ CommandOperationManager::CommandOperationManager()
 #endif // WORKBENCH_HAVE_C11X
     this->commandOperations.push_back(new CommandGiftiConvert());
     this->commandOperations.push_back(new CommandUnitTest());
-    this->commandOperations.push_back(new CommandNiftiConvert());
 }
 
 /**

@@ -37,8 +37,8 @@ class QAction;
 class QDialog;
 class QWidget;
 class MovieDialog;
-namespace caret {
-    
+
+namespace caret {    
     class Brain;
     class BrainBrowserWindow;
     class BrowserTabContent;
@@ -46,6 +46,7 @@ namespace caret {
     class ClippingPlanesDialog;
     class CursorManager;
     class CustomViewDialog;
+    class HelpViewerDialog;
     class ImageFile;
     class ImageCaptureDialog;
     class InformationDisplayDialog;
@@ -148,8 +149,6 @@ namespace caret {
         
     public slots:
         void processBringAllWindowsToFront();
-        void processShowHelpOnlineWindow();
-        void processShowSearchHelpOnlineWindow();
         void processShowInformationWindow();
         void processTileWindows();
         
@@ -177,6 +176,9 @@ namespace caret {
         
         void showHideSceneDialog(const bool status,
                                  BrainBrowserWindow* parentBrainBrowserWindow);
+        
+        void processShowHelpViewerDialog(BrainBrowserWindow* browserWindow,
+                                         const AString& helpPageName);
         
         void removeNonModalDialog(QWidget* dialog);
         
@@ -229,6 +231,8 @@ namespace caret {
         QAction* m_informationDisplayDialogEnabledAction;
         
         BugReportDialog* m_bugReportDialog;
+        
+        HelpViewerDialog* m_helpViewerDialog;
         
         /** 
          * Tracks non-modal dialogs that are created only one time

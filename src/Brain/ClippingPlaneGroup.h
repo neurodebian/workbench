@@ -24,12 +24,12 @@
 
 #include "CaretObject.h"
 #include "Matrix4x4.h"
-#include "Plane.h"
 #include "SceneableInterface.h"
 #include "StructureEnum.h"
 
 
 namespace caret {
+    class Plane;
     class SceneClassAssistant;
 
     class ClippingPlaneGroup : public CaretObject, public SceneableInterface {
@@ -47,14 +47,16 @@ namespace caret {
         
         void resetToDefaultValues();
         
-        std::vector<Plane> getActiveClippingPlanesForStructure(const StructureEnum::Enum structure) const;
+        std::vector<const Plane*> getActiveClippingPlanesForStructure(const StructureEnum::Enum structure) const;
         
         void getTranslation(float translation[3]) const;
+        
+        void setTranslation(const float translation[3]);
         
         void getTranslationForStructure(const StructureEnum::Enum structure,
                                         float translation[3]) const;
         
-        Matrix4x4 getRotationMatrix() const;
+        Matrix4x4 getRotationMatrixForStructure(const StructureEnum::Enum structure) const;
         
         void setRotationMatrix(const Matrix4x4& rotationMatrix);
         
@@ -62,7 +64,11 @@ namespace caret {
         
         void setRotationAngles(const float rotationAngles[3]);
         
+        void setRotation(const float rotation[4][4]);
+        
         void getThickness(float thickness[3]) const;
+        
+        void setThickness(const float thickness[3]);
         
         bool isXAxisSelected() const;
         
@@ -75,6 +81,10 @@ namespace caret {
         void setYAxisSelected(const bool yAxisSelected);
         
         void setZAxisSelected(const bool zAxisSelected);
+        
+        bool isDisplayClippingBoxSelected() const;
+        
+        void setDisplayClippingBoxSelected(const bool selected);
         
         bool isSurfaceSelected() const;
         
@@ -89,12 +99,6 @@ namespace caret {
         bool isFeaturesAndAnyAxisSelected() const;
         
         void setFeaturesSelected(const bool selected);
-        
-        void setTranslation(const float translation[3]);
-        
-        void setRotation(const float rotation[4][4]);
-        
-        void setThickness(const float thickness[3]);
         
         bool isCoordinateInsideClippingPlanesForStructure(const StructureEnum::Enum structure,
                                                           const float xyz[3]) const;
@@ -136,8 +140,24 @@ namespace caret {
         
         void copyHelperClippingPlaneGroup(const ClippingPlaneGroup& obj);
 
-        Plane createClippingPlane(const PlaneIdentifier planeIdentifier,
+        Plane* createClippingPlane(const PlaneIdentifier planeIdentifier,
                                   const StructureEnum::Enum structure) const;
+        
+        void updateActiveClippingPlainEquations() const;
+        
+        void invalidateActiveClippingPlainEquations();
+        
+        /**
+         * For all everthing EXCEPT right structures
+         */
+        mutable std::vector<Plane*> m_activeClippingPlanes;
+        
+        /**
+         * Mirror flipped for RIGHT structure
+         */
+        mutable std::vector<Plane*> m_rightStructureActiveClippingPlanes;
+        
+        mutable bool m_activeClippingPlanesValid;
         
         SceneClassAssistant* m_sceneAssistant;
 
@@ -160,6 +180,8 @@ namespace caret {
         bool m_volumeSelectionStatus;
         
         bool m_featuresSelectionStatus;
+        
+        bool m_displayClippingBoxStatus;
         
         // ADD_NEW_MEMBERS_HERE
 

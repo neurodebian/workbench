@@ -148,6 +148,7 @@ BrainOpenGLFixedPipeline::BrainOpenGLFixedPipeline(BrainOpenGLTextRenderInterfac
     m_shapeCubeRounded = NULL;
     this->surfaceNodeColoring = new SurfaceNodeColoring();
     m_brain = NULL;
+    m_clippingPlaneGroup = NULL;
 }
 
 /**
@@ -209,6 +210,8 @@ BrainOpenGLFixedPipeline::selectModel(BrainOpenGLViewportContent* viewportConten
     m_brain = viewportContent->getBrain();
     CaretAssert(m_brain);
     
+    m_clippingPlaneGroup = NULL;
+    
     this->inverseRotationMatrixValid = false;
     
     /*
@@ -253,6 +256,8 @@ BrainOpenGLFixedPipeline::projectToModel(BrainOpenGLViewportContent* viewportCon
     m_brain = viewportContent->getBrain();
     CaretAssert(m_brain);
     
+    m_clippingPlaneGroup = NULL;
+    
     m_brain->getSelectionManager()->reset();
     
     this->modeProjectionData = &projectionOut;
@@ -289,6 +294,8 @@ BrainOpenGLFixedPipeline::drawModels(std::vector<BrainOpenGLViewportContent*>& v
 {
     this->inverseRotationMatrixValid = false;
     
+    m_clippingPlaneGroup = NULL;
+    
     this->checkForOpenGLError(NULL, "At beginning of drawModels()");
     
     float backgroundColor[3];
@@ -310,10 +317,10 @@ BrainOpenGLFixedPipeline::drawModels(std::vector<BrainOpenGLViewportContent*>& v
         const int* windowVP = vpContent->getWindowViewport();
         glViewport(windowVP[0], windowVP[1], windowVP[2], windowVP[3]);
         
-        CaretLogFinest("Drawing Model "
-                       + AString::number(i)
-                       + ": "
-                       + AString::fromNumbers(vpContent->getModelViewport(), 4, ", "));
+//        CaretLogFinest("Drawing Model "
+//                       + AString::number(i)
+//                       + ": "
+//                       + AString::fromNumbers(vpContent->getModelViewport(), 4, ", "));
         m_brain = vpContent->getBrain();
         CaretAssert(m_brain);
         this->drawModelInternal(MODE_DRAWING,
@@ -410,10 +417,16 @@ BrainOpenGLFixedPipeline::drawModelInternal(Mode mode,
     ElapsedTimer et;
     et.start();
     
-    this->browserTabContent= viewportContent->getBrowserTabContent();
+    this->browserTabContent = viewportContent->getBrowserTabContent();
+    
+    m_mirroredClippingEnabled = false;
+    
     Model* model = NULL;
     
     if (this->browserTabContent != NULL) {
+        m_clippingPlaneGroup = const_cast<ClippingPlaneGroup*>(this->browserTabContent->getClippingPlaneGroup());
+        CaretAssert(m_clippingPlaneGroup);
+        
         Model* model = this->browserTabContent->getModelForDisplay();
         this->windowTabIndex = this->browserTabContent->getTabNumber();
         int viewport[4];
@@ -439,10 +452,12 @@ BrainOpenGLFixedPipeline::drawModelInternal(Mode mode,
                 modelAllowsPalettes = false;
             }
             else if (surfaceModel != NULL) {
+                m_mirroredClippingEnabled = true;
                 this->drawSurfaceModel(surfaceModel, viewport);
             }
             else if (surfaceMontageModel != NULL) {
-                this->drawSurfaceMontageModel(browserTabContent, 
+                m_mirroredClippingEnabled = true;
+                this->drawSurfaceMontageModel(browserTabContent,
                                               surfaceMontageModel, 
                                               viewport);
             }
@@ -584,41 +599,75 @@ BrainOpenGLFixedPipeline::disableClippingPlanes()
  *
  * @param clippingDataType
  *    Type of data that is being clipped.
- * @param structure
+ * @param structureIn
  *    The structure.
  */
 void
 BrainOpenGLFixedPipeline::applyClippingPlanes(const ClippingDataType clippingDataType,
-                                              const StructureEnum::Enum structure)
+                                              const StructureEnum::Enum structureIn)
 {
     disableClippingPlanes();
+
+    StructureEnum::Enum structure = StructureEnum::CORTEX_LEFT;
+    if (m_mirroredClippingEnabled) {
+        structure = structureIn;
+    }
     
     if (browserTabContent == NULL) {
         return;
     }
-    const ClippingPlaneGroup* clippingPlaneGroup = browserTabContent->getClippingPlaneGroup();
+    
+    CaretAssert(m_clippingPlaneGroup);
+    
     float rotation[3];
-    clippingPlaneGroup->getRotationAngles(rotation);
+    m_clippingPlaneGroup->getRotationAngles(rotation);
 
     float panning[3];
-    clippingPlaneGroup->getTranslationForStructure(structure,
+    m_clippingPlaneGroup->getTranslationForStructure(structure,
                                                    panning);
     
+    float rotationAngles[3];
+    m_clippingPlaneGroup->getRotationAngles(rotationAngles);
+    
     float thickness[3];
-    clippingPlaneGroup->getThickness(thickness);
+    m_clippingPlaneGroup->getThickness(thickness);
+    
+    float minX = -thickness[0] / 2.0;
+    float maxX =  thickness[0] / 2.0;
+    float minY = -thickness[1] / 2.0;
+    float maxY =  thickness[1] / 2.0;
+    float minZ = -thickness[2] / 2.0;
+    float maxZ =  thickness[2] / 2.0;
+    
+    GLfloat rotMatrix[16];
+    m_clippingPlaneGroup->getRotationMatrixForStructure(structure).getMatrixForOpenGL(rotMatrix);
 
-    const bool showClippingBounds = false;
-    if (showClippingBounds) {
+//    const Matrix4x4 rotMat = clippingPlaneGroup->getRotationMatrix();
+//
+//    float minValues[3] = { minX, minY, minZ };
+//    rotMat.multiplyPoint3(minValues);
+//    minX = minValues[0];
+//    minY = minValues[1];
+//    minZ = minValues[2];
+//    
+//    float maxValues[3] = { maxX, maxY, maxZ };
+//    rotMat.multiplyPoint3(maxValues);
+//    maxX = maxValues[0];
+//    maxY = maxValues[1];
+//    maxZ = maxValues[2];
+    
+    
+    if (m_clippingPlaneGroup->isDisplayClippingBoxSelected()) {
         glColor3f(1.0, 0.0, 0.0);
         glLineWidth(2.0);
         glPushMatrix();
         glTranslatef(panning[0], panning[1], panning[2]);
-        float minX = -thickness[0] / 2.0;
-        float maxX =  thickness[0] / 2.0;
-        float minY = -thickness[1] / 2.0;
-        float maxY =  thickness[1] / 2.0;
-        float minZ = -thickness[2] / 2.0;
-        float maxZ =  thickness[2] / 2.0;
+        
+        glMultMatrixf(rotMatrix);
+//        glRotatef(rotationAngles[2], 0.0, 0.0, 1.0);
+//        glRotatef(rotationAngles[1], 0.0, 1.0, 0.0);
+//        glRotatef(rotationAngles[0], 0.0, 0.0, 1.0);
+        
         
         glBegin(GL_LINE_LOOP);
         glVertex3f(minX, minY, minZ);
@@ -649,33 +698,71 @@ BrainOpenGLFixedPipeline::applyClippingPlanes(const ClippingDataType clippingDat
     
     switch (clippingDataType) {
         case CLIPPING_DATA_TYPE_FEATURES:
-            if (! clippingPlaneGroup->isFeaturesSelected()) {
+            if (! m_clippingPlaneGroup->isFeaturesSelected()) {
                 return;
             }
             break;
         case CLIPPING_DATA_TYPE_SURFACE:
-            if (! clippingPlaneGroup->isSurfaceSelected()) {
+            if (! m_clippingPlaneGroup->isSurfaceSelected()) {
                 return;
             }
             break;
         case CLIPPING_DATA_TYPE_VOLUME:
-            if (! clippingPlaneGroup->isVolumeSelected()) {
+            if (! m_clippingPlaneGroup->isVolumeSelected()) {
                 return;
             }
             break;
     }
     
-    std::vector<Plane> planes = clippingPlaneGroup->getActiveClippingPlanesForStructure(structure);
+    std::vector<const Plane*> planes = m_clippingPlaneGroup->getActiveClippingPlanesForStructure(structure);
     const int32_t numPlanes = static_cast<int32_t>(planes.size());
     for (int32_t i = 0; i < numPlanes; i++) {
-        const Plane& p = planes[i];
+        const Plane* p = planes[i];
         double a, b, c, d;
-        p.getPlane(a, b, c, d);
+        p->getPlane(a, b, c, d);
         const GLdouble abcd[4] = { a, b, c, d };
         glClipPlane(GL_CLIP_PLANE0 + i,
                     abcd);
         glEnable(GL_CLIP_PLANE0 + i);
     }
+}
+
+/**
+ * Is the coordinate inside the clipping planes?
+ *
+ * If a clipping plane for an axis is off, the coordinate is considered
+ * to be inside the clipping plane.
+ *
+ * @param structureIn
+ *     The structure.  Note that right and left hemispheres are mirror flipped.
+ * @param xyz
+ *     The coordinate.
+ *
+ * @return
+ *     True if inside the clipping planes, else false.
+ */
+bool
+BrainOpenGLFixedPipeline::isCoordinateInsideClippingPlanesForStructure(const StructureEnum::Enum structureIn,
+                                                                       const float xyz[3]) const
+{
+    CaretAssert(m_clippingPlaneGroup);
+    
+    StructureEnum::Enum structure = StructureEnum::CORTEX_LEFT;
+    if (m_mirroredClippingEnabled) {
+        structure = structureIn;
+    }
+    
+    return m_clippingPlaneGroup->isCoordinateInsideClippingPlanesForStructure(structure, xyz);
+}
+
+/**
+ * @return Is clipping of features enabled?
+ */
+bool
+BrainOpenGLFixedPipeline::isFeatureClippingEnabled() const
+{
+    CaretAssert(m_clippingPlaneGroup);
+    return m_clippingPlaneGroup->isFeaturesAndAnyAxisSelected();
 }
 
 /**
@@ -1740,6 +1827,7 @@ BrainOpenGLFixedPipeline::drawSurfaceNormalVectors(const Surface* surface)
 {
     disableLighting();
     
+    const StructureEnum::Enum structure = surface->getStructure();
     const float length = 10.0;    
     CaretPointer<TopologyHelper> topoHelper = surface->getTopologyHelper();
     setLineWidth(1.0);
@@ -1750,6 +1838,13 @@ BrainOpenGLFixedPipeline::drawSurfaceNormalVectors(const Surface* surface)
     for (int32_t i = 0; i < numNodes; i++) {
         if (topoHelper->getNodeHasNeighbors(i)) {
             const float* xyz = surface->getCoordinate(i);
+
+            if (m_clippingPlaneGroup->isSurfaceSelected()) {
+                if ( ! isCoordinateInsideClippingPlanesForStructure(structure, xyz)) {
+                    continue;
+                }
+            }
+            
             const float* normal = surface->getNormalVector(i);
             float vector[3] = {
                 xyz[0] + length * normal[0],
@@ -1834,6 +1929,15 @@ BrainOpenGLFixedPipeline::drawSurfaceNodeAttributes(Surface* surface)
         const IdentifiedItemNode& nodeID = *iter;
         
         const int32_t nodeIndex = nodeID.getNodeIndex();
+        const int32_t i3 = nodeIndex * 3;
+        const float* xyz = &coordinates[i3];
+        
+        if (m_clippingPlaneGroup->isSurfaceSelected()) {
+            if ( ! isCoordinateInsideClippingPlanesForStructure(structure, xyz)) {
+                continue;
+            }
+        }
+        
         const float symbolDiameter = nodeID.getSymbolSize();
         
         if (isSelect) {
@@ -1854,9 +1958,9 @@ BrainOpenGLFixedPipeline::drawSurfaceNodeAttributes(Surface* surface)
         }
         idRGBA[3] = 255;
         
-        const int32_t i3 = nodeIndex * 3;
+        
         glPushMatrix();
-        glTranslatef(coordinates[i3], coordinates[i3+1], coordinates[i3+2]);
+        glTranslatef(xyz[0], xyz[1], xyz[2]);
         this->drawSphereWithDiameter(idRGBA,
                                      symbolDiameter);
         glPopMatrix();
@@ -1943,12 +2047,27 @@ BrainOpenGLFixedPipeline::drawBorder(const BorderDrawInfo& borderDrawInfo)
             drawSphericalPoints = true;
             break;
     }
-    
+
     const bool flatSurfaceFlag = (borderDrawInfo.surface->getSurfaceType() == SurfaceTypeEnum::FLAT);
+    bool flatSurfaceDrawUnstretchedLinesFlag = false;
+    float unstretchedLinesLength = -1.0;
+    if (flatSurfaceFlag) {
+        if ((borderDrawInfo.anatomicalSurface != NULL)
+            && (borderDrawInfo.unstretchedLinesLength > 0.0)) {
+            flatSurfaceDrawUnstretchedLinesFlag = true;
+            unstretchedLinesLength = borderDrawInfo.unstretchedLinesLength;
+        }
+    }
+    
     const float drawAtDistanceAboveSurface = 0.0;
 
     std::vector<float> pointXYZ;
+    std::vector<float> pointAnatomicalXYZ;
     std::vector<int32_t> pointIndex;
+    
+    const CaretPointer<TopologyHelper> th = borderDrawInfo.surface->getTopologyHelper();
+    const std::vector<int32_t>& nodesBoundaryEdgeCount = th->getNumberOfBoundaryEdgesForAllNodes();
+    CaretAssert(static_cast<int32_t>(nodesBoundaryEdgeCount.size()) == borderDrawInfo.surface->getNumberOfNodes());
     
     /*
      * Find points valid for this surface
@@ -1976,22 +2095,64 @@ BrainOpenGLFixedPipeline::drawBorder(const BorderDrawInfo& borderDrawInfo)
         }
         
         float xyz[3];
-        const bool isXyzValid = p->getProjectedPositionAboveSurface(*borderDrawInfo.surface, 
+        bool isXyzValid = p->getProjectedPositionAboveSurface(*borderDrawInfo.surface, 
                                                                     xyz,
                                                                     drawAtDistanceAboveSurface);
         
         if (isXyzValid) {
-            pointXYZ.push_back(xyz[0]);
-            pointXYZ.push_back(xyz[1]);
-            pointXYZ.push_back(xyz[2]);
-            pointIndex.push_back(i);
+            /*
+             * On a flat surface, do not draw border points that are attached to all edge nodes
+             * as they will likely result in points outside of the flat surface 
+             * (near cuts and medial wall)
+             */
+            if (flatSurfaceDrawUnstretchedLinesFlag){
+                if (p->getBarycentricProjection()->isValid()) {
+                    const int32_t* baryNodes = p->getBarycentricProjection()->getTriangleNodes();
+                    if (baryNodes != NULL) {
+                        int32_t edgeNodeCount = 0;
+                        if (nodesBoundaryEdgeCount[baryNodes[0]] > 0) edgeNodeCount++;
+                        if (nodesBoundaryEdgeCount[baryNodes[1]] > 0) edgeNodeCount++;
+                        if (nodesBoundaryEdgeCount[baryNodes[2]] > 0) edgeNodeCount++;
+                        if (edgeNodeCount >= 3) {
+                            isXyzValid = false;
+                        }
+                    }
+                }
+            }
+        }
+        
+        if (isXyzValid) {
+            if (flatSurfaceDrawUnstretchedLinesFlag) {
+                float anatXYZ[3];
+                const bool isAnatXyzValid = p->getProjectedPositionAboveSurface(*borderDrawInfo.anatomicalSurface,
+                                                                                anatXYZ,
+                                                                                drawAtDistanceAboveSurface);
+                if (isAnatXyzValid) {
+                    pointXYZ.push_back(xyz[0]);
+                    pointXYZ.push_back(xyz[1]);
+                    pointXYZ.push_back(xyz[2]);
+                    pointAnatomicalXYZ.push_back(anatXYZ[0]);
+                    pointAnatomicalXYZ.push_back(anatXYZ[1]);
+                    pointAnatomicalXYZ.push_back(anatXYZ[2]);
+                    pointIndex.push_back(i);
+                    
+                }
+            }
+            else {
+                pointXYZ.push_back(xyz[0]);
+                pointXYZ.push_back(xyz[1]);
+                pointXYZ.push_back(xyz[2]);
+                pointIndex.push_back(i);
+            }
         }
     }    
 
-    const ClippingPlaneGroup* clippingPlaneGroup = this->browserTabContent->getClippingPlaneGroup();
-    const bool doClipping = clippingPlaneGroup->isFeaturesAndAnyAxisSelected();
+    const bool doClipping = isFeatureClippingEnabled();
     
     const int32_t numPointsToDraw = static_cast<int32_t>(pointXYZ.size() / 3);
+    if (flatSurfaceDrawUnstretchedLinesFlag) {
+        CaretAssert(pointXYZ.size() == pointAnatomicalXYZ.size());
+    }
     
     /*
      * Draw points
@@ -2004,8 +2165,8 @@ BrainOpenGLFixedPipeline::drawBorder(const BorderDrawInfo& borderDrawInfo)
             const float* xyz = &pointXYZ[i3];
             
             if (doClipping) {
-                if ( ! clippingPlaneGroup->isCoordinateInsideClippingPlanesForStructure(surfaceStructure,
-                                                                                        xyz)) {
+                if ( ! isCoordinateInsideClippingPlanesForStructure(surfaceStructure,
+                                                                    xyz)) {
                     continue;
                 }
             }
@@ -2088,7 +2249,7 @@ BrainOpenGLFixedPipeline::drawBorder(const BorderDrawInfo& borderDrawInfo)
                  * prevent long border lines stretching from one edge of the
                  * surface to a far away edge.
                  */
-                if (flatSurfaceFlag) {
+                if (flatSurfaceDrawUnstretchedLinesFlag) {
                     if (pointIndex[i] != (pointIndex[i-1] + 1)) {
                         continue;
                     }
@@ -2103,15 +2264,16 @@ BrainOpenGLFixedPipeline::drawBorder(const BorderDrawInfo& borderDrawInfo)
                                                    pointIndex[i]);
                 glColor3ubv(idRGBA);
                 
+                CaretAssertVectorIndex(pointXYZ, i3 + 2);
                 const float* xyz1 = &pointXYZ[i3 - 3];
                 const float* xyz2 = &pointXYZ[i3];
                 
                 bool drawIt = true;
                 if (doClipping) {
-                    if (clippingPlaneGroup->isCoordinateInsideClippingPlanesForStructure(surfaceStructure,
-                                                                                         xyz1)
-                        && (clippingPlaneGroup->isCoordinateInsideClippingPlanesForStructure(surfaceStructure,
-                                                                                             xyz2)) ) {
+                    if (isCoordinateInsideClippingPlanesForStructure(surfaceStructure,
+                                                                     xyz1)
+                        && (isCoordinateInsideClippingPlanesForStructure(surfaceStructure,
+                                                                         xyz2)) ) {
                         /* nothing */
                     }
                     else {
@@ -2119,6 +2281,18 @@ BrainOpenGLFixedPipeline::drawBorder(const BorderDrawInfo& borderDrawInfo)
                     }
                 }
                 
+                if (drawIt) {
+                    if (flatSurfaceDrawUnstretchedLinesFlag) {
+                        CaretAssertVectorIndex(pointAnatomicalXYZ, i3 + 2);
+                        if (unstretchedBorderLineTest(xyz1,
+                                                      xyz2,
+                                                      &pointAnatomicalXYZ[i3],
+                                                      &pointAnatomicalXYZ[i3-3],
+                                                      unstretchedLinesLength)) {
+                            drawIt = false;
+                        }
+                    }
+                }
                 if (drawIt) {
                     glBegin(GL_LINES);
                     glVertex3fv(xyz1);
@@ -2143,26 +2317,41 @@ BrainOpenGLFixedPipeline::drawBorder(const BorderDrawInfo& borderDrawInfo)
                  * prevent long border lines stretching from one edge of the
                  * surface to a far away edge.
                  */
-                if (flatSurfaceFlag) {
+                if (flatSurfaceDrawUnstretchedLinesFlag) {
                     if (pointIndex[i] != (pointIndex[i-1] + 1)) {
                         continue;
                     }
                 }
                 
                 const int32_t i3 = i * 3;
+                CaretAssertVectorIndex(pointXYZ, i3 + 2);
                 const float* xyz1 = &pointXYZ[i3 - 3];
                 const float* xyz2 = &pointXYZ[i3];
                 
                 bool drawIt = true;
                 if (doClipping) {
-                    if (clippingPlaneGroup->isCoordinateInsideClippingPlanesForStructure(surfaceStructure,
-                                                                                         xyz1)
-                        && (clippingPlaneGroup->isCoordinateInsideClippingPlanesForStructure(surfaceStructure,
-                                                                                             xyz2)) ) {
+                    if (isCoordinateInsideClippingPlanesForStructure(surfaceStructure,
+                                                                     xyz1)
+                        && (isCoordinateInsideClippingPlanesForStructure(surfaceStructure,
+                                                                         xyz2)) ) {
                         /* nothing */
                     }
                     else {
                         drawIt = false;
+                    }
+                }
+                
+                
+                if (drawIt) {
+                    if (flatSurfaceDrawUnstretchedLinesFlag) {
+                        CaretAssertVectorIndex(pointAnatomicalXYZ, i3 + 2);
+                        if (unstretchedBorderLineTest(xyz1,
+                                                      xyz2,
+                                                      &pointAnatomicalXYZ[i3],
+                                                      &pointAnatomicalXYZ[i3-3],
+                                                      unstretchedLinesLength)) {
+                            drawIt = false;
+                        }
                     }
                 }
                 
@@ -2177,6 +2366,45 @@ BrainOpenGLFixedPipeline::drawBorder(const BorderDrawInfo& borderDrawInfo)
         this->enableLighting();
     }
 }
+
+/**
+ * Determine if the ratio if border length over anatomical border length
+ * is greater than the unstretched lines factor.
+ *
+ * @param p1
+ *    Position of border point in surface.
+ * @param p1
+ *    Position of next border point in surface.
+ * @param anat1
+ *    Position of border point in anatomical surface.
+ * @param anat2
+ *    Position of next border point in anatomical surface.
+ * @param unstretchedLinesFactor
+ *    The unstretched lines factor.
+ * @return
+ *    True if the border is too long and should NOT be drawn, else false.
+ */
+bool
+BrainOpenGLFixedPipeline::unstretchedBorderLineTest(const float p1[3],
+                                                    const float p2[3],
+                                                    const float anat1[3],
+                                                    const float anat2[3],
+                                                    const float unstretchedLinesFactor) const
+{
+    const float dist = MathFunctions::distance3D(p1, p2);
+    const float anatDist = MathFunctions::distance3D(anat1,
+                                                     anat2);
+    
+    if (anatDist > 0.0) {
+        const float ratio = dist / anatDist;
+        if (ratio > unstretchedLinesFactor) {
+            return true;
+        }
+    }
+    
+    return false;
+}
+
 
 /**
  * Set the OpenGL line width.  Value is clamped
@@ -2264,8 +2492,7 @@ BrainOpenGLFixedPipeline::drawSurfaceFoci(Surface* surface)
     const StructureEnum::Enum surfaceStructure = surface->getStructure();
     const StructureEnum::Enum surfaceContralateralStructure = StructureEnum::getContralateralStructure(surfaceStructure);
     
-    const ClippingPlaneGroup* clippingPlaneGroup = this->browserTabContent->getClippingPlaneGroup();
-    const bool doClipping = clippingPlaneGroup->isFeaturesAndAnyAxisSelected();
+    const bool doClipping = isFeatureClippingEnabled();
     
     bool drawAsSpheres = false;
     switch (fociDisplayProperties->getDrawingType(displayGroup,
@@ -2361,8 +2588,8 @@ BrainOpenGLFixedPipeline::drawSurfaceFoci(Surface* surface)
                     }
 
                     if (doClipping) {
-                        if ( ! clippingPlaneGroup->isCoordinateInsideClippingPlanesForStructure(surfaceStructure,
-                                                                                             xyz)) {
+                        if ( ! isCoordinateInsideClippingPlanesForStructure(surfaceStructure,
+                                                                            xyz)) {
                             drawIt = false;
                         }
                     }
@@ -2481,6 +2708,13 @@ BrainOpenGLFixedPipeline::drawSurfaceBorders(Surface* surface)
         return;
     }
     
+    float unstretchedLinesLength = -1.0;
+    if (borderDisplayProperties->isUnstretchedLinesEnabled(displayGroup,
+                                                           this->windowTabIndex)) {
+        unstretchedLinesLength = borderDisplayProperties->getUnstretchedLinesLength(displayGroup,
+                                                                                    this->windowTabIndex);
+    }
+    
     const FeatureColoringTypeEnum::Enum borderColoringType = borderDisplayProperties->getColoringType(displayGroup,
                                                                                                       this->windowTabIndex);
     const bool isContralateralEnabled = borderDisplayProperties->isContralateralDisplayed(displayGroup,
@@ -2549,6 +2783,16 @@ BrainOpenGLFixedPipeline::drawSurfaceBorders(Surface* surface)
             borderDrawInfo.isSelect = isSelect;
             borderDrawInfo.isContralateralEnabled = isContralateralEnabled;
             borderDrawInfo.isHighlightEndPoints = m_drawHighlightedEndPoints;
+            
+            borderDrawInfo.anatomicalSurface = NULL;
+            borderDrawInfo.unstretchedLinesLength = unstretchedLinesLength;
+            
+            BrainStructure* bs = brain->getBrainStructure(border->getStructure(),
+                                                          false);
+            if (bs != NULL) {
+                borderDrawInfo.anatomicalSurface = bs->getVolumeInteractionSurface();
+            }
+            
             this->drawBorder(borderDrawInfo);
         }
     }
@@ -2609,6 +2853,9 @@ BrainOpenGLFixedPipeline::drawSurfaceBorderBeingDrawn(const Surface* surface)
         borderDrawInfo.isSelect = false;
         borderDrawInfo.isContralateralEnabled = false;
         borderDrawInfo.isHighlightEndPoints = false;
+        borderDrawInfo.anatomicalSurface = NULL;
+        borderDrawInfo.unstretchedLinesLength = -1.0;
+        
         this->drawBorder(borderDrawInfo);
     }
 }
@@ -3562,6 +3809,8 @@ BrainOpenGLFixedPipeline::drawVolumeVoxelsAsCubesWholeBrain(std::vector<VolumeDr
     
     glEnable(GL_CULL_FACE);
     
+    const bool doClipping = isFeatureClippingEnabled();
+    
     const DisplayPropertiesLabels* dsl = m_brain->getDisplayPropertiesLabels();
     const DisplayGroupEnum::Enum displayGroup = dsl->getDisplayGroupForTab(this->windowTabIndex);
     
@@ -3664,19 +3913,31 @@ BrainOpenGLFixedPipeline::drawVolumeVoxelsAsCubesWholeBrain(std::vector<VolumeDr
                             const float x = iVoxel * dx + originX;
                             const float y = jVoxel * dy + originY;
                             const float z = kVoxel * dz + originZ;
-                            glPushMatrix();
-                            glTranslatef(x, y, z);
-                            switch (volInfo.wholeBrainVoxelDrawingMode) {
-                                case WholeBrainVoxelDrawingMode::DRAW_VOXELS_AS_THREE_D_CUBES:
-                                    drawCuboid(rgba, cubeSizeDX, cubeSizeDY, cubeSizeDZ);
-                                    break;
-                                case WholeBrainVoxelDrawingMode::DRAW_VOXELS_AS_ROUNDED_THREE_D_CUBES:
-                                    drawRoundedCuboid(rgba, cubeSizeDX, cubeSizeDY, cubeSizeDZ);
-                                    break;
-                                case WholeBrainVoxelDrawingMode::DRAW_VOXELS_ON_TWO_D_SLICES:
-                                    break;
+                            
+                            bool drawIt = true;
+                            if (doClipping) {
+                                const float xyz[3] = { x, y, z };
+                                if ( ! isCoordinateInsideClippingPlanesForStructure(StructureEnum::ALL,
+                                                                                    xyz)) {
+                                    drawIt = false;
+                                }
                             }
-                            glPopMatrix();
+                            
+                            if (drawIt) {
+                                glPushMatrix();
+                                glTranslatef(x, y, z);
+                                switch (volInfo.wholeBrainVoxelDrawingMode) {
+                                    case WholeBrainVoxelDrawingMode::DRAW_VOXELS_AS_THREE_D_CUBES:
+                                        drawCuboid(rgba, cubeSizeDX, cubeSizeDY, cubeSizeDZ);
+                                        break;
+                                    case WholeBrainVoxelDrawingMode::DRAW_VOXELS_AS_ROUNDED_THREE_D_CUBES:
+                                        drawRoundedCuboid(rgba, cubeSizeDX, cubeSizeDY, cubeSizeDZ);
+                                        break;
+                                    case WholeBrainVoxelDrawingMode::DRAW_VOXELS_ON_TWO_D_SLICES:
+                                        break;
+                                }
+                                glPopMatrix();
+                            }
                         }
                     }
                 }
@@ -3729,7 +3990,6 @@ void
 BrainOpenGLFixedPipeline::setFiberOrientationDisplayInfo(const DisplayPropertiesFiberOrientation* dpfo,
                                                          const DisplayGroupEnum::Enum displayGroup,
                                                          const int32_t tabIndex,
-                                                         const ClippingPlaneGroup* clippingPlaneGroup,
                                                          Plane* plane,
                                                          const StructureEnum::Enum structure,
                                                          FiberTrajectoryColorModel::Item* colorSource,
@@ -3737,7 +3997,6 @@ BrainOpenGLFixedPipeline::setFiberOrientationDisplayInfo(const DisplayProperties
 {
     dispInfo.aboveLimit = dpfo->getAboveLimit(displayGroup, tabIndex);
     dispInfo.belowLimit = dpfo->getBelowLimit(displayGroup, tabIndex);
-    dispInfo.clippingPlaneGroup = clippingPlaneGroup;
     dispInfo.colorSource = colorSource;
     dispInfo.fiberOrientationColorType = dpfo->getColoringType(displayGroup, tabIndex);
     dispInfo.fanMultiplier = dpfo->getFanMultiplier(displayGroup, tabIndex);
@@ -3851,7 +4110,6 @@ BrainOpenGLFixedPipeline::drawFiberOrientations(const Plane* plane,
     setFiberOrientationDisplayInfo(dpfo,
                                    displayGroup,
                                    this->windowTabIndex,
-                                   this->browserTabContent->getClippingPlaneGroup(),
                                    const_cast<Plane*>(plane),
                                    structure,
                                    &colorUseFiber,
@@ -3926,9 +4184,9 @@ BrainOpenGLFixedPipeline::addFiberOrientationForDrawing(const FiberOrientationDi
             return;
         }
     }
-    if (fodi->clippingPlaneGroup->isFeaturesAndAnyAxisSelected()) {
-        if ( ! fodi->clippingPlaneGroup->isCoordinateInsideClippingPlanesForStructure(fodi->structure,
-                                                                                      fiberOrientation->m_xyz)) {
+    if (isFeatureClippingEnabled()) {
+        if ( ! isCoordinateInsideClippingPlanesForStructure(fodi->structure,
+                                                            fiberOrientation->m_xyz)) {
             return;
         }
     }
@@ -4410,7 +4668,6 @@ BrainOpenGLFixedPipeline::drawFiberTrajectories(const Plane* plane,
         setFiberOrientationDisplayInfo(dpfo,
                                        displayGroup,
                                        this->windowTabIndex,
-                                       browserTabContent->getClippingPlaneGroup(),
                                        const_cast<Plane*>(plane),
                                        structure,
                                        ftmp->getFiberTrajectoryColorModel()->getSelectedItem(),

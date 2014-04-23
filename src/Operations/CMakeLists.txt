@@ -24,6 +24,7 @@ OperationCiftiChangeTimestep.h
 OperationCiftiConvert.h
 OperationCiftiConvertToScalar.h
 OperationCiftiEstimateFWHM.h
+OperationCiftiLabelExportTable.h
 OperationCiftiLabelImport.h
 OperationCiftiMath.h
 OperationCiftiPalette.h
@@ -50,6 +51,7 @@ OperationMetricMath.h
 OperationMetricMerge.h
 OperationMetricPalette.h
 OperationMetricVertexSum.h
+OperationNiftiConvert.h
 OperationNiftiInformation.h
 OperationProbtrackXDotConvert.h
 OperationSetMapName.h
@@ -67,6 +69,7 @@ OperationSurfaceInformation.h
 OperationSurfaceVertexAreas.h
 OperationVolumeCapturePlane.h
 OperationVolumeCreate.h
+OperationVolumeLabelExportTable.h
 OperationVolumeLabelImport.h
 OperationVolumeMath.h
 OperationVolumePalette.h
@@ -83,6 +86,7 @@ OperationCiftiChangeTimestep.cxx
 OperationCiftiConvert.cxx
 OperationCiftiConvertToScalar.cxx
 OperationCiftiEstimateFWHM.cxx
+OperationCiftiLabelExportTable.cxx
 OperationCiftiLabelImport.cxx
 OperationCiftiMath.cxx
 OperationCiftiPalette.cxx
@@ -109,6 +113,7 @@ OperationMetricMath.cxx
 OperationMetricMerge.cxx
 OperationMetricPalette.cxx
 OperationMetricVertexSum.cxx
+OperationNiftiConvert.cxx
 OperationNiftiInformation.cxx
 OperationProbtrackXDotConvert.cxx
 OperationSetMapName.cxx
@@ -126,6 +131,7 @@ OperationSurfaceInformation.cxx
 OperationSurfaceVertexAreas.cxx
 OperationVolumeCapturePlane.cxx
 OperationVolumeCreate.cxx
+OperationVolumeLabelExportTable.cxx
 OperationVolumeLabelImport.cxx
 OperationVolumeMath.cxx
 OperationVolumePalette.cxx

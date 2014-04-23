@@ -38,6 +38,7 @@
 #include "CaretHttpManager.h"
 #include "CaretLogger.h"
 #include "CaretPreferences.h"
+#include "CommandOperationManager.h"
 #include "EventBrowserWindowNew.h"
 #include "EventManager.h"
 #include "FileInformation.h"
@@ -248,6 +249,13 @@ main(int argc, char* argv[])
         * Handle uncaught exceptions
         */
         SystemUtilities::setHandlersForUnexpected(argc, argv);
+        
+        /*
+        * Create the session manager.
+        */
+        SessionManager::createSessionManager();
+        caretLoggerIsValid = true;
+
         /*
         * Parameters for the program.
         */
@@ -259,6 +267,11 @@ main(int argc, char* argv[])
         FileInformation progInfo(argv[0]);
         AString progName = progInfo.getFileName();
         parseCommandLine(progName, parameters, myState);
+        
+        /*
+        * Log the command parameters.
+        */
+        CaretLogFine("Running: " + caret_global_commandLine);
         
         //change the default graphics system on mac to avoid rendering performance issues with qwtplotter
 #ifdef CARET_OS_MACOSX
@@ -303,23 +316,11 @@ main(int argc, char* argv[])
         */
         BrainOpenGLWidget::initializeDefaultGLFormat();
         
-        
-        /*
-        * Create the session manager.
-        */
-        SessionManager::createSessionManager();
-        caretLoggerIsValid = true;
-        qInstallMsgHandler(messageHandlerForQt);//this handler uses caretlogger, so we must install it after the logger is available
-
+        qInstallMsgHandler(messageHandlerForQt);//this handler uses CaretLogger and GuiManager, so we must install it after the logger is available and the application is created
         /*
          * Log debug status
          */
         CaretLogConfig(applicationInformation.getCompiledWithDebugStatus());
-        
-        /*
-        * Log the command parameters.
-        */
-        CaretLogFine("Running: " + caret_global_commandLine);
         
         //sanity check command line
         bool haveSpec = false;
@@ -375,7 +376,7 @@ main(int argc, char* argv[])
         QPixmap splashPixmap;
         QSplashScreen splashScreen;
         if (showImageSplashScreen) {
-            if (WuQtUtilities::loadPixmap(":/splash_hcp.png", splashPixmap)) {
+            if (WuQtUtilities::loadPixmap(":/Splash/hcp.png", splashPixmap)) {
                 splashScreen.setPixmap(splashPixmap);
                 splashScreen.showMessage("Starting Workbench...");
                 splashScreen.show();
@@ -581,6 +582,11 @@ main(int argc, char* argv[])
         GuiManager::deleteGuiManager();
         
         /*
+         * Delete the command manager
+         */
+        CommandOperationManager::deleteCommandOperationManager();
+        
+        /*
         * Delete the session manager.
         */
         SessionManager::deleteSessionManager();
@@ -769,6 +775,21 @@ void parseCommandLine(const AString& progName, ProgramParameters* myParams, Prog
                         cerr << "Missing Y position for window" << endl;
                         hasFatalError = true;
                     }
+                } else if (thisParam.startsWith("-psn")) {
+                    /*
+                     * 21 April 2014 (Did not have this problem before this date)
+                     *
+                     * IGNORE this parameter.  For some reason, when a Mac
+                     * version is started from Finder, a "-psn" parameter
+                     * is being added to the parameters.  If this parameter
+                     * is not ignored, Workbench starts, the icon bounces 
+                     * a few times, and then Workbench quits (due to
+                     * "unrecognized option", below), and the user is 
+                     * not given any error message.
+                     *
+                     * http://stackoverflow.com/questions/10242115/os-x-strange-psn-command-line-parameter-when-launched-from-finder
+                     * http://trac.wxwidgets.org/ticket/15432
+                     */
                 } else {
                     cerr << "unrecognized option \"" << thisParam << "\"" << endl;
                     printHelp(progName);

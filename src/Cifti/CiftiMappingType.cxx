@@ -25,3 +25,12 @@ using namespace caret;
 CiftiMappingType::~CiftiMappingType()
 {//to ensure that the class's vtable gets defined in an object file
 }
+
+int64_t CiftiMappingType::getIndexFromNumberOrName(const QString& numberOrName) const
+{
+    bool ok = false;
+    int64_t ret = numberOrName.toLongLong(&ok) - 1;//quirk: use string "1" as the first index
+    if (!ok) return -1;
+    if (ret < 0 || ret >= getLength()) return -1;
+    return ret;
+}

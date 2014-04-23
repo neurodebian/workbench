@@ -24,6 +24,7 @@
 #undef __CLIPPING_PLANE_GROUP_DECLARE__
 
 #include "CaretAssert.h"
+#include "Plane.h"
 #include "SceneClass.h"
 #include "SceneClassArray.h"
 #include "SceneClassAssistant.h"
@@ -44,9 +45,12 @@ using namespace caret;
 ClippingPlaneGroup::ClippingPlaneGroup()
 : CaretObject()
 {
+    invalidateActiveClippingPlainEquations();
+    
     resetToDefaultValues();
     
     m_sceneAssistant = new SceneClassAssistant();
+    m_sceneAssistant->add("m_displayClippingBoxStatus", &m_displayClippingBoxStatus);
     m_sceneAssistant->addArray("m_translation", m_translation, 3, 0.0);
     m_sceneAssistant->addArray("m_thickness", m_thickness, 3, 20.0);
     m_sceneAssistant->add("m_xAxisSelectionStatus", &m_xAxisSelectionStatus);
@@ -63,6 +67,8 @@ ClippingPlaneGroup::ClippingPlaneGroup()
 ClippingPlaneGroup::~ClippingPlaneGroup()
 {
     delete m_sceneAssistant;
+    
+    invalidateActiveClippingPlainEquations();
 }
 
 /**
@@ -116,6 +122,10 @@ ClippingPlaneGroup::copyHelperClippingPlaneGroup(const ClippingPlaneGroup& obj)
     m_surfaceSelectionStatus  = obj.m_surfaceSelectionStatus;
     m_volumeSelectionStatus   = obj.m_volumeSelectionStatus;
     m_featuresSelectionStatus = obj.m_featuresSelectionStatus;
+
+    m_displayClippingBoxStatus = obj.m_displayClippingBoxStatus;
+    
+    invalidateActiveClippingPlainEquations();
 }
 
 /**
@@ -127,11 +137,14 @@ ClippingPlaneGroup::resetTransformation()
     for (int32_t i = 0; i < 3; i++) {
         m_translation[i] = 0.0;
     }
+
     m_thickness[0] = 180.0;
     m_thickness[1] = 250.0;
     m_thickness[2] = 220.0;
     
     m_rotationMatrix.identity();
+
+    invalidateActiveClippingPlainEquations();
 }
 
 /**
@@ -142,6 +155,8 @@ ClippingPlaneGroup::resetToDefaultValues()
 {
     resetTransformation();
     
+    m_displayClippingBoxStatus = false;
+    
     m_xAxisSelectionStatus = false;
     m_yAxisSelectionStatus = false;
     m_zAxisSelectionStatus = false;
@@ -149,6 +164,8 @@ ClippingPlaneGroup::resetToDefaultValues()
     m_surfaceSelectionStatus  = true;
     m_volumeSelectionStatus   = true;
     m_featuresSelectionStatus = true;
+
+    invalidateActiveClippingPlainEquations();
 }
 
 /**
@@ -176,7 +193,7 @@ ClippingPlaneGroup::getXCoordinateForStructure(const StructureEnum::Enum structu
  * @param structure
  *     The structure.  Note that right and left hemispheres are mirror flipped.
  */
-Plane
+Plane*
 ClippingPlaneGroup::createClippingPlane(const PlaneIdentifier planeIdentifier,
                                         const StructureEnum::Enum structure) const
 {
@@ -234,11 +251,12 @@ ClippingPlaneGroup::createClippingPlane(const PlaneIdentifier planeIdentifier,
             CaretAssert(0);
     }
     
-    m_rotationMatrix.multiplyPoint3(normalVector);
-    m_rotationMatrix.multiplyPoint3(pointOnPlane);
+    Matrix4x4 rotMat = getRotationMatrixForStructure(structure);
+    rotMat.multiplyPoint3(normalVector);
+    rotMat.multiplyPoint3(pointOnPlane);
     
-    Plane plane(normalVector,
-                pointOnPlane);
+    Plane* plane = new Plane(normalVector,
+                             pointOnPlane);
     return plane;
 }
 
@@ -249,30 +267,22 @@ ClippingPlaneGroup::createClippingPlane(const PlaneIdentifier planeIdentifier,
  * @param structure
  *     The structure.  Note that right and left hemispheres are mirror flipped.
  */
-std::vector<Plane>
+std::vector<const Plane*>
 ClippingPlaneGroup::getActiveClippingPlanesForStructure(const StructureEnum::Enum structure) const
 {
-    std::vector<Plane> planes;
+    updateActiveClippingPlainEquations();
     
-    if (m_xAxisSelectionStatus) {
-        planes.push_back(createClippingPlane(PLANE_MINIMUM_X,
-                                             structure));
-        planes.push_back(createClippingPlane(PLANE_MAXIMUM_X,
-                                             structure));
+    std::vector<const Plane*> planes;
+    
+    if (StructureEnum::isRight(structure)) {
+        planes.insert(planes.end(),
+                      m_rightStructureActiveClippingPlanes.begin(),
+                      m_rightStructureActiveClippingPlanes.end());
     }
-    
-    if (m_yAxisSelectionStatus) {
-        planes.push_back(createClippingPlane(PLANE_MINIMUM_Y,
-                                             structure));
-        planes.push_back(createClippingPlane(PLANE_MAXIMUM_Y,
-                                             structure));
-    }
-    
-    if (m_zAxisSelectionStatus) {
-        planes.push_back(createClippingPlane(PLANE_MINIMUM_Z,
-                                             structure));
-        planes.push_back(createClippingPlane(PLANE_MAXIMUM_Z,
-                                             structure));
+    else {
+        planes.insert(planes.end(),
+                      m_activeClippingPlanes.begin(),
+                      m_activeClippingPlanes.end());
     }
     
     return planes;
@@ -280,10 +290,56 @@ ClippingPlaneGroup::getActiveClippingPlanesForStructure(const StructureEnum::Enu
 
 /**
  * @return The rotation matrix.
+ *
+ * @param structure
+ *    Structure for the rotation matrix.  A 'right' structure has rotations
+ *    'mirror flipped'.
  */
 Matrix4x4
-ClippingPlaneGroup::getRotationMatrix() const
+ClippingPlaneGroup::getRotationMatrixForStructure(const StructureEnum::Enum structure) const
 {
+    if (StructureEnum::isRight(structure)) {
+        double rotationX, rotationY, rotationZ;
+        m_rotationMatrix.getRotation(rotationX,
+                                     rotationY,
+                                     rotationZ);
+        
+        const int flipMode = 2;
+        switch (flipMode) {
+            case 1:
+                rotationY = 180.0 - rotationY;
+                rotationZ = 180.0 - rotationZ;
+                break;
+            case 2:
+                rotationY = -rotationY;
+                rotationZ = -rotationZ;
+                break;
+            case 3:
+                rotationY = 180.0 - rotationY;
+                rotationZ = -rotationZ;
+                break;
+            case 4:
+                rotationY = - rotationY;
+                rotationZ = 180.0 -rotationZ;
+                break;
+        }
+        
+        Matrix4x4 mat;
+        mat.setRotation(rotationX,
+                        rotationY,
+                        rotationZ);
+        return mat;
+        
+        
+//        const double rotationFlippedY = 180.0 - rotationY;
+//        const double rotationFlippedZ = 180.0 - rotationZ;
+//        Matrix4x4 mat;
+//        mat.setRotation(rotationX, //rotationFlippedX,
+//                        rotationFlippedY,
+//                        rotationFlippedZ);
+//        return mat;
+        
+    }
     return m_rotationMatrix;
 }
 
@@ -297,6 +353,8 @@ void
 ClippingPlaneGroup::setRotationMatrix(const Matrix4x4& rotationMatrix)
 {
     m_rotationMatrix = rotationMatrix;
+
+    invalidateActiveClippingPlainEquations();
 }
 
 /**
@@ -327,6 +385,8 @@ ClippingPlaneGroup::setRotationAngles(const float rotationAngles[3])
     m_rotationMatrix.setRotation(rotationAngles[0],
                                  rotationAngles[1],
                                  rotationAngles[2]);
+    
+    invalidateActiveClippingPlainEquations();
 }
 
 
@@ -356,6 +416,8 @@ ClippingPlaneGroup::setTranslation(const float translation[3])
     m_translation[0] = translation[0];
     m_translation[1] = translation[1];
     m_translation[2] = translation[2];
+    
+    invalidateActiveClippingPlainEquations();
 }
 
 /**
@@ -400,6 +462,8 @@ ClippingPlaneGroup::setThickness(const float thickness[3])
     m_thickness[0] = thickness[0];
     m_thickness[1] = thickness[1];
     m_thickness[2] = thickness[2];
+    
+    invalidateActiveClippingPlainEquations();
 }
 
 /**
@@ -421,6 +485,8 @@ void
 ClippingPlaneGroup::setSurfaceSelected(const bool selected)
 {
     m_surfaceSelectionStatus = selected;
+    
+    invalidateActiveClippingPlainEquations();
 }
 
 /**
@@ -442,6 +508,8 @@ void
 ClippingPlaneGroup::setVolumeSelected(const bool selected)
 {
     m_volumeSelectionStatus = selected;
+    
+    invalidateActiveClippingPlainEquations();
 }
 
 /**
@@ -453,6 +521,28 @@ ClippingPlaneGroup::isFeaturesSelected() const
     return m_featuresSelectionStatus;
 }
 
+/**
+ * Set display clipping box selected
+ *
+ * @param selected
+ *    New status.
+ */
+void
+ClippingPlaneGroup::setDisplayClippingBoxSelected(const bool selected)
+{
+    m_displayClippingBoxStatus = selected;
+    
+    invalidateActiveClippingPlainEquations();
+}
+
+/**
+ * @return Is display clipping box selected?
+ */
+bool
+ClippingPlaneGroup::isDisplayClippingBoxSelected() const
+{
+    return m_displayClippingBoxStatus;
+}
 
 /**
  * @return Is features and any one or more axes selected for clipping?
@@ -521,6 +611,8 @@ void
 ClippingPlaneGroup::setXAxisSelected(const bool xAxisSelected)
 {
     m_xAxisSelectionStatus = xAxisSelected;
+    
+    invalidateActiveClippingPlainEquations();
 }
 
 /**
@@ -533,6 +625,8 @@ void
 ClippingPlaneGroup::setYAxisSelected(const bool yAxisSelected)
 {
     m_yAxisSelectionStatus = yAxisSelected;
+    
+    invalidateActiveClippingPlainEquations();
 }
 
 /**
@@ -545,6 +639,8 @@ void
 ClippingPlaneGroup::setZAxisSelected(const bool zAxisSelected)
 {
     m_zAxisSelectionStatus = zAxisSelected;
+    
+    invalidateActiveClippingPlainEquations();
 }
 
 /**
@@ -565,27 +661,54 @@ bool
 ClippingPlaneGroup::isCoordinateInsideClippingPlanesForStructure(const StructureEnum::Enum structure,
                                                                  const float xyz[3]) const
 {
-    if (m_xAxisSelectionStatus) {
-        const float x = getXCoordinateForStructure(structure);
-        const float minX = x - (m_thickness[0] / 2.0);
-        const float maxX = x + (m_thickness[0] / 2.0);
-        if (xyz[0] < minX) return false;
-        if (xyz[0] > maxX) return false;
+    updateActiveClippingPlainEquations();
+    
+    if (StructureEnum::isRight(structure)) {
+        for (std::vector<Plane*>::iterator iter = m_rightStructureActiveClippingPlanes.begin();
+             iter != m_rightStructureActiveClippingPlanes.end();
+             iter++) {
+            const Plane* plane = *iter;
+            if (plane->signedDistanceToPlane(xyz) < 0.0) {
+                return false;
+            }
+        }
+        
+        return true;
     }
     
-    if (m_yAxisSelectionStatus) {
-        const float minY = m_translation[1] - (m_thickness[1] / 2.0);
-        const float maxY = m_translation[1] + (m_thickness[1] / 2.0);
-        if (xyz[1] < minY) return false;
-        if (xyz[1] > maxY) return false;
+    for (std::vector<Plane*>::iterator iter = m_activeClippingPlanes.begin();
+         iter != m_activeClippingPlanes.end();
+         iter++) {
+        const Plane* plane = *iter;
+        if (plane->signedDistanceToPlane(xyz) < 0.0) {
+            return false;
+        }
     }
     
-    if (m_zAxisSelectionStatus) {
-        const float minZ = m_translation[2] - (m_thickness[2] / 2.0);
-        const float maxZ = m_translation[2] + (m_thickness[2] / 2.0);
-        if (xyz[2] < minZ) return false;
-        if (xyz[2] > maxZ) return false;
-    }
+//    USE THE CLIPPING PLANES EQUATIONS !!!!
+    
+    
+//    if (m_xAxisSelectionStatus) {
+//        const float x = getXCoordinateForStructure(structure);
+//        const float minX = x - (m_thickness[0] / 2.0);
+//        const float maxX = x + (m_thickness[0] / 2.0);
+//        if (xyz[0] < minX) return false;
+//        if (xyz[0] > maxX) return false;
+//    }
+//    
+//    if (m_yAxisSelectionStatus) {
+//        const float minY = m_translation[1] - (m_thickness[1] / 2.0);
+//        const float maxY = m_translation[1] + (m_thickness[1] / 2.0);
+//        if (xyz[1] < minY) return false;
+//        if (xyz[1] > maxY) return false;
+//    }
+//    
+//    if (m_zAxisSelectionStatus) {
+//        const float minZ = m_translation[2] - (m_thickness[2] / 2.0);
+//        const float maxZ = m_translation[2] + (m_thickness[2] / 2.0);
+//        if (xyz[2] < minZ) return false;
+//        if (xyz[2] > maxZ) return false;
+//    }
     
     return true;
 }
@@ -599,6 +722,80 @@ ClippingPlaneGroup::toString() const
 {
     return "ClippingPlaneGroup";
 }
+
+/**
+ * Update the active clipping planes.
+ */
+void
+ClippingPlaneGroup::updateActiveClippingPlainEquations() const
+{
+    if (m_activeClippingPlanesValid) {
+        return;
+    }
+    
+    if (m_xAxisSelectionStatus) {
+        m_activeClippingPlanes.push_back(createClippingPlane(PLANE_MINIMUM_X,
+                                                             StructureEnum::CORTEX_LEFT));
+        m_activeClippingPlanes.push_back(createClippingPlane(PLANE_MAXIMUM_X,
+                                                             StructureEnum::CORTEX_LEFT));
+
+        m_rightStructureActiveClippingPlanes.push_back(createClippingPlane(PLANE_MINIMUM_X,
+                                                             StructureEnum::CORTEX_RIGHT));
+        m_rightStructureActiveClippingPlanes.push_back(createClippingPlane(PLANE_MAXIMUM_X,
+                                                             StructureEnum::CORTEX_RIGHT));
+    }
+    
+    if (m_yAxisSelectionStatus) {
+        m_activeClippingPlanes.push_back(createClippingPlane(PLANE_MINIMUM_Y,
+                                                             StructureEnum::CORTEX_LEFT));
+        m_activeClippingPlanes.push_back(createClippingPlane(PLANE_MAXIMUM_Y,
+                                                             StructureEnum::CORTEX_LEFT));
+
+        m_rightStructureActiveClippingPlanes.push_back(createClippingPlane(PLANE_MINIMUM_Y,
+                                                             StructureEnum::CORTEX_RIGHT));
+        m_rightStructureActiveClippingPlanes.push_back(createClippingPlane(PLANE_MAXIMUM_Y,
+                                                             StructureEnum::CORTEX_RIGHT));
+    }
+    
+    if (m_zAxisSelectionStatus) {
+        m_activeClippingPlanes.push_back(createClippingPlane(PLANE_MINIMUM_Z,
+                                                             StructureEnum::CORTEX_LEFT));
+        m_activeClippingPlanes.push_back(createClippingPlane(PLANE_MAXIMUM_Z,
+                                                             StructureEnum::CORTEX_LEFT));
+
+        m_rightStructureActiveClippingPlanes.push_back(createClippingPlane(PLANE_MINIMUM_Z,
+                                                             StructureEnum::CORTEX_RIGHT));
+        m_rightStructureActiveClippingPlanes.push_back(createClippingPlane(PLANE_MAXIMUM_Z,
+                                                             StructureEnum::CORTEX_RIGHT));
+    }
+    
+    m_activeClippingPlanesValid = true;
+}
+
+/**
+ * Invalidate and remove all of the active clipping planes.
+ */
+void
+ClippingPlaneGroup::invalidateActiveClippingPlainEquations()
+{
+    m_activeClippingPlanesValid = false;
+    
+    for (std::vector<Plane*>::iterator iter = m_activeClippingPlanes.begin();
+         iter != m_activeClippingPlanes.end();
+         iter++) {
+        delete *iter;
+    }
+    m_activeClippingPlanes.clear();
+    
+    for (std::vector<Plane*>::iterator iter = m_rightStructureActiveClippingPlanes.begin();
+         iter != m_rightStructureActiveClippingPlanes.end();
+         iter++) {
+        delete *iter;
+    }
+    m_rightStructureActiveClippingPlanes.clear();
+}
+
+
 
 /**
  * Save information specific to this type of model to the scene.

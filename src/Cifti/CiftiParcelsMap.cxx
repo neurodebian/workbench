@@ -166,7 +166,12 @@ int64_t CiftiParcelsMap::getIndexForNode(const int64_t& node, const StructureEnu
 
 int64_t CiftiParcelsMap::getIndexForVoxel(const int64_t* ijk) const
 {
-    const int64_t* test = m_volLookup.find(ijk);
+    return getIndexForVoxel(ijk[0], ijk[1], ijk[2]);
+}
+
+int64_t CiftiParcelsMap::getIndexForVoxel(const int64_t& i, const int64_t& j, const int64_t& k) const
+{
+    const int64_t* test = m_volLookup.find(i, j, k);//the lookup tolerates weirdness like negatives
     if (test == NULL) return -1;
     return *test;
 }
@@ -180,6 +185,24 @@ vector<StructureEnum::Enum> CiftiParcelsMap::getParcelSurfaceStructures() const
         ret.push_back(iter->first);
     }
     return ret;
+}
+
+int64_t CiftiParcelsMap::getIndexFromNumberOrName(const QString& numberOrName) const
+{
+    bool ok = false;
+    int64_t ret = numberOrName.toLongLong(&ok) - 1;//quirk: use string "1" as the first index
+    if (ok)
+    {
+        if (ret < 0 || ret >= getLength()) return -1;//if it is a number, do not try to use it as a name, under any circumstances
+        return ret;
+    } else {
+        int64_t length = getLength();
+        for (int64_t i = 0; i < length; ++i)
+        {
+            if (numberOrName == m_parcels[i].m_name) return i;
+        }
+        return -1;
+    }
 }
 
 const VolumeSpace& CiftiParcelsMap::getVolumeSpace() const

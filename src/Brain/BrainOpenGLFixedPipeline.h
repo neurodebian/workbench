@@ -146,7 +146,6 @@ namespace caret {
         struct FiberOrientationDisplayInfo {
             float aboveLimit;
             float belowLimit;
-            const ClippingPlaneGroup* clippingPlaneGroup;
             FiberTrajectoryColorModel::Item* colorSource;
             FiberOrientationColoringTypeEnum::Enum fiberOrientationColorType;
             float fanMultiplier;
@@ -161,7 +160,6 @@ namespace caret {
         void setFiberOrientationDisplayInfo(const DisplayPropertiesFiberOrientation* dpfo,
                                             const DisplayGroupEnum::Enum displayGroup,
                                             const int32_t tabIndex,
-                                            const ClippingPlaneGroup* clippingPlaneGroup,
                                             Plane* plane,
                                             const StructureEnum::Enum structure,
                                             FiberTrajectoryColorModel::Item* colorSource,
@@ -205,6 +203,7 @@ namespace caret {
         void drawSurfaceBorders(Surface* surface);
         
         struct BorderDrawInfo {
+            Surface* anatomicalSurface;
             Surface* surface;
             Border* border;
             int32_t borderFileIndex;
@@ -213,9 +212,16 @@ namespace caret {
             bool isSelect;
             bool isContralateralEnabled;
             bool isHighlightEndPoints;
+            float unstretchedLinesLength;
         };
         
         void drawBorder(const BorderDrawInfo& borderDrawInfo);
+        
+        bool unstretchedBorderLineTest(const float p1[3],
+                                       const float p2[3],
+                                       const float anat1[3],
+                                       const float anat2[3],
+                                       const float unstretchedLinesFactor) const;
         
         void drawSurfaceFoci(Surface* surface);
         
@@ -462,9 +468,14 @@ namespace caret {
         };
         
         void applyClippingPlanes(const ClippingDataType clippingDataType,
-                                 const StructureEnum::Enum structure);
+                                 const StructureEnum::Enum structureIn);
         
         void disableClippingPlanes();
+        
+        bool isCoordinateInsideClippingPlanesForStructure(const StructureEnum::Enum structureIn,
+                                                          const float xyz[3]) const;
+        
+        bool isFeatureClippingEnabled() const;
         
         void getVolumeFitToWindowScalingAndTranslation(const VolumeMappableInterface* volume,
                                                        const VolumeSliceViewPlaneEnum::Enum sliceViewPlane,
@@ -496,6 +507,24 @@ namespace caret {
         
         int32_t mouseX;
         int32_t mouseY;
+        
+        /** Clipping plane group active in browser tab */
+        ClippingPlaneGroup* m_clippingPlaneGroup;
+        
+        /** 
+         * When mirrored clipping is enabled, the clipping region is
+         * 'mirror flipped' for right structures and clipping performed
+         * separately for left and right structures.  Otherwise, one
+         * clipping is used for all data.
+         *
+         *   Model      Enabled
+         *   -----      -------
+         *   All        NO
+         *   Montage    YES
+         *   Surface    YES
+         *   Volume     NO
+         */
+        bool m_mirroredClippingEnabled;
         
         /** Identify using color */
         IdentificationWithColor* colorIdentification;

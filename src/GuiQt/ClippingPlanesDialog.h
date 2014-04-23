@@ -26,11 +26,13 @@
 
 #include "EventListenerInterface.h"
 
+class QCheckBox;
 class QDoubleSpinBox;
 class QPushButton;
 
 namespace caret {
-
+    class BrainBrowserWindow;
+    class BrainBrowserWindowComboBox;
     class WuQWidgetObjectGroup;
     
     class ClippingPlanesDialog : public WuQDialogNonModal, public EventListenerInterface {
@@ -52,6 +54,8 @@ namespace caret {
         virtual void receiveEvent(Event* event);
 
     private slots:
+        void browserWindowComboBoxValueChanged(BrainBrowserWindow* browserWindow);
+        
         void clippingValueChanged();
         
     protected:
@@ -68,7 +72,7 @@ namespace caret {
         
         QPushButton* m_resetPushButton;
         
-        int32_t m_browserWindowIndex;
+        BrainBrowserWindowComboBox* m_browserWindowComboBox;
         
         WuQWidgetObjectGroup* m_clippingWidgetGroup;
         
@@ -89,6 +93,8 @@ namespace caret {
         QDoubleSpinBox* m_yThicknessDoubleSpinBox;
         
         QDoubleSpinBox* m_zThicknessDoubleSpinBox;
+        
+        QCheckBox* m_displayClippingBoxCheckBox;
         
         bool m_blockDialogUpdate;
         
