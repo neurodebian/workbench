@@ -2,7 +2,7 @@
 Encoding=UTF-8
 Name=Connectome Workbench
 GenericName=Human Connectome Project Viewing and Analysis Tools
-Exec=workbench
+Exec=wb_view
 Icon=connectome-workbench
 Terminal=false
 Type=Application

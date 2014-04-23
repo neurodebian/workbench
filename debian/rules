@@ -43,8 +43,8 @@ override_dh_auto_install:
 	mkdir -p debian/tmp/usr/share/man/man1
 	help2man --no-info --help-option=-help --version-string=$(uver) \
 		-n "visualization and discovery tool used to map neuroimaging data" \
-		debian/tmp/usr/bin/workbench \
-		>| debian/tmp/usr/share/man/man1/workbench.1
+		debian/tmp/usr/bin/wb_view \
+		>| debian/tmp/usr/share/man/man1/wb_view.1
 
 	help2man --no-info --help-option=-all-commands-help --version-string=$(uver) \
 		-n "command-line program for performing a variety of algorithmic tasks using volume, surface, and grayordinate data" \

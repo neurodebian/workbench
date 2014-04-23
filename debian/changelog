@@ -1,6 +1,7 @@
 connectome-workbench (0.85+git87-gce714a3-1) neurodebian; urgency=low
 
   * Fresh upstream snapshot
+    - renamed conflicting generic 'workbench' binary to 'wb_view' (thanks!)
   * debian/copyright is now generated from upstream's src/debian/copyright
 
  -- Yaroslav Halchenko <debian@onerussian.com>  Wed, 23 Apr 2014 10:01:09 -0400
