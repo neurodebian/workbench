@@ -1,3 +1,10 @@
+connectome-workbench (0.85+git87-gce714a3-1) neurodebian; urgency=low
+
+  * Fresh upstream snapshot
+  * debian/copyright is now generated from upstream's src/debian/copyright
+
+ -- Yaroslav Halchenko <debian@onerussian.com>  Wed, 23 Apr 2014 10:01:09 -0400
+
 connectome-workbench (0.85+git26-g72866b8-1) UNRELEASED; urgency=low
 
   * Initial packaging, not yet finalized for Debian proper

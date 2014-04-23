@@ -25,6 +25,11 @@ export DH_VERBOSE=1
 %:
 	dh $@ --parallel --sourcedirectory=src
 
+override_dh_clean:
+	# nice upstream maintains "proper" copyright file for us
+	cat src/debian/copyright debian/copyright.debian >| debian/copyright
+	dh_clean
+
 override_dh_auto_configure:
 	OSMESA_DIR=/usr \
      dh_auto_configure -- \
