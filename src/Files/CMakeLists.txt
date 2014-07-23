@@ -23,13 +23,14 @@ Border.h
 BorderException.h
 BorderFile.h
 BorderFileSaxReader.h
+BorderPointFromSearch.h
+BorderTracingHelper.h
 CaretDataFile.h
 CaretDataFileHelper.h
 CaretMappableDataFile.h
 CaretSparseFile.h
 CaretVolumeExtension.h
 ChartableBrainordinateInterface.h
-ChartableInterface.h
 ChartableMatrixInterface.h
 CiftiBrainordinateDataSeriesFile.h
 CiftiBrainordinateLabelFile.h
@@ -38,7 +39,6 @@ CiftiConnectivityMatrixDenseFile.h
 CiftiConnectivityMatrixDenseParcelFile.h
 CiftiConnectivityMatrixParcelFile.h
 CiftiConnectivityMatrixParcelDenseFile.h
-CiftiFacade.h
 CiftiFiberOrientationFile.h
 CiftiFiberTrajectoryFile.h
 CiftiMappableDataFile.h
@@ -72,6 +72,7 @@ ImageDimensionsModel.h
 ImageFile.h
 ImagePixelsPerSpatialUnitsEnum.h
 ImageSpatialUnitsEnum.h
+LabelDrawingTypeEnum.h
 LabelFile.h
 MetricFile.h
 MetricSmoothingObject.h
@@ -115,12 +116,14 @@ Border.cxx
 BorderException.cxx
 BorderFile.cxx
 BorderFileSaxReader.cxx
+BorderTracingHelper.cxx
 CaretDataFile.cxx
 CaretDataFileHelper.cxx
 CaretMappableDataFile.cxx
 CaretSparseFile.cxx
 CaretVolumeExtension.cxx
-ChartableInterface.cxx
+ChartableBrainordinateInterface.cxx
+ChartableMatrixInterface.cxx
 CiftiBrainordinateDataSeriesFile.cxx
 CiftiBrainordinateLabelFile.cxx
 CiftiBrainordinateScalarFile.cxx
@@ -128,7 +131,6 @@ CiftiConnectivityMatrixDenseFile.cxx
 CiftiConnectivityMatrixDenseParcelFile.cxx
 CiftiConnectivityMatrixParcelFile.cxx
 CiftiConnectivityMatrixParcelDenseFile.cxx
-CiftiFacade.cxx
 CiftiFiberOrientationFile.cxx
 CiftiFiberTrajectoryFile.cxx
 CiftiMappableDataFile.cxx
@@ -162,6 +164,7 @@ ImageDimensionsModel.cxx
 ImageFile.cxx
 ImagePixelsPerSpatialUnitsEnum.cxx
 ImageSpatialUnitsEnum.cxx
+LabelDrawingTypeEnum.cxx
 LabelFile.cxx
 MetricFile.cxx
 MetricSmoothingObject.cxx

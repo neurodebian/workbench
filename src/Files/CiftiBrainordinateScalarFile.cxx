@@ -29,7 +29,6 @@
 #include "CaretLogger.h"
 #include "ChartDataCartesian.h"
 #include "CiftiFile.h"
-#include "CiftiInterface.h"
 #include "CiftiXML.h"
 #include "SceneClass.h"
 #include "SceneClassArray.h"
@@ -49,12 +48,7 @@ using namespace caret;
  * Constructor.
  */
 CiftiBrainordinateScalarFile::CiftiBrainordinateScalarFile()
-: CiftiMappableDataFile(DataFileTypeEnum::CONNECTIVITY_DENSE_SCALAR,
-                        CiftiMappableDataFile::FILE_READ_DATA_ALL,
-                        CIFTI_INDEX_TYPE_SCALARS,
-                        CIFTI_INDEX_TYPE_BRAIN_MODELS,
-                        CiftiMappableDataFile::DATA_ACCESS_WITH_COLUMN_METHODS,
-                        CiftiMappableDataFile::DATA_ACCESS_WITH_ROW_METHODS)
+: CiftiMappableDataFile(DataFileTypeEnum::CONNECTIVITY_DENSE_SCALAR)
 {
     for (int32_t i = 0; i < BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_TABS; i++) {
         m_chartingEnabledForTab[i] = false;
@@ -73,7 +67,7 @@ CiftiBrainordinateScalarFile::~CiftiBrainordinateScalarFile()
  * Create a Cifti Scalar File using the currently loaded row in a Cifti 
  * connectivity matrix file.
  *
- * @param ciftiMatrixFile
+ * @param sourceCiftiMatrixFile
  *    Cifti connectivity matrix file.
  * @param errorMessageOut
  *    Will describe problem if there is an error.
@@ -82,27 +76,27 @@ CiftiBrainordinateScalarFile::~CiftiBrainordinateScalarFile()
  *    NULL will be returned and errorMessageOut will describe the problem.
  */
 CiftiBrainordinateScalarFile*
-CiftiBrainordinateScalarFile::newInstanceFromRowInCiftiConnectivityMatrixFile(const CiftiMappableConnectivityMatrixDataFile* ciftiMatrixFile,
+CiftiBrainordinateScalarFile::newInstanceFromRowInCiftiConnectivityMatrixFile(const CiftiMappableConnectivityMatrixDataFile* sourceCiftiMatrixFile,
                                                                               AString& errorMessageOut)
 {
     errorMessageOut.clear();
  
     const CiftiConnectivityMatrixDenseFile* denseFile =
-       dynamic_cast<const CiftiConnectivityMatrixDenseFile*>(ciftiMatrixFile);
+       dynamic_cast<const CiftiConnectivityMatrixDenseFile*>(sourceCiftiMatrixFile);
     if (denseFile == NULL) {
         errorMessageOut = "Only Cifti Dense Matrix Files are supported for conversion to Cifti Scalar Files.";
         return NULL;
     }
     
-    const CiftiInterface* ciftiMatrixInterface = ciftiMatrixFile->m_ciftiInterface;
+    const CiftiFile* sourceCiftiFile = sourceCiftiMatrixFile->m_ciftiFile;
     
-    if (ciftiMatrixFile->getNumberOfMaps() <= 0) {
+    if (sourceCiftiMatrixFile->getNumberOfMaps() <= 0) {
         errorMessageOut = "No data appears to be loaded in the Cifti Matrix File (No Maps).";
         return NULL;
     }
     
     std::vector<float> data;
-    ciftiMatrixFile->getMapData(0, data);
+    sourceCiftiMatrixFile->getMapData(0, data);
     if (data.empty()) {
         errorMessageOut = "No data appears to be loaded in the Cifti Matrix File (mapData empty).";
         return NULL;
@@ -113,19 +107,21 @@ CiftiBrainordinateScalarFile::newInstanceFromRowInCiftiConnectivityMatrixFile(co
     try {
         CiftiFile* ciftiFile = new CiftiFile();
         
-        const CiftiXMLOld& ciftiMatrixXML = ciftiMatrixInterface->getCiftiXMLOld();
-        
         /*
          * Copy XML from matrix file
          * and update to be a scalar file.
          */
-        CiftiXMLOld ciftiScalarXML = ciftiMatrixXML;
-        ciftiScalarXML.copyMapping(CiftiXMLOld::ALONG_COLUMN,
-                                   ciftiMatrixXML,
-                                   CiftiXMLOld::ALONG_ROW);
-        ciftiScalarXML.resetRowsToScalars(1);
-        AString mapName = ciftiMatrixFile->getMapName(0);
-        ciftiScalarXML.setMapNameForRowIndex(0, mapName);
+        const CiftiXML& ciftiMatrixXML = sourceCiftiFile->getCiftiXML();
+        CiftiXML ciftiScalarXML = ciftiMatrixXML;
+        CiftiBrainModelsMap brainModelsMap = ciftiMatrixXML.getBrainModelsMap(CiftiXML::ALONG_ROW);
+        CiftiScalarsMap scalarsMap;
+        scalarsMap.setLength(1);
+        scalarsMap.setMapName(0,
+                              sourceCiftiMatrixFile->getMapName(0));
+        ciftiScalarXML.setMap(CiftiXML::ALONG_ROW,
+                              scalarsMap);
+        ciftiScalarXML.setMap(CiftiXML::ALONG_COLUMN,
+                              brainModelsMap);
         ciftiFile->setCiftiXML(ciftiScalarXML);
         
         /*
@@ -138,29 +134,25 @@ CiftiBrainordinateScalarFile::newInstanceFromRowInCiftiConnectivityMatrixFile(co
          * Create a scalar file
          */
         CiftiBrainordinateScalarFile* scalarFile = new CiftiBrainordinateScalarFile();
+        scalarFile->m_ciftiFile.grabNew(ciftiFile);
 
         /*
          * Create name of scalar file
          */
-        AString newFileName = ciftiMatrixFile->getFileNameNoExtension();
+        AString newFileName = sourceCiftiMatrixFile->getFileNameNoExtension();
         newFileName.append("_");
-        newFileName.append(ciftiMatrixFile->getRowLoadedText());
+        newFileName.append(sourceCiftiMatrixFile->getRowLoadedText());
         newFileName.append(".");
         newFileName.append(DataFileTypeEnum::toFileExtension(scalarFile->getDataFileType()));
+        scalarFile->setFileName(newFileName);
         
         /*
          * Add the CiftiFile to the Scalar file
          */
-        scalarFile->initializeFromCiftiInterface(ciftiFile, newFileName);
+        scalarFile->initializeAfterReading();
         scalarFile->setModified();
         
         return scalarFile;
-    }
-    catch (const CiftiFileException& ce) {
-        if (scalarFile != NULL) {
-            delete scalarFile;
-        }
-        errorMessageOut = ce.whatString();
     }
     catch (const DataFileException& de) {
         if (scalarFile != NULL) {
@@ -176,7 +168,7 @@ CiftiBrainordinateScalarFile::newInstanceFromRowInCiftiConnectivityMatrixFile(co
  * @return Is charting enabled for this file?
  */
 bool
-CiftiBrainordinateScalarFile::isChartingEnabled(const int32_t tabIndex) const
+CiftiBrainordinateScalarFile::isBrainordinateChartingEnabled(const int32_t tabIndex) const
 {
     CaretAssertArrayIndex(m_chartingEnabledForTab,
                           BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_TABS,
@@ -190,7 +182,7 @@ CiftiBrainordinateScalarFile::isChartingEnabled(const int32_t tabIndex) const
  * is chartable if it contains more than one map.
  */
 bool
-CiftiBrainordinateScalarFile::isChartingSupported() const
+CiftiBrainordinateScalarFile::isBrainordinateChartingSupported() const
 {
     if (getNumberOfMaps() > 1) {
         return true;
@@ -206,7 +198,7 @@ CiftiBrainordinateScalarFile::isChartingSupported() const
  *    New status for charting enabled.
  */
 void
-CiftiBrainordinateScalarFile::setChartingEnabled(const int32_t tabIndex,
+CiftiBrainordinateScalarFile::setBrainordinateChartingEnabled(const int32_t tabIndex,
                                                  const bool enabled)
 {
     CaretAssertArrayIndex(m_chartingEnabledForTab,
@@ -222,7 +214,7 @@ CiftiBrainordinateScalarFile::setChartingEnabled(const int32_t tabIndex,
  *    Chart types supported by this file.
  */
 void
-CiftiBrainordinateScalarFile::getSupportedChartDataTypes(std::vector<ChartDataTypeEnum::Enum>& chartDataTypesOut) const
+CiftiBrainordinateScalarFile::getSupportedBrainordinateChartDataTypes(std::vector<ChartDataTypeEnum::Enum>& chartDataTypesOut) const
 {
     helpGetSupportedBrainordinateChartDataTypes(chartDataTypesOut);
 }
@@ -240,7 +232,7 @@ CiftiBrainordinateScalarFile::getSupportedChartDataTypes(std::vector<ChartDataTy
  *     of the pointer and must delete it when no longer needed.
  */
 ChartDataCartesian*
-CiftiBrainordinateScalarFile::loadChartDataForSurfaceNode(const StructureEnum::Enum structure,
+CiftiBrainordinateScalarFile::loadBrainordinateChartDataForSurfaceNode(const StructureEnum::Enum structure,
                                                                const int32_t nodeIndex) throw (DataFileException)
 {
     ChartDataCartesian* chartData = helpLoadChartDataForSurfaceNode(structure,
@@ -296,7 +288,7 @@ CiftiBrainordinateScalarFile::loadChartDataForSurfaceNode(const StructureEnum::E
  *     of the pointer and must delete it when no longer needed.
  */
 ChartDataCartesian*
-CiftiBrainordinateScalarFile::loadAverageChartDataForSurfaceNodes(const StructureEnum::Enum structure,
+CiftiBrainordinateScalarFile::loadAverageBrainordinateChartDataForSurfaceNodes(const StructureEnum::Enum structure,
                                                                       const std::vector<int32_t>& nodeIndices) throw (DataFileException)
 {
     ChartDataCartesian* chartData = helpLoadChartDataForSurfaceNodeAverage(structure,
@@ -315,7 +307,7 @@ CiftiBrainordinateScalarFile::loadAverageChartDataForSurfaceNodes(const Structur
  *     of the pointer and must delete it when no longer needed.
  */
 ChartDataCartesian*
-CiftiBrainordinateScalarFile::loadChartDataForVoxelAtCoordinate(const float xyz[3]) throw (DataFileException)
+CiftiBrainordinateScalarFile::loadBrainordinateChartDataForVoxelAtCoordinate(const float xyz[3]) throw (DataFileException)
 {
     ChartDataCartesian* chartData = helpLoadChartDataForVoxelAtCoordinate(xyz);
     return chartData;

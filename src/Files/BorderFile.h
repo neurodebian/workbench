@@ -28,6 +28,7 @@
 namespace caret {
 
     class Border;
+    class BorderPointFromSearch;
     class GroupAndNameHierarchyModel;
     class GiftiLabelTable;
     class SurfaceFile;
@@ -68,16 +69,20 @@ namespace caret {
         
         const Border* getBorder(const int32_t indx) const;
         
-        bool findBorderNearestXYZ(const DisplayGroupEnum::Enum displayGroup,
-                                  const int32_t browserTabIndex,
-                                  const SurfaceFile* surfaceFile,
-                                  const float xyz[3],
-                                  const float maximumDistance,
-                                  Border*& borderOut,
-                                  int32_t& borderIndexOut,
-                                  SurfaceProjectedItem*& borderPointOut,
-                                  int32_t& borderPointIndexOut,
-                                  float& distanceToNearestPointOut) const;
+        void findAllBordersWithEndPointNearSegmentFirstPoint(const DisplayGroupEnum::Enum displayGroup,
+                                               const int32_t browserTabIndex,
+                                               const SurfaceFile* surfaceFile,
+                                               const Border* borderSegment,
+                                               const float maximumDistance,
+                                               std::vector<BorderPointFromSearch>& borderPointsOut) const;
+        
+        
+        void findAllBordersWithPointsNearBothSegmentEndPoints(const DisplayGroupEnum::Enum displayGroup,
+                                                 const int32_t browserTabIndex,
+                                                 const SurfaceFile* surfaceFile,
+                                                 const Border* borderSegment,
+                                                 const float maximumDistance,
+                                                 std::vector<BorderPointFromSearch>& borderPointsOut) const;
         
         void addBorder(Border* border);
         
@@ -108,6 +113,9 @@ namespace caret {
         static int32_t getFileVersion();
         
         static AString getFileVersionAsString();
+        
+        void exportToCaret5Format(const std::vector<SurfaceFile*>& surfaceFiles,
+                                  const AString& outputCaret5FilesPrefix) throw (DataFileException);
         
         /** XML Tag for BorderFile element */
         static const AString XML_TAG_BORDER_FILE;

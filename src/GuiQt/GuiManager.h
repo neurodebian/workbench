@@ -57,6 +57,7 @@ namespace caret {
     class SceneDialog;
     class SceneFile;
     class SelectionManager;
+    class SpecFile;
     class SurfacePropertiesEditorDialog;
     class TileTabsConfigurationDialog;
     
@@ -90,6 +91,11 @@ namespace caret {
                                             const int32_t numberOfOpenTabs);
         
         bool exitProgram(QWidget* parent);
+        
+        bool processShowOpenSpecFileDialog(SpecFile* specFile,
+                                           BrainBrowserWindow* browserWindow);
+        
+        void processShowSaveManageFilesDialog(BrainBrowserWindow* browserWindow);
         
         QString applicationName() const;
         
@@ -180,6 +186,8 @@ namespace caret {
         void processShowHelpViewerDialog(BrainBrowserWindow* browserWindow,
                                          const AString& helpPageName);
         
+        void addNonModalDialog(QWidget* dialog);
+        
         void removeNonModalDialog(QWidget* dialog);
         
         /** One instance of the GuiManager */
@@ -240,7 +248,7 @@ namespace caret {
          * BrainBrowserWindow is closed in which case the dialog
          * is reparented to a different BrainBrowserWindow.
          */
-        std::vector<QWidget*> nonModalDialogs;
+        std::set<QWidget*> nonModalDialogs;
         
         /**
          * If Workbench is started by double-clicking a data file in

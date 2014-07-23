@@ -28,7 +28,7 @@
 #include "CaretMappableDataFile.h"
 #include "ChartAxis.h"
 #include "ChartableBrainordinateInterface.h"
-#include "ChartableMatrixFileSelectionModel.h"
+#include "CaretDataFileSelectionModel.h"
 #include "ChartableMatrixInterface.h"
 #include "ChartData.h"
 #include "ChartDataCartesian.h"
@@ -64,7 +64,7 @@ ModelChart::ModelChart(Brain* brain)
                                             "Chart View");
 
     for (int32_t i = 0; i < BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_TABS; i++) {
-        m_chartableMatrixFileSelectionModel[i] = new ChartableMatrixFileSelectionModel(m_brain);
+        m_chartableMatrixFileSelectionModel[i] = CaretDataFileSelectionModel::newInstanceForChartableMatrixInterface(m_brain);
     }
     initializeCharts();
     
@@ -93,7 +93,7 @@ void
 ModelChart::initializeCharts()
 {
     for (int32_t i = 0; i < BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_TABS; i++) {
-        m_selectedChartDataType[i] = ChartDataTypeEnum::CHART_DATA_TYPE_TIME_SERIES;
+        m_selectedChartDataType[i] = ChartDataTypeEnum::CHART_DATA_TYPE_INVALID;
         
         m_chartModelDataSeries[i] = new ChartModelDataSeries();
         m_chartModelDataSeries[i]->getLeftAxis()->setText("Value");
@@ -168,11 +168,11 @@ ModelChart::loadAverageChartDataForSurfaceNodes(const StructureEnum::Enum struct
         const std::vector<int32_t>  tabIndices = fileTabIter->second;
         
         CaretAssert(chartFile);
-        ChartData* chartData = chartFile->loadAverageChartDataForSurfaceNodes(structure,
+        ChartData* chartData = chartFile->loadAverageBrainordinateChartDataForSurfaceNodes(structure,
                                                                               nodeIndices);
         if (chartData != NULL) {
             ChartDataSource* dataSource = chartData->getChartDataSource();
-            dataSource->setSurfaceNodeAverage(chartFile->getCaretMappableDataFile()->getFileName(),
+            dataSource->setSurfaceNodeAverage(chartFile->getBrainordinateChartCaretMappableDataFile()->getFileName(),
                                               StructureEnum::toName(structure),
                                               surfaceNumberOfNodes, nodeIndices);
             
@@ -203,10 +203,10 @@ ModelChart::loadChartDataForVoxelAtCoordinate(const float xyz[3]) throw (DataFil
         const std::vector<int32_t>  tabIndices = fileTabIter->second;
         
         CaretAssert(chartFile);
-        ChartData* chartData = chartFile->loadChartDataForVoxelAtCoordinate(xyz);
+        ChartData* chartData = chartFile->loadBrainordinateChartDataForVoxelAtCoordinate(xyz);
         if (chartData != NULL) {
             ChartDataSource* dataSource = chartData->getChartDataSource();
-            dataSource->setVolumeVoxel(chartFile->getCaretMappableDataFile()->getFileName(),
+            dataSource->setVolumeVoxel(chartFile->getBrainordinateChartCaretMappableDataFile()->getFileName(),
                                        xyz);
             
             addChartToChartModels(tabIndices,
@@ -300,7 +300,7 @@ ModelChart::getTabsAndChartFilesForChartLoading(std::map<ChartableBrainordinateI
              tabIter != validTabIndices.end();
              tabIter++) {
             const int32_t tabIndex = *tabIter;
-            if (cf->isChartingEnabled(tabIndex)) {
+            if (cf->isBrainordinateChartingEnabled(tabIndex)) {
                 chartFileTabIndices.push_back(tabIndex);
             }
         }
@@ -338,11 +338,11 @@ ModelChart::loadChartDataForSurfaceNode(const StructureEnum::Enum structure,
         const std::vector<int32_t>  tabIndices = fileTabIter->second;
 
         CaretAssert(chartFile);
-        ChartData* chartData = chartFile->loadChartDataForSurfaceNode(structure,
+        ChartData* chartData = chartFile->loadBrainordinateChartDataForSurfaceNode(structure,
                                                nodeIndex);
         if (chartData != NULL) {
             ChartDataSource* dataSource = chartData->getChartDataSource();
-            dataSource->setSurfaceNode(chartFile->getCaretMappableDataFile()->getFileName(),
+            dataSource->setSurfaceNode(chartFile->getBrainordinateChartCaretMappableDataFile()->getFileName(),
                                        StructureEnum::toName(structure),
                                        surfaceNumberOfNodes,
                                        nodeIndex);
@@ -913,6 +913,92 @@ ModelChart::setSelectedChartDataType(const int32_t tabIndex,
 }
 
 /**
+ * Get the valid chart data types based upon the currently loaded files.
+ * 
+ * @param validChartDataTypesOut
+ *    Output containing valid chart data types.
+ */
+void
+ModelChart::getValidChartDataTypes(std::vector<ChartDataTypeEnum::Enum>& validChartDataTypesOut) const
+{
+    validChartDataTypesOut.clear();
+    
+    bool haveDataSeries = false;
+    bool haveMatrix     = false;
+    bool haveTimeSeries = false;
+    
+    std::vector<ChartableBrainordinateInterface*> allBrainordinateChartableFiles;
+    m_brain->getAllChartableBrainordinateDataFiles(allBrainordinateChartableFiles);
+
+    for (std::vector<ChartableBrainordinateInterface*>::iterator fileIter = allBrainordinateChartableFiles.begin();
+         fileIter != allBrainordinateChartableFiles.end();
+         fileIter++) {
+        ChartableBrainordinateInterface* chartFile = *fileIter;
+        
+        std::vector<ChartDataTypeEnum::Enum> chartDataTypes;
+        chartFile->getSupportedBrainordinateChartDataTypes(chartDataTypes);
+        
+        for (std::vector<ChartDataTypeEnum::Enum>::iterator typeIter = chartDataTypes.begin();
+             typeIter != chartDataTypes.end();
+             typeIter++) {
+            const ChartDataTypeEnum::Enum cdt = *typeIter;
+            switch (cdt) {
+                case ChartDataTypeEnum::CHART_DATA_TYPE_DATA_SERIES:
+                    haveDataSeries = true;
+                    break;
+                case ChartDataTypeEnum::CHART_DATA_TYPE_INVALID:
+                    break;
+                case ChartDataTypeEnum::CHART_DATA_TYPE_MATRIX:
+                    break;
+                case ChartDataTypeEnum::CHART_DATA_TYPE_TIME_SERIES:
+                    haveTimeSeries = true;
+                    break;
+            }
+        }
+    }
+    
+    std::vector<ChartableMatrixInterface*> allMatrixChartableFiles;
+    m_brain->getAllChartableMatrixDataFiles(allMatrixChartableFiles);
+    
+    for (std::vector<ChartableMatrixInterface*>::iterator fileIter = allMatrixChartableFiles.begin();
+         fileIter != allMatrixChartableFiles.end();
+         fileIter++) {
+        ChartableMatrixInterface* chartFile = *fileIter;
+        
+        std::vector<ChartDataTypeEnum::Enum> chartDataTypes;
+        chartFile->getSupportedMatrixChartDataTypes(chartDataTypes);
+        
+        for (std::vector<ChartDataTypeEnum::Enum>::iterator typeIter = chartDataTypes.begin();
+             typeIter != chartDataTypes.end();
+             typeIter++) {
+            const ChartDataTypeEnum::Enum cdt = *typeIter;
+            switch (cdt) {
+                case ChartDataTypeEnum::CHART_DATA_TYPE_DATA_SERIES:
+                    break;
+                case ChartDataTypeEnum::CHART_DATA_TYPE_INVALID:
+                    break;
+                case ChartDataTypeEnum::CHART_DATA_TYPE_MATRIX:
+                    haveMatrix = true;
+                    break;
+                case ChartDataTypeEnum::CHART_DATA_TYPE_TIME_SERIES:
+                    break;
+            }
+        }
+    }
+    
+    if (haveDataSeries) {
+        validChartDataTypesOut.push_back(ChartDataTypeEnum::CHART_DATA_TYPE_DATA_SERIES);
+    }
+    if (haveMatrix) {
+        validChartDataTypesOut.push_back(ChartDataTypeEnum::CHART_DATA_TYPE_MATRIX);
+    }
+    if (haveTimeSeries) {
+        validChartDataTypesOut.push_back(ChartDataTypeEnum::CHART_DATA_TYPE_TIME_SERIES);
+    }
+}
+
+
+/**
  * Get the type of chart selected in the given tab.
  *
  * @param tabIndex
@@ -926,7 +1012,89 @@ ModelChart::getSelectedChartDataType(const int32_t tabIndex) const
     CaretAssertArrayIndex(m_selectedChartDataType,
                           BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_TABS,
                           tabIndex);
-    return m_selectedChartDataType[tabIndex];
+    ChartDataTypeEnum::Enum chartDataType = m_selectedChartDataType[tabIndex];
+    
+    /*
+     * Verify that the selected chart data type is valid.
+     */
+    std::vector<ChartDataTypeEnum::Enum> validChartDataTypes;
+    getValidChartDataTypes(validChartDataTypes);
+    if (std::find(validChartDataTypes.begin(),
+                  validChartDataTypes.end(),
+                  chartDataType) == validChartDataTypes.end()) {
+        chartDataType = ChartDataTypeEnum::CHART_DATA_TYPE_INVALID;
+    }
+    
+    /*
+     * If selected chart data type is invalid, find a valid chart type,
+     * preferably one that contains data.
+     */
+    if (chartDataType == ChartDataTypeEnum::CHART_DATA_TYPE_INVALID) {
+        if ( ! validChartDataTypes.empty()) {
+            /*
+             * Will become the the first valid chart data type that contains
+             * data (if there is one)
+             */
+            ChartDataTypeEnum::Enum chartDataTypeWithValidData = ChartDataTypeEnum::CHART_DATA_TYPE_INVALID;
+            
+            /*
+             * Loop through all chart types (some or all valid charts 
+             * types may not contain data until the user commands loading of data)
+             */
+            std::vector<ChartDataTypeEnum::Enum> allChartDataTypes;
+            ChartDataTypeEnum::getAllEnums(allChartDataTypes);
+            for (std::vector<ChartDataTypeEnum::Enum>::iterator iter = allChartDataTypes.begin();
+                 iter != allChartDataTypes.end();
+                 iter++) {
+                const ChartDataTypeEnum::Enum cdt = *iter;
+                if (std::find(validChartDataTypes.begin(),
+                              validChartDataTypes.end(),
+                              cdt) != validChartDataTypes.end()) {
+                    if (chartDataType == ChartDataTypeEnum::CHART_DATA_TYPE_INVALID) {
+                        chartDataType = cdt;
+                    }
+                    
+                    switch (cdt) {
+                        case ChartDataTypeEnum::CHART_DATA_TYPE_DATA_SERIES:
+                            if (m_chartModelDataSeries[tabIndex]->getNumberOfChartData()) {
+                                if (chartDataTypeWithValidData == ChartDataTypeEnum::CHART_DATA_TYPE_INVALID) {
+                                    chartDataTypeWithValidData = ChartDataTypeEnum::CHART_DATA_TYPE_DATA_SERIES;
+                                }
+                            }
+                            break;
+                        case ChartDataTypeEnum::CHART_DATA_TYPE_INVALID:
+                            break;
+                        case ChartDataTypeEnum::CHART_DATA_TYPE_MATRIX:
+                            if (chartDataTypeWithValidData == ChartDataTypeEnum::CHART_DATA_TYPE_INVALID) {
+                                chartDataTypeWithValidData = ChartDataTypeEnum::CHART_DATA_TYPE_MATRIX;
+                            }
+                            break;
+                        case ChartDataTypeEnum::CHART_DATA_TYPE_TIME_SERIES:
+                            if (m_chartModelTimeSeries[tabIndex]->getNumberOfChartData()) {
+                                if (chartDataTypeWithValidData == ChartDataTypeEnum::CHART_DATA_TYPE_INVALID) {
+                                    chartDataTypeWithValidData = ChartDataTypeEnum::CHART_DATA_TYPE_TIME_SERIES;
+                                }
+                            }
+                            break;
+                    }
+                }
+            }
+            
+            if (chartDataTypeWithValidData != ChartDataTypeEnum::CHART_DATA_TYPE_INVALID) {
+                chartDataType = chartDataTypeWithValidData;
+            }
+            else if (chartDataType == ChartDataTypeEnum::CHART_DATA_TYPE_INVALID) {
+                chartDataType = validChartDataTypes[0];
+            }
+        }
+    }
+    
+    /*
+     * Selected type may have changed due to loaded files changing
+     */
+    m_selectedChartDataType[tabIndex] = chartDataType;
+    
+    return chartDataType;
 }
 
 /**
@@ -1033,7 +1201,7 @@ ModelChart::getSelectedTimeSeriesChartModelHelper(const int32_t tabIndex) const
  * @return 
  *     Chartable file selection model for the tab.
  */
-ChartableMatrixFileSelectionModel*
+CaretDataFileSelectionModel*
 ModelChart::getChartableMatrixFileSelectionModel(const int32_t tabIndex)
 {
     CaretAssertArrayIndex(m_chartableMatrixFileSelectionModel,

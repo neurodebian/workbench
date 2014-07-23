@@ -34,12 +34,19 @@ class QLabel;
 class QLineEdit;
 class QRadioButton;
 class QSignalMapper;
+class QStackedWidget;
 
 namespace caret {
 
+    class Brain;
+    class CaretDataFile;
+    class CaretDataFileSelectionComboBox;
     class ChartableBrainordinateInterface;
+    class ChartMatrixDisplayProperties;
     class ChartableMatrixInterface;
     class ChartModel;
+    class EnumComboBoxTemplate;
+    class ModelChart;
     
     class ChartSelectionViewController : public QWidget, public EventListenerInterface {
         
@@ -53,9 +60,13 @@ namespace caret {
         virtual ~ChartSelectionViewController();
         
     private slots:
-        void selectionCheckBoxClicked(int);
+        void brainordinateSelectionCheckBoxClicked(int);
         
-        void selectionRadioButtonClicked(int);
+        void matrixFileSelected(CaretDataFile* caretDataFile);
+        
+        void matrixFileLoadingButtonClicked();
+
+        void matrixYokingGroupEnumComboBoxActivated();
         
     private:
         ChartSelectionViewController(const ChartSelectionViewController&);
@@ -77,42 +88,62 @@ namespace caret {
         
         // ADD_NEW_MEMBERS_HERE
 
+        QWidget* createBrainordinateChartWidget();
+        
+        QWidget* createMatrixChartWidget();
+        
         void updateSelectionViewController();
+        
+        void updateBrainordinateChartWidget(Brain* brain,
+                                            ModelChart* modelChart,
+                                            const int32_t browserTabIndex);
+        
+        void updateMatrixChartWidget(Brain* brain,
+                                     ModelChart* modelChart,
+                                     const int32_t browserTabIndex);
         
         ChartableBrainordinateInterface* getBrainordinateFileAtIndex(const int32_t indx);
         
-        ChartableMatrixInterface* getMatrixFileAtIndex(const int32_t indx);
+//        ChartableMatrixInterface* getMatrixFileAtIndex(const int32_t indx);
         
 //        ChartModel* getSelectedChartModel();
+        
+        ChartMatrixDisplayProperties* getChartMatrixDisplayProperties();
+        
+        QStackedWidget* m_stackedWidget;
+        
+        QWidget* m_brainordinateChartWidget;
+        
+        QWidget* m_matrixChartWidget;
         
         Mode m_mode;
         
         const int32_t m_browserWindowIndex;
         
-        std::vector<QCheckBox*> m_fileEnableCheckBoxes;
+        std::vector<QCheckBox*> m_brainordinateFileEnableCheckBoxes;
         
-        std::vector<QLineEdit*> m_fileNameLineEdits;
+        std::vector<QLineEdit*> m_brainordinateFileNameLineEdits;
         
-        std::vector<QRadioButton*> m_fileSelectionRadioButtons;
+        QGridLayout* m_brainordinateGridLayout;
         
-        QButtonGroup* m_selectionRadioButtonGroup;
+        QSignalMapper* m_signalMapperBrainordinateFileEnableCheckBox;
         
-        QGridLayout* m_gridLayout;
+        CaretDataFileSelectionComboBox* m_matrixFileSelectionComboBox;
         
-        QSignalMapper* m_signalMapperFileEnableCheckBox;
+        QRadioButton* m_matrixLoadByColumnRadioButton;
         
-        QLabel* m_averageLabel;
-        
+        QRadioButton* m_matrixLoadByRowRadioButton;
+                
+        EnumComboBoxTemplate* m_matrixYokingGroupComboBox;
+
         static const int COLUMN_CHECKBOX;
-        static const int COLUMN_RADIOBUTTON;
         static const int COLUMN_LINE_EDIT;
         
     };
     
 #ifdef __CHART_SELECTION_VIEW_CONTROLLER_DECLARE__
     const int ChartSelectionViewController::COLUMN_CHECKBOX    = 0;
-    const int ChartSelectionViewController::COLUMN_RADIOBUTTON = 1;
-    const int ChartSelectionViewController::COLUMN_LINE_EDIT   = 2;
+    const int ChartSelectionViewController::COLUMN_LINE_EDIT   = 1;
 #endif // __CHART_SELECTION_VIEW_CONTROLLER_DECLARE__
 
 } // namespace

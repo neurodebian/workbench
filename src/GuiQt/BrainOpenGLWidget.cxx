@@ -43,6 +43,7 @@
 #include "CaretLogger.h"
 #include "CaretPreferences.h"
 #include "CursorManager.h"
+#include "DummyFontTextRenderer.h"
 #include "EventModelGetAll.h"
 #include "EventManager.h"
 #include "EventBrowserWindowContentGet.h"
@@ -51,7 +52,7 @@
 #include "EventGraphicsUpdateOneWindow.h"
 #include "EventGetOrSetUserInputModeProcessor.h"
 #include "EventUserInterfaceUpdate.h"
-#include "GlfFontTextRenderer.h"
+#include "FtglFontTextRenderer.h"
 #include "GuiManager.h"
 #include "MathFunctions.h"
 #include "Matrix4x4.h"
@@ -65,8 +66,6 @@
 #include "UserInputModeBorders.h"
 #include "UserInputModeFoci.h"
 #include "UserInputModeView.h"
-
-#include "GlfFontTextRenderer.h"
 
 
 using namespace caret;
@@ -84,16 +83,35 @@ BrainOpenGLWidget::BrainOpenGLWidget(QWidget* parent,
     this->openGL = NULL;
     this->borderBeingDrawn = new Border();
 
-//    this->textRenderer = new GlfFontTextRenderer();
-//    if (this->textRenderer->isValid()) {
-//        CaretLogConfig("GLF font system is being used for OpenGL fonts.");
-//    }
-//    else {
-//        CaretLogConfig("GLF font system failed, switch to Qt's font system.");
-//        delete this->textRenderer;
-//        this->textRenderer = new BrainOpenGLWidgetTextRenderer(this);
-//    }
-    this->textRenderer = new BrainOpenGLWidgetTextRenderer(this);
+    this->textRenderer = NULL;
+    /*
+     * Create a FTGL font renderer
+     */
+    if (this->textRenderer == NULL){
+        this->textRenderer = new FtglFontTextRenderer();
+        if ( ! this->textRenderer->isValid()) {
+            CaretLogWarning("Failed to create FTGL text renderer.");
+            delete this->textRenderer;
+            this->textRenderer = NULL;
+        }
+    }
+  
+    /*
+     * If creating previous renderer failed, use QT for text.
+     */
+    if (this->textRenderer == NULL){
+        this->textRenderer = new BrainOpenGLWidgetTextRenderer(this);
+        if ( ! this->textRenderer->isValid()) {
+            delete this->textRenderer;
+            this->textRenderer = NULL;
+            CaretLogWarning("Failed to create QT GL text renderer.");
+        }
+    }
+
+    if (this->textRenderer == NULL) {
+        CaretLogSevere("Unable to create a text renderer for OpenGL.");
+        this->textRenderer = new DummyFontTextRenderer();
+    }
     
     this->windowIndex = windowIndex;
     this->userInputBordersModeProcessor = new UserInputModeBorders(this->borderBeingDrawn,
@@ -1131,6 +1149,10 @@ BrainOpenGLWidget::captureImage(EventImageCapture* imageCaptureEvent)
     }
     
     imageCaptureEvent->setImage(image);
+    
+    uint8_t backgroundColor[3];
+    this->openGL->getBackgroundColor(backgroundColor);
+    imageCaptureEvent->setBackgroundColor(backgroundColor);
     
     BrainOpenGLShape::setImmediateModeOverride(false);
     

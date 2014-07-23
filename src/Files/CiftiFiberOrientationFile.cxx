@@ -25,6 +25,7 @@
 
 #include "CaretAssert.h"
 #include "CiftiFile.h"
+#include "CiftiMappableDataFile.h"
 #include "CaretLogger.h"
 #include "Fiber.h"
 #include "FiberOrientation.h"
@@ -399,7 +400,7 @@ CiftiFiberOrientationFile::getVolumeSpacing(float volumeSpacingOut[3]) const
  * @return a pointer to the CIFTI XML.
  * May be NULL if a file is not loaded.
  */
-const CiftiXMLOld*
+const CiftiXML*
 CiftiFiberOrientationFile::getCiftiXML() const
 {
     return m_ciftiXML;
@@ -422,8 +423,8 @@ CiftiFiberOrientationFile::readFile(const AString& filename) throw (DataFileExce
     
     try {
         CiftiFile ciftiFile;
-        ciftiFile.openFile(filename,
-                           IN_MEMORY);
+        ciftiFile.openFile(filename);
+        ciftiFile.convertToInMemory();
         
         const int64_t numRows = ciftiFile.getNumberOfRows();
         if (numRows <= 0) {
@@ -474,15 +475,16 @@ CiftiFiberOrientationFile::readFile(const AString& filename) throw (DataFileExce
             }
         }
         
-        const CiftiXMLOld& ciftiXML = ciftiFile.getCiftiXMLOld();
-        m_ciftiXML = new CiftiXMLOld(ciftiXML);
+        const CiftiXML& ciftiXML = ciftiFile.getCiftiXML();
+        m_ciftiXML = new CiftiXML(ciftiXML);
         VolumeSpace::OrientTypes orient[3];
-        int64_t dims[3];
         float origin[3];
-        ciftiXML.getVolumeAttributesForPlumb(orient,
-                                             dims,
-                                             origin,
-                                             m_volumeSpacing);
+        if (ciftiXML.getMappingType(CiftiXML::ALONG_COLUMN) != CiftiMappingType::BRAIN_MODELS) throw DataFileException(getFileNameNoPath() + " does not have brain models along column");
+        const CiftiBrainModelsMap& myMap = ciftiXML.getBrainModelsMap(CiftiXML::ALONG_COLUMN);
+        if (!myMap.hasVolumeData()) throw DataFileException(getFileNameNoPath() + " has no volume data, cannot be a fiber orientation file");
+        myMap.getVolumeSpace().getOrientAndSpacingForPlumb(orient,
+                                                           m_volumeSpacing,
+                                                           origin);//NOTE: will assert/throw if not plumb
         
         setFileName(filename);
         
@@ -493,6 +495,24 @@ CiftiFiberOrientationFile::readFile(const AString& filename) throw (DataFileExce
         throw dfe;
     }
 }
+
+/**
+ * Add information about the file to the data file information.
+ *
+ * @param dataFileInformation
+ *    Consolidates information about a data file.
+ */
+void
+CiftiFiberOrientationFile::addToDataFileContentInformation(DataFileContentInformation& dataFileInformation)
+{
+    CaretDataFile::addToDataFileContentInformation(dataFileInformation);
+    
+    if (m_ciftiXML != NULL) {
+        CiftiMappableDataFile::addCiftiXmlToDataFileContentInformation(dataFileInformation,
+                                                                       *m_ciftiXML);
+    }
+}
+
 
 /**
  * Write the data file.

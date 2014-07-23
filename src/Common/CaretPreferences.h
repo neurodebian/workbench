@@ -43,17 +43,44 @@ namespace caret {
         
         virtual ~CaretPreferences();
         
-        void getColorForeground(uint8_t colorForeground[3]) const;
-
-        void getColorForeground(float colorForeground[3]) const;
+        void getColorForegroundAllView(uint8_t colorForeground[3]) const;
         
-        void setColorForeground(const uint8_t colorForeground[3]);
+        void setColorForegroundAllView(const uint8_t colorForeground[3]);
         
-        void getColorBackground(uint8_t colorBackground[3]) const;
+        void getColorBackgroundAllView(uint8_t colorForeground[3]) const;
         
-        void getColorBackground(float colorBackground[3]) const;
+        void setColorBackgroundAllView(const uint8_t colorForeground[3]);
         
-        void setColorBackground(const uint8_t colorBackground[3]);
+        
+        void getColorForegroundChartView(uint8_t colorForeground[3]) const;
+        
+        void setColorForegroundChartView(const uint8_t colorForeground[3]);
+        
+        void getColorBackgroundChartView(uint8_t colorForeground[3]) const;
+        
+        void setColorBackgroundChartView(const uint8_t colorForeground[3]);
+        
+        
+        void getColorForegroundSurfaceView(uint8_t colorForeground[3]) const;
+        
+        void setColorForegroundSurfaceView(const uint8_t colorForeground[3]);
+        
+        void getColorBackgroundSurfaceView(uint8_t colorForeground[3]) const;
+        
+        void setColorBackgroundSurfaceView(const uint8_t colorForeground[3]);
+        
+        
+        void getColorForegroundVolumeView(uint8_t colorForeground[3]) const;
+        
+        void setColorForegroundVolumeView(const uint8_t colorForeground[3]);
+        
+        void getColorBackgroundVolumeView(uint8_t colorForeground[3]) const;
+        
+        void setColorBackgroundVolumeView(const uint8_t colorForeground[3]);
+        
+        void getColorChartMatrixGridLines(uint8_t colorChartMatrixGridLines[3]) const;
+        
+        void setColorChartMatrixGridLines(const uint8_t colorChartMatrixGridLines[3]);
         
         void getPreviousSpecFiles(std::vector<AString>& previousSpecFiles) const;
         
@@ -103,10 +130,6 @@ namespace caret {
         
         void getAnimationStartTime(double &time);
         
-        //bool isContralateralIdentificationEnabled() const;
-        
-        //void setContralateralIdentificationEnabled(const bool enabled);
-        
         bool isSplashScreenEnabled() const;
         
         void setSplashScreenEnabled(const bool enabled);
@@ -127,18 +150,9 @@ namespace caret {
         
         const TileTabsConfiguration* getTileTabsConfigurationByUniqueIdentifier(const AString& uniqueIdentifier) const;
         
-//        std::vector<AString> getTileTabsConfigurationUniqueIdentifiers() const;
-        
-//        std::vector<AString> getTileTabsConfigurationNames() const;
-        
         TileTabsConfiguration* getTileTabsConfigurationByName(const AString& name) const;
         
-//        bool getTileTabsConfigurationByUniqueIdentifier(const AString& tileTabsUniqueIdentifier,
-//                                            TileTabsConfiguration& tileTabsConfigurationOut) const;
-        
         void addTileTabsConfiguration(TileTabsConfiguration* tileTabsConfiguration);
-        
-//        void addOrReplaceTileTabsConfiguration(const TileTabsConfiguration& tileTabsConfiguration);
         
         void removeTileTabsConfigurationByUniqueIdentifier(const AString& tileTabsUniqueIdentifier);
         
@@ -167,16 +181,9 @@ namespace caret {
         void setRemoteFileUserNameAndPassword(const AString& userName,
                                               const AString& password);
         
-//        std::vector<ModelTransform*> getAllModelTransforms();
-//        
-//        void setAllModelTransforms(std::vector<ModelTransform*>& allModelTransforms);
-//        
-//        const ModelTransform* getModelTransform(const AString& viewName);
-//        
-//        void addModelTransform(const ModelTransform& ModelTransform);
-//        
-//        void removeModelTransform(const AString& viewName);
-        
+        static void byteRgbToFloatRgb(const uint8_t byteRGB[3],
+                                      float floatRGB[3]);
+
     private:
         CaretPreferences(const CaretPreferences&);
 
@@ -207,6 +214,14 @@ namespace caret {
         void addToPrevious(std::vector<AString>& previousVector,
                            const AString& newName);
         
+        void readUnsignedByteArray(const AString& name,
+                                   uint8_t array[],
+                                   const int32_t numberOfElements);
+        
+        void writeUnsignedByteArray(const AString& name,
+                                    const uint8_t array[],
+                                    const int32_t numberOfElements);
+        
         void readPreferences();
         
         void removeAllTileTabsConfigurations();
@@ -217,9 +232,23 @@ namespace caret {
         
         mutable QSettings* qSettings;
         
-        uint8_t colorForeground[3];
+        uint8_t colorForegroundAll[3];
         
-        uint8_t colorBackground[3];
+        uint8_t colorBackgroundAll[3];
+        
+        uint8_t colorForegroundChart[3];
+        
+        uint8_t colorBackgroundChart[3];
+        
+        uint8_t colorForegroundSurface[3];
+        
+        uint8_t colorBackgroundSurface[3];
+        
+        uint8_t colorForegroundVolume[3];
+        
+        uint8_t colorBackgroundVolume[3];
+        
+        uint8_t colorChartMatrixGridLines[3];
         
         std::vector<AString> previousSpecFiles;
         
@@ -257,8 +286,6 @@ namespace caret {
         AString remoteFilePassword;
         bool remoteFileLoginSaved;
         
-        //bool contralateralIdentificationEnabled;
-        
         static const AString NAME_ANIMATION_START_TIME;
         static const AString NAME_VOLUME_AXES_CROSSHAIRS;
         static const AString NAME_VOLUME_AXES_LABELS;
@@ -267,9 +294,17 @@ namespace caret {
         static const AString NAME_VOLUME_MONTAGE_COORDINATE_PRECISION;
         static const AString NAME_COLOR_BACKGROUND;
         static const AString NAME_COLOR_FOREGROUND;
+        static const AString NAME_COLOR_BACKGROUND_ALL;
+        static const AString NAME_COLOR_FOREGROUND_ALL;
+        static const AString NAME_COLOR_BACKGROUND_CHART;
+        static const AString NAME_COLOR_FOREGROUND_CHART;
+        static const AString NAME_COLOR_BACKGROUND_SURFACE;
+        static const AString NAME_COLOR_FOREGROUND_SURFACE;
+        static const AString NAME_COLOR_BACKGROUND_VOLUME;
+        static const AString NAME_COLOR_FOREGROUND_VOLUME;
+        static const AString NAME_COLOR_CHART_MATRIX_GRID_LINES;
         static const AString NAME_DEVELOP_MENU;
         static const AString NAME_IMAGE_CAPTURE_METHOD;
-//        static const AString NAME_IDENTIFICATION_CONTRALATERAL;
         static const AString NAME_LOGGING_LEVEL;
         static const AString NAME_OPENGL_DRAWING_METHOD;
         static const AString NAME_PREVIOUS_SPEC_FILES;
@@ -293,9 +328,17 @@ namespace caret {
     const AString CaretPreferences::NAME_VOLUME_MONTAGE_COORDINATE_PRECISION     = "volumeMontageCoordinatePrecision";
     const AString CaretPreferences::NAME_COLOR_BACKGROUND     = "colorBackground";
     const AString CaretPreferences::NAME_COLOR_FOREGROUND     = "colorForeground";
+    const AString CaretPreferences::NAME_COLOR_BACKGROUND_ALL     = "colorBackgroundAll";
+    const AString CaretPreferences::NAME_COLOR_FOREGROUND_ALL     = "colorForegroundAll";
+    const AString CaretPreferences::NAME_COLOR_BACKGROUND_CHART     = "colorBackgroundChart";
+    const AString CaretPreferences::NAME_COLOR_FOREGROUND_CHART     = "colorForegroundChart";
+    const AString CaretPreferences::NAME_COLOR_BACKGROUND_SURFACE     = "colorBackgroundSurface";
+    const AString CaretPreferences::NAME_COLOR_FOREGROUND_SURFACE     = "colorForegroundSurface";
+    const AString CaretPreferences::NAME_COLOR_BACKGROUND_VOLUME     = "colorBackgroundVolume";
+    const AString CaretPreferences::NAME_COLOR_FOREGROUND_VOLUME     = "colorForegroundVolume";
+    const AString CaretPreferences::NAME_COLOR_CHART_MATRIX_GRID_LINES = "colorChartMatrixGridLines";
     const AString CaretPreferences::NAME_DEVELOP_MENU     = "developMenu";
     const AString CaretPreferences::NAME_IMAGE_CAPTURE_METHOD = "imageCaptureMethod";
-    //const AString CaretPreferences::NAME_IDENTIFICATION_CONTRALATERAL     = "identificationContralateral";
     const AString CaretPreferences::NAME_LOGGING_LEVEL     = "loggingLevel";
     const AString CaretPreferences::NAME_OPENGL_DRAWING_METHOD     = "openGLDrawingMethod";
     const AString CaretPreferences::NAME_PREVIOUS_SPEC_FILES     = "previousSpecFiles";

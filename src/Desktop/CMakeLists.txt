@@ -95,7 +95,7 @@ OperationsBase
 Qwt
 OSMesaDummy
 Brain
-GlfFont
+${FTGL_FONT_MODULE_FOR_LINKING}
 Files
 Charting
 Palette
@@ -107,6 +107,7 @@ Scenes
 Xml
 Common
 Quazip
+${FREETYPE_LIBRARIES}
 ${QT_LIBRARIES}
 ${ZLIB_LIBRARIES}
 #${LIBS}
@@ -192,7 +193,9 @@ ENDIF (APPLE)
 IF (APPLE)
     SET (MACOSX_BUNDLE_INFO_STRING wb_view Copyright 2014 )
     SET (MACOSX_BUNDLE_ICON_FILE workbench.icns )
-    SET (MACOSX_BUNDLE_GUI_IDENTIFIER wb_view )
+    ##SET (MACOSX_BUNDLE_GUI_IDENTIFIER wb_view )
+    ## Underscore is not valid in MACOSX_BUNDLE_GUI_IDENTIFIER
+    SET (MACOSX_BUNDLE_GUI_IDENTIFIER workbench )
     SET (MACOSX_BUNDLE_LONG_VERSION_STRING wb_view)
     SET (MACOSX_BUNDLE_BUNDLE_NAME wb_view)
     SET (MACOSX_BUNDLE_SHORT_VERSION_STRING 0.85)

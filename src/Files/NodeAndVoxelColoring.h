@@ -23,6 +23,10 @@
 
 #include <stdint.h>
 
+#include "CaretColorEnum.h"
+#include "DisplayGroupEnum.h"
+#include "LabelDrawingTypeEnum.h"
+
 namespace caret {
     class DescriptiveStatistics;
     class FastStatistics;
@@ -51,15 +55,6 @@ namespace caret {
                                             float* rgbaOut,
                                             const bool ignoreThresholding = false);
         
-//        static void colorScalarsWithPaletteParallel(const FastStatistics* statistics,
-//                                            const PaletteColorMapping* paletteColorMapping,
-//                                            const Palette* palette,
-//                                            const float* scalars,
-//                                            const float* scalarThresholds,
-//                                            const int64_t numberOfScalars,
-//                                            uint8_t* rgbaOut,
-//                                            const bool ignoreThresholding = false);
-        
         static void colorScalarsWithPalette(const FastStatistics* statistics,
                                             const PaletteColorMapping* paletteColorMapping,
                                             const Palette* palette,
@@ -72,20 +67,24 @@ namespace caret {
         static const float SMALL_POSITIVE;
         static const float SMALL_NEGATIVE;
         
-        static void colorIndicesWithLabelTable(const GiftiLabelTable* labelTable,
-                                               const int32_t* labelIndices,
+        static void colorIndicesWithLabelTableForDisplayGroupTab(const GiftiLabelTable* labelTable,
+                                               const float* labelIndices,
                                                const int64_t numberOfIndices,
+                                               const DisplayGroupEnum::Enum displayGroup,
+                                               const int32_t tabIndex,
                                                float* rgbv);
+        
+        static void colorIndicesWithLabelTableForDisplayGroupTab(const GiftiLabelTable* labelTable,
+                                               const float* labelIndices,
+                                               const int64_t numberOfIndices,
+                                               const DisplayGroupEnum::Enum displayGroup,
+                                               const int32_t tabIndex,
+                                               uint8_t* rgbv);
         
         static void colorIndicesWithLabelTable(const GiftiLabelTable* labelTable,
                                                const float* labelIndices,
                                                const int64_t numberOfIndices,
                                                float* rgbv);
-        
-        static void colorIndicesWithLabelTable(const GiftiLabelTable* labelTable,
-                                               const int32_t* labelIndices,
-                                               const int64_t numberOfIndices,
-                                               uint8_t* rgbv);
         
         static void colorIndicesWithLabelTable(const GiftiLabelTable* labelTable,
                                                const float* labelIndices,
@@ -93,6 +92,8 @@ namespace caret {
                                                uint8_t* rgbv);
         
         static void convertSliceColoringToOutlineMode(uint8_t* rgbaInOut,
+                                                      const LabelDrawingTypeEnum::Enum labelDrawingType,
+                                                      const CaretColorEnum::Enum labelOutlineColor,
                                                       const int64_t xdim,
                                                       const int64_t ydim);
         
@@ -112,6 +113,14 @@ namespace caret {
                                             void* rgbaOutPointer,
                                             const bool ignoreThresholding);
         
+        static void colorIndicesWithLabelTableForDisplayGroupTabPrivate(const GiftiLabelTable* labelTable,
+                                                      const float* labelIndices,
+                                                      const int64_t numberOfIndices,
+                                                      const DisplayGroupEnum::Enum displayGroup,
+                                                      const int32_t tabIndex,
+                                                      const ColorDataType colorDataType,
+                                                      void* rgbaOutPointer);
+        
         NodeAndVoxelColoring();
         
         virtual ~NodeAndVoxelColoring();
@@ -119,13 +128,14 @@ namespace caret {
         NodeAndVoxelColoring(const NodeAndVoxelColoring&);
 
         NodeAndVoxelColoring& operator=(const NodeAndVoxelColoring&);
-        
-    private:
+
+        static const int32_t INVALID_TAB_INDEX;
     };
     
 #ifdef __NODE_AND_VOXEL_COLORING_DECLARE__
     const float NodeAndVoxelColoring::SMALL_POSITIVE =  0.00001;
     const float NodeAndVoxelColoring::SMALL_NEGATIVE = -0.00001;
+    const int32_t NodeAndVoxelColoring::INVALID_TAB_INDEX = -1;
 #endif // __NODE_AND_VOXEL_COLORING_DECLARE__
 
 } // namespace

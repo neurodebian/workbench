@@ -135,7 +135,13 @@ SpecFileManagementDialog::runManageFilesDialog(Brain* brain,
                                     brain->getSpecFile(),
                                     title,
                                     parent);
+    if ( ! s_manageFilesGeometry.isEmpty()) {
+        dialog.restoreGeometry(s_manageFilesGeometry);
+    }
+    
     dialog.exec();
+    
+    s_manageFilesGeometry = dialog.saveGeometry();
 }
 
 /**
@@ -547,6 +553,15 @@ SpecFileManagementDialog::filesTableWidgetCellChanged(int rowIndex, int columnIn
             else if (columnIndex == m_COLUMN_IN_SPEC_FILE_CHECKBOX) {
                 sfdf->setSpecFileMember(isSelected);
                 updateSpecFileRowInTable();
+                
+                /*
+                 * Check the Spec File SAVE checkbox
+                 */
+                if (m_specFileTableRowIndex >= 0) {
+                    QTableWidgetItem* saveItem = getTableWidgetItem(m_specFileTableRowIndex,
+                                                                    m_COLUMN_SAVE_CHECKBOX);
+                    saveItem->setCheckState(Qt::Checked);
+                }
             }
         }
     }
@@ -1018,6 +1033,16 @@ SpecFileManagementDialog::updateSpecFileRowInTable()
                     break;
                 case MANAGE_FILES_LOADED:
                     break;
+                case MANAGE_FILES_LOADED_MODIFIED:
+                    if (! m_specFile->isModified()) {
+                        hideSpecFileRow = true;
+                    }
+                    break;
+                case MANAGE_FILES_LOADED_NOT_MODIFIED:
+                    if (m_specFile->isModified()) {
+                        hideSpecFileRow = true;
+                    }
+                    break;
                 case MANAGE_FILES_NOT_LOADED:
                     hideSpecFileRow = true;
                     break;
@@ -1408,6 +1433,26 @@ SpecFileManagementDialog::loadSpecFileContentIntoDialog()
                     isFileHidden = true;
                 }
                 break;
+            case MANAGE_FILES_LOADED_MODIFIED:
+                if (caretDataFile != NULL) {
+                    if ( ! caretDataFile->isModified()) {
+                        isFileHidden = true;
+                    }
+                }
+                else {
+                    isFileHidden = true;
+                }
+                break;
+            case MANAGE_FILES_LOADED_NOT_MODIFIED:
+                if (caretDataFile != NULL) {
+                    if (caretDataFile->isModified()) {
+                        isFileHidden = true;
+                    }
+                }
+                else {
+                    isFileHidden = true;
+                }
+                break;
             case MANAGE_FILES_NOT_LOADED:
                 if (caretDataFile != NULL) {
                     isFileHidden = true;
@@ -1461,6 +1506,7 @@ SpecFileManagementDialog::createCheckableItem()
     return item;
 }
 
+#include "EventDataFileDelete.h"
 
 /**
  * Called when a push button was added using addUserPushButton().
@@ -1473,7 +1519,7 @@ SpecFileManagementDialog::createCheckableItem()
  *    The result that indicates action that should be taken
  *    as a result of the button being pressed.
  */
-WuQDialogModal::ModalDialogUserButtonResult
+WuQDialogModal::DialogUserButtonResult
 SpecFileManagementDialog::userButtonPressed(QPushButton* userPushButton)
 {
     if (userPushButton == m_loadScenesPushButton) {
@@ -1486,7 +1532,7 @@ SpecFileManagementDialog::userButtonPressed(QPushButton* userPushButton)
         
         GuiManager::get()->processShowSceneDialog(GuiManager::get()->getActiveBrowserWindow());
         
-        return RESULT_ACCEPT;
+        return RESULT_MODAL_ACCEPT;
     }
     else {
         CaretAssert(0);
@@ -1685,6 +1731,7 @@ SpecFileManagementDialog::writeSpecFile(const bool writeOnlyIfModified)
     
     return errorMessage;
 }
+
 /**
  * Called when a file remove button is clicked.
  *
@@ -1709,7 +1756,7 @@ SpecFileManagementDialog::fileRemoveActionSelected(int rowIndex)
                 return;
             }
         }
-        GuiManager::get()->getBrain()->removeAndDeleteDataFile(caretDataFile);
+        EventManager::get()->sendEvent(EventDataFileDelete(caretDataFile).getPointer());
         loadSpecFileContentIntoDialog();
         updateGraphicWindowsAndUserInterface();
     }
@@ -2297,12 +2344,30 @@ SpecFileManagementDialog::createManageFilesLoadedNotLoadedToolBar(QLabel* &label
     loadedFilesAction->setData(qVariantFromValue((int)MANAGE_FILES_LOADED));
     loadedFilesAction->setCheckable(true);
     
-    QAction* notLoadedFilesAction = m_manageFilesLoadedNotLoadedActionGroup->addAction("Not-Loaded");
+    QAction* loadedFilesModifiedAction = m_manageFilesLoadedNotLoadedActionGroup->addAction("Loaded:Modified");
+    loadedFilesModifiedAction->setData(qVariantFromValue((int)MANAGE_FILES_LOADED_MODIFIED));
+    loadedFilesModifiedAction->setCheckable(true);
+    
+    QAction* loadedFilesNotModifiedAction = m_manageFilesLoadedNotLoadedActionGroup->addAction("Loaded:Not Modified");
+    loadedFilesNotModifiedAction->setData(qVariantFromValue((int)MANAGE_FILES_LOADED_NOT_MODIFIED));
+    loadedFilesNotModifiedAction->setCheckable(true);
+    
+    QAction* notLoadedFilesAction = m_manageFilesLoadedNotLoadedActionGroup->addAction("Not Loaded");
     notLoadedFilesAction->setData(qVariantFromValue((int)MANAGE_FILES_NOT_LOADED));
     notLoadedFilesAction->setCheckable(true);
     
     m_manageFilesLoadedNotLoadedActionGroup->blockSignals(true);
-    allFilesAction->setChecked(true);
+    switch (m_dialogMode) {
+        case MODE_MANAGE_FILES:
+            allFilesAction->setChecked(true);
+            break;
+        case MODE_OPEN_SPEC_FILE:
+            allFilesAction->setChecked(true);
+            break;
+        case MODE_SAVE_FILES_WHILE_QUITTING:
+            loadedFilesModifiedAction->setChecked(true);
+            break;
+    }
     m_manageFilesLoadedNotLoadedActionGroup->blockSignals(false);
     
     QToolBar* toolbar = createToolBarWithActionGroup("View Files: ",

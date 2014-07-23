@@ -26,6 +26,7 @@
 
 #include "Border.h"
 #include "BorderFile.h"
+#include "BorderPointFromSearch.h"
 #include "Brain.h"
 #include "BrainStructure.h"
 #include "BrowserTabContent.h"
@@ -53,6 +54,8 @@
 #include "ElapsedTimer.h"
 #include "EventBrowserTabGetAll.h"
 #include "EventCaretMappableDataFilesGet.h"
+#include "EventDataFileAdd.h"
+#include "EventDataFileDelete.h"
 #include "EventDataFileRead.h"
 #include "EventDataFileReload.h"
 #include "EventGetDisplayedDataFiles.h"
@@ -139,6 +142,10 @@ Brain::Brain()
     m_displayPropertiesVolume = new DisplayPropertiesVolume();
     m_displayProperties.push_back(m_displayPropertiesVolume);
     
+    EventManager::get()->addEventListener(this,
+                                          EventTypeEnum::EVENT_DATA_FILE_ADD);
+    EventManager::get()->addEventListener(this,
+                                          EventTypeEnum::EVENT_DATA_FILE_DELETE);
     EventManager::get()->addEventListener(this,
                                           EventTypeEnum::EVENT_DATA_FILE_READ);
     EventManager::get()->addEventListener(this,
@@ -1211,7 +1218,12 @@ Brain::addReadOrReloadVolumeFile(const FileModeAddReadReload fileMode,
     
     vf->clearModified();
     
+    ElapsedTimer timer;
+    timer.start();
     vf->updateScalarColoringForAllMaps(m_paletteFile);
+    CaretLogInfo("Time to color volume data is "
+                 + AString::number(timer.getElapsedTimeSeconds(), 'f', 3)
+                 + " seconds.");
     
     if (addFlag) {
         m_volumeFiles.push_back(vf);
@@ -1424,6 +1436,7 @@ Brain::validateCiftiMappableDataFile(const CiftiMappableDataFile* ciftiMapFile) 
     }
 }
 
+
 /**
  * Read a connectivity matrix dense file.
  *
@@ -1622,57 +1635,6 @@ Brain::addReadOrReloadConnectivityMatrixDenseParcelFile(const FileModeAddReadRel
     }
     
     return file;
-}
-
-/**
- * Convert the loaded row in a Cifti Connectivity Matrix File into a single
- * map in a Cifti Scalar File.  The file create is added to the "in-memory"
- * files.
- *
- * @param ciftiMatrixFile
- *     Cifti Matrix File whose loaded row is convert to a Cifti Scalar File.
- * @throw
- *     DataFileException if there is an error during conversion.
- */
-void
-Brain::convertCiftiMatrixFileToCiftiScalarFile(const CiftiMappableConnectivityMatrixDataFile* ciftiMatrixFile) throw (DataFileException)
-{
-    AString errorMessage;
-    
-    CiftiBrainordinateScalarFile* scalarFile =
-    CiftiBrainordinateScalarFile::newInstanceFromRowInCiftiConnectivityMatrixFile(ciftiMatrixFile,
-                                                                                  errorMessage);
-    
-    if (scalarFile == NULL) {
-        throw DataFileException(errorMessage);
-    }
-
-    m_connectivityDenseScalarFiles.push_back(scalarFile);
-    m_specFile->addCaretDataFile(scalarFile);
-}
-
-/**
- * Create a new fiber trajectory from the data currently loaded in the given
- * fiber trajectory file.
- *
- * @param ciftiFiberTrajectoryFile
- *    File that is the source of data for the new file.
- * @param errorMessage
- *    DataFileException if there is an error during conversion.
- */
-void
-Brain::createNewConnectivityFiberTrajectoryFileFromLoadedData(const CiftiFiberTrajectoryFile* ciftiFiberTrajectoryFile) throw (DataFileException)
-{
-    AString errorMessage;
-    
-    CiftiFiberTrajectoryFile* trajFile = ciftiFiberTrajectoryFile->newFiberTrajectoryFileFromLoadedRowData(errorMessage);
-    
-    if (trajFile == NULL) {
-        throw DataFileException(errorMessage);
-    }
-    
-    m_connectivityFiberTrajectoryFiles.push_back(trajFile);
-    m_specFile->addCaretDataFile(trajFile);
 }
 
 /**
@@ -2607,7 +2569,7 @@ Brain::getAllChartableBrainordinateDataFiles(std::vector<ChartableBrainordinateI
          iter++) {
         ChartableBrainordinateInterface* chartFile = dynamic_cast<ChartableBrainordinateInterface*>(*iter);
         if (chartFile != NULL) {
-            if (chartFile->isChartingSupported()) {
+            if (chartFile->isBrainordinateChartingSupported()) {
                 chartableDataFilesOut.push_back(chartFile);
             }
         }
@@ -2637,7 +2599,7 @@ Brain::getAllChartableBrainordinateDataFilesForChartDataType(const ChartDataType
          iter != chartFiles.end();
          iter++) {
         ChartableBrainordinateInterface* chartFile = *iter;
-        if (chartFile->isChartDataTypeSupported(chartDataType)) {
+        if (chartFile->isBrainordinateChartDataTypeSupported(chartDataType)) {
             chartableDataFilesOut.push_back(chartFile);
         }
     }
@@ -2671,10 +2633,10 @@ Brain::getAllChartableBrainordinateDataFilesWithChartingEnabled(std::vector<Char
          iter++) {
         ChartableBrainordinateInterface* chartFile = dynamic_cast<ChartableBrainordinateInterface*>(*iter);
         if (chartFile != NULL) {
-            if (chartFile->isChartingSupported()) {
+            if (chartFile->isBrainordinateChartingSupported()) {
                 for (int32_t iTab = 0; iTab < numTabs; iTab++) {
                     const int32_t tabIndex = tabIndices[iTab];
-                    if (chartFile->isChartingEnabled(tabIndex)) {
+                    if (chartFile->isBrainordinateChartingEnabled(tabIndex)) {
                         chartableDataFilesOut.push_back(chartFile);
                         break;
                     }
@@ -2705,7 +2667,7 @@ Brain::getAllChartableMatrixDataFiles(std::vector<ChartableMatrixInterface*>& ch
          iter++) {
         ChartableMatrixInterface* chartFile = dynamic_cast<ChartableMatrixInterface*>(*iter);
         if (chartFile != NULL) {
-            if (chartFile->isChartingSupported()) {
+            if (chartFile->isMatrixChartingSupported()) {
                 chartableDataFilesOut.push_back(chartFile);
             }
         }
@@ -2735,7 +2697,7 @@ Brain::getAllChartableMatrixDataFilesForChartDataType(const ChartDataTypeEnum::E
          iter != chartFiles.end();
          iter++) {
         ChartableMatrixInterface* chartFile = *iter;
-        if (chartFile->isChartDataTypeSupported(chartDataType)) {
+        if (chartFile->isMatrixChartDataTypeSupported(chartDataType)) {
             chartableDataFilesOut.push_back(chartFile);
         }
     }
@@ -3397,17 +3359,6 @@ Brain::getNumberOfBorderFiles() const
 }
 
 /**
- * @return Return a new BorderFile that has been added to the brain.
- */
-BorderFile* 
-Brain::addBorderFile()
-{
-    BorderFile* bf = new BorderFile();
-    addDataFile(bf);
-    return bf;
-}
-
-/**
  * @return The border file.
  * @param indx Index of the border file.
  */
@@ -3430,255 +3381,12 @@ Brain::getBorderFile(const int32_t indx) const
 }
 
 /**
- * For the given border, find in the border files, the border
- * that is closest to points in the given border in the given border.
- *
- * @param displayGroup
- *    Display group in which border is tested for display.
- * @param browserTabIndex
- *    Tab index in which border is displayed.
- * @param surfaceFile
- *    Surface file used for unprojection of border points.
- * @param border
- *    Border whose endpoints are used to find a nearby border
- *    in the border files.
- * @param borderTestMode
- *    Mode for which given border points are used for finding
- *    the nearest border;
- * @param maximumDistance
- *    Maximum distance given border can be from a border point.
- * @param borderFileOut
- *    File containing the border that was nearest the given border.
- * @param borderFileIndexOut
- *    Index of border file containing the border that was nearest the given border.
- * @param borderOut
- *    Border containing the point nearest the given border.
- * @param borderIndexOut
- *    Index of border in the border file containing the point nearest the coordinate.
- * @param borderPointIndexOut
- *    Index of border point nearest the given border, in the border.
- * @param borderPointOut
- *    Point in border nearest the given border.
- * @return
- *    Returns true if a border was found that was within
- *    maximum distance of either endpoint in which case ALL of
- *    the output parameters will be valid.  Otherwise, false
- *    will be returned.
- */
-bool 
-Brain::findBorderNearestBorder(const DisplayGroupEnum::Enum displayGroup,
-                               const int32_t browserTabIndex,
-                               const SurfaceFile* surfaceFile,
-                              const Border* border,
-                              const NearestBorderTestMode borderTestMode,
-                              const float maximumDistance,
-                              BorderFile*& borderFileOut,
-                              int32_t& borderFileIndexOut,
-                              Border*& borderOut,
-                              int32_t& borderIndexOut,
-                              SurfaceProjectedItem*& borderPointOut,
-                              int32_t& borderPointIndexOut,
-                              float& distanceToBorderPointOut) const
-{
-    CaretAssert(surfaceFile);
-    CaretAssert(border);
-    
-    const int32_t numPoints = border->getNumberOfPoints();
-    if (numPoints <= 0) {
-        return false;
-    }
-    
-    borderFileOut = NULL;
-    borderFileIndexOut = -1;
-    borderOut = NULL; 
-    borderIndexOut = -1;
-    borderPointOut = NULL;
-    borderPointIndexOut = -1;
-    distanceToBorderPointOut = maximumDistance;
-    
-    bool testFirstBorderPoint = false;
-    bool testLastBorderPoint  = false;
-    bool testAllBorderPoints  = false;
-    switch (borderTestMode) {
-        case NEAREST_BORDER_TEST_MODE_ALL_POINTS:
-            testAllBorderPoints = true;
-            break;
-        case NEAREST_BORDER_TEST_MODE_ENDPOINTS:
-            testFirstBorderPoint = true;
-            testLastBorderPoint = true;
-            break;
-    }
-    for (int32_t i = 0; i < numPoints; i++) {
-        bool testIt = testAllBorderPoints;
-        if (testFirstBorderPoint) {
-            if (i == 0) {
-                testIt = true;
-            }
-        }
-        if (testLastBorderPoint) {
-            if (i == (numPoints - 1)) {
-                testIt = true;
-            }
-        }
-        
-        if (testIt) {
-            float xyz[3];
-            const SurfaceProjectedItem* firstPoint = border->getPoint(i);
-            if (firstPoint->getProjectedPosition(*surfaceFile, 
-                                                 xyz, 
-                                                 true)) {
-                BorderFile* borderFile = NULL;
-                int32_t borderFileIndex = -1;
-                Border* border = NULL;
-                int32_t borderIndex = -1;
-                SurfaceProjectedItem* borderPoint = NULL;
-                int32_t borderPointIndex = -1;
-                float distanceToBorderPoint = 0.0;
-                if (findBorderNearestXYZ(displayGroup,
-                                         browserTabIndex,
-                                         surfaceFile,
-                                              xyz, 
-                                              maximumDistance, 
-                                              borderFile, 
-                                              borderFileIndex, 
-                                              border, 
-                                              borderIndex, 
-                                              borderPoint, 
-                                              borderPointIndex,
-                                              distanceToBorderPoint)) {
-                    if (distanceToBorderPoint < distanceToBorderPointOut) {
-                        borderFileOut = borderFile;
-                        borderFileIndexOut = borderFileIndex;
-                        borderOut = border;
-                        borderIndexOut = borderIndex;
-                        borderPointOut = borderPoint;
-                        borderPointIndexOut = borderPointIndex;
-                        distanceToBorderPointOut = distanceToBorderPoint;
-                    }
-                }
-            }
-        }
-    }
-    
-    const bool valid = (borderOut != NULL);
-    return valid;
-}
-
-/**
- * Find the border nearest the given coordinate within
- * the given maximum distance.
- *
- * @param displayGroup
- *    Display group in which border is tested for display.
- * @param browserTabIndex
- *    Tab index in which border is displayed.
- * @param surfaceFile
- *    Surface file used for unprojection of border points.
- * @param xyz
- *    Coordinate for nearest border.
- * @param maximumDistance
- *    Maximum distance coordinate can be from a border point.
- * @param borderFileOut
- *    File containing the border that was nearest the coordinate.
- * @param borderFileIndexOut
- *    Index of border file containing the border that was nearest the coordinate.
- * @param borderOut
- *    Border containing the point nearest the coordinate.
- * @param borderIndexOut
- *    Index of border in the border file containing the point nearest the coordinate.
- * @param borderPointIndexOut
- *    Index of border point nearest the coordinate, in the border.
- * @param borderPointOut
- *    Point in border nearest the coordinate.
- * @param distanceToBorderPointOut
- *    Distance to border point found nearest the given coordinate.
- * @return
- *    Returns true if a border point was found that was within
- *    maximum distance of the coordinate in which case ALL of
- *    the output parameters will be valid.  Otherwise, false
- *    will be returned.
- */
-bool 
-Brain::findBorderNearestXYZ(const DisplayGroupEnum::Enum displayGroup,
-                            const int32_t browserTabIndex,
-                            const SurfaceFile* surfaceFile,
-                           const float xyz[3],
-                           const float maximumDistance,
-                           BorderFile*& borderFileOut,
-                           int32_t& borderFileIndexOut,
-                           Border*& borderOut,
-                           int32_t& borderIndexOut,
-                           SurfaceProjectedItem*& borderPointOut,
-                           int32_t& borderPointIndexOut,
-                           float& distanceToBorderPointOut) const
-{
-    CaretAssert(surfaceFile);
-    
-    borderFileOut = NULL;
-    borderFileIndexOut = -1;
-    borderOut = NULL;
-    borderIndexOut = -1;
-    borderPointOut = NULL;
-    borderPointIndexOut = -1;
-    distanceToBorderPointOut = maximumDistance;
-    
-    const int32_t numBorderFiles = getNumberOfBorderFiles();
-    for (int32_t iFile = 0; iFile < numBorderFiles; iFile++) {
-        const BorderFile* borderFile = getBorderFile(iFile);
-        Border* border = NULL;
-        int32_t borderIndex = -1;
-        SurfaceProjectedItem* borderPoint = NULL;
-        int32_t borderPointIndex;
-        float distanceToNearestBorderPoint = 0.0;
-        bool valid = borderFile->findBorderNearestXYZ(displayGroup,
-                                                      browserTabIndex,
-                                                      surfaceFile,
-                                                      xyz,
-                                                      maximumDistance,
-                                                      border,
-                                                      borderIndex,
-                                                      borderPoint,
-                                                      borderPointIndex,
-                                                      distanceToNearestBorderPoint);
-        if (valid) {
-            if (distanceToNearestBorderPoint < distanceToBorderPointOut) {
-                CaretAssert(border);
-                CaretAssert(borderIndex >= 0);
-                CaretAssert(borderPoint);
-                CaretAssert(borderPointIndex >= 0);
-                borderFileOut = (BorderFile*)borderFile;
-                borderFileIndexOut = iFile;
-                borderOut = border;
-                borderIndexOut = borderIndex;
-                borderPointOut = borderPoint;
-                borderPointIndexOut = borderPointIndex;
-                distanceToBorderPointOut = distanceToNearestBorderPoint;
-            }
-        }
-    }
-    
-    const bool valid = (borderFileOut != NULL);
-    return valid;
-}
-
-/**
  * @return Number of foci files.
  */
 int32_t 
 Brain::getNumberOfFociFiles() const
 {
     return m_fociFiles.size();
-}
-
-/**
- * @return Return a new FociFile that has been added to the brain.
- */
-FociFile* 
-Brain::addFociFile()
-{
-    FociFile* ff = new FociFile();
-    addDataFile(ff);
-    return ff;
 }
 
 /**
@@ -3701,17 +3409,6 @@ Brain::getFociFile(const int32_t indx) const
 {
     CaretAssertVectorIndex(m_fociFiles, indx);
     return m_fociFiles[indx];
-}
-
-/**
- * @return A new scene file that has been added to the brain.
- */
-SceneFile* 
-Brain::addSceneFile()
-{
-    SceneFile* sf = new SceneFile();
-    addDataFile(sf);
-    return sf;
 }
 
 /**
@@ -4859,7 +4556,7 @@ Brain::updateFileNameForReading(const AString& filename)
     }
     
     FileInformation pathFileInfo(m_currentDirectory, filename);
-    AString fullPathName = pathFileInfo.getFilePath();
+    AString fullPathName = pathFileInfo.getAbsoluteFilePath();
     
     return fullPathName;
 }
@@ -4894,7 +4591,7 @@ Brain::updateFileNameForWriting(const AString& filename) throw (DataFileExceptio
     }
     
     FileInformation pathFileInfo(m_currentDirectory, filename);
-    AString fullPathName = pathFileInfo.getFilePath();
+    AString fullPathName = pathFileInfo.getAbsoluteFilePath();
     
     return fullPathName;
 }
@@ -4908,7 +4605,24 @@ Brain::updateFileNameForWriting(const AString& filename) throw (DataFileExceptio
 void 
 Brain::receiveEvent(Event* event)
 {
-    if (event->getEventType() == EventTypeEnum::EVENT_DATA_FILE_READ) {
+    if (event->getEventType() == EventTypeEnum::EVENT_DATA_FILE_ADD) {
+        EventDataFileAdd* addDataFileEvent =
+            dynamic_cast<EventDataFileAdd*>(event);
+        CaretAssert(addDataFileEvent);
+        
+        addDataFile(addDataFileEvent->getCaretDataFile());
+        addDataFileEvent->setEventProcessed();
+    }
+    else if (event->getEventType() == EventTypeEnum::EVENT_DATA_FILE_DELETE) {
+        EventDataFileDelete* deleteDataFileEvent =
+        dynamic_cast<EventDataFileDelete*>(event);
+        CaretAssert(deleteDataFileEvent);
+        
+        removeAndDeleteDataFile(deleteDataFileEvent->getCaretDataFile());
+
+        deleteDataFileEvent->setEventProcessed();
+    }
+    else if (event->getEventType() == EventTypeEnum::EVENT_DATA_FILE_READ) {
         EventDataFileRead* readDataFileEvent =
              dynamic_cast<EventDataFileRead*>(event);
         CaretAssert(readDataFileEvent);
@@ -5145,6 +4859,35 @@ Brain::getAllMappableDataFileWithDataFileType(const DataFileTypeEnum::Enum dataF
     }
 }
 
+/**
+ * Get all CaretDataFiles of the given data file type.
+ *
+ * @param dataFileType
+ *     Type of data file.
+ * @param caretDataFilesOut
+ *     Data file of the given data file type that were found.
+ */
+void
+Brain::getAllDataFilesWithDataFileType(const DataFileTypeEnum::Enum dataFileType,
+                                     std::vector<CaretDataFile*>& caretDataFilesOut) const
+{
+    
+    std::vector<CaretDataFile*> allDataFiles;
+    getAllDataFiles(allDataFiles,
+                    true);
+    
+    for (std::vector<CaretDataFile*>::iterator iter = allDataFiles.begin();
+         iter != allDataFiles.end();
+         iter++) {
+        CaretDataFile* cdf = *iter;
+        if (cdf->getDataFileType() == dataFileType) {
+            caretDataFilesOut.push_back(cdf);
+        }
+    }
+    
+    caretDataFilesOut.clear();
+}
+
 
 /**
  * Get all loaded data files.
@@ -5257,21 +5000,26 @@ Brain::isFileValid(const CaretDataFile* caretDataFile) const
     return false;
 }
 
-
 /**
- * Are any data files modified (including spec file)?
+ * Get all of the modified files excluding the given data file types.
+ *
  * @param excludeTheseDataTypes
- *    Do not check the modification status of any data files whose
- *    data type is contained in this parameter.
+ *    Data types of files that excluded.
+ * @param modifiedDataFilesOut
+ *    Output containing the modified files.
+ *
  */
-bool
-Brain::areFilesModified(const std::vector<DataFileTypeEnum::Enum>& excludeTheseDataTypes)
+void
+Brain::getAllModifiedFiles(const std::vector<DataFileTypeEnum::Enum>& excludeTheseDataTypes,
+                           std::vector<CaretDataFile*>& modifiedDataFilesOut) const
 {
+    modifiedDataFilesOut.clear();
+    
     if (std::find(excludeTheseDataTypes.begin(),
                   excludeTheseDataTypes.end(),
                   DataFileTypeEnum::SPECIFICATION) == excludeTheseDataTypes.end()) {
         if (m_specFile->isModified()) {
-            return true;
+            modifiedDataFilesOut.push_back(m_specFile);
         }
     }
     
@@ -5290,13 +5038,52 @@ Brain::areFilesModified(const std::vector<DataFileTypeEnum::Enum>& excludeTheseD
                       excludeTheseDataTypes.end(),
                       cdf->getDataFileType()) == excludeTheseDataTypes.end()) {
             if (cdf->isModified()) {
-                return true;
+                modifiedDataFilesOut.push_back(cdf);
             }
         }
     }
-    
-    return false;
 }
+
+
+///**
+// * Are any data files modified (including spec file)?
+// * @param excludeTheseDataTypes
+// *    Do not check the modification status of any data files whose
+// *    data type is contained in this parameter.
+// */
+//bool
+//Brain::areFilesModified(const std::vector<DataFileTypeEnum::Enum>& excludeTheseDataTypes)
+//{
+//    if (std::find(excludeTheseDataTypes.begin(),
+//                  excludeTheseDataTypes.end(),
+//                  DataFileTypeEnum::SPECIFICATION) == excludeTheseDataTypes.end()) {
+//        if (m_specFile->isModified()) {
+//            return true;
+//        }
+//    }
+//    
+//    std::vector<CaretDataFile*> dataFiles;
+//    getAllDataFiles(dataFiles);
+//    
+//    for (std::vector<CaretDataFile*>::iterator iter = dataFiles.begin();
+//         iter != dataFiles.end();
+//         iter++) {
+//        CaretDataFile* cdf = *iter;
+//        
+//        /**
+//         * Ignore files whose data type is excluded.
+//         */
+//        if (std::find(excludeTheseDataTypes.begin(),
+//                      excludeTheseDataTypes.end(),
+//                      cdf->getDataFileType()) == excludeTheseDataTypes.end()) {
+//            if (cdf->isModified()) {
+//                return true;
+//            }
+//        }
+//    }
+//    
+//    return false;
+//}
 
 
 /**

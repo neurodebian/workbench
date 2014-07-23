@@ -44,7 +44,6 @@
 #include "Surface.h"
 #include "WuQMessageBox.h"
 #include <ModelVolume.h>
-#include <VolumeSliceViewModeEnum.h>
 #include <VolumeSliceViewPlaneEnum.h>
 #include <VolumeFile.h>
 
@@ -80,6 +79,10 @@ MovieDialog::MovieDialog(QWidget *parent) :
 	m_CEnd = 0;
 	m_AEnd = 0;
     m_interpolationIndex = 0;
+    
+    m_surface  = NULL;
+    m_surface1 = NULL;
+    m_surface2 = NULL;
 }
 
 MovieDialog::~MovieDialog()
@@ -96,6 +99,59 @@ void MovieDialog::on_closeButton_clicked()
     this->close();
 }
 
+
+void MovieDialog::on_interpolateSurfaceCheckbox_toggled(bool checked)
+{
+    if ( ! checked) {
+        return;
+    }
+    
+    BrainBrowserWindow *bw = GuiManager::get()->getBrowserWindowByWindowIndex(m_browserWindowIndex);
+    if(!bw)
+    {
+        WuQMessageBox::errorOk(this,
+                               "Invalid browser window index, " + AString::number(m_browserWindowIndex));
+        return;
+    }
+    
+    BrowserTabContent *btc1 = bw->getBrowserTabContent(0);
+    BrowserTabContent *btc2 = bw->getBrowserTabContent(1);
+    if(!btc1 || !btc2) {
+        this->ui->interpolateSurfaceCheckbox->blockSignals(true);
+        this->ui->interpolateSurfaceCheckbox->setChecked(false);
+        this->ui->interpolateSurfaceCheckbox->blockSignals(false);
+        WuQMessageBox::errorOk(this,
+                               "There must be two browser tabs.");
+        return;
+    }
+    
+    //    int32_t tabIndex1 = btc1->getTabNumber();
+    if ((btc1->getSelectedModelType() != ModelTypeEnum::MODEL_TYPE_SURFACE)
+        || (btc2->getSelectedModelType() != ModelTypeEnum::MODEL_TYPE_SURFACE)) {
+        this->ui->interpolateSurfaceCheckbox->blockSignals(true);
+        this->ui->interpolateSurfaceCheckbox->setChecked(false);
+        this->ui->interpolateSurfaceCheckbox->blockSignals(false);
+        WuQMessageBox::errorOk(this,
+                               "Both Tab 1 and Tab 2 must contain surface models.");
+        return;
+    }
+    
+    ModelSurface *ms1 = btc1->getDisplayedSurfaceModel();
+    
+    //    int32_t tabIndex2 = btc2->getTabNumber();
+    ModelSurface *ms2 = btc2->getDisplayedSurfaceModel();
+    
+    if(!(ms1&&ms2)) return;
+    
+    if (ms1->getSurface()->getStructure() != ms2->getSurface()->getStructure()) {
+        this->ui->interpolateSurfaceCheckbox->blockSignals(true);
+        this->ui->interpolateSurfaceCheckbox->setChecked(false);
+        this->ui->interpolateSurfaceCheckbox->blockSignals(false);
+        WuQMessageBox::errorOk(this,
+                               "Surfaces in Tab 1 and Tab 2 must be the same structure.");
+        return;
+    }
+}
 
 
 
@@ -160,34 +216,39 @@ void MovieDialog::on_recordButton_toggled(bool checked)
         AString tempDir = QDir::tempPath();
         if ( !fileName.isEmpty() )
         {
-            int crop[4];
-            crop[0] = imageX;
-            crop[1] = imageY;
-            crop[2] = 0;
-            crop[3] = 0;            
-            if(!(crop[0]&&crop[1])) GuiManager::get()->getBrowserWindowByWindowIndex(m_browserWindowIndex)->getViewportSize(crop[0],crop[1]);
+//            int crop[4];
+//            crop[0] = imageX;
+//            crop[1] = imageY;
+//            crop[2] = 0;
+//            crop[3] = 0;            
+//            if(!(crop[0]&&crop[1])) GuiManager::get()->getBrowserWindowByWindowIndex(m_browserWindowIndex)->getViewportSize(crop[0],crop[1]);
     
 
             unlink(fileName);
             CaretLogInfo("Rendering movie to:" + fileName);
             AString ffmpeg = SystemUtilities::getWorkbenchHome() + AString("/ffmpeg ");            
 
+           // JWH ffmpeg = "/mnt/myelin/distribution/caret7_distribution/workbench//macosx64_apps/ffmpeg ";
+            
+            
             double frame_rate = 30.0/double(1 + this->ui->repeatFramesSpinBox->value());
 
             
-            if(ui->cropImageCheckBox->isChecked())
-            {                
-                this->getImageCrop(tempDir + "/movie0" + AString(".png"),crop);
-            }
-
-            crop[0] = (crop[0]/2)*2;
-            crop[1] = (crop[1]/2)*2;
-            CaretLogInfo("Resizing image from " + AString::number(imageX) + AString(":") + AString::number(imageY) + AString(" to ") +
-                         AString::number(crop[0]) + AString(":") + AString::number(crop[1]));
-
-            AString command = ffmpeg + AString("-threads 4 -r " + AString::number(frame_rate) + " -i "+ tempDir + "/movie%d.png -r 30 -q:v 1 -vf crop=" + 
-                AString::number(crop[0]) + ":" + AString::number(crop[1]) + ":" + 
-                AString::number(crop[2]) + ":" + AString::number(crop[3]) + " " + fileName);
+//            if(ui->cropImageCheckBox->isChecked())
+//            {                
+//                this->getImageCrop(tempDir + "/movie0" + AString(".png"),crop);
+//            }
+//
+//            crop[0] = (crop[0]/2)*2;
+//            crop[1] = (crop[1]/2)*2;
+//            CaretLogInfo("Resizing image from " + AString::number(imageX) + AString(":") + AString::number(imageY) + AString(" to ") +
+//                         AString::number(crop[0]) + AString(":") + AString::number(crop[1]));
+//
+//            AString command = ffmpeg + AString("-threads 4 -r " + AString::number(frame_rate) + " -i "+ tempDir + "/movie%d.png -r 30 -q:v 1 -vf crop=" + 
+//                AString::number(crop[0]) + ":" + AString::number(crop[1]) + ":" + 
+//                AString::number(crop[2]) + ":" + AString::number(crop[3]) + " " + fileName);
+            AString command = ffmpeg + AString("-threads 4 -r " + AString::number(frame_rate) + " -i "+ tempDir + "/movie%d.png -r 30 -q:v 1 "
+                                               + fileName);
             CaretLogFine("running " + command);
 
             system(command.toAscii().data());
@@ -203,31 +264,26 @@ void MovieDialog::on_recordButton_toggled(bool checked)
     }
 }
 
-void MovieDialog::getImageCrop(AString fileName, int *cropOut)
-{
-    const int marginSize = this->ui->marginSpinBox->value();
-    CaretPreferences* prefs = SessionManager::get()->getCaretPreferences();
-    uint8_t backgroundColor[3];
-    prefs->getColorBackground(backgroundColor);
-
-    ImageFile file;
-    file.readFile(fileName);
-
-    int leftTopRightBottom[4];
-    file.findImageObject(backgroundColor,leftTopRightBottom);
-
-    const int width = leftTopRightBottom[2] - leftTopRightBottom[0] + 1;
-    const int height = leftTopRightBottom[3] - leftTopRightBottom[1] + 1;
-    cropOut[0] = width + 2*marginSize;
-    cropOut[1] = height + 2*marginSize;
-    cropOut[2] = leftTopRightBottom[0]+marginSize;
-    cropOut[3] = leftTopRightBottom[1]+marginSize;
-}
-
-void MovieDialog::on_cropImageCheckBox_toggled(bool /*checked*/)
-{
-
-}
+//void MovieDialog::getImageCrop(AString fileName, int *cropOut)
+//{
+//    const int marginSize = this->ui->marginSpinBox->value();
+//    CaretPreferences* prefs = SessionManager::get()->getCaretPreferences();
+//    uint8_t backgroundColor[3];
+//    prefs->getColorBackground(backgroundColor);
+//
+//    ImageFile file;
+//    file.readFile(fileName);
+//
+//    int leftTopRightBottom[4];
+//    file.findImageObject(backgroundColor,leftTopRightBottom);
+//
+//    const int width = leftTopRightBottom[2] - leftTopRightBottom[0] + 1;
+//    const int height = leftTopRightBottom[3] - leftTopRightBottom[1] + 1;
+//    cropOut[0] = width + 2*marginSize;
+//    cropOut[1] = height + 2*marginSize;
+//    cropOut[2] = leftTopRightBottom[0]+marginSize;
+//    cropOut[3] = leftTopRightBottom[1]+marginSize;
+//}
 
 void MovieDialog::processRotateTransformation(const double dx, const double dy, const double dz)
 {
@@ -569,11 +625,13 @@ void MovieDialog::processUpdateVolumeSlice()
 		return;
 	}
 
-	VolumeSliceViewModeEnum::Enum vme = btc->getSliceViewMode();
-	if(vme != VolumeSliceViewModeEnum::ORTHOGONAL)
-	{
-		return;
-	}
+    switch (btc->getSliceProjectionType()) {
+        case caret::VolumeSliceProjectionTypeEnum::VOLUME_SLICE_PROJECTION_OBLIQUE:
+            return;
+            break;
+        case caret::VolumeSliceProjectionTypeEnum::VOLUME_SLICE_PROJECTION_ORTHOGONAL:
+            break;
+    }
 
 
 //	VolumeSliceCoordinateSelection* vscs = btc->getSelectedVolumeSlices();
@@ -676,7 +734,15 @@ void MovieDialog::captureFrame(AString filename)
         }
     }
 
+    uint8_t backgroundColor[3];
+    imageCaptureEvent.getBackgroundColor(backgroundColor);
+    
     try {
+        const int marginSize = this->ui->marginSpinBox->value();
+        if (marginSize > 0) {
+            imageFile.addMargin(marginSize,
+                                backgroundColor);
+        }
         imageFile.writeFile(filename);
     }
     catch (const DataFileException& /*e*/) {
@@ -694,7 +760,7 @@ void MovieDialog::on_workbenchWindowSpinBox_valueChanged(int arg1)
 void MovieDialog::processUpdateSurfaceInterpolation()
 {
 
-    if(!m_interpolationEnabled||!m_isInterpolating) 
+    if(!m_interpolationEnabled||!m_isInterpolating)
         return;
 
     BrainBrowserWindow *bw = GuiManager::get()->getBrowserWindowByWindowIndex(m_browserWindowIndex);
@@ -705,19 +771,29 @@ void MovieDialog::processUpdateSurfaceInterpolation()
         return;
     }
 
-    BrowserTabContent *btc1 = bw->getBrowserTabContent(0);    
+    BrowserTabContent *btc1 = bw->getBrowserTabContent(0);
+    BrowserTabContent *btc2 = bw->getBrowserTabContent(1);
     if(!btc1) return;
-//    int32_t tabIndex1 = btc1->getTabNumber();
+    if(!btc2) return;
+
+    //    int32_t tabIndex1 = btc1->getTabNumber();
+    if ((btc1->getSelectedModelType() != ModelTypeEnum::MODEL_TYPE_SURFACE)
+        || (btc2->getSelectedModelType() != ModelTypeEnum::MODEL_TYPE_SURFACE)) {
+        CaretLogInfo("Both Tab 1 and Tab 2 must contain surface models.");
+        return;
+    }
+    
     ModelSurface *ms1 = btc1->getDisplayedSurfaceModel();
 
-    BrowserTabContent *btc2 = bw->getBrowserTabContent(1);
-    if(!btc2) return;
 //    int32_t tabIndex2 = btc2->getTabNumber();
     ModelSurface *ms2 = btc2->getDisplayedSurfaceModel();
     
     if(!(ms1&&ms2)) return;
 
-    
+    if (ms1->getSurface()->getStructure() != ms2->getSurface()->getStructure()) {
+        CaretLogInfo("Surfaces in Tab 1 and Tab 2 must be the same structure.");
+        return;
+    }
 
     if(m_interpolationIndex == 0)
     {
@@ -792,6 +868,10 @@ void MovieDialog::CleanupInterpolation()
 {
 	if(!m_interpolationEnabled||!m_isInterpolating) 
 		return;
+    if (m_surface2 == NULL) {
+        return;
+    }
+    
 	for(int64_t i = 0;i<coordsCount*3;i++)
 	{
 		coords[i] = m_surfaceCoords2Back[i];
@@ -807,5 +887,8 @@ void MovieDialog::CleanupInterpolation()
 		coords = NULL;
 		coordsCount = 0;
 	}
+    
+    m_surface1 = NULL;
+    m_surface2 = NULL;
 }
 

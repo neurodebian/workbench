@@ -23,9 +23,11 @@
 #include "VolumeSliceSettings.h"
 #undef __VOLUME_SLICE_SETTINGS_DECLARE__
 
+#include "CaretLogger.h"
 #include "PlainTextStringBuilder.h"
 #include "SceneClass.h"
 #include "SceneClassAssistant.h"
+#include "SceneEnumeratedType.h"
 #include "VolumeFile.h"
 
 using namespace caret;
@@ -45,7 +47,8 @@ VolumeSliceSettings::VolumeSliceSettings()
 : CaretObject()
 {
     m_sliceViewPlane         = VolumeSliceViewPlaneEnum::AXIAL;
-    m_sliceViewMode          = VolumeSliceViewModeEnum::ORTHOGONAL;
+    m_sliceDrawingType       = VolumeSliceDrawingTypeEnum::VOLUME_SLICE_DRAW_SINGLE;
+    m_sliceProjectionType    = VolumeSliceProjectionTypeEnum::VOLUME_SLICE_PROJECTION_ORTHOGONAL;
     m_montageNumberOfColumns = 3;
     m_montageNumberOfRows    = 4;
     m_montageSliceSpacing    = 5;
@@ -63,8 +66,10 @@ VolumeSliceSettings::VolumeSliceSettings()
     m_sceneAssistant = new SceneClassAssistant();
     m_sceneAssistant->add<VolumeSliceViewPlaneEnum,VolumeSliceViewPlaneEnum::Enum>("m_sliceViewPlane",
                                                                                    &m_sliceViewPlane);
-    m_sceneAssistant->add<VolumeSliceViewModeEnum,VolumeSliceViewModeEnum::Enum>("m_sliceViewMode",
-                                                                                   &m_sliceViewMode);
+    m_sceneAssistant->add<VolumeSliceDrawingTypeEnum,VolumeSliceDrawingTypeEnum::Enum>("m_sliceDrawingType",
+                                                                                   &m_sliceDrawingType);
+    m_sceneAssistant->add<VolumeSliceProjectionTypeEnum,VolumeSliceProjectionTypeEnum::Enum>("m_sliceProjectionType",
+                                                                                 &m_sliceProjectionType);
     m_sceneAssistant->add("m_montageNumberOfColumns",
                           &m_montageNumberOfColumns);
     m_sceneAssistant->add("m_montageNumberOfRows",
@@ -125,7 +130,9 @@ void
 VolumeSliceSettings::copyHelperVolumeSliceSettings(const VolumeSliceSettings& obj)
 {
     m_sliceViewPlane         = obj.m_sliceViewPlane;
-    m_sliceViewMode          = obj.m_sliceViewMode;
+    m_sliceDrawingType       = obj.m_sliceDrawingType;
+    m_sliceProjectionType    = obj.m_sliceProjectionType;
+    
     m_montageNumberOfColumns = obj.m_montageNumberOfColumns;
     m_montageNumberOfRows    = obj.m_montageNumberOfRows;
     m_montageSliceSpacing    = obj.m_montageSliceSpacing;
@@ -249,25 +256,48 @@ VolumeSliceSettings::setSliceViewPlane(const VolumeSliceViewPlaneEnum::Enum slic
     m_sliceViewPlane = slicePlane;
 }
 
-/**
- * @return the slice viewing mode.
+/** 
+ * @return Type of slice drawing (single/montage)
  */
-VolumeSliceViewModeEnum::Enum
-VolumeSliceSettings::getSliceViewMode() const
+VolumeSliceDrawingTypeEnum::Enum
+VolumeSliceSettings::getSliceDrawingType() const
 {
-    return m_sliceViewMode;
+    return m_sliceDrawingType;
 }
 
 /**
- * Set the slice viewing mode.
- * @param sliceViewMode
- *    New value for view mode
+ * Set type of slice drawing (single/montage)
+ *
+ * @param sliceDrawingType
+ *    New value for slice drawing type.
  */
 void
-VolumeSliceSettings::setSliceViewMode(const VolumeSliceViewModeEnum::Enum sliceViewMode)
+VolumeSliceSettings::setSliceDrawingType(const VolumeSliceDrawingTypeEnum::Enum sliceDrawingType)
 {
-    m_sliceViewMode = sliceViewMode;
+    m_sliceDrawingType = sliceDrawingType;
 }
+
+/** 
+ * @return Type of slice projection (oblique/orthogonal) 
+ */
+VolumeSliceProjectionTypeEnum::Enum
+VolumeSliceSettings::getSliceProjectionType() const
+{
+    return m_sliceProjectionType;
+}
+
+/**
+ * Set type of slice projection (oblique/orthogonal)
+ *
+ * @param sliceProjectionType
+ *    New value for slice projection type.
+ */
+void
+VolumeSliceSettings::setSliceProjectionType(const VolumeSliceProjectionTypeEnum::Enum sliceProjectionType)
+{
+    m_sliceProjectionType = sliceProjectionType;
+}
+
 
 /**
  * @return the montage number of columns for the given window tab.
@@ -720,7 +750,7 @@ VolumeSliceSettings::saveToScene(const SceneAttributes* sceneAttributes,
 {
     SceneClass* sceneClass = new SceneClass(instanceName,
                                             "VolumeSliceSettings",
-                                            1);
+                                            2);
     m_sceneAssistant->saveMembers(sceneAttributes,
                                   sceneClass);
     
@@ -746,8 +776,39 @@ VolumeSliceSettings::restoreFromScene(const SceneAttributes* sceneAttributes,
         return;
     }
     
+    /*
+     * Added in scene version 2
+     */
+    m_sliceDrawingType       = VolumeSliceDrawingTypeEnum::VOLUME_SLICE_DRAW_SINGLE;
+    m_sliceProjectionType    = VolumeSliceProjectionTypeEnum::VOLUME_SLICE_PROJECTION_ORTHOGONAL;
+    
     m_sceneAssistant->restoreMembers(sceneAttributes,
                                      sceneClass);
+    
+    if (sceneClass->getVersionNumber() < 2) {
+        /*
+         * Set slice drawing type and projection type using old slice view mode.
+         */
+        const AString oldViewModeValue = sceneClass->getEnumeratedTypeValueAsString("m_sliceViewMode");
+        if (! oldViewModeValue.isEmpty()) {
+            if (oldViewModeValue == "MONTAGE") {
+                m_sliceDrawingType = VolumeSliceDrawingTypeEnum::VOLUME_SLICE_DRAW_MONTAGE;
+                m_sliceProjectionType = VolumeSliceProjectionTypeEnum::VOLUME_SLICE_PROJECTION_ORTHOGONAL;
+            }
+            else if (oldViewModeValue == "OBLIQUE") {
+                m_sliceDrawingType = VolumeSliceDrawingTypeEnum::VOLUME_SLICE_DRAW_SINGLE;
+                m_sliceProjectionType = VolumeSliceProjectionTypeEnum::VOLUME_SLICE_PROJECTION_OBLIQUE;
+            }
+            else if (oldViewModeValue == "ORTHOGONAL") {
+                m_sliceDrawingType = VolumeSliceDrawingTypeEnum::VOLUME_SLICE_DRAW_SINGLE;
+                m_sliceProjectionType = VolumeSliceProjectionTypeEnum::VOLUME_SLICE_PROJECTION_ORTHOGONAL;
+            }
+            else {
+                CaretLogWarning("Unrecognized value for old m_sliceViewMode: "
+                                + oldViewModeValue);
+            }
+        }
+    }
 
     /*
      * Restoring scene initialize all members.

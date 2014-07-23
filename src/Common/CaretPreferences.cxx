@@ -312,117 +312,6 @@ CaretPreferences::removeCustomView(const AString& customViewName)
     this->writeCustomViews();
 }
 
-///**
-// * Get all of the user views.
-// * @return
-// *    All of the user views.
-// */
-//std::vector<ModelTransform*> 
-//CaretPreferences::getAllModelTransforms()
-//{
-//    std::vector<ModelTransform*> viewsOut;
-//    viewsOut.insert(viewsOut.end(),
-//                    this->ModelTransforms.begin(),
-//                    this->ModelTransforms.end());
-//    return viewsOut;
-//}
-//
-///**
-// * Set the user views to the given user views.  This class will take
-// * ownership of the user views and delete them when necessary.
-// *
-// * @param allModelTransforms
-// *     New user views.
-// */
-//void
-//CaretPreferences::setAllModelTransforms(std::vector<ModelTransform*>& allModelTransforms)
-//{
-//    /*
-//     * Remove any existing views that are not in the new vector of views
-//     */
-//    for (std::vector<ModelTransform*>::iterator iter = this->ModelTransforms.begin();
-//         iter != this->ModelTransforms.end();
-//         iter++) {
-//        ModelTransform* uv = *iter;
-//        if (std::find(allModelTransforms.begin(),
-//                      allModelTransforms.end(),
-//                      uv) == allModelTransforms.end()) {
-//            delete uv;
-//        }
-//    }
-//    this->ModelTransforms.clear();
-//    
-//    this->ModelTransforms = allModelTransforms;
-//    
-//    this->writeModelTransforms();
-//}
-//
-///**
-// * Get the user view with the specified name.
-// * @param viewName
-// *    Name of view.
-// * @return
-// *    Pointer to view or NULL if not found.
-// */
-//const ModelTransform* 
-//CaretPreferences::getModelTransform(const AString& viewName)
-//{
-//    for (std::vector<ModelTransform*>::iterator iter = this->ModelTransforms.begin();
-//         iter != this->ModelTransforms.end();
-//         iter++) {
-//        ModelTransform* uv = *iter;
-//        if (uv->getName() == viewName) {
-//            return uv;
-//        }
-//    }
-//    
-//    return NULL;
-//}
-//
-///**
-// * Add a user view.  If a view with the same name exists
-// * it is replaced.
-// * @param
-// *    New user view.
-// */
-//void 
-//CaretPreferences::addModelTransform(const ModelTransform& ModelTransform)
-//{
-//    for (std::vector<ModelTransform*>::iterator iter = this->ModelTransforms.begin();
-//         iter != this->ModelTransforms.end();
-//         iter++) {
-//        ModelTransform* uv = *iter;
-//        if (uv->getName() == ModelTransform.getName()) {
-//            *uv = ModelTransform;
-//            return;
-//        }
-//    }
-//    
-//    this->ModelTransforms.push_back(new ModelTransform(ModelTransform));
-//    
-//    this->writeModelTransforms();
-//}
-//
-///**
-// * Remove the user view with the specified name.
-// */
-//void 
-//CaretPreferences::removeModelTransform(const AString& viewName)
-//{
-//    for (std::vector<ModelTransform*>::iterator iter = this->ModelTransforms.begin();
-//         iter != this->ModelTransforms.end();
-//         iter++) {
-//        ModelTransform* uv = *iter;
-//        if (uv->getName() == viewName) {
-//            this->ModelTransforms.erase(iter);
-//            delete uv;
-//            break;
-//        }
-//    }
-//    
-//    this->writeModelTransforms();
-//}
-
 /**
  * Write the custom views.
  */
@@ -533,38 +422,6 @@ CaretPreferences::getTileTabsConfigurationsSortedByName() const
     return configurations;
 }
 
-///**
-// * @return Unique identifiers of tile tabs configurations that are sorted
-// * by the names of the tile tabs configurationsMay want to precede this
-// * method with a call to 'readTileTabsConfigurations(true)' so that the 
-// * tile tabs are the latest from the settings.
-// */
-//std::vector<AString>
-//CaretPreferences::getTileTabsConfigurationUniqueIdentifiers() const
-//{
-//    /*
-//     * Copy the pointers to the tile tabs configurations and then
-//     * sort them by name.
-//     */
-//    std::vector<TileTabsConfiguration*> configurations = this->tileTabsConfigurations;
-//    std::sort(configurations.begin(),
-//              configurations.end(),
-//              TileTabsConfiguration::lessThanComparisonByName);
-//    
-//    /*
-//     * Get unique IDs
-//     */
-//    std::vector<AString> uniqueIDs;
-//    for (std::vector<TileTabsConfiguration*>::iterator iter = configurations.begin();
-//         iter != configurations.end();
-//         iter++) {
-//        TileTabsConfiguration* ttc = *iter;
-//        uniqueIDs.push_back(ttc->getUniqueIdentifier());
-//    }
-//    
-//    return uniqueIDs;
-//}
-
 /**
  * Get the tile tabs configuration with the given unique identifier.
  *
@@ -613,30 +470,6 @@ CaretPreferences::getTileTabsConfigurationByUniqueIdentifier(const AString& uniq
     return NULL;
 }
 
-
-///**
-// * @return Names of tile tabs configurations sorted by name.  May want to precede this
-// * method with a call to 'readTileTabsConfigurations(true)' so that the tile tabs
-// * are the latest from the settings.
-// */
-//std::vector<AString>
-//CaretPreferences::getTileTabsConfigurationNames() const
-//{
-//    std::vector<AString> names;
-//    
-//    for (std::vector<TileTabsConfiguration*>::const_iterator iter = this->tileTabsConfigurations.begin();
-//         iter != this->tileTabsConfigurations.end();
-//         iter++) {
-//        const TileTabsConfiguration* ttc = *iter;
-//        names.push_back(ttc->getName());
-//    }
-//    
-//    std::sort(names.begin(),
-//              names.end());
-//    
-//    return names;
-//}
-
 /**
  * Get the tile tabs configuration with the given name.
  *
@@ -662,35 +495,6 @@ CaretPreferences::getTileTabsConfigurationByName(const AString& name) const
     return NULL;
 }
 
-///**
-// * Get a tile tabs configuration with the given unique identifier.
-// *
-// * @param tileTabsUniqueIdentifier
-// *     Unique identifier of the tile tabs configuration.
-// * @param tileTabsConfigurationOut
-// *     Tile tabs configuration will be loaded into this tile tabs configuration.
-// * @return true if a tile tabs configuration with the unique identifier exists.  If no
-// *     tile tabs configuration exists with the unique identifier, false is returned and
-// *     the output tile tabs configuration will not be modified.
-// */
-//bool
-//CaretPreferences::getTileTabsConfigurationByUniqueIdentifier(const AString& tileTabsUniqueIdentifier,
-//                                                TileTabsConfiguration& tileTabsConfigurationOut) const
-//{
-//    for (std::vector<TileTabsConfiguration*>::const_iterator iter = this->tileTabsConfigurations.begin();
-//         iter != this->tileTabsConfigurations.end();
-//         iter++) {
-//        const TileTabsConfiguration* ttc = *iter;
-//        
-//        if (tileTabsUniqueIdentifier == ttc->getUniqueIdentifier()) {
-//            tileTabsConfigurationOut = *ttc;
-//            return true;
-//        }
-//    }
-//    
-//    return false;
-//}
-
 /**
  * Add a new tile tabs configuration.
  * 
@@ -703,35 +507,6 @@ CaretPreferences::addTileTabsConfiguration(TileTabsConfiguration* tileTabsConfig
     this->tileTabsConfigurations.push_back(tileTabsConfiguration);
     this->writeTileTabsConfigurations();
 }
-
-///**
-// * Add or update a tile tabs configuration.  If a tile tabs configuration exists with the name
-// * in the given tile tabs configuration it is replaced.
-// *
-// * @param modelTransform
-// *    Tile tabs configuration that is added or replaced.
-// */
-//void
-//CaretPreferences::addOrReplaceTileTabsConfiguration(const TileTabsConfiguration& tileTabsConfiguration)
-//{
-//    bool addNewTileTabsConfiguration = true;
-//    
-//    for (std::vector<TileTabsConfiguration*>::iterator iter = this->tileTabsConfigurations.begin();
-//         iter != this->tileTabsConfigurations.end();
-//         iter++) {
-//        TileTabsConfiguration* ttc = *iter;
-//        if (ttc->getUniqueIdentifier() == tileTabsConfiguration.getUniqueIdentifier()) {
-//            *ttc = tileTabsConfiguration;
-//            addNewTileTabsConfiguration = false;
-//            break;
-//        }
-//    }
-//    
-//    if (addNewTileTabsConfiguration) {
-//        this->tileTabsConfigurations.push_back(new TileTabsConfiguration(tileTabsConfiguration));
-//    }
-//    this->writeTileTabsConfigurations();
-//}
 
 /**
  * Remove the tile tabs configuration with the given name.
@@ -756,117 +531,290 @@ CaretPreferences::removeTileTabsConfigurationByUniqueIdentifier(const AString& t
     this->writeTileTabsConfigurations();
 }
 
-/**
- * Get the foreground color as integer rgb components ranging in value
- * from 0 to 255.
- *
- * @param colorForeground
- *   The output into which rgb color components are loaded.
- */
-void 
-CaretPreferences::getColorForeground(uint8_t colorForeground[3]) const
-{
-    colorForeground[0] = this->colorForeground[0];
-    colorForeground[1] = this->colorForeground[1];
-    colorForeground[2] = this->colorForeground[2];
-}
+
+
+
 
 /**
- * Get the foreground color as float rgb components ranging in value
- * from 0 to 1
+ * Get the foreground color for viewing the ALL model.
  *
  * @param colorForeground
- *   The output into which rgb color components are loaded.
+ *    RGB color components ranging [0, 255].
  */
-void 
-CaretPreferences::getColorForeground(float colorForeground[3]) const
+void
+CaretPreferences::getColorForegroundAllView(uint8_t colorForeground[3]) const
 {
-    uint8_t byteForeground[3];
-    this->getColorForeground(byteForeground);
-    
-    colorForeground[0] = std::min((byteForeground[0] / 255.0), 255.0);
-    colorForeground[1] = std::min((byteForeground[1] / 255.0), 255.0);
-    colorForeground[2] = std::min((byteForeground[2] / 255.0), 255.0);
-}
-
-/**
- * Set the foreground color as integer rgb components ranging in value
- * from 0 to 255.
- *
- * @param colorForeground
- *   New values for the foreground rgb color components.
- */
-void 
-CaretPreferences::setColorForeground(const uint8_t colorForeground[3])
-{
-    this->colorForeground[0] = colorForeground[0];
-    this->colorForeground[1] = colorForeground[1];
-    this->colorForeground[2] = colorForeground[2];
-    
-    this->qSettings->beginWriteArray(NAME_COLOR_FOREGROUND);
-    for (int i = 0; i < 3; i++) {
-        this->qSettings->setArrayIndex(i);
-        this->qSettings->setValue(AString::number(i),
-                                  colorForeground[i]);
+    for (int32_t i = 0; i < 3; i++) {
+        colorForeground[i] = this->colorForegroundAll[i];
     }
-    this->qSettings->endArray();
-    this->qSettings->sync();
 }
 
 /**
- * Get the background color as integer rgb components ranging in value
- * from 0 to 255.
+ * Set the foreground color for viewing the ALL model.
  *
- * @param colorBackground
- *   The output into which rgb color components are loaded.
+ * @param colorForeground
+ *    RGB color components ranging [0, 255].
  */
-void 
-CaretPreferences::getColorBackground(uint8_t colorBackground[3]) const
+void
+CaretPreferences::setColorForegroundAllView(const uint8_t colorForeground[3])
 {
-    colorBackground[0] = this->colorBackground[0];
-    colorBackground[1] = this->colorBackground[1];
-    colorBackground[2] = this->colorBackground[2];
-}
-
-/**
- * Get the background color as float rgb components ranging in value
- * from 0 to 1
- *
- * @param colorBackground
- *   The output into which rgb color components are loaded.
- */
-void 
-CaretPreferences::getColorBackground(float colorBackground[3]) const
-{
-    uint8_t byteBackground[3];
-    this->getColorBackground(byteBackground);
-    
-    colorBackground[0] = std::min((byteBackground[0] / 255.0), 255.0);
-    colorBackground[1] = std::min((byteBackground[1] / 255.0), 255.0);
-    colorBackground[2] = std::min((byteBackground[2] / 255.0), 255.0);
-}
-
-/**
- * Set the background color as integer rgb components ranging in value
- * from 0 to 255.
- *
- * @param colorBackground
- *   New values for the background rgb color components.
- */
-void 
-CaretPreferences::setColorBackground(const uint8_t colorBackground[3])
-{
-    this->colorBackground[0] = colorBackground[0];
-    this->colorBackground[1] = colorBackground[1];
-    this->colorBackground[2] = colorBackground[2];
-    this->qSettings->beginWriteArray(NAME_COLOR_BACKGROUND);
-    for (int i = 0; i < 3; i++) {
-        this->qSettings->setArrayIndex(i);
-        this->qSettings->setValue(AString::number(i),
-                                  colorBackground[i]);
+    for (int32_t i = 0; i < 3; i++) {
+        this->colorForegroundAll[i] = colorForeground[i];
     }
-    this->qSettings->endArray();
-    this->qSettings->sync();
+    
+    writeUnsignedByteArray(NAME_COLOR_FOREGROUND_ALL,
+                           colorForegroundAll,
+                           3);
+}
+
+/**
+ * Get the background color for viewing the ALL model.
+ *
+ * @param colorBackground
+ *    RGB color components ranging [0, 255].
+ */
+void
+CaretPreferences::getColorBackgroundAllView(uint8_t colorBackground[3]) const
+{
+    for (int32_t i = 0; i < 3; i++) {
+        colorBackground[i] = this->colorBackgroundAll[i];
+    }
+}
+
+/**
+ * Set the background color for viewing the ALL model.
+ *
+ * @param colorBackground
+ *    RGB color components ranging [0, 255].
+ */
+void
+CaretPreferences::setColorBackgroundAllView(const uint8_t colorBackground[3])
+{
+    for (int32_t i = 0; i < 3; i++) {
+        this->colorBackgroundAll[i] = colorBackground[i];
+    }
+    writeUnsignedByteArray(NAME_COLOR_BACKGROUND_ALL,
+                           colorBackgroundAll,
+                           3);
+}
+
+
+/**
+ * Get the foreground color for viewing the CHART model.
+ *
+ * @param colorForeground
+ *    RGB color components ranging [0, 255].
+ */
+void
+CaretPreferences::getColorForegroundChartView(uint8_t colorForeground[3]) const
+{
+    for (int32_t i = 0; i < 3; i++) {
+        colorForeground[i] = this->colorForegroundChart[i];
+    }
+}
+
+/**
+ * Set the foreground color for viewing the CHART model.
+ *
+ * @param colorForeground
+ *    RGB color components ranging [0, 255].
+ */
+void
+CaretPreferences::setColorForegroundChartView(const uint8_t colorForeground[3])
+{
+    for (int32_t i = 0; i < 3; i++) {
+        this->colorForegroundChart[i] = colorForeground[i];
+    }
+    writeUnsignedByteArray(NAME_COLOR_FOREGROUND_CHART,
+                           colorForegroundChart,
+                           3);
+}
+
+/**
+ * Get the background color for viewing the CHART model.
+ *
+ * @param colorBackground
+ *    RGB color components ranging [0, 255].
+ */
+void
+CaretPreferences::getColorBackgroundChartView(uint8_t colorBackground[3]) const
+{
+    for (int32_t i = 0; i < 3; i++) {
+        colorBackground[i] = this->colorBackgroundChart[i];
+    }
+}
+
+/**
+ * Set the background color for viewing the CHART model.
+ *
+ * @param colorBackground
+ *    RGB color components ranging [0, 255].
+ */
+void
+CaretPreferences::setColorBackgroundChartView(const uint8_t colorBackground[3])
+{
+    for (int32_t i = 0; i < 3; i++) {
+        this->colorBackgroundChart[i] = colorBackground[i];
+    }
+    writeUnsignedByteArray(NAME_COLOR_BACKGROUND_CHART,
+                           colorBackgroundChart,
+                           3);
+}
+
+
+/**
+ * Get the foreground color for viewing the SURFACE model.
+ *
+ * @param colorForeground
+ *    RGB color components ranging [0, 255].
+ */
+void
+CaretPreferences::getColorForegroundSurfaceView(uint8_t colorForeground[3]) const
+{
+    for (int32_t i = 0; i < 3; i++) {
+        colorForeground[i] = this->colorForegroundSurface[i];
+    }
+}
+
+/**
+ * Set the foreground color for viewing the SURFACE model.
+ *
+ * @param colorForeground
+ *    RGB color components ranging [0, 255].
+ */
+void
+CaretPreferences::setColorForegroundSurfaceView(const uint8_t colorForeground[3])
+{
+    for (int32_t i = 0; i < 3; i++) {
+        this->colorForegroundSurface[i] = colorForeground[i];
+    }
+    writeUnsignedByteArray(NAME_COLOR_FOREGROUND_SURFACE,
+                           colorForegroundSurface,
+                           3);
+}
+
+/**
+ * Get the background color for viewing the SURFACE model.
+ *
+ * @param colorBackground
+ *    RGB color components ranging [0, 255].
+ */
+void
+CaretPreferences::getColorBackgroundSurfaceView(uint8_t colorBackground[3]) const
+{
+    for (int32_t i = 0; i < 3; i++) {
+        colorBackground[i] = this->colorBackgroundSurface[i];
+    }
+}
+
+/**
+ * Get the background color for viewing the SURFACE model.
+ *
+ * @param colorBackground
+ *    RGB color components ranging [0, 255].
+ */
+void
+CaretPreferences::setColorBackgroundSurfaceView(const uint8_t colorBackground[3])
+{
+    for (int32_t i = 0; i < 3; i++) {
+        this->colorBackgroundSurface[i] = colorBackground[i];
+    }
+    writeUnsignedByteArray(NAME_COLOR_BACKGROUND_SURFACE,
+                           colorBackgroundSurface,
+                           3);
+}
+
+/**
+ * Get the foreground color for viewing the VOLUME model.
+ *
+ * @param colorForeground
+ *    RGB color components ranging [0, 255].
+ */
+void
+CaretPreferences::getColorForegroundVolumeView(uint8_t colorForeground[3]) const
+{
+    for (int32_t i = 0; i < 3; i++) {
+        colorForeground[i] = this->colorForegroundVolume[i];
+    }
+}
+
+/**
+ * Set the foreground color for viewing the VOLUME model.
+ *
+ * @param colorForeground
+ *    RGB color components ranging [0, 255].
+ */
+void
+CaretPreferences::setColorForegroundVolumeView(const uint8_t colorForeground[3])
+{
+    for (int32_t i = 0; i < 3; i++) {
+        this->colorForegroundVolume[i] = colorForeground[i];
+    }
+    writeUnsignedByteArray(NAME_COLOR_FOREGROUND_VOLUME,
+                           colorForegroundVolume,
+                           3);
+}
+
+/**
+ * Get the background color for viewing the VOLUME model.
+ *
+ * @param colorBackground
+ *    RGB color components ranging [0, 255].
+ */
+void
+CaretPreferences::getColorBackgroundVolumeView(uint8_t colorBackground[3]) const
+{
+    for (int32_t i = 0; i < 3; i++) {
+        colorBackground[i] = this->colorBackgroundVolume[i];
+    }
+}
+
+/**
+ * Set the background color for viewing the VOLUME model.
+ *
+ * @param colorBackground
+ *    RGB color components ranging [0, 255].
+ */
+void
+CaretPreferences::setColorBackgroundVolumeView(const uint8_t colorBackground[3])
+{
+    for (int32_t i = 0; i < 3; i++) {
+        this->colorBackgroundVolume[i] = colorBackground[i];
+    }
+    writeUnsignedByteArray(NAME_COLOR_BACKGROUND_VOLUME,
+                           colorBackgroundVolume,
+                           3);
+}
+
+/**
+ * Get the color for chart matrix grid lines
+ *
+ * @param colorChartMatrixGridLines
+ *    RGB color components ranging [0, 255].
+ */
+void
+CaretPreferences::getColorChartMatrixGridLines(uint8_t colorChartMatrixGridLines[3]) const
+{
+    for (int32_t i = 0; i < 3; i++) {
+        colorChartMatrixGridLines[i] = this->colorChartMatrixGridLines[i];
+    }
+}
+
+/**
+ * Set the color for chart matrix grid lines
+ *
+ * @param colorChartMatrixGridLines
+ *    RGB color components ranging [0, 255].
+ */
+void
+CaretPreferences::setColorChartMatrixGridLines(const uint8_t colorChartMatrixGridLines[3])
+{
+    for (int32_t i = 0; i < 3; i++) {
+        this->colorChartMatrixGridLines[i] = colorChartMatrixGridLines[i];
+    }
+    writeUnsignedByteArray(NAME_COLOR_CHART_MATRIX_GRID_LINES,
+                           colorChartMatrixGridLines,
+                           3);
 }
 
 /**
@@ -1282,31 +1230,6 @@ CaretPreferences::setToolBoxType(const int32_t toolBoxType)
     this->qSettings->sync();
 }
 
-
-/**
- * @return Is contralateral identification enabled?
- *
-bool 
-CaretPreferences::isContralateralIdentificationEnabled() const
-{
-    return this->contralateralIdentificationEnabled;
-}
-*/
-
-/**
- * Set contralateral identification enabled.
- * @param enabled
- *    New status.
- *
-void 
-CaretPreferences::setContralateralIdentificationEnabled(const bool enabled)
-{
-    this->contralateralIdentificationEnabled = enabled;
-    this->setBoolean(CaretPreferences::NAME_IDENTIFICATION_CONTRALATERAL, 
-                     this->contralateralIdentificationEnabled);
-}
-*/
-
 /**
  * @return Is the splash screen enabled?
  */
@@ -1353,6 +1276,55 @@ CaretPreferences::setDevelopMenuEnabled(const bool enabled)
     this->qSettings->sync();
 }
 
+/**
+ * Read an unsigned byte array to the preferences.
+ *
+ * @param name
+ *     Name for preferences
+ * @param array
+ *     The array that is read.
+ * @param numberOfElements
+ *     Number of elements in the array.
+ */
+void
+CaretPreferences::readUnsignedByteArray(const AString& name,
+                                        uint8_t array[],
+                                        const int32_t numberOfElements)
+{
+    const int numAvailable = this->qSettings->beginReadArray(name);
+    const int numToRead = std::min(numAvailable,
+                                   numberOfElements);
+    for (int i = 0; i < numToRead; i++) {
+        this->qSettings->setArrayIndex(i);
+        array[i] = static_cast<uint8_t>(this->qSettings->value(AString::number(i)).toInt());
+    }
+    this->qSettings->endArray();
+}
+
+/**
+ * Write an unsigned byte array to the preferences.
+ *
+ * @param name
+ *     Name for preferences
+ * @param array
+ *     The array that is written.
+ * @param numberOfElements
+ *     Number of elements in the array.
+ */
+void
+CaretPreferences::writeUnsignedByteArray(const AString& name,
+                                         const uint8_t array[],
+                                         const int32_t numberOfElements)
+{
+    this->qSettings->beginWriteArray(name);
+    for (int i = 0; i < numberOfElements; i++) {
+        this->qSettings->setArrayIndex(i);
+        this->qSettings->setValue(AString::number(i),
+                                  array[i]);
+    }
+    this->qSettings->endArray();
+    this->qSettings->sync();
+}
 
 /**
  * Initialize/Read the preferences
@@ -1360,25 +1332,65 @@ CaretPreferences::setDevelopMenuEnabled(const bool enabled)
 void 
 CaretPreferences::readPreferences()
 {
-    this->colorForeground[0] = 255;
-    this->colorForeground[1] = 255;
-    this->colorForeground[2] = 255;
-    const int numFG = this->qSettings->beginReadArray(NAME_COLOR_FOREGROUND);
-    for (int i = 0; i < numFG; i++) {
-        this->qSettings->setArrayIndex(i);
-        colorForeground[i] = static_cast<uint8_t>(this->qSettings->value(AString::number(i)).toInt());
-    }
-    this->qSettings->endArray();
+    uint8_t colorForeground[3] = { 255, 255, 255 };
+    readUnsignedByteArray(NAME_COLOR_FOREGROUND,
+                          colorForeground,
+                          3);
     
-    this->colorBackground[0] = 0;
-    this->colorBackground[1] = 0;
-    this->colorBackground[2] = 0;
-    const int numBG = this->qSettings->beginReadArray(NAME_COLOR_BACKGROUND);
-    for (int i = 0; i < numBG; i++) {
-        this->qSettings->setArrayIndex(i);
-        colorBackground[i] = static_cast<uint8_t>(this->qSettings->value(AString::number(i)).toInt());
+    uint8_t colorBackground[3] = { 0, 0, 0 };
+    readUnsignedByteArray(NAME_COLOR_BACKGROUND,
+                          colorBackground,
+                          3);
+    
+    /*
+     * At one time, there was one foreground and background color that applied
+     * to all model views.  Use it to initialize the newer background and
+     * foreground colors for each model type.
+     */
+    for (int32_t i = 0; i < 3; i++) {
+        this->colorBackgroundAll[i]        = colorBackground[i];
+        this->colorBackgroundChart[i]      = colorBackground[i];
+        this->colorBackgroundSurface[i]    = colorBackground[i];
+        this->colorBackgroundVolume[i]     = colorBackground[i];
+        
+        this->colorForegroundAll[i]        = colorForeground[i];
+        this->colorForegroundChart[i]      = colorForeground[i];
+        this->colorForegroundSurface[i]    = colorForeground[i];
+        this->colorForegroundVolume[i]     = colorForeground[i];
+        this->colorChartMatrixGridLines[i] = colorForeground[i];
     }
-    this->qSettings->endArray();
+    
+    readUnsignedByteArray(NAME_COLOR_FOREGROUND_ALL,
+                          this->colorForegroundAll,
+                          3);
+    readUnsignedByteArray(NAME_COLOR_BACKGROUND_ALL,
+                          this->colorBackgroundAll,
+                          3);
+    readUnsignedByteArray(NAME_COLOR_FOREGROUND_CHART,
+                          this->colorForegroundChart,
+                          3);
+    readUnsignedByteArray(NAME_COLOR_BACKGROUND_CHART,
+                          this->colorBackgroundChart,
+                          3);
+    readUnsignedByteArray(NAME_COLOR_FOREGROUND_SURFACE,
+                          this->colorForegroundSurface,
+                          3);
+    readUnsignedByteArray(NAME_COLOR_BACKGROUND_SURFACE,
+                          this->colorBackgroundSurface,
+                          3);
+    readUnsignedByteArray(NAME_COLOR_FOREGROUND_VOLUME,
+                          this->colorForegroundVolume,
+                          3);
+    readUnsignedByteArray(NAME_COLOR_BACKGROUND_VOLUME,
+                          this->colorBackgroundVolume,
+                          3);
+
+    this->colorChartMatrixGridLines[0] = 0;
+    this->colorChartMatrixGridLines[1] = 0;
+    this->colorChartMatrixGridLines[2] = 0;
+    readUnsignedByteArray(NAME_COLOR_CHART_MATRIX_GRID_LINES,
+                          this->colorChartMatrixGridLines,
+                          3);
     
     this->previousSpecFiles.clear();    
     const int numPrevSpec = this->qSettings->beginReadArray(NAME_PREVIOUS_SPEC_FILES);
@@ -1455,10 +1467,6 @@ CaretPreferences::readPreferences()
     this->remoteFilePassword = this->getString(NAME_REMOTE_FILE_PASSWORD);
     this->remoteFileLoginSaved = this->getBoolean(NAME_REMOTE_FILE_LOGIN_SAVED,
                                                   false);
-    
-//    this->contralateralIdentificationEnabled = this->getBoolean(CaretPreferences::NAME_IDENTIFICATION_CONTRALATERAL,
-//                                                                   false);
-    
 }
 
 /**
@@ -1518,7 +1526,6 @@ void CaretPreferences::getAnimationStartTime(double& time)
 void CaretPreferences::setAnimationStartTime(const double& time)
 {
    animationStartTime = time;
-   //this->qSettings->setValue(CaretPreferences::NAME_ANIMATION_START_TIME, time);
 }
 
 
@@ -1531,3 +1538,22 @@ CaretPreferences::toString() const
 {
     return "CaretPreferences";
 }
+
+/**
+ * Convert RGB bytes to Floats.
+ *
+ * @param bytesRGB
+ *     Byte RGB color [0, 255] INPUT
+ * @param floatRGB
+ *     Float RGB color [0.0, 1.0]  OUTPUT
+ */
+void
+CaretPreferences::byteRgbToFloatRgb(const uint8_t byteRGB[3],
+                                    float floatRGB[3])
+{
+    for (int32_t i = 0; i < 3; i++) {
+        floatRGB[i] = static_cast<float>(byteRGB[i]) / 255.0;
+    }
+}
+
+

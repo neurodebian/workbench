@@ -24,6 +24,8 @@
 #include "CommandOperationManager.h"
 #undef __COMMAND_OPERATION_MANAGER_DEFINE__
 
+#include "AlgorithmBorderResample.h"
+#include "AlgorithmBorderToVertices.h"
 #include "AlgorithmCiftiAllLabelsToROIs.h"
 #include "AlgorithmCiftiAverage.h"
 #include "AlgorithmCiftiAverageDenseROI.h"
@@ -62,6 +64,7 @@
 #include "AlgorithmLabelMerge.h"
 #include "AlgorithmLabelModifyKeys.h"
 #include "AlgorithmLabelResample.h"
+#include "AlgorithmLabelToBorder.h"
 #include "AlgorithmMetricDilate.h"
 #include "AlgorithmMetricEstimateFWHM.h"
 #include "AlgorithmMetricExtrema.h"
@@ -74,7 +77,9 @@
 #include "AlgorithmMetricRemoveIslands.h"
 #include "AlgorithmMetricResample.h"
 #include "AlgorithmMetricROIsFromExtrema.h"
+#include "AlgorithmMetricROIsToBorder.h"
 #include "AlgorithmMetricSmoothing.h"
+#include "AlgorithmMetricTFCE.h"
 #include "AlgorithmNodesInsideBorder.h" //-border-to-rois
 #include "AlgorithmSignedDistanceToSurface.h"
 #include "AlgorithmSurfaceAffineRegression.h"
@@ -118,14 +123,19 @@
 #include "OperationAddToSpecFile.h"
 #include "OperationBackendAverageDenseROI.h"
 #include "OperationBackendAverageROICorrelation.h"
+#include "OperationBorderExportColorTable.h"
+#include "OperationBorderFileExportToCaret5.h"
+#include "OperationBorderMerge.h"
 #include "OperationCiftiChangeTimestep.h"
 #include "OperationCiftiConvert.h"
 #include "OperationCiftiConvertToScalar.h"
 #include "OperationCiftiEstimateFWHM.h"
+#include "OperationCiftiExportDenseMapping.h"
 #include "OperationCiftiLabelExportTable.h"
 #include "OperationCiftiLabelImport.h"
 #include "OperationCiftiMath.h"
 #include "OperationCiftiPalette.h"
+#include "OperationCiftiResampleDconnMemory.h"
 #include "OperationCiftiROIAverage.h"
 #include "OperationCiftiSeparateAll.h"
 #include "OperationConvertAffine.h"
@@ -165,6 +175,7 @@
 #include "OperationSurfaceInformation.h"
 #include "OperationSurfaceVertexAreas.h"
 #include "OperationVolumeCapturePlane.h"
+#include "OperationVolumeCopyExtensions.h"
 #include "OperationVolumeCreate.h"
 #include "OperationVolumeLabelExportTable.h"
 #include "OperationVolumeLabelImport.h"
@@ -186,6 +197,7 @@
 #include "CommandClassCreateAlgorithm.h"
 #include "CommandClassCreateEnum.h"
 #include "CommandClassCreateOperation.h"
+#include "CommandDevCreateResourceFile.h"
 #include "CommandC11xTesting.h"
 #include "CommandGiftiConvert.h"
 #include "CommandUnitTest.h"
@@ -231,6 +243,8 @@ CommandOperationManager::deleteCommandOperationManager()
  */
 CommandOperationManager::CommandOperationManager()
 {
+    this->commandOperations.push_back(new CommandParser(new AutoAlgorithmBorderResample()));
+    this->commandOperations.push_back(new CommandParser(new AutoAlgorithmBorderToVertices()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmCiftiAllLabelsToROIs()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmCiftiAverage()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmCiftiAverageDenseROI()));
@@ -269,6 +283,7 @@ CommandOperationManager::CommandOperationManager()
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmLabelMerge()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmLabelModifyKeys()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmLabelResample()));
+    this->commandOperations.push_back(new CommandParser(new AutoAlgorithmLabelToBorder()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmMetricDilate()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmMetricEstimateFWHM()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmMetricExtrema()));
@@ -281,7 +296,9 @@ CommandOperationManager::CommandOperationManager()
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmMetricRemoveIslands()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmMetricResample()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmMetricROIsFromExtrema()));
+    this->commandOperations.push_back(new CommandParser(new AutoAlgorithmMetricROIsToBorder()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmMetricSmoothing()));
+    this->commandOperations.push_back(new CommandParser(new AutoAlgorithmMetricTFCE()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmNodesInsideBorder()));//-border-to-rois
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmSignedDistanceToSurface()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmSurfaceAffineRegression()));
@@ -325,14 +342,19 @@ CommandOperationManager::CommandOperationManager()
     this->commandOperations.push_back(new CommandParser(new AutoOperationAddToSpecFile()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationBackendAverageDenseROI()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationBackendAverageROICorrelation()));
+    this->commandOperations.push_back(new CommandParser(new AutoOperationBorderExportColorTable()));
+    this->commandOperations.push_back(new CommandParser(new AutoOperationBorderFileExportToCaret5()));
+    this->commandOperations.push_back(new CommandParser(new AutoOperationBorderMerge()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationCiftiChangeTimestep()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationCiftiConvert()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationCiftiConvertToScalar()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationCiftiEstimateFWHM()));
+    this->commandOperations.push_back(new CommandParser(new AutoOperationCiftiExportDenseMapping()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationCiftiLabelExportTable()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationCiftiLabelImport()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationCiftiMath()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationCiftiPalette()));
+    this->commandOperations.push_back(new CommandParser(new AutoOperationCiftiResampleDconnMemory()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationCiftiROIAverage()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationCiftiSeparateAll()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationConvertAffine()));
@@ -374,6 +396,7 @@ CommandOperationManager::CommandOperationManager()
     this->commandOperations.push_back(new CommandParser(new AutoOperationSurfaceInformation()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationSurfaceVertexAreas()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationVolumeCapturePlane()));
+    this->commandOperations.push_back(new CommandParser(new AutoOperationVolumeCopyExtensions()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationVolumeCreate()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationVolumeLabelExportTable()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationVolumeLabelImport()));
@@ -390,6 +413,7 @@ CommandOperationManager::CommandOperationManager()
     this->commandOperations.push_back(new CommandClassCreateAlgorithm());
     this->commandOperations.push_back(new CommandClassCreateEnum());
     this->commandOperations.push_back(new CommandClassCreateOperation());
+    this->commandOperations.push_back(new CommandDevCreateResourceFile());
 #ifdef WORKBENCH_HAVE_C11X
     this->commandOperations.push_back(new CommandC11xTesting());
 #endif // WORKBENCH_HAVE_C11X

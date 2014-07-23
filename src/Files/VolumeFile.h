@@ -138,7 +138,9 @@ namespace caret {
         
         SubvolumeAttributes::VolumeType getType() const;
         
-        void validateSplines(const int64_t brickIndex = 0, const int64_t component = 0) const;
+        void validateSpline(const int64_t brickIndex = 0, const int64_t component = 0) const;
+
+        void freeSpline(const int64_t brickIndex = 0, const int64_t component = 0) const;
 
         float interpolateValue(const float* coordIn, InterpType interp = TRILINEAR, bool* validOut = NULL, const int64_t brickIndex = 0, const int64_t component = 0) const;
 
@@ -284,23 +286,23 @@ namespace caret {
         
         const GroupAndNameHierarchyModel* getGroupAndNameHierarchyModel() const;
         
-        virtual bool isChartingEnabled(const int32_t tabIndex) const;
+        virtual bool isBrainordinateChartingEnabled(const int32_t tabIndex) const;
         
-        virtual void setChartingEnabled(const int32_t tabIndex,
+        virtual void setBrainordinateChartingEnabled(const int32_t tabIndex,
                                         const bool enabled);
         
-        virtual bool isChartingSupported() const;
+        virtual bool isBrainordinateChartingSupported() const;
         
-        virtual ChartDataCartesian* loadChartDataForSurfaceNode(const StructureEnum::Enum structure,
+        virtual ChartDataCartesian* loadBrainordinateChartDataForSurfaceNode(const StructureEnum::Enum structure,
                                                                 const int32_t nodeIndex) throw (DataFileException);
         
-        virtual ChartDataCartesian* loadAverageChartDataForSurfaceNodes(const StructureEnum::Enum structure,
+        virtual ChartDataCartesian* loadAverageBrainordinateChartDataForSurfaceNodes(const StructureEnum::Enum structure,
                                                                         const std::vector<int32_t>& nodeIndices) throw (DataFileException);
         
-        virtual ChartDataCartesian* loadChartDataForVoxelAtCoordinate(const float xyz[3]) throw (DataFileException);
+        virtual ChartDataCartesian* loadBrainordinateChartDataForVoxelAtCoordinate(const float xyz[3]) throw (DataFileException);
         
         
-        virtual void getSupportedChartDataTypes(std::vector<ChartDataTypeEnum::Enum>& chartDataTypesOut) const;
+        virtual void getSupportedBrainordinateChartDataTypes(std::vector<ChartDataTypeEnum::Enum>& chartDataTypesOut) const;
         
     };
 

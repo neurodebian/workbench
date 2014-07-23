@@ -66,6 +66,7 @@
 #include "FociProjectionDialog.h"
 #include "GuiManager.h"
 #include "ModelSurface.h"
+#include "ModelSurfaceMontage.h"
 #include "ModelWholeBrain.h"
 #include "PlainTextStringBuilder.h"
 #include "ProgressReportingDialog.h"
@@ -81,6 +82,7 @@
 #include "SpecFileManagementDialog.h"
 #include "StructureEnumComboBox.h"
 #include "Surface.h"
+#include "SurfaceMontageConfigurationAbstract.h"
 #include "SurfaceSelectionViewController.h"
 #include "TileTabsConfiguration.h"
 #include "WuQDataEntryDialog.h"
@@ -844,7 +846,7 @@ BrainBrowserWindow::processRecentSpecFileMenuAboutToBeDisplayed()
                 name += (" (" + path + ")");
             }
             actionName = name;
-            actionFullPath = fileInfo.getFilePath();
+            actionFullPath = fileInfo.getAbsoluteFilePath();
         }
         
         QAction* action = new QAction(actionName,
@@ -886,12 +888,16 @@ BrainBrowserWindow::processRecentSpecFileMenuSelection(QAction* itemAction)
         try {
             specFile.readFile(specFileName);
             
-            Brain* brain = GuiManager::get()->getBrain();
-            if (SpecFileManagementDialog::runOpenSpecFileDialog(brain,
-                                                                &specFile,
-                                                                this)) {
+            if (GuiManager::get()->processShowOpenSpecFileDialog(&specFile,
+                                              this)) {
                 m_toolbar->addDefaultTabsAfterLoadingSpecFile();
-            }            
+            }
+//            Brain* brain = GuiManager::get()->getBrain();
+//            if (SpecFileManagementDialog::runOpenSpecFileDialog(brain,
+//                                                                &specFile,
+//                                                                this)) {
+//                m_toolbar->addDefaultTabsAfterLoadingSpecFile();
+//            }            
         }
         catch (const DataFileException& e) {
             //errorMessages += e.whatString();
@@ -1271,7 +1277,22 @@ BrainBrowserWindow::processSurfaceMenuInformation()
                 const Surface* surface = mdcwb->getSelectedSurface(*iter, btc->getTabNumber());
                 if (surface != NULL) {
                     txt += surface->getInformation();
+                    txt += "\n";
                 }
+            }
+        }
+        
+        ModelSurfaceMontage* msm = dynamic_cast<ModelSurfaceMontage*>(mdc);
+        if (msm != NULL) {
+            std::vector<Surface*> surfaces;
+            msm->getSelectedConfiguration(btc->getTabNumber())->getDisplayedSurfaces(surfaces);
+            
+            for (std::vector<Surface*>::iterator iter = surfaces.begin();
+                 iter != surfaces.end();
+                 iter++) {
+                const Surface* s = *iter;
+                txt += s->getInformation();
+                txt += "\n";
             }
         }
         
@@ -1597,6 +1618,10 @@ BrainBrowserWindow::processDataFileOpen()
         }
     }
     
+    if ( ! s_previousOpenFileGeometry.isEmpty()) {
+        fd.restoreGeometry(s_previousOpenFileGeometry);
+    }
+    
     AString errorMessages;
     
     if (fd.exec() == CaretFileDialog::Accepted) {
@@ -1622,6 +1647,7 @@ BrainBrowserWindow::processDataFileOpen()
         }
         s_previousOpenFileNameFilter = fd.selectedNameFilter();
         s_previousOpenFileDirectory  = fd.directory().absolutePath();
+        s_previousOpenFileGeometry   = fd.saveGeometry();
     }
 }
 
@@ -1938,10 +1964,12 @@ BrainBrowserWindow::loadFiles(QWidget* parentForDialogs,
             case LOAD_SPEC_FILE_WITH_DIALOG:
             case LOAD_SPEC_FILE_WITH_DIALOG_VIA_COMMAND_LINE:
             {
-                Brain* brain = GuiManager::get()->getBrain();
-                if (SpecFileManagementDialog::runOpenSpecFileDialog(brain,
-                                                                    &specFile,
-                                                                    this)) {
+                if (GuiManager::get()->processShowOpenSpecFileDialog(&specFile,
+                                                                     this)) {
+//                    Brain* brain = GuiManager::get()->getBrain();
+//                if (SpecFileManagementDialog::runOpenSpecFileDialog(brain,
+//                                                                    &specFile,
+//                                                                    this)) {
                     m_toolbar->addDefaultTabsAfterLoadingSpecFile();
                     specFileWasLoaded = true;
                     createDefaultTabsFlag = true;
@@ -2098,9 +2126,10 @@ BrainBrowserWindow::loadFiles(QWidget* parentForDialogs,
 void 
 BrainBrowserWindow::processManageSaveLoadedFiles()
 {
-    Brain* brain = GuiManager::get()->getBrain();
-    SpecFileManagementDialog::runManageFilesDialog(brain,
-                                                   this);
+    GuiManager::get()->processShowSaveManageFilesDialog(this);
+//    Brain* brain = GuiManager::get()->getBrain();
+//    SpecFileManagementDialog::runManageFilesDialog(brain,
+//                                                   this);
 }
 
 /**
@@ -2789,6 +2818,8 @@ BrainBrowserWindow::saveToScene(const SceneAttributes* sceneAttributes,
     
     sceneClass->addBoolean("isFullScreen",
                            isFullScreen());
+    sceneClass->addBoolean("isMaximized",
+                           isMaximized());
     sceneClass->addBoolean("m_viewTileTabsAction",
                            m_viewTileTabsSelected);
     return sceneClass;
@@ -2968,6 +2999,12 @@ BrainBrowserWindow::restoreFromScene(const SceneAttributes* sceneAttributes,
             break;
         case SceneTypeEnum::SCENE_TYPE_GENERIC:
             break;
+    }
+    
+    const bool maximizedWindow = sceneClass->getBooleanValue("isMaximized",
+                                                       false);
+    if (maximizedWindow) {
+        showMaximized();
     }
 }
 

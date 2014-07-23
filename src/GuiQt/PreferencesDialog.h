@@ -29,10 +29,12 @@ class QComboBox;
 class QDoubleSpinBox;
 class QGridLayout;
 class QLabel;
+class QSignalMapper;
 class QSpinBox;
 
 namespace caret {
     
+    class CaretPreferences;
     class EnumComboBoxTemplate;
     class WuQTrueFalseComboBox;
     class WuQWidgetObjectGroup;
@@ -48,14 +50,18 @@ namespace caret {
         void updateDialog();
         
     protected:
-        virtual void applyButtonPressed();
+        virtual void applyButtonClicked();
 
     private slots:
-        void backgroundColorPushButtonPressed();
-        void foregroundColorPushButtonPressed();
-        void loggingLevelComboBoxChanged(int);
+        void colorPushButtonClicked(int);
+        
+        void miscDevelopMenuEnabledComboBoxChanged(bool value);
+        void miscLoggingLevelComboBoxChanged(int);
+        void miscSplashScreenShowAtStartupComboBoxChanged(bool value);
+        
+        
         void openGLDrawingMethodEnumComboBoxItemActivated();
-        void imageCaptureMethodEnumComboBoxItemActivated();
+        void openGLImageCaptureMethodEnumComboBoxItemActivated();
         
         void volumeAxesCrosshairsComboBoxToggled(bool value);
         void volumeAxesLabelsComboBoxToggled(bool value);
@@ -63,50 +69,75 @@ namespace caret {
         void volumeMontageGapValueChanged(int value);
         void volumeMontageCoordinatePrecisionChanged(int value);
         
-        void splashScreenShowAtStartupComboBoxChanged(bool value);
-        
-        void developMenuEnabledComboBoxChanged(bool value);
         
     private:
-        void addColorItems();
-        void addDevelopItems();
-        void addLoggingItems();
-        void addOpenGLItems();
-        void addSplashItems();
-        void addVolumeItems();
+        enum PREF_COLOR {
+            PREF_COLOR_BACKGROUND_ALL          = 0,
+            PREF_COLOR_BACKGROUND_CHART        = 1,
+            PREF_COLOR_BACKGROUND_SURFACE      = 2,
+            PREF_COLOR_BACKGROUND_VOLUME       = 3,
+            PREF_COLOR_FOREGROUND_ALL          = 4,
+            PREF_COLOR_FOREGROUND_CHART        = 5,
+            PREF_COLOR_FOREGROUND_SURFACE      = 6,
+            PREF_COLOR_FOREGROUND_VOLUME       = 7,
+            PREF_COLOR_CHART_MATRIX_GRID_LINES = 8,
+            NUMBER_OF_PREF_COLORS              = 9
+        };
         
-        QLabel* addWidgetToLayout(const QString& labelText,
+        QWidget* createColorsWidget();
+        QWidget* createMiscellaneousWidget();
+        QWidget* createOpenGLWidget();
+        QWidget* createVolumeWidget();
+        
+        void updateColorWidget(CaretPreferences* prefs);
+        void updateMiscellaneousWidget(CaretPreferences* prefs);
+        void updateOpenGLWidget(CaretPreferences* prefs);
+        void updateVolumeWidget(CaretPreferences* prefs);
+        
+        void updateColorWithDialog(const PREF_COLOR prefColor);
+
+        QLabel* addWidgetToLayout(QGridLayout* gridLayout,
+                                  const QString& labelText,
                                   QWidget* widget);
         
-        void addWidgetsToLayout(QWidget* leftWidget,
-                             QWidget* rightWidget);
+        void addWidgetsToLayout(QGridLayout* gridLayout,
+                                QWidget* leftWidget,
+                                QWidget* rightWidget);
+        
+        void addColorButtonAndSwatch(QGridLayout* gridLayout,
+                                     const PREF_COLOR prefColor,
+                                     QSignalMapper* colorSignalMapper);
         
         PreferencesDialog(const PreferencesDialog&);
 
         PreferencesDialog& operator=(const PreferencesDialog&);
         
-        QWidget* foregroundColorWidget;
-        QWidget* backgroundColorWidget;
+        QWidget* m_foregroundColorAllWidget;
+        QWidget* m_foregroundColorChartWidget;
+        QWidget* m_foregroundColorSurfaceWidget;
+        QWidget* m_foregroundColorVolumeWidget;
+        QWidget* m_backgroundColorAllWidget;
+        QWidget* m_backgroundColorChartWidget;
+        QWidget* m_backgroundColorSurfaceWidget;
+        QWidget* m_backgroundColorVolumeWidget;
+        QWidget* m_chartMatrixGridLinesColorWidget;
 
-        QComboBox* loggingLevelComboBox;
+        WuQTrueFalseComboBox* m_miscDevelopMenuEnabledComboBox;
+        QComboBox* m_miscLoggingLevelComboBox;
+        WuQTrueFalseComboBox* m_miscSplashScreenShowAtStartupComboBox;
+
         
         EnumComboBoxTemplate* m_openGLDrawingMethodEnumComboBox;
+        EnumComboBoxTemplate* m_openGLImageCaptureMethodEnumComboBox;
         
-        EnumComboBoxTemplate* m_imageCaptureMethodEnumComboBox;
+        WuQTrueFalseComboBox* m_volumeAxesCrosshairsComboBox;
+        WuQTrueFalseComboBox* m_volumeAxesLabelsComboBox;
+        WuQTrueFalseComboBox* m_volumeAxesMontageCoordinatesComboBox;
+        QSpinBox* m_volumeMontageGapSpinBox;
+        QSpinBox* m_volumeMontageCoordinatePrecisionSpinBox;
         
-        WuQTrueFalseComboBox* volumeAxesCrosshairsComboBox;
-        WuQTrueFalseComboBox* volumeAxesLabelsComboBox;
-        WuQTrueFalseComboBox* volumeAxesMontageCoordinatesComboBox;
-        QSpinBox* volumeMontageGapSpinBox;
-        QSpinBox* volumeMontageCoordinatePrecisionSpinBox;
         
-        WuQTrueFalseComboBox* splashScreenShowAtStartupComboBox;
-        
-        WuQTrueFalseComboBox* developMenuEnabledComboBox;
-        
-        QGridLayout* gridLayout;
-        
-        WuQWidgetObjectGroup* allWidgets;
+        WuQWidgetObjectGroup* m_allWidgets;
     };
     
 #ifdef __PREFERENCES_DIALOG__H__DECLARE__

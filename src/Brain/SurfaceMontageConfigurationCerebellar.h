@@ -31,7 +31,7 @@ namespace caret {
     class SurfaceMontageConfigurationCerebellar : public SurfaceMontageConfigurationAbstract {
         
     public:
-        SurfaceMontageConfigurationCerebellar();
+        SurfaceMontageConfigurationCerebellar(const int32_t tabIndex);
         
         virtual ~SurfaceMontageConfigurationCerebellar();
         
@@ -85,6 +85,8 @@ namespace caret {
         virtual AString toString() const;
         
         virtual void getDescriptionOfContent(PlainTextStringBuilder& descriptionOut) const;
+        
+        virtual void getDisplayedSurfaces(std::vector<Surface*>& surfacesOut) const;
         
         // ADD_NEW_METHODS_HERE
 

@@ -34,37 +34,41 @@
 using namespace caret;
 using namespace std;
 
+//private implementation classes
+namespace caret
+{
+#ifdef ZLIB_VERSION
+    class ZFileImpl : public CaretBinaryFile::ImplInterface
+    {
+        gzFile m_zfile;
+    public:
+        ZFileImpl() { m_zfile = NULL; }
+        void open(const QString& filename, const CaretBinaryFile::OpenMode& opmode);
+        void close();
+        void seek(const int64_t& position);
+        int64_t pos();
+        void read(void* dataOut, const int64_t& count, int64_t* numRead);
+        void write(const void* dataIn, const int64_t& count);
+        ~ZFileImpl();
+    };
+#endif //ZLIB_VERSION
+
+    class QFileImpl : public CaretBinaryFile::ImplInterface
+    {
+        QFile m_file;
+    public:
+        void open(const QString& filename, const CaretBinaryFile::OpenMode& opmode);
+        void close();
+        void seek(const int64_t& position);
+        int64_t pos();
+        void read(void* dataOut, const int64_t& count, int64_t* numRead);
+        void write(const void* dataIn, const int64_t& count);
+    };
+}
+
 CaretBinaryFile::ImplInterface::~ImplInterface()
 {
 }
-
-#ifdef ZLIB_VERSION
-class ZFileImpl : public CaretBinaryFile::ImplInterface
-{
-    gzFile m_zfile;
-public:
-    ZFileImpl() { m_zfile = NULL; }
-    void open(const QString& filename, const CaretBinaryFile::OpenMode& opmode);
-    void close();
-    void seek(const int64_t& position);
-    int64_t pos();
-    void read(void* dataOut, const int64_t& count, int64_t* numRead);
-    void write(const void* dataIn, const int64_t& count);
-    ~ZFileImpl();
-};
-#endif //ZLIB_VERSION
-
-class QFileImpl : public CaretBinaryFile::ImplInterface
-{
-    QFile m_file;
-public:
-    void open(const QString& filename, const CaretBinaryFile::OpenMode& opmode);
-    void close();
-    void seek(const int64_t& position);
-    int64_t pos();
-    void read(void* dataOut, const int64_t& count, int64_t* numRead);
-    void write(const void* dataIn, const int64_t& count);
-};
 
 CaretBinaryFile::CaretBinaryFile(const QString& filename, const OpenMode& fileMode)
 {
@@ -297,5 +301,13 @@ int64_t QFileImpl::pos()
 void QFileImpl::write(const void* dataIn, const int64_t& count)
 {
     int64_t writeret = m_file.write((const char*)dataIn, count);//again, expect QFile to handle it in one shot
-    if (writeret != count) throw DataFileException("failed to write to file '" + m_fileName + "'");
+    const AString msg = ("failed to write file '"
+                         + m_fileName
+                         + "'.  Tried to write "
+                         + AString::number(count)
+                         + " bytes but actually wrote "
+                         + AString::number(writeret)
+                         + " bytes.");
+    if (writeret != count) throw DataFileException(msg);
+    //if (writeret != count) throw DataFileException("failed to write to file '" + m_fileName + "'");
 }

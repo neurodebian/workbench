@@ -31,7 +31,7 @@ namespace caret {
     class SurfaceMontageConfigurationFlatMaps : public SurfaceMontageConfigurationAbstract {
         
     public:
-        SurfaceMontageConfigurationFlatMaps();
+        SurfaceMontageConfigurationFlatMaps(const int32_t tabIndex);
         
         virtual ~SurfaceMontageConfigurationFlatMaps();
         
@@ -77,6 +77,8 @@ namespace caret {
         virtual AString toString() const;
         
         virtual void getDescriptionOfContent(PlainTextStringBuilder& descriptionOut) const;
+        
+        virtual void getDisplayedSurfaces(std::vector<Surface*>& surfacesOut) const;
         
         // ADD_NEW_METHODS_HERE
 

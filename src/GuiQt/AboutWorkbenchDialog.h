@@ -39,7 +39,7 @@ namespace caret {
         virtual ~AboutWorkbenchDialog();
         
     protected:
-        virtual ModalDialogUserButtonResult userButtonPressed(QPushButton* userPushButton);
+        virtual DialogUserButtonResult userButtonPressed(QPushButton* userPushButton);
         
     private:
         AboutWorkbenchDialog(const AboutWorkbenchDialog&);

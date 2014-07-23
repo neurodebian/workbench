@@ -32,12 +32,12 @@
 
 #include "BrowserTabContent.h"
 #include "CaretAssert.h"
+#include "CaretDataFile.h"
+#include "CaretDataFileSelectionModel.h"
 #include "EnumComboBoxTemplate.h"
 #include "ChartMatrixDisplayProperties.h"
-#include "ChartMatrixScaleModeEnum.h"
 #include "ChartModelDataSeries.h"
 #include "ChartModelTimeSeries.h"
-#include "ChartableMatrixFileSelectionModel.h"
 #include "ChartableMatrixInterface.h"
 #include "EventBrowserWindowGraphicsRedrawn.h"
 #include "EventGraphicsUpdateAllWindows.h"
@@ -171,7 +171,7 @@ BrainBrowserWindowToolBarChartAttributes::getChartableMatrixDisplayProperties()
                     break;
                 case ChartDataTypeEnum::CHART_DATA_TYPE_MATRIX:
                 {
-                    ChartableMatrixInterface* matrixInterface = modelChart->getChartableMatrixFileSelectionModel(tabIndex)->getSelectedFile();
+                    ChartableMatrixInterface* matrixInterface = modelChart->getChartableMatrixFileSelectionModel(tabIndex)->getSelectedFileOfType<ChartableMatrixInterface>();
                     if (matrixInterface != NULL) {
                         matrixDisplayProperties = matrixInterface->getChartMatrixDisplayProperties(tabIndex);
                     }
@@ -307,12 +307,6 @@ EventListenerInterface()
 {
     m_brainBrowserWindowToolBarChartAttributes = brainBrowserWindowToolBarChartAttributes;
     
-    QLabel* scaleModeLabel = new QLabel("Mode");
-    m_chartMatrixScaleModeEnumComboBox = new EnumComboBoxTemplate(this);
-    m_chartMatrixScaleModeEnumComboBox->setup<ChartMatrixScaleModeEnum,ChartMatrixScaleModeEnum::Enum>();
-    QObject::connect(m_chartMatrixScaleModeEnumComboBox, SIGNAL(itemActivated()),
-                     this, SLOT(chartMatrixScaleModeEnumComboBoxItemActivated()));
-
     QLabel* cellWidthLabel = new QLabel("Cell Width");
     m_cellWidthSpinBox = WuQFactory::newDoubleSpinBoxWithMinMaxStepDecimalsSignalDouble(1.0,
                                                                                         1000.0,
@@ -320,6 +314,7 @@ EventListenerInterface()
                                                                                         2,
                                                                                         this,
                                                                                         SLOT(cellWidthSpinBoxValueChanged(double)));
+    m_cellWidthSpinBox->setKeyboardTracking(true);
 
     QLabel* cellHeightLabel = new QLabel("Cell Height");
     m_cellHeightSpinBox = WuQFactory::newDoubleSpinBoxWithMinMaxStepDecimalsSignalDouble(1.0,
@@ -328,9 +323,10 @@ EventListenerInterface()
                                                                                         2,
                                                                                         this,
                                                                                         SLOT(cellHeightSpinBoxValueChanged(double)));
+    m_cellHeightSpinBox->setKeyboardTracking(true);
     
-    QAction* resetButtonAction = WuQtUtilities::createAction("Reset Pan/Zoom",
-                                                             "Reset panning (shift-mouse movement) and zooming (CTRL-mouse movement)",
+    QAction* resetButtonAction = WuQtUtilities::createAction("Reset",
+                                                             "Reset panning (SHIFT-mouse),zooming (CTRL-mouse), and scale matrix to fit window",
                                                              this,
                                                              this,
                                                              SLOT(resetButtonClicked()));
@@ -338,8 +334,7 @@ EventListenerInterface()
     resetToolButton->setDefaultAction(resetButtonAction);
     
     WuQtUtilities::matchWidgetWidths(m_cellHeightSpinBox,
-                                     m_cellWidthSpinBox,
-                                     m_chartMatrixScaleModeEnumComboBox->getComboBox());
+                                     m_cellWidthSpinBox);
     
     m_manualWidgetsGroup = new WuQWidgetObjectGroup(this);
     m_manualWidgetsGroup->add(m_cellWidthSpinBox);
@@ -351,11 +346,8 @@ EventListenerInterface()
     
     QWidget* gridWidget = new QWidget();
     QGridLayout* gridLayout = new QGridLayout(gridWidget);
-    WuQtUtilities::setLayoutSpacingAndMargins(gridLayout, 2, 0);
+    WuQtUtilities::setLayoutSpacingAndMargins(gridLayout, 2, 2);
     int32_t rowIndex = gridLayout->rowCount();
-    gridLayout->addWidget(scaleModeLabel, rowIndex, COLUMN_LABEL);
-    gridLayout->addWidget(m_chartMatrixScaleModeEnumComboBox->getWidget(), rowIndex, COLUMN_WIDGET);
-    rowIndex++;
     gridLayout->addWidget(cellWidthLabel, rowIndex, COLUMN_LABEL);
     gridLayout->addWidget(m_cellWidthSpinBox, rowIndex, COLUMN_WIDGET);
     rowIndex++;
@@ -418,41 +410,13 @@ MatrixChartAttributesWidget::updateContent()
 {
     ChartMatrixDisplayProperties* matrixDisplayProperties = m_brainBrowserWindowToolBarChartAttributes->getChartableMatrixDisplayProperties();
     if (matrixDisplayProperties != NULL) {
-        const ChartMatrixScaleModeEnum::Enum scaleMode = matrixDisplayProperties->getScaleMode();
-        m_chartMatrixScaleModeEnumComboBox->setSelectedItem<ChartMatrixScaleModeEnum,ChartMatrixScaleModeEnum::Enum>(scaleMode);
+        m_cellWidthSpinBox->blockSignals(true);
+        m_cellWidthSpinBox->setValue(matrixDisplayProperties->getCellWidth());
+        m_cellWidthSpinBox->blockSignals(false);
         
-        
-        switch (scaleMode) {
-            case ChartMatrixScaleModeEnum::CHART_MATRIX_SCALE_AUTO:
-                m_manualWidgetsGroup->setEnabled(false);
-
-                m_cellWidthSpinBox->blockSignals(true);
-                m_cellWidthSpinBox->setValue(matrixDisplayProperties->getCellWidth());
-                m_cellWidthSpinBox->blockSignals(false);
-                
-                m_cellHeightSpinBox->blockSignals(true);
-                m_cellHeightSpinBox->setValue(matrixDisplayProperties->getCellHeight());
-                m_cellHeightSpinBox->blockSignals(false);
-                break;
-            case ChartMatrixScaleModeEnum::CHART_MATRIX_SCALE_MANUAL:
-                m_manualWidgetsGroup->setEnabled(true);
-                break;
-        }
-    }
-}
-
-/**
- * Called when the scale mode combo box is changed.
- */
-void
-MatrixChartAttributesWidget::chartMatrixScaleModeEnumComboBoxItemActivated()
-{
-    ChartMatrixDisplayProperties* matrixDisplayProperties = m_brainBrowserWindowToolBarChartAttributes->getChartableMatrixDisplayProperties();
-    if (matrixDisplayProperties != NULL) {
-        const ChartMatrixScaleModeEnum::Enum scaleMode = m_chartMatrixScaleModeEnumComboBox->getSelectedItem<ChartMatrixScaleModeEnum,ChartMatrixScaleModeEnum::Enum>();
-        matrixDisplayProperties->setScaleMode(scaleMode);
-        updateContent();
-        m_brainBrowserWindowToolBarChartAttributes->updateGraphics();
+        m_cellHeightSpinBox->blockSignals(true);
+        m_cellHeightSpinBox->setValue(matrixDisplayProperties->getCellHeight());
+        m_cellHeightSpinBox->blockSignals(false);
     }
 }
 
@@ -467,6 +431,7 @@ MatrixChartAttributesWidget::cellWidthSpinBoxValueChanged(double value)
 {
     ChartMatrixDisplayProperties* matrixDisplayProperties = m_brainBrowserWindowToolBarChartAttributes->getChartableMatrixDisplayProperties();
     if (matrixDisplayProperties != NULL) {
+        matrixDisplayProperties->setScaleMode(ChartMatrixScaleModeEnum::CHART_MATRIX_SCALE_MANUAL);
         matrixDisplayProperties->setCellWidth(value);
         m_brainBrowserWindowToolBarChartAttributes->updateGraphics();
     }
@@ -483,6 +448,7 @@ MatrixChartAttributesWidget::cellHeightSpinBoxValueChanged(double value)
 {
     ChartMatrixDisplayProperties* matrixDisplayProperties = m_brainBrowserWindowToolBarChartAttributes->getChartableMatrixDisplayProperties();
     if (matrixDisplayProperties != NULL) {
+        matrixDisplayProperties->setScaleMode(ChartMatrixScaleModeEnum::CHART_MATRIX_SCALE_MANUAL);
         matrixDisplayProperties->setCellHeight(value);
         m_brainBrowserWindowToolBarChartAttributes->updateGraphics();
     }
@@ -496,7 +462,7 @@ MatrixChartAttributesWidget::resetButtonClicked()
 {
     ChartMatrixDisplayProperties* matrixDisplayProperties = m_brainBrowserWindowToolBarChartAttributes->getChartableMatrixDisplayProperties();
     if (matrixDisplayProperties != NULL) {
-        matrixDisplayProperties->resetManualModeProperties();
+        matrixDisplayProperties->resetPropertiesToDefault();
         updateContent();
         m_brainBrowserWindowToolBarChartAttributes->updateGraphics();
     }

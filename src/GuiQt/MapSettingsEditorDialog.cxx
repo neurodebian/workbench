@@ -34,6 +34,7 @@
 #include "CaretMappableDataFile.h"
 #include "CiftiFiberTrajectoryFile.h"
 #include "CiftiConnectivityMatrixParcelFile.h"
+#include "EventDataFileDelete.h"
 #include "EventGraphicsUpdateAllWindows.h"
 #include "EventManager.h"
 #include "EventOverlayValidate.h"
@@ -66,7 +67,8 @@ using namespace caret;
  */
 MapSettingsEditorDialog::MapSettingsEditorDialog(QWidget* parent)
 : WuQDialogNonModal("Overlay and Map Settings",
-                    parent)
+                    parent),
+  EventListenerInterface()
 {
     /*
      * No context menu, it screws things up
@@ -132,6 +134,8 @@ MapSettingsEditorDialog::MapSettingsEditorDialog(QWidget* parent)
     this->addWidgetToLeftOfButtons(windowOptionsWidget);
     
     disableAutoDefaultForAllPushButtons();
+
+    EventManager::get()->addProcessedEventListener(this, EventTypeEnum::EVENT_DATA_FILE_DELETE);
 }
 
 /**
@@ -139,8 +143,27 @@ MapSettingsEditorDialog::MapSettingsEditorDialog(QWidget* parent)
  */
 MapSettingsEditorDialog::~MapSettingsEditorDialog()
 {
+    EventManager::get()->removeAllEventsFromListener(this);
 }
 
+/**
+ * Receive an event.
+ *
+ * @param event
+ *    An event for which this instance is listening.
+ */
+void
+MapSettingsEditorDialog::receiveEvent(Event* event)
+{
+    if (event->getEventType() == EventTypeEnum::EVENT_DATA_FILE_DELETE) {
+        updateDialog();
+    }
+}
+
+/**
+ * @return Create and return map file and name section of the dialog.
+ *
+ */
 QWidget*
 MapSettingsEditorDialog::createMapFileAndNameSection()
 {
@@ -313,11 +336,11 @@ MapSettingsEditorDialog::updateDialogContent(Overlay* overlay)
      * is the priority of the tabs.
      */
     std::vector<int32_t> priorityTabIndices;
-    priorityTabIndices.push_back(m_layersWidgetTabIndex);
     priorityTabIndices.push_back(m_paletteWidgetTabIndex);
-    priorityTabIndices.push_back(m_parcelsWidgetTabIndex);
     priorityTabIndices.push_back(m_labelsWidgetTabIndex);
+    priorityTabIndices.push_back(m_parcelsWidgetTabIndex);
     priorityTabIndices.push_back(m_trajectoryWidgetTabIndex);
+    priorityTabIndices.push_back(m_layersWidgetTabIndex);
     priorityTabIndices.push_back(m_metadataWidgetTabIndex);
     CaretAssertMessage((static_cast<int>(priorityTabIndices.size()) == m_tabWidget->count()),
                        "Number of elements in priorityTabIndices is different "
@@ -378,7 +401,7 @@ MapSettingsEditorDialog::closeButtonPressed()
      */
     m_doNotReplaceCheckBox->setCheckState(Qt::Unchecked);
     
-    WuQDialogNonModal::closeButtonPressed();
+    WuQDialogNonModal::closeButtonClicked();
 }
 
 /**

@@ -98,7 +98,7 @@ namespace caret {
         virtual ~SpecFileManagementDialog();
         
     protected:
-        WuQDialogModal::ModalDialogUserButtonResult userButtonPressed(QPushButton* userPushButton);
+        WuQDialogModal::DialogUserButtonResult userButtonPressed(QPushButton* userPushButton);
         
     private slots:
         void toolBarFileTypeActionTriggered(QAction* action);
@@ -133,6 +133,8 @@ namespace caret {
         enum ManageFilesDisplay {
             MANAGE_FILES_ALL,
             MANAGE_FILES_LOADED,
+            MANAGE_FILES_LOADED_MODIFIED,
+            MANAGE_FILES_LOADED_NOT_MODIFIED,
             MANAGE_FILES_NOT_LOADED
         };
         
@@ -257,6 +259,8 @@ namespace caret {
         
         std::set<const CaretDataFile*> m_displayedDataFiles;
         
+        static QByteArray s_manageFilesGeometry;
+        
         static const int SHOW_FILES_ALL;
         static const int SHOW_FILES_NONE;
 
@@ -277,6 +281,8 @@ namespace caret {
     };
     
 #ifdef __SPEC_FILE_MANAGEMENT_DIALOG_DECLARE__
+    QByteArray SpecFileManagementDialog::s_manageFilesGeometry;
+    
     const int SpecFileManagementDialog::SHOW_FILES_ALL = -1;
     const int SpecFileManagementDialog::SHOW_FILES_NONE = -2;
 #endif // __SPEC_FILE_MANAGEMENT_DIALOG_DECLARE__

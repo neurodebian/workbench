@@ -25,8 +25,9 @@
 #include "CaretObject.h"
 #include "ModelTypeEnum.h"
 #include "SceneableInterface.h"
+#include "VolumeSliceDrawingTypeEnum.h"
+#include "VolumeSliceProjectionTypeEnum.h"
 #include "VolumeSliceViewPlaneEnum.h"
-#include "VolumeSliceViewModeEnum.h"
 
 namespace caret {
 
@@ -50,9 +51,13 @@ namespace caret {
         
         void setSliceViewPlane(VolumeSliceViewPlaneEnum::Enum sliceAxisMode);
         
-        VolumeSliceViewModeEnum::Enum getSliceViewMode() const;
+        VolumeSliceDrawingTypeEnum::Enum getSliceDrawingType() const;
+
+        void setSliceDrawingType(const VolumeSliceDrawingTypeEnum::Enum sliceDrawingType);
         
-        void setSliceViewMode(VolumeSliceViewModeEnum::Enum sliceViewMode);
+        VolumeSliceProjectionTypeEnum::Enum getSliceProjectionType() const;
+        
+        void setSliceProjectionType(const VolumeSliceProjectionTypeEnum::Enum sliceProjectionType);
         
         int32_t getMontageNumberOfColumns() const;
         
@@ -140,8 +145,11 @@ namespace caret {
         /** Axis of slice being viewed */
         VolumeSliceViewPlaneEnum::Enum m_sliceViewPlane;
         
-        /** Type of slice viewing */
-        VolumeSliceViewModeEnum::Enum m_sliceViewMode;
+        /** Type of slice drawing (single/montage) */
+        VolumeSliceDrawingTypeEnum::Enum m_sliceDrawingType;
+        
+        /** Type of slice projection (oblique/orthogonal) */
+        VolumeSliceProjectionTypeEnum::Enum m_sliceProjectionType;
         
         /** Number of montage rows */
         int32_t m_montageNumberOfRows;

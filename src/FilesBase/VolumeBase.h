@@ -35,9 +35,7 @@ namespace caret {
     {
         enum ExtensionType
         {
-            NIFTI,
-            NIFTI1,
-            NIFTI2
+            NIFTI
         };
         std::vector<char> m_bytes;
         virtual ExtensionType getType() const = 0;
@@ -48,9 +46,7 @@ namespace caret {
     {
         enum HeaderType
         {
-            NIFTI,
-            NIFTI1,
-            NIFTI2
+            NIFTI
         };
         virtual HeaderType getType() const = 0;
         virtual ~AbstractHeader();
@@ -70,7 +66,6 @@ namespace caret {
         int64_t* m_bMult;
         int64_t* m_cMult;
         
-        void freeMemory();
         void freeIndexing();
         void setupIndexing();//sets up the magic
         bool m_ModifiedFlag;
@@ -80,6 +75,7 @@ namespace caret {
         //convenience method for unsigned
         VolumeBase(const std::vector<uint64_t>& dimensionsIn, const std::vector<std::vector<float> >& indexToSpace, const uint64_t numComponents = 1);
     public:
+        void clear();
         virtual ~VolumeBase();
 
         ///there isn't much VolumeFile can do to restrict access to extensions, so just have them public

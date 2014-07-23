@@ -21,13 +21,16 @@
 #include "AlgorithmMetricDilate.h"
 #include "AlgorithmException.h"
 
+#include "CaretAssert.h"
 #include "CaretOMP.h"
 #include "GeodesicHelper.h"
 #include "MetricFile.h"
 #include "PaletteColorMapping.h"
 #include "SurfaceFile.h"
 #include "TopologyHelper.h"
+#include "Vector3D.h"
 
+#include <algorithm>
 #include <cmath>
 
 using namespace caret;
@@ -64,6 +67,8 @@ OperationParameters* AlgorithmMetricDilate::getParameters()
     columnSelect->addStringParameter(1, "column", "the column number or name");
     
     ret->createOptionalParameter(7, "-nearest", "use the nearest good value instead of a weighted average");
+    
+    ret->createOptionalParameter(10, "-linear", "fill in values with linear interpolation along strongest gradient");
     
     OptionalParameter* exponentOpt = ret->createOptionalParameter(8, "-exponent", "use a different exponent in the weighting function");
     exponentOpt->addDoubleParameter(1, "exponent", "exponent 'n' to use in (area / (distance ^ n)) as the weighting function (default 2)");
@@ -109,19 +114,22 @@ void AlgorithmMetricDilate::useParameters(OperationParameters* myParams, Progres
         }
     }
     bool nearest = myParams->getOptionalParameter(7)->m_present;
+    bool linear = myParams->getOptionalParameter(10)->m_present;
+    if (nearest && linear) throw AlgorithmException("-nearest and -linear may not be specified together");
     float exponent = 2.0f;
     OptionalParameter* exponentOpt = myParams->getOptionalParameter(8);
     if (exponentOpt->m_present)
     {
         exponent = (float)exponentOpt->getDouble(1);
     }
-    AlgorithmMetricDilate(myProgObj, myMetric, mySurf, distance, myMetricOut, badNodeRoi, dataRoi, columnNum, nearest, exponent);
+    AlgorithmMetricDilate(myProgObj, myMetric, mySurf, distance, myMetricOut, badNodeRoi, dataRoi, columnNum, nearest, linear, exponent);
 }
 
 AlgorithmMetricDilate::AlgorithmMetricDilate(ProgressObject* myProgObj, const MetricFile* myMetric, const SurfaceFile* mySurf, const float& distance, MetricFile* myMetricOut,
-                                             const MetricFile* badNodeRoi, const MetricFile* dataRoi, const int& columnNum, const bool& nearest, const float& exponent) : AbstractAlgorithm(myProgObj)
+                                             const MetricFile* badNodeRoi, const MetricFile* dataRoi, const int& columnNum, const bool& nearest, const bool& linear, const float& exponent) : AbstractAlgorithm(myProgObj)
 {
     LevelProgress myProgress(myProgObj);
+    if (nearest && linear) throw AlgorithmException("cannot dilate in nearest and linear modes together");
     int numNodes = mySurf->getNumberOfNodes();
     if (numNodes != myMetric->getNumberOfNodes())
     {
@@ -143,23 +151,13 @@ AlgorithmMetricDilate::AlgorithmMetricDilate(ProgressObject* myProgObj, const Me
     {
         throw AlgorithmException("invalid distance specified");
     }
-    float cutoffRatio = 1.5f, test = pow(0.1f, -1.0f / exponent);//don't use less than a 1.5 * nearest cutoff
-    if (test > 1.0f && test < cutoffRatio)//if it is less than 1, the exponent is weird, so simply ignore it and use default
-    {
-        if (test > 1.1f)
-        {
-            cutoffRatio = test;
-        } else {
-            cutoffRatio = 1.1f;
-        }
-    }
     myMetricOut->setStructure(mySurf->getStructure());
     vector<pair<int, StencilElem> > myStencils;//because we need to iterate over it in parallel
     vector<pair<int, int> > myNearest;
     vector<float> colScratch(numNodes);
     vector<float> myAreas;
     mySurf->computeNodeAreas(myAreas);
-    if (badNodeRoi != NULL)
+    if (!linear && badNodeRoi != NULL)
     {
         if (nearest)
         {
@@ -176,9 +174,9 @@ AlgorithmMetricDilate::AlgorithmMetricDilate(ProgressObject* myProgObj, const Me
             *(myMetricOut->getMapPaletteColorMapping(thisCol)) = *(myMetric->getMapPaletteColorMapping(thisCol));
             const float* myInputData = myMetric->getValuePointerForColumn(thisCol);
             myMetricOut->setColumnName(thisCol, myMetric->getColumnName(thisCol));
-            if (badNodeRoi == NULL)
+            if (linear || badNodeRoi == NULL)
             {
-                processColumn(colScratch.data(), myInputData, mySurf, myAreas.data(), dataRoi, distance, nearest, exponent);
+                processColumn(colScratch.data(), myInputData, mySurf, myAreas.data(), badNodeRoi, dataRoi, distance, nearest, linear, exponent);
             } else {
                 if (nearest)
                 {
@@ -194,9 +192,9 @@ AlgorithmMetricDilate::AlgorithmMetricDilate(ProgressObject* myProgObj, const Me
         *(myMetricOut->getMapPaletteColorMapping(0)) = *(myMetric->getMapPaletteColorMapping(columnNum));
         const float* myInputData = myMetric->getValuePointerForColumn(columnNum);
         myMetricOut->setColumnName(0, myMetric->getColumnName(columnNum));
-        if (badNodeRoi == NULL)
+        if (linear || badNodeRoi == NULL)
         {
-            processColumn(colScratch.data(), myInputData, mySurf, myAreas.data(), dataRoi, distance, nearest, exponent);
+            processColumn(colScratch.data(), myInputData, mySurf, myAreas.data(), badNodeRoi, dataRoi, distance, nearest, linear, exponent);
         } else {
             if (nearest)
             {
@@ -257,8 +255,8 @@ void AlgorithmMetricDilate::processColumn(float* colScratch, const int& numNodes
     }
 }
 
-void AlgorithmMetricDilate::processColumn(float* colScratch, const float* myInputData, const SurfaceFile* mySurf, const float* myAreas, const MetricFile* dataRoi,
-                                          const float& distance, const bool& nearest, const float& exponent)
+void AlgorithmMetricDilate::processColumn(float* colScratch, const float* myInputData, const SurfaceFile* mySurf, const float* myAreas, const MetricFile* badNodeRoi, const MetricFile* dataRoi,
+                                          const float& distance, const bool& nearest, const bool& linear, const float& exponent)
 {
     float cutoffRatio = 1.5f, test = pow(10.0f, 1.0f / exponent);//find what cutoff ratio corresponds to a tenth of weight, but don't use more than a 1.5 * nearest cutoff
     if (test > 1.0f && test < cutoffRatio)//if it is less than 1, the exponent is weird, so simply ignore it and use default
@@ -296,6 +294,8 @@ void AlgorithmMetricDilate::processColumn(float* colScratch, const float* myInpu
             }
         }
     }
+    const float* badRoiData = NULL;
+    if (badNodeRoi != NULL) badRoiData = badNodeRoi->getValuePointerForColumn(0);
 #pragma omp CARET_PAR
     {
         CaretPointer<TopologyHelper> myTopoHelp = mySurf->getTopologyHelper();
@@ -303,7 +303,14 @@ void AlgorithmMetricDilate::processColumn(float* colScratch, const float* myInpu
 #pragma omp CARET_FOR schedule(dynamic)
         for (int i = 0; i < numNodes; ++i)
         {
-            if ((dataRoiVals == NULL || dataRoiVals[i] > 0.0f) && myInputData[i] == 0.0f)
+            bool badNode;
+            if (badRoiData != NULL)
+            {
+                badNode = (badRoiData[i] > 0.0f);
+            } else {
+                badNode = (myInputData[i] == 0.0f);
+            }
+            if ((dataRoiVals == NULL || dataRoiVals[i] > 0.0f) && badNode)
             {
                 float closestDist;
                 int closestNode = myGeoHelp->getClosestNodeInRoi(i, charRoi.data(), distance, closestDist);
@@ -332,31 +339,107 @@ void AlgorithmMetricDilate::processColumn(float* colScratch, const float* myInpu
                     } else {
                         vector<int32_t> nodeList;
                         vector<float> distList;
-                        myGeoHelp->getNodesToGeoDist(i, closestDist * cutoffRatio, nodeList, distList);
-                        int numInRange = (int)nodeList.size();
-                        float totalWeight = 0.0f, weightedSum = 0.0f;
-                        for (int j = 0; j < numInRange; ++j)
+                        if (linear)
                         {
-                            if (charRoi[nodeList[j]] != 0)
+                            myGeoHelp->getNodesToGeoDist(i, distance, nodeList, distList);
+                            int numInRange = (int)nodeList.size();
+                            Vector3D center = mySurf->getCoordinate(i);
+                            vector<float> blockDists;
+                            vector<int32_t> blockPath;
+                            vector<int32_t> usableNodes;
+                            vector<float> usableDists;
+                            for (int j = 0; j < numInRange; ++j)//prescan what is usable, and also exclude things that are through a valid node
                             {
-                                float weight;
-                                const float tolerance = 0.9f;//distances should NEVER be less than closestDist, for obvious reasons
-                                float divdist = distList[j] / closestDist;
-                                if (divdist > tolerance)//tricky: if closestDist is zero, this filters between NaN and inf, resulting in a straight average between nodes with 0 distance
+                                if (badRoiData != NULL)
                                 {
-                                    weight = myAreas[nodeList[j]] / pow(divdist, exponent);
+                                    badNode = (badRoiData[nodeList[j]] > 0.0f);
                                 } else {
-                                    weight = myAreas[nodeList[j]] / pow(tolerance, exponent);
+                                    badNode = (myInputData[nodeList[j]] == 0.0f);
                                 }
-                                totalWeight += weight;
-                                weightedSum += myInputData[nodeList[j]] * weight;
+                                if ((dataRoiVals == NULL || dataRoiVals[nodeList[j]] > 0.0f) && !badNode)
+                                {
+                                    myGeoHelp->getPathAlongLineSegment(i, nodeList[j], center, mySurf->getCoordinate(nodeList[j]), blockPath, blockDists);
+                                    CaretAssert(blockPath.size() > 0 && blockPath[0] == i);//we already know that i is "bad", skip it
+                                    bool usable = true;
+                                    for (int k = 1; k < (int)blockPath.size() - 1; ++k)//and don't test the endpoint
+                                    {
+                                        if (dataRoiVals == NULL || dataRoiVals[blockPath[k]] > 0.0f)
+                                        {
+                                            if (badRoiData != NULL)
+                                            {
+                                                if (!(badRoiData[blockPath[k]] > 0.0f))//"not greater than" to trap NaNs
+                                                {
+                                                    usable = false;
+                                                    break;
+                                                }
+                                            } else {
+                                                if (myInputData[blockPath[k]] != 0.0f)
+                                                {
+                                                    usable = false;
+                                                    break;
+                                                }
+                                            }
+                                        }
+                                    }
+                                    if (usable)
+                                    {
+                                        usableNodes.push_back(nodeList[j]);
+                                        usableDists.push_back(distList[j]);
+                                    }
+                                }
                             }
-                        }
-                        if (totalWeight != 0.0f)
-                        {
-                            colScratch[i] = weightedSum / totalWeight;
+                            int numUsable = (int)usableNodes.size();
+                            float bestGradient = -1.0f;
+                            int bestj = -1, bestk = -1;
+                            for (int j = 0; j < numUsable; ++j)
+                            {
+                                int node1 = usableNodes[j];
+                                for (int k = j + 1; k < numUsable; ++k)
+                                {
+                                    int node2 = usableNodes[k];
+                                    float grad = abs(myInputData[node1] - myInputData[node2]) / (usableDists[j] + usableDists[k]);
+                                    if (grad > bestGradient)
+                                    {
+                                        bestGradient = grad;
+                                        bestj = j;
+                                        bestk = k;
+                                    }
+                                }
+                            }
+                            if (bestj == -1)
+                            {
+                                colScratch[i] = myInputData[closestNode];
+                            } else {
+                                int node1 = usableNodes[bestj], node2 = usableNodes[bestk];
+                                colScratch[i] = myInputData[node1] + (myInputData[node2] - myInputData[node1]) * usableDists[bestj] / (usableDists[bestj] + usableDists[bestk]);
+                            }
                         } else {
-                            colScratch[i] = 0.0f;
+                            myGeoHelp->getNodesToGeoDist(i, closestDist * cutoffRatio, nodeList, distList);
+                            int numInRange = (int)nodeList.size();
+                            float totalWeight = 0.0f, weightedSum = 0.0f;
+                            for (int j = 0; j < numInRange; ++j)
+                            {
+                                if (charRoi[nodeList[j]] != 0)
+                                {
+                                    float weight;
+                                    const float tolerance = 0.9f;//distances should NEVER be less than closestDist, for obvious reasons
+                                    float divdist = distList[j] / closestDist;
+                                    if (divdist > tolerance)//tricky: if closestDist is zero, this filters between NaN and inf, resulting in a straight average between nodes with 0 distance
+                                    {
+                                        weight = myAreas[nodeList[j]] / pow(divdist, exponent);
+                                    } else {
+                                        weight = myAreas[nodeList[j]] / pow(tolerance, exponent);
+                                    }
+                                    totalWeight += weight;
+                                    weightedSum += myInputData[nodeList[j]] * weight;
+                                }
+                            }
+                            if (totalWeight != 0.0f)
+                            {
+                                colScratch[i] = weightedSum / totalWeight;
+                            } else {
+                                colScratch[i] = 0.0f;
+                            }
                         }
                     }
                 }
@@ -401,7 +484,10 @@ void AlgorithmMetricDilate::precomputeStencils(vector<pair<int, StencilElem> >& 
                     charRoi[i] = 0;
                 }
             } else {
-                ++badCount;
+                if (dataRoiVals[i] > 0.0f)
+                {
+                    ++badCount;
+                }
                 charRoi[i] = 0;
             }
         }
@@ -426,7 +512,7 @@ void AlgorithmMetricDilate::precomputeStencils(vector<pair<int, StencilElem> >& 
 #pragma omp CARET_FOR schedule(dynamic)
         for (int i = 0; i < numNodes; ++i)
         {
-            if (badNodeData[i] > 0.0f)
+            if (badNodeData[i] > 0.0f && (dataRoiVals == NULL || dataRoiVals[i] > 0.0f))
             {
                 int myIndex;
 #pragma omp critical
@@ -509,7 +595,10 @@ void AlgorithmMetricDilate::precomputeNearest(vector<pair<int, int> >& myNearest
                     charRoi[i] = 0;
                 }
             } else {
-                ++badCount;
+                if (dataRoiVals[i] > 0.0f)
+                {
+                    ++badCount;
+                }
                 charRoi[i] = 0;
             }
         }
@@ -534,7 +623,7 @@ void AlgorithmMetricDilate::precomputeNearest(vector<pair<int, int> >& myNearest
 #pragma omp CARET_FOR schedule(dynamic)
         for (int i = 0; i < numNodes; ++i)
         {
-            if (badNodeData[i] > 0.0f)
+            if (badNodeData[i] > 0.0f && (dataRoiVals == NULL || dataRoiVals[i] > 0.0f))
             {
                 int myIndex;
 #pragma omp critical

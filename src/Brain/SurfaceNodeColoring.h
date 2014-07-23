@@ -21,8 +21,11 @@
  */
 /*LICENSE_END*/
 
-
+#include "CaretColorEnum.h"
 #include "CaretObject.h"
+#include "CaretPointer.h"
+#include "DisplayGroupEnum.h"
+#include "LabelDrawingTypeEnum.h"
 
 namespace caret {
 
@@ -35,14 +38,16 @@ namespace caret {
     class CiftiParcelScalarFile;
     class CiftiParcelSeriesFile;
     class DisplayPropertiesLabels;
+    class GiftiLabelTable;
     class Model;
     class LabelFile;
     class MetricFile;
+    class OverlaySet;
     class Palette;
     class PaletteColorMapping;
     class RgbaFile;
     class Surface;
-    class OverlaySet;
+    class TopologyHelper;
     
     /// Performs coloring of surface nodes
     class SurfaceNodeColoring : public CaretObject {
@@ -83,7 +88,8 @@ namespace caret {
                                  const BrainStructure* brainStructure,
                                  const Surface* surface,
                                  const LabelFile* labelFile,
-                                 const AString& labelMapUniqueID,
+                                 const int32_t mapIndex,
+                                 //const AString& labelMapUniqueID,
                                  const int32_t numberOfNodes,
                                  float* rgbv);
 
@@ -91,53 +97,69 @@ namespace caret {
                                       const int32_t browserTabIndex,
                                       const BrainStructure* brainStructure,
                                   CiftiBrainordinateLabelFile* ciftiScalarFile,
-                                  const AString& metricMapUniqueID,
+                                      const int32_t mapIndex,
+                                      //const AString& metricMapUniqueID,
                                   const int32_t numberOfNodes,
                                   float* rgbv);
         
         bool assignCiftiScalarColoring(const BrainStructure* brainStructure,
                                        CiftiBrainordinateScalarFile* ciftiScalarFile,
-                                       const AString& metricMapUniqueID,
+                                       const int32_t mapIndex,
+                                       //const AString& metricMapUniqueID,
                                        const int32_t numberOfNodes,
                                        float* rgbv);
         
         bool assignCiftiParcelScalarColoring(const BrainStructure* brainStructure,
                                        CiftiParcelScalarFile* ciftiScalarFile,
-                                       const AString& metricMapUniqueID,
+                                             const int32_t mapIndex,
+                                             //const AString& metricMapUniqueID,
                                        const int32_t numberOfNodes,
                                        float* rgbv);
         
         bool assignCiftiDataSeriesColoring(const BrainStructure* brainStructure,
                                        CiftiBrainordinateDataSeriesFile* ciftiDataSeriesFile,
-                                       const AString& metricMapUniqueID,
+                                           const int32_t mapIndex,
+                                           //const AString& metricMapUniqueID,
                                        const int32_t numberOfNodes,
                                        float* rgbv);
         
         bool assignCiftiParcelSeriesColoring(const BrainStructure* brainStructure,
                                            CiftiParcelSeriesFile* ciftiParcelSeriesFile,
-                                           const AString& metricMapUniqueID,
+                                             const int32_t mapIndex,
+                                             //const AString& metricMapUniqueID,
                                            const int32_t numberOfNodes,
                                            float* rgbv);
         
         bool assignCiftiMappableConnectivityMatrixColoring(const BrainStructure* brainStructure,
                                                    CiftiMappableConnectivityMatrixDataFile* ciftiConnectivityMatrixFile,
-                                                   const AString& selectedMapUniqueID,
+                                                           const int32_t mapIndex,
+                                                           //const AString& selectedMapUniqueID,
                                                    const int32_t numberOfNodes,
                                                    float* rgbv);
         
         bool assignMetricColoring(const BrainStructure* brainStructure,
                                   MetricFile* metricFile,
-                                  const AString& metricMapUniqueID,
+                                  const int32_t mapIndex,
+                                  //const AString& metricMapUniqueID,
                                   const int32_t numberOfNodes,
                                   float* rgbv);
         
         bool assignRgbaColoring(const BrainStructure* brainStructure,
                                 const RgbaFile* rgbaFile,
-                                const AString& rgbaMapUniqueID,
+                                const int32_t mapIndex,
+                                //const AString& rgbaMapUniqueID,
                                 const int32_t numberOfNodes,
                                 float* rgbv);
         
-};
+        void assignLabelTableColors(const GiftiLabelTable* labelTable,
+                                    const LabelDrawingTypeEnum::Enum labelDrawingType,
+                                    const CaretColorEnum::Enum outlineColor,
+                                    const CaretPointer<TopologyHelper> topologyHelper,
+                                    const DisplayGroupEnum::Enum displayGroup,
+                                    const int32_t browserTabIndex,
+                                    const std::vector<float>& labelIndices,
+                                    float* rgbv);
+    };
     
 #ifdef __SURFACE_NODE_COLORING_DECLARE__
 #endif // __SURFACE_NODE_COLORING_DECLARE__

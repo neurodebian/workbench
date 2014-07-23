@@ -58,7 +58,7 @@ Operations
 Algorithms
 OperationsBase
 Brain
-GlfFont
+${FTGL_FONT_MODULE_FOR_LINKING}
 Files
 Palette
 Gifti
@@ -70,6 +70,7 @@ Scenes
 Xml
 Common
 Quazip
+${FREETYPE_LIBRARIES}
 ${QT_LIBRARIES}
 ${OSMESA_OFFSCREEN_LIBRARY}
 ${OSMESA_GL_LIBRARY}
@@ -90,7 +91,6 @@ ${CMAKE_SOURCE_DIR}/Algorithms
 ${CMAKE_SOURCE_DIR}/OperationsBase
 ${CMAKE_SOURCE_DIR}/Brain
 ${CMAKE_SOURCE_DIR}/Charting
-${CMAKE_SOURCE_DIR}/GlfFont
 ${CMAKE_SOURCE_DIR}/Palette
 ${CMAKE_SOURCE_DIR}/Files
 ${CMAKE_SOURCE_DIR}/Gifti

@@ -36,6 +36,7 @@
 
 namespace caret {
 
+    class CaretDataFileSelectionModel;
     class ChartData;
     class ChartDataCartesian;
     class ChartableMatrixInterface;
@@ -43,7 +44,6 @@ namespace caret {
     class ChartModelDataSeries;
     class ChartModelTimeSeries;
     class ChartableBrainordinateInterface;
-    class ChartableMatrixFileSelectionModel;
     class CiftiConnectivityMatrixParcelFile;
     class OverlaySetArray;
     class SurfaceFile;
@@ -78,6 +78,8 @@ namespace caret {
         
         virtual void receiveEvent(Event* event);
         
+        void getValidChartDataTypes(std::vector<ChartDataTypeEnum::Enum>& validChartDataTypesOut) const;
+        
         ChartDataTypeEnum::Enum getSelectedChartDataType(const int32_t tabIndex) const;
         
         void setSelectedChartDataType(const int32_t tabIndex,
@@ -99,7 +101,7 @@ namespace caret {
         
         void reset();
         
-        ChartableMatrixFileSelectionModel* getChartableMatrixFileSelectionModel(const int32_t tabIndex);
+        CaretDataFileSelectionModel* getChartableMatrixFileSelectionModel(const int32_t tabIndex);
         
     protected:
         virtual void saveModelSpecificInformationToScene(const SceneAttributes* sceneAttributes,
@@ -153,7 +155,7 @@ namespace caret {
         
         std::vector<ChartableMatrixInterface*> m_previousChartMatrixFiles;
 
-        ChartableMatrixFileSelectionModel* m_chartableMatrixFileSelectionModel[BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_TABS];
+        CaretDataFileSelectionModel* m_chartableMatrixFileSelectionModel[BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_TABS];
         
         SceneClassAssistant* m_sceneAssistant;
     };

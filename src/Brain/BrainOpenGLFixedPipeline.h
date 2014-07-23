@@ -446,9 +446,9 @@ namespace caret {
                          const FastStatistics* statistics,
                          const int paletteDrawingIndex);
         
-        float modelSizeToPixelSize(const float modelSize);
-        
-        float pixelSizeToModelSize(const float pixelSize);
+//        float modelSizeToPixelSize(const float modelSize);
+//        
+//        float pixelSizeToModelSize(const float pixelSize);
         
         void setProjectionModeData(const float screenDepth,
                                           const float xyz[3],
@@ -486,6 +486,8 @@ namespace caret {
         Plane getPlaneForVolumeSliceIndex(const VolumeMappableInterface* volumeMappable,
                                           const VolumeSliceViewPlaneEnum::Enum slicePlane,
                                           const int64_t sliceIndex) const;
+        
+        void updateForegroundAndBackgroundColors(BrainOpenGLViewportContent* vpContent);
         
         /** Indicates OpenGL has been initialized */
         bool initializedOpenGLFlag;
@@ -572,6 +574,7 @@ namespace caret {
         
         friend class BrainOpenGLChartDrawingFixedPipeline;
         friend class BrainOpenGLVolumeSliceDrawing;
+        friend class OLD_BrainOpenGLVolumeSliceDrawing;
     };
 
 #ifdef __BRAIN_OPENGL_FIXED_PIPELINE_DEFINE_H

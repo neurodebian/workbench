@@ -46,7 +46,7 @@ using namespace caret;
 /**
  * Constructor.
  */
-SurfaceMontageConfigurationCerebral::SurfaceMontageConfigurationCerebral()
+SurfaceMontageConfigurationCerebral::SurfaceMontageConfigurationCerebral(const int32_t tabIndex)
 : SurfaceMontageConfigurationAbstract(SurfaceMontageConfigurationTypeEnum::CEREBRAL_CORTEX_CONFIGURATION,
                                       SUPPORTS_LAYOUT_ORIENTATION_YES)
 {
@@ -99,7 +99,9 @@ SurfaceMontageConfigurationCerebral::SurfaceMontageConfigurationCerebral()
     std::vector<StructureEnum::Enum> supportedStructures;
     supportedStructures.push_back(StructureEnum::CORTEX_LEFT);
     supportedStructures.push_back(StructureEnum::CORTEX_RIGHT);
-    setupOverlaySet(supportedStructures);
+    setupOverlaySet("Cerebral Montage",
+                    tabIndex,
+                    supportedStructures);
 }
 
 /**
@@ -717,6 +719,55 @@ SurfaceMontageConfigurationCerebral::getDescriptionOfContent(PlainTextStringBuil
     descriptionOut.addLine(viewsMsg);
     
     descriptionOut.popIndentation();
+}
+
+/**
+ * Get all surfaces displayed in this configuration.
+ *
+ * @param surfaceOut
+ *    Will contain all displayed surfaces upon exit.
+ */
+void
+SurfaceMontageConfigurationCerebral::getDisplayedSurfaces(std::vector<Surface*>& surfacesOut) const
+{
+    surfacesOut.clear();
+    
+    if (isLeftEnabled()) {
+        Surface* firstLeftSurface = NULL;;
+        if (isFirstSurfaceEnabled()) {
+            firstLeftSurface = const_cast<Surface*>(getLeftFirstSurfaceSelectionModel()->getSurface());
+            if (firstLeftSurface != NULL) {
+                surfacesOut.push_back(const_cast<Surface*>(firstLeftSurface));
+            }
+        }
+        
+        if (isSecondSurfaceEnabled()) {
+            const Surface* secondLeftSurface = getLeftSecondSurfaceSelectionModel()->getSurface();
+            if (secondLeftSurface != NULL) {
+                if (secondLeftSurface != firstLeftSurface) {
+                    surfacesOut.push_back(const_cast<Surface*>(secondLeftSurface));
+                }
+            }
+        }
+    }
+    
+    if (isRightEnabled()) {
+        Surface* firstRightSurface = NULL;
+        if (isFirstSurfaceEnabled()) {
+            firstRightSurface = const_cast<Surface*>(getRightFirstSurfaceSelectionModel()->getSurface());
+            if (firstRightSurface != NULL) {
+                surfacesOut.push_back(const_cast<Surface*>(firstRightSurface));
+            }
+        }
+        if (isSecondSurfaceEnabled()) {
+            const Surface* secondRightSurface = getRightSecondSurfaceSelectionModel()->getSurface();
+            if (secondRightSurface != NULL) {
+                if (secondRightSurface != firstRightSurface) {
+                    surfacesOut.push_back(const_cast<Surface*>(secondRightSurface));
+                }
+            }
+        }
+    }
 }
 
 /**

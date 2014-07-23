@@ -39,6 +39,7 @@ namespace caret {
     
     class Border;
     class BorderFile;
+    class BorderPointFromSearch;
     class FociFile;
     class BrainStructure;
     class CaretDataFile;
@@ -110,46 +111,11 @@ namespace caret {
         BrainStructure* getBrainStructure(StructureEnum::Enum structure,
                                           bool createIfNotFound);
 
-        void addDataFile(CaretDataFile* caretDataFile) throw (DataFileException);
-        
         int32_t getNumberOfBorderFiles() const;
         
         BorderFile* getBorderFile(const int32_t indx);
         
         const BorderFile* getBorderFile(const int32_t indx) const;
-        
-        BorderFile* addBorderFile();
-        
-        enum NearestBorderTestMode {
-            NEAREST_BORDER_TEST_MODE_ALL_POINTS,
-            NEAREST_BORDER_TEST_MODE_ENDPOINTS
-        };
-        bool findBorderNearestBorder(const DisplayGroupEnum::Enum displayGroup,
-                                     const int32_t browserTabIndex,
-                                     const SurfaceFile* surfaceFile,
-                                    const Border* border,
-                                    const NearestBorderTestMode borderTestMode,
-                                    const float maximumDistance,
-                                    BorderFile*& borderFileOut,
-                                    int32_t& borderFileIndexOut,
-                                    Border*& borderOut,
-                                    int32_t& borderIndexOut,
-                                    SurfaceProjectedItem*& borderPointOut,
-                                    int32_t& borderPointIndexOut,
-                                    float& distanceToBorderPointOut) const;
-                                    
-        bool findBorderNearestXYZ(const DisplayGroupEnum::Enum displayGroup,
-                                  const int32_t browserTabIndex,
-                                  const SurfaceFile* surfaceFile,
-                                 const float xyz[3],
-                                 const float maximumDistance,
-                                 BorderFile*& borderFileOut,
-                                 int32_t& borderFileIndexOut,
-                                 Border*& borderOut,
-                                 int32_t& borderIndexOut,
-                                 SurfaceProjectedItem*& borderPointOut,
-                                 int32_t& borderPointIndexOut,
-                                 float& distanceToBorderPointOut) const;
         
         int32_t getNumberOfFociFiles() const;
         
@@ -157,14 +123,10 @@ namespace caret {
         
         const FociFile* getFociFile(const int32_t indx) const;
         
-        FociFile* addFociFile();
-        
         PaletteFile* getPaletteFile();
         
         const PaletteFile* getPaletteFile() const;
 
-        SceneFile* addSceneFile();
-        
         int32_t getNumberOfSceneFiles() const;
         
         SceneFile* getSceneFile(const int32_t indx);
@@ -206,8 +168,6 @@ namespace caret {
         ChartingDataManager* getChartingDataManager();
         
         const ChartingDataManager* getChartingDataManager() const;
-        
-        void convertCiftiMatrixFileToCiftiScalarFile(const CiftiMappableConnectivityMatrixDataFile* ciftiMatrixFile) throw (DataFileException);
         
         void getAllCiftiMappableDataFiles(std::vector<CiftiMappableDataFile*>& allCiftiMappableDataFilesOut) const;
         
@@ -281,8 +241,6 @@ namespace caret {
         
         void getConnectivityFiberTrajectoryFiles(std::vector<CiftiFiberTrajectoryFile*>& ciftiFiberTrajectoryFilesOut) const;
         
-        void createNewConnectivityFiberTrajectoryFileFromLoadedData(const CiftiFiberTrajectoryFile* ciftiFiberTrajectoryFile) throw (DataFileException);
-        
         int32_t getNumberOfConnectivityMatrixParcelFiles() const;
         
         CiftiConnectivityMatrixParcelFile* getConnectivityMatrixParcelFile(int32_t indx);
@@ -330,6 +288,9 @@ namespace caret {
         void getAllDataFiles(std::vector<CaretDataFile*>& allDataFilesOut,
                              const bool includeSpecFile = false) const;
         
+        void getAllDataFilesWithDataFileType(const DataFileTypeEnum::Enum dataFileType,
+                                             std::vector<CaretDataFile*>& caretDataFilesOut) const;
+        
         void getAllMappableDataFiles(std::vector<CaretMappableDataFile*>& allCaretMappableDataFilesOut) const;
         
         void getAllMappableDataFileWithDataFileType(const DataFileTypeEnum::Enum dataFileType,
@@ -337,15 +298,10 @@ namespace caret {
         
         bool isFileValid(const CaretDataFile* caretDataFile) const;
 
-        bool areFilesModified(const std::vector<DataFileTypeEnum::Enum>& excludeTheseDataTypes);
+        void getAllModifiedFiles(const std::vector<DataFileTypeEnum::Enum>& excludeTheseDataTypes,
+                                 std::vector<CaretDataFile*>& modifiedDataFilesOut) const;
         
         void writeDataFile(CaretDataFile* caretDataFile) throw (DataFileException);
-        
-        bool removeWithoutDeleteDataFile(const CaretDataFile* caretDataFile);
-        
-        bool removeWithoutDeleteDataFilePrivate(const CaretDataFile* caretDataFile);
-        
-        bool removeAndDeleteDataFile(CaretDataFile* caretDataFile);
         
         DisplayPropertiesBorders* getDisplayPropertiesBorders();
         
@@ -421,6 +377,14 @@ namespace caret {
             /** Reload the file */
             FILE_MODE_RELOAD
         };
+        
+        void addDataFile(CaretDataFile* caretDataFile) throw (DataFileException);
+        
+        bool removeWithoutDeleteDataFile(const CaretDataFile* caretDataFile);
+        
+        bool removeWithoutDeleteDataFilePrivate(const CaretDataFile* caretDataFile);
+        
+        bool removeAndDeleteDataFile(CaretDataFile* caretDataFile);
         
         void loadFilesSelectedInSpecFile(EventSpecFileReadDataFiles* readSpecFileDataFilesEvent);
         

@@ -40,12 +40,7 @@ using namespace caret;
  * Constructor.
  */
 CiftiConnectivityMatrixDenseParcelFile::CiftiConnectivityMatrixDenseParcelFile()
-: CiftiMappableConnectivityMatrixDataFile(DataFileTypeEnum::CONNECTIVITY_DENSE_PARCEL,
-                                          CiftiMappableDataFile::FILE_READ_DATA_ALL,
-                                          CIFTI_INDEX_TYPE_PARCELS,
-                                          CIFTI_INDEX_TYPE_BRAIN_MODELS,
-                                          CiftiMappableDataFile::DATA_ACCESS_WITH_ROW_METHODS,
-                                          CiftiMappableDataFile::DATA_ACCESS_INVALID)
+: CiftiMappableConnectivityMatrixDataFile(DataFileTypeEnum::CONNECTIVITY_DENSE_PARCEL)
 {
     
 }

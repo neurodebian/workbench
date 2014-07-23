@@ -28,6 +28,7 @@
 #include "BrainOpenGL.h"
 #undef __BRAIN_OPENGL_DEFINE_H
 
+#include "BrainOpenGLTextRenderInterface.h"
 #include "CaretAssert.h"
 #include "CaretLogger.h"
 #include "CaretPreferences.h"
@@ -309,6 +310,9 @@ BrainOpenGL::initializeOpenGL()
                         + "\nOpenGL Renderer: " + AString(renderStr));
     
     lineInfo += "\n";
+    lineInfo += ("\nFont Renderer: " + this->textRenderer->getName());
+    lineInfo += "\n";
+    
 #ifdef GL_VERSION_2_0
     if (testForVersionOfOpenGLSupported("2.0")) {
         GLfloat values[2];
@@ -702,4 +706,19 @@ AString BrainOpenGL::getOpenGLLightAsText(const AString& enumName,
                        + valuesString);
     return s;
 }
+
+/**
+ * Get the background color.
+ *
+ * @param backgroundColor
+ *     Output containing RGB components [0, 255].
+ */
+void
+BrainOpenGL::getBackgroundColor(uint8_t backgroundColor[3]) const
+{
+    backgroundColor[0] = m_backgroundColorByte[0];
+    backgroundColor[1] = m_backgroundColorByte[1];
+    backgroundColor[2] = m_backgroundColorByte[2];
+}
+
 

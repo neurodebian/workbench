@@ -707,7 +707,7 @@ ImageCaptureDialog::selectImagePushButtonPressed()
     if (fileInfo.isRelative()) {
         FileInformation absFileInfo(GuiManager::get()->getBrain()->getCurrentDirectory(),
                                     m_imageFileNameLineEdit->text().trimmed());
-        defaultFileName = absFileInfo.getFilePath();
+        defaultFileName = absFileInfo.getAbsoluteFilePath();
     }
     
     std::vector<AString> imageFileFilters;
@@ -739,7 +739,7 @@ ImageCaptureDialog::selectImagePushButtonPressed()
  * Called when the apply button is pressed.
  */
 void
-ImageCaptureDialog::applyButtonPressed()
+ImageCaptureDialog::applyButtonClicked()
 {
     const int browserWindowIndex = m_windowSelectionSpinBox->value() - 1;
     
@@ -771,6 +771,8 @@ ImageCaptureDialog::applyButtonPressed()
     }
     
     if ( ! errorFlag) {
+        uint8_t backgroundColor[3];
+        imageCaptureEvent.getBackgroundColor(backgroundColor);
         ImageFile imageFile;
         imageFile.setFromQImage(imageCaptureEvent.getImage());
         
@@ -782,9 +784,6 @@ ImageCaptureDialog::applyButtonPressed()
         
         if (m_imageAutoCropCheckBox->isChecked()) {
             const int marginSize = m_imageAutoCropMarginSpinBox->value();
-            CaretPreferences* prefs = SessionManager::get()->getCaretPreferences();
-            uint8_t backgroundColor[3];
-            prefs->getColorBackground(backgroundColor);
             imageFile.cropImageRemoveBackground(marginSize, backgroundColor);
         }
         

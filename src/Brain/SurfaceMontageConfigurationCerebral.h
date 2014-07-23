@@ -31,7 +31,7 @@ namespace caret {
     class SurfaceMontageConfigurationCerebral : public SurfaceMontageConfigurationAbstract {
         
     public:
-        SurfaceMontageConfigurationCerebral();
+        SurfaceMontageConfigurationCerebral(const int32_t tabIndex);
         
         virtual ~SurfaceMontageConfigurationCerebral();
         
@@ -92,6 +92,8 @@ namespace caret {
         virtual AString toString() const;
         
         virtual void getDescriptionOfContent(PlainTextStringBuilder& descriptionOut) const;
+        
+        virtual void getDisplayedSurfaces(std::vector<Surface*>& surfacesOut) const;
         
 
         // ADD_NEW_METHODS_HERE

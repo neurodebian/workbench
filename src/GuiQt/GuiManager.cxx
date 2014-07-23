@@ -26,6 +26,7 @@
 #include <QAction>
 #include <QApplication>
 #include <QDesktopWidget>
+#include <QPushButton>
 
 #define __GUI_MANAGER_DEFINE__
 #include "GuiManager.h"
@@ -48,6 +49,7 @@
 #include "CursorDisplayScoped.h"
 #include "CursorManager.h"
 #include "CustomViewDialog.h"
+#include "ElapsedTimer.h"
 #include "EventBrowserTabGetAll.h"
 #include "EventBrowserWindowNew.h"
 #include "EventGraphicsUpdateAllWindows.h"
@@ -58,6 +60,7 @@
 #include "EventMapSettingsEditorDialogRequest.h"
 #include "EventModelGetAll.h"
 #include "EventOperatingSystemRequestOpenDataFile.h"
+#include "EventProgressUpdate.h"
 #include "EventSurfaceColoringInvalidate.h"
 #include "EventUpdateInformationWindows.h"
 #include "EventUserInterfaceUpdate.h"
@@ -509,87 +512,133 @@ GuiManager::exitProgram(QWidget* parent)
      *   Connectivity Files
      */
     std::vector<DataFileTypeEnum::Enum> dataFileTypesToExclude;
-    DataFileTypeEnum::getAllConnectivityEnums(dataFileTypesToExclude);
+    dataFileTypesToExclude.push_back(DataFileTypeEnum::CONNECTIVITY_DENSE);
+    dataFileTypesToExclude.push_back(DataFileTypeEnum::CONNECTIVITY_FIBER_ORIENTATIONS_TEMPORARY);
+    dataFileTypesToExclude.push_back(DataFileTypeEnum::CONNECTIVITY_FIBER_TRAJECTORY_TEMPORARY);
 
     bool okToExit = false;
     
     /*
      * Are files modified?
      */
-    const bool areFilesModified = this->getBrain()->areFilesModified(dataFileTypesToExclude);
-//    std::vector<CaretDataFile*> dataFiles;
-//    this->getBrain()->getAllDataFiles(dataFiles);
-//    for (std::vector<CaretDataFile*>::iterator iter = dataFiles.begin();
-//         iter != dataFiles.end();
-//         iter++) {
-//        CaretDataFile* cdf = *iter;
-//
-//        /**
-//         * Do not check connectivity files for modified status
-//         */ 
-//        bool checkIfModified = true;
-//        switch (cdf->getDataFileType()) {
-//            case DataFileTypeEnum::CONNECTIVITY_DENSE:
-//            case DataFileTypeEnum::CONNECTIVITY_DENSE_TIME_SERIES:
-//                checkIfModified = false;
-//                break;
-//            default:
-//                break;
-//        }
-//        
-//        if (checkIfModified) {
-//            if (cdf->isModified()) {
-//                areFilesModified = true;
-//                break;
-//            }
-//        }
-//    }
+    std::vector<CaretDataFile*> modifiedDataFiles;
+    getBrain()->getAllModifiedFiles(dataFileTypesToExclude,
+                                    modifiedDataFiles);
+    const int32_t modFileCount = static_cast<int32_t>(modifiedDataFiles.size());
          
-    if (areFilesModified) {
-        WuQMessageBox::StandardButton buttonPressed = 
-        WuQMessageBox::saveDiscardCancel(parent, 
-                                         "Files are modified.", 
-                                         "Do you want to save changes?");
+    if (modFileCount > 0) {
+        /*
+         * Display dialog allowing user to save files (goes to Save/Manage
+         * Files dialog), exit without saving, or cancel.
+         */
+        const AString textMsg("Do you want to save changes you made to these files?");
         
-        switch (buttonPressed) {
-            case QMessageBox::Save:
-            {
-                if (SpecFileManagementDialog::runSaveFilesDialogWhileQuittingWorkbench(this->getBrain(),
-                                                                                       parent)) {
-                    okToExit = true;
-                    
-                }
-//                ManageLoadedFilesDialog manageLoadedFile(parent,
-//                                                         this->getBrain(),
-//                                                         true);
-//                if (manageLoadedFile.exec() == ManageLoadedFilesDialog::Accepted) {
-//                    okToExit = true;
-//                }
-            }
-                break;
-            case QMessageBox::Discard:
-                okToExit = true;
-                break;
-            case QMessageBox::Cancel:
-                break;
-            default:
-                CaretAssert(0);
-                break;
+        AString infoTextMsg("Changes to these files will be lost if you don't save them:\n");
+        for (std::vector<CaretDataFile*>::iterator iter = modifiedDataFiles.begin();
+             iter != modifiedDataFiles.end();
+             iter++) {
+            const CaretDataFile* cdf = *iter;
+            infoTextMsg.appendWithNewLine("   "
+                                  + cdf->getFileNameNoPath());
         }
+        infoTextMsg.appendWithNewLine("");
         
+        QMessageBox quitDialog(QMessageBox::Warning,
+                               "Exit Workbench",
+                               textMsg,
+                               QMessageBox::NoButton,
+                               parent);
+        quitDialog.setInformativeText(infoTextMsg);
+        
+        QPushButton* saveButton = quitDialog.addButton("Save...", QMessageBox::AcceptRole);
+        saveButton->setToolTip("Display manage files window to save files");
+        
+        QPushButton* dontSaveButton = quitDialog.addButton("Don't Save", QMessageBox::DestructiveRole);
+        dontSaveButton->setToolTip("Do not save changes and exit.");
+        
+        QPushButton* cancelButton = quitDialog.addButton("Cancel", QMessageBox::RejectRole);
+        
+        quitDialog.setDefaultButton(saveButton);
+        quitDialog.setEscapeButton(cancelButton);
+        
+        quitDialog.exec();
+        const QAbstractButton* clickedButton = quitDialog.clickedButton();
+        if (clickedButton == saveButton) {
+            if (SpecFileManagementDialog::runSaveFilesDialogWhileQuittingWorkbench(this->getBrain(),
+                                                                                   parent)) {
+                okToExit = true;
+                
+            }
+        }
+        else if (clickedButton == dontSaveButton) {
+            okToExit = true;
+        }
+        else if (clickedButton == cancelButton) {
+            /* nothing */
+        }
+        else {
+            CaretAssert(0);
+        }
     }
     else {
-        const AString msg = ("<html>"
-                             "Closing this window will exit the application.<p>"
-                             "Did you create or update a scene file for the analyses "
-                             "you were just working on? Scenes can reduce setup time "
-                             "when returning to this dataset for further analysis. They "
-                             "are especially useful during manuscript preparation "
-                             "because each scene can regenerate exactly what is displayed "
-                             "in the current version of a figure."
-                             "</html>");
-        okToExit = WuQMessageBox::warningOkCancel(parent,
-                                                  msg);
+        const AString textMsg("Exiting Workbench");
+        const AString infoTextMsg("<html>Would you like to save your Workbench windows in scene file "
+                                  "so you can easily pick up where you left off?"
+                                  "<p>"
+                                  "Click the <B>Show Details</B> button for "
+                                  "more information.</html>");
+        const AString detailTextMsg("Scenes allow one to regenerate exactly what is displayed in "
+                                    "Workbench.  This can be useful in these and other situations:"
+                                    "\n\n"
+                                    " * During manuscript preparation to restore Workbench to match "
+                                    "a previously generated figure (image capture)."
+                                    "\n\n"
+                                    " * When returning to this dataset for further analysis."
+                                    "\n\n"
+                                    " * When sharing data sets with others to provide a particular "
+                                    "view of a surface/volume with desired data (overlay and feature) "
+                                    "selections.");
+
+        QMessageBox quitDialog(QMessageBox::Warning,
+                               "Exit Workbench",
+                               textMsg,
+                               QMessageBox::NoButton,
+                               parent);
+        quitDialog.setInformativeText(infoTextMsg);
+        quitDialog.setDetailedText(detailTextMsg);
+        
+        QPushButton* exitButton = quitDialog.addButton("Exit",
+                                                       QMessageBox::AcceptRole);
+        
+        QPushButton* cancelButton = quitDialog.addButton("Cancel",
+                                                         QMessageBox::RejectRole);
+        
+        quitDialog.setDefaultButton(exitButton);
+        quitDialog.setEscapeButton(cancelButton);
+        
+        quitDialog.exec();
+        const QAbstractButton* clickedButton = quitDialog.clickedButton();
+        if (clickedButton  == exitButton) {
+            okToExit = true;
+        }
+        else if (clickedButton == cancelButton) {
+            /* Nothing */
+        }
+        else {
+            CaretAssert(0);
+        }
+
+//        const AString msg = ("<html>"
+//                             "Closing this window will exit the application.<p>"
+//                             "Did you create or update a scene file for the analyses "
+//                             "you were just working on? Scenes can reduce setup time "
+//                             "when returning to this dataset for further analysis. They "
+//                             "are especially useful during manuscript preparation "
+//                             "because each scene can regenerate exactly what is displayed "
+//                             "in the current version of a figure."
+//                             "</html>");
+//        okToExit = WuQMessageBox::warningOkCancel(parent,
+//                                                  msg);
     }
     
     if (okToExit) {
@@ -602,6 +651,38 @@ GuiManager::exitProgram(QWidget* parent)
     }    
     
     return okToExit;
+}
+
+/**
+ * Show the Open Spec File Dialog with the given spec file.
+ *
+ * @param specFile
+ *    SpecFile displayed in the dialog.
+ * @param browserWindow
+ *    Window on which dialog is displayed.
+ * @return
+ *    True if user opened spec file, else false.
+ */
+bool
+GuiManager::processShowOpenSpecFileDialog(SpecFile* specFile,
+                                          BrainBrowserWindow* browserWindow)
+{
+    return SpecFileManagementDialog::runOpenSpecFileDialog(getBrain(),
+                                                           specFile,
+                                                           browserWindow);
+}
+
+/**
+ * Show the Save/Manage Files Dialog.
+ *
+ * @param browserWindow
+ *    Window on which dialog is displayed.
+ */
+void
+GuiManager::processShowSaveManageFilesDialog(BrainBrowserWindow* browserWindow)
+{
+    SpecFileManagementDialog::runManageFilesDialog(getBrain(),
+                                                   browserWindow);
 }
 
 /**
@@ -674,13 +755,21 @@ GuiManager::processBringAllWindowsToFront()
         }
     }
     
-    for (int32_t i = 0; i < static_cast<int32_t>(nonModalDialogs.size()); i++) {
-        if (nonModalDialogs[i] != NULL) {
-            if (nonModalDialogs[i]->isVisible()) {
-                nonModalDialogs[i]->raise();
-            }
+    for (std::set<QWidget*>::iterator iter = this->nonModalDialogs.begin();
+         iter != this->nonModalDialogs.end();
+         iter++) {
+        QWidget* w = *iter;
+        if (w->isVisible()) {
+            w->raise();
         }
     }
+//    for (int32_t i = 0; i < static_cast<int32_t>(nonModalDialogs.size()); i++) {
+//        if (nonModalDialogs[i] != NULL) {
+//            if (nonModalDialogs[i]->isVisible()) {
+//                nonModalDialogs[i]->raise();
+//            }
+//        }
+//    }
 }
 
 /**
@@ -864,7 +953,7 @@ GuiManager::receiveEvent(Event* event)
         if (mapEditor == NULL) {
             mapEditor = new MapSettingsEditorDialog(browserWindow);
             m_mappingSettingsEditors.insert(mapEditor);
-            this->nonModalDialogs.push_back(mapEditor);
+            this->addNonModalDialog(mapEditor);
             placeInDefaultLocation = true;
         }
         else {
@@ -1018,9 +1107,12 @@ GuiManager::reparentNonModalDialogs(BrainBrowserWindow* closingBrainBrowserWindo
     }
     
     if (firstBrainBrowserWindow != NULL) {
-        const int32_t numNonModalDialogs = static_cast<int32_t>(this->nonModalDialogs.size());
-        for (int32_t i = 0; i < numNonModalDialogs; i++) {
-            QWidget* d = this->nonModalDialogs[i];
+        //const int32_t numNonModalDialogs = static_cast<int32_t>(this->nonModalDialogs.size());
+        //for (int32_t i = 0; i < numNonModalDialogs; i++) {
+        for (std::set<QWidget*>::iterator iter = this->nonModalDialogs.begin();
+                 iter != this->nonModalDialogs.end();
+                 iter++) {
+            QWidget* d = *iter;
             if (d->parent() == closingBrainBrowserWindow) {
                 const bool wasVisible = d->isVisible();
                 const QPoint globalPos = d->pos();
@@ -1057,7 +1149,7 @@ GuiManager::processShowSurfacePropertiesEditorDialog(BrainBrowserWindow* browser
     
     if (this->m_surfacePropertiesEditorDialog == NULL) {
         m_surfacePropertiesEditorDialog = new SurfacePropertiesEditorDialog(browserWindow);
-        this->nonModalDialogs.push_back(m_surfacePropertiesEditorDialog);
+        this->addNonModalDialog(m_surfacePropertiesEditorDialog);
         m_surfacePropertiesEditorDialog->setSaveWindowPositionForNextTime(true);
         wasCreatedFlag = true;
     }
@@ -1132,8 +1224,7 @@ GuiManager::showHideSceneDialog(const bool status,
             }
             
             this->sceneDialog = new SceneDialog(sceneDialogParent);
-            this->sceneDialog->setSaveWindowPositionForNextTime(true);
-            this->nonModalDialogs.push_back(this->sceneDialog);
+            this->addNonModalDialog(this->sceneDialog);
             QObject::connect(this->sceneDialog, SIGNAL(dialogWasClosed()),
                              this, SLOT(sceneDialogWasClosed()));
             
@@ -1151,7 +1242,6 @@ GuiManager::showHideSceneDialog(const bool status,
             }
         }
         
-        this->sceneDialog->setVisible(true);
         this->sceneDialog->show();
         this->sceneDialog->activateWindow();
     }
@@ -1228,7 +1318,7 @@ GuiManager::processShowBugReportDialog(BrainBrowserWindow* browserWindow,
     if (m_bugReportDialog == NULL) {
         m_bugReportDialog = new BugReportDialog(browserWindow,
                                                 openGLInformation);
-        this->nonModalDialogs.push_back(m_bugReportDialog);
+        this->addNonModalDialog(m_bugReportDialog);
     }
     
     m_bugReportDialog->setVisible(true);
@@ -1256,12 +1346,14 @@ GuiManager::processShowHelpViewerDialog(BrainBrowserWindow* browserWindow,
             bbw = getActiveBrowserWindow();
         }
         m_helpViewerDialog = new HelpViewerDialog(bbw);
-        this->nonModalDialogs.push_back(m_helpViewerDialog);
+        this->addNonModalDialog(m_helpViewerDialog);
     }
     
     m_helpViewerDialog->updateDialog();
 
-    m_helpViewerDialog->showHelpPageWithName(helpPageName);
+    if ( ! helpPageName.isEmpty()) {
+        m_helpViewerDialog->showHelpPageWithName(helpPageName);
+    }
     
     m_helpViewerDialog->setVisible(true);
     m_helpViewerDialog->show();
@@ -1321,7 +1413,7 @@ GuiManager::processShowInformationDisplayDialog(const bool forceDisplayOfDialog)
         if (bbws.empty() == false) {
             BrainBrowserWindow* parentWindow = bbws[0];
             m_informationDisplayDialog = new InformationDisplayDialog(parentWindow);
-            this->nonModalDialogs.push_back(m_informationDisplayDialog);
+            this->addNonModalDialog(m_informationDisplayDialog);
             
             m_informationDisplayDialog->resize(600, 200);
             m_informationDisplayDialog->setSaveWindowPositionForNextTime(true);
@@ -1341,15 +1433,26 @@ GuiManager::processShowInformationDisplayDialog(const bool forceDisplayOfDialog)
 }
 
 /**
+ * Add a non-modal dialog.
+ */
+void
+GuiManager::addNonModalDialog(QWidget* dialog)
+{
+    CaretAssert(dialog);
+    this->nonModalDialogs.insert(dialog);
+}
+
+/**
  * Removes the dialog from the non-modal dialogs BUT DOES NOT delete
  * the dialog.
  */
 void
 GuiManager::removeNonModalDialog(QWidget* dialog)
 {
-    std::vector<QWidget*>::iterator iter = std::find(nonModalDialogs.begin(),
-                                           nonModalDialogs.end(),
-                                           dialog);
+    CaretAssert(dialog);
+    std::set<QWidget*>::iterator iter = std::find(nonModalDialogs.begin(),
+                                                  nonModalDialogs.end(),
+                                                  dialog);
     if (iter != nonModalDialogs.end()) {
         nonModalDialogs.erase(iter);
     }
@@ -1365,7 +1468,7 @@ GuiManager::processShowClippingPlanesDialog(BrainBrowserWindow* browserWindow)
 {
     if (m_clippingPlanesDialog == NULL) {
         m_clippingPlanesDialog = new ClippingPlanesDialog(browserWindow);
-        this->nonModalDialogs.push_back(m_clippingPlanesDialog);
+        this->addNonModalDialog(m_clippingPlanesDialog);
     }
     
     const int32_t browserWindowIndex = browserWindow->getBrowserWindowIndex();
@@ -1386,7 +1489,7 @@ GuiManager::processShowCustomViewDialog(BrainBrowserWindow* browserWindow)
 {
     if (m_customViewDialog == NULL) {
         m_customViewDialog = new CustomViewDialog(browserWindow);
-        this->nonModalDialogs.push_back(m_customViewDialog);
+        this->addNonModalDialog(m_customViewDialog);
     }
     
     const int32_t browserWindowIndex = browserWindow->getBrowserWindowIndex();
@@ -1407,7 +1510,7 @@ GuiManager::processShowTileTabsConfigurationDialog(caret::BrainBrowserWindow *br
 {
     if (m_tileTabsConfigurationDialog == NULL) {
         m_tileTabsConfigurationDialog = new TileTabsConfigurationDialog(browserWindow);
-        this->nonModalDialogs.push_back(m_tileTabsConfigurationDialog);
+        this->addNonModalDialog(m_tileTabsConfigurationDialog);
     }
     
     m_tileTabsConfigurationDialog->updateDialogWithSelectedTileTabsFromWindow(browserWindow);
@@ -1426,7 +1529,7 @@ GuiManager::processShowImageCaptureDialog(BrainBrowserWindow* browserWindow)
 {
     if (this->imageCaptureDialog == NULL) {
         this->imageCaptureDialog = new ImageCaptureDialog(browserWindow);
-        this->nonModalDialogs.push_back(this->imageCaptureDialog);
+        this->addNonModalDialog(this->imageCaptureDialog);
     }
     this->imageCaptureDialog->updateDialog();
     this->imageCaptureDialog->setBrowserWindowIndex(browserWindow->getBrowserWindowIndex());
@@ -1445,7 +1548,7 @@ GuiManager::processShowMovieDialog(BrainBrowserWindow* browserWindow)
 {
     if (this->movieDialog == NULL) {
         this->movieDialog = new MovieDialog(browserWindow);
-        this->nonModalDialogs.push_back(this->movieDialog);
+        this->addNonModalDialog(this->movieDialog);
     }
     //this->movieDialog->updateDialog();
     //this->movieDialog->setBrowserWindowIndex(browserWindow->getBrowserWindowIndex());
@@ -1466,7 +1569,7 @@ GuiManager::processShowPreferencesDialog(BrainBrowserWindow* browserWindow)
 {
     if (this->preferencesDialog == NULL) {
         this->preferencesDialog = new PreferencesDialog(browserWindow);
-        this->nonModalDialogs.push_back(this->preferencesDialog);
+        this->addNonModalDialog(this->preferencesDialog);
     }
     this->preferencesDialog->updateDialog();
     this->preferencesDialog->setVisible(true);
@@ -1497,7 +1600,7 @@ GuiManager::processShowConnectomeDataBaseWebView(BrainBrowserWindow* /*browserWi
     if (this->connectomeDatabaseWebView == NULL) {
         this->connectomeDatabaseWebView = new WuQWebView();
         this->connectomeDatabaseWebView->load(QUrl("https://db.humanconnectome.org/"));
-        this->nonModalDialogs.push_back(this->connectomeDatabaseWebView);
+        this->addNonModalDialog(this->connectomeDatabaseWebView);
     }
     this->connectomeDatabaseWebView->show();
 //    this->connectomeDatabaseWebView->activateWindow();
@@ -1606,6 +1709,11 @@ void
 GuiManager::restoreFromScene(const SceneAttributes* sceneAttributes,
                              const SceneClass* sceneClass)
 {
+    const int64_t eventCountAtStart = EventManager::get()->getEventIssuedCounter();
+    
+    ElapsedTimer sceneRestoreTimer;
+    sceneRestoreTimer.start();
+    
     if (sceneClass == NULL) {
         return;
     }
@@ -1652,9 +1760,15 @@ GuiManager::restoreFromScene(const SceneAttributes* sceneAttributes,
     EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());    
     
     /*
-     * Block graphics update events
+     * Blocking user-interface and graphics event will speed up
+     * restoration of the user interface.
      */
-    EventManager::get()->blockEvent(EventTypeEnum::EVENT_GRAPHICS_UPDATE_ALL_WINDOWS, 
+    bool blockUserInteraceUpdateEvents = true;
+    if (blockUserInteraceUpdateEvents) {
+        EventManager::get()->blockEvent(EventTypeEnum::EVENT_USER_INTERFACE_UPDATE,
+                                        true);
+    }
+    EventManager::get()->blockEvent(EventTypeEnum::EVENT_GRAPHICS_UPDATE_ALL_WINDOWS,
                                     true);
     EventManager::get()->blockEvent(EventTypeEnum::EVENT_GRAPHICS_UPDATE_ONE_WINDOW,
                                     true);
@@ -1665,6 +1779,8 @@ GuiManager::restoreFromScene(const SceneAttributes* sceneAttributes,
     SessionManager::get()->restoreFromScene(sceneAttributes, 
                                             sceneClass->getClass("m_sessionManager"));
 
+    EventProgressUpdate progressEvent("");
+    
     /*
      * See if models available (user may have cancelled scene loading.
      */
@@ -1672,6 +1788,9 @@ GuiManager::restoreFromScene(const SceneAttributes* sceneAttributes,
     EventManager::get()->sendEvent(getAllModelsEvent.getPointer());
     const bool haveModels = (getAllModelsEvent.getModels().empty() == false);
 
+    ElapsedTimer timer;
+    timer.start();
+    
     if (haveModels) {
         /*
          * Get open windows
@@ -1687,6 +1806,8 @@ GuiManager::restoreFromScene(const SceneAttributes* sceneAttributes,
         /*
          * Restore windows
          */
+        progressEvent.setProgressMessage("Restoring browser windows");
+        EventManager::get()->sendEvent(progressEvent.getPointer());
         const SceneClassArray* browserWindowArray = sceneClass->getClassArray("m_brainBrowserWindows");
         if (browserWindowArray != NULL) {
             const int32_t numBrowserClasses = browserWindowArray->getNumberOfArrayElements();
@@ -1709,6 +1830,11 @@ GuiManager::restoreFromScene(const SceneAttributes* sceneAttributes,
             }
         }
         
+        CaretLogInfo("Time to restore browser windows was "
+                     + QString::number(timer.getElapsedTimeSeconds(), 'f', 3)
+                     + " seconds");
+        timer.reset();
+        
         /*
          * Close windows not needed
          */
@@ -1722,6 +1848,8 @@ GuiManager::restoreFromScene(const SceneAttributes* sceneAttributes,
         /*
          * Restore information window
          */
+        progressEvent.setProgressMessage("Restoring Information Window");
+        EventManager::get()->sendEvent(progressEvent.getPointer());
         const SceneClass* infoWindowClass = sceneClass->getClass("m_informationDisplayDialog");
         if (infoWindowClass != NULL) {
             if (m_informationDisplayDialog == NULL) {
@@ -1746,6 +1874,8 @@ GuiManager::restoreFromScene(const SceneAttributes* sceneAttributes,
         /*
          * Restore surface properties
          */
+        progressEvent.setProgressMessage("Restoring Surface Properties Window");
+        EventManager::get()->sendEvent(progressEvent.getPointer());
         const SceneClass* surfPropClass = sceneClass->getClass("m_surfacePropertiesEditorDialog");
         if (surfPropClass != NULL) {
             if (m_surfacePropertiesEditorDialog == NULL) {
@@ -1757,9 +1887,21 @@ GuiManager::restoreFromScene(const SceneAttributes* sceneAttributes,
             m_surfacePropertiesEditorDialog->restoreFromScene(sceneAttributes,
                                                               surfPropClass);
         }
+        
+        CaretLogInfo("Time to restore information/property windows was "
+                     + QString::number(timer.getElapsedTimeSeconds(), 'f', 3)
+                     + " seconds");
+        timer.reset();
     }
     
+    progressEvent.setProgressMessage("Invalidating coloring and updating user interface");
+    EventManager::get()->sendEvent(progressEvent.getPointer());
     EventManager::get()->sendEvent(EventSurfaceColoringInvalidate().getPointer());
+
+    if (blockUserInteraceUpdateEvents) {
+        EventManager::get()->blockEvent(EventTypeEnum::EVENT_USER_INTERFACE_UPDATE,
+                                    false);
+    }
     EventManager::get()->sendEvent(EventUserInterfaceUpdate().getPointer());
     
     /*
@@ -1770,7 +1912,22 @@ GuiManager::restoreFromScene(const SceneAttributes* sceneAttributes,
     EventManager::get()->blockEvent(EventTypeEnum::EVENT_GRAPHICS_UPDATE_ONE_WINDOW,
                                     false);
 
+    progressEvent.setProgressMessage("Updating graphics in all windows");
+    EventManager::get()->sendEvent(progressEvent.getPointer());
     EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+
+    CaretLogInfo("Time to update graphics in all windows was "
+                 + QString::number(timer.getElapsedTimeSeconds(), 'f', 3)
+                 + " seconds");
+    timer.reset();
+
+    const int64_t totalNumberOfEvents = (EventManager::get()->getEventIssuedCounter()
+                                         - eventCountAtStart);
+    CaretLogInfo("Time to restore scene was "
+                 + QString::number(sceneRestoreTimer.getElapsedTimeSeconds(), 'f', 3)
+                 + " seconds with "
+                 + AString::number(totalNumberOfEvents)
+                 + " events");
 }
 
 /**

@@ -30,6 +30,7 @@
 #include "ChartDataCartesian.h"
 #include "ChartDataSource.h"
 #include "DataFileContentInformation.h"
+#include "ElapsedTimer.h"
 #include "GroupAndNameHierarchyModel.h"
 #include "FastStatistics.h"
 #include "Histogram.h"
@@ -188,15 +189,25 @@ VolumeFile::clear()
     m_frameSplines.clear();
     
     m_dataRangeValid = false;
+    VolumeBase::clear();
 }
 
 void VolumeFile::readFile(const AString& filename) throw (DataFileException)
 {
+    ElapsedTimer timer;
+    timer.start();
+    
     clear();
     AString fileToRead;
     try {
+        /*
+         * CaretTemporaryFile must be outside of the "if" statment block of code.
+         * Otherwise, at the end of the "if" statement block, the 
+         * CaretTemporaryFile object will go out of scope and the temporary
+         * file will be deleted so there will be no file to read.
+         */
+        CaretTemporaryFile tempFile; 
         if (DataFile::isFileOnNetwork(filename)) {
-            CaretTemporaryFile tempFile;
             tempFile.readFile(filename);
             fileToRead = tempFile.getFileName();
             setFileName(filename);
@@ -209,20 +220,23 @@ void VolumeFile::readFile(const AString& filename) throw (DataFileException)
         myIO.openRead(fileToRead);
         const NiftiHeader& inHeader = myIO.getHeader();
         int numComponents = myIO.getNumComponents();
-        reinitialize(myIO.getDimensions(), inHeader.getSForm(), numComponents);
         vector<int64_t> myDims = myIO.getDimensions();
+        int fullDims = 3;//deal with nifti with less than 3 dimensions
+        if (myDims.size() < 3) fullDims = (int)myDims.size();
         vector<int64_t> extraDims;//non-spatial dims
         if (myDims.size() > 3)
         {
             extraDims = vector<int64_t>(myDims.begin() + 3, myDims.end());
         }
+        while (myDims.size() < 3) myDims.push_back(1);//pretend we have 3 dimensions in header, always, things that use getOriginalDimensions assume this (because "VolumeFile")
+        reinitialize(myDims, inHeader.getSForm(), numComponents);
         int64_t frameSize = myDims[0] * myDims[1] * myDims[2];
         if (numComponents != 1)
         {
             vector<float> tempFrame(frameSize), readBuffer(frameSize * numComponents);
             for (MultiDimIterator<int64_t> myiter(extraDims); !myiter.atEnd(); ++myiter)
             {
-                myIO.readData(readBuffer.data(), 3, *myiter);
+                myIO.readData(readBuffer.data(), fullDims, *myiter);
                 for (int c = 0; c < numComponents; ++c)
                 {
                     for (int64_t i = 0; i < frameSize; ++i)
@@ -236,10 +250,14 @@ void VolumeFile::readFile(const AString& filename) throw (DataFileException)
             vector<float> tempFrame(frameSize);
             for (MultiDimIterator<int64_t> myiter(extraDims); !myiter.atEnd(); ++myiter)
             {
-                myIO.readData(tempFrame.data(), 3, *myiter);
+                myIO.readData(tempFrame.data(), fullDims, *myiter);
                 setFrame(tempFrame.data(), getBrickIndexFromNonSpatialIndexes(*myiter));
             }
         }
+        
+        CaretLogFine("Time to read volume data is "
+                     + AString::number(timer.getElapsedTimeSeconds(), 'f', 3)
+                     + " seconds.");
         m_header.grabNew(new NiftiHeader(inHeader));
         for (int64_t i = 0; i < (int64_t)inHeader.m_extensions.size(); ++i)
         {
@@ -262,6 +280,10 @@ void VolumeFile::readFile(const AString& filename) throw (DataFileException)
         m_forceUpdateOfGroupAndNameHierarchy = true;
         getGroupAndNameHierarchyModel();
     }
+    
+    CaretLogFine("Total Time to read and process volume is "
+                 + AString::number(timer.getElapsedTimeSeconds(), 'f', 3)
+                 + " seconds.");
 }
 
 /**
@@ -346,7 +368,7 @@ float VolumeFile::interpolateValue(const float coordIn1, const float coordIn2, c
                 return INVALID_INTERP_VALUE;//check for valid coord before deconvolving the frame
             }
             int64_t whichFrame = component * m_dimensions[3] + brickIndex;
-            validateSplines(brickIndex, component);
+            validateSpline(brickIndex, component);
             if (validOut != NULL) *validOut = true;
             return m_frameSplines[whichFrame].sample(indexSpace);
         }
@@ -403,31 +425,64 @@ float VolumeFile::interpolateValue(const float coordIn1, const float coordIn2, c
     return INVALID_INTERP_VALUE;
 }
 
-void VolumeFile::validateSplines(const int64_t brickIndex, const int64_t component) const
+void VolumeFile::validateSpline(const int64_t brickIndex, const int64_t component) const
 {
-    CaretAssert(brickIndex < m_dimensions[3]);//function is public, so check inputs
-    CaretAssert(component < m_dimensions[4]);
+    CaretAssert(brickIndex >= 0 && brickIndex < m_dimensions[3]);//function is public, so check inputs
+    CaretAssert(component >= 0 && component < m_dimensions[4]);
     int64_t numFrames = m_dimensions[3] * m_dimensions[4], whichFrame = component * m_dimensions[3] + brickIndex;
-    CaretMutexLocker locked(&m_splineMutex);//prevent concurrent access to spline state
     if (!m_splinesValid)
     {
-        m_frameSplineValid.clear();
-        m_frameSplines.clear();
-        m_splinesValid = true;//the only purpose of this flag is for setModified to be fast
+        CaretMutexLocker locked(&m_splineMutex);//prevent concurrent modify access to spline state
+        if (!m_splinesValid)//double check
+        {
+            m_frameSplineValid = vector<bool>(numFrames, false);
+            m_frameSplines = vector<VolumeSpline>(numFrames);//release the old spline memory
+            m_splinesValid = true;//the only purpose of this flag is for setModified to be fast, don't worry about it becoming false again before the below happens
+        }
     }
-    if ((int64_t)m_frameSplineValid.size() != numFrames)
-    {
-        m_frameSplineValid.resize(numFrames, false);
-        m_frameSplines.resize(numFrames);
-    }
+    CaretAssert((int64_t)m_frameSplineValid.size() == numFrames);
+    CaretAssert((int64_t)m_frameSplines.size() == numFrames);
     if (!m_frameSplineValid[whichFrame])
     {
-        m_frameSplines[whichFrame] = VolumeSpline(getFrame(brickIndex, component), m_dimensions);
-        if (m_frameSplines[whichFrame].ignoredNonNumeric())
+        CaretMutexLocker locked(&m_splineMutex);//prevent concurrent modify access to spline state
+        if (!m_frameSplineValid[whichFrame])//double check
         {
-            CaretLogWarning("ignored non-numeric input value when calculating cubic splines in volume '" + getFileName() + "', frame #" + AString::number(brickIndex + 1));
+            m_frameSplines[whichFrame] = VolumeSpline(getFrame(brickIndex, component), m_dimensions);
+            if (m_frameSplines[whichFrame].ignoredNonNumeric())
+            {
+                CaretLogWarning("ignored non-numeric input value when calculating cubic splines in volume '" + getFileName() + "', frame #" + AString::number(brickIndex + 1));
+            }
+            m_frameSplineValid[whichFrame] = true;
         }
-        m_frameSplineValid[whichFrame] = true;
+    }
+}
+
+void VolumeFile::freeSpline(const int64_t brickIndex, const int64_t component) const
+{
+    CaretAssert(brickIndex >= 0 && brickIndex < m_dimensions[3]);//function is public, so check inputs
+    CaretAssert(component >= 0 && component < m_dimensions[4]);
+    int64_t numFrames = m_dimensions[3] * m_dimensions[4], whichFrame = component * m_dimensions[3] + brickIndex;
+    if (!m_splinesValid)
+    {
+        CaretMutexLocker locked(&m_splineMutex);//prevent concurrent modify access to spline state
+        if (!m_splinesValid)//double check
+        {
+            m_frameSplineValid = vector<bool>(numFrames, false);
+            m_frameSplines = vector<VolumeSpline>(numFrames);//release the old spline memory
+            m_splinesValid = true;//the only purpose of this flag is for setModified to be fast
+        }
+        return;//already freed, we are done
+    }
+    CaretAssert((int64_t)m_frameSplineValid.size() == numFrames);
+    CaretAssert((int64_t)m_frameSplines.size() == numFrames);
+    if (m_frameSplineValid[whichFrame])
+    {
+        CaretMutexLocker locked(&m_splineMutex);//prevent concurrent modify access to spline state
+        if (m_frameSplineValid[whichFrame])//double check
+        {
+            m_frameSplines[whichFrame] = VolumeSpline();
+            m_frameSplineValid[whichFrame] = false;
+        }
     }
 }
 
@@ -537,7 +592,9 @@ void VolumeFile::updateCaretExtension()
 void VolumeFile::validateMembers()
 {
     m_dataRangeValid = false;
-    m_splinesValid = false;
+    m_frameSplineValid = vector<bool>(m_dimensions[3] * m_dimensions[4], false);
+    m_frameSplines = vector<VolumeSpline>(m_dimensions[3] * m_dimensions[4]);//release any previous spline memory
+    m_splinesValid = true;//this now indicates only if they need to all be recalculated - the frame vectors will always have the correct length
     int numMaps = getNumberOfMaps();
     m_brickAttributes.clear();//invalidate brick attributes first
     m_brickAttributes.resize(numMaps);//before resizing
@@ -1014,53 +1071,6 @@ VolumeFile::getVoxelSpaceBoundingBox(BoundingBox& boundingBoxOut) const
     }
 }
 
-///**
-// * Assign colors for all maps in this volume file.
-// * Does nothing if coloring is not enabled.
-// *
-// * @param paletteFile
-// *     File containing the palettes.
-// */
-//void
-//VolumeFile::assignVoxelColorsForAllMaps(const PaletteFile* paletteFile)
-//{
-//    if (s_voxelColoringEnabled == false) {
-//        return;
-//    }
-//    
-//    CaretAssert(m_voxelColorizer);
-//    
-//    const int32_t numberOfMaps = getNumberOfMaps();
-//    for (int32_t iMap = 0; iMap < numberOfMaps; iMap++) {
-//        assignVoxelColorsForMap(iMap,
-//                                paletteFile);
-////        const bool usesPalette = isMappedWithPalette();
-////        const PaletteColorMapping* pcm = (usesPalette
-////                                          ? getMapPaletteColorMapping(iMap)
-////                                          : NULL);
-////        const AString paletteName = (usesPalette
-////                                     ? pcm->getSelectedPaletteName()
-////                                     : "");
-////        const Palette* palette = (usesPalette
-////                                  ? paletteFile->getPaletteByName(paletteName)
-////                                  : NULL);
-////        if (usesPalette
-////            && (palette == NULL)) {
-////            CaretLogSevere("No palette named \""
-////                           + paletteName
-////                           + "\" found for coloring map index="
-////                           + AString::number(iMap)
-////                           + " in "
-////                           + getFileNameNoPath());
-////        }
-////        
-////        m_voxelColorizer->assignVoxelColorsForMapInBackground(iMap,
-////                                                              palette,
-////                                                              NULL,
-////                                                              0);
-//    }
-//}
-
 /**
  * Update coloring for a map.
  * Does nothing if coloring is not enabled.
@@ -1101,10 +1111,10 @@ VolumeFile::updateScalarColoringForMap(const int32_t mapIndex,
                        + getFileNameNoPath());
     }
     
-    m_voxelColorizer->assignVoxelColorsForMapInBackground(mapIndex,
-                                                          palette,
-                                                          this,
-                                                          mapIndex);
+    m_voxelColorizer->assignVoxelColorsForMap(mapIndex,
+                                              palette,
+                                              this,
+                                              mapIndex);
 }
 
 /**
@@ -1559,7 +1569,7 @@ VolumeFile::addToDataFileContentInformation(DataFileContentInformation& dataFile
     if (m_header != NULL && m_header->getType() == AbstractHeader::NIFTI) {
         const NiftiHeader& myHeader = *((NiftiHeader*)m_header.getPointer());
         dataFileInformation.addNameAndValue("NIFTI Version",
-                                            myHeader.versionRead());
+                                            myHeader.version());
         bool ok = false;
         dataFileInformation.addNameAndValue("NIFTI Data Type",
                                             NiftiDataTypeEnum::toName(NiftiDataTypeEnum::fromIntegerCode(myHeader.getDataType(), &ok)));//fromIntegerCode basically just ignores invalid values
@@ -1661,7 +1671,7 @@ VolumeFile::addToDataFileContentInformation(DataFileContentInformation& dataFile
  * @return Is charting enabled for this file?
  */
 bool
-VolumeFile::isChartingEnabled(const int32_t tabIndex) const
+VolumeFile::isBrainordinateChartingEnabled(const int32_t tabIndex) const
 {
     CaretAssertArrayIndex(m_chartingEnabledForTab,
                           BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_TABS,
@@ -1675,7 +1685,7 @@ VolumeFile::isChartingEnabled(const int32_t tabIndex) const
  * is chartable if it contains more than one map.
  */
 bool
-VolumeFile::isChartingSupported() const
+VolumeFile::isBrainordinateChartingSupported() const
 {
     if (getNumberOfMaps() > 1) {
         return true;
@@ -1691,7 +1701,7 @@ VolumeFile::isChartingSupported() const
  *    New status for charting enabled.
  */
 void
-VolumeFile::setChartingEnabled(const int32_t tabIndex,
+VolumeFile::setBrainordinateChartingEnabled(const int32_t tabIndex,
                                const bool enabled)
 {
     CaretAssertArrayIndex(m_chartingEnabledForTab,
@@ -1707,7 +1717,7 @@ VolumeFile::setChartingEnabled(const int32_t tabIndex,
  *    Chart types supported by this file.
  */
 void
-VolumeFile::getSupportedChartDataTypes(std::vector<ChartDataTypeEnum::Enum>& chartDataTypesOut) const
+VolumeFile::getSupportedBrainordinateChartDataTypes(std::vector<ChartDataTypeEnum::Enum>& chartDataTypesOut) const
 {
     helpGetSupportedBrainordinateChartDataTypes(chartDataTypesOut);
 }
@@ -1725,7 +1735,7 @@ VolumeFile::getSupportedChartDataTypes(std::vector<ChartDataTypeEnum::Enum>& cha
  *     of the pointer and must delete it when no longer needed.
  */
 ChartDataCartesian*
-VolumeFile::loadChartDataForSurfaceNode(const StructureEnum::Enum /*structure*/,
+VolumeFile::loadBrainordinateChartDataForSurfaceNode(const StructureEnum::Enum /*structure*/,
                                         const int32_t /*nodeIndex*/) throw (DataFileException)
 {
     ChartDataCartesian* chartData = NULL;
@@ -1745,7 +1755,7 @@ VolumeFile::loadChartDataForSurfaceNode(const StructureEnum::Enum /*structure*/,
  *     of the pointer and must delete it when no longer needed.
  */
 ChartDataCartesian*
-VolumeFile::loadAverageChartDataForSurfaceNodes(const StructureEnum::Enum /*structure*/,
+VolumeFile::loadAverageBrainordinateChartDataForSurfaceNodes(const StructureEnum::Enum /*structure*/,
                                                 const std::vector<int32_t>& /*nodeIndices*/) throw (DataFileException)
 {
     ChartDataCartesian* chartData = NULL;
@@ -1763,7 +1773,7 @@ VolumeFile::loadAverageChartDataForSurfaceNodes(const StructureEnum::Enum /*stru
  *     of the pointer and must delete it when no longer needed.
  */
 ChartDataCartesian*
-VolumeFile::loadChartDataForVoxelAtCoordinate(const float xyz[3]) throw (DataFileException)
+VolumeFile::loadBrainordinateChartDataForVoxelAtCoordinate(const float xyz[3]) throw (DataFileException)
 {
     ChartDataCartesian* chartData = NULL;
 

@@ -21,10 +21,11 @@
  */
 /*LICENSE_END*/
 
-
 #include "CaretMappableDataFile.h"
 #include "CaretPointer.h"
+#include "CaretObjectTracksModification.h"
 #include "CiftiXMLElements.h"
+#include "DisplayGroupEnum.h"
 #include "VolumeMappableInterface.h"
 
 #include <set>
@@ -33,11 +34,8 @@ namespace caret {
     
     class ChartData;
     class ChartDataCartesian;
-    class CiftiFacade;
-    class CiftiFiberTrajectoryFile;
-    class CiftiInterface;
-    class CiftiMappableConnectivityMatrixDataFile;
-    class CiftiXMLOld;
+    class CiftiFile;
+    class CiftiXML;
     class DescriptiveStatistics;
     class FastStatistics;
     class GroupAndNameHierarchyModel;
@@ -50,30 +48,71 @@ namespace caret {
     public VolumeMappableInterface {
         
     protected:
-        /** Access (row/column) of a type of data */
-        enum DataAccess {
-            /** Data access invalid */
-            DATA_ACCESS_INVALID,
-            /** Data is accessed using the column methods */
-            DATA_ACCESS_WITH_COLUMN_METHODS,
-            /** Data is accessed using the row methods */
-            DATA_ACCESS_WITH_ROW_METHODS,
-        };
-                
-        /** How to read the file */
-        enum FileReading {
-            /** Read all data in the file */
-            FILE_READ_DATA_ALL,
-            /** Open the file but only read data as needed */
-            FILE_READ_DATA_AS_NEEDED
+        /**
+         * Method for accessing data with CIFTI
+         */
+        enum DataAccessMethod {
+            /**
+             * Invalid data access method.
+             */
+            DATA_ACCESS_METHOD_INVALID,
+            /**
+             * The data is accessed from CiftiFile using ROW Methods
+             * and from the XML using ALONG_COLUMN
+             */
+            DATA_ACCESS_FILE_ROWS_OR_XML_ALONG_COLUMN,
+            /**
+             * Use ALONG_ROW to access CIFTI data
+             * which means one is accessing COLUMNS of data
+             */
+            DATA_ACCESS_FILE_COLUMNS_OR_XML_ALONG_ROW
         };
         
-        CiftiMappableDataFile(const DataFileTypeEnum::Enum dataFileType,
-                              const FileReading fileReading,
-                              const IndicesMapToDataType rowIndexType,
-                              const IndicesMapToDataType columnIndexType,
-                              const DataAccess brainordinateMappedDataAccess,
-                              const DataAccess seriesDataAccess);
+        /**
+         * Method for color mapping a map
+         */
+        enum ColorMappingMethod {
+            /**
+             * Invalid color mapping method. 
+             */
+            COLOR_MAPPING_METHOD_INVALID,
+            /**
+             * Color mapped with a label table using map's data.
+             */
+            COLOR_MAPPING_METHOD_LABEL_TABLE,
+            /**
+             * Use ALL data from file when applying palette color mapping to a map
+             */
+            COLOR_MAPPING_METHOD_PALETTE_FILE_DATA,
+            /**
+             * Use only the MAP's data when applying palette color mapping to a map
+             */
+            COLOR_MAPPING_METHOD_PALETTE_MAP_DATA
+        };
+        
+        /**
+         * Type of map data in the file.
+         */
+        enum FileMapDataType {
+            /**
+             * Invalid file map data type
+             */
+            FILE_MAP_DATA_TYPE_INVALID,
+            /**
+             * The file contains a connectivity matrix.  There is only
+             * 'one map' and the data for the map is selectively read
+             * and replaced based upon user actions.
+             */
+            FILE_MAP_DATA_TYPE_MATRIX,
+            /**
+             * The file contains one or more maps and all maps are loaded
+             * when the file is read.
+             */
+            FILE_MAP_DATA_TYPE_MULTI_MAP
+        };
+        
+        CiftiMappableDataFile(const DataFileTypeEnum::Enum dataFileType);
+        
     public:
         virtual ~CiftiMappableDataFile();
         
@@ -83,6 +122,9 @@ namespace caret {
                                                                      AString& errorMessageOut);
         
         virtual void addToDataFileContentInformation(DataFileContentInformation& dataFileInformation);
+        
+        static void addCiftiXmlToDataFileContentInformation(DataFileContentInformation& dataFileInformation,
+                                                            const CiftiXML& ciftiXML);
         
         virtual void clear();
         
@@ -98,7 +140,9 @@ namespace caret {
         
         virtual const GiftiMetaData* getFileMetaData() const;
         
-        virtual void readFile(const AString& filename) throw (DataFileException);
+//        virtual void setPreferOnDiskReading(const bool& prefer);
+        
+        virtual void readFile(const AString& ciftiMapFileName) throw (DataFileException);
         
         virtual void writeFile(const AString& filename) throw (DataFileException);
         
@@ -301,18 +345,13 @@ namespace caret {
         virtual bool getDataRangeFromAllMaps(float& dataRangeMinimumOut,
                                              float& dataRangeMaximumOut) const;
         
-        bool getStructureAndNodeIndexFromRowIndex(const int64_t rowIndex,
-                                                  StructureEnum::Enum& structureOut,
-                                                  int64_t& nodeIndexOut) const;
-        
-        bool getVoxelIndexAndCoordinateFromRowIndex(const int64_t rowIndex,
-                                                    int64_t ijkOut[3],
-                                                    float xyzOut[3]) const;
-
         void setMapDataForSurface(const int32_t mapIndex,
                                   const StructureEnum::Enum structure,
                                   const std::vector<float> surfaceMapData) throw (DataFileException);
         
+        bool getParcelNodesElementForSelectedParcel(std::set<int64_t> &parcelNodesOut,
+                                                    const StructureEnum::Enum &structure,
+                                                    const int64_t &selectionIndex) const;
     private:
         
         CiftiMappableDataFile(const CiftiMappableDataFile&);
@@ -321,14 +360,13 @@ namespace caret {
         
     public:
         
-        // ADD_NEW_METHODS_HERE
         virtual void getMapData(const int32_t mapIndex,
-            std::vector<float>& dataOut) const;
-
+                                std::vector<float>& dataOut) const;
+        
+        virtual void setMapData(const int32_t mapIndex,
+                                const std::vector<float>& data);
+        
         virtual void getMatrixRGBA(std::vector<float>& rgba, PaletteFile *paletteFile);
-    
-//    private:
-//        ChartDataCartesian* helpCreateCartesianChartData(const std::vector<float>& data) throw (DataFileException);
     
     protected:
         ChartDataCartesian* helpLoadChartDataForSurfaceNode(const StructureEnum::Enum structure,
@@ -344,46 +382,66 @@ namespace caret {
                                                        int32_t& numberOfColumnsOut,
                                                        std::vector<float>& rgbaOut) const;
 
-        /** The CIFTI XML (Do not delete since points to data in m_ciftiInterface */
-        //CiftiXML* m_ciftiXML;
-        class MapContent : public CaretObject {
+        class MapContent : public CaretObjectTracksModification {
             
         public:
             
-            MapContent(CiftiFacade* ciftiFacade,
+            MapContent(CiftiFile* ciftiFile,
+                       const FileMapDataType fileMapDataType,
+                       const int32_t readingDirectionForCiftiXML,
+                       const int32_t mappingDirectionForCiftiXML,
                        const int32_t mapIndex);
             
             ~MapContent();
             
-            void clearModifiedStatus();
+            virtual void clearModified();
             
-            bool isModifiedStatus();
+            virtual bool isModified() const;
             
             void invalidateColoring();
             
             void updateColoring(const std::vector<float>& data,
                                 const PaletteFile* paletteFile);
             
-            /** Name of Map */
-            AString m_name;
+            AString getName() const;
+            
+            void setName(const AString& name);
+            
+            /** The CIFTI file pointer */
+            CiftiFile *m_ciftiFile;
+            
+            /** Maps or Matrix file */
+            const FileMapDataType m_fileMapDataType;
+            
+            /** Direction for obtaining reading information (CiftiXML::ALONG_ROW, etc) */
+            const int32_t m_readingDirectionForCiftiXML;
+            
+            /** Direction for obtaining mapping information (CiftiXML::ALONG_ROW, etc) */
+            const int32_t m_mappingDirectionForCiftiXML;
+            
+            /** Index of this map */
+            const int32_t m_mapIndex;
+            
+            /** Name of the map */
+            AString m_mapName;
             
             /** Count of data elements in map. */
-            const int64_t m_dataCount;
+            int64_t m_dataCount;
             
-            /** Metadata for the map. */
-            CaretPointer<GiftiMetaData> m_metadata;
+            /** Metadata for the map. Points to data in CiftiFile so DO NOT delete */
+            GiftiMetaData* m_metadata;
             
-            /** Palette color mapping for map */
+            /** Palette color mapping for map. Points to data in CiftiFile so DO NOT delete  */
             PaletteColorMapping* m_paletteColorMapping;
             
-            /** Label table for map */
+            /** Label table for map. Points to data in CiftiFile so DO NOT delete  */
             GiftiLabelTable* m_labelTable;
 
             /** Indicates data is mapped with a lable table */
             bool m_dataIsMappedWithLabelTable;
             
             /** RGBA coloring for map */
-            std::vector<float> m_rgba;
+            std::vector<uint8_t> m_rgba;
             
             /** RGBA coloring is valid */
             bool m_rgbaValid;
@@ -396,20 +454,27 @@ namespace caret {
             
             /** histogram for map */
             CaretPointer<Histogram> m_histogram;
+        
+        private:
+            /** Name of map */
+            AString m_name;
+            
+            /** 
+             * For maps that do not have metadata, a metadata instance
+             * is still needed even though it essentially does nothing.
+             */
+            CaretPointer<GiftiMetaData> m_metadataForMapsWithNoMetaData;
         };
         
         void clearPrivate();
         
-        void initializeFromCiftiInterface(CiftiInterface* ciftiInterface,
-                                          const AString& filename) throw (DataFileException);
+        void initializeAfterReading() throw (DataFileException);
         
-        static AString ciftiIndexTypeToName(const IndicesMapToDataType ciftiIndexType);
+        //static AString ciftiIndexTypeToName(const IndicesMapToDataType ciftiIndexType);
         
         void validateKeysAndLabels() const;
         
         virtual void validateAfterFileReading() throw (DataFileException);
-        
-        bool isCiftiInterfaceValid() const;
         
         virtual void saveFileDataToScene(const SceneAttributes* sceneAttributes,
                                          SceneClass* sceneClass);
@@ -417,39 +482,55 @@ namespace caret {
         virtual void restoreFileDataFromScene(const SceneAttributes* sceneAttributes,
                                               const SceneClass* sceneClass);
         
-        /** How to read data from file */
-        const FileReading m_fileReading;
+        bool getSurfaceDataIndicesForMappingToBrainordinates(const StructureEnum::Enum structure,
+                                                             const int64_t surfaceNumberOfNodes,
+                                                             std::vector<int64_t>& dataIndicesForNodes) const;
+        /**
+         * Point to the CIFTI file object.
+         */
+        CaretPointer<CiftiFile> m_ciftiFile;
         
-        /** Required type of data along the row (dimension 0) */
-        const IndicesMapToDataType m_requiredRowIndexType;
+        /**
+         * Method used when reading data from the file.
+         */
+        DataAccessMethod m_dataReadingAccessMethod;
         
-        /** Required type of data along the column (dimension 1) */
-        const IndicesMapToDataType m_requiredColumnIndexType;
+        /** Direction for obtaining mapping information (CiftiXML::ALONG_ROW, etc) */
+        int32_t m_dataReadingDirectionForCiftiXML;
         
-        /** Location of brainordinate mapped data */
-        const DataAccess m_brainordinateMappedDataAccess;
+        /**
+         * Method used when mapping loaded data to brainordinates.
+         */
+        DataAccessMethod m_dataMappingAccessMethod;
         
-        /** Location of series data */
-        const DataAccess m_seriesDataAccess;
+        /** Direction for obtaining mapping information (CiftiXML::ALONG_ROW, etc) */
+        int32_t m_dataMappingDirectionForCiftiXML;
+        
+        /**
+         * Method used when mapping data to colors.
+         */
+        ColorMappingMethod m_colorMappingMethod;
+        
+        /**
+         * Type of data in the file's map(s).
+         */
+        FileMapDataType m_fileMapDataType;
         
         /** Contains data related to each map */
         std::vector<MapContent*> m_mapContent;
         
-        /** True if the file contains volume data */
+        /** True if the file contains surface data */
+        bool m_containsSurfaceData;
+        
+        /** True if the file contains surface data */
         bool m_containsVolumeData;
         
-        /** The CIFTI interface (could be local file or on network) */
-        CaretPointer<CiftiInterface> m_ciftiInterface;
+        float m_mappingTimeStart;
         
-        /** The file's metadata. */
-        CaretPointer<GiftiMetaData> m_metadata;
+        float m_mappingTimeStep;
         
-        /** CIFTI Facade for simplifying access to CIFTI data */
-        CaretPointer<CiftiFacade> m_ciftiFacade;
-        
-        /** Dimensions of volume data */
-        int64_t m_volumeDimensions[5];
-        
+        NiftiTimeUnitsEnum::Enum m_mappingTimeUnits;
+                
         /** Fast conversion of IJK to data offset */
         CaretPointer<SparseVolumeIndexer> m_voxelIndicesToOffset;
         
@@ -459,9 +540,7 @@ namespace caret {
         /** force an update of the class and name hierarchy */
         mutable bool m_forceUpdateOfGroupAndNameHierarchy;
 
-        std::vector<int64_t> m_niftiHeaderDimensions;
-        
-        NiftiDataTypeEnum::Enum m_niftiDataType;
+//        std::vector<int64_t> m_ciftiDimensions;
         
         // ADD_NEW_MEMBERS_HERE
         
@@ -472,4 +551,5 @@ namespace caret {
 #endif // __CIFTI_MAPPABLE_DATA_FILE_DECLARE__
     
 } // namespace
+
 #endif  //__CIFTI_MAPPABLE_DATA_FILE_H__

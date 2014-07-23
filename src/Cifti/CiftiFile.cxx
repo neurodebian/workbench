@@ -17,454 +17,205 @@
  *  51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 /*LICENSE_END*/
+
 #include "CiftiFile.h"
+
+#include "ByteOrderEnum.h"
 #include "CaretAssert.h"
-#include "CiftiXML.h"
-#include <algorithm>
-#include "CiftiXMLReader.h"
-#include <vector>
-#include "CiftiMatrix.h"
+#include "CaretHttpManager.h"
+#include "CaretLogger.h"
+#include "DataFileException.h"
+#include "FileInformation.h"
+#include "MultiDimArray.h"
+#include "MultiDimIterator.h"
+#include "NiftiIO.h"
 
-
-#include <iostream>
-#include <FileInformation.h>
-using namespace caret;
 using namespace std;
+using namespace caret;
 
-/**
- * Default Constructor
- *
- * Default Constructor
- *
- */
-CiftiFile::CiftiFile()
+//private implementation classes
+namespace caret
 {
-    init();    
+    class CiftiOnDiskImpl : public CiftiFile::WriteImplInterface
+    {
+        mutable NiftiIO m_nifti;//because file objects aren't stateless (current position), so reading "changes" them
+        CiftiXML m_xml;//because we need to parse it to set up the dimensions anyway
+    public:
+        CiftiOnDiskImpl(const QString& filename);//read-only
+        CiftiOnDiskImpl(const QString& filename, const CiftiXML& xml, const CiftiVersion& version);//make new empty file with read/write
+        void getRow(float* dataOut, const std::vector<int64_t>& indexSelect, const bool& tolerateShortRead) const;
+        void getColumn(float* dataOut, const int64_t& index) const;
+        const CiftiXML& getCiftiXML() const { return m_xml; }
+        QString getFilename() const { return m_nifti.getFilename(); }
+        void setRow(const float* dataIn, const std::vector<int64_t>& indexSelect);
+        void setColumn(const float* dataIn, const int64_t& index);
+    };
+    
+    class CiftiMemoryImpl : public CiftiFile::WriteImplInterface
+    {
+        MultiDimArray<float> m_array;
+    public:
+        CiftiMemoryImpl(const CiftiXML& xml);
+        void getRow(float* dataOut, const std::vector<int64_t>& indexSelect, const bool& tolerateShortRead) const;
+        void getColumn(float* dataOut, const int64_t& index) const;
+        bool isInMemory() const { return true; }
+        void setRow(const float* dataIn, const std::vector<int64_t>& indexSelect);
+        void setColumn(const float* dataIn, const int64_t& index);
+    };
+    
+    class CiftiXnatImpl : public CiftiFile::ReadImplInterface
+    {
+        CiftiXML m_xml;//because we need to parse it to check the dimensions anyway
+        CaretHttpRequest m_baseRequest;
+        void init(const QString& url);
+        void getReqAsFloats(float* data, const int64_t& dataSize, CaretHttpRequest& request) const;
+        int64_t getSizeFromReq(CaretHttpRequest& request);
+    public:
+        CiftiXnatImpl(const QString& url, const QString& user, const QString& pass);
+        CiftiXnatImpl(const QString& url);//reuse existing user/pass, or access non-protected url - in the future, maybe only the second use (private http manager)
+        void getRow(float* dataOut, const std::vector<int64_t>& indexSelect, const bool& tolerateShortRead) const;
+        void getColumn(float* dataOut, const int64_t& index) const;
+        const CiftiXML& getCiftiXML() const { return m_xml; }
+    };
 }
 
-CiftiFile::CiftiFile(const CacheEnum &caching, const AString &cacheFile)
+CiftiFile::ReadImplInterface::~ReadImplInterface()
 {
-    init();
-    this->m_caching = caching;
-    this->m_cacheFileName = cacheFile;
 }
 
-/**
- * constructor
- *
- * Constructor
- *
- * @param fileName name and path of the Cifti File
- *
- */
-CiftiFile::CiftiFile(const AString &fileName, const CacheEnum &caching, const AString &cacheFile)
+CiftiFile::WriteImplInterface::~WriteImplInterface()
 {
-    init();
-    this->m_caching = caching;
-    this->m_cacheFileName = cacheFile;
-    this->openFile(fileName,caching);
 }
 
-void CiftiFile::setCiftiCacheFile(const AString &fileName)
+CiftiFile::CiftiFile(const QString& fileName)
 {
-    this->m_cacheFileName = fileName;
+    openFile(fileName);
 }
 
-void CiftiFile::init()
-{   
-    this->m_swapNeeded = false;
-    this->m_caching = IN_MEMORY;
+void CiftiFile::openFile(const QString& fileName)
+{
+    m_writingImpl.grabNew(NULL);
+    m_readingImpl.grabNew(NULL);//to make sure it closes everything first, even if the open throws
+    m_dims.clear();
+    CaretPointer<CiftiOnDiskImpl> newRead(new CiftiOnDiskImpl(FileInformation(fileName).getAbsoluteFilePath()));//this constructor opens existing file read-only
+    m_readingImpl = newRead;//it should be noted that if the constructor throws (if the file isn't readable), new guarantees the memory allocated for the object will be freed
+    m_xml = newRead->getCiftiXML();
+    m_dims = m_xml.getDimensions();
 }
 
-/**
- *
- *
- * open a Cifti file
- *
- * @param fileName name and path of the Cifti File
- */
-void CiftiFile::openFile(const AString &fileName, const CacheEnum &caching)
+void CiftiFile::openURL(const QString& url, const QString& user, const QString& pass)
 {
-    if(!QFile::exists(fileName)) {
-        throw CiftiFileException("Cifti File: " + fileName + " does not exist.");
-        return;
+    m_writingImpl.grabNew(NULL);
+    m_readingImpl.grabNew(NULL);//to make sure it closes everything first, even if the open throws
+    m_dims.clear();
+    CaretPointer<CiftiXnatImpl> newRead(new CiftiXnatImpl(url, user, pass));
+    m_readingImpl = newRead;
+    m_xml = newRead->getCiftiXML();
+    m_dims = m_xml.getDimensions();
+}
+
+void CiftiFile::openURL(const QString& url)
+{
+    m_writingImpl.grabNew(NULL);
+    m_readingImpl.grabNew(NULL);//to make sure it closes everything first, even if the open throws
+    m_dims.clear();
+    CaretPointer<CiftiXnatImpl> newRead(new CiftiXnatImpl(url));
+    m_readingImpl = newRead;
+    m_xml = newRead->getCiftiXML();
+    m_dims = m_xml.getDimensions();
+}
+
+void CiftiFile::setWritingFile(const QString& fileName)
+{
+    m_writingFile = FileInformation(fileName).getAbsoluteFilePath();//always resolve paths as soon as they enter CiftiFile, in case some clown changes directory before writing data
+    m_writingImpl.grabNew(NULL);//prevent writing to previous writing implementation, let the next set...() set up for writing
+}
+
+void CiftiFile::writeFile(const QString& fileName, const CiftiVersion& writingVersion)
+{
+    if (m_readingImpl == NULL || m_dims.empty()) throw DataFileException("writeFile called on uninitialized CiftiFile");
+    FileInformation myInfo(fileName);
+    QString canonicalFilename = myInfo.getCanonicalFilePath();//NOTE: returns EMPTY STRING for nonexistant file
+    CaretPointer<ReadImplInterface> tempRead = m_readingImpl;
+    const CiftiOnDiskImpl* testImpl = dynamic_cast<CiftiOnDiskImpl*>(m_readingImpl.getPointer());
+    bool collision = false;
+    if (testImpl != NULL && canonicalFilename != "" && FileInformation(testImpl->getFilename()).getCanonicalFilePath() == canonicalFilename)
+    {//empty string test is so that we don't say collision if both are nonexistant - could happen if file is removed/unlinked while reading on some filesystems
+        if (m_writingVersion == writingVersion) return;//don't need to copy to itself
+        collision = true;//we need to copy to memory temporarily
+        CaretPointer<WriteImplInterface> tempMemory(new CiftiMemoryImpl(m_xml));//because tempRead is a ReadImpl, can't be used to copy to
+        copyImplData(m_readingImpl, tempMemory, m_dims);
+        tempRead = tempMemory;//set it to read from the memory rather than m_readingImpl
     }
-    try {
-        m_caching = caching;
-        //Read CiftiHeader
-        m_headerIO.readFile(fileName);
-        if (m_headerIO.getNiftiVersion() != 2) throw CiftiFileException("CIFTI files must be NIFTI-2 files");
-        
-        //read XML
-        m_swapNeeded = m_headerIO.getSwapNeeded();
-        {
-            QFile inputFile(fileName);
-            inputFile.setFileName(fileName);
-            inputFile.open(QIODevice::ReadOnly);
-
-            if (!inputFile.isOpen())
-            {
-                throw CiftiFileException("unable to open cifti file");//so permissions problems result in an exception, not an abort later
-            }
-            inputFile.seek(sizeof(nifti_2_header));
-            char extensions[4];
-            inputFile.read(extensions,4);
-            if (extensions[0] == 0)
-            {
-                throw CiftiFileException("cifti files require a nifti extension");
-            }
-            if (extensions[0] != 1 || extensions[1] != 0 || extensions[2] != 0 || extensions[3] != 0)
-            {
-                throw CiftiFileException("unrecognized nifti extender bytes");
-            }
-            unsigned int length;
-            inputFile.read((char *)&length, 4);
-            if(m_swapNeeded)ByteSwapping::swapBytes(&length,1);
-            unsigned int ecode;
-            inputFile.read((char *)&ecode,4);
-            if(m_swapNeeded)ByteSwapping::swapBytes(&ecode,1);
-            if((int32_t)ecode != NIFTI_ECODE_CIFTI) throw CiftiFileException("Error reading extension.  Extension Code is not Cifti.");//TODO: not assume that the first (only) extension is cifti
-            m_xmlBytes = inputFile.read(length-8);//we substract 8 since the length includes the ecode and length
-            inputFile.close();//HACK: we read the bytes into the member xml byte storage because writeFile always rewrites the header for some reason, and this is easier than reengineering it
-            m_xml.readXML(m_xmlBytes);
+    CaretPointer<WriteImplInterface> tempWrite(new CiftiOnDiskImpl(myInfo.getAbsoluteFilePath(), m_xml, writingVersion));//NOTE: this makes m_readingImpl/m_writingImpl unusable if collision is true!
+    copyImplData(tempRead, tempWrite, m_dims);
+    if (collision)//if we rewrote the file, we need the handle to the new file, the old one has the wrong version and vox_offset in it
+    {
+        m_writingVersion = writingVersion;//also record the current version number
+        if (m_writingImpl != NULL)//NULL can happen if setWritingFile is called with a name other than the current file, then writeFile is called with the same name as current file but different version
+        {//or, if it is in read-only on-disk mode
+            m_writingImpl = tempWrite;//replace the now-unusable old file implementation
         }
-        m_writingVersion = m_xml.getParsedVersion();//HACK: because we save the read bytes, we also have to save the read version so it doesn't screw up the dimensions
-        //set up Matrix for reading..
-        m_matrix.setMatrixFile(fileName, m_cacheFileName);
-        CiftiHeader header;
-        m_headerIO.getHeader(header);
-        std::vector <int64_t> vec;
-        
-        header.getDimensions(vec);
-        int64_t offset = header.getVolumeOffset();
-        if (vec.size() < 1) throw CiftiFileException("cannot use 0-dimensional cifti");
-        if (m_xml.getParsedVersion().hasReversedFirstDims())//deal with cifti-1 nastiness
-        {
-            if (vec.size() == 1)
-            {
-                vec.push_back(vec[0]);
-                vec[0] = 1;
-            } else {
-                int64_t temp = vec[0];
-                vec[0] = vec[1];
-                vec[1] = temp;
-            }
-        }
-        if ((int)vec.size() != m_xml.getNumberOfDimensions()) throw CiftiFileException("xml and nifti header disagree on cifti matrix dimensionality");
-        for (int i = 0; i < (int)vec.size(); ++i)
-        {
-            if (m_xml.getDimensionLength(i) < 1)//should only happen with cifti-1
-            {
-                m_xml.getSeriesMap(i).setLength(vec[0]);
-            } else {
-                if (m_xml.getDimensionLength(i) != vec[i]) throw CiftiFileException("xml and nifti header disagree on matrix dimensions");
-            }
-        }
-        while (vec.size() < 2) vec.push_back(1);//HACK: in case we get 1D cifti, which CiftiMatrix will choke on
-        int64_t temp = vec[0];//HACK: CiftiMatrix expects reversed dims
-        vec[0] = vec[1];
-        vec[1] = temp;
-        m_matrix.setup(vec,offset,m_caching,m_swapNeeded);
-    }
-    catch (CaretException& e) {
-        throw CiftiFileException("Error reading file \"" + fileName + "\": " + e.whatString());
-    }
-    catch (std::exception& e) {
-        throw CiftiFileException("Error reading file \"" + fileName + "\": " + e.what());
-    }
-    catch (...) {
-        throw CiftiFileException("Unknown error reading file \"" + fileName + "\"");
+        m_readingImpl = tempWrite;//replace the now-unusable old file implementation
     }
 }
 
-/**
- *
- * Setup the Cifti Matrix
- *
- * @param header the cifti header used for setting up the matrix
- * @param xml the cifti xml extensions used to calculate vox offset
- *
- */
-
-void CiftiFile::setupMatrix()
+void CiftiFile::writeFile(const QString& fileName)
 {
-    invalidateDataRange();
-    //Get XML string and length, which is needed to calculate the vox_offset stored in the Nifti Header
-    m_xmlBytes = m_xml.writeXMLToQByteArray(m_writingVersion);//NOTE: if writing on-disk, this must be reused in writeFile()
-    int length = 8 + m_xmlBytes.length();
-
-
-    // update header struct dimensions and vox_offset
-    CiftiHeader ciftiHeader;
-    char name[17];//just to be safe, use one more char and make it null
-    name[16] = '\0';
-    ciftiHeader.setIntentCode(m_xml.getIntentInfo(m_writingVersion, name));
-    ciftiHeader.setIntentName(name);
-    //populate header dimensions from the layout
-    vector<int64_t> dim;
-    int numDims = m_xml.getNumberOfDimensions();
-    if (numDims < 1) throw CiftiFileException("cannot use 0-dimensional cifti");
-    for (int i = 0; i < numDims; ++i)
-    {
-        dim.push_back(m_xml.getDimensionLength(i));//0 is along row, 1 is along column, etc
-    }
-    if (m_writingVersion.hasReversedFirstDims())//deal with cifti-1 nastiness
-    {
-        vector<int64_t> reversed = dim;
-        if (reversed.size() < 2)
-        {
-            reversed.push_back(dim[0]);
-            reversed[0] = 1;
-        } else {
-            reversed[0] = dim[1];
-            reversed[1] = dim[0];
-        }
-        ciftiHeader.setDimensions(reversed);
-    } else {
-        ciftiHeader.setDimensions(dim);
-    }
-
-    int64_t vox_offset = 544 + length;
-    int remainder = vox_offset % 16;
-    int padding = 0;
-    if (remainder) padding = 16 - remainder;//for 8 byte alignment
-    vox_offset += padding;
-    length += padding;
-
-
-    ciftiHeader.setVolumeOffset(vox_offset);
-    m_headerIO.setHeader(ciftiHeader);
-    
-    //setup the matrix
-    m_matrix.setMatrixFile(m_fileName, m_cacheFileName);
-    while (dim.size() < 2) dim.push_back(1);//HACK: CiftiMatrix won't take 1D, and we need to swap dims to make CiftiMatrix happy
-    int64_t temp = dim[0];
-    dim[0] = dim[1];
-    dim[1] = temp;
-    m_matrix.setup(dim, vox_offset, this->m_caching, this->m_swapNeeded);
-}
-
-/*
- *
- * setup the Cifti Matrix
- * @param dimensions the dimensions of the cifti matrix
- * @param offsetIn the offset, in bytes, of the start of the matrix within the cifti file
- * @param e the caching type of the matrix (ON_DISK or IN_MEMORY)
- * @param needsSwapping the byte order of the matrix (native or swapped)
- */
-/*void CiftiFile::setupMatrix(vector<int64_t> &dimensions, const int64_t &offsetIn, const CacheEnum &e, const bool &needsSwapping) throw (CiftiFileException)
-{
-    m_matrix.setup(dimensions, offsetIn, e, needsSwapping);
-}//*/
-
-/** 
- *
- *
- * write the Cifti File
- *
- * @param fileName specifies the name and path of the file to write to
- */
-void CiftiFile::writeFile(const AString &fileName)
-{
-    QFile *file = this->m_matrix.getCacheFile();
-    bool writingNewFile = true;
-    bool shouldSwap = false;
-    
-    if (m_caching == IN_MEMORY)//rewrite the XML bytes only if in-memory, because if it already on-disk, then we can't resize the xml bytes
-    {
-        m_writingVersion = CiftiVersion();//use default cifti version for the rewrite
-        m_xmlBytes = m_xml.writeXMLToQByteArray(m_writingVersion);
-    }
-    
-    if(file && m_caching == ON_DISK) 
-    {
-        AString cacheFileName = file->fileName();
-        if(QDir::toNativeSeparators(cacheFileName) == QDir::toNativeSeparators(fileName))
-        {
-            writingNewFile = false;
-            shouldSwap = m_matrix.getNeedsSwapping();//TSC: I don't know why it doesn't just return here, but I don't really want to mess with this code
-        }
-    }
-    
-    if(writingNewFile)
-    {
-        file = new QFile();
-        file->setFileName(fileName);
-        if(m_caching == IN_MEMORY)
-        {
-            if (!file->open(QIODevice::WriteOnly))//this function is writeFile, try to open writable at all times
-            {
-                throw CiftiFileException("encountered error reopening file as writable");
-            }
-        }
-        else
-        {
-            if (!file->open(QIODevice::ReadWrite))//this function is writeFile, try to open writable at all times
-            {
-                throw CiftiFileException("encountered error reopening file as writable");
-            }
-        }        
-    }
-    file->seek(0);
-    
-    //Get XML string and length, which is needed to calculate the vox_offset stored in the Nifti Header
-    int length = 8 + m_xmlBytes.length();
-
-
-    // update header struct dimensions and vox_offset
-    CiftiHeader ciftiHeader;
-    this->m_headerIO.getHeader(ciftiHeader);
-
-    if (m_caching == IN_MEMORY)//also update the intent code and name if writing from in-memory
-    {
-        char name[17];//just to be safe, use one more char and make it null
-        name[16] = '\0';
-        ciftiHeader.setIntentCode(m_xml.getIntentInfo(m_writingVersion, name));
-        ciftiHeader.setIntentName(name);
-    }
-    
-    int64_t vox_offset = 544 + length;
-    int remainder = vox_offset % 16;
-    int padding = 0;
-    if (remainder) padding = 16 - remainder;//for 16 byte alignment
-    vox_offset += padding;
-    length += padding;
-
-
-    std::vector <int64_t> dim;
-    m_matrix.getMatrixDimensions(dim);//HACK: these dimensions are already reversed!  CiftiMatrix has reversed dimensions baked into it
-    if (!m_writingVersion.hasReversedFirstDims())//deal with cifti-1 nastiness
-    {
-        vector<int64_t> reversed = dim;
-        if (reversed.size() < 2)
-        {
-            reversed.push_back(dim[0]);
-            reversed[0] = 1;
-        } else {
-            reversed[0] = dim[1];
-            reversed[1] = dim[0];
-        }
-        ciftiHeader.setDimensions(reversed);
-    } else {
-        ciftiHeader.setDimensions(dim);
-    }
-    ciftiHeader.setVolumeOffset(vox_offset);
-    m_headerIO.setHeader(ciftiHeader);
-
-
-    //write out the file
-    //write out header
-    if (shouldSwap)
-    {
-        m_headerIO.writeFile(*file, SWAPPED_BYTE_ORDER);
-    } else {
-        m_headerIO.writeFile(*file, NATIVE_BYTE_ORDER);
-    }
-    file->flush();
-
-    //write out the xml extension
-    
-    //isWritable DOES NOT CHECK PERMISSIONS
-    
-    file->seek(540);
-    char eflags[4] = {1,0x00,0x00,0x00};
-    int32_t ecode = NIFTI_ECODE_CIFTI;
-    
-    if(shouldSwap) {
-        ByteSwapping::swapBytes(&length,1);
-        ByteSwapping::swapBytes(&ecode,1);
-    }
-    file->write(eflags,4);
-    file->write((char *)&length,4);
-    file->write((char *)&ecode, 4);
-    file->write(m_xmlBytes);
-    char nulls[16] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-    file->write(nulls,padding);//pad out null values to 8 byte boundary
-    file->flush();
-
-    //write the matrix
-    if(writingNewFile) delete file;
-    m_matrix.writeToNewFile(fileName,vox_offset);
-    
-}
-
-bool CiftiFile::isInMemory() const
-{
-    CacheEnum test;
-    m_matrix.getCaching(test);
-    return (test == IN_MEMORY);
+    writeFile(fileName, m_writingVersion);//let the more complex case handle the simple one too, will always return early on collision
 }
 
 void CiftiFile::convertToInMemory()
 {
     if (isInMemory()) return;
-    CiftiMatrix newMatrix;
-    vector<int64_t> dims;
-    m_matrix.getMatrixDimensions(dims);
-    newMatrix.setup(dims);
-    vector<float> rowScratch(dims[1], 0.0f);//yes, really, row length is second dimension
-    for (int64_t i = 0; i < dims[0]; ++i)
+    if (m_readingImpl == NULL || m_dims.empty())//not set up yet
     {
-        m_matrix.getRow(rowScratch.data(), i, true);//allow it to work on unallocated on-disk cifti
-        newMatrix.setRow(rowScratch.data(), i);
+        m_writingFile = "";//make sure it doesn't do on-disk when set...() is called
+        return;
     }
-    m_matrix = newMatrix;
-    CaretAssert(isInMemory());//make sure it knows it is in memory
+    CaretPointer<WriteImplInterface> tempWrite(new CiftiMemoryImpl(m_xml));//if we get an error while reading, free the memory immediately, and don't leave m_readingImpl and m_writingImpl pointing to different things
+    copyImplData(m_readingImpl, tempWrite, m_dims);
+    m_writingImpl = tempWrite;
+    m_readingImpl = tempWrite;
 }
 
-/**
- * destructor
- */
-CiftiFile::~CiftiFile()
+bool CiftiFile::isInMemory() const
 {
-
+    if (m_readingImpl == NULL)
+    {
+        return (m_writingFile == "");//return what it would be if verifyImpl() was called
+    } else {
+        return m_readingImpl->isInMemory();
+    }
 }
 
-/*
- *
- *
- * set the CiftiHeader
- *
- * @param header
- */
-// Header IO
-/*void CiftiFile::setHeader(const CiftiHeader &header) throw (CiftiFileException)
-{   
-    m_headerIO.setHeader(header);
-    setupMatrix();
-}//*/
-
-/**
- *
- *
- * get a copy of the CiftiHeader
- *
- * @param header
- */
-void CiftiFile::getHeader(CiftiHeader &header)
+void CiftiFile::getRow(float* dataOut, const vector<int64_t>& indexSelect, const bool& tolerateShortRead) const
 {
-    m_headerIO.getHeader(header);
+    if (m_dims.empty()) throw DataFileException("getRow called on uninitialized CiftiFile");
+    if (m_readingImpl == NULL) return;//NOT an error because we are pretending to have a matrix already, while we are waiting for setRow to actually start writing the file
+    m_readingImpl->getRow(dataOut, indexSelect, tolerateShortRead);
 }
 
-// XML IO
-/** 
- *
- *
- * setter for CiftiFile's CiftiXML object
- *
- * @param ciftixml
- */
-void CiftiFile::setCiftiXML(const CiftiXML & xml, bool useOldMetadata, const CiftiVersion& writingVersion)
+void CiftiFile::getColumn(float* dataOut, const int64_t& index) const
 {
+    if (m_dims.empty()) throw DataFileException("getColumn called on uninitialized CiftiFile");
+    if (m_dims.size() != 2) throw DataFileException("getColumn called on non-2D CiftiFile");
+    if (m_readingImpl == NULL) return;//NOT an error because we are pretending to have a matrix already, while we are waiting for setRow to actually start writing the file
+    m_readingImpl->getColumn(dataOut, index);
+}
+
+void CiftiFile::setCiftiXML(const CiftiXML& xml, const bool useOldMetadata, const CiftiVersion& writingVersion)
+{
+    if (xml.getNumberOfDimensions() == 0) throw DataFileException("setCiftiXML called with 0-dimensional CiftiXML");
     m_writingVersion = writingVersion;
     if (useOldMetadata)
     {
         const GiftiMetaData* oldmd = m_xml.getFileMetaData();
         if (oldmd != NULL)
         {
-            GiftiMetaData newmd = *oldmd;
-            oldmd = NULL;//don't leave a dangling pointer around
-            m_xml = xml;//because this will probably result in a new pointer for the metadata
+            GiftiMetaData newmd = *oldmd;//make a copy
+            oldmd = NULL;//don't leave a potentially dangling pointer around
+            m_xml = xml;//because this will result in a new pointer for the metadata
             GiftiMetaData* changemd = m_xml.getFileMetaData();
             if (changemd != NULL)
             {
@@ -474,9 +225,11 @@ void CiftiFile::setCiftiXML(const CiftiXML & xml, bool useOldMetadata, const Cif
             m_xml = xml;
         }
     } else {
-        this->m_xml = xml;
+        m_xml = xml;
     }
-    setupMatrix();//this also populates the header with the dimensions from the CiftiXML object
+    m_dims = m_xml.getDimensions();
+    m_readingImpl.grabNew(NULL);//drop old implementation, as it is now invalid due to XML (and therefore matrix size) change
+    m_writingImpl.grabNew(NULL);
 }
 
 void CiftiFile::setCiftiXML(const CiftiXMLOld& xml, const bool useOldMetadata, const CiftiVersion& writingVersion)
@@ -487,54 +240,431 @@ void CiftiFile::setCiftiXML(const CiftiXMLOld& xml, const bool useOldMetadata, c
     tempXML.readXML(xmlText);
     if (tempXML.getDimensionLength(CiftiXML::ALONG_ROW) < 1)
     {
-        CiftiSeriesMap tempMap = tempXML.getSeriesMap(CiftiXML::ALONG_ROW);
+        CiftiSeriesMap& tempMap = tempXML.getSeriesMap(CiftiXML::ALONG_ROW);
         tempMap.setLength(xml.getDimensionLength(CiftiXMLOld::ALONG_ROW));
-        tempXML.setMap(CiftiXML::ALONG_ROW, tempMap);
     }
     if (tempXML.getDimensionLength(CiftiXML::ALONG_COLUMN) < 1)
     {
-        CiftiSeriesMap tempMap = tempXML.getSeriesMap(CiftiXML::ALONG_COLUMN);
+        CiftiSeriesMap& tempMap = tempXML.getSeriesMap(CiftiXML::ALONG_COLUMN);
         tempMap.setLength(xml.getDimensionLength(CiftiXMLOld::ALONG_COLUMN));
-        tempXML.setMap(CiftiXML::ALONG_COLUMN, tempMap);
     }
     setCiftiXML(tempXML, useOldMetadata, writingVersion);
 }
 
-bool CiftiFile::setRowTimestep(const float& seconds)
+void CiftiFile::setRow(const float* dataIn, const vector<int64_t>& indexSelect)
 {
-    if (m_xml.getMappingType(CiftiXML::ALONG_ROW) != CiftiMappingType::SERIES) return false;
-    m_xml.getSeriesMap(CiftiXML::ALONG_ROW).setStep(seconds);
-    return true;
+    verifyWriteImpl();
+    m_writingImpl->setRow(dataIn, indexSelect);
 }
 
-bool CiftiFile::setColumnTimestep(const float& seconds)
+void CiftiFile::setColumn(const float* dataIn, const int64_t& index)
 {
-    if (m_xml.getMappingType(CiftiXML::ALONG_COLUMN) != CiftiMappingType::SERIES) return false;
-    m_xml.getSeriesMap(CiftiXML::ALONG_COLUMN).setStep(seconds);
-    return true;
+    verifyWriteImpl();
+    if (m_dims.size() != 2) throw DataFileException("setColumn called on non-2D CiftiFile");
+    m_writingImpl->setColumn(dataIn, index);
 }
 
-int64_t CiftiFile::getNumberOfColumns() const
+//compatibility with old interface
+void CiftiFile::getRow(float* dataOut, const int64_t& index, const bool& tolerateShortRead) const
 {
-    vector<int64_t> myDims;
-    m_matrix.getMatrixDimensions(myDims);
-    if (myDims.size() < 2)
-    {
-        throw CiftiFileException("Matrix has less than 2 dimensions");
-    }
-    return myDims[1];
+    if (m_dims.empty()) throw DataFileException("getRow called on uninitialized CiftiFile");
+    if (m_dims.size() != 2) throw DataFileException("getRow with single index called on non-2D CiftiFile");
+    if (m_readingImpl == NULL) return;//NOT an error because we are pretending to have a matrix already, while we are waiting for setRow to actually start writing the file
+    vector<int64_t> tempvec(1, index);//could use a member if we need more speed
+    m_readingImpl->getRow(dataOut, tempvec, tolerateShortRead);
+}
+
+void CiftiFile::getRow(float* dataOut, const int64_t& index) const
+{
+    getRow(dataOut, index, false);//once CiftiInterface is gone, we can collapse this into a default value
 }
 
 int64_t CiftiFile::getNumberOfRows() const
 {
-    vector<int64_t> myDims;
-    m_matrix.getMatrixDimensions(myDims);
-    if (myDims.size() < 1)
-    {
-        throw CiftiFileException("Matrix has no dimensions");
-    }
-    return myDims[0];
+    if (m_dims.empty()) throw DataFileException("getNumberOfRows called on uninitialized CiftiFile");
+    if (m_dims.size() != 2) throw DataFileException("getNumberOfRows called on non-2D CiftiFile");
+    return m_dims[1];//length of a column
 }
 
-//Matrix IO, simply passes through to CiftiMatrix, see header for more info..
+int64_t CiftiFile::getNumberOfColumns() const
+{
+    if (m_dims.empty()) throw DataFileException("getNumberOfRows called on uninitialized CiftiFile");
+    if (m_dims.size() != 2) throw DataFileException("getNumberOfRows called on non-2D CiftiFile");
+    return m_dims[0];//length of a row
+}
 
+void CiftiFile::setRow(const float* dataIn, const int64_t& index)
+{
+    verifyWriteImpl();
+    if (m_dims.size() != 2) throw DataFileException("setRow with single index called on non-2D CiftiFile");
+    vector<int64_t> tempvec(1, index);//could use a member if we need more speed
+    m_writingImpl->setRow(dataIn, tempvec);
+}
+//*///end old compatibility functions
+
+void CiftiFile::verifyWriteImpl()
+{//this is where the magic happens - we want to emulate being a simple in-memory file, but actually be reading/writing on-disk when possible
+    if (m_writingImpl != NULL) return;
+    CaretAssert(!m_dims.empty());//if the xml hasn't been set, then we can't do anything meaningful
+    if (m_dims.empty()) throw DataFileException("setRow or setColumn attempted on uninitialized CiftiFile");
+    if (m_writingFile == "")
+    {
+        if (m_readingImpl != NULL)
+        {
+            convertToInMemory();
+        } else {
+            m_writingImpl.grabNew(new CiftiMemoryImpl(m_xml));
+        }
+    } else {
+        if (m_readingImpl != NULL)
+        {
+            CiftiOnDiskImpl* testImpl = dynamic_cast<CiftiOnDiskImpl*>(m_readingImpl.getPointer());
+            if (testImpl != NULL)
+            {
+                QString canonicalCurrent = FileInformation(testImpl->getFilename()).getCanonicalFilePath();//returns "" if nonexistant, if unlinked while open
+                if (canonicalCurrent != "" && canonicalCurrent == FileInformation(m_writingFile).getCanonicalFilePath())//these were already absolute
+                {
+                    convertToInMemory();//save existing data in memory before we clobber file
+                }
+            }
+        }
+        m_writingImpl.grabNew(new CiftiOnDiskImpl(m_writingFile, m_xml, m_writingVersion));//this constructor makes new file for writing
+        if (m_readingImpl != NULL)
+        {
+            copyImplData(m_readingImpl, m_writingImpl, m_dims);
+        }
+    }
+    m_readingImpl = m_writingImpl;//read-only implementations are set up in specialized functions
+}
+
+void CiftiFile::copyImplData(const ReadImplInterface* from, WriteImplInterface* to, const vector<int64_t>& dims)
+{
+    vector<int64_t> iterateDims(dims.begin() + 1, dims.end());
+    vector<float> scratchRow(dims[0]);
+    for (MultiDimIterator<int64_t> iter(iterateDims); !iter.atEnd(); ++iter)
+    {
+        from->getRow(scratchRow.data(), *iter, false);
+        to->setRow(scratchRow.data(), *iter);
+    }
+}
+
+CiftiMemoryImpl::CiftiMemoryImpl(const CiftiXML& xml)
+{
+    CaretAssert(xml.getNumberOfDimensions() != 0);
+    m_array.resize(xml.getDimensions());
+}
+
+void CiftiMemoryImpl::getRow(float* dataOut, const vector<int64_t>& indexSelect, const bool&) const
+{
+    const float* ref = m_array.get(1, indexSelect);
+    int64_t rowSize = m_array.getDimensions()[0];//we don't accept 0-D CiftiXML, so this will always work
+    for (int64_t i = 0; i < rowSize; ++i)
+    {
+        dataOut[i] = ref[i];
+    }
+}
+
+void CiftiMemoryImpl::getColumn(float* dataOut, const int64_t& index) const
+{
+    CaretAssert(m_array.getDimensions().size() == 2);//otherwise, CiftiFile shouldn't have called this
+    const float* ref = m_array.get(2, vector<int64_t>());//empty vector is intentional, only 2 dimensions exist, so no more to select from
+    int64_t rowSize = m_array.getDimensions()[0];
+    int64_t colSize = m_array.getDimensions()[1];
+    CaretAssert(index >= 0 && index < rowSize);//because we are doing the indexing math manually for speed
+    for (int64_t i = 0; i < colSize; ++i)
+    {
+        dataOut[i] = ref[index + rowSize * i];
+    }
+}
+
+void CiftiMemoryImpl::setRow(const float* dataIn, const vector<int64_t>& indexSelect)
+{
+    float* ref = m_array.get(1, indexSelect);
+    int64_t rowSize = m_array.getDimensions()[0];//we don't accept 0-D CiftiXML, so this will always work
+    for (int64_t i = 0; i < rowSize; ++i)
+    {
+        ref[i] = dataIn[i];
+    }
+}
+
+void CiftiMemoryImpl::setColumn(const float* dataIn, const int64_t& index)
+{
+    CaretAssert(m_array.getDimensions().size() == 2);//otherwise, CiftiFile shouldn't have called this
+    float* ref = m_array.get(2, vector<int64_t>());//empty vector is intentional, only 2 dimensions exist, so no more to select from
+    int64_t rowSize = m_array.getDimensions()[0];
+    int64_t colSize = m_array.getDimensions()[1];
+    CaretAssert(index >= 0 && index < rowSize);//because we are doing the indexing math manually for speed
+    for (int64_t i = 0; i < colSize; ++i)
+    {
+        ref[index + rowSize * i] = dataIn[i];
+    }
+}
+
+CiftiOnDiskImpl::CiftiOnDiskImpl(const QString& filename)
+{//opens existing file for reading
+    m_nifti.openRead(filename);//read-only, so we don't need write permission to read a cifti file
+    const NiftiHeader& myHeader = m_nifti.getHeader();
+    int numExts = (int)myHeader.m_extensions.size(), whichExt = -1;
+    for (int i = 0; i < numExts; ++i)
+    {
+        if (myHeader.m_extensions[i]->m_ecode == NIFTI_ECODE_CIFTI)
+        {
+            whichExt = i;
+            break;
+        }
+    }
+    if (whichExt == -1) throw DataFileException("no cifti extension found in file '" + filename + "'");
+    m_xml.readXML(QByteArray(myHeader.m_extensions[whichExt]->m_bytes.data(), myHeader.m_extensions[whichExt]->m_bytes.size()));//CiftiXML should be under 2GB
+    vector<int64_t> dimCheck = m_nifti.getDimensions();
+    if (dimCheck.size() < 5) throw DataFileException("invalid dimensions in cifti file '" + filename + "'");
+    for (int i = 0; i < 4; ++i)
+    {
+        if (dimCheck[i] != 1) throw DataFileException("non-singular dimension #" + QString::number(i + 1) + " in cifti file '" + filename + "'");
+    }
+    if (m_xml.getParsedVersion().hasReversedFirstDims())
+    {
+        while (dimCheck.size() < 6) dimCheck.push_back(1);//just in case
+        int64_t temp = dimCheck[4];//note: nifti dim[5] is the 5th dimension, index 4 in this vector
+        dimCheck[4] = dimCheck[5];
+        dimCheck[5] = temp;
+        m_nifti.overrideDimensions(dimCheck);
+    }
+    if (m_xml.getNumberOfDimensions() + 4 != (int)dimCheck.size()) throw DataFileException("XML does not match number of nifti dimensions in file " + filename + "'");
+    for (int i = 4; i < (int)dimCheck.size(); ++i)
+    {
+        if (m_xml.getDimensionLength(i - 4) < 1)//CiftiXML will only let this happen with cifti-1
+        {
+            m_xml.getSeriesMap(i - 4).setLength(dimCheck[i]);//and only in a series map
+        } else {
+            if (m_xml.getDimensionLength(i - 4) != dimCheck[i])
+            {
+                throw DataFileException("xml and nifti header disagree on matrix dimensions");
+            }
+        }
+    }
+}
+
+CiftiOnDiskImpl::CiftiOnDiskImpl(const QString& filename, const CiftiXML& xml, const CiftiVersion& version)
+{//starts writing new file
+    NiftiHeader outHeader;
+    outHeader.setDataType(NIFTI_TYPE_FLOAT32);//actually redundant currently, default is float32
+    char intentName[16];
+    int32_t intentCode = xml.getIntentInfo(version, intentName);
+    outHeader.setIntent(intentCode, intentName);
+    QByteArray xmlBytes = xml.writeXMLToQByteArray(version);
+    CaretPointer<NiftiExtension> outExtension(new NiftiExtension());
+    outExtension->m_ecode = NIFTI_ECODE_CIFTI;
+    int numBytes = xmlBytes.size();
+    outExtension->m_bytes.resize(numBytes);
+    for (int i = 0; i < numBytes; ++i)
+    {
+        outExtension->m_bytes[i] = xmlBytes[i];
+    }
+    outHeader.m_extensions.push_back(outExtension);
+    vector<int64_t> matrixDims = xml.getDimensions();
+    vector<int64_t> niftiDims(4, 1);//the reserved space and time dims
+    niftiDims.insert(niftiDims.end(), matrixDims.begin(), matrixDims.end());
+    if (version.hasReversedFirstDims())
+    {
+        vector<int64_t> headerDims = niftiDims;
+        while (headerDims.size() < 6) headerDims.push_back(1);//just in case
+        int64_t temp = headerDims[4];
+        headerDims[4] = headerDims[5];
+        headerDims[5] = temp;
+        outHeader.setDimensions(headerDims);//give the header the reversed dimensions
+        m_nifti.writeNew(filename, outHeader, 2, true);
+        m_nifti.overrideDimensions(niftiDims);//and then tell the nifti reader to use the correct dimensions
+    } else {
+        outHeader.setDimensions(niftiDims);
+        m_nifti.writeNew(filename, outHeader, 2, true);
+    }
+    m_xml = xml;
+}
+
+void CiftiOnDiskImpl::getRow(float* dataOut, const vector<int64_t>& indexSelect, const bool& tolerateShortRead) const
+{
+    m_nifti.readData(dataOut, 5, indexSelect, tolerateShortRead);//5 means 4 reserved (space and time) plus the first cifti dimension
+}
+
+void CiftiOnDiskImpl::getColumn(float* dataOut, const int64_t& index) const
+{
+    CaretAssert(m_xml.getNumberOfDimensions() == 2);//otherwise this shouldn't be called
+    CaretAssert(index >= 0 && index < m_xml.getDimensionLength(CiftiXML::ALONG_ROW));
+    CaretLogFine("getColumn called on CiftiOnDiskImpl, this will be slow");//generate logging messages at a low priority
+    vector<int64_t> indexSelect(2);
+    indexSelect[0] = index;
+    int64_t colLength = m_xml.getDimensionLength(CiftiXML::ALONG_COLUMN);
+    for (int64_t i = 0; i < colLength; ++i)//assume if they really want getColumn on disk, they don't want their pagecache obliterated, so read it 1 element at a time
+    {
+        indexSelect[1] = i;
+        m_nifti.readData(dataOut + i, 4, indexSelect);//4 means just the 4 reserved dimensions, so 1 element of the matrix
+    }
+}
+
+void CiftiOnDiskImpl::setRow(const float* dataIn, const vector<int64_t>& indexSelect)
+{
+    m_nifti.writeData(dataIn, 5, indexSelect);
+}
+
+void CiftiOnDiskImpl::setColumn(const float* dataIn, const int64_t& index)
+{
+    CaretAssert(m_xml.getNumberOfDimensions() == 2);//otherwise this shouldn't be called
+    CaretAssert(index >= 0 && index < m_xml.getDimensionLength(CiftiXML::ALONG_ROW));
+    CaretLogFine("getColumn called on CiftiOnDiskImpl, this will be slow");//generate logging messages at a low priority
+    vector<int64_t> indexSelect(2);
+    indexSelect[0] = index;
+    int64_t colLength = m_xml.getDimensionLength(CiftiXML::ALONG_COLUMN);
+    for (int64_t i = 0; i < colLength; ++i)//don't do RMW, so write it 1 element at a time
+    {
+        indexSelect[1] = i;
+        m_nifti.writeData(dataIn + i, 4, indexSelect);//4 means just the 4 reserved dimensions, so 1 element of the matrix
+    }
+}
+
+CiftiXnatImpl::CiftiXnatImpl(const QString& url, const QString& user, const QString& pass)
+{
+    CaretHttpManager::setAuthentication(url, user, pass);
+    init(url);
+}
+
+CiftiXnatImpl::CiftiXnatImpl(const QString& url)
+{
+    init(url);
+}
+
+void CiftiXnatImpl::init(const QString& url)
+{
+    m_baseRequest.m_url = url;
+    m_baseRequest.m_method = CaretHttpManager::POST;
+    int32_t start = url.indexOf('?');
+    bool foundSearchID = false;
+    bool foundResource = false;
+    while ((!foundSearchID) && (!foundResource))
+    {
+        if (start == -1)
+        {
+            throw DataFileException("Error: searchID not found in URL string");
+        }
+        if (url.mid(start + 1, 9) == "searchID=")
+        {
+            foundSearchID = true;
+        } else if (url.mid(start + 1, 9) == "resource=") {
+            foundResource = true;
+        }
+        start = url.indexOf('&', start + 1);
+    }
+    m_baseRequest.m_queries.push_back(make_pair(AString("type"), AString("dconn")));
+    CaretHttpRequest metadata = m_baseRequest;
+    if (foundResource)
+    {
+        metadata.m_queries.push_back(make_pair(AString("metadata"), AString("true")));
+    } else {
+        metadata.m_queries.push_back(make_pair(AString("metadata"), AString("")));
+    }
+    CaretHttpResponse myResponse;
+    CaretHttpManager::httpRequest(metadata, myResponse);
+    if (!myResponse.m_ok)
+    {
+        throw DataFileException("Error opening URL, response code: " + AString::number(myResponse.m_responseCode));
+    }
+    myResponse.m_body.push_back('\0');//null terminate it so we can construct an AString easily - CaretHttpManager is nice and pre-reserves this room for this purpose
+    AString theBody(myResponse.m_body.data());
+    m_xml.readXML(theBody);
+    if (m_xml.getNumberOfDimensions() != 2)
+    {
+        throw DataFileException("only 2D cifti are supported via URL at this time");
+    }
+    if (m_xml.getMappingType(CiftiXML::ALONG_COLUMN) == CiftiMappingType::SERIES && m_xml.getDimensionLength(CiftiXML::ALONG_ROW) < 1)
+    {
+        CaretHttpRequest rowRequest = m_baseRequest;
+        rowRequest.m_queries.push_back(make_pair(AString("row-index"), AString("0")));
+        m_xml.getSeriesMap(CiftiXML::ALONG_COLUMN).setLength(getSizeFromReq(rowRequest));//number of timepoints along a row is the number of columns
+    }
+    if (m_xml.getMappingType(CiftiXML::ALONG_ROW) == CiftiMappingType::SERIES && m_xml.getDimensionLength(CiftiXML::ALONG_COLUMN) < 1)
+    {
+        CaretHttpRequest columnRequest = m_baseRequest;
+        columnRequest.m_queries.push_back(make_pair(AString("column-index"), AString("0")));
+        m_xml.getSeriesMap(CiftiXML::ALONG_ROW).setLength(getSizeFromReq(columnRequest));//see above
+    }
+    CaretLogFine("Connected URL: "
+                   + url
+                   + "\nRow/Column length:"
+                   + QString::number(m_xml.getDimensionLength(CiftiXML::ALONG_ROW))
+                   + "/"
+                   + QString::number(m_xml.getDimensionLength(CiftiXML::ALONG_COLUMN)));
+}
+
+void CiftiXnatImpl::getReqAsFloats(float* data, const int64_t& dataSize, CaretHttpRequest& request) const
+{
+    CaretHttpResponse myResponse;
+    CaretHttpManager::httpRequest(request, myResponse);
+    if (!myResponse.m_ok)
+    {
+        throw DataFileException("Error getting row, response code: " + AString::number(myResponse.m_responseCode));
+    }
+    if (myResponse.m_body.size() % 4 != 0)//expect a multiple of 4 bytes
+    {
+        throw DataFileException("Bad reply, number of bytes is not a multiple of 4");
+    }
+    int32_t numItems = *((int32_t*)myResponse.m_body.data());
+    if (ByteOrderEnum::isSystemBigEndian())
+    {
+        ByteSwapping::swap(numItems);
+    }
+    if (numItems * 4 + 4 != (int64_t)myResponse.m_body.size())
+    {
+        throw DataFileException("Bad reply, number of items does not match length of reply");
+    }
+    if (dataSize != numItems)
+    {
+        throw DataFileException("Bad reply, number of items does not match header");
+    }
+    float* myPointer = (float*)(myResponse.m_body.data() + 4);//skip the first element (which is an int32)
+    for (int i = 0; i < numItems; ++i)
+    {
+        data[i] = myPointer[i];
+    }
+    if (ByteOrderEnum::isSystemBigEndian())
+    {
+        ByteSwapping::swapArray(data, numItems);
+    }
+}
+
+int64_t CiftiXnatImpl::getSizeFromReq(CaretHttpRequest& request)
+{
+    CaretHttpResponse myResponse;
+    CaretHttpManager::httpRequest(request, myResponse);
+    if (!myResponse.m_ok)
+    {
+        throw DataFileException("Error getting row, response code: " + AString::number(myResponse.m_responseCode));
+    }
+    if (myResponse.m_body.size() % 4 != 0)//expect a multiple of 4 bytes
+    {
+        throw DataFileException("Bad reply, number of bytes is not a multiple of 4");
+    }
+    int32_t numItems = *((int32_t*)myResponse.m_body.data());
+    if (ByteOrderEnum::isSystemBigEndian())
+    {
+        ByteSwapping::swap(numItems);
+    }
+    if (numItems * 4 + 4 != (int64_t)myResponse.m_body.size())
+    {
+        throw DataFileException("Bad reply, number of items does not match length of reply");
+    }
+    return numItems;
+}
+
+void CiftiXnatImpl::getRow(float* dataOut, const vector<int64_t>& indexSelect, const bool&) const
+{
+    CaretAssert(indexSelect.size() == 1);
+    CaretHttpRequest rowRequest = m_baseRequest;
+    rowRequest.m_queries.push_back(make_pair(AString("row-index"), AString::number(indexSelect[0])));
+    getReqAsFloats(dataOut, m_xml.getDimensionLength(CiftiXML::ALONG_ROW), rowRequest);
+}
+
+void CiftiXnatImpl::getColumn(float* dataOut, const int64_t& index) const
+{
+    CaretHttpRequest columnRequest = m_baseRequest;
+    columnRequest.m_queries.push_back(make_pair(AString("column-index"), AString::number(index)));
+    getReqAsFloats(dataOut, m_xml.getDimensionLength(CiftiXML::ALONG_COLUMN), columnRequest);
+}

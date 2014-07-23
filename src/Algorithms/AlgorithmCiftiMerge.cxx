@@ -53,7 +53,7 @@ OperationParameters* AlgorithmCiftiMerge::getParameters()
         AString("Given input CIFTI files which have matching mappings along columns, and for which mappings along rows ") +
         "are the same type, all either time points, scalars, or labels, this command concatenates the specified columns horizontally (rows become longer).\n\n" +
         "Example: wb_command -cifti-merge out.dtseries.nii -cifti first.dtseries.nii -column 1 -cifti second.dtseries.nii\n\n" +
-        "This example would take the first column from first.dtseries.nii and all columns from second.dtseries.nii, " +
+        "This example would take the first column from first.dtseries.nii, followed by all columns from second.dtseries.nii, " +
         "and write these columns to out.dtseries.nii."
     );
     return ret;
@@ -63,7 +63,7 @@ void AlgorithmCiftiMerge::useParameters(OperationParameters* myParams, ProgressO
 {
     CiftiFile* ciftiOut = myParams->getOutputCifti(1);
     const vector<ParameterComponent*>& myInstances = *(myParams->getRepeatableParameterInstances(2));
-    vector<const CiftiInterface*> ciftiList;
+    vector<const CiftiFile*> ciftiList;
     vector<int64_t> indexList;
     int numCifti = (int)myInstances.size();
     for (int i = 0; i < numCifti; ++i)
@@ -82,7 +82,7 @@ void AlgorithmCiftiMerge::useParameters(OperationParameters* myParams, ProgressO
     AlgorithmCiftiMerge(myProgObj, ciftiList, indexList, ciftiOut);
 }
 
-AlgorithmCiftiMerge::AlgorithmCiftiMerge(ProgressObject* myProgObj, const vector<const CiftiInterface*>& ciftiList, const vector<int64_t>& indexList, CiftiFile* ciftiOut) : AbstractAlgorithm(myProgObj)
+AlgorithmCiftiMerge::AlgorithmCiftiMerge(ProgressObject* myProgObj, const vector<const CiftiFile*>& ciftiList, const vector<int64_t>& indexList, CiftiFile* ciftiOut) : AbstractAlgorithm(myProgObj)
 {
     LevelProgress myProgress(myProgObj);
     if (ciftiList.size() == 0)

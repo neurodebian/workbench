@@ -289,14 +289,7 @@
            <bool>true</bool>
           </property>
           <property name="text">
-           <string>Interpolate Surface To:</string>
-          </property>
-         </widget>
-        </item>
-        <item>
-         <widget class="QComboBox" name="comboBox">
-          <property name="enabled">
-           <bool>false</bool>
+           <string>Interpolate Surface in Tab 1 to Surface in Tab 2</string>
           </property>
          </widget>
         </item>
@@ -439,20 +432,6 @@
       <string>Image Options</string>
      </property>
      <layout class="QVBoxLayout" name="verticalLayout">
-      <item>
-       <layout class="QHBoxLayout" name="horizontalLayout">
-        <item>
-         <widget class="QCheckBox" name="cropImageCheckBox">
-          <property name="enabled">
-           <bool>true</bool>
-          </property>
-          <property name="text">
-           <string>Automatically Crop Image</string>
-          </property>
-         </widget>
-        </item>
-       </layout>
-      </item>
       <item>
        <layout class="QHBoxLayout" name="horizontalLayout_2">
         <item>

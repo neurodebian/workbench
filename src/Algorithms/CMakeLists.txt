@@ -18,6 +18,8 @@ INCLUDE (${QT_USE_FILE})
 #
 ADD_LIBRARY(Algorithms
 AbstractAlgorithm.h
+AlgorithmBorderResample.h
+AlgorithmBorderToVertices.h
 AlgorithmCiftiAllLabelsToROIs.h
 AlgorithmCiftiAverage.h
 AlgorithmCiftiAverageDenseROI.h
@@ -57,6 +59,7 @@ AlgorithmLabelDilate.h
 AlgorithmLabelMerge.h
 AlgorithmLabelModifyKeys.h
 AlgorithmLabelResample.h
+AlgorithmLabelToBorder.h
 AlgorithmMetricDilate.h
 AlgorithmMetricEstimateFWHM.h
 AlgorithmMetricExtrema.h
@@ -69,7 +72,9 @@ AlgorithmMetricRegression.h
 AlgorithmMetricRemoveIslands.h
 AlgorithmMetricResample.h
 AlgorithmMetricROIsFromExtrema.h
+AlgorithmMetricROIsToBorder.h
 AlgorithmMetricSmoothing.h
+AlgorithmMetricTFCE.h
 AlgorithmNodesInsideBorder.h
 AlgorithmSignedDistanceToSurface.h
 AlgorithmSurfaceAffineRegression.h
@@ -112,6 +117,8 @@ AlgorithmVolumeWarpfieldResample.h
 OverlapLogicEnum.h
 
 AbstractAlgorithm.cxx
+AlgorithmBorderResample.cxx
+AlgorithmBorderToVertices.cxx
 AlgorithmCiftiAllLabelsToROIs.cxx
 AlgorithmCiftiAverage.cxx
 AlgorithmCiftiAverageDenseROI.cxx
@@ -151,6 +158,7 @@ AlgorithmLabelDilate.cxx
 AlgorithmLabelMerge.cxx
 AlgorithmLabelModifyKeys.cxx
 AlgorithmLabelResample.cxx
+AlgorithmLabelToBorder.cxx
 AlgorithmMetricDilate.cxx
 AlgorithmMetricEstimateFWHM.cxx
 AlgorithmMetricExtrema.cxx
@@ -163,7 +171,9 @@ AlgorithmMetricRegression.cxx
 AlgorithmMetricRemoveIslands.cxx
 AlgorithmMetricResample.cxx
 AlgorithmMetricROIsFromExtrema.cxx
+AlgorithmMetricROIsToBorder.cxx
 AlgorithmMetricSmoothing.cxx
+AlgorithmMetricTFCE.cxx
 AlgorithmNodesInsideBorder.cxx
 AlgorithmSignedDistanceToSurface.cxx
 AlgorithmSurfaceAffineRegression.cxx

@@ -20,6 +20,8 @@
 
 #include "CiftiInterface.h"
 
+#include "DataFileException.h"
+
 #include <limits>
 #include <vector>
 
@@ -69,7 +71,7 @@ bool CiftiInterface::getDataRangeFromAllMaps(float& minOut, float& maxOut) const
 CiftiXMLOld CiftiInterface::getCiftiXMLOld() const
 {
     CiftiXMLOld ret;
-    if (m_xml.getNumberOfDimensions() != 2) throw CiftiFileException("can't convert to old XML because number of dimensions isn't 2");
+    if (m_xml.getNumberOfDimensions() != 2) throw DataFileException("can't convert to old XML because number of dimensions isn't 2");
     ret.readXML(m_xml.writeXMLToString(CiftiVersion(1, 0)));
     if (ret.getDimensionLength(CiftiXMLOld::ALONG_ROW) < 1)
     {
@@ -77,7 +79,7 @@ CiftiXMLOld CiftiInterface::getCiftiXMLOld() const
     }
     if (ret.getDimensionLength(CiftiXMLOld::ALONG_COLUMN) < 1)
     {
-        ret.setRowNumberOfTimepoints(m_xml.getDimensionLength(CiftiXML::ALONG_COLUMN));
+        ret.setColumnNumberOfTimepoints(m_xml.getDimensionLength(CiftiXML::ALONG_COLUMN));
     }
     return ret;
 }
@@ -103,7 +105,7 @@ bool CiftiInterface::checkRowIndex(int64_t index) const
 bool CiftiInterface::getColumnFromNode(float* columnOut, const int64_t node, const caret::StructureEnum::Enum structure) const
 {
     int64_t myIndex = -1;
-    const CiftiMappingType& myGenMap = *(m_xml.getMap(CiftiXML::ALONG_COLUMN));
+    const CiftiMappingType& myGenMap = *(m_xml.getMap(CiftiXML::ALONG_ROW));
     if (myGenMap.getType() == CiftiMappingType::BRAIN_MODELS)
     {
         const CiftiBrainModelsMap& myMap = (const CiftiBrainModelsMap&)myGenMap;
@@ -120,7 +122,7 @@ bool CiftiInterface::getColumnFromNode(float* columnOut, const int64_t node, con
 bool CiftiInterface::getColumnFromVoxel(float* columnOut, const int64_t* ijk) const
 {
     int64_t myIndex = -1;
-    const CiftiMappingType& myGenMap = *(m_xml.getMap(CiftiXML::ALONG_COLUMN));
+    const CiftiMappingType& myGenMap = *(m_xml.getMap(CiftiXML::ALONG_ROW));
     if (myGenMap.getType() == CiftiMappingType::BRAIN_MODELS)
     {
         const CiftiBrainModelsMap& myMap = (const CiftiBrainModelsMap&)myGenMap;
@@ -137,7 +139,7 @@ bool CiftiInterface::getColumnFromVoxel(float* columnOut, const int64_t* ijk) co
 bool CiftiInterface::getRowFromNode(float* rowOut, const int64_t node, const caret::StructureEnum::Enum structure) const
 {
     int64_t myIndex = -1;
-    const CiftiMappingType& myGenMap = *(m_xml.getMap(CiftiXML::ALONG_ROW));
+    const CiftiMappingType& myGenMap = *(m_xml.getMap(CiftiXML::ALONG_COLUMN));
     if (myGenMap.getType() == CiftiMappingType::BRAIN_MODELS)
     {
         const CiftiBrainModelsMap& myMap = (const CiftiBrainModelsMap&)myGenMap;
@@ -154,7 +156,7 @@ bool CiftiInterface::getRowFromNode(float* rowOut, const int64_t node, const car
 bool CiftiInterface::getRowFromNode(float* rowOut, const int64_t node, const caret::StructureEnum::Enum structure, int64_t& rowIndexOut) const
 {
     rowIndexOut = -1;
-    const CiftiMappingType& myGenMap = *(m_xml.getMap(CiftiXML::ALONG_ROW));
+    const CiftiMappingType& myGenMap = *(m_xml.getMap(CiftiXML::ALONG_COLUMN));
     if (myGenMap.getType() == CiftiMappingType::BRAIN_MODELS)
     {
         const CiftiBrainModelsMap& myMap = (const CiftiBrainModelsMap&)myGenMap;
@@ -171,7 +173,7 @@ bool CiftiInterface::getRowFromNode(float* rowOut, const int64_t node, const car
 bool CiftiInterface::getRowFromVoxel(float* rowOut, const int64_t* ijk) const
 {
     int64_t myIndex = -1;
-    const CiftiMappingType& myGenMap = *(m_xml.getMap(CiftiXML::ALONG_ROW));
+    const CiftiMappingType& myGenMap = *(m_xml.getMap(CiftiXML::ALONG_COLUMN));
     if (myGenMap.getType() == CiftiMappingType::BRAIN_MODELS)
     {
         const CiftiBrainModelsMap& myMap = (const CiftiBrainModelsMap&)myGenMap;
@@ -189,7 +191,7 @@ bool CiftiInterface::getColumnFromVoxelCoordinate(float* columnOut, const float*
 {
     int64_t myIndex = -1;
     int64_t ijk[3];
-    const CiftiMappingType& myGenMap = *(m_xml.getMap(CiftiXML::ALONG_COLUMN));
+    const CiftiMappingType& myGenMap = *(m_xml.getMap(CiftiXML::ALONG_ROW));
     if (myGenMap.getType() == CiftiMappingType::BRAIN_MODELS)
     {
         const CiftiBrainModelsMap& myMap = (const CiftiBrainModelsMap&)myGenMap;
@@ -209,7 +211,7 @@ bool CiftiInterface::getRowFromVoxelCoordinate(float* rowOut, const float* xyz) 
 {
     int64_t myIndex = -1;
     int64_t ijk[3];
-    const CiftiMappingType& myGenMap = *(m_xml.getMap(CiftiXML::ALONG_ROW));
+    const CiftiMappingType& myGenMap = *(m_xml.getMap(CiftiXML::ALONG_COLUMN));
     if (myGenMap.getType() == CiftiMappingType::BRAIN_MODELS)
     {
         const CiftiBrainModelsMap& myMap = (const CiftiBrainModelsMap&)myGenMap;
@@ -229,7 +231,7 @@ bool CiftiInterface::getRowFromVoxelCoordinate(float* rowOut, const float* xyz, 
 {
     rowIndexOut = -1;
     int64_t ijk[3];
-    const CiftiMappingType& myGenMap = *(m_xml.getMap(CiftiXML::ALONG_ROW));
+    const CiftiMappingType& myGenMap = *(m_xml.getMap(CiftiXML::ALONG_COLUMN));
     if (myGenMap.getType() == CiftiMappingType::BRAIN_MODELS)
     {
         const CiftiBrainModelsMap& myMap = (const CiftiBrainModelsMap&)myGenMap;
@@ -247,7 +249,7 @@ bool CiftiInterface::getRowFromVoxelCoordinate(float* rowOut, const float* xyz, 
 
 bool CiftiInterface::getColumnFromTimepoint(float* columnOut, const float seconds) const
 {
-    const CiftiMappingType& myGenMap = *(m_xml.getMap(CiftiXML::ALONG_COLUMN));
+    const CiftiMappingType& myGenMap = *(m_xml.getMap(CiftiXML::ALONG_ROW));
     if (myGenMap.getType() != CiftiMappingType::SERIES) return false;
     const CiftiSeriesMap& myMap = (const CiftiSeriesMap&)myGenMap;
     int64_t myIndex = (int64_t)floor((seconds - myMap.getStart()) / myMap.getStep() + 0.5f);

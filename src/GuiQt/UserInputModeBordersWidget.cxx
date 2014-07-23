@@ -24,6 +24,7 @@
 #include <QAction>
 #include <QActionGroup>
 #include <QBoxLayout>
+#include <QCheckBox>
 #include <QComboBox>
 #include <QInputDialog>
 #include <QLabel>
@@ -39,6 +40,7 @@
 #include "AlgorithmNodesInsideBorder.h"
 #include "Border.h"
 #include "BorderFile.h"
+#include "BorderPointFromSearch.h"
 #include "BorderPropertiesEditorDialog.h"
 #include "Brain.h"
 #include "BrainBrowserWindow.h"
@@ -59,6 +61,7 @@
 #include "RegionOfInterestCreateFromBorderDialog.h"
 #include "Surface.h"
 #include "UserInputModeBorders.h"
+#include "WuQDataEntryDialog.h"
 #include "WuQMessageBox.h"
 #include "WuQtUtilities.h"
 
@@ -386,46 +389,53 @@ UserInputModeBordersWidget::drawUndoButtonClicked()
 void
 UserInputModeBordersWidget::drawUndoLastEditButtonClicked()
 {
-    bool foundBorderFlag = false;
-    Brain* brain = GuiManager::get()->getBrain();
-    const int32_t numBorderFiles = brain->getNumberOfBorderFiles();
-    for (int32_t i = 0; i < numBorderFiles; i++) {
-        BorderFile* bf = brain->getBorderFile(i);
-        if (bf == m_undoFinishBorderFile) {
-            foundBorderFlag = true;
-            break;
-        }
-    }
-    
-    if (foundBorderFlag) {
-        foundBorderFlag = false;
-        const int32_t numBorders = m_undoFinishBorderFile->getNumberOfBorders();
-        for (int32_t i = 0; i < numBorders; i++) {
-            if (m_undoFinishBorderFile->getBorder(i) == m_undoFinishBorder) {
+    for (std::vector<BorderFileAndBorderMemento>::iterator iter = m_undoFinishBorders.begin();
+         iter != m_undoFinishBorders.end();
+         iter++) {
+        BorderFile* undoBorderFile = iter->m_borderFile;
+        Border*     undoBorder     = iter->m_border;
+        
+        bool foundBorderFlag = false;
+        Brain* brain = GuiManager::get()->getBrain();
+        const int32_t numBorderFiles = brain->getNumberOfBorderFiles();
+        for (int32_t i = 0; i < numBorderFiles; i++) {
+            BorderFile* bf = brain->getBorderFile(i);
+            if (bf == undoBorderFile) {
                 foundBorderFlag = true;
                 break;
             }
         }
-    }
-    
-    if (foundBorderFlag) {
-        if (m_undoFinishBorder->isUndoBorderValid()) {
-            if (WuQMessageBox::warningOkCancel(m_undoFinishToolButton,
-                                               ("Undo changes to " + m_undoFinishBorder->getName()))) {
-                m_undoFinishBorder->undoLastBorderEditing();
+        
+        if (foundBorderFlag) {
+            foundBorderFlag = false;
+            const int32_t numBorders = undoBorderFile->getNumberOfBorders();
+            for (int32_t i = 0; i < numBorders; i++) {
+                if (undoBorderFile->getBorder(i) == undoBorder) {
+                    foundBorderFlag = true;
+                    break;
+                }
+            }
+        }
+        
+        if (foundBorderFlag) {
+            if (undoBorder->isUndoBorderValid()) {
+                if (WuQMessageBox::warningOkCancel(m_undoFinishToolButton,
+                                                   ("Undo changes to " + undoBorder->getName()))) {
+                    undoBorder->undoLastBorderEditing();
+                }
+            }
+            else {
+                WuQMessageBox::errorOk(m_undoFinishToolButton,
+                                       ("Cannot undo border " + undoBorder->getName()));
             }
         }
         else {
-            WuQMessageBox::errorOk(m_undoFinishToolButton,
-                                   ("Cannot undo border " + m_undoFinishBorder->getName()));
+            WuQMessageBox::errorOk(m_undoFinishToolButton, "Cannot undo last edited border.  "
+                                   "Did not find border for undoing.");
         }
     }
-    else {
-        WuQMessageBox::errorOk(m_undoFinishToolButton, "Cannot undo last edited border.");
-    }
     
-    m_undoFinishBorder = NULL;
-    m_undoFinishBorderFile = NULL;
+    resetLastEditedBorder();
 }
 
 /**
@@ -459,7 +469,11 @@ UserInputModeBordersWidget::drawFinishButtonClicked()
         WuQMessageBox::errorOk(this, "Error: Border points are on more than one structure.");
         return;
     }
-    
+    if (this->inputModeBorders->borderBeingDrawnByOpenGL->getNumberOfPoints() < 2) {
+        WuQMessageBox::errorOk(this, "There must be at least two points in the border segment.");
+        return;
+    }
+
     ModelSurface* surfaceController = btc->getDisplayedSurfaceModel();
     ModelWholeBrain* wholeBrainController = btc->getDisplayedWholeBrainModel();
     ModelSurfaceMontage* surfaceMontageController = btc->getDisplayedSurfaceMontageModel();
@@ -512,64 +526,195 @@ UserInputModeBordersWidget::drawFinishButtonClicked()
         case UserInputModeBorders::DRAW_OPERATION_EXTEND:
         case UserInputModeBorders::DRAW_OPERATION_REPLACE:
         {
-            float nearestTolerance = 15;
-            BorderFile* borderFile;
-            int32_t borderFileIndex; 
-            Border* border;
-            int32_t borderIndex;
-            SurfaceProjectedItem* borderPoint;
-            int32_t borderPointIndex;
-            float distanceToNearestBorder;
-            bool successFlag = false;
-            if (brain->findBorderNearestBorder(displayGroup,
-                                               browserTabIndex,
-                                               surface,
-                                               this->inputModeBorders->borderBeingDrawnByOpenGL,
-                                               Brain::NEAREST_BORDER_TEST_MODE_ENDPOINTS, 
-                                               nearestTolerance,
-                                               borderFile,
-                                               borderFileIndex,
-                                               border, 
-                                               borderIndex,
-                                               borderPoint,
-                                               borderPointIndex,
-                                               distanceToNearestBorder)) {
-                try {
-                    switch (this->inputModeBorders->getDrawOperation()) {
-                        case UserInputModeBorders::DRAW_OPERATION_CREATE:
-                            CaretAssert(0);
-                            break;
-                        case UserInputModeBorders::DRAW_OPERATION_ERASE:
-                            border->reviseEraseFromEnd(surface,
-                                                       this->inputModeBorders->borderBeingDrawnByOpenGL);
-                            break;
-                        case UserInputModeBorders::DRAW_OPERATION_EXTEND:
-                            border->reviseExtendFromEnd(surface,
-                                                        this->inputModeBorders->borderBeingDrawnByOpenGL);
-                            break;
-                        case UserInputModeBorders::DRAW_OPERATION_REPLACE:
-                            border->reviseReplaceSegment(surface, 
-                                                         this->inputModeBorders->borderBeingDrawnByOpenGL);
-                            break;
-                    }
-
-                    setLastEditedBorder(borderFile,
-                                        border);
+            const float nearestTolerance = 10;
+            
+            std::vector<BorderPointFromSearch> allNearbyBorders;
+            const int32_t numBorderFiles = brain->getNumberOfBorderFiles();
+            for (int32_t ibf = 0; ibf < numBorderFiles; ibf++) {
+                const BorderFile* borderFile = brain->getBorderFile(ibf);
+                std::vector<BorderPointFromSearch> bordersFoundFromFile;
+                
+                switch (this->inputModeBorders->getDrawOperation()) {
+                    case UserInputModeBorders::DRAW_OPERATION_CREATE:
+                        CaretAssert(0);
+                        break;
+                    case UserInputModeBorders::DRAW_OPERATION_ERASE:
+                        borderFile->findAllBordersWithPointsNearBothSegmentEndPoints(displayGroup,
+                                                                                     browserTabIndex,
+                                                                                     surface,
+                                                                                     this->inputModeBorders->borderBeingDrawnByOpenGL,
+                                                                                     nearestTolerance,
+                                                                                     bordersFoundFromFile);
+                        break;
+                    case UserInputModeBorders::DRAW_OPERATION_EXTEND:
+                        borderFile->findAllBordersWithEndPointNearSegmentFirstPoint(displayGroup,
+                                                                                  browserTabIndex,
+                                                                                  surface,
+                                                                                  this->inputModeBorders->borderBeingDrawnByOpenGL,
+                                                                                  nearestTolerance,
+                                                                                  bordersFoundFromFile);
+                        break;
+                    case UserInputModeBorders::DRAW_OPERATION_REPLACE:
+                        borderFile->findAllBordersWithPointsNearBothSegmentEndPoints(displayGroup,
+                                                                                     browserTabIndex,
+                                                                                     surface,
+                                                                                     this->inputModeBorders->borderBeingDrawnByOpenGL,
+                                                                                     nearestTolerance,
+                                                                                     bordersFoundFromFile);
+                        break;
+                }
+                
+                allNearbyBorders.insert(allNearbyBorders.end(),
+                                        bordersFoundFromFile.begin(),
+                                        bordersFoundFromFile.end());
+            }
+            
+            if (allNearbyBorders.empty()) {
+                WuQMessageBox::errorOk(this, "No borders were found near the border editing points");
+                return;
+            }
+            else {
+                std::sort(allNearbyBorders.begin(),
+                          allNearbyBorders.end());
+                const int32_t numBorders = static_cast<int32_t>(allNearbyBorders.size());
+                
+                AString msg;
+                switch (this->inputModeBorders->getDrawOperation()) {
+                    case UserInputModeBorders::DRAW_OPERATION_CREATE:
+                        CaretAssert(0);
+                        break;
+                    case UserInputModeBorders::DRAW_OPERATION_ERASE:
+                        msg = "Erase segement in";
+                        break;
+                    case UserInputModeBorders::DRAW_OPERATION_EXTEND:
+                        msg = "Extend";
+                        break;
+                    case UserInputModeBorders::DRAW_OPERATION_REPLACE:
+                        msg = "Replace segment in";
+                        break;
+                }
+                msg += ((numBorders > 1)
+                        ? " these borders (ordered by distance): "
+                        : " this border: ");
+                
+                std::vector<QCheckBox*> borderCheckBoxes;
+                WuQDataEntryDialog ded("Edit Borders",
+                                       this);
+                ded.setTextAtTop(msg, false);
+                
+                for (int32_t i = 0; i < numBorders; i++) {
+                    BorderPointFromSearch& bpfs = allNearbyBorders[i];
+                    QCheckBox* cb = ded.addCheckBox(bpfs.border()->getName());
+                    cb->setChecked(true);
+                    borderCheckBoxes.push_back(cb);
+                }
+                
+                if (ded.exec() == WuQDataEntryDialog::Accepted) {
+                    AString errorMessage;
                     
-                    successFlag = true;
-                }
-                catch (BorderException& e) {
-                    WuQMessageBox::errorOk(this,
-                                           e.whatString());
+                    std::vector<BorderFileAndBorderMemento> undoBorders;
+                    
+                    for (int32_t i = 0; i < numBorders; i++) {
+                        CaretAssertVectorIndex(borderCheckBoxes, i);
+                        if (borderCheckBoxes[i]->isChecked()) {
+                            BorderPointFromSearch& bpfs = allNearbyBorders[i];
+                            BorderFile* borderFile = bpfs.borderFile();
+                            Border* border = bpfs.border();
+                            CaretAssert(borderFile);
+                            CaretAssert(border);
+                            
+                            try {
+                                switch (this->inputModeBorders->getDrawOperation()) {
+                                    case UserInputModeBorders::DRAW_OPERATION_CREATE:
+                                        CaretAssert(0);
+                                        break;
+                                    case UserInputModeBorders::DRAW_OPERATION_ERASE:
+                                        border->reviseEraseFromEnd(surface,
+                                                                   this->inputModeBorders->borderBeingDrawnByOpenGL);
+                                        break;
+                                    case UserInputModeBorders::DRAW_OPERATION_EXTEND:
+                                        border->reviseExtendFromEnd(surface,
+                                                                    this->inputModeBorders->borderBeingDrawnByOpenGL);
+                                        break;
+                                    case UserInputModeBorders::DRAW_OPERATION_REPLACE:
+                                        border->reviseReplaceSegment(surface,
+                                                                     this->inputModeBorders->borderBeingDrawnByOpenGL);
+                                        break;
+                                }
+                                
+                                undoBorders.push_back(BorderFileAndBorderMemento(borderFile,
+                                                                                 border));
+                            }
+                            catch (BorderException& e) {
+                                errorMessage.appendWithNewLine(e.whatString());
+                            }
+                        }
+                    }
+                    
+                    if ( ! errorMessage.isEmpty()) {
+                        WuQMessageBox::errorOk(this,
+                                               errorMessage);
+                    }
+                    else {
+                        this->inputModeBorders->borderBeingDrawnByOpenGL->clear();
+                    }
+                    
+                    setLastEditedBorder(undoBorders);
+                    EventManager::get()->sendEvent(EventUserInterfaceUpdate().getPointer());
+                    EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
                 }
             }
             
-            if (successFlag) {
-                this->inputModeBorders->borderBeingDrawnByOpenGL->clear();
-            }
-            
-            EventManager::get()->sendEvent(EventUserInterfaceUpdate().getPointer());
-            EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+//            BorderPointFromSearch nearestBorderPoint;
+//            brain->findBorderNearestBorder(displayGroup,
+//                                               browserTabIndex,
+//                                               surface,
+//                                               this->inputModeBorders->borderBeingDrawnByOpenGL,
+//                                               Brain::NEAREST_BORDER_TEST_MODE_CLOSEST_END_POINT,
+//                                               nearestTolerance,
+//                                           nearestBorderPoint);
+//            if (nearestBorderPoint.isValid()) {
+//                BorderFile* borderFile = nearestBorderPoint.borderFile();
+//                Border* border = nearestBorderPoint.border();
+//                CaretAssert(borderFile);
+//                CaretAssert(border);
+//                
+//                try {
+//                    switch (this->inputModeBorders->getDrawOperation()) {
+//                        case UserInputModeBorders::DRAW_OPERATION_CREATE:
+//                            CaretAssert(0);
+//                            break;
+//                        case UserInputModeBorders::DRAW_OPERATION_ERASE:
+//                            border->reviseEraseFromEnd(surface,
+//                                                       this->inputModeBorders->borderBeingDrawnByOpenGL);
+//                            break;
+//                        case UserInputModeBorders::DRAW_OPERATION_EXTEND:
+//                            border->reviseExtendFromEnd(surface,
+//                                                        this->inputModeBorders->borderBeingDrawnByOpenGL);
+//                            break;
+//                        case UserInputModeBorders::DRAW_OPERATION_REPLACE:
+//                            border->reviseReplaceSegment(surface, 
+//                                                         this->inputModeBorders->borderBeingDrawnByOpenGL);
+//                            break;
+//                    }
+//
+//                    setLastEditedBorder(borderFile,
+//                                        border);
+//                    
+//                    successFlag = true;
+//                }
+//                catch (BorderException& e) {
+//                    WuQMessageBox::errorOk(this,
+//                                           e.whatString());
+//                }
+//            }
+//            
+//            if (successFlag) {
+//                this->inputModeBorders->borderBeingDrawnByOpenGL->clear();
+//            }
+//            
+//            EventManager::get()->sendEvent(EventUserInterfaceUpdate().getPointer());
+//            EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
             
         }
             break;
@@ -704,24 +849,19 @@ UserInputModeBordersWidget::executeRoiInsideSelectedBorderOperation(Brain* /*bra
 void
 UserInputModeBordersWidget::resetLastEditedBorder()
 {
-    m_undoFinishBorderFile = NULL;
-    m_undoFinishBorder     = NULL;
+    m_undoFinishBorders.clear();
 }
 
 /**
  * Set the last edited border.
  *
- * @param borderFile
- *     File containing border.
- * @param border
- *     Border that was changed.
+ * @param undoFinishBorders
+ *    Borders that were changed by the last border edit operation.
  */
 void
-UserInputModeBordersWidget::setLastEditedBorder(BorderFile* borderFile,
-                                                Border* border)
+UserInputModeBordersWidget::setLastEditedBorder(std::vector<BorderFileAndBorderMemento>& undoFinishBorders)
 {
-    m_undoFinishBorderFile = borderFile;
-    m_undoFinishBorder     = border;
+    m_undoFinishBorders = undoFinishBorders;
 }
 
 

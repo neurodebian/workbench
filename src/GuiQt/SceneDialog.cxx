@@ -52,6 +52,7 @@
 #include "CaretPreferences.h"
 #include "ElapsedTimer.h"
 #include "EventBrowserTabGetAll.h"
+#include "EventDataFileAdd.h"
 #include "EventImageCapture.h"
 #include "EventManager.h"
 #include "EventUserInterfaceUpdate.h"
@@ -108,8 +109,9 @@ SceneDialog::SceneDialog(QWidget* parent)
      */
     disableAutoDefaultForAllPushButtons();
     
-    setDialogSizeHint(650,
-                      500);
+//    setDialogSizeHint(650,
+//                      500);
+    setSaveWindowPositionForNextTime(true);
     
     /*
      * Update the dialog.
@@ -118,6 +120,9 @@ SceneDialog::SceneDialog(QWidget* parent)
     
     EventManager::get()->addEventListener(this, 
                                           EventTypeEnum::EVENT_USER_INTERFACE_UPDATE);
+
+    resize(650,
+           500);
 }
 
 /**
@@ -327,6 +332,7 @@ SceneDialog::loadScenesIntoDialog(Scene* selectedSceneIn)
     }
     m_addNewScenePushButton->setEnabled(validFile);
     m_deleteScenePushButton->setEnabled(validScene);
+    m_insertNewScenePushButton->setEnabled(validScene);
     m_replaceScenePushButton->setEnabled(validScene);
     m_showScenePushButton->setEnabled(validScene);
     m_showSceneImagePreviewPushButton->setEnabled(validScene);
@@ -391,14 +397,9 @@ void
 SceneDialog::newSceneFileButtonClicked()
 {
     /*
-     * Create a new scene file that will have proper path
-     */
-    Brain* brain = GuiManager::get()->getBrain();
-    SceneFile* newSceneFile = brain->addSceneFile();
-    
-    /*
      * Let user choose a different path/name
      */
+    SceneFile* newSceneFile = new SceneFile();
     AString newSceneFileName = CaretFileDialog::getSaveFileNameDialog(DataFileTypeEnum::SCENE,
                                                                       this,
                                                                       "Choose Scene File Name",
@@ -407,14 +408,15 @@ SceneDialog::newSceneFileButtonClicked()
      * If user cancels, delete the new scene file and return
      */
     if (newSceneFileName.isEmpty()) {
-        brain->removeAndDeleteDataFile(newSceneFile);
+        delete newSceneFile;
         return;
     }
     
     /*
-     * Set name of new scene file
+     * Set name of new scene file and add to brain
      */
     newSceneFile->setFileName(newSceneFileName);
+    EventManager::get()->sendEvent(EventDataFileAdd(newSceneFile).getPointer());
     this->loadSceneFileComboBox(newSceneFile);
     this->sceneFileSelected();    
 }
@@ -446,6 +448,29 @@ SceneDialog::addNewSceneButtonClicked()
         loadScenesIntoDialog(newScene);
     }
 }
+
+/**
+ * Called when insert new scene button clicked.
+ */
+void
+SceneDialog::insertSceneButtonClicked()
+{
+    if (checkForModifiedFiles() == false) {
+        return;
+    }
+    
+    SceneFile* sceneFile = getSelectedSceneFile();
+    if (sceneFile != NULL) {
+        Scene* scene = getSelectedScene();
+        if (scene != NULL) {
+            Scene* newScene = SceneCreateReplaceDialog::createNewSceneInsertBeforeScene(m_insertNewScenePushButton,
+                                                                                       sceneFile,
+                                                                                       scene);
+            loadScenesIntoDialog(newScene);
+        }
+    }
+}
+
 
 /**
  * Called when replace scene button clicked.
@@ -482,6 +507,9 @@ SceneDialog::addImageToScene(Scene* scene)
     
     CaretAssert(scene);
     
+    uint8_t backgroundColor[3] = { 0, 0, 0 };
+    bool backgroundColorValid = false;
+    
     /*
      * Capture an image of each window
      */
@@ -502,6 +530,10 @@ SceneDialog::addImageToScene(Scene* scene)
             }
             else {
                 imageFiles.push_back(new ImageFile(imageCaptureEvent.getImage()));
+                if ( ! backgroundColorValid) {
+                    imageCaptureEvent.getBackgroundColor(backgroundColor);
+                    backgroundColorValid = true;
+                }
             }
         }
     }
@@ -516,8 +548,6 @@ SceneDialog::addImageToScene(Scene* scene)
         try {
             const int32_t numImagesPerRow = 1;
             ImageFile compositeImageFile;
-            uint8_t backgroundColor[4] = { 0, 0, 0, 255 };
-            SessionManager::get()->getCaretPreferences()->getColorBackground(backgroundColor);
             compositeImageFile.combinePreservingAspectAndFillIfNeeded(imageFiles,
                                                                       numImagesPerRow,
                                                                       backgroundColor);
@@ -678,6 +708,7 @@ SceneDialog::createMainPage()
      * Add new scene button
      */
     m_addNewScenePushButton = new QPushButton("Add...");
+    m_addNewScenePushButton->setToolTip("Add a new scene to the END of the list");
     QObject::connect(m_addNewScenePushButton, SIGNAL(clicked()),
                      this, SLOT(addNewSceneButtonClicked()));
     
@@ -685,13 +716,23 @@ SceneDialog::createMainPage()
      * Delete new scene button
      */
     m_deleteScenePushButton = new QPushButton("Delete...");
+    m_deleteScenePushButton->setToolTip("Delete the selected scene");
     QObject::connect(m_deleteScenePushButton, SIGNAL(clicked()),
                      this, SLOT(deleteSceneButtonClicked()));
+    
+    /*
+     * Insert scene button
+     */
+    m_insertNewScenePushButton = new QPushButton("Insert...");
+    m_insertNewScenePushButton->setToolTip("Insert a new scene ABOVE the selected scene in the list");
+    QObject::connect(m_insertNewScenePushButton, SIGNAL(clicked()),
+                     this, SLOT(insertSceneButtonClicked()));
     
     /*
      * Replace scene button
      */
     m_replaceScenePushButton = new QPushButton("Replace...");
+    m_replaceScenePushButton->setToolTip("Replace the selected scene");
     QObject::connect(m_replaceScenePushButton, SIGNAL(clicked()),
                      this, SLOT(replaceSceneButtonClicked()));
     
@@ -699,6 +740,7 @@ SceneDialog::createMainPage()
      * Show new scene button
      */
     m_showScenePushButton = new QPushButton("Show");
+    m_showScenePushButton->setToolTip("Show the selected scene");
     QObject::connect(m_showScenePushButton, SIGNAL(clicked()),
                      this, SLOT(showSceneButtonClicked()));
     
@@ -706,6 +748,8 @@ SceneDialog::createMainPage()
      * Show scene image button
      */
     m_showSceneImagePreviewPushButton = new QPushButton("Preview...");
+    m_showSceneImagePreviewPushButton->setToolTip("Show larger image and full description\n"
+                                                  "for the selected scene");
     QObject::connect(m_showSceneImagePreviewPushButton, SIGNAL(clicked()),
                      this, SLOT(showImagePreviewButtonClicked()));
     
@@ -718,6 +762,7 @@ SceneDialog::createMainPage()
     sceneButtonLayout->addSpacing(20);
     sceneButtonLayout->addStretch();
     sceneButtonLayout->addWidget(m_addNewScenePushButton);
+    sceneButtonLayout->addWidget(m_insertNewScenePushButton);
     sceneButtonLayout->addWidget(m_replaceScenePushButton);
     sceneButtonLayout->addWidget(m_deleteScenePushButton);
 
@@ -1298,7 +1343,7 @@ SceneClassInfoWidget::getFormattedTextForSceneNameAndDescription(const SceneInfo
         description = WuQtUtilities::createWordWrappedToolTipText(replaceWithDescriptionBoldText
                                                                   + description);
         description.replace(replaceWithDescriptionBoldText,
-                            "<b>DESCRIPTION:</b><br>");
+                            "<b>DESCRIPTION:</b> ");
     }
     
     descriptionTextOut = description;

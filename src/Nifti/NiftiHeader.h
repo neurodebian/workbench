@@ -44,10 +44,10 @@ namespace caret
         
         NiftiHeader();
         void read(CaretBinaryFile& inFile);
-        int64_t write(CaretBinaryFile& outFile, const int& version = 1, const bool& swapEndian = false) const;//returns new vox_offset, doesn't set it internally
+        void write(CaretBinaryFile& outFile, const int& version = 1, const bool& swapEndian = false);//returns new vox_offset, doesn't set it internally
         bool canWriteVersion(const int& version) const;
-        bool wasSwapped() const { return m_readSwapped; }
-        int versionRead() const { return m_readVersion; }
+        bool isSwapped() const { return m_isSwapped; }
+        int version() const { return m_version; }
         HeaderType getType() const { return NIFTI; }//TODO: this should be changed to just "NIFTI", we don't deal with them separately - also, change to getHeaderType()
         
         std::vector<int64_t> getDimensions() const;
@@ -57,7 +57,7 @@ namespace caret
         int32_t getIntentCode() const { return m_header.intent_code; }
         const char* getIntentName() const { return m_header.intent_name; }//NOTE: MAY NOT HAVE A NULL TERMINATOR
         bool getDataScaling(double& mult, double& offset) const;//returns false if scaling not needed
-        AString toString() const;
+        QString toString() const;
         
         void setDimensions(const std::vector<int64_t>& dimsIn);
         void setSForm(const std::vector<std::vector<float> > &sForm);
@@ -72,8 +72,8 @@ namespace caret
         bool operator!=(const NiftiHeader& rhs) const { return !((*this) == rhs); }
     private:
         nifti_2_header m_header;//storage for header values regardless of version
-        int m_readVersion;
-        bool m_readSwapped;
+        int m_version;
+        bool m_isSwapped;
         static void swapHeaderBytes(nifti_1_header &header);
         static void swapHeaderBytes(nifti_2_header &header);
         void prepareHeader(nifti_1_header& header) const;//transform internal state into ready to write header struct

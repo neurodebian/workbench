@@ -43,7 +43,7 @@ using namespace caret;
 /**
  * Constructor.
  */
-SurfaceMontageConfigurationCerebellar::SurfaceMontageConfigurationCerebellar()
+SurfaceMontageConfigurationCerebellar::SurfaceMontageConfigurationCerebellar(const int32_t tabIndex)
 : SurfaceMontageConfigurationAbstract(SurfaceMontageConfigurationTypeEnum::CEREBELLAR_CORTEX_CONFIGURATION,
                                       SUPPORTS_LAYOUT_ORIENTATION_YES)
 {
@@ -86,7 +86,9 @@ SurfaceMontageConfigurationCerebellar::SurfaceMontageConfigurationCerebellar()
     
     std::vector<StructureEnum::Enum> supportedStructures;
     supportedStructures.push_back(StructureEnum::CEREBELLUM);
-    setupOverlaySet(supportedStructures);
+    setupOverlaySet("Cerebellar Montage",
+                    tabIndex,
+                    supportedStructures);
 }
 
 /**
@@ -628,6 +630,33 @@ SurfaceMontageConfigurationCerebellar::getDescriptionOfContent(PlainTextStringBu
     descriptionOut.popIndentation();
 }
 
+/**
+ * Get all surfaces displayed in this configuration.
+ *
+ * @param surfaceOut
+ *    Will contain all displayed surfaces upon exit.
+ */
+void
+SurfaceMontageConfigurationCerebellar::getDisplayedSurfaces(std::vector<Surface*>& surfacesOut) const
+{
+    surfacesOut.clear();
+    
+    const Surface* firstSurface = getFirstSurfaceSelectionModel()->getSurface();
+    if (firstSurface != NULL) {
+        if (isFirstSurfaceEnabled()) {
+            surfacesOut.push_back(const_cast<Surface*>(firstSurface));
+        }
+    }
+    
+    const Surface* secondSurface = getSecondSurfaceSelectionModel()->getSurface();
+    if (secondSurface != NULL) {
+        if (isSecondSurfaceEnabled()) {
+            if (secondSurface != firstSurface) {
+                surfacesOut.push_back(const_cast<Surface*>(secondSurface));
+            }
+        }
+    }
+}
 /**
  * Copy the given configuration to this configurtion.
  *

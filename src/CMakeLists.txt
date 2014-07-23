@@ -84,6 +84,11 @@ SET(CMAKE_VERBOSE_MAKEFILE TRUE CACHE BOOL "cause all build commands to be displ
 #
 SET (WORKBENCH_C11X FALSE)
 ##SET (WORKBENCH_C11X TRUE)
+IF ("$ENV{WORKBENCH_CONFIGURE_C11X}" STREQUAL "YES")
+   SET (WORKBENCH_C11X TRUE)
+   MESSAGE("Configuring Workbench build with C11X enabled.")
+ENDIF ("$ENV{WORKBENCH_CONFIGURE_C11X}" STREQUAL "YES")
+
 
 #
 # Set flags for C11 compiler
@@ -95,7 +100,7 @@ SET (GNU_11X_FLAGS "")
 SET (INTEL_11X_FLAGS "")
 IF (WORKBENCH_C11X)
     ADD_DEFINITIONS("-DWORKBENCH_HAVE_C11X")
-    SET (CLANG_11X_FLAGS "-std=c++11 -Wno-error=c++11-narrowing")
+    SET (CLANG_11X_FLAGS "-std=c++11 -stdlib=libc++ -Wno-error=c++11-narrowing")
     SET (GNU_11X_FLAGS "-std=c++11 -Wno-error=c++11-narrowing")
     SET (INTEL_11X_FLAGS "-std=c++11 -Wno-error=c++11-narrowing")
 ENDIF (WORKBENCH_C11X)
@@ -113,9 +118,19 @@ ENDIF (${CMAKE_CXX_COMPILER} MATCHES "^.*icpc$")
 #
 IF (${CMAKE_CXX_COMPILER} MATCHES "^.*clang\\+\\+.*")
     ADD_DEFINITIONS("-W -Wall -Werror=return-type -Werror=switch -Wunused-parameter")
+    #
+    # The clang compiler does not support OpenMP so it produces many warnings
+    # with "Unknown pragma ignored".  So, tell clang to ignore unknown pragmas
+    # so the message is not printed.
+    #
+    ADD_DEFINITIONS("-Wno-unknown-pragmas")
     SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CLANG_11X_FLAGS}")
     ##SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CLANG_11X_FLAGS} -W -Wall -Werror=return-type -Werror=switch -Wunused-parameter")
     ##SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CLANG_11X_FLAGS} -W -Wall -Werror=return-type -Werror=switch -Wunused-parameter" CACHE STRING "C++ compiler options" FORCE)
+
+    IF (WORKBENCH_C11X)
+        set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -std=c++11 -stdlib=libc++")
+    ENDIF (WORKBENCH_C11X)
 ENDIF (${CMAKE_CXX_COMPILER} MATCHES "^.*clang\\+\\+.*")
 
 
@@ -220,6 +235,29 @@ IF(WIN32)
 ENDIF(WIN32)
 
 #
+# Find FreeType
+#
+SET(FTGL_FONT_MODULE_FOR_LINKING "")
+
+FIND_PACKAGE(Freetype)
+IF (FREETYPE_FOUND)
+    SET (FTGL_FONT_MODULE_FOR_LINKING FtglFont)
+    MESSAGE("FreeType library found")
+    MESSAGE("   INCLUDES ${FREETYPE_INCLUDE_DIRS}")
+    MESSAGE("   INCLUDES_FT2_BUILD ${FREETYPE_INCLUDE_DIR_ft2build}")
+    MESSAGE("   INCLUDES_FT2 ${FREETYPE_INCLUDE_DIR_freetype2}")
+    MESSAGE("   LIBS ${FREETYPE_LIBRARIES}")
+
+    ADD_DEFINITIONS(-DHAVE_FREETYPE)
+ELSE (FREETYPE_FOUND)
+    SET (FREETYPE_LIBRARY "")
+    SET (FREETYPE_LIBRARIES "")
+    MESSAGE("FreeType library NOT found")
+    MESSAGE("    The environment variable FREETYPE_DIR can be set to the")
+    MESSAGE("    directory containing FreeType include and lib.")
+ENDIF (FREETYPE_FOUND)
+
+#
 # Fixes issue with XCode and newer version of CMake.
 # It prevents the ZERO_CHECK dependency from running
 # (which is very slow) every time a build is performed
@@ -284,7 +322,9 @@ ADD_SUBDIRECTORY ( Common )
 ADD_SUBDIRECTORY ( Xml )
 ADD_SUBDIRECTORY ( Scenes )
 ADD_SUBDIRECTORY ( OSMesaDummy )
-ADD_SUBDIRECTORY ( GlfFont )
+IF (FREETYPE_FOUND)
+    ADD_SUBDIRECTORY ( FtglFont )
+ENDIF (FREETYPE_FOUND)
 ADD_SUBDIRECTORY ( Charting )
 ADD_SUBDIRECTORY ( Palette )
 ADD_SUBDIRECTORY ( FilesBase )

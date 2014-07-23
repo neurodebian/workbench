@@ -233,7 +233,9 @@ GroupAndNameHierarchyModel::update(BorderFile* borderFile,
             
             const GiftiLabel* groupLabel = classLabelTable->getLabelBestMatching(theGroupName);
             if (groupLabel != NULL) {
-                groupItem->setIconColorRGBA(groupLabel->getColor());
+                float tempcolor[4];
+                groupLabel->getColor(tempcolor);
+                groupItem->setIconColorRGBA(tempcolor);
             }
             else {
                 groupItem->setIconColorRGBA(rgbaBlack);
@@ -247,7 +249,9 @@ GroupAndNameHierarchyModel::update(BorderFile* borderFile,
                                                                      ID_NOT_USED);
             const GiftiLabel* nameLabel = nameLabelTable->getLabelBestMatching(name);
             if (nameLabel != NULL) {
-                nameItem->setIconColorRGBA(nameLabel->getColor());
+                float tempcolor[4];
+                nameLabel->getColor(tempcolor);
+                nameItem->setIconColorRGBA(tempcolor);
             }
             else {
                 nameItem->setIconColorRGBA(rgbaBlack);
@@ -288,6 +292,12 @@ GroupAndNameHierarchyModel::update(LabelFile* labelFile,
     setName(labelFile->getFileNameNoPath());
 
     /*
+     * Names for missing group names or foci names.
+     */
+    const AString missingGroupName = "NoGroup";
+    const AString missingName = "NoName";
+    
+    /*
      * The label table
      */
     GiftiLabelTable* labelTable = labelFile->getLabelTable();
@@ -305,7 +315,11 @@ GroupAndNameHierarchyModel::update(LabelFile* labelFile,
         }
         else {
             for (int32_t i = 0; i < numGroups; i++) {
-                if (groups[i]->getName() != labelFile->getMapName(i)) {
+                AString mapName = labelFile->getMapName(i);
+                if (mapName.isEmpty()) {
+                    mapName = missingGroupName;
+                }
+                if (groups[i]->getName() != mapName) {
                     needToGenerateKeys = true;
                     break;
                 }
@@ -364,12 +378,6 @@ GroupAndNameHierarchyModel::update(LabelFile* labelFile,
         this->clear();
 
         /*
-         * Names for missing group names or foci names.
-         */
-        const AString missingGroupName = "NoGroup";
-        const AString missingName = "NoName";
-
-        /*
          * Update with labels from maps
          */
         const int32_t numMaps = labelFile->getNumberOfMaps();
@@ -408,7 +416,8 @@ GroupAndNameHierarchyModel::update(LabelFile* labelFile,
                     labelName = missingName;
                 }
 
-                const float* rgba = label->getColor();
+                float rgba[4];
+                label->getColor(rgba);
 
                 /*
                  * Adding focus to class
@@ -464,6 +473,12 @@ GroupAndNameHierarchyModel::update(CiftiMappableDataFile* ciftiMappableDataFile,
         return;
     }
     
+    /*
+     * Names for missing group names or foci names.
+     */
+    const AString missingGroupName = "NoGroup";
+    const AString missingName = "NoName";
+    
     bool needToGenerateKeys = forceUpdate;
     
     setName(ciftiMappableDataFile->getFileNameNoPath());
@@ -484,7 +499,11 @@ GroupAndNameHierarchyModel::update(CiftiMappableDataFile* ciftiMappableDataFile,
         }
         else {
             for (int32_t i = 0; i < numGroups; i++) {
-                if (groups[i]->getName() != ciftiMappableDataFile->getMapName(i)) {
+                AString mapName = ciftiMappableDataFile->getMapName(i);
+                if (mapName.isEmpty()) {
+                    mapName = missingGroupName;
+                }
+                if (groups[i]->getName() != mapName) {
                     needToGenerateKeys = true;
                     break;
                 }
@@ -559,12 +578,6 @@ GroupAndNameHierarchyModel::update(CiftiMappableDataFile* ciftiMappableDataFile,
         this->clear();
         
         /*
-         * Names for missing group names or foci names.
-         */
-        const AString missingGroupName = "NoGroup";
-        const AString missingName = "NoName";
-        
-        /*
          * Update with labels from maps
          */
         for (int32_t iMap = 0; iMap < numMaps; iMap++) {
@@ -607,7 +620,8 @@ GroupAndNameHierarchyModel::update(CiftiMappableDataFile* ciftiMappableDataFile,
                     labelName = missingName;
                 }
                 
-                const float* rgba = label->getColor();
+                float rgba[4];
+                label->getColor(rgba);
                 
                 /*
                  * Adding focus to class
@@ -663,6 +677,12 @@ GroupAndNameHierarchyModel::update(VolumeFile* volumeFile,
         return;
     }
     
+    /*
+     * Names for missing group names or foci names.
+     */
+    const AString missingGroupName = "NoGroup";
+    const AString missingName = "NoName";
+    
     bool needToGenerateKeys = forceUpdate;
     
     setName(volumeFile->getFileNameNoPath());
@@ -683,7 +703,11 @@ GroupAndNameHierarchyModel::update(VolumeFile* volumeFile,
         }
         else {
             for (int32_t i = 0; i < numGroups; i++) {
-                if (groups[i]->getName() != volumeFile->getMapName(i)) {
+                AString mapName = volumeFile->getMapName(i);
+                if (mapName.isEmpty()) {
+                    mapName = missingGroupName;
+                }
+                if (groups[i]->getName() != mapName) {
                     needToGenerateKeys = true;
                     break;
                 }
@@ -756,13 +780,7 @@ GroupAndNameHierarchyModel::update(VolumeFile* volumeFile,
          * Clear everything
          */
         this->clear();
-        
-        /*
-         * Names for missing group names or foci names.
-         */
-        const AString missingGroupName = "NoGroup";
-        const AString missingName = "NoName";
-        
+                
         /*
          * Update with labels from maps
          */
@@ -806,7 +824,8 @@ GroupAndNameHierarchyModel::update(VolumeFile* volumeFile,
                     labelName = missingName;
                 }
                 
-                const float* rgba = label->getColor();
+                float rgba[4];
+                label->getColor(rgba);
                 
                 /*
                  * Adding focus to class
@@ -925,7 +944,9 @@ GroupAndNameHierarchyModel::update(FociFile* fociFile,
             
             const GiftiLabel* groupLabel = classLabelTable->getLabelBestMatching(theGroupName);
             if (groupLabel != NULL) {
-                groupItem->setIconColorRGBA(groupLabel->getColor());
+                float rgba[4];
+                groupLabel->getColor(rgba);
+                groupItem->setIconColorRGBA(rgba);
             }
             else {
                 groupItem->setIconColorRGBA(rgbaBlack);
@@ -939,7 +960,9 @@ GroupAndNameHierarchyModel::update(FociFile* fociFile,
                                                                       ID_NOT_USED);
             const GiftiLabel* nameLabel = nameLabelTable->getLabelBestMatching(name);
             if (nameLabel != NULL) {
-                nameItem->setIconColorRGBA(nameLabel->getColor());
+                float rgba[4];
+                nameLabel->getColor(rgba);
+                nameItem->setIconColorRGBA(rgba);
             }
             else {
                 nameItem->setIconColorRGBA(rgbaBlack);

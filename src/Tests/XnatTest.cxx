@@ -21,7 +21,7 @@
 #include <vector>
 
 #include "XnatTest.h"
-#include "CiftiXnat.h"
+#include "CiftiFile.h"
 
 using namespace caret;
 using namespace std;
@@ -36,15 +36,20 @@ void XnatTest::execute()
     AString myUrl("");//test url goes here
     AString user("");//test auth goes here
     AString pass("");
-    CiftiXnat myXnat;
-    myXnat.setAuthentication(myUrl, user, pass);
-    myXnat.openURL(myUrl);
+    CiftiFile myXnat;
+    myXnat.openURL(myUrl, user, pass);
     vector<float> myData;
     myData.resize(myXnat.getNumberOfColumns());
     myXnat.getRow(myData.data(), 0);
-    bool success = myXnat.getRowFromNode(myData.data(), 528, StructureEnum::CORTEX_RIGHT);
-    if (!success)
+    if (myXnat.getCiftiXML().getMappingType(CiftiXML::ALONG_COLUMN) != CiftiMappingType::BRAIN_MODELS)
     {
-        setFailed("error getting row by node");
+        setFailed("opened file does not have brain models along column");
     }
+    const CiftiBrainModelsMap& myDenseMap = myXnat.getCiftiXML().getBrainModelsMap(CiftiXML::ALONG_COLUMN);
+    int64_t myRow = myDenseMap.getIndexForNode(547, StructureEnum::CORTEX_RIGHT);
+    if (myRow == -1)
+    {
+        setFailed("did not find specified node in specified structure");
+    }
+    myXnat.getRow(myData.data(), myRow);
 }

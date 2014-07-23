@@ -54,7 +54,11 @@ namespace caret {
     class BrainBrowserWindowToolBarChartAttributes;
     class BrainBrowserWindowToolBarChartType;
     class BrainBrowserWindowToolBarClipping;
+    class BrainBrowserWindowToolBarSlicePlane;
+    class BrainBrowserWindowToolBarSliceSelection;
     class BrainBrowserWindowToolBarSurfaceMontage;
+    class BrainBrowserWindowToolBarTab;
+    class BrainBrowserWindowToolBarVolumeMontage;
     class BrainBrowserWindow;
     class BrowserTabContent;
     class Model;
@@ -128,7 +132,7 @@ namespace caret {
         QWidget* createWholeBrainSurfaceOptionsWidget();
         QWidget* createVolumeIndicesWidget();
         QWidget* createModeWidget();
-        QWidget* createWindowWidget();
+        QWidget* createTabOptionsWidget();
         QWidget* createChartAxesWidget();
         QWidget* createChartAttributesWidget();
         QWidget* createChartTypeWidget();
@@ -143,7 +147,7 @@ namespace caret {
         void updateWholeBrainSurfaceOptionsWidget(BrowserTabContent* browserTabContent);
         void updateVolumeIndicesWidget(BrowserTabContent* browserTabContent);
         void updateModeWidget(BrowserTabContent* browserTabContent);
-        void updateWindowWidget(BrowserTabContent* browserTabContent);
+        void updateTabOptionsWidget(BrowserTabContent* browserTabContent);
         void updateSingleSurfaceOptionsWidget(BrowserTabContent* browserTabContent);
         void updateSurfaceMontageOptionsWidget(BrowserTabContent* browserTabContent);
         void updateChartAxesWidget(BrowserTabContent* browserTabContent);
@@ -177,12 +181,8 @@ namespace caret {
         WuQWidgetObjectGroup* viewWidgetGroup;
         WuQWidgetObjectGroup* orientationWidgetGroup;
         WuQWidgetObjectGroup* wholeBrainSurfaceOptionsWidgetGroup;
-        WuQWidgetObjectGroup* volumeIndicesWidgetGroup;
         WuQWidgetObjectGroup* modeWidgetGroup;
-        WuQWidgetObjectGroup* windowWidgetGroup;
         WuQWidgetObjectGroup* singleSurfaceSelectionWidgetGroup;
-        WuQWidgetObjectGroup* volumeMontageWidgetGroup;
-        WuQWidgetObjectGroup* volumePlaneWidgetGroup;
         
         QWidget* fullToolBarWidget;
         QWidget* m_toolbarWidget;
@@ -228,6 +228,8 @@ namespace caret {
         void renameTab();
         
         void updateToolBar();
+        
+        void updateToolBarComponents(BrowserTabContent* browserTabContent);
         
         void showHideToolBar(bool showIt);
         
@@ -330,42 +332,6 @@ namespace caret {
         void wholeBrainSurfaceCerebellumToolButtonTriggered(bool checked);
     
     private:
-        QCheckBox* volumeIndicesParasagittalCheckBox;
-        QCheckBox* volumeIndicesCoronalCheckBox;
-        QCheckBox* volumeIndicesAxialCheckBox;
-        QSpinBox*  volumeIndicesParasagittalSpinBox;
-        QSpinBox*  volumeIndicesCoronalSpinBox;
-        QSpinBox*  volumeIndicesAxialSpinBox;
-        QDoubleSpinBox* volumeIndicesXcoordSpinBox;
-        QDoubleSpinBox* volumeIndicesYcoordSpinBox;
-        QDoubleSpinBox* volumeIndicesZcoordSpinBox;
-        
-        void readVolumeSliceCoordinatesAndUpdateSliceIndices();
-        void readVolumeSliceIndicesAndUpdateSliceCoordinates();
-        void updateSliceIndicesAndCoordinatesRanges();
-        
-    private slots:
-        void volumeIndicesOriginActionTriggered();
-        void volumeIndicesParasagittalCheckBoxStateChanged(int state);
-        void volumeIndicesCoronalCheckBoxStateChanged(int state);
-        void volumeIndicesAxialCheckBoxStateChanged(int state);
-        void volumeIndicesParasagittalSpinBoxValueChanged(int i);
-        void volumeIndicesCoronalSpinBoxValueChanged(int i);
-        void volumeIndicesAxialSpinBoxValueChanged(int i);
-        void volumeIndicesXcoordSpinBoxValueChanged(double d);
-        void volumeIndicesYcoordSpinBoxValueChanged(double d);
-        void volumeIndicesZcoordSpinBoxValueChanged(double d);
-        
-    private:
-        
-        EnumComboBoxTemplate* m_yokingGroupComboBox;
-        WuQWidgetObjectGroup* windowYokingWidgetGroup;
-
-    
-    private slots:
-        void windowYokeToGroupComboBoxIndexChanged();
-        
-    private:
         StructureSurfaceSelectionControl* surfaceSurfaceSelectionControl;
         
     private slots:
@@ -379,35 +345,10 @@ namespace caret {
         BrainBrowserWindowToolBarSurfaceMontage* m_surfaceMontageToolBarComponent;
         
         BrainBrowserWindowToolBarClipping* m_clippingToolBarComponent;
-        
-    private:
-        QAction* volumePlaneParasagittalToolButtonAction;
-        QAction* volumePlaneCoronalToolButtonAction;
-        QAction* volumePlaneAxialToolButtonAction;
-        QAction* volumePlaneAllToolButtonAction;
-        QAction* volumePlaneViewOrthogonalToolButtonAction;
-        QAction* volumePlaneViewObliqueToolButtonAction;
-        QAction* volumePlaneViewMontageToolButtonAction;
-        QAction* volumePlaneResetToolButtonAction;
-        
-        QActionGroup* volumePlaneActionGroup;
-        QActionGroup* volumePlaneViewActionGroup;
-        
-    private slots:
-        void volumePlaneActionGroupTriggered(QAction*);
-        void volumePlaneViewActionGroupTriggered(QAction*);
-        void volumePlaneResetToolButtonTriggered(bool checked);
-        
-        
-    private:
-        QSpinBox* montageRowsSpinBox;
-        QSpinBox* montageColumnsSpinBox;
-        QSpinBox* montageSpacingSpinBox;
-        
-    private slots:
-        void montageRowsSpinBoxValueChanged(int i);
-        void montageColumnsSpinBoxValueChanged(int i);
-        void montageSpacingSpinBoxValueChanged(int i);
+        BrainBrowserWindowToolBarSlicePlane* m_slicePlaneComponent;
+        BrainBrowserWindowToolBarSliceSelection* m_sliceSelectionComponent;
+        BrainBrowserWindowToolBarVolumeMontage* m_volumeMontageComponent;
+        BrainBrowserWindowToolBarTab* m_tabOptionsComponent;
         
     private slots:
         void modeInputModeActionTriggered(QAction*);
@@ -435,6 +376,10 @@ namespace caret {
         friend class BrainBrowserWindowToolBarClipping;
         friend class BrainBrowserWindowToolBarComponent;
         friend class BrainBrowserWindowToolBarSurfaceMontage;
+        friend class BrainBrowserWindowToolBarSlicePlane;
+        friend class BrainBrowserWindowToolBarSliceSelection;
+        friend class BrainBrowserWindowToolBarTab;
+        friend class BrainBrowserWindowToolBarVolumeMontage;
         
         /**
          * When a tab is selected in Tile Tabs viewing,

@@ -43,7 +43,7 @@ using namespace caret;
 /**
  * Constructor.
  */
-SurfaceMontageConfigurationFlatMaps::SurfaceMontageConfigurationFlatMaps()
+SurfaceMontageConfigurationFlatMaps::SurfaceMontageConfigurationFlatMaps(const int32_t tabIndex)
 : SurfaceMontageConfigurationAbstract(SurfaceMontageConfigurationTypeEnum::FLAT_CONFIGURATION,
                                       SUPPORTS_LAYOUT_ORIENTATION_NO)
 {
@@ -83,7 +83,9 @@ SurfaceMontageConfigurationFlatMaps::SurfaceMontageConfigurationFlatMaps()
     supportedStructures.push_back(StructureEnum::CEREBELLUM);
     supportedStructures.push_back(StructureEnum::CORTEX_LEFT);
     supportedStructures.push_back(StructureEnum::CORTEX_RIGHT);
-    setupOverlaySet(supportedStructures);
+    setupOverlaySet("Flat Montage",
+                    tabIndex,
+                    supportedStructures);
 }
 
 /**
@@ -374,6 +376,40 @@ SurfaceMontageConfigurationFlatMaps::getDescriptionOfContent(PlainTextStringBuil
         }
     }
 }
+
+/**
+ * Get all surfaces displayed in this configuration.
+ *
+ * @param surfaceOut
+ *    Will contain all displayed surfaces upon exit.
+ */
+void
+SurfaceMontageConfigurationFlatMaps::getDisplayedSurfaces(std::vector<Surface*>& surfacesOut) const
+{
+    surfacesOut.clear();
+    
+    if (isLeftEnabled()) {
+        const Surface* firstLeftSurface = getLeftSurfaceSelectionModel()->getSurface();
+        if (firstLeftSurface != NULL) {
+            surfacesOut.push_back(const_cast<Surface*>(firstLeftSurface));
+        }
+    }
+    
+    if (isRightEnabled()) {
+        const Surface* firstRightSurface = getRightSurfaceSelectionModel()->getSurface();
+        if (firstRightSurface != NULL) {
+            surfacesOut.push_back(const_cast<Surface*>(firstRightSurface));
+        }
+    }
+    
+    if (isCerebellumEnabled()) {
+        const Surface* cerebellumSurface = getCerebellumSurfaceSelectionModel()->getSurface();
+        if (cerebellumSurface != NULL) {
+            surfacesOut.push_back(const_cast<Surface*>(cerebellumSurface));
+        }
+    }
+}
+
 
 /**
  * Copy the given configuration to this configurtion.

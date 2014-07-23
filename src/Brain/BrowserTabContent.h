@@ -30,7 +30,8 @@
 #include "Plane.h"
 #include "ProjectionViewTypeEnum.h"
 #include "SceneableInterface.h"
-#include "VolumeSliceViewModeEnum.h"
+#include "VolumeSliceDrawingTypeEnum.h"
+#include "VolumeSliceProjectionTypeEnum.h"
 #include "VolumeSliceViewPlaneEnum.h"
 #include "YokingGroupEnum.h"
 
@@ -122,6 +123,8 @@ namespace caret {
         bool isCerebellumDisplayed() const;
         
         bool isChartDisplayed() const;
+        
+        bool isFlatSurfaceDisplayed() const;
         
         bool isVolumeSlicesDisplayed() const;
         
@@ -244,9 +247,13 @@ namespace caret {
         
         void setSliceViewPlane(VolumeSliceViewPlaneEnum::Enum sliceAxisMode);
         
-        VolumeSliceViewModeEnum::Enum getSliceViewMode() const;
+        VolumeSliceDrawingTypeEnum::Enum getSliceDrawingType() const;
         
-        void setSliceViewMode(VolumeSliceViewModeEnum::Enum sliceViewMode);
+        void setSliceDrawingType(const VolumeSliceDrawingTypeEnum::Enum sliceDrawingType);
+        
+        VolumeSliceProjectionTypeEnum::Enum getSliceProjectionType() const;
+        
+        void setSliceProjectionType(const VolumeSliceProjectionTypeEnum::Enum sliceProjectionType);
         
         int32_t getMontageNumberOfColumns() const;
         
@@ -307,6 +314,10 @@ namespace caret {
         
         void selectSlicesAtCoordinate(const float xyz[3]);
         
+        bool isIdentificationUpdatesVolumeSlices() const;
+        
+        void setIdentificationUpdatesVolumeSlices(const bool status);
+
         void reset();
 
         void updateYokedBrowserTabs();
@@ -351,6 +362,10 @@ namespace caret {
                                                                   const int32_t mousePressX,
                                                                   const int32_t mousePressY,
                                                                               int sliceViewportOut[4]) const;
+        
+        ViewingTransformations* getViewingTransformation();
+        
+        const ViewingTransformations* getViewingTransformation() const;
         
         /** Number of this tab */
         int32_t m_tabNumber;
@@ -412,6 +427,9 @@ namespace caret {
         /** Transformation for surface/all viewing */
         ViewingTransformations* m_viewingTransformation;
         
+        /** Transformation for surface/all viewing */
+        ViewingTransformations* m_flatSurfaceViewingTransformation;
+        
         /** Transformation for volume slices viewing */
         ViewingTransformationsVolume* m_volumeSliceViewingTransformation;
 
@@ -420,6 +438,12 @@ namespace caret {
         
         /** Whole brain surface settings. */
         WholeBrainSurfaceSettings* m_wholeBrainSurfaceSettings;
+        
+        /** 
+         * If true, selected volume slices in tab move to location
+         *  of the identification operation.
+         */
+        bool m_identificationUpdatesVolumeSlices;
         
         /** Contains all active browser tab content instances */
         static std::set<BrowserTabContent*> s_allBrowserTabContent;

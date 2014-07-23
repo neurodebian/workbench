@@ -156,13 +156,8 @@ VolumeFileVoxelColorizer::assignVoxelColorsForMap(const int32_t mapIndex,
             break;
         case SubvolumeAttributes::LABEL:
             if (m_voxelCountPerMap > 0) {
-                std::vector<int32_t> labelIndices(m_voxelCountPerMap);
-                for (int32_t i = 0; i < m_voxelCountPerMap; i++) {
-                    labelIndices[i] = static_cast<int32_t>(mapDataPointer[i]);
-                }
-                
                 NodeAndVoxelColoring::colorIndicesWithLabelTable(m_volumeFile->getMapLabelTable(mapIndex),
-                                                                 &labelIndices[0],
+                                                                 &mapDataPointer[0],
                                                                  m_voxelCountPerMap,
                                                                  m_mapRGBA[mapIndex]);
                 m_mapColoringValid[mapIndex] = true;
@@ -185,31 +180,31 @@ VolumeFileVoxelColorizer::assignVoxelColorsForMap(const int32_t mapIndex,
                    + " milliseconds");
 }
 
-/**
- * Assign voxel coloring for a map in the background.  This method will
- * launch the assignment of voxel coloring in a separate thread and then
- * return.
- *
- * @param mapIndex
- *     Index of map.
- * @param palette
- *     Palette used for scalar color assignment.
- * @param thresholdVolume
- *     Volume that contains thresholding (if NULL indicates no thresholding).
- * @param thresholdVolumeMapIndex
- *     Index of map in thresholding volume.
- */
-void
-VolumeFileVoxelColorizer::assignVoxelColorsForMapInBackground(const int32_t mapIndex,
-                                                              const Palette* palette,
-                                                              const VolumeFile* thresholdVolume,
-                                                              const int32_t thresholdVolumeMapIndex)
-{
-    assignVoxelColorsForMap(mapIndex,
-                            palette,
-                            thresholdVolume,
-                            thresholdVolumeMapIndex);
-}
+///**
+// * Assign voxel coloring for a map in the background.  This method will
+// * launch the assignment of voxel coloring in a separate thread and then
+// * return.
+// *
+// * @param mapIndex
+// *     Index of map.
+// * @param palette
+// *     Palette used for scalar color assignment.
+// * @param thresholdVolume
+// *     Volume that contains thresholding (if NULL indicates no thresholding).
+// * @param thresholdVolumeMapIndex
+// *     Index of map in thresholding volume.
+// */
+//void
+//VolumeFileVoxelColorizer::assignVoxelColorsForMapInBackground(const int32_t mapIndex,
+//                                                              const Palette* palette,
+//                                                              const VolumeFile* thresholdVolume,
+//                                                              const int32_t thresholdVolumeMapIndex)
+//{
+//    assignVoxelColorsForMap(mapIndex,
+//                            palette,
+//                            thresholdVolume,
+//                            thresholdVolumeMapIndex);
+//}
 
 /**
  * Invalidate the RGBA coloring for all maps.

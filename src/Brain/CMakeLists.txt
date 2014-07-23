@@ -66,8 +66,8 @@ BrainOpenGLVolumeSliceDrawing.h
 BrainStructure.h
 BrainStructureNodeAttributes.h
 BrowserTabContent.h
+CaretDataFileSelectionModel.h
 CaretOpenGLInclude.h
-ChartableMatrixFileSelectionModel.h
 ChartingDataManager.h
 CiftiConnectivityMatrixDataFileManager.h
 CiftiFiberTrajectoryManager.h
@@ -79,12 +79,16 @@ DisplayPropertiesFoci.h
 DisplayPropertiesLabels.h
 DisplayPropertiesSurface.h
 DisplayPropertiesVolume.h
+DummyFontTextRenderer.h
 EventBrainStructureGetAll.h
 EventBrowserTabDelete.h
 EventBrowserTabGet.h
 EventBrowserTabGetAll.h
 EventBrowserTabNew.h
+EventCaretMappableDataFileMapsViewedInOverlays.h
 EventCaretMappableDataFilesGet.h
+EventDataFileAdd.h
+EventDataFileDelete.h
 EventDataFileRead.h
 EventDataFileReload.h
 EventIdentificationHighlightLocation.h
@@ -103,14 +107,13 @@ FiberOrientationSamplesLoader.h
 FiberOrientationSamplesVector.h
 FiberOrientationSymbolTypeEnum.h
 FociDrawingTypeEnum.h
-GlfFontTextRenderer.h
+FtglFontTextRenderer.h
 IdentificationManager.h
 IdentificationStringBuilder.h
 IdentificationTextGenerator.h
 IdentificationWithColor.h
 IdentifiedItem.h
 IdentifiedItemNode.h
-LabelDrawingTypeEnum.h
 Model.h
 ModelChart.h
 ModelSurface.h
@@ -152,6 +155,8 @@ SurfaceSelectionModel.h
 ViewingTransformations.h
 ViewingTransformationsCerebellum.h
 ViewingTransformationsVolume.h
+VolumeSliceDrawingTypeEnum.h
+VolumeSliceProjectionTypeEnum.h
 VolumeSliceSettings.h
 VolumeSliceViewModeEnum.h
 VolumeSurfaceOutlineColorOrTabModel.h
@@ -159,7 +164,6 @@ VolumeSurfaceOutlineModel.h
 VolumeSurfaceOutlineSetModel.h
 WholeBrainSurfaceSettings.h
 WholeBrainVoxelDrawingMode.h
-YokingGroupEnum.h
 
 BorderDrawingTypeEnum.cxx
 Brain.cxx
@@ -178,7 +182,7 @@ BrainOpenGLVolumeSliceDrawing.cxx
 BrainStructure.cxx
 BrainStructureNodeAttributes.cxx
 BrowserTabContent.cxx
-ChartableMatrixFileSelectionModel.cxx
+CaretDataFileSelectionModel.cxx
 ChartingDataManager.cxx
 CiftiConnectivityMatrixDataFileManager.cxx
 CiftiFiberTrajectoryManager.cxx
@@ -190,12 +194,16 @@ DisplayPropertiesFoci.cxx
 DisplayPropertiesLabels.cxx
 DisplayPropertiesSurface.cxx
 DisplayPropertiesVolume.cxx
+DummyFontTextRenderer.cxx
 EventBrainStructureGetAll.cxx
 EventBrowserTabDelete.cxx
 EventBrowserTabGet.cxx
 EventBrowserTabGetAll.cxx
 EventBrowserTabNew.cxx
+EventCaretMappableDataFileMapsViewedInOverlays.cxx
 EventCaretMappableDataFilesGet.cxx
+EventDataFileAdd.cxx
+EventDataFileDelete.cxx
 EventDataFileRead.cxx
 EventDataFileReload.cxx
 EventIdentificationHighlightLocation.cxx
@@ -213,14 +221,13 @@ FeatureColoringTypeEnum.cxx
 FiberOrientationSamplesLoader.cxx
 FiberOrientationSymbolTypeEnum.cxx
 FociDrawingTypeEnum.cxx
-GlfFontTextRenderer.cxx
+FtglFontTextRenderer.cxx
 IdentificationManager.cxx
 IdentificationStringBuilder.cxx
 IdentificationTextGenerator.cxx
 IdentificationWithColor.cxx
 IdentifiedItem.cxx
 IdentifiedItemNode.cxx
-LabelDrawingTypeEnum.cxx
 Model.cxx
 ModelChart.cxx
 ModelSurface.cxx
@@ -262,6 +269,8 @@ SurfaceSelectionModel.cxx
 ViewingTransformations.cxx
 ViewingTransformationsCerebellum.cxx
 ViewingTransformationsVolume.cxx
+VolumeSliceDrawingTypeEnum.cxx
+VolumeSliceProjectionTypeEnum.cxx
 VolumeSliceSettings.cxx
 VolumeSliceViewModeEnum.cxx
 VolumeSurfaceOutlineColorOrTabModel.cxx
@@ -269,7 +278,6 @@ VolumeSurfaceOutlineModel.cxx
 VolumeSurfaceOutlineSetModel.cxx
 WholeBrainSurfaceSettings.cxx
 WholeBrainVoxelDrawingMode.cxx
-YokingGroupEnum.cxx
 ) 
 
 #
@@ -278,7 +286,6 @@ YokingGroupEnum.cxx
 INCLUDE_DIRECTORIES(
 ${CMAKE_SOURCE_DIR}/Brain
 ${CMAKE_SOURCE_DIR}/Charting
-${CMAKE_SOURCE_DIR}/GlfFont
 ${CMAKE_SOURCE_DIR}/Cifti
 ${CMAKE_SOURCE_DIR}/FilesBase
 ${CMAKE_SOURCE_DIR}/Files
@@ -289,3 +296,12 @@ ${CMAKE_SOURCE_DIR}/Scenes
 ${CMAKE_SOURCE_DIR}/Xml
 ${CMAKE_SOURCE_DIR}/Common
 )
+
+IF (FREETYPE_FOUND)
+INCLUDE_DIRECTORIES(
+   ${CMAKE_SOURCE_DIR}/FtglFont
+   ${CMAKE_SOURCE_DIR}/FtglFont/FTGL
+   ${FREETYPE_INCLUDE_DIR_ft2build}
+   ${FREETYPE_INCLUDE_DIR_freetype2}
+)
+ENDIF (FREETYPE_FOUND)

@@ -18,15 +18,17 @@
  */
 /*LICENSE_END*/
 
+#include <QFile>
+
 #include <algorithm>
 #include <sstream>
 
+#include "AStringNaturalComparison.h"
 #include "CaretAssert.h"
 #include "CaretLogger.h"
 #include "GiftiLabel.h"
 #include "GiftiLabelTable.h"
 #include "GiftiXmlElements.h"
-#include "NameIndexSort.h"
 #include "StringTableModel.h"
 #include "XmlWriter.h"
 
@@ -930,28 +932,28 @@ GiftiLabelTable::setLabelColor(
 std::vector<int32_t>
 GiftiLabelTable::getLabelKeysSortedByName() const
 {
-    NameIndexSort nameIndexSort;
+    /*
+     * Use map to sort by name
+     * If AStringNaturalComparison crashes, temporarily remove
+     * as the third template parameter.
+     */
+    std::map<AString, int32_t, AStringNaturalComparison> nameToKeyMap;
     
-    std::set<int32_t> keys = this->getKeys();
-    for (std::set<int32_t>::iterator iter = keys.begin();
-         iter != keys.end();
+    for (LABELS_MAP_CONST_ITERATOR iter = this->labelsMap.begin();
+         iter != this->labelsMap.end();
          iter++) {
-        const int32_t key = *iter;
-        const GiftiLabel* gl = this->getLabel(key);
-        if (gl != NULL) {
-            nameIndexSort.add(key,
-                              gl->getName());
-        }
+        nameToKeyMap.insert(std::make_pair(iter->second->getName(),
+                                           iter->first));
     }
     
-    nameIndexSort.sortByNameCaseSensitive();
-    
-    std::vector<int32_t> sortedKeys;
-    const int64_t numItems = nameIndexSort.getNumberOfItems();
-    for (int64_t i = 0; i < numItems; i++) {
-        sortedKeys.push_back(nameIndexSort.getSortedIndex(i));
+    std::vector<int32_t> keysSortedByName;
+    for (std::map<AString, int32_t, AStringNaturalComparison>::iterator iter = nameToKeyMap.begin();
+         iter != nameToKeyMap.end();
+         iter++) {
+        keysSortedByName.push_back(iter->second);
     }
-    return sortedKeys;
+    
+    return keysSortedByName;
 }
 
 /**
@@ -1198,7 +1200,8 @@ GiftiLabelTable::writeAsXML(XmlWriter& xmlWriter) throw (GiftiException)
                 attributes.addAttribute(GiftiXmlElements::ATTRIBUTE_LABEL_KEY,
                                         key);
                 
-                float* rgba = label->getColor();
+                float rgba[4];
+                label->getColor(rgba);
                 attributes.addAttribute(GiftiXmlElements::ATTRIBUTE_LABEL_RED,
                                         rgba[0]);
                 attributes.addAttribute(GiftiXmlElements::ATTRIBUTE_LABEL_GREEN,
@@ -1207,7 +1210,6 @@ GiftiLabelTable::writeAsXML(XmlWriter& xmlWriter) throw (GiftiException)
                                         rgba[2]);
                 attributes.addAttribute(GiftiXmlElements::ATTRIBUTE_LABEL_ALPHA,
                                         rgba[3]);
-                delete[] rgba;
                 
                 xmlWriter.writeElementCData(GiftiXmlElements::TAG_LABEL,
                                             attributes, label->getName());
@@ -1248,7 +1250,8 @@ GiftiLabelTable::writeAsXML(QXmlStreamWriter& xmlWriter) const
                 xmlWriter.writeAttribute(GiftiXmlElements::ATTRIBUTE_LABEL_KEY,
                                         AString::number(key));
                 
-                float* rgba = label->getColor();
+                float rgba[4];
+                label->getColor(rgba);
                 xmlWriter.writeAttribute(GiftiXmlElements::ATTRIBUTE_LABEL_RED,
                                         AString::number(rgba[0]));
                 xmlWriter.writeAttribute(GiftiXmlElements::ATTRIBUTE_LABEL_GREEN,
@@ -1259,7 +1262,6 @@ GiftiLabelTable::writeAsXML(QXmlStreamWriter& xmlWriter) const
                                         AString::number(rgba[3]));
                 xmlWriter.writeCharacters(label->getName());
                 xmlWriter.writeEndElement();
-                delete[] rgba;
             }
         }
         
@@ -1610,3 +1612,71 @@ GiftiLabelTable::issueLabelKeyZeroWarning(const AString& name) const
                         + "\".  This label is typically \"???\" or \"unknown\".");
     }
 }
+
+/**
+ * Export the content of the GIFTI Label Table to a Caret5 Color File.
+ */
+void
+GiftiLabelTable::exportToCaret5ColorFile(const AString& filename) const throw (GiftiException)
+{
+    if (filename.isEmpty()) {
+        throw GiftiException("Missing filename for export of label table to caret5 color file format.");
+    }
+    
+    QFile file(filename);
+    if ( ! file.open(QFile::WriteOnly)) {
+        const AString msg = ("Unable to open "
+                             + filename
+                             + " for export of label table to caret5 color file format.\n"
+                             + file.errorString());
+        throw GiftiException(msg);
+    }
+    
+    QXmlStreamWriter xmlWriter(&file);
+    xmlWriter.setAutoFormatting(true);
+    xmlWriter.writeStartDocument("1.0");
+    xmlWriter.writeStartElement("Border_Color_File");
+    
+    xmlWriter.writeStartElement("FileHeader");
+    xmlWriter.writeStartElement("Element");
+    xmlWriter.writeTextElement("comment",
+                               "Exported from Caret7/Workbench");
+    xmlWriter.writeEndElement();
+    xmlWriter.writeEndElement();
+    
+    std::set<int32_t> keys = this->getKeys();
+    for (std::set<int32_t>::const_iterator iter = keys.begin();
+         iter != keys.end();
+         iter++) {
+        int key = *iter;
+        const GiftiLabel* label = this->getLabel(key);
+        
+        if (label != NULL) {
+            xmlWriter.writeStartElement("Color");
+            xmlWriter.writeTextElement("name", label->getName());
+
+            const int32_t red   = static_cast<int32_t>(label->getRed() * 255.0);
+            const int32_t green = static_cast<int32_t>(label->getGreen() * 255.0);
+            const int32_t blue  = static_cast<int32_t>(label->getBlue() * 255.0);
+            const int32_t alpha = static_cast<int32_t>(label->getAlpha() * 255.0);
+            
+            xmlWriter.writeTextElement("red", AString::number(red));
+            xmlWriter.writeTextElement("green", AString::number(green));
+            xmlWriter.writeTextElement("blue", AString::number(blue));
+            xmlWriter.writeTextElement("alpha", AString::number(alpha));
+            
+            xmlWriter.writeTextElement("pointSize", "1.5");
+            xmlWriter.writeTextElement("lineSize", "1.0");
+            xmlWriter.writeTextElement("symbol", "POINT");
+            xmlWriter.writeTextElement("sumscolorid", "");
+            xmlWriter.writeEndElement();
+        }
+    }
+    
+    xmlWriter.writeEndElement();
+    xmlWriter.writeEndDocument();
+    
+    file.close();
+}
+
+
