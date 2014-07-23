@@ -1,4 +1,10 @@
-connectome-workbench (0.85+git87-gce714a3-1) neurodebian; urgency=low
+connectome-workbench (0.85+git348-g3893c53-1) neurodebian; urgency=medium
+
+  * New upstream snapshot from v0.85-348-g3893c53
+
+ -- Yaroslav Halchenko <debian@onerussian.com>  Wed, 23 Jul 2014 16:58:34 -0400
+
+connectome-workbench (0.85+git87-gce714a3-1) UNRELEASED; urgency=low
 
   * Fresh upstream snapshot
     - renamed conflicting generic 'workbench' binary to 'wb_view' (thanks!)
