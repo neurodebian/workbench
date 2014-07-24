@@ -12,6 +12,7 @@ Build-Depends: debhelper (>= 9),
 			   libqt4-opengl-dev | libqt4-dev (<< 4.4.0),
 			   libglib2.0-dev,
 			   xauth, xvfb,
+               libftgl-dev,
 Standards-Version: 3.9.6
 Homepage: http://www.nitrc.org/projects/workbench/
 Vcs-Git: git://github.com/neurodebian/workbench -b debian

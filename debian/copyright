@@ -40,9 +40,11 @@ Copyright: 2014 Washington University School of Medicine
 License: GPL-2+ and PNPOLY-BSD-3-Clause
 
 Files: src/FtglFont
-Copyright: 2001-2004  Henry Maddocks <henryj@paradise.net.nz>
-           2008  Sam Hocevar <sam@zoy.org>
-           2008  Éric Beets <ericbeets@free.fr>
+Copyright: 2001-2004 Henry Maddocks <henryj@paradise.net.nz>
+           2008 Sam Hocevar <sam@zoy.org>
+           2008 Éric Beets <ericbeets@free.fr>
+           2008 Sean Morrison <learner@brlcad.org>
+           2008 Daniel Remenak <dtremenak@users.sourceforge.net>
 License: Expat
 Comment: FTGL sources were kept, but build system is patched to use system-wide version of the library
 

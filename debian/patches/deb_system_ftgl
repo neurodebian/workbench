@@ -1,0 +1,48 @@
+--- a/src/CMakeLists.txt
++++ b/src/CMakeLists.txt
+@@ -241,7 +241,7 @@ SET(FTGL_FONT_MODULE_FOR_LINKING "")
+ 
+ FIND_PACKAGE(Freetype)
+ IF (FREETYPE_FOUND)
+-    SET (FTGL_FONT_MODULE_FOR_LINKING FtglFont)
++    SET (FTGL_FONT_MODULE_FOR_LINKING ftgl)
+     MESSAGE("FreeType library found")
+     MESSAGE("   INCLUDES ${FREETYPE_INCLUDE_DIRS}")
+     MESSAGE("   INCLUDES_FT2_BUILD ${FREETYPE_INCLUDE_DIR_ft2build}")
+@@ -323,7 +323,8 @@ ADD_SUBDIRECTORY ( Xml )
+ ADD_SUBDIRECTORY ( Scenes )
+ ADD_SUBDIRECTORY ( OSMesaDummy )
+ IF (FREETYPE_FOUND)
+-    ADD_SUBDIRECTORY ( FtglFont )
++    # yoh: Use system-installed libftgl
++    #ADD_SUBDIRECTORY ( FtglFont )
+ ENDIF (FREETYPE_FOUND)
+ ADD_SUBDIRECTORY ( Charting )
+ ADD_SUBDIRECTORY ( Palette )
+--- a/src/Brain/CMakeLists.txt
++++ b/src/Brain/CMakeLists.txt
+@@ -299,8 +299,10 @@ ${CMAKE_SOURCE_DIR}/Common
+ 
+ IF (FREETYPE_FOUND)
+ INCLUDE_DIRECTORIES(
+-   ${CMAKE_SOURCE_DIR}/FtglFont
+-   ${CMAKE_SOURCE_DIR}/FtglFont/FTGL
++   # yoh: use system-installed version of the library on Debian builds
++   /usr/include/FTGL
++   #${CMAKE_SOURCE_DIR}/FtglFont
++   #${CMAKE_SOURCE_DIR}/FtglFont/FTGL
+    ${FREETYPE_INCLUDE_DIR_ft2build}
+    ${FREETYPE_INCLUDE_DIR_freetype2}
+ )
+--- a/src/Brain/FtglFontTextRenderer.cxx
++++ b/src/Brain/FtglFontTextRenderer.cxx
+@@ -70,7 +70,8 @@
+ #include "CaretOpenGLInclude.h"
+ 
+ #ifdef HAVE_FREETYPE
+-#include <FtglConfig.h>
++/* yoh: disabling use of the original FTGL configuration file
++ #include <FtglConfig.h> */
+ #include <FTGL/ftgl.h>
+ using namespace FTGL;
+ #endif // HAVE_FREETYPE

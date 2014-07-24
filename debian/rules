@@ -26,11 +26,14 @@ export DH_VERBOSE=1
 	dh $@ --parallel --sourcedirectory=src
 
 override_dh_clean:
-	# nice upstream maintains "proper" copyright file for us
 	cat src/debian/copyright debian/copyright.debian >| debian/copyright
+	# Bring shipped version back
+	[ -e src/FtglFont.aside ] && mv src/FtglFont.aside src/FtglFont || :
 	dh_clean
 
 override_dh_auto_configure:
+	# Just to make sure we are not using shipped version
+	[ -e src/FtglFont ] && mv src/FtglFont src/FtglFont.aside || [ -e src/FtglFont.aside ]
 	OSMESA_DIR=/usr \
      dh_auto_configure -- \
 		-DCMAKE_SKIP_RPATH:BOOL=OFF
