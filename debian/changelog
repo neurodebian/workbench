@@ -1,8 +1,8 @@
-connectome-workbench (0.85+git348-g3893c53-1) neurodebian; urgency=medium
+connectome-workbench (0.85+git361-gb605a57-1) neurodebian; urgency=medium
 
-  * New upstream snapshot from v0.85-348-g3893c53
+  * New upstream snapshot from v0.85-361-gb605a57
 
- -- Yaroslav Halchenko <debian@onerussian.com>  Wed, 23 Jul 2014 16:58:34 -0400
+ -- Yaroslav Halchenko <debian@onerussian.com>  Fri, 25 Jul 2014 13:58:19 -0400
 
 connectome-workbench (0.85+git87-gce714a3-1) UNRELEASED; urgency=low
 
