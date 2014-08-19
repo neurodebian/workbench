@@ -50,8 +50,9 @@ namespace caret {
     class ImageFile;
     class ImageCaptureDialog;
     class InformationDisplayDialog;
-    class MapSettingsEditorDialog;
+    class OverlaySettingsEditorDialog;
     class Model;
+    class PaletteColorMappingEditorDialog;
     class PreferencesDialog;
     class Scene;
     class SceneDialog;
@@ -150,7 +151,8 @@ namespace caret {
         
         AString getNameOfDataFileToOpenAfterStartup() const;
 
-        void processIdentification(SelectionManager* selectionManager,
+        void processIdentification(const int32_t tabIndex,
+                                   SelectionManager* selectionManager,
                                    QWidget* parentWidget);
         
     public slots:
@@ -188,7 +190,7 @@ namespace caret {
         
         void addNonModalDialog(QWidget* dialog);
         
-        void removeNonModalDialog(QWidget* dialog);
+        void addParentLessNonModalDialog(QWidget* dialog);
         
         /** One instance of the GuiManager */
         static GuiManager* singletonGuiManager;
@@ -209,8 +211,11 @@ namespace caret {
         /* Performs OpenGL drawing commands */
         //BrainOpenGL* brainOpenGL;
         
-        /* Editor for map settings. */
-        std::set<MapSettingsEditorDialog*> m_mappingSettingsEditors;
+        /* Editor for overlay settings. */
+        std::set<OverlaySettingsEditorDialog*> m_overlaySettingsEditors;
+        
+        /** Editor for palette color mapping editing */
+        PaletteColorMappingEditorDialog* m_paletteColorMappingEditor;
         
         TileTabsConfigurationDialog* m_tileTabsConfigurationDialog;
         
@@ -247,8 +252,24 @@ namespace caret {
          * and may need to be reparented if the original parent, a
          * BrainBrowserWindow is closed in which case the dialog
          * is reparented to a different BrainBrowserWindow.
+         *
+         * On Linux and Windows, behavior is that when a dialog becomes active,
+         * its parent window is brought forward to be directly behind the 
+         * dialog.  When there are multiple browser windows, this may cause
+         * the parent browser window to be brought forward and obscure
+         * a browser window (not a parent of the dialog) that the user
+         * was viewing.  In this case, it may be desirable to make 
+         * the dialog parent-less.
          */
         std::set<QWidget*> nonModalDialogs;
+        
+        /**
+         * Tracks non-modal dialogs WITHOUT parents.  Dialogs without parents
+         * are undesirable on Mac because when the parent-less dialog is
+         * the active window, the menu bar will disappear.  See the
+         * comment for 'nonModalDialogs' for more information.
+         */
+        std::set<QWidget*> m_parentlessNonModalDialogs;
         
         /**
          * If Workbench is started by double-clicking a data file in

@@ -130,13 +130,14 @@ namespace caret {
         void processInformationDialog();
         void processNewWindow();
         void processNewTab();
+        void processDuplicateTab();
         void processDataFileLocationOpen();
         void processDataFileOpen();
         void processManageSaveLoadedFiles();
         void processCaptureImage();
         void processRecordMovie();
         void processEditPreferences();
-        void processCloseSpecFile();
+        void processCloseAllFiles();
         void processExitProgram();
         void processMoveAllTabsToOneWindow();
         void processViewFullScreenSelected();
@@ -263,6 +264,8 @@ namespace caret {
         QAction* m_newWindowAction;
         
         QAction* m_newTabAction;
+        
+        QAction* m_duplicateTabAction;
         
         QAction* m_openFileAction;
         

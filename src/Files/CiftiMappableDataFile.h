@@ -24,6 +24,7 @@
 #include "CaretMappableDataFile.h"
 #include "CaretPointer.h"
 #include "CaretObjectTracksModification.h"
+#include "CiftiMappingType.h"
 #include "CiftiXMLElements.h"
 #include "DisplayGroupEnum.h"
 #include "VolumeMappableInterface.h"
@@ -36,7 +37,6 @@ namespace caret {
     class ChartDataCartesian;
     class CiftiFile;
     class CiftiXML;
-    class DescriptiveStatistics;
     class FastStatistics;
     class GroupAndNameHierarchyModel;
     class Histogram;
@@ -77,17 +77,30 @@ namespace caret {
              */
             COLOR_MAPPING_METHOD_INVALID,
             /**
-             * Color mapped with a label table using map's data.
+             * Color data using a label table
              */
             COLOR_MAPPING_METHOD_LABEL_TABLE,
             /**
-             * Use ALL data from file when applying palette color mapping to a map
+             * Color data using a color palette
              */
-            COLOR_MAPPING_METHOD_PALETTE_FILE_DATA,
+            COLOR_MAPPING_METHOD_PALETTE
+        };
+        
+        /**
+         * Source of palette color mapping.
+         * Some CIFTI files provide one palette color mapping per file.
+         * Others have one palette color mapping for each map in the file.
+         */
+        enum PaletteColorMappingSourceType {
+            PALETTE_COLOR_MAPPING_SOURCE_INVALID,
             /**
-             * Use only the MAP's data when applying palette color mapping to a map
+             * Use file's palette color mapping.
              */
-            COLOR_MAPPING_METHOD_PALETTE_MAP_DATA
+            PALETTE_COLOR_MAPPING_SOURCE_FROM_FILE,
+            /**
+             * Use map's palette color mapping.
+             */
+            PALETTE_COLOR_MAPPING_SOURCE_FROM_MAP
         };
         
         /**
@@ -109,6 +122,24 @@ namespace caret {
              * when the file is read.
              */
             FILE_MAP_DATA_TYPE_MULTI_MAP
+        };
+        
+        /**
+         * Method for computation of histogram and statistics.
+         */
+        enum HistogramAndStatisticsMethod {
+            /**
+             * Invalid histogram and statistics computation method.
+             */
+            HISTOGRAM_AND_STATISTICS_INVALID,
+            /**
+             * Histogram and statistics are computed using all data in the file.
+             */
+            HISTOGRAM_AND_STATISTICS_USE_ALL_FILE_DATA,
+            /**
+             * Histogram and statistics are computed uniquely for each map.
+             */
+            HISTOGRAM_AND_STATISTICS_USE_MAP_DATA
         };
         
         CiftiMappableDataFile(const DataFileTypeEnum::Enum dataFileType);
@@ -167,18 +198,9 @@ namespace caret {
         
         virtual bool isMappedWithPalette() const;
         
-        virtual const DescriptiveStatistics* getMapStatistics(const int32_t mapIndex);
-        
         virtual const FastStatistics* getMapFastStatistics(const int32_t mapIndex);
         
         virtual const Histogram* getMapHistogram(const int32_t mapIndex);
-        
-        virtual const DescriptiveStatistics* getMapStatistics(const int32_t mapIndex,
-                                                              const float mostPositiveValueInclusive,
-                                                              const float leastPositiveValueInclusive,
-                                                              const float leastNegativeValueInclusive,
-                                                              const float mostNegativeValueInclusive,
-                                                              const bool includeZeroValues);
         
         virtual const Histogram* getMapHistogram(const int32_t mapIndex,
                                                  const float mostPositiveValueInclusive,
@@ -352,6 +374,9 @@ namespace caret {
         bool getParcelNodesElementForSelectedParcel(std::set<int64_t> &parcelNodesOut,
                                                     const StructureEnum::Enum &structure,
                                                     const int64_t &selectionIndex) const;
+        
+        void invalidateColoringInAllMaps();
+        
     private:
         
         CiftiMappableDataFile(const CiftiMappableDataFile&);
@@ -368,7 +393,11 @@ namespace caret {
         
         virtual void getMatrixRGBA(std::vector<float>& rgba, PaletteFile *paletteFile);
     
+        virtual void getFileData(std::vector<float>& data) const;
+        
     protected:
+        void updateForChangeInMapDataWithMapIndex(const int32_t mapIndex);
+        
         ChartDataCartesian* helpLoadChartDataForSurfaceNode(const StructureEnum::Enum structure,
                                                        const int32_t nodeIndex) throw (DataFileException);
         
@@ -382,6 +411,7 @@ namespace caret {
                                                        int32_t& numberOfColumnsOut,
                                                        std::vector<float>& rgbaOut) const;
 
+    private:
         class MapContent : public CaretObjectTracksModification {
             
         public:
@@ -398,10 +428,31 @@ namespace caret {
             
             virtual bool isModified() const;
             
-            void invalidateColoring();
+            void updateForChangeInMapData();
             
             void updateColoring(const std::vector<float>& data,
                                 const PaletteFile* paletteFile);
+            
+            bool isFastStatisticsValid() const;
+            
+            void updateFastStatistics(const std::vector<float>& data);
+            
+            bool isHistogramValid() const;
+            
+            void updateHistogram(const std::vector<float>& data);
+            
+            bool isHistogramLimitedValuesValid(const float mostPositiveValueInclusive,
+                                               const float leastPositiveValueInclusive,
+                                               const float leastNegativeValueInclusive,
+                                               const float mostNegativeValueInclusive,
+                                               const bool includeZeroValues) const;
+            
+            void updateHistogramLimitedValues(const std::vector<float>& data,
+                                              const float mostPositiveValueInclusive,
+                                              const float leastPositiveValueInclusive,
+                                              const float leastNegativeValueInclusive,
+                                              const float mostNegativeValueInclusive,
+                                              const bool includeZeroValues);
             
             AString getName() const;
             
@@ -446,20 +497,26 @@ namespace caret {
             /** RGBA coloring is valid */
             bool m_rgbaValid;
             
-            /** descriptive statistics for map */
-            CaretPointer<DescriptiveStatistics> m_descriptiveStatistics;
-            
             /** fast statistics for map */
             CaretPointer<FastStatistics> m_fastStatistics;
             
-            /** histogram for map */
+            /** histogram for all of map map */
             CaretPointer<Histogram> m_histogram;
         
+            /** histogram for limited values from map */
+            CaretPointer<Histogram> m_histogramLimitedValues;
+            
+            float m_histogramLimitedValuesMostPositiveValueInclusive;
+            float m_histogramLimitedValuesLeastPositiveValueInclusive;
+            float m_histogramLimitedValuesLeastNegativeValueInclusive;
+            float m_histogramLimitedValuesMostNegativeValueInclusive;
+            bool m_histogramLimitedValuesIncludeZeroValues;
+            
         private:
             /** Name of map */
             AString m_name;
             
-            /** 
+            /**
              * For maps that do not have metadata, a metadata instance
              * is still needed even though it essentially does nothing.
              */
@@ -468,7 +525,10 @@ namespace caret {
         
         void clearPrivate();
         
-        void initializeAfterReading() throw (DataFileException);
+    protected:
+        void initializeAfterReading(const AString& filename) throw (DataFileException);
+        
+        void validateMappingTypes(const AString& filename) throw (DataFileException);
         
         //static AString ciftiIndexTypeToName(const IndicesMapToDataType ciftiIndexType);
         
@@ -485,6 +545,9 @@ namespace caret {
         bool getSurfaceDataIndicesForMappingToBrainordinates(const StructureEnum::Enum structure,
                                                              const int64_t surfaceNumberOfNodes,
                                                              std::vector<int64_t>& dataIndicesForNodes) const;
+        
+        static AString mappingTypeToName(const CiftiMappingType::MappingType mappingType);
+
         /**
          * Point to the CIFTI file object.
          */
@@ -507,9 +570,19 @@ namespace caret {
         int32_t m_dataMappingDirectionForCiftiXML;
         
         /**
-         * Method used when mapping data to colors.
+         * Method used when mapping data to colors (LabelTable or Palette).
          */
         ColorMappingMethod m_colorMappingMethod;
+        
+        /**
+         * Source of color palette (file or per map)
+         */
+        PaletteColorMappingSourceType m_paletteColorMappingSource;
+        
+        /**
+         * Method for computing histogram and statistic for palette mapped data.
+         */
+        HistogramAndStatisticsMethod m_histogramAndStatisticsMethod;
         
         /**
          * Type of data in the file's map(s).
@@ -530,7 +603,22 @@ namespace caret {
         float m_mappingTimeStep;
         
         NiftiTimeUnitsEnum::Enum m_mappingTimeUnits;
-                
+        
+        /** Fast statistics used when statistics computed on all data in file */
+        CaretPointer<FastStatistics> m_fileFastStatistics;
+        
+        /** Histogram used when statistics computed on all data in file */
+        CaretPointer<Histogram> m_fileHistogram;
+        
+        /** Histogram with limited values used when statistics computed on all data in file */
+        CaretPointer<Histogram> m_fileHistorgramLimitedValues;
+        
+        float m_fileHistogramLimitedValuesMostPositiveValueInclusive;
+        float m_fileHistogramLimitedValuesLeastPositiveValueInclusive;
+        float m_fileHistogramLimitedValuesLeastNegativeValueInclusive;
+        float m_fileHistogramLimitedValuesMostNegativeValueInclusive;
+        bool m_fileHistogramLimitedValuesIncludeZeroValues;
+        
         /** Fast conversion of IJK to data offset */
         CaretPointer<SparseVolumeIndexer> m_voxelIndicesToOffset;
         

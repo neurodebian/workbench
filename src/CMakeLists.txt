@@ -160,6 +160,12 @@ if (CMAKE_COMPILER_IS_GNUCC)
         SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${GNU_11X_FLAGS}")
     endif()
 
+    if (${GCC_VERSION} VERSION_LESS "4.9")
+        # there is no greater than or equal in CMake
+    else()
+        ADD_DEFINITIONS(-Wno-narrowing -Wno-unused-local-typedefs)
+    endif()
+
 #    execute_process(COMMAND uname -n OUTPUT_VARIABLE MACHINE_NAME)
 #    message("MACHINE_NAME: ${MACHINE_NAME}")
 #    if (${MACHINE_NAME} MATCHES "linuxbuild")
@@ -324,6 +330,11 @@ IF (EXISTS $ENV{OSMESA_DIR})
     ENDIF (EXISTS $ENV{OSMESA_DIR}/include/GL/osmesa.h)
 ENDIF (EXISTS $ENV{OSMESA_DIR})
 
+#=============================================================================
+MESSAGE("")
+MESSAGE("Compiler: ${CMAKE_CXX_COMPILER}")
+MESSAGE("Compiler Version: ${CMAKE_CXX_COMPILER_VERSION}")
+MESSAGE("")
 #=============================================================================
 
 

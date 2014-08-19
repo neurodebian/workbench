@@ -4,6 +4,7 @@
  * Copyright (c) 2001-2004 Henry Maddocks <ftgl@opengl.geek.nz>
  * Copyright (c) 2008 Éric Beets <ericbeets@free.fr>
  * Copyright (c) 2008 Sam Hocevar <sam@zoy.org>
+ * Copyright (c) 2014 Washington University School of Medicine
  *
  * Permission is hereby granted, free of charge, to any person obtaining
  * a copy of this software and associated documentation files (the
@@ -34,7 +35,14 @@
 #define CALLBACK
 #endif
 
-#if defined __APPLE_CC__ && __APPLE_CC__ < 5465
+#define GCC_VERSION (__GNUC__ * 10000 \
+                     + __GNUC_MINOR__ * 100 \
+                     + __GNUC_PATCHLEVEL__)
+
+/* Test for GCC > 4.9.0 on Apple  JWH */
+#if defined __APPLE_CC__ && GCC_VERSION > 4900
+    typedef GLvoid (*GLUTesselatorFunction) ();
+#elif defined __APPLE_CC__ && __APPLE_CC__ < 5465
     typedef GLvoid (*GLUTesselatorFunction) (...);
 #elif defined WIN32 && !defined __CYGWIN__
     typedef GLvoid (CALLBACK *GLUTesselatorFunction) ();

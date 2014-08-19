@@ -57,9 +57,10 @@
 #include "EventHelpViewerDisplay.h"
 #include "EventIdentificationHighlightLocation.h"
 #include "EventManager.h"
-#include "EventMapSettingsEditorDialogRequest.h"
 #include "EventModelGetAll.h"
 #include "EventOperatingSystemRequestOpenDataFile.h"
+#include "EventOverlaySettingsEditorDialogRequest.h"
+#include "EventPaletteColorMappingEditorDialogRequest.h"
 #include "EventProgressUpdate.h"
 #include "EventSurfaceColoringInvalidate.h"
 #include "EventUpdateInformationWindows.h"
@@ -72,8 +73,9 @@
 #include "ImageFile.h"
 #include "ImageCaptureDialog.h"
 #include "InformationDisplayDialog.h"
-#include "MapSettingsEditorDialog.h"
+#include "OverlaySettingsEditorDialog.h"
 #include "MovieDialog.h"
+#include "PaletteColorMappingEditorDialog.h"
 #include "PreferencesDialog.h"
 #include "SceneAttributes.h"
 #include "SceneClass.h"
@@ -127,6 +129,7 @@ GuiManager::GuiManager(QObject* parent)
     this->preferencesDialog = NULL;  
     this->connectomeDatabaseWebView = NULL;
     m_helpViewerDialog = NULL;
+    m_paletteColorMappingEditor = NULL;
     this->sceneDialog = NULL;
     m_surfacePropertiesEditorDialog = NULL;
     m_tileTabsConfigurationDialog = NULL;
@@ -189,8 +192,9 @@ GuiManager::GuiManager(QObject* parent)
     
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_BROWSER_WINDOW_NEW);
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_HELP_VIEWER_DISPLAY);
-    EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_MAP_SCALAR_DATA_COLOR_MAPPING_EDITOR_SHOW);
+    EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_OVERLAY_SETTINGS_EDITOR_SHOW);
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_OPERATING_SYSTEM_REQUEST_OPEN_DATA_FILE);
+    EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_PALETTE_COLOR_MAPPING_EDITOR_SHOW);
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_UPDATE_INFORMATION_WINDOWS);
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_USER_INTERFACE_UPDATE);
 }
@@ -210,11 +214,13 @@ GuiManager::~GuiManager()
     
     FociPropertiesEditorDialog::deleteStaticMembers();
     
-//    if (this->brainOpenGL != NULL) {
-//        delete this->brainOpenGL;
-//        this->brainOpenGL = NULL;
-//    }
-    
+    for (std::set<QWidget*>::iterator iter = m_parentlessNonModalDialogs.begin();
+         iter != m_parentlessNonModalDialogs.end();
+         iter++) {
+        QWidget* w = *iter;
+        delete w;
+    }
+    m_parentlessNonModalDialogs.clear();
 }
 
 /**
@@ -763,13 +769,15 @@ GuiManager::processBringAllWindowsToFront()
             w->raise();
         }
     }
-//    for (int32_t i = 0; i < static_cast<int32_t>(nonModalDialogs.size()); i++) {
-//        if (nonModalDialogs[i] != NULL) {
-//            if (nonModalDialogs[i]->isVisible()) {
-//                nonModalDialogs[i]->raise();
-//            }
-//        }
-//    }
+    
+    for (std::set<QWidget*>::iterator iter = m_parentlessNonModalDialogs.begin();
+         iter != m_parentlessNonModalDialogs.end();
+         iter++) {
+        QWidget* w = *iter;
+        if (w->isVisible()) {
+            w->raise();
+        }
+    }
 }
 
 /**
@@ -924,9 +932,9 @@ GuiManager::receiveEvent(Event* event)
         
         infoEvent->setEventProcessed();
     }
-    else if (event->getEventType() == EventTypeEnum::EVENT_MAP_SCALAR_DATA_COLOR_MAPPING_EDITOR_SHOW) {
-        EventMapSettingsEditorDialogRequest* mapEditEvent =
-        dynamic_cast<EventMapSettingsEditorDialogRequest*>(event);
+    else if (event->getEventType() == EventTypeEnum::EVENT_OVERLAY_SETTINGS_EDITOR_SHOW) {
+        EventOverlaySettingsEditorDialogRequest* mapEditEvent =
+        dynamic_cast<EventOverlaySettingsEditorDialogRequest*>(event);
         CaretAssert(mapEditEvent);
         
         const int browserWindowIndex = mapEditEvent->getBrowserWindowIndex();
@@ -934,41 +942,39 @@ GuiManager::receiveEvent(Event* event)
         BrainBrowserWindow* browserWindow = m_brainBrowserWindows[browserWindowIndex];
         CaretAssert(browserWindow);
         
-//        CaretMappableDataFile* mapFile = mapEditEvent->getCaretMappableDataFile();
-//        const int mapIndex = mapEditEvent->getMapIndex();
         Overlay* overlay = mapEditEvent->getOverlay();
         
-        MapSettingsEditorDialog* mapEditor = NULL;
-        for (std::set<MapSettingsEditorDialog*>::iterator mapEditorIter = m_mappingSettingsEditors.begin();
-             mapEditorIter != m_mappingSettingsEditors.end();
-             mapEditorIter++) {
-            MapSettingsEditorDialog* med = *mapEditorIter;
+        OverlaySettingsEditorDialog* overlayEditor = NULL;
+        for (std::set<OverlaySettingsEditorDialog*>::iterator overlayEditorIter = m_overlaySettingsEditors.begin();
+             overlayEditorIter != m_overlaySettingsEditors.end();
+             overlayEditorIter++) {
+            OverlaySettingsEditorDialog* med = *overlayEditorIter;
             if (med->isDoNotReplaceSelected() == false) {
-                mapEditor = med;
+                overlayEditor = med;
                 break;
             }
         }
         
         bool placeInDefaultLocation = false;
-        if (mapEditor == NULL) {
-            mapEditor = new MapSettingsEditorDialog(browserWindow);
-            m_mappingSettingsEditors.insert(mapEditor);
-            this->addNonModalDialog(mapEditor);
+        if (overlayEditor == NULL) {
+            overlayEditor = new OverlaySettingsEditorDialog(browserWindow);
+            m_overlaySettingsEditors.insert(overlayEditor);
+            this->addNonModalDialog(overlayEditor);
             placeInDefaultLocation = true;
         }
         else {
-            if (mapEditor->isHidden()) {
+            if (overlayEditor->isHidden()) {
                 placeInDefaultLocation = true;
             }
         }
         
-        mapEditor->updateDialogContent(overlay);
-        mapEditor->show();
-        mapEditor->raise();
-        mapEditor->activateWindow();
+        overlayEditor->updateDialogContent(overlay);
+        overlayEditor->show();
+        overlayEditor->raise();
+        overlayEditor->activateWindow();
         if (placeInDefaultLocation) {
             WuQtUtilities::moveWindowToSideOfParent(browserWindow,
-                                                    mapEditor);
+                                                    overlayEditor);
         }
         mapEditEvent->setEventProcessed();
     }
@@ -998,6 +1004,36 @@ GuiManager::receiveEvent(Event* event)
             //CaretLogSevere("No browser window open for loading file from operating system.");
             //CaretAssert(0);
         }
+    }
+    else if (event->getEventType() == EventTypeEnum::EVENT_PALETTE_COLOR_MAPPING_EDITOR_SHOW) {
+        EventPaletteColorMappingEditorDialogRequest* paletteEditEvent =
+        dynamic_cast<EventPaletteColorMappingEditorDialogRequest*>(event);
+        CaretAssert(paletteEditEvent);
+
+        BrainBrowserWindow* browserWindow = m_brainBrowserWindows[paletteEditEvent->getBrowserWindowIndex()];
+        CaretAssert(browserWindow);
+
+        bool placeInDefaultLocation = false;
+        if (m_paletteColorMappingEditor == NULL) {
+            m_paletteColorMappingEditor = new PaletteColorMappingEditorDialog(browserWindow);
+            addNonModalDialog(m_paletteColorMappingEditor);
+            placeInDefaultLocation = true;
+        }
+        else if (m_paletteColorMappingEditor->isHidden()) {
+            placeInDefaultLocation = true;
+        }
+        
+        m_paletteColorMappingEditor->updateDialogContent(paletteEditEvent->getCaretMappableDataFile(),
+                                                         paletteEditEvent->getMapIndex());
+        m_paletteColorMappingEditor->show();
+        m_paletteColorMappingEditor->raise();
+        m_paletteColorMappingEditor->activateWindow();
+        if (placeInDefaultLocation) {
+            WuQtUtilities::moveWindowToSideOfParent(browserWindow,
+                                                    m_paletteColorMappingEditor);
+        }
+        
+        paletteEditEvent->setEventProcessed();
     }
     else if (event->getEventType() == EventTypeEnum::EVENT_HELP_VIEWER_DISPLAY) {
         EventHelpViewerDisplay* helpEvent = dynamic_cast<EventHelpViewerDisplay*>(event);
@@ -1107,8 +1143,6 @@ GuiManager::reparentNonModalDialogs(BrainBrowserWindow* closingBrainBrowserWindo
     }
     
     if (firstBrainBrowserWindow != NULL) {
-        //const int32_t numNonModalDialogs = static_cast<int32_t>(this->nonModalDialogs.size());
-        //for (int32_t i = 0; i < numNonModalDialogs; i++) {
         for (std::set<QWidget*>::iterator iter = this->nonModalDialogs.begin();
                  iter != this->nonModalDialogs.end();
                  iter++) {
@@ -1412,9 +1446,13 @@ GuiManager::processShowInformationDisplayDialog(const bool forceDisplayOfDialog)
         std::vector<BrainBrowserWindow*> bbws = this->getAllOpenBrainBrowserWindows();
         if (bbws.empty() == false) {
             BrainBrowserWindow* parentWindow = bbws[0];
+#ifdef CARET_OS_MACOSX
             m_informationDisplayDialog = new InformationDisplayDialog(parentWindow);
             this->addNonModalDialog(m_informationDisplayDialog);
-            
+#else // CARET_OS_MACOSX
+            m_informationDisplayDialog = new InformationDisplayDialog(NULL);
+            addParentLessNonModalDialog(m_informationDisplayDialog);
+#endif // CARET_OS_MACOSX
             m_informationDisplayDialog->resize(600, 200);
             m_informationDisplayDialog->setSaveWindowPositionForNextTime(true);
             WuQtUtilities::moveWindowToSideOfParent(parentWindow,
@@ -1433,7 +1471,10 @@ GuiManager::processShowInformationDisplayDialog(const bool forceDisplayOfDialog)
 }
 
 /**
- * Add a non-modal dialog.
+ * Add a non-modal dialog so that it may be reparented.
+ *
+ * @param dialog
+ *    The dialog.
  */
 void
 GuiManager::addNonModalDialog(QWidget* dialog)
@@ -1443,20 +1484,19 @@ GuiManager::addNonModalDialog(QWidget* dialog)
 }
 
 /**
- * Removes the dialog from the non-modal dialogs BUT DOES NOT delete
- * the dialog.
+ * Add a parent-less dialog so that it may be deleted when 
+ * the application is exited.
+ *
+ * @param dialog
+ *    The dialog.
  */
 void
-GuiManager::removeNonModalDialog(QWidget* dialog)
+GuiManager::addParentLessNonModalDialog(QWidget* dialog)
 {
     CaretAssert(dialog);
-    std::set<QWidget*>::iterator iter = std::find(nonModalDialogs.begin(),
-                                                  nonModalDialogs.end(),
-                                                  dialog);
-    if (iter != nonModalDialogs.end()) {
-        nonModalDialogs.erase(iter);
-    }
+    m_parentlessNonModalDialogs.insert(dialog);
 }
+
 
 /**
  * Show the clipping planes dialog.
@@ -1944,14 +1984,20 @@ GuiManager::getNameOfDataFileToOpenAfterStartup() const
 /**
  * Process identification after item(s) selected using a selection manager.
  *
+ * @parma tabIndex
+ *    Index of tab in which identification took place.  This value may
+ *    be negative indicating that the identification request is not
+ *    from a browser tab.  One source for this is the Select Brainordinate
+ *    option on the Information Window.
  * @param selectionManager
  *    The selection manager.
  * @param parentWidget
  *    Widget on which any error message windows are displayed.
  */
 void
-GuiManager::processIdentification(SelectionManager* selectionManager,
-                           QWidget* parentWidget)
+GuiManager::processIdentification(const int32_t tabIndex,
+                                  SelectionManager* selectionManager,
+                                  QWidget* parentWidget)
 {
     CursorDisplayScoped cursor;
     cursor.showWaitCursor();
@@ -2169,7 +2215,8 @@ GuiManager::processIdentification(SelectionManager* selectionManager,
              */
             if (nodeIdentificationCreatedFromVoxelIdentificationFlag == false) {
                 if (issuedIdentificationLocationEvent == false) {
-                    EventIdentificationHighlightLocation idLocation(xyz);
+                    EventIdentificationHighlightLocation idLocation(tabIndex,
+                                                                    xyz);
                     EventManager::get()->sendEvent(idLocation.getPointer());
                     issuedIdentificationLocationEvent = true;
                 }
@@ -2185,7 +2232,8 @@ GuiManager::processIdentification(SelectionManager* selectionManager,
                 volumeFile->indexToSpace(voxelIJK, xyz);
                 
                 if (issuedIdentificationLocationEvent == false) {
-                    EventIdentificationHighlightLocation idLocation(xyz);
+                    EventIdentificationHighlightLocation idLocation(tabIndex,
+                                                                    xyz);
                     EventManager::get()->sendEvent(idLocation.getPointer());
                     issuedIdentificationLocationEvent = true;
                 }

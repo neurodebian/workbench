@@ -39,7 +39,6 @@ class QwtPlot;
 namespace caret {
     
     class CaretMappableDataFile;
-    class DescriptiveStatistics;
     class EnumComboBoxTemplate;
     class FastStatistics;
     class Histogram;
@@ -94,8 +93,6 @@ namespace caret {
         void updateThresholdControlsMinimumMaximumRangeValues();
         
         void setLayoutSpacingAndMargins(QLayout* layout);
-        
-        const DescriptiveStatistics* getDescriptiveStatisticsForHistogram(const DescriptiveStatistics* statisticsForAll) const;
         
         const Histogram* getHistogram(const FastStatistics* statisticsForAll) const;
         

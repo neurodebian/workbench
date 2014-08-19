@@ -78,7 +78,6 @@ InformationDisplayDialog.h
 InformationDisplayPropertiesDialog.h
 LabelSelectionViewController.h
 MacApplication.h
-MapSettingsEditorDialog.h
 MapSettingsFiberTrajectoryWidget.h
 MapSettingsLayerWidget.h
 MapSettingsPaletteColorMappingWidget.h
@@ -87,7 +86,9 @@ MetaDataEditorDialog.h
 MetaDataEditorWidget.h
 MovieDialog.h
 OverlaySetViewController.h
+OverlaySettingsEditorDialog.h
 OverlayViewController.h
+PaletteColorMappingEditorDialog.h
 PlotMagnifier.h
 PlotPanner.h
 PreferencesDialog.h
@@ -187,8 +188,9 @@ EventGraphicsUpdateAllWindows.h
 EventGraphicsUpdateOneWindow.h
 EventHelpViewerDisplay.h
 EventImageCapture.h
-EventMapSettingsEditorDialogRequest.h
 EventOperatingSystemRequestOpenDataFile.h
+EventOverlaySettingsEditorDialogRequest.h
+EventPaletteColorMappingEditorDialogRequest.h
 EventUpdateInformationWindows.h
 EventUpdateYokedWindows.h
 EventUserInterfaceUpdate.h
@@ -210,7 +212,6 @@ InformationDisplayDialog.h
 InformationDisplayPropertiesDialog.h
 LabelSelectionViewController.h
 MacApplication.h
-MapSettingsEditorDialog.h
 MapSettingsFiberTrajectoryWidget.h
 MapSettingsLayerWidget.h
 MapSettingsPaletteColorMappingWidget.h
@@ -220,7 +221,9 @@ MetaDataEditorWidget.h
 MouseEvent.h
 MovieDialog.h
 OverlaySetViewController.h
+OverlaySettingsEditorDialog.h
 OverlayViewController.h
+PaletteColorMappingEditorDialog.h
 PlotMagnifier.h
 PlotPanner.h
 PreferencesDialog.h
@@ -318,8 +321,9 @@ EventGraphicsUpdateAllWindows.cxx
 EventGraphicsUpdateOneWindow.cxx
 EventHelpViewerDisplay.cxx
 EventImageCapture.cxx
-EventMapSettingsEditorDialogRequest.cxx
 EventOperatingSystemRequestOpenDataFile.cxx
+EventOverlaySettingsEditorDialogRequest.cxx
+EventPaletteColorMappingEditorDialogRequest.cxx
 EventUpdateInformationWindows.cxx
 EventUpdateYokedWindows.cxx
 EventUserInterfaceUpdate.cxx
@@ -341,7 +345,6 @@ InformationDisplayDialog.cxx
 InformationDisplayPropertiesDialog.cxx
 LabelSelectionViewController.cxx
 MacApplication.cxx
-MapSettingsEditorDialog.cxx
 MapSettingsFiberTrajectoryWidget.cxx
 MapSettingsLayerWidget.cxx
 MapSettingsPaletteColorMappingWidget.cxx
@@ -352,9 +355,11 @@ MouseEvent.cxx
 MovieDialog.cxx
 OverlaySetViewController.cxx
 OverlayViewController.cxx
-PreferencesDialog.cxx
+OverlaySettingsEditorDialog.cxx
+PaletteColorMappingEditorDialog.cxx
 PlotMagnifier.cxx
 PlotPanner.cxx
+PreferencesDialog.cxx
 ProgressReportingDialog.cxx
 ProgressReportingWithSlots.cxx
 RegionOfInterestCreateFromBorderDialog.cxx

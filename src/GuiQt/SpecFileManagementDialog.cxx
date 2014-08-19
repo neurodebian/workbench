@@ -135,11 +135,32 @@ SpecFileManagementDialog::runManageFilesDialog(Brain* brain,
                                     brain->getSpecFile(),
                                     title,
                                     parent);
+    
+    /*
+     * Override view files type the first time the dialog is displayed
+     * using the value from the user's preferences
+     */
+    static bool firstTime = true;
+    if (firstTime) {
+        const CaretPreferences* prefs = SessionManager::get()->getCaretPreferences();
+        s_manageFilesViewFilesType = prefs->getManageFilesViewFileType();
+        firstTime = false;
+    }
+    
+    dialog.setFilterSelections(s_manageFilesViewFilesType,
+                               s_manageFilesFilteredDataFileType,
+                               s_manageFilesFilteredStructureType);
+    
     if ( ! s_manageFilesGeometry.isEmpty()) {
         dialog.restoreGeometry(s_manageFilesGeometry);
     }
-    
+    dialog.loadSpecFileContentIntoDialog();
+
     dialog.exec();
+    
+    dialog.getFilterSelections(s_manageFilesViewFilesType,
+                               s_manageFilesFilteredDataFileType,
+                               s_manageFilesFilteredStructureType);
     
     s_manageFilesGeometry = dialog.saveGeometry();
 }
@@ -217,7 +238,7 @@ m_specFile(specFile)
     m_iconOpenFile   = WuQtUtilities::loadIcon(":/SpecFileDialog/load_icon.png");
     m_iconOptions    = WuQtUtilities::loadIcon(":/SpecFileDialog/options_icon.png");
     m_iconReloadFile = WuQtUtilities::loadIcon(":/SpecFileDialog/reload_icon.png");
-    m_iconRemoveFile = WuQtUtilities::loadIcon(":/SpecFileDialog/delete_icon.png");
+    m_iconCloseFile = WuQtUtilities::loadIcon(":/SpecFileDialog/delete_icon.png");
     
     /*
      * Open Spec File or Manage Files?
@@ -246,8 +267,8 @@ m_specFile(specFile)
     QObject::connect(m_fileOptionsActionSignalMapper, SIGNAL(mapped(int)),
                      this, SLOT(fileOptionsActionSelected(int)));
     
-    m_fileRemoveFileActionSignalMapper = new QSignalMapper(this);
-    QObject::connect(m_fileRemoveFileActionSignalMapper, SIGNAL(mapped(int)),
+    m_fileCloseFileActionSignalMapper = new QSignalMapper(this);
+    QObject::connect(m_fileCloseFileActionSignalMapper, SIGNAL(mapped(int)),
                      this, SLOT(fileRemoveActionSelected(int)));
 
     int tableRowCounter = 0;
@@ -297,7 +318,7 @@ m_specFile(specFile)
     m_COLUMN_DISPLAYED_LABEL             = -1;
     m_COLUMN_IN_SPEC_FILE_CHECKBOX       = -1;
     m_COLUMN_READ_BUTTON                 = -1;
-    m_COLUMN_REMOVE_BUTTON               = -1;
+    m_COLUMN_CLOSE_BUTTON               = -1;
     m_COLUMN_OPTIONS_TOOLBUTTON          = -1;
     m_COLUMN_DATA_FILE_TYPE_LABEL        = -1;
     m_COLUMN_STRUCTURE                   = -1;
@@ -312,7 +333,7 @@ m_specFile(specFile)
         m_COLUMN_DISPLAYED_LABEL = columnCounter++;
         m_COLUMN_IN_SPEC_FILE_CHECKBOX = columnCounter++;
         m_COLUMN_READ_BUTTON = columnCounter++;
-        m_COLUMN_REMOVE_BUTTON = columnCounter++;
+        m_COLUMN_CLOSE_BUTTON = columnCounter++;
     }
     m_COLUMN_OPTIONS_TOOLBUTTON = columnCounter++;
     m_COLUMN_DATA_FILE_TYPE_LABEL = columnCounter++;
@@ -455,8 +476,8 @@ SpecFileManagementDialog::~SpecFileManagementDialog()
     if (m_iconReloadFile != NULL) {
         delete m_iconReloadFile;
     }
-    if (m_iconRemoveFile != NULL) {
-        delete m_iconRemoveFile;
+    if (m_iconCloseFile != NULL) {
+        delete m_iconCloseFile;
     }
 }
 
@@ -656,47 +677,6 @@ SpecFileManagementDialog::setTableWidgetItem(const int rowIndex,
 void
 SpecFileManagementDialog::setTableColumnLabels()
 {
-//    /*
-//     * Set names of table's columns
-//     */
-//    QStringList tableWidgetColumnLabels;
-//    tableWidgetColumnLabels.reserve(m_COLUMN_COUNT);
-//    for (int32_t i = 0; i < m_COLUMN_COUNT; i++) {
-//        tableWidgetColumnLabels.append("");
-//    }
-//    if (m_COLUMN_LOAD_CHECKBOX >= 0){
-//        tableWidgetColumnLabels.replace(m_COLUMN_LOAD_CHECKBOX, "Load");
-//    }
-//    if (m_COLUMN_SAVE_CHECKBOX >= 0){
-//        tableWidgetColumnLabels.replace(m_COLUMN_SAVE_CHECKBOX, "Save");
-//    }
-//    if (m_COLUMN_STATUS_LABEL >= 0){
-//        tableWidgetColumnLabels.replace(m_COLUMN_STATUS_LABEL, "Modified");
-//    }
-//    if (m_COLUMN_IN_SPEC_FILE_CHECKBOX >= 0){
-//        tableWidgetColumnLabels.replace(m_COLUMN_IN_SPEC_FILE_CHECKBOX, "In Spec");
-//    }
-//    if (m_COLUMN_READ_BUTTON >= 0){
-//        tableWidgetColumnLabels.replace(m_COLUMN_READ_BUTTON, "Read");
-//    }
-//    if (m_COLUMN_REMOVE_BUTTON >= 0) {
-//        tableWidgetColumnLabels.replace(m_COLUMN_REMOVE_BUTTON, "Remove");
-//    }
-//    if (m_COLUMN_OPTIONS_TOOLBUTTON >= 0){
-//        tableWidgetColumnLabels.replace(m_COLUMN_OPTIONS_TOOLBUTTON, "More");
-//    }
-//    if (m_COLUMN_DATA_FILE_TYPE_LABEL >= 0){
-//        tableWidgetColumnLabels.replace(m_COLUMN_DATA_FILE_TYPE_LABEL, "Data Type");
-//    }
-//    if (m_COLUMN_STRUCTURE >= 0){
-//        tableWidgetColumnLabels.replace(m_COLUMN_STRUCTURE, "Structure");
-//    }
-//    if (m_COLUMN_FILE_NAME_LABEL >= 0){
-//        tableWidgetColumnLabels.replace(m_COLUMN_FILE_NAME_LABEL, "Data File Name");
-//    }
-//    
-//    m_filesTableWidget->setHorizontalHeaderLabels(tableWidgetColumnLabels);
-    
     /*
      * Set names of table's columns
      */
@@ -724,9 +704,9 @@ SpecFileManagementDialog::setTableColumnLabels()
         m_filesTableWidget->setHorizontalHeaderItem(m_COLUMN_READ_BUTTON,
                                                     createHeaderTextItem("Read"));
     }
-    if (m_COLUMN_REMOVE_BUTTON >= 0) {
-        m_filesTableWidget->setHorizontalHeaderItem(m_COLUMN_REMOVE_BUTTON,
-                                                    createHeaderTextItem("Remove"));
+    if (m_COLUMN_CLOSE_BUTTON >= 0) {
+        m_filesTableWidget->setHorizontalHeaderItem(m_COLUMN_CLOSE_BUTTON,
+                                                    createHeaderTextItem("Close"));
     }
     if (m_COLUMN_OPTIONS_TOOLBUTTON >= 0){
         m_filesTableWidget->setHorizontalHeaderItem(m_COLUMN_OPTIONS_TOOLBUTTON,
@@ -900,15 +880,15 @@ SpecFileManagementDialog::updateTableDimensionsToFitFiles()
                                                   loadImageLabel);
             }
             
-            if (m_COLUMN_REMOVE_BUTTON >= 0) {
-                WuQImageLabel* removeImageLabel = new WuQImageLabel(m_iconRemoveFile,
-                                                                     "Remove");
-                QObject::connect(removeImageLabel, SIGNAL(clicked()),
-                                 m_fileRemoveFileActionSignalMapper, SLOT(map()));
-                m_fileRemoveFileActionSignalMapper->setMapping(removeImageLabel, iRow);
+            if (m_COLUMN_CLOSE_BUTTON >= 0) {
+                WuQImageLabel* closeImageLabel = new WuQImageLabel(m_iconCloseFile,
+                                                                     "Close");
+                QObject::connect(closeImageLabel, SIGNAL(clicked()),
+                                 m_fileCloseFileActionSignalMapper, SLOT(map()));
+                m_fileCloseFileActionSignalMapper->setMapping(closeImageLabel, iRow);
                 m_filesTableWidget->setCellWidget(iRow,
-                                                  m_COLUMN_REMOVE_BUTTON,
-                                                  removeImageLabel);
+                                                  m_COLUMN_CLOSE_BUTTON,
+                                                  closeImageLabel);
             }
         }
         
@@ -1014,10 +994,10 @@ SpecFileManagementDialog::updateSpecFileRowInTable()
             /*
              * Get filtering selections
              */
-            ManageFilesDisplay manageFilesDisplay;
+            SpecFileDialogViewFilesTypeEnum::Enum viewFilesType;
             DataFileTypeEnum::Enum filteredDataFileType;
             StructureEnum::Enum filteredStructureType;
-            getFilterSelections(manageFilesDisplay,
+            getFilterSelections(viewFilesType,
                                 filteredDataFileType,
                                 filteredStructureType);
             
@@ -1028,24 +1008,25 @@ SpecFileManagementDialog::updateSpecFileRowInTable()
                 hideSpecFileRow = true;
             }
             
-            switch (manageFilesDisplay) {
-                case MANAGE_FILES_ALL:
+            switch (viewFilesType) {
+                case SpecFileDialogViewFilesTypeEnum::VIEW_FILES_ALL:
                     break;
-                case MANAGE_FILES_LOADED:
+                case SpecFileDialogViewFilesTypeEnum::VIEW_FILES_LOADED:
                     break;
-                case MANAGE_FILES_LOADED_MODIFIED:
+                case SpecFileDialogViewFilesTypeEnum::VIEW_FILES_LOADED_MODIFIED:
                     if (! m_specFile->isModified()) {
                         hideSpecFileRow = true;
                     }
                     break;
-                case MANAGE_FILES_LOADED_NOT_MODIFIED:
+                case SpecFileDialogViewFilesTypeEnum::VIEW_FILES_LOADED_NOT_MODIFIED:
                     if (m_specFile->isModified()) {
                         hideSpecFileRow = true;
                     }
                     break;
-                case MANAGE_FILES_NOT_LOADED:
+                case SpecFileDialogViewFilesTypeEnum::VIEW_FILES_NOT_LOADED:
                     hideSpecFileRow = true;
                     break;
+                    
             }
             
             if (filteredDataFileType != DataFileTypeEnum::UNKNOWN) {
@@ -1083,26 +1064,27 @@ SpecFileManagementDialog::horizontalHeaderSelectedForSorting(int logicalIndex)
 /**
  * Get the file filtering selections
  *
- * @param manageFilesDisplayOut
- *    Manage files loaded/not loaded
+ * @param viewFilesTypeOut
+ *    view files types
  * @param filteredDataFileTypeOut
  *    Data file type
  * @param filteredStructureTypeOut
  *    Structure
  */
 void
-SpecFileManagementDialog::getFilterSelections(ManageFilesDisplay& manageFilesDisplayOut,
+SpecFileManagementDialog::getFilterSelections(SpecFileDialogViewFilesTypeEnum::Enum& viewFilesTypeOut,
                                               DataFileTypeEnum::Enum& filteredDataFileTypeOut,
                                               StructureEnum::Enum& filteredStructureTypeOut) const
 {
     /*
      * All/Loaded/Not-Loaded
      */
-    manageFilesDisplayOut = MANAGE_FILES_ALL;
+    viewFilesTypeOut = SpecFileDialogViewFilesTypeEnum::VIEW_FILES_ALL;
     if (m_manageFilesLoadedNotLoadedActionGroup != NULL) {
         const QAction* manageFileAction = m_manageFilesLoadedNotLoadedActionGroup->checkedAction();
         if (manageFileAction != NULL) {
-            manageFilesDisplayOut = static_cast<ManageFilesDisplay>(manageFileAction->data().toInt());
+            viewFilesTypeOut = SpecFileDialogViewFilesTypeEnum::fromIntegerCode(manageFileAction->data().toInt(),
+                                                                                NULL);
         }
     }
     
@@ -1128,6 +1110,56 @@ SpecFileManagementDialog::getFilterSelections(ManageFilesDisplay& manageFilesDis
                                                                NULL);
     }
 }
+
+/**
+ * Set the file filtering selections
+ *
+ * @param viewFilesType
+ *    View files type
+ * @param filteredDataFileType
+ *    Data file type
+ * @param filteredStructureType
+ *    Structure
+ */
+void
+SpecFileManagementDialog::setFilterSelections(const SpecFileDialogViewFilesTypeEnum::Enum viewFilesType,
+                                              const DataFileTypeEnum::Enum filteredDataFileType,
+                                              const StructureEnum::Enum filteredStructureType)
+{
+    const int32_t viewFilesTypeInt = SpecFileDialogViewFilesTypeEnum::toIntegerCode(viewFilesType);
+    QList<QAction*> manageActions = m_manageFilesLoadedNotLoadedActionGroup->actions();
+    QListIterator<QAction*> manageIterator(manageActions);
+    while (manageIterator.hasNext()) {
+        QAction* action = manageIterator.next();
+        if (action->data().toInt() == viewFilesTypeInt) {
+            action->setChecked(true);
+            break;
+        }
+    }
+    
+    const int32_t dataFileTypeInt = DataFileTypeEnum::toIntegerCode(filteredDataFileType);
+    QList<QAction*> fileTypeActions = m_fileTypesActionGroup->actions();
+    QListIterator<QAction*> fileTypeIterator(fileTypeActions);
+    while (fileTypeIterator.hasNext()) {
+        QAction* action = fileTypeIterator.next();
+        if (action->data() == dataFileTypeInt) {
+            action->setChecked(true);
+            break;
+        }
+    }
+    
+    const int32_t structureTypeInt = StructureEnum::toIntegerCode(filteredStructureType);
+    QList<QAction*> structureTypeActions = m_structureActionGroup->actions();
+    QListIterator<QAction*> structureTypeIterator(structureTypeActions);
+    while (structureTypeIterator.hasNext()) {
+        QAction* action = structureTypeIterator.next();
+        if (action->data() == structureTypeInt) {
+            action->setChecked(true);
+            break;
+        }
+    }
+}
+
 
 ///**
 // * Less than method for sorting using the sorting key.
@@ -1199,10 +1231,10 @@ SpecFileManagementDialog::loadSpecFileContentIntoDialog()
      */
     sortFileContent();
     
-    ManageFilesDisplay manageFilesDisplay;
+    SpecFileDialogViewFilesTypeEnum::Enum filteredViewFilesType;
     DataFileTypeEnum::Enum filteredDataFileType;
     StructureEnum::Enum filteredStructureType;
-    getFilterSelections(manageFilesDisplay,
+    getFilterSelections(filteredViewFilesType,
                         filteredDataFileType,
                         filteredStructureType);
     
@@ -1425,15 +1457,15 @@ SpecFileManagementDialog::loadSpecFileContentIntoDialog()
                     break;
             }
         }
-        switch (manageFilesDisplay) {
-            case MANAGE_FILES_ALL:
+        switch (filteredViewFilesType) {
+            case SpecFileDialogViewFilesTypeEnum::VIEW_FILES_ALL:
                 break;
-            case MANAGE_FILES_LOADED:
+            case SpecFileDialogViewFilesTypeEnum::VIEW_FILES_LOADED:
                 if (caretDataFile == NULL) {
                     isFileHidden = true;
                 }
                 break;
-            case MANAGE_FILES_LOADED_MODIFIED:
+            case SpecFileDialogViewFilesTypeEnum::VIEW_FILES_LOADED_MODIFIED:
                 if (caretDataFile != NULL) {
                     if ( ! caretDataFile->isModified()) {
                         isFileHidden = true;
@@ -1443,7 +1475,7 @@ SpecFileManagementDialog::loadSpecFileContentIntoDialog()
                     isFileHidden = true;
                 }
                 break;
-            case MANAGE_FILES_LOADED_NOT_MODIFIED:
+            case SpecFileDialogViewFilesTypeEnum::VIEW_FILES_LOADED_NOT_MODIFIED:
                 if (caretDataFile != NULL) {
                     if (caretDataFile->isModified()) {
                         isFileHidden = true;
@@ -1453,7 +1485,7 @@ SpecFileManagementDialog::loadSpecFileContentIntoDialog()
                     isFileHidden = true;
                 }
                 break;
-            case MANAGE_FILES_NOT_LOADED:
+            case SpecFileDialogViewFilesTypeEnum::VIEW_FILES_NOT_LOADED:
                 if (caretDataFile != NULL) {
                     isFileHidden = true;
                 }
@@ -1745,13 +1777,13 @@ SpecFileManagementDialog::fileRemoveActionSelected(int rowIndex)
     SpecFileDataFile* specFileDataFile = rowContent->m_specFileDataFile;
     
     QWidget* removeButtonWidget = m_filesTableWidget->cellWidget(rowIndex,
-                                                               m_COLUMN_REMOVE_BUTTON);
+                                                               m_COLUMN_CLOSE_BUTTON);
     CaretAssert(removeButtonWidget);
     CaretDataFile* caretDataFile = specFileDataFile->getCaretDataFile();
     if (caretDataFile != NULL) {
         if (caretDataFile->isModified()) {
             const QString msg = (caretDataFile->getFileNameNoPath()
-                                 + " is modified.  Remove without saving changes?");
+                                 + " is modified.  Close without saving changes?");
             if (WuQMessageBox::warningOkCancel(removeButtonWidget, msg) == false) {
                 return;
             }
@@ -1919,13 +1951,20 @@ SpecFileManagementDialog::fileOptionsActionSelected(int rowIndex)
     m_filesTableWidget->setRangeSelected(QTableWidgetSelectionRange(rowIndex, m_COLUMN_OPTIONS_TOOLBUTTON,
                                                                     rowIndex, m_COLUMN_OPTIONS_TOOLBUTTON), false);
     
+    const AString copyPathText("Copy Path and Filename to Clipboard");
+    
     if (rowIndex == m_specFileTableRowIndex) {
         QMenu menu;
+        QAction* copyFilePathToClipboardAction = NULL;
+        if (m_specFile != NULL) {
+            if ( ! m_specFile->getFileName().trimmed().isEmpty()) {
+                copyFilePathToClipboardAction = menu.addAction(copyPathText);
+            }
+        }
         QAction* editMetaDataAction = menu.addAction("Edit Metadata...");;
         QAction* setFileNameAction = menu.addAction("Set File Name...");
-
-        QAction* selectedAction = menu.exec(QCursor::pos());
         
+        QAction* selectedAction = menu.exec(QCursor::pos());
         if (selectedAction == NULL) {
             /*
              * If the selected action is NULL, it indicates that the user did
@@ -1944,6 +1983,10 @@ SpecFileManagementDialog::fileOptionsActionSelected(int rowIndex)
                                       &menu);
             mded.exec();
             loadSpecFileContentIntoDialog();
+        }
+        else if (selectedAction == copyFilePathToClipboardAction) {
+            QApplication::clipboard()->setText(m_specFile->getFileName().trimmed(),
+                                               QClipboard::Clipboard);
         }
         else if (selectedAction != NULL) {
             CaretAssertMessage(0,
@@ -1965,31 +2008,33 @@ SpecFileManagementDialog::fileOptionsActionSelected(int rowIndex)
         //QAction* unloadFileAction = NULL;
         QAction* unloadFileMapsAction = NULL;
         QAction* viewMetaDataAction = NULL;
-        
+                
         QMenu menu;
         switch (m_dialogMode) {
             case MODE_MANAGE_FILES:
             case MODE_SAVE_FILES_WHILE_QUITTING:
                 if (caretDataFile != NULL) {
-                    copyFilePathToClipboardAction = menu.addAction("Copy File's Path to Clipboard");
+                    copyFilePathToClipboardAction = menu.addAction(copyPathText);
                     editMetaDataAction = menu.addAction("Edit Metadata...");
                     setFileNameAction = menu.addAction("Set File Name...");
                     //                unloadFileAction = menu.addAction("Unload File");
-                    if (caretMappableDataFile != NULL) {
-                        unloadFileMapsAction = menu.addAction("Unload Map(s) from File");
-                        unloadFileMapsAction->setEnabled(false);
-                    }
+                    //if (caretMappableDataFile != NULL) {
+                    //    unloadFileMapsAction = menu.addAction("Unload Map(s) from File");
+                    //    unloadFileMapsAction->setEnabled(false);
+                    //}
                 }
                 else {
-                    viewMetaDataAction = menu.addAction("View Metadata...");
-                    viewMetaDataAction->setEnabled(false);
+                    copyFilePathToClipboardAction = menu.addAction(copyPathText);
+                    //viewMetaDataAction = menu.addAction("View Metadata...");
+                    //viewMetaDataAction->setEnabled(false);
                 }
                 break;
             case MODE_OPEN_SPEC_FILE:
-                setStructureAction = menu.addAction("Set Structure...");
-                setStructureAction->setEnabled(false);
-                viewMetaDataAction = menu.addAction("View Metadata...");
-                viewMetaDataAction->setEnabled(false);
+                copyFilePathToClipboardAction = menu.addAction(copyPathText);
+                //setStructureAction = menu.addAction("Set Structure...");
+                //setStructureAction->setEnabled(false);
+                //viewMetaDataAction = menu.addAction("View Metadata...");
+                //viewMetaDataAction->setEnabled(false);
                 break;
         }
         
@@ -2004,7 +2049,8 @@ SpecFileManagementDialog::fileOptionsActionSelected(int rowIndex)
              */
         }
         else if (selectedAction == copyFilePathToClipboardAction) {
-            copyFilePathToClipboard(caretDataFile);
+            copyFilePathToClipboard(specFileDataFile,
+                                    caretDataFile);
         }
         else if (selectedAction == setFileNameAction) {
             changeFileName(&menu,
@@ -2048,16 +2094,27 @@ SpecFileManagementDialog::fileOptionsActionSelected(int rowIndex)
 }
 
 /**
- * Copy the file's path to the clipboard.
+ * Copy the loaded file's path to the clipboard.
+ *
+ * @param caretDataFile
+ *    The data file.
  */
 void
-SpecFileManagementDialog::copyFilePathToClipboard(const CaretDataFile* caretDataFile)
+SpecFileManagementDialog::copyFilePathToClipboard(const SpecFileDataFile* specFileDataFile,
+                                                  const CaretDataFile* caretDataFile)
 {
-    CaretAssert(caretDataFile);
-    QApplication::clipboard()->setText(caretDataFile->getFileName().trimmed(),
-                                       QClipboard::Clipboard);
+    if (caretDataFile != NULL) {
+        QApplication::clipboard()->setText(caretDataFile->getFileName().trimmed(),
+                                           QClipboard::Clipboard);
+    }
+    else if (specFileDataFile != NULL) {
+        QApplication::clipboard()->setText(specFileDataFile->getFileName().trimmed(),
+                                           QClipboard::Clipboard);
+    }
+    else {
+        CaretAssert(0);
+    }
 }
-
 
 /**
  * Change the name of a file.

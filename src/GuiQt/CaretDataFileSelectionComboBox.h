@@ -21,6 +21,7 @@
  */
 /*LICENSE_END*/
 
+#include <vector>
 
 #include "WuQWidget.h"
 
@@ -41,6 +42,8 @@ namespace caret {
         virtual ~CaretDataFileSelectionComboBox();
         
         void updateComboBox(CaretDataFileSelectionModel* selectionModel);
+        
+        CaretDataFileSelectionModel* getSelectionModel();
         
         virtual QWidget* getWidget();
         

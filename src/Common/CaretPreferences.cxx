@@ -1003,6 +1003,29 @@ CaretPreferences::setOpenGLDrawingMethod(const OpenGLDrawingMethodEnum::Enum ope
 }
 
 /**
+ * @return The view file type for manage files dialog.
+ */
+SpecFileDialogViewFilesTypeEnum::Enum
+CaretPreferences::getManageFilesViewFileType() const
+{
+    return this->manageFilesViewFileType;
+}
+
+/**
+ * Set the view file type for manage files dialog.
+ *
+ * @param manageFilesViewFileType
+ *     New view file type.
+ */
+void
+CaretPreferences::setManageFilesViewFileType(const SpecFileDialogViewFilesTypeEnum::Enum manageFilesViewFileType)
+{
+    this->manageFilesViewFileType = manageFilesViewFileType;
+    this->setString(NAME_MANAGE_FILES_VIEW_FILE_TYPE,
+                    SpecFileDialogViewFilesTypeEnum::toName(this->manageFilesViewFileType));
+}
+
+/**
  * @return The image capture method.
  */
 ImageCaptureMethodEnum::Enum
@@ -1208,29 +1231,6 @@ CaretPreferences::setVolumeMontageCoordinatePrecision(const int32_t volumeMontag
 }
 
 /**
- * @return The toolbox type.
- */
-int32_t 
-CaretPreferences::getToolBoxType() const
-{
-    return this->toolBoxType;
-}
-
-/**
- * Set the toolbox type.
- * @param toolBoxType
- *    New toolbox type.
- */
-void 
-CaretPreferences::setToolBoxType(const int32_t toolBoxType)
-{
-    this->toolBoxType = toolBoxType;
-    this->setInteger(CaretPreferences::NAME_TOOLBOX_TYPE, 
-                     this->toolBoxType);
-    this->qSettings->sync();
-}
-
-/**
  * @return Is the splash screen enabled?
  */
 bool 
@@ -1273,6 +1273,50 @@ CaretPreferences::setDevelopMenuEnabled(const bool enabled)
     this->developMenuEnabled = enabled;
     this->setBoolean(CaretPreferences::NAME_DEVELOP_MENU,
                      this->developMenuEnabled);
+    this->qSettings->sync();
+}
+
+/**
+ * @param Is yoking defaulted on ?
+ */
+bool CaretPreferences::isYokingDefaultedOn() const
+{
+    return this->yokingDefaultedOn;
+}
+
+/**
+ * Set yoking defaulted on
+ *
+ * @param status
+ *    New status for yoking on.
+ */
+void CaretPreferences::setYokingDefaultedOn(const bool status)
+{
+    this->yokingDefaultedOn = status;
+    this->setBoolean(CaretPreferences::NAME_YOKING_DEFAULT_ON,
+                     this->yokingDefaultedOn);
+    this->qSettings->sync();
+}
+
+/**
+ * @param Is volume identification defaulted on ?
+ */
+bool CaretPreferences::isVolumeIdentificationDefaultedOn() const
+{
+    return this->volumeIdentificationDefaultedOn;
+}
+
+/**
+ * Set volume identification defaulted on
+ *
+ * @param status
+ *    New status for yoking on.
+ */
+void CaretPreferences::setVolumeIdentificationDefaultedOn(const bool status)
+{
+    this->volumeIdentificationDefaultedOn = status;
+    this->setBoolean(CaretPreferences::NAME_VOLUME_IDENTIFICATION_DEFAULTED_ON,
+                     this->volumeIdentificationDefaultedOn);
     this->qSettings->sync();
 }
 
@@ -1439,6 +1483,15 @@ CaretPreferences::readPreferences()
         this->openGLDrawingMethod = OpenGLDrawingMethodEnum::DRAW_WITH_VERTEX_BUFFERS_OFF;
     }
     
+    AString viewFileTypesName = this->qSettings->value(NAME_MANAGE_FILES_VIEW_FILE_TYPE,
+                                                       SpecFileDialogViewFilesTypeEnum::toName(SpecFileDialogViewFilesTypeEnum::VIEW_FILES_ALL)).toString();
+    bool viewFilesTypeValid = false;
+    this->manageFilesViewFileType = SpecFileDialogViewFilesTypeEnum::fromName(viewFileTypesName,
+                                                                              &viewFilesTypeValid);
+    if ( ! viewFilesTypeValid) {
+        this->manageFilesViewFileType = SpecFileDialogViewFilesTypeEnum::VIEW_FILES_ALL;
+    }
+    
     this->displayVolumeAxesLabels = this->getBoolean(CaretPreferences::NAME_VOLUME_AXES_LABELS,
                                                      true);
     this->displayVolumeAxesCrosshairs = this->getBoolean(CaretPreferences::NAME_VOLUME_AXES_CROSSHAIRS,
@@ -1454,14 +1507,18 @@ CaretPreferences::readPreferences()
     
     this->animationStartTime = 0.0;//this->qSettings->value(CaretPreferences::NAME_ANIMATION_START_TIME).toDouble();
 
-    this->toolBoxType = this->getInteger(CaretPreferences::NAME_TOOLBOX_TYPE,
-                                         0);
     
     this->splashScreenEnabled = this->getBoolean(CaretPreferences::NAME_SPLASH_SCREEN,
                                                  true);
     
     this->developMenuEnabled = this->getBoolean(CaretPreferences::NAME_DEVELOP_MENU,
                                                 false);
+
+    this->yokingDefaultedOn = this->getBoolean(CaretPreferences::NAME_YOKING_DEFAULT_ON,
+                                               true);
+    
+    this->volumeIdentificationDefaultedOn = this->getBoolean(CaretPreferences::NAME_VOLUME_IDENTIFICATION_DEFAULTED_ON,
+                                                             true);
     
     this->remoteFileUserName = this->getString(NAME_REMOTE_FILE_USER_NAME);
     this->remoteFilePassword = this->getString(NAME_REMOTE_FILE_PASSWORD);

@@ -345,6 +345,16 @@ PreferencesDialog::createMiscellaneousWidget()
     m_allWidgets->add(m_miscSplashScreenShowAtStartupComboBox);
     
     /*
+     * Yoking
+     */
+    m_yokingDefaultComboBox = new WuQTrueFalseComboBox("On",
+                                                       "Off",
+                                                       this);
+    QObject::connect(m_yokingDefaultComboBox, SIGNAL(statusChanged(bool)),
+                     this, SLOT(yokingComboBoxToggled(bool)));
+    m_allWidgets->add(m_yokingDefaultComboBox);
+    
+    /*
      * Developer Menu
      */
     m_miscDevelopMenuEnabledComboBox = new WuQTrueFalseComboBox("On",
@@ -354,9 +364,25 @@ PreferencesDialog::createMiscellaneousWidget()
                      this, SLOT(miscDevelopMenuEnabledComboBoxChanged(bool)));
     m_allWidgets->add(m_miscDevelopMenuEnabledComboBox);
     
+    /*
+     * Manage Files View Files Type
+     */
+    m_miscSpecFileDialogViewFilesTypeEnumComboBox = new EnumComboBoxTemplate(this);
+    m_miscSpecFileDialogViewFilesTypeEnumComboBox->setup<SpecFileDialogViewFilesTypeEnum,SpecFileDialogViewFilesTypeEnum::Enum>();
+    QObject::connect(m_miscSpecFileDialogViewFilesTypeEnumComboBox, SIGNAL(itemActivated()),
+                     this, SLOT(miscSpecFileDialogViewFilesTypeEnumComboBoxItemActivated()));
+    m_allWidgets->add(m_miscSpecFileDialogViewFilesTypeEnumComboBox->getWidget());
+    
     QGridLayout* gridLayout = new QGridLayout();
     addWidgetToLayout(gridLayout,
-                      "Logging Level: ", m_miscLoggingLevelComboBox);
+                      "Logging Level: ",
+                      m_miscLoggingLevelComboBox);
+    addWidgetToLayout(gridLayout,
+                      "Save/Manage View Files: ",
+                      m_miscSpecFileDialogViewFilesTypeEnumComboBox->getWidget());
+    addWidgetToLayout(gridLayout,
+                      "New Tabs Yoked to Group A: ",
+                      m_yokingDefaultComboBox->getWidget());
     addWidgetToLayout(gridLayout,
                       "Show Develop Menu in Menu Bar: ",
                       m_miscDevelopMenuEnabledComboBox->getWidget());
@@ -389,6 +415,11 @@ PreferencesDialog::updateMiscellaneousWidget(CaretPreferences* prefs)
     m_miscDevelopMenuEnabledComboBox->setStatus(prefs->isDevelopMenuEnabled());
     
     m_miscSplashScreenShowAtStartupComboBox->setStatus(prefs->isSplashScreenEnabled());
+    
+    m_yokingDefaultComboBox->setStatus(prefs->isYokingDefaultedOn());
+    
+    m_miscSpecFileDialogViewFilesTypeEnumComboBox->setSelectedItem<SpecFileDialogViewFilesTypeEnum,SpecFileDialogViewFilesTypeEnum::Enum>(prefs->getManageFilesViewFileType());
+
 }
 
 /**
@@ -482,6 +513,14 @@ PreferencesDialog::createVolumeWidget()
     m_allWidgets->add(m_volumeAxesLabelsComboBox);
     
     /*
+     * Identification On/Off
+     */
+    m_volumeIdentificationComboBox = new WuQTrueFalseComboBox("On", "Off", this);
+    QObject::connect(m_volumeIdentificationComboBox, SIGNAL(statusChanged(bool)),
+                     this, SLOT(volumeIdentificationComboBoxToggled(bool)));
+    m_allWidgets->add(m_volumeIdentificationComboBox);
+
+    /*
      * Montage Coordinates On/Off
      */
     m_volumeAxesMontageCoordinatesComboBox = new WuQTrueFalseComboBox("On", "Off", this);
@@ -524,6 +563,9 @@ PreferencesDialog::createVolumeWidget()
                       "Volume Axes Labels: ",
                       m_volumeAxesLabelsComboBox->getWidget());
     addWidgetToLayout(gridLayout,
+                      "Volume Identification For New Tabs: ",
+                      m_volumeIdentificationComboBox->getWidget());
+    addWidgetToLayout(gridLayout,
                       "Volume Montage Slice Coord: ",
                       m_volumeAxesMontageCoordinatesComboBox->getWidget());
     addWidgetToLayout(gridLayout,
@@ -552,6 +594,7 @@ PreferencesDialog::updateVolumeWidget(CaretPreferences* prefs)
     m_volumeAxesCrosshairsComboBox->setStatus(prefs->isVolumeAxesCrosshairsDisplayed());
     m_volumeAxesLabelsComboBox->setStatus(prefs->isVolumeAxesLabelsDisplayed());
     m_volumeAxesMontageCoordinatesComboBox->setStatus(prefs->isVolumeMontageAxesCoordinatesDisplayed());
+    m_volumeIdentificationComboBox->setStatus(prefs->isVolumeIdentificationDefaultedOn());
     m_volumeMontageGapSpinBox->setValue(prefs->getVolumeMontageGap());
     m_volumeMontageCoordinatePrecisionSpinBox->setValue(prefs->getVolumeMontageCoordinatePrecision());
 }
@@ -845,6 +888,26 @@ PreferencesDialog::volumeMontageCoordinatePrecisionChanged(int value)
 }
 
 /**
+ * Called when volume identification value is changed.
+ */
+void
+PreferencesDialog::volumeIdentificationComboBoxToggled(bool value)
+{
+    CaretPreferences* prefs = SessionManager::get()->getCaretPreferences();
+    prefs->setVolumeIdentificationDefaultedOn(value);
+}
+
+/**
+ * Called when yoking default value is changed.
+ */
+void
+PreferencesDialog::yokingComboBoxToggled(bool value)
+{
+    CaretPreferences* prefs = SessionManager::get()->getCaretPreferences();
+    prefs->setYokingDefaultedOn(value);
+}
+
+/**
  * Called when show splash screen option changed.
  * @param value
  *   New value.
@@ -871,6 +934,17 @@ PreferencesDialog::miscDevelopMenuEnabledComboBoxChanged(bool value)
                          + " in newly opened windows.");
     WuQMessageBox::informationOk(m_miscDevelopMenuEnabledComboBox->getWidget(),
                                  msg);
+}
+
+/**
+ * Gets called when view files type is changed.
+ */
+void
+PreferencesDialog::miscSpecFileDialogViewFilesTypeEnumComboBoxItemActivated()
+{
+    const SpecFileDialogViewFilesTypeEnum::Enum viewFilesType = m_miscSpecFileDialogViewFilesTypeEnumComboBox->getSelectedItem<SpecFileDialogViewFilesTypeEnum,SpecFileDialogViewFilesTypeEnum::Enum>();
+    CaretPreferences* prefs = SessionManager::get()->getCaretPreferences();
+    prefs->setManageFilesViewFileType(viewFilesType);
 }
 
 

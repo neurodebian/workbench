@@ -35,6 +35,7 @@
 #include "CaretLogger.h"
 #include "ChartData.h"
 #include "ChartMatrixDisplayProperties.h"
+#include "CaretPreferences.h"
 #include "ChartableMatrixInterface.h"
 #include "ChartModelDataSeries.h"
 #include "ClippingPlaneGroup.h"
@@ -64,6 +65,7 @@
 #include "SceneAttributes.h"
 #include "SceneClass.h"
 #include "SceneClassAssistant.h"
+#include "SessionManager.h"
 #include "Surface.h"
 #include "SurfaceMontageConfigurationCerebellar.h"
 #include "SurfaceMontageConfigurationCerebral.h"
@@ -89,7 +91,11 @@ using namespace caret;
 BrowserTabContent::BrowserTabContent(const int32_t tabNumber)
 : CaretObject()
 {
+    isExecutingConstructor = true;
+    
     s_allBrowserTabContent.insert(this);
+    
+    const CaretPreferences* prefs = SessionManager::get()->getCaretPreferences();
     
     m_tabNumber = tabNumber;
     m_surfaceModelSelector = new ModelSurfaceSelector();
@@ -102,7 +108,7 @@ BrowserTabContent::BrowserTabContent(const int32_t tabNumber)
     m_userName = "";
     m_volumeSurfaceOutlineSetModel = new VolumeSurfaceOutlineSetModel();
     m_yokingGroup = YokingGroupEnum::YOKING_GROUP_OFF;
-    m_identificationUpdatesVolumeSlices = false;
+    m_identificationUpdatesVolumeSlices = prefs->isVolumeIdentificationDefaultedOn();
 
     m_cerebellumViewingTransformation  = new ViewingTransformationsCerebellum();
     m_flatSurfaceViewingTransformation = new ViewingTransformations();
@@ -170,6 +176,15 @@ BrowserTabContent::BrowserTabContent(const int32_t tabNumber)
                                           EventTypeEnum::EVENT_IDENTIFICATION_HIGHLIGHT_LOCATION);
     EventManager::get()->addEventListener(this,
                                           EventTypeEnum::EVENT_CARET_MAPPABLE_DATA_FILE_MAPS_VIEWED_IN_OVERLAYS);
+    
+    isExecutingConstructor = false;
+    
+    /*
+     * Need to be done from here
+     */
+    if (prefs->isYokingDefaultedOn()) {
+        setYokingGroup(YokingGroupEnum::YOKING_GROUP_A);
+    }
 }
 
 /**
@@ -207,7 +222,7 @@ BrowserTabContent::~BrowserTabContent()
  * @param tabToClone
  *    Tab whose contents is cloned.
  */
-void 
+void
 BrowserTabContent::cloneBrowserTabContent(BrowserTabContent* tabToClone)
 {
     CaretAssert(tabToClone);
@@ -243,6 +258,8 @@ BrowserTabContent::cloneBrowserTabContent(BrowserTabContent* tabToClone)
     
     *m_obliqueVolumeRotationMatrix = *tabToClone->m_obliqueVolumeRotationMatrix;
     
+    m_identificationUpdatesVolumeSlices = tabToClone->m_identificationUpdatesVolumeSlices;
+
     Model* model = getModelForDisplay();
     
     if (model != NULL) {
@@ -1009,80 +1026,63 @@ BrowserTabContent::receiveEvent(Event* event)
             return;
         }
 
-        if (isIdentificationUpdatesVolumeSlices()) {
-            const float* highlighXYZ = idLocationEvent->getXYZ();
-            for (int32_t windowTabNumber = 0;
-                 windowTabNumber < BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_TABS;
-                 windowTabNumber++) {
-                
-                float volumeSliceXYZ[3] = {
-                    highlighXYZ[0],
-                    highlighXYZ[1],
-                    highlighXYZ[2]
-                };
-                
-                /*
-                 * If othogonal/montage viewing, do not alter the slice
-                 * coordinate in the axis being viewed
-                 */
-                if (getDisplayedVolumeModel() != NULL) {
-                    bool keepSliceCoordinateForSelectedAxis = false;
-                    switch (m_volumeSliceSettings->getSliceProjectionType()) {
-                        case VolumeSliceProjectionTypeEnum::VOLUME_SLICE_PROJECTION_ORTHOGONAL:
-                            break;
-                        case VolumeSliceProjectionTypeEnum::VOLUME_SLICE_PROJECTION_OBLIQUE:
-                            keepSliceCoordinateForSelectedAxis = true;
-                            break;
-                    }
-                    switch (m_volumeSliceSettings->getSliceDrawingType()) {
-                        case VolumeSliceDrawingTypeEnum::VOLUME_SLICE_DRAW_MONTAGE:
-                            keepSliceCoordinateForSelectedAxis = true;
-                            break;
-                        case VolumeSliceDrawingTypeEnum::VOLUME_SLICE_DRAW_SINGLE:
-                            break;
-                    }
-
-                    if (keepSliceCoordinateForSelectedAxis) {
-                        switch (getSliceViewPlane()) {
-                            case VolumeSliceViewPlaneEnum::ALL:
-                                volumeSliceXYZ[0] = getSliceCoordinateParasagittal();
-                                volumeSliceXYZ[1] = getSliceCoordinateCoronal();
-                                volumeSliceXYZ[2] = getSliceCoordinateAxial();
+        if (idLocationEvent->getTabIndex() == getTabNumber()) {
+            if (isIdentificationUpdatesVolumeSlices()) {
+                const float* highlighXYZ = idLocationEvent->getXYZ();
+                for (int32_t windowTabNumber = 0;
+                     windowTabNumber < BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_TABS;
+                     windowTabNumber++) {
+                    
+                    float volumeSliceXYZ[3] = {
+                        highlighXYZ[0],
+                        highlighXYZ[1],
+                        highlighXYZ[2]
+                    };
+                    
+                    /*
+                     * If othogonal/montage viewing, do not alter the slice
+                     * coordinate in the axis being viewed
+                     */
+                    if (getDisplayedVolumeModel() != NULL) {
+                        bool keepSliceCoordinateForSelectedAxis = false;
+                        switch (m_volumeSliceSettings->getSliceProjectionType()) {
+                            case VolumeSliceProjectionTypeEnum::VOLUME_SLICE_PROJECTION_ORTHOGONAL:
                                 break;
-                            case VolumeSliceViewPlaneEnum::PARASAGITTAL:
-                                volumeSliceXYZ[0] = getSliceCoordinateParasagittal();
-                                break;
-                            case VolumeSliceViewPlaneEnum::CORONAL:
-                                volumeSliceXYZ[1] = getSliceCoordinateCoronal();
-                                break;
-                            case VolumeSliceViewPlaneEnum::AXIAL:
-                                volumeSliceXYZ[2] = getSliceCoordinateAxial();
+                            case VolumeSliceProjectionTypeEnum::VOLUME_SLICE_PROJECTION_OBLIQUE:
+                                keepSliceCoordinateForSelectedAxis = true;
                                 break;
                         }
+                        switch (m_volumeSliceSettings->getSliceDrawingType()) {
+                            case VolumeSliceDrawingTypeEnum::VOLUME_SLICE_DRAW_MONTAGE:
+                                keepSliceCoordinateForSelectedAxis = true;
+                                break;
+                            case VolumeSliceDrawingTypeEnum::VOLUME_SLICE_DRAW_SINGLE:
+                                break;
+                        }
+                        
+                        if (keepSliceCoordinateForSelectedAxis) {
+                            switch (getSliceViewPlane()) {
+                                case VolumeSliceViewPlaneEnum::ALL:
+                                    volumeSliceXYZ[0] = getSliceCoordinateParasagittal();
+                                    volumeSliceXYZ[1] = getSliceCoordinateCoronal();
+                                    volumeSliceXYZ[2] = getSliceCoordinateAxial();
+                                    break;
+                                case VolumeSliceViewPlaneEnum::PARASAGITTAL:
+                                    volumeSliceXYZ[0] = getSliceCoordinateParasagittal();
+                                    break;
+                                case VolumeSliceViewPlaneEnum::CORONAL:
+                                    volumeSliceXYZ[1] = getSliceCoordinateCoronal();
+                                    break;
+                                case VolumeSliceViewPlaneEnum::AXIAL:
+                                    volumeSliceXYZ[2] = getSliceCoordinateAxial();
+                                    break;
+                            }
+                        }
                     }
-//                    switch (m_volumeSliceSettings->getSliceViewMode()) {
-//                        case VolumeSliceViewModeEnum::MONTAGE:
-//                        case VolumeSliceViewModeEnum::OBLIQUE:
-//                            switch (getSliceViewPlane()) {
-//                                case VolumeSliceViewPlaneEnum::ALL:
-//                                    break;
-//                                case VolumeSliceViewPlaneEnum::PARASAGITTAL:
-//                                    volumeSliceXYZ[0] = getSliceCoordinateParasagittal();
-//                                    break;
-//                                case VolumeSliceViewPlaneEnum::CORONAL:
-//                                    volumeSliceXYZ[1] = getSliceCoordinateCoronal();
-//                                    break;
-//                                case VolumeSliceViewPlaneEnum::AXIAL:
-//                                    volumeSliceXYZ[2] = getSliceCoordinateAxial();
-//                                    break;
-//                            }
-//                            break;
-//                        case VolumeSliceViewModeEnum::ORTHOGONAL:
-//                            break;
-//                    }
+                    
+                    selectSlicesAtCoordinate(volumeSliceXYZ);
+                    //m_volumeSliceSettings->selectSlicesAtCoordinate(volumeSliceXYZ);
                 }
-                
-                m_volumeSliceSettings->selectSlicesAtCoordinate(volumeSliceXYZ);
             }
         }
         
@@ -1131,24 +1131,91 @@ BrowserTabContent::getDisplayedPaletteMapFiles(std::vector<CaretMappableDataFile
     mapFiles.clear();
     mapIndices.clear();
     
-    OverlaySet* overlaySet = getOverlaySet();
-    const int32_t numOverlays = overlaySet->getNumberOfDisplayedOverlays();
-    for (int32_t i = (numOverlays - 1); i >= 0; i--) {
-        Overlay* overlay = overlaySet->getOverlay(i);
-        if (overlay->isEnabled()) {
-            if (overlay->isPaletteDisplayEnabled()) {
-                CaretMappableDataFile* mapFile;
-                int32_t mapFileIndex;
-                overlay->getSelectionData(mapFile, mapFileIndex);
-                if (mapFile != NULL) {
-                    if (mapFile->isMappedWithPalette()) {
-                        if ((mapFileIndex >= 0) 
-                            && (mapFileIndex < mapFile->getNumberOfMaps())) {
-                            mapFiles.push_back(mapFile);
-                            mapIndices.push_back(mapFileIndex);
+    if (getModelForDisplay() == NULL) {
+        return;
+    }
+    
+    bool useOverlayFlag = false;
+    bool useChartsFlag  = false;
+    switch (getSelectedModelType()) {
+        case ModelTypeEnum::MODEL_TYPE_INVALID:
+            break;
+        case ModelTypeEnum::MODEL_TYPE_CHART:
+            useChartsFlag = true;
+            break;
+        case ModelTypeEnum::MODEL_TYPE_SURFACE:
+            useOverlayFlag = true;
+            break;
+        case ModelTypeEnum::MODEL_TYPE_SURFACE_MONTAGE:
+            useOverlayFlag = true;
+            break;
+        case ModelTypeEnum::MODEL_TYPE_VOLUME_SLICES:
+            useOverlayFlag = true;
+            break;
+        case ModelTypeEnum::MODEL_TYPE_WHOLE_BRAIN:
+            useOverlayFlag = true;
+            break;
+    }
+    
+    if (useOverlayFlag) {
+        OverlaySet* overlaySet = getOverlaySet();
+        const int32_t numOverlays = overlaySet->getNumberOfDisplayedOverlays();
+        for (int32_t i = (numOverlays - 1); i >= 0; i--) {
+            Overlay* overlay = overlaySet->getOverlay(i);
+            if (overlay->isEnabled()) {
+                if (overlay->isPaletteDisplayEnabled()) {
+                    CaretMappableDataFile* mapFile;
+                    int32_t mapFileIndex;
+                    overlay->getSelectionData(mapFile, mapFileIndex);
+                    if (mapFile != NULL) {
+                        if (mapFile->isMappedWithPalette()) {
+                            if ((mapFileIndex >= 0)
+                                && (mapFileIndex < mapFile->getNumberOfMaps())) {
+                                mapFiles.push_back(mapFile);
+                                mapIndices.push_back(mapFileIndex);
+                            }
                         }
                     }
                 }
+            }
+        }
+    }
+    
+    if (useChartsFlag) {
+        ModelChart* modelChart = getDisplayedChartModel();
+        if (modelChart != NULL) {
+            switch (modelChart->getSelectedChartDataType(m_tabNumber)) {
+                case ChartDataTypeEnum::CHART_DATA_TYPE_INVALID:
+                    break;
+                case ChartDataTypeEnum::CHART_DATA_TYPE_DATA_SERIES:
+                    break;
+                case ChartDataTypeEnum::CHART_DATA_TYPE_MATRIX:
+                {
+                    CaretDataFileSelectionModel* fileModel = modelChart->getChartableMatrixFileSelectionModel(m_tabNumber);
+                    if (fileModel != NULL) {
+                        CaretDataFile* caretFile = fileModel->getSelectedFile();
+                        if (caretFile != NULL) {
+                            CaretMappableDataFile* mapFile = dynamic_cast<CaretMappableDataFile*>(caretFile);
+                            if (mapFile != NULL) {
+                                ChartableMatrixInterface* matrixFile = dynamic_cast<ChartableMatrixInterface*>(mapFile);
+                                if (matrixFile != NULL) {
+                                    ChartMatrixDisplayProperties* props = matrixFile->getChartMatrixDisplayProperties(m_tabNumber);
+                                    if (props->isColorBarDisplayed()) {
+                                        /*
+                                         * Matrix contains all file data and always
+                                         * uses a map index of zero.
+                                         */
+                                        mapFiles.push_back(mapFile);
+                                        mapIndices.push_back(0);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                    break;
+                case ChartDataTypeEnum::CHART_DATA_TYPE_TIME_SERIES:
+                    break;
             }
         }
     }
@@ -3445,6 +3512,9 @@ BrowserTabContent::setYokingGroup(const YokingGroupEnum::Enum yokingGroup)
         BrowserTabContent* btc = *iter;
         if (btc != this) {
             if (btc->getYokingGroup() == m_yokingGroup) {
+                /*
+                 * If anything is added, also need to update updateYokedBrowserTabs()
+                 */
                 *m_viewingTransformation = *btc->m_viewingTransformation;
                 *m_flatSurfaceViewingTransformation = *btc->m_flatSurfaceViewingTransformation;
                 *m_cerebellumViewingTransformation = *btc->m_cerebellumViewingTransformation;
@@ -3475,6 +3545,10 @@ BrowserTabContent::isYoked() const
 void
 BrowserTabContent::updateYokedBrowserTabs()
 {
+    if (isExecutingConstructor) {
+        return;
+    }
+    
     if (m_yokingGroup == YokingGroupEnum::YOKING_GROUP_OFF) {
         return;
     }
@@ -3487,6 +3561,9 @@ BrowserTabContent::updateYokedBrowserTabs()
          iter++) {
         BrowserTabContent* btc = *iter;
         if (btc != this) {
+            /*
+             * If anything is added, also need to update setYokingGroup()
+             */
             if (btc->getYokingGroup() == m_yokingGroup) {
                 *btc->m_viewingTransformation = *m_viewingTransformation;
                 *btc->m_flatSurfaceViewingTransformation = *m_flatSurfaceViewingTransformation;

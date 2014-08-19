@@ -60,7 +60,6 @@
 #include "CiftiFiberOrientationFile.h"
 #include "CiftiFiberTrajectoryFile.h"
 #include "ClippingPlaneGroup.h"
-#include "DescriptiveStatistics.h"
 #include "DisplayGroupEnum.h"
 #include "DisplayPropertiesBorders.h"
 #include "DisplayPropertiesFiberOrientation.h"
@@ -558,7 +557,7 @@ BrainOpenGLFixedPipeline::drawModelInternal(Mode mode,
             ModelWholeBrain* wholeBrainModel = dynamic_cast<ModelWholeBrain*>(model);
             if (modelChart != NULL) {
                 drawChartData(browserTabContent, modelChart, viewport);
-                modelAllowsPalettes = false;
+                modelAllowsPalettes = true;
             }
             else if (surfaceModel != NULL) {
                 m_mirroredClippingEnabled = true;
@@ -2976,7 +2975,8 @@ BrainOpenGLFixedPipeline::setupVolumeDrawInfo(BrowserTabContent* browserTabConte
                             const FastStatistics* statistics = mapFile->getMapFastStatistics(mapIndex);
                             PaletteColorMapping* paletteColorMapping = mapFile->getMapPaletteColorMapping(mapIndex);
                             Palette* palette = paletteFile->getPaletteByName(paletteColorMapping->getSelectedPaletteName());
-                            if (palette != NULL) {
+                            if ((statistics != NULL)
+                                && (palette != NULL)) {
                                 bool useIt = true;
                                 
                                 if (volumeDrawInfoOut.empty() == false) {
@@ -5586,10 +5586,12 @@ BrainOpenGLFixedPipeline::drawAllPalettes(Brain* brain)
             const Palette* palette = paletteFile->getPaletteByName(paletteName);
             if (palette != NULL) {
                 const FastStatistics* statistics = mapFiles[i]->getMapFastStatistics(mapIndex);
-                this->drawPalette(palette,
-                                  pcm,
-                                  statistics,
-                                  i);
+                if (statistics != NULL) {
+                    this->drawPalette(palette,
+                                      pcm,
+                                      statistics,
+                                      i);
+                }
             }
             else {
                 CaretLogWarning("Palette named "
@@ -5644,7 +5646,11 @@ BrainOpenGLFixedPipeline::drawPalette(const Palette* palette,
                                                  (GLint)120);
     const GLint colorbarViewportHeight = 35;    
     const GLint colorbarViewportX = modelViewport[0] + 10;
-    GLint colorbarViewportY = (modelViewport[1] + 10 + (paletteDrawingIndex * colorbarViewportHeight));
+    const GLint colorbarVerticalSpacing = 10;
+    GLint colorbarViewportY = (modelViewport[1]
+                               + colorbarVerticalSpacing
+                               + (paletteDrawingIndex * colorbarViewportHeight));
+    
     glViewport(colorbarViewportX, 
                colorbarViewportY, 
                colorbarViewportWidth, 
@@ -5702,7 +5708,7 @@ BrainOpenGLFixedPipeline::drawPalette(const Palette* palette,
      * Add a little to left and right so viewport is filled (excess will get clipped)
      */
     glColor3fv(m_backgroundColorFloat);
-    glRectf(orthoLeftWithExtra, orthoRightWithExtra, -orthoHeight, orthoHeight);
+    glRectf(orthoLeftWithExtra, -orthoHeight, orthoRightWithExtra, orthoHeight);
     
     /*
      * Always interpolate if the palette has only two colors

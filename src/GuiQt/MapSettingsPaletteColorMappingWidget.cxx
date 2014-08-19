@@ -42,7 +42,6 @@
 
 #include "Brain.h"
 #include "CaretMappableDataFile.h"
-#include "DescriptiveStatistics.h"
 #include "EnumComboBoxTemplate.h"
 #include "EventCaretMappableDataFilesGet.h"
 #include "EventGraphicsUpdateAllWindows.h"
@@ -209,8 +208,10 @@ MapSettingsPaletteColorMappingWidget::updateThresholdControlsMinimumMaximumRange
                     case PaletteThresholdRangeModeEnum::PALETTE_THRESHOLD_RANGE_MODE_MAP:
                     {
                         const FastStatistics* stats = this->caretMappableDataFile->getMapFastStatistics(this->mapFileIndex);
-                        minValue = stats->getMin();
-                        maxValue = stats->getMax();
+                        if (stats != NULL) {
+                            minValue = stats->getMin();
+                            maxValue = stats->getMax();
+                        }
                     }
                         break;
                     case PaletteThresholdRangeModeEnum::PALETTE_THRESHOLD_RANGE_MODE_UNLIMITED:
@@ -945,7 +946,7 @@ MapSettingsPaletteColorMappingWidget::createPaletteSection()
  */
 void 
 MapSettingsPaletteColorMappingWidget::updateEditor(CaretMappableDataFile* caretMappableDataFile,
-                                         const int32_t mapIndexIn)
+                                                   const int32_t mapIndexIn)
 {
     this->caretMappableDataFile = caretMappableDataFile;
     this->mapFileIndex = mapIndexIn;
@@ -1059,9 +1060,13 @@ MapSettingsPaletteColorMappingWidget::updateEditor(CaretMappableDataFile* caretM
         this->thresholdRangeModeComboBox->blockSignals(false);
         updateThresholdControlsMinimumMaximumRangeValues();
 
+        float minValue  = 0.0;
+        float maxValue  = 0.0;
         const FastStatistics* statistics = this->caretMappableDataFile->getMapFastStatistics(this->mapFileIndex);
-        float minValue  = statistics->getMin();
-        float maxValue  = statistics->getMax();
+        if (statistics != NULL) {
+            minValue  = 0.0;
+            maxValue  = 0.0;
+        }
         
         this->thresholdLowSlider->setValue(lowValue);
         
@@ -1089,79 +1094,6 @@ MapSettingsPaletteColorMappingWidget::updateEditor(CaretMappableDataFile* caretM
     
     this->paletteWidgetGroup->blockAllSignals(false);
     this->thresholdWidgetGroup->blockAllSignals(false);
-}
-
-/**
- * Get statistics for displaying data in histogram
- * @param statisticsForAll
- *    Statistics for all data.
- * @param
- *    Statistics for display in the histogram.
- */
-const DescriptiveStatistics* 
-MapSettingsPaletteColorMappingWidget::getDescriptiveStatisticsForHistogram(const DescriptiveStatistics* statisticsForAll) const
-{
-    float mostPos  = 0.0;
-    float leastPos = 0.0;
-    float leastNeg = 0.0;
-    float mostNeg  = 0.0;
-    bool matchFlag = false;
-    if (this->histogramAllRadioButton->isChecked()) {
-        mostPos  = statisticsForAll->getMostPositiveValue();
-        leastPos = 0.0;
-        leastNeg = 0.0;
-        mostNeg  = statisticsForAll->getMostNegativeValue();
-    }
-    else if (this->histogramMatchPaletteRadioButton->isChecked()) {
-        matchFlag = true;
-        switch (this->paletteColorMapping->getScaleMode()) {
-            case PaletteScaleModeEnum::MODE_AUTO_SCALE:
-                mostPos  = std::numeric_limits<float>::max();
-                leastPos = 0.0;
-                leastNeg = 0.0;
-                mostNeg  = -std::numeric_limits<float>::max();
-                break;
-            case PaletteScaleModeEnum::MODE_AUTO_SCALE_PERCENTAGE:
-                mostPos  = statisticsForAll->getPositivePercentile(this->scaleAutoPercentagePositiveMaximumSpinBox->value());
-                leastPos = statisticsForAll->getPositivePercentile(this->scaleAutoPercentagePositiveMinimumSpinBox->value());
-                leastNeg = statisticsForAll->getNegativePercentile(this->scaleAutoPercentageNegativeMinimumSpinBox->value());
-                mostNeg  = statisticsForAll->getNegativePercentile(this->scaleAutoPercentageNegativeMaximumSpinBox->value());
-                break;
-            case PaletteScaleModeEnum::MODE_USER_SCALE:
-                mostPos  = this->scaleFixedPositiveMaximumSpinBox->value();
-                leastPos = this->scaleFixedPositiveMinimumSpinBox->value();
-                leastNeg = this->scaleFixedNegativeMinimumSpinBox->value();
-                mostNeg  = this->scaleFixedNegativeMaximumSpinBox->value();
-                break;
-        }
-    }
-    else {
-        CaretAssert(0);
-    }
-    
-    /*
-     * Remove data that is not displayed
-     */
-    bool isZeroIncluded = true;
-    if (matchFlag) {
-        isZeroIncluded = this->displayModeZeroCheckBox->isChecked();
-        
-        if (this->displayModeNegativeCheckBox->isChecked() == false) {
-            mostNeg  = 0.0;
-            leastNeg = 0.0;
-        }
-        if (this->displayModePositiveCheckBox->isChecked() == false) {
-            mostPos  = 0.0;
-            leastPos = 0.0;
-        }
-    }
-    
-    return this->caretMappableDataFile->getMapStatistics(this->mapFileIndex, 
-                                                         mostPos, 
-                                                         leastPos, 
-                                                         leastNeg, 
-                                                         mostNeg, 
-                                                         isZeroIncluded);
 }
 
 /**
@@ -1252,12 +1184,10 @@ MapSettingsPaletteColorMappingWidget::updateHistogramPlot()
      */
     this->thresholdPlot->detachItems();
     
-    if (this->paletteColorMapping != NULL) {
+    const FastStatistics* fastStatistics = caretMappableDataFile->getMapFastStatistics(mapFileIndex);
+    if ((this->paletteColorMapping != NULL)
+        && (fastStatistics != NULL)) {
         PaletteFile* paletteFile = GuiManager::get()->getBrain()->getPaletteFile();
-        /*const DescriptiveStatistics* statisticsForAll = this->caretMappableDataFile->getMapStatistics(this->mapFileIndex);
-        const DescriptiveStatistics* statistics = this->getDescriptiveStatisticsForHistogram(statisticsForAll);//*/
-        
-        const FastStatistics* fastStatistics = caretMappableDataFile->getMapFastStatistics(mapFileIndex);
         
         /*
          * Data values table

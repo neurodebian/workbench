@@ -26,6 +26,7 @@
 
 #include "WuQDialogNonModal.h"
 
+class QFileInfo;
 class QLineEdit;
 class QSplitter;
 class QToolButton;
@@ -56,25 +57,18 @@ namespace caret {
         // ADD_NEW_METHODS_HERE
 
     private slots:
-        void helpPageAnchorClicked(const QUrl&);
-        
-        void topicIndexTreeItemSelected(QTreeWidgetItem* item, int column);
-        
-        void helpPageBackButtonClicked();
-        
-        void helpPageForwardButtonClicked();
+        void topicIndexTreeItemChanged(QTreeWidgetItem* currentItem,
+                                       QTreeWidgetItem* previousItem);
         
         void helpPagePrintButtonClicked();
-        
-        void helpTextFindPreviousButtonClicked();
-        
-        void helpTextFindNextButtonClicked();
-        
-        void helpTextSearchLineEditStartSearch();
         
         void topicSearchLineEditStartSearch();
         
         void topicSearchLineEditCursorPositionChanged(int,int);
+        
+        void topicExpandAllTriggered();
+        
+        void topicCollapseAllTriggered();
         
     private:
         enum TreeItemType {
@@ -83,36 +77,25 @@ namespace caret {
             TREE_ITEM_WB_COMMAND
         };
         
-        enum FindDirection {
-            FIND_BACKWARDS,
-            FIND_FORWARDS
-        };
-        
         HelpViewerDialog(const HelpViewerDialog&);
 
         HelpViewerDialog& operator=(const HelpViewerDialog&);
         
         void loadHelpTopicsIntoIndexTree();
         
-        void printHistory();
-        
         HelpTreeWidgetItem* createHelpTreeWidgetItemForHelpPage(QTreeWidgetItem* parent,
                                                                 const AString& itemText,
                                                                 const AString& helpPageURL);
         
-        void displayHelpTextForHelpTreeWidgetItem(HelpTreeWidgetItem* helpItem,
-                                                  const bool addToHistoryFlag);
-        
-        void displayHttpInUsersWebBrowser(const AString& urlText);
-        
-        void addToHelpTopicHistory(HelpTreeWidgetItem* item);
-        
-        void findInHelpText(const FindDirection findDirection);
+        void displayHelpTextForHelpTreeWidgetItem(HelpTreeWidgetItem* helpItem);
         
         void addItemToParentMenu(QTreeWidgetItem* parentMenu,
                                  QTreeWidgetItem* item,
                                  const AString& itemName);
                                
+        QTreeWidgetItem* loadWorkbenchHelpInfoFromDirectory(QTreeWidgetItem* parent,
+                                                const QFileInfo& dirInfo);
+        
         /// the help browser
         QTextBrowser* m_helpBrowser;
         
@@ -128,38 +111,38 @@ namespace caret {
         /// tracks first mouse click in search topic line edit
         bool m_topicSearchLineEditFirstMouseClick;
         
-        /// line edit for searching help text
-        QLineEdit* m_helpTextFindLineEdit;
-        
-        /// find previous toolbutton
-        QToolButton* m_helpTextFindPreviousToolButton;
-        
-        /// find next toolbutton
-        QToolButton* m_helpTextFindNextToolButton;
-        
         /// All help pages
         std::vector<HelpTreeWidgetItem*> m_allHelpWidgetItems;
         
-        std::vector<HelpTreeWidgetItem*> m_helpTopicHistoryItems;
-        
-        int32_t m_helpTopicHistoryIndex;
-        
         // ADD_NEW_MEMBERS_HERE
+        
+        friend class HelpTextBrowser;
 
     };
     
+    /**
+     * The help text browser.
+     */
     class HelpTextBrowser : public QTextBrowser {
         Q_OBJECT
         
     public:
-        HelpTextBrowser(QWidget* parent = 0);
+        HelpTextBrowser(HelpViewerDialog* parentHelpViewerDialog);
         
         virtual ~HelpTextBrowser();
         
-        virtual QVariant loadResource(int type, const QUrl& name);
+        virtual QVariant loadResource(int type, const QUrl& url);
+        
+        virtual void setSource(const QUrl& url);
+        
+    private:
+        HelpViewerDialog* m_parentHelpViewerDialog;
         
     };
     
+    /**
+     * Base class for items in the tree widget.
+     */
     class HelpTreeWidgetItem : public QTreeWidgetItem {
         
     public:
@@ -197,8 +180,6 @@ namespace caret {
         const AString m_helpPageURL;
         
         const AString m_helpText;
-        
-        
     };
     
 #ifdef __HELP_VIEWER_DIALOG_DECLARE__

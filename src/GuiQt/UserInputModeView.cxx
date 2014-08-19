@@ -89,7 +89,7 @@ UserInputModeView::getUserInputMode() const
  *     Location of where mouse was clicked.
  */
 void
-UserInputModeView::processModelViewIdentification(BrainOpenGLViewportContent* /*viewportContent*/,
+UserInputModeView::processModelViewIdentification(BrainOpenGLViewportContent* viewportContent,
                                            BrainOpenGLWidget* openGLWidget,
                                            const int32_t mouseClickX,
                                            const int32_t mouseClickY)
@@ -99,8 +99,13 @@ UserInputModeView::processModelViewIdentification(BrainOpenGLViewportContent* /*
                                         mouseClickY,
                                         false);
     
-    GuiManager::get()->processIdentification(selectionManager,
-                                             openGLWidget);    
+    BrowserTabContent* btc = viewportContent->getBrowserTabContent();
+    if (btc != NULL) {
+       const int32_t tabIndex = btc->getTabNumber();
+       GuiManager::get()->processIdentification(tabIndex,
+                                                selectionManager,
+                                                openGLWidget);    
+   }
 }
 
 /**

@@ -437,6 +437,14 @@ BrainBrowserWindow::createActions()
                                 this,
                                 SLOT(processNewTab()));
     
+    m_duplicateTabAction =
+    WuQtUtilities::createAction("Duplicate Tab",
+                                "Create a new tab (window pane) that duplicates the selected tab in the window",
+                                Qt::CTRL + Qt::Key_D,
+                                this,
+                                this,
+                                SLOT(processDuplicateTab()));
+    
     m_openFileAction =
     WuQtUtilities::createAction("Open File...", 
                                 "Open a data file including a spec file located on the computer",
@@ -462,11 +470,11 @@ BrainBrowserWindow::createActions()
                                 SLOT(processManageSaveLoadedFiles()));
     
     m_closeSpecFileAction =
-    WuQtUtilities::createAction("Close Spec File",
-                                "Close the Spec File",
+    WuQtUtilities::createAction("Close All Files",
+                                "Close all loaded files",
                                 this,
                                 this,
-                                SLOT(processCloseSpecFile()));
+                                SLOT(processCloseAllFiles()));
     
     m_closeTabAction =
     WuQtUtilities::createAction("Close Tab",
@@ -730,6 +738,7 @@ BrainBrowserWindow::createMenuFile()
 #endif // CARET_OS_MACOSX
     menu->addAction(m_newWindowAction);
     menu->addAction(m_newTabAction);
+    menu->addAction(m_duplicateTabAction);
     menu->addSeparator();
     menu->addAction(m_openFileAction);
     menu->addAction(m_openLocationAction);
@@ -1514,10 +1523,10 @@ BrainBrowserWindow::processInformationDialog()
  * Called when close spec file is selected.
  */
 void 
-BrainBrowserWindow::processCloseSpecFile()
+BrainBrowserWindow::processCloseAllFiles()
 {
     if(!WuQMessageBox::warningYesNo(this,
-        "<html>Are you sure you want to close the spec file?</html>")) return;
+        "<html>Are you sure you want to close all files?</html>")) return;
 
     Brain* brain = GuiManager::get()->getBrain();
     brain->resetBrain();
@@ -1910,7 +1919,6 @@ BrainBrowserWindow::loadFiles(QWidget* parentForDialogs,
     float specFileTimeStart = 0.0;
     float specFileTimeEnd   = 0.0;
     bool sceneFileWasLoaded = false;
-    bool specFileWasLoaded  = false;
     
     /*
      * Load spec file (before data files)
@@ -1957,7 +1965,6 @@ BrainBrowserWindow::loadFiles(QWidget* parentForDialogs,
                     errorMessages += readSpecFileEvent.getErrorMessage();
                 }
                 specFileTimeEnd = timer.getElapsedTimeSeconds();
-                specFileWasLoaded = true;
                 createDefaultTabsFlag = true;
             }
                 break;
@@ -1971,7 +1978,6 @@ BrainBrowserWindow::loadFiles(QWidget* parentForDialogs,
 //                                                                    &specFile,
 //                                                                    this)) {
                     m_toolbar->addDefaultTabsAfterLoadingSpecFile();
-                    specFileWasLoaded = true;
                     createDefaultTabsFlag = true;
                 }
             }
@@ -2319,6 +2325,15 @@ BrainBrowserWindow::saveWindowComponentStatus(WindowComponentStatus& wcs)
 void 
 BrainBrowserWindow::processNewTab()
 {
+    m_toolbar->addNewTab();
+}
+
+/**
+ * Adds a new tab to the window.
+ */
+void
+BrainBrowserWindow::processDuplicateTab()
+{
     BrowserTabContent* previousTabContent = getBrowserTabContent();
     m_toolbar->addNewTabCloneContent(previousTabContent);
 }
@@ -2341,7 +2356,7 @@ BrainBrowserWindow::processMoveAllTabsToOneWindow()
     
     const int32_t numOtherTabs = static_cast<int32_t>(otherTabContent.size());
     for (int32_t i = 0; i < numOtherTabs; i++) {
-        m_toolbar->addNewTab(otherTabContent[i]);
+        m_toolbar->addNewTabWithContent(otherTabContent[i]);
         m_toolbar->updateToolBar();
     }
     
@@ -2409,7 +2424,7 @@ BrainBrowserWindow::processMoveSelectedTabToWindowMenuSelection(QAction* action)
             
         if (moveToBrowserWindow != NULL) {
             m_toolbar->removeTabWithContent(btc);
-            moveToBrowserWindow->m_toolbar->addNewTab(btc);
+            moveToBrowserWindow->m_toolbar->addNewTabWithContent(btc);
         }
         else {
             EventBrowserWindowNew newWindow(this,

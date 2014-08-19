@@ -91,8 +91,12 @@ namespace caret {
         
         AString convertToHtmlPage() const;
         
+        AString convertToHtmlPageWithFontHeight(const int fontHeight) const;
+        
         int32_t indexOfAnyChar(const AString& str,
                                const int from) const;
+        
+        int32_t indexNotOf(const QChar& ch) const;
         
         void appendWithNewLine(const AString& str);
         

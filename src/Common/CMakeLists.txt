@@ -98,6 +98,7 @@ ProgressObject.h
 ProgressReportingInterface.h
 ReductionEnum.h
 ReductionOperation.h
+SpecFileDialogViewFilesTypeEnum.h
 SpeciesEnum.h
 StereotaxicSpaceEnum.h
 StringTableModel.h
@@ -168,6 +169,7 @@ ProgramParametersException.cxx
 ProgressObject.cxx
 ReductionEnum.cxx
 ReductionOperation.cxx
+SpecFileDialogViewFilesTypeEnum.cxx
 SpeciesEnum.cxx
 StereotaxicSpaceEnum.cxx
 StringTableModel.cxx
@@ -177,6 +179,9 @@ TileTabsConfiguration.cxx
 Vector3D.cxx
 YokingGroupEnum.cxx
 )
+
+ADD_DEFINITIONS(-DCOMPILER_NAME="${CMAKE_CXX_COMPILER}")
+ADD_DEFINITIONS(-DCOMPILER_VERSION="${CMAKE_CXX_COMPILER_VERSION}")
 
 #
 # Include directories
