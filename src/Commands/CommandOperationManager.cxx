@@ -43,7 +43,6 @@
 #include "AlgorithmCiftiGradient.h"
 #include "AlgorithmCiftiLabelAdjacency.h"
 #include "AlgorithmCiftiLabelToROI.h"
-#include "AlgorithmCiftiMerge.h"
 #include "AlgorithmCiftiMergeDense.h"
 #include "AlgorithmCiftiPairwiseCorrelation.h"
 #include "AlgorithmCiftiParcellate.h"
@@ -61,7 +60,6 @@
 #include "AlgorithmGiftiLabelAddPrefix.h"
 #include "AlgorithmGiftiLabelToROI.h"
 #include "AlgorithmLabelDilate.h"
-#include "AlgorithmLabelMerge.h"
 #include "AlgorithmLabelModifyKeys.h"
 #include "AlgorithmLabelResample.h"
 #include "AlgorithmLabelToBorder.h"
@@ -109,7 +107,6 @@
 #include "AlgorithmVolumeGradient.h"
 #include "AlgorithmVolumeLabelToROI.h"
 #include "AlgorithmVolumeLabelToSurfaceMapping.h"
-#include "AlgorithmVolumeMerge.h"
 #include "AlgorithmVolumeParcelResampling.h"
 #include "AlgorithmVolumeParcelResamplingGeneric.h"
 #include "AlgorithmVolumeParcelSmoothing.h"
@@ -135,6 +132,7 @@
 #include "OperationCiftiLabelExportTable.h"
 #include "OperationCiftiLabelImport.h"
 #include "OperationCiftiMath.h"
+#include "OperationCiftiMerge.h"
 #include "OperationCiftiPalette.h"
 #include "OperationCiftiResampleDconnMemory.h"
 #include "OperationCiftiROIAverage.h"
@@ -151,6 +149,7 @@
 #include "OperationFociListCoords.h"
 #include "OperationLabelExportTable.h"
 #include "OperationLabelMask.h"
+#include "OperationLabelMerge.h"
 #include "OperationMetadataRemoveProvenance.h"
 #include "OperationMetadataStringReplace.h"
 #include "OperationMetricConvert.h"
@@ -181,6 +180,7 @@
 #include "OperationVolumeLabelExportTable.h"
 #include "OperationVolumeLabelImport.h"
 #include "OperationVolumeMath.h"
+#include "OperationVolumeMerge.h"
 #include "OperationVolumePalette.h"
 #include "OperationVolumeReorient.h"
 #include "OperationVolumeSetSpace.h"
@@ -262,7 +262,6 @@ CommandOperationManager::CommandOperationManager()
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmCiftiGradient()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmCiftiLabelAdjacency()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmCiftiLabelToROI()));
-    this->commandOperations.push_back(new CommandParser(new AutoAlgorithmCiftiMerge()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmCiftiMergeDense()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmCiftiPairwiseCorrelation()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmCiftiParcellate()));
@@ -280,7 +279,6 @@ CommandOperationManager::CommandOperationManager()
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmGiftiLabelAddPrefix()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmGiftiLabelToROI()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmLabelDilate()));
-    this->commandOperations.push_back(new CommandParser(new AutoAlgorithmLabelMerge()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmLabelModifyKeys()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmLabelResample()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmLabelToBorder()));
@@ -328,7 +326,6 @@ CommandOperationManager::CommandOperationManager()
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmVolumeGradient()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmVolumeLabelToROI()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmVolumeLabelToSurfaceMapping()));
-    this->commandOperations.push_back(new CommandParser(new AutoAlgorithmVolumeMerge()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmVolumeParcelResampling()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmVolumeParcelResamplingGeneric()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmVolumeParcelSmoothing()));
@@ -354,6 +351,7 @@ CommandOperationManager::CommandOperationManager()
     this->commandOperations.push_back(new CommandParser(new AutoOperationCiftiLabelExportTable()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationCiftiLabelImport()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationCiftiMath()));
+    this->commandOperations.push_back(new CommandParser(new AutoOperationCiftiMerge()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationCiftiPalette()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationCiftiResampleDconnMemory()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationCiftiROIAverage()));
@@ -370,6 +368,7 @@ CommandOperationManager::CommandOperationManager()
     this->commandOperations.push_back(new CommandParser(new AutoOperationFociListCoords()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationLabelExportTable()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationLabelMask()));
+    this->commandOperations.push_back(new CommandParser(new AutoOperationLabelMerge()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationMetadataRemoveProvenance()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationMetadataStringReplace()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationMetricConvert()));
@@ -402,6 +401,7 @@ CommandOperationManager::CommandOperationManager()
     this->commandOperations.push_back(new CommandParser(new AutoOperationVolumeLabelExportTable()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationVolumeLabelImport()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationVolumeMath()));
+    this->commandOperations.push_back(new CommandParser(new AutoOperationVolumeMerge()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationVolumePalette()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationVolumeReorient()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationVolumeSetSpace()));

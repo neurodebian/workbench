@@ -31,6 +31,7 @@ OperationCiftiExportDenseMapping.h
 OperationCiftiLabelExportTable.h
 OperationCiftiLabelImport.h
 OperationCiftiMath.h
+OperationCiftiMerge.h
 OperationCiftiPalette.h
 OperationCiftiResampleDconnMemory.h
 OperationCiftiROIAverage.h
@@ -48,6 +49,7 @@ OperationFociGetProjectionVertex.h
 OperationFociListCoords.h
 OperationLabelExportTable.h
 OperationLabelMask.h
+OperationLabelMerge.h
 OperationMetadataRemoveProvenance.h
 OperationMetadataStringReplace.h
 OperationMetricConvert.h
@@ -78,6 +80,7 @@ OperationVolumeCreate.h
 OperationVolumeLabelExportTable.h
 OperationVolumeLabelImport.h
 OperationVolumeMath.h
+OperationVolumeMerge.h
 OperationVolumePalette.h
 OperationVolumeReorient.h
 OperationVolumeSetSpace.h
@@ -99,6 +102,7 @@ OperationCiftiExportDenseMapping.cxx
 OperationCiftiLabelExportTable.cxx
 OperationCiftiLabelImport.cxx
 OperationCiftiMath.cxx
+OperationCiftiMerge.cxx
 OperationCiftiPalette.cxx
 OperationCiftiResampleDconnMemory.cxx
 OperationCiftiROIAverage.cxx
@@ -116,6 +120,7 @@ OperationFociGetProjectionVertex.cxx
 OperationFociListCoords.cxx
 OperationLabelExportTable.cxx
 OperationLabelMask.cxx
+OperationLabelMerge.cxx
 OperationMetadataRemoveProvenance.cxx
 OperationMetadataStringReplace.cxx
 OperationMetricConvert.cxx
@@ -146,6 +151,7 @@ OperationVolumeCreate.cxx
 OperationVolumeLabelExportTable.cxx
 OperationVolumeLabelImport.cxx
 OperationVolumeMath.cxx
+OperationVolumeMerge.cxx
 OperationVolumePalette.cxx
 OperationVolumeReorient.cxx
 OperationVolumeSetSpace.cxx

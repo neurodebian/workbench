@@ -2051,8 +2051,9 @@ CiftiMappableDataFile::getVoxelSpaceBoundingBox(BoundingBox& boundingBoxOut) con
     boundingBoxOut.resetForUpdate();
     
     std::vector<int64_t> volumeDimensions(5, 0);
-    CaretAssertVectorIndex(volumeDimensions, 4);
-    
+    getDimensions(volumeDimensions);
+    CaretAssertVectorIndex(volumeDimensions, 2);
+
     if (m_voxelIndicesToOffset->isValid()) {
         float xyz[3];
         indexToSpace(0,
@@ -2067,6 +2068,9 @@ CiftiMappableDataFile::getVoxelSpaceBoundingBox(BoundingBox& boundingBoxOut) con
                      xyz);
         
         boundingBoxOut.update(xyz);
+    }
+    else {
+        boundingBoxOut.resetZeros();
     }
 }
 
@@ -2484,6 +2488,82 @@ CiftiMappableDataFile::getVoxelColorInMap(const PaletteFile* paletteFile,
         rgbaOut[1] = mapRGBA[dataOffset4+1];
         rgbaOut[2] = mapRGBA[dataOffset4+2];
         rgbaOut[3] = mapRGBA[dataOffset4+3];
+    }
+}
+
+/**
+ * Get the brainordinate from the given row.
+ *
+ * @param rowIndex
+ *     Index of the row.
+ * @param surfaceStructureOut
+ *     Will contain structure of surface if row is a surface node.
+ * @param surfaceNodeIndexOut
+ *     Will contain index of surface node if row is a surface node.
+ * @param surfaceNumberOfNodesOut
+ *     Will contain surfaces number of nodes if row is a surface node.
+ * @param surfaceNodeValidOut
+ *     Will be true upon exit if the row corresponded to a surface node.
+ * @param voxelIJKOut
+ *     Will contain the voxel's IJK indices if row is a surface node.
+ * @param voxelXYZOut
+ *     Will contain the voxel's XYZ coordinate if row is a surface node.
+ * @param voxelValidOut
+ *     Will be true upon exit if the row corresponded to a surface node.
+ * @throw DataFileException
+ *     If the rows are not for brainordinates or the row index is invalid.
+ */
+void
+CiftiMappableDataFile::getBrainordinateFromRowIndex(const int64_t rowIndex,
+                                                    StructureEnum::Enum& surfaceStructureOut,
+                                                    int32_t& surfaceNodeIndexOut,
+                                                    int32_t& surfaceNumberOfNodesOut,
+                                                    bool& surfaceNodeValidOut,
+                                                    int64_t voxelIJKOut[3],
+                                                    float voxelXYZOut[3],
+                                                    bool& voxelValidOut) const throw (DataFileException)
+{
+    surfaceNodeValidOut = false;
+    voxelValidOut       = false;
+    
+    if (m_ciftiFile == NULL) {
+        return;
+    }
+    
+    const CiftiXML& ciftiXML = m_ciftiFile->getCiftiXML();
+    
+    if (ciftiXML.getMappingType(CiftiXML::ALONG_COLUMN) != CiftiMappingType::BRAIN_MODELS) {
+        throw DataFileException("File does not have brainordinate data for rows.");
+        return;
+    }
+    
+    const CiftiBrainModelsMap& brainMap = ciftiXML.getBrainModelsMap(CiftiXML::ALONG_COLUMN);
+    
+    if ((rowIndex < 0)
+        || (rowIndex >= m_ciftiFile->getNumberOfRows())) {
+        throw DataFileException("Row index "
+                                + AString::number(rowIndex)
+                                + " is invalid.  Number of rows is "
+                                + AString::number(m_ciftiFile->getNumberOfRows()));
+    }
+    
+    const CiftiBrainModelsMap::IndexInfo indexInfo = brainMap.getInfoForIndex(rowIndex);
+    
+    switch (indexInfo.m_type) {
+        case CiftiBrainModelsMap::SURFACE:
+            surfaceStructureOut     = indexInfo.m_structure;
+            surfaceNodeIndexOut     = indexInfo.m_surfaceNode;
+            surfaceNumberOfNodesOut = brainMap.getSurfaceNumberOfNodes(surfaceStructureOut);
+            surfaceNodeValidOut     = true;
+            break;
+        case CiftiBrainModelsMap::VOXELS:
+            voxelIJKOut[0] = indexInfo.m_ijk[0];
+            voxelIJKOut[1] = indexInfo.m_ijk[1];
+            voxelIJKOut[2] = indexInfo.m_ijk[2];
+            indexToSpace(voxelIJKOut,
+                         voxelXYZOut);
+            voxelValidOut = true;
+            break;
     }
 }
 
@@ -3022,15 +3102,15 @@ CiftiMappableDataFile::getSeriesDataForVoxelAtCoordinate(const float xyz[3],
             CaretAssert(0);
             break;
         case DATA_ACCESS_FILE_COLUMNS_OR_XML_ALONG_ROW:
+            seriesDataOut.resize(m_ciftiFile->getNumberOfRows());
+            valid = m_ciftiFile->getColumnFromVoxelCoordinate(&seriesDataOut[0],
+                                                              xyz);
+            break;
+        case DATA_ACCESS_FILE_ROWS_OR_XML_ALONG_COLUMN:
             seriesDataOut.resize(m_ciftiFile->getNumberOfColumns());
             valid = m_ciftiFile->getRowFromVoxelCoordinate(&seriesDataOut[0],
                                                            xyz);
             break;
-        case DATA_ACCESS_FILE_ROWS_OR_XML_ALONG_COLUMN:
-            break;
-            seriesDataOut.resize(m_ciftiFile->getNumberOfRows());
-            valid = m_ciftiFile->getColumnFromVoxelCoordinate(&seriesDataOut[0],
-                                                              xyz);
     }
     
     return valid;

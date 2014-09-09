@@ -143,6 +143,7 @@ namespace caret {
         void processViewFullScreenSelected();
         void processViewTileTabs();
         void processViewTileTabsConfigurationDialog();
+        void processShowHelpInformation();
         
         void processMoveOverlayToolBoxToLeft();
         void processMoveOverlayToolBoxToBottom();
@@ -188,8 +189,7 @@ namespace caret {
         void processDevelopExportVtkFile();
         
         void processProjectFoci();
-        
-        void processShowHelpViewer();
+        void processSplitBorderFiles();
         
     private:
         // Contains status of components such as enter/exit full screen
@@ -320,7 +320,6 @@ namespace caret {
         QAction* m_helpHcpWebsiteAction;
         QAction* m_helpHcpFeatureRequestAction;
         QAction* m_helpWorkbenchBugReportAction;
-        QAction* m_helpViewerAction;
         
         QAction* m_developerGraphicsTimingAction;
         QAction* m_developerExportVtkFileAction;
@@ -329,7 +328,8 @@ namespace caret {
         
         QAction* m_featuresToolBoxAction;
         
-        QAction* m_fociProjectAction;
+        QAction* m_dataFociProjectAction;
+        QAction* m_dataBorderFilesSplitAction;
         
         QMenu* m_moveSelectedTabToWindowMenu;
         

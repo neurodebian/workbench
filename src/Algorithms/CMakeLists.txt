@@ -37,7 +37,6 @@ AlgorithmCiftiFindClusters.h
 AlgorithmCiftiGradient.h
 AlgorithmCiftiLabelAdjacency.h
 AlgorithmCiftiLabelToROI.h
-AlgorithmCiftiMerge.h
 AlgorithmCiftiMergeDense.h
 AlgorithmCiftiPairwiseCorrelation.h
 AlgorithmCiftiParcellate.h
@@ -56,7 +55,6 @@ AlgorithmGiftiAllLabelsToROIs.h
 AlgorithmGiftiLabelAddPrefix.h
 AlgorithmGiftiLabelToROI.h
 AlgorithmLabelDilate.h
-AlgorithmLabelMerge.h
 AlgorithmLabelModifyKeys.h
 AlgorithmLabelResample.h
 AlgorithmLabelToBorder.h
@@ -104,7 +102,6 @@ AlgorithmVolumeFindClusters.h
 AlgorithmVolumeGradient.h
 AlgorithmVolumeLabelToROI.h
 AlgorithmVolumeLabelToSurfaceMapping.h
-AlgorithmVolumeMerge.h
 AlgorithmVolumeParcelResampling.h
 AlgorithmVolumeParcelResamplingGeneric.h
 AlgorithmVolumeParcelSmoothing.h
@@ -137,7 +134,6 @@ AlgorithmCiftiFindClusters.cxx
 AlgorithmCiftiGradient.cxx
 AlgorithmCiftiLabelAdjacency.cxx
 AlgorithmCiftiLabelToROI.cxx
-AlgorithmCiftiMerge.cxx
 AlgorithmCiftiMergeDense.cxx
 AlgorithmCiftiPairwiseCorrelation.cxx
 AlgorithmCiftiParcellate.cxx
@@ -156,7 +152,6 @@ AlgorithmGiftiAllLabelsToROIs.cxx
 AlgorithmGiftiLabelAddPrefix.cxx
 AlgorithmGiftiLabelToROI.cxx
 AlgorithmLabelDilate.cxx
-AlgorithmLabelMerge.cxx
 AlgorithmLabelModifyKeys.cxx
 AlgorithmLabelResample.cxx
 AlgorithmLabelToBorder.cxx
@@ -204,7 +199,6 @@ AlgorithmVolumeFindClusters.cxx
 AlgorithmVolumeGradient.cxx
 AlgorithmVolumeLabelToROI.cxx
 AlgorithmVolumeLabelToSurfaceMapping.cxx
-AlgorithmVolumeMerge.cxx
 AlgorithmVolumeParcelResampling.cxx
 AlgorithmVolumeParcelResamplingGeneric.cxx
 AlgorithmVolumeParcelSmoothing.cxx

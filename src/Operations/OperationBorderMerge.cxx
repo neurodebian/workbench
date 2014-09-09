@@ -24,6 +24,10 @@
 #include "Border.h"
 #include "BorderFile.h"
 
+#include <map>
+#include <utility>
+#include <vector>
+
 using namespace caret;
 using namespace std;
 
@@ -44,12 +48,14 @@ OperationParameters* OperationBorderMerge::getParameters()
     
     ParameterComponent* borderOpt = ret->createRepeatableParameter(2, "-border", "specify an input border file");
     borderOpt->addBorderParameter(1, "border-file-in", "a border file to use borders from");
-    OptionalParameter* selectOpt = borderOpt->createOptionalParameter(2, "-select", "select a single border to use");
+    ParameterComponent* selectOpt = borderOpt->createRepeatableParameter(2, "-select", "select a single border to use");
     selectOpt->addStringParameter(1, "border", "the border number or name");
+    OptionalParameter* upToOpt = selectOpt->createOptionalParameter(2, "-up-to", "use an inclusive range of borders");
+    upToOpt->addStringParameter(1, "last-border", "the number or name of the last column to include");
+    upToOpt->createOptionalParameter(2, "-reverse", "use the range in reverse order");
     
     ret->setHelpText(
-        AString("Takes one or more border files and makes a new border file from the borders in them.  ") +
-        "Beware, the borders are NOT checked for same structure or number of vertices in the surface they apply to.\n\n" +
+        AString("Takes one or more border files and makes a new border file from the borders in them.\n\n") +
         "Example: wb_command -border-merge out.border -border first.border -select 1 -border second.border\n\n" +
         "This example would take the first border from first.border, followed by all borders from second.border, " +
         "and write these to out.border."
@@ -67,32 +73,63 @@ void OperationBorderMerge::useParameters(OperationParameters* myParams, Progress
     for (int i = 0; i < numInputs; ++i)
     {
         BorderFile* input = borderInst[i]->getBorder(1);
-        int numBorders = input->getNumberOfBorders();
-        OptionalParameter* selectOpt = borderInst[i]->getOptionalParameter(2);
-        if (selectOpt->m_present)
+        if (i != 0)//structure automatically gets set on empty file by added borders
         {
-            AString borderID = selectOpt->getString(1);
-            bool ok = false;
-            int whichBorder = borderID.toInt(&ok) - 1;//first border is "1"
-            if (!ok)//only search for name if the string isn't a number, to prevent surprises
+            if (outFile->getStructure() != input->getStructure()) throw OperationException("input files have different structures");
+        }
+        if (input->getNumberOfNodes() != -1)
+        {
+            int outNodes = outFile->getNumberOfNodes();
+            if (outNodes != -1)
             {
-                for (int j = 0; j < numBorders; ++j)
+                if (outNodes != input->getNumberOfNodes()) throw OperationException("input files have different number of surface vertices");
+            } else {
+                outFile->setNumberOfNodes(input->getNumberOfNodes());
+            }
+        }
+        int numBorderParts = input->getNumberOfBorders();
+        const vector<ParameterComponent*>& selectOpts = *(borderInst[i]->getRepeatableParameterInstances(2));
+        int numSelectOpts = (int)selectOpts.size();
+        if (numSelectOpts > 0)
+        {
+            BorderMultiPartHelper myHelp(input);
+            for (int j = 0; j < numSelectOpts; ++j)
+            {
+                int initialBorder = myHelp.fromNumberOrName(selectOpts[j]->getString(1));
+                if (initialBorder < 0) throw OperationException("border '" + selectOpts[j]->getString(1) + "' not found in file '" + input->getFileName() + "'");
+                OptionalParameter* upToOpt = selectOpts[j]->getOptionalParameter(2);
+                if (upToOpt->m_present)
                 {
-                    if (input->getBorder(j)->getName() == borderID)
+                    int finalBorder = myHelp.fromNumberOrName(upToOpt->getString(1));
+                    if (finalBorder < 0) throw OperationException("ending border '" + selectOpts[j]->getString(1) + "' not found in file '" + input->getFileName() + "'");
+                    bool reverse = upToOpt->getOptionalParameter(2)->m_present;
+                    if (reverse)
                     {
-                        ok = true;
-                        whichBorder = j;
-                        break;
+                        for (int b = finalBorder; b >= initialBorder; --b)
+                        {
+                            for (int k = 0; k < (int)myHelp.borderPieceList[b].size(); ++k)
+                            {
+                                outFile->addBorder(new Border(*(input->getBorder(myHelp.borderPieceList[b][k]))));
+                            }
+                        }
+                    } else {
+                        for (int b = initialBorder; b <= finalBorder; ++b)
+                        {
+                            for (int k = 0; k < (int)myHelp.borderPieceList[b].size(); ++k)
+                            {
+                                outFile->addBorder(new Border(*(input->getBorder(myHelp.borderPieceList[b][k]))));
+                            }
+                        }
+                    }
+                } else {
+                    for (int k = 0; k < (int)myHelp.borderPieceList[initialBorder].size(); ++k)
+                    {
+                        outFile->addBorder(new Border(*(input->getBorder(myHelp.borderPieceList[initialBorder][k]))));
                     }
                 }
             }
-            if (!ok || whichBorder < 0 || whichBorder >= numBorders)
-            {
-                throw OperationException("border '" + borderID + "' not found in file '" + input->getFileName() + "'");
-            }
-            outFile->addBorder(new Border(*(input->getBorder(whichBorder))));
         } else {
-            for (int j = 0; j < numBorders; ++j)
+            for (int j = 0; j < numBorderParts; ++j)
             {
                 outFile->addBorder(new Border(*(input->getBorder(j))));
             }

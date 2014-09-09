@@ -145,6 +145,20 @@ UserInputModeBorders::drawPointAtMouseXY(BrainOpenGLWidget* openGLWidget,
             spi->setStructure(projectedItem.getStructure());
             this->borderBeingDrawnByOpenGL->addPoint(spi);
         } else {
+            const AString prevName(StructureEnum::toGuiName(borderBeingDrawnByOpenGL->getStructure()));
+            const AString newName(StructureEnum::toGuiName(projectedItem.getStructure()));
+            WuQMessageBox::errorOk(borderToolsWidget,
+                                   ("The last point added is on "
+                                    + newName
+                                    + " but all previous point(s) are on "
+                                    + prevName
+                                    + ".  Either resume drawing on "
+                                    + prevName
+                                    + " or press the Reset button to remove all previous point(s) "
+                                    "from "
+                                    + prevName
+                                    + " and draw on "
+                                    + newName));
             delete spi;
         }
     }
@@ -368,31 +382,25 @@ UserInputModeBorders::mouseLeftClick(const MouseEvent& mouseEvent)
             EventManager::get()->sendEvent(EventGraphicsUpdateOneWindow(this->windowIndex).getPointer());
             break;
         case MODE_EDIT:
-            switch (this->editOperation) {
-                case EDIT_OPERATION_DELETE:
-                {
-                        SelectionManager* idManager =
-                        openGLWidget->performIdentification(mouseX,
-                                                            mouseY,
-                                                            true);
-                        SelectionItemBorderSurface* idBorder = idManager->getSurfaceBorderIdentification();
-                        if (idBorder->isValid()) {
-                            BorderFile* borderFile = idBorder->getBorderFile();
+        {
+            SelectionManager* idManager =
+            openGLWidget->performIdentification(mouseX,
+                                                mouseY,
+                                                true);
+            SelectionItemBorderSurface* idBorder = idManager->getSurfaceBorderIdentification();
+            if (idBorder->isValid()) {
+                BorderFile* borderFile = idBorder->getBorderFile();
+                if (borderFile->isSingleStructure()) {
+                    switch (this->editOperation) {
+                        case EDIT_OPERATION_DELETE:
+                        {
                             Border* border = idBorder->getBorder();
                             borderFile->removeBorder(border);
                             this->updateAfterBordersChanged();
                         }
-                    }
-                    break;
-                case EDIT_OPERATION_PROPERTIES:
-                {
-                        SelectionManager* idManager =
-                        openGLWidget->performIdentification(mouseX,
-                                                            mouseY,
-                                                            true);
-                        SelectionItemBorderSurface* idBorder = idManager->getSurfaceBorderIdentification();
-                        if (idBorder->isValid()) {
-                            BorderFile* borderFile = idBorder->getBorderFile();
+                            break;
+                        case EDIT_OPERATION_PROPERTIES:
+                        {
                             Border* border = idBorder->getBorder();
                             std::auto_ptr<BorderPropertiesEditorDialog> editBorderDialog(
                                                                                          BorderPropertiesEditorDialog::newInstanceEditBorder(borderFile,
@@ -402,9 +410,15 @@ UserInputModeBorders::mouseLeftClick(const MouseEvent& mouseEvent)
                                 this->updateAfterBordersChanged();
                             }
                         }
+                            break;
                     }
-                    break;
+                }
+                else {
+                    WuQMessageBox::errorOk(this->borderToolsWidget,
+                                           borderFile->getObsoleteMultiStructureFormatMessage());
+                }
             }
+        }
             break;
         case MODE_ROI:
         {

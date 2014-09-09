@@ -216,6 +216,10 @@ BrainBrowserWindowToolBar::BrainBrowserWindowToolBar(const int32_t browserWindow
     QToolButton* informationDialogToolButton = new QToolButton();
     informationDialogToolButton->setDefaultAction(GuiManager::get()->getInformationDisplayDialogEnabledAction());
     
+    QToolButton* helpDialogToolButton = new QToolButton();
+    helpDialogToolButton->setDefaultAction(GuiManager::get()->getHelpViewerDialogDisplayAction());
+    helpDialogToolButton->setFixedSize(informationDialogToolButton->sizeHint()); // same size buttons
+    
     QToolButton* sceneDialogToolButton = new QToolButton();
     sceneDialogToolButton->setDefaultAction(GuiManager::get()->getSceneDialogDisplayAction());
     
@@ -262,6 +266,7 @@ BrainBrowserWindowToolBar::BrainBrowserWindowToolBar(const int32_t browserWindow
     QHBoxLayout* tabBarLayout = new QHBoxLayout(this->tabBarWidget);
     WuQtUtilities::setLayoutSpacingAndMargins(tabBarLayout, 2, 1);
     tabBarLayout->addWidget(this->tabBar, 100);
+    tabBarLayout->addWidget(helpDialogToolButton);
     tabBarLayout->addWidget(informationDialogToolButton);
     tabBarLayout->addWidget(sceneDialogToolButton);
     tabBarLayout->addWidget(toolBarToolButton);
@@ -1433,7 +1438,7 @@ BrainBrowserWindowToolBar::createViewWidget()
     
     QWidget* widget = new QWidget();
     QVBoxLayout* layout = new QVBoxLayout(widget);
-    WuQtUtilities::setLayoutSpacingAndMargins(layout, 4, 2);
+    WuQtUtilities::setLayoutSpacingAndMargins(layout, 4, 5);
     layout->addWidget(this->viewModeChartRadioButton);
     layout->addWidget(this->viewModeSurfaceMontageRadioButton);
     layout->addWidget(this->viewModeVolumeRadioButton);

@@ -37,6 +37,8 @@
 
 #include "AboutWorkbenchDialog.h"
 #include "ApplicationInformation.h"
+#include "BorderFile.h"
+#include "BorderFileSplitDialog.h"
 #include "Brain.h"
 #include "BrainBrowserWindowToolBar.h"
 #include "BrainBrowserWindowOrientedToolBox.h"
@@ -54,7 +56,6 @@
 #include "ElapsedTimer.h"
 #include "EventBrowserWindowCreateTabs.h"
 #include "EventDataFileRead.h"
-#include "EventHelpViewerDisplay.h"
 #include "EventManager.h"
 #include "EventModelGetAll.h"
 #include "EventGraphicsUpdateAllWindows.h"
@@ -521,12 +522,19 @@ BrainBrowserWindow::createActions()
                                 this,
                                 SLOT(processExitProgram()));
     
-    m_fociProjectAction =
+    m_dataFociProjectAction =
     WuQtUtilities::createAction("Project Foci...",
                                 "Project Foci to Surfaces",
                                 this,
                                 this,
                                 SLOT(processProjectFoci()));
+    
+    m_dataBorderFilesSplitAction =
+    WuQtUtilities::createAction("Split Multi-Structure Border File(s)...",
+                                "Split Multi-Structure Border File(s",
+                                this,
+                                this,
+                                SLOT(processSplitBorderFiles()));
     
     m_viewFullScreenAction = WuQtUtilities::createAction("Full Screen",
                                                          "View using all of screen",
@@ -630,13 +638,6 @@ BrainBrowserWindow::createActions()
                                 this,
                                 SLOT(processReportWorkbenchBug()));
     
-    m_helpViewerAction =
-    WuQtUtilities::createAction("Workbench Help...",
-                                "Show the Help Viewer",
-                                this,
-                                this,
-                                SLOT(processShowHelpViewer()));
-    
     m_connectToAllenDatabaseAction =
     WuQtUtilities::createAction("Allen Brain Institute Database...",
                                 "Open a connection to the Allen Brain Institute Database",
@@ -691,11 +692,17 @@ BrainBrowserWindow::createMenus()
     if (volumeMenu != NULL) {
         menubar->addMenu(volumeMenu);
     }
-    menubar->addMenu(createMenuConnect());
+    
+    QMenu* connectMenu = createMenuConnect();
+    if (connectMenu != NULL) {
+        menubar->addMenu(connectMenu);
+    }
+    
     if (prefs->isDevelopMenuEnabled()) {
         QMenu* developMenu = createMenuDevelop();
         menubar->addMenu(developMenu);
     }
+    
     menubar->addMenu(createMenuWindow());
     menubar->addMenu(createMenuHelp());
 }
@@ -1170,10 +1177,23 @@ BrainBrowserWindow::getSelectedTileTabsConfiguration()
 QMenu* 
 BrainBrowserWindow::createMenuConnect()
 {
-    QMenu* menu = new QMenu("Connect", this);
+    QMenu* menu = new QMenu("Connect");
     
-    menu->addAction(m_connectToAllenDatabaseAction);
-    menu->addAction(m_connectToConnectomeDatabaseAction);
+    if (m_connectToAllenDatabaseAction->isEnabled()) {
+        menu->addAction(m_connectToAllenDatabaseAction);
+    }
+    if (m_connectToConnectomeDatabaseAction->isEnabled()) {
+        menu->addAction(m_connectToConnectomeDatabaseAction);
+    }
+
+    /*
+     * If none of the actions are enabled, the menu will be
+     * empty so there is no need to display the menu.
+     */
+    if (menu->isEmpty()) {
+        delete menu;
+        menu =  NULL;
+    }
     
     return menu;
 }
@@ -1189,7 +1209,8 @@ BrainBrowserWindow::createMenuData()
     QObject::connect(menu, SIGNAL(aboutToShow()),
                      this, SLOT(processDataMenuAboutToShow()));
     
-    menu->addAction(m_fociProjectAction);
+    menu->addAction(m_dataFociProjectAction);
+    menu->addAction(m_dataBorderFilesSplitAction);
     
     return menu;
 }
@@ -1200,8 +1221,19 @@ BrainBrowserWindow::createMenuData()
 void
 BrainBrowserWindow::processDataMenuAboutToShow()
 {
+    Brain* brain = GuiManager::get()->getBrain();
     bool haveFociFiles = (GuiManager::get()->getBrain()->getNumberOfFociFiles() > 0);
-    m_fociProjectAction->setEnabled(haveFociFiles);
+    m_dataFociProjectAction->setEnabled(haveFociFiles);
+    
+    bool haveMultiStructureBorderFiles = false;
+    const int32_t numBorderFiles = brain->getNumberOfBorderFiles();
+    for (int32_t i = 0; i < numBorderFiles; i++) {
+        if ( ! brain->getBorderFile(i)->isSingleStructure()) {
+            haveMultiStructureBorderFiles = true;
+            break;
+        }
+    }
+    m_dataBorderFilesSplitAction->setEnabled(haveMultiStructureBorderFiles);
 }
 
 /**
@@ -1365,13 +1397,41 @@ BrainBrowserWindow::createMenuHelp()
 {
     QMenu* menu = new QMenu("Help", this);
     
-    menu->addAction(m_helpViewerAction);
+    /*
+     * Cannot use the Help action since it sets the "checkable" attribute
+     * and this will add checkbox and checkmark to the menu.  In addition,
+     * using the help action would also hide the help viewer if it is
+     * dispalyed and we don't want that.
+     */
+    QAction* helpAction = GuiManager::get()->getHelpViewerDialogDisplayAction();
+    menu->addAction(helpAction->text(),
+                    this, SLOT(processShowHelpInformation()));
     menu->addSeparator();
     menu->addAction(m_helpHcpWebsiteAction);
     menu->addAction(m_helpWorkbenchBugReportAction);
     menu->addAction(m_helpHcpFeatureRequestAction);
     
     return menu;
+}
+
+/**
+ * Called to show/hide help content.
+ */
+void
+BrainBrowserWindow::processShowHelpInformation()
+{
+    /*
+     * Always display the help viewer when selected from the menu.
+     * Even if the help viewer is active it may be under other windows
+     * so triggering it will cause it to display.
+     */
+    QAction* helpAction = GuiManager::get()->getHelpViewerDialogDisplayAction();
+    if (helpAction->isChecked()) {
+        helpAction->blockSignals(true);
+        helpAction->setChecked(false);
+        helpAction->blockSignals(false);
+    }
+    helpAction->trigger();
 }
 
 /**
@@ -1481,6 +1541,16 @@ BrainBrowserWindow::processProjectFoci()
 {    
     FociProjectionDialog fpd(this);
     fpd.exec();
+}
+
+/**
+ * Split multi-structure border files.
+ */
+void
+BrainBrowserWindow::processSplitBorderFiles()
+{
+    BorderFileSplitDialog dialog(this);
+    dialog.exec();
 }
 
 /**
@@ -2666,16 +2736,6 @@ QMenu*
 BrainBrowserWindow::createPopupMenu()
 {
     return NULL;
-}
-
-/**
- * Show the help viewer
- */
-void
-BrainBrowserWindow::processShowHelpViewer()
-{
-    EventHelpViewerDisplay helpEvent(this);
-    EventManager::get()->sendEvent(helpEvent.getPointer());
 }
 
 /**

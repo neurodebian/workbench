@@ -35,7 +35,6 @@
 #undef __BORDER_FILE_DECLARE__
 
 #include "Border.h"
-#include "BorderFileSaxReader.h"
 #include "BorderPointFromSearch.h"
 #include "CaretAssert.h"
 #include "CaretLogger.h"
@@ -182,6 +181,187 @@ BorderFile::getStructure() const
 }
 
 /**
+ * @return Structures of all borders.  In most cases, this method
+ * is equivalent to getStructure().  However, there are some older,
+ * obsolete border files that contain borders for multiple structures
+ * in which case this returns the structures for those borders such as
+ * CORTEX_LEFT and CORTEX_RIGHT.
+ */
+std::vector<StructureEnum::Enum>
+BorderFile::getAllBorderStructures() const
+{
+    std::set<StructureEnum::Enum> uniqueStructures;
+    
+    const int32_t numBorders = getNumberOfBorders();
+    for (int32_t i = 0; i < numBorders; i++) {
+        uniqueStructures.insert(getBorder(i)->getStructure());
+    }
+    
+    std::vector<StructureEnum::Enum> structures(uniqueStructures.begin(),
+                                                uniqueStructures.end());
+    return structures;
+}
+
+/**
+ * Create new border files each of which contains a border for a single structure.
+ * If there is not a border file name for for a structure, no file will be
+ * produced for that file and it is not considered an error.
+ *
+ * @param singleStructureFileNames
+ *     Each 'pair' is the filename for a structure.
+ * @param structureNumberOfNodes
+ *     Each pair is the number of nodes for a structure.  This parameter is 
+ *     optional and when available, is used to validate the barycentric
+ *     node indices in a border.
+ * @param singleStructureBorderFilesOut
+ *     On output contains border files for each of the structures.
+ * @param errorMessageOut
+ *     If unsuccessful will contain description of error(s).
+ * @return
+ *     True if successful and all files were created, else false.
+ */
+bool
+BorderFile::splitIntoSingleStructureFiles(const std::map<StructureEnum::Enum, AString>& singleStructureFileNames,
+                                          const std::map<StructureEnum::Enum, int32_t>& structureNumberOfNodes,
+                                          std::vector<BorderFile*>& singleStructureBorderFilesOut,
+                                          AString& errorMessageOut) const
+{
+    singleStructureBorderFilesOut.clear();
+    errorMessageOut.clear();
+    
+    /*
+     * Create single structure border files.
+     */
+    std::map<StructureEnum::Enum, BorderFile*> structureBorderFiles;
+    for (std::map<StructureEnum::Enum, AString>::const_iterator nameIter = singleStructureFileNames.begin();
+         nameIter != singleStructureFileNames.end();
+         nameIter++) {
+        const StructureEnum::Enum structure = nameIter->first;
+        if (StructureEnum::isSingleStructure(structure)) {
+            /*
+             * Create the border file and set the structure
+             */
+            BorderFile* borderFile = new BorderFile();
+            borderFile->setFileName(nameIter->second);
+            borderFile->setStructure(structure);
+            
+            /*
+             * Set number of nodes for border file (if available)
+             */
+            const std::map<StructureEnum::Enum, int32_t>::const_iterator structNumNodesIter =
+                structureNumberOfNodes.find(structure);
+            if (structNumNodesIter != structureNumberOfNodes.end()) {
+                const int32_t numNodes = structNumNodesIter->second;
+                borderFile->setNumberOfNodes(numNodes);
+            }
+            
+            /*
+             * Add to border file for each structure.
+             */
+            structureBorderFiles.insert(std::make_pair(structure,
+                                                       borderFile));
+        }
+        else {
+            errorMessageOut.appendWithNewLine("Structure "
+                                              + StructureEnum::toGuiName(structure)
+                                              + " is not a 'single' type structure.");
+        }
+    }
+    
+    /*
+     * Copy borders to the appropriate single-structure files.
+     */
+    const int32_t numBorders = getNumberOfBorders();
+    for (int32_t i = 0; i < numBorders; i++) {
+        const Border* border = getBorder(i);
+        CaretAssert(border);
+        const StructureEnum::Enum structure = border->getStructure();
+
+        /*
+         * Find output file with same structure as this border
+         */
+        std::map<StructureEnum::Enum, BorderFile*>::iterator fileIter = structureBorderFiles.find(structure);
+        if (fileIter != structureBorderFiles.end()) {
+            if (border->verifyAllPointsOnSameStructure()) {
+                /*
+                 * Surface number of nodes may be available
+                 */
+                int32_t surfaceNumberOfNodes = 0;
+                const std::map<StructureEnum::Enum, int32_t>::const_iterator structNumNodesIter =
+                structureNumberOfNodes.find(structure);
+                if (structNumNodesIter != structureNumberOfNodes.end()) {
+                    surfaceNumberOfNodes = structNumNodesIter->second;
+                }
+                
+                /*
+                 * If possible verify border node indices valid for structure
+                 */
+                bool copyBorderFlag = false;
+                if (surfaceNumberOfNodes > 0) {
+                    if (border->verifyForSurfaceNumberOfNodes(surfaceNumberOfNodes)) {
+                        copyBorderFlag = true;
+                    }
+                    else {
+                        errorMessageOut.appendWithNewLine("Border index="
+                                                          + AString::number(i)
+                                                          + " name="
+                                                          + border->getName()
+                                                          + " contains an incompatible number of nodes for structure "
+                                                          + StructureEnum::toGuiName(structure));
+                    }
+                }
+                else {
+                    /*
+                     * Unable to verify number of nodes so assume okay
+                     */
+                    copyBorderFlag = true;
+                }
+                
+                if (copyBorderFlag) {
+                    Border* borderCopy = new Border(*border);
+                    fileIter->second->addBorder(borderCopy);
+                    
+                    const GiftiLabel* nameLabel = m_nameColorTable->getLabelBestMatching(border->getName());
+                    fileIter->second->getNameColorTable()->addLabel(nameLabel);
+                    const GiftiLabel* classLabel = m_classColorTable->getLabelBestMatching(border->getClassName());
+                    fileIter->second->getClassColorTable()->addLabel(classLabel);
+                }
+            }
+            else {
+                errorMessageOut.appendWithNewLine("Border index="
+                                                  + AString::number(i)
+                                                  + " name="
+                                                  + border->getName()
+                                                  + " is an invalid border that contains points on multiple structures");
+            }
+        }
+    }
+    
+    if (errorMessageOut.isEmpty()) {
+        /*
+         * Success: return the single structure border files that were created.
+         */
+        for (std::map<StructureEnum::Enum, BorderFile*>::iterator fileIter = structureBorderFiles.begin();
+             fileIter != structureBorderFiles.end();
+             fileIter++) {
+            singleStructureBorderFilesOut.push_back(fileIter->second);
+        }
+        return true;
+    }
+
+    /*
+     * Had an error so delete any single structure border files that were created.
+     */
+    for (std::map<StructureEnum::Enum, BorderFile*>::iterator fileIter = structureBorderFiles.begin();
+         fileIter != structureBorderFiles.end();
+         fileIter++) {
+        delete fileIter->second;
+    }
+    
+    return false;
+}
+
+/**
  * Set the structure for this file.
  * @param structure
  *   New structure for this file.
@@ -204,6 +384,7 @@ BorderFile::setStructure(const StructureEnum::Enum structure)
         }
     }
     m_structure = structure;
+    setModified();
 }
 
 /**
@@ -256,18 +437,85 @@ void BorderFile::setNumberOfNodes(const int32_t& numNodes)
 {
     if (numNodes < 1)
     {
-        throw DataFileException("attempt to set non-positive number of nodes on border file");
+        throw DataFileException("attempt to set non-positive number of vertices on border file");
     }
     int numBorders = (int)m_borders.size();
     for (int i = 0; i < numBorders; ++i)
     {
         if (!m_borders[i]->verifyForSurfaceNumberOfNodes(numNodes))
         {
-            throw DataFileException("attempt to set number of nodes less than the nodes used in border file");
+            throw DataFileException("cannot set border file number of vertices less than the vertices used by its borders");
         }
     }
     m_numNodes = numNodes;//even if we are currently multi-structure, remember the number of nodes that was set
+    setModified();
 }
+
+/**
+ * If the number of nodes is not valid, it may indicate an old border file
+ * that allows borders from multiple structures.  So, examine all of the
+ * borders and if ALL of the borders resized on the same structure, set the
+ * number of nodes.
+ *
+ * @param structureToNodeCount
+ *    A map containing the number of nodes for each valid structure.
+ * @throw DataFileException
+ *    If a border is not valid for its corresponding structure
+ *    (meaning, a node index used by a border is greater than the 
+ *    number of nodes in the corresponding structure).
+ */
+void
+BorderFile::updateNumberOfNodesIfSingleStructure(const std::map<StructureEnum::Enum, int32_t>& structureToNodeCount)
+{
+    if (getNumberOfNodes() > 0) {
+        return;
+    }
+    
+    const int32_t numBorders = getNumberOfBorders();
+
+    /*
+     * Verify that all borders in this file are for the same structure
+     */
+    bool allStructuresMatchFlag = true;
+    StructureEnum::Enum firstBorderStructure = StructureEnum::INVALID;
+    for (int32_t i = 0; i < numBorders; i++) {
+        const StructureEnum::Enum structure = m_borders[i]->getStructure();
+        
+        if (i == 0) {
+            firstBorderStructure = structure;
+        }
+        else {
+            if (structure != firstBorderStructure) {
+                allStructuresMatchFlag = false;
+                break;
+            }
+        }
+    }
+    
+    /*
+     * If all of the borders in this file are for the same structure,
+     * see if the number of nodes is available for the structure, and if so,
+     * set the number of borders for the file.
+     */
+    if (allStructuresMatchFlag) {
+        if ((firstBorderStructure != StructureEnum::INVALID)
+            && (firstBorderStructure != StructureEnum::ALL)) {
+            const std::map<StructureEnum::Enum, int32_t>::const_iterator iter = structureToNodeCount.find(firstBorderStructure);
+            if (iter != structureToNodeCount.end()) {
+                const int32_t numNodes = iter->second;
+                setNumberOfNodes(numNodes);
+                setStructure(firstBorderStructure);
+                CaretLogInfo("Updated border file: "
+                             + getFileNameNoPath()
+                             + " structure="
+                             + StructureEnum::toGuiName(firstBorderStructure)
+                             + " number-of-nodes="
+                             + AString::number(numNodes));
+            }
+        }
+    }
+}
+
 
 /**
  * @return the number of borders.
@@ -487,16 +735,17 @@ BorderFile::findAllBordersWithPointsNearBothSegmentEndPoints(const DisplayGroupE
                                                                            distance2);
             if ((nearestIndex1 >= 0)
                 && (nearestIndex2 >= 0)) {
-                    BorderPointFromSearch bpo;
-                    bpo.setData(const_cast<BorderFile*>(this),
-                                border,
-                                borderIndex,
-                                nearestIndex1,
-                                distance1);
-                    borderPointsOut.push_back(bpo);
+                const float averageDistance = (distance1 + distance2) / 2.0;
+                BorderPointFromSearch bpo;
+                bpo.setData(const_cast<BorderFile*>(this),
+                            border,
+                            borderIndex,
+                            nearestIndex1,
+                            averageDistance);
+                borderPointsOut.push_back(bpo);
             }
         }
-    }    
+    }
 }
 
 
@@ -538,20 +787,24 @@ BorderFile::addBorder(Border* border)
         }
     }
     m_borders.push_back(border);
-    const AString name = border->getName();
-    if (name.isEmpty() == false) {
-        const int32_t nameColorKey = m_nameColorTable->getLabelKeyFromName(name);
-        if (nameColorKey < 0) {
-            m_nameColorTable->addLabel(name, 0.0f, 0.0f, 0.0f, 1.0f);
-        }
-    }
-    const AString className = border->getClassName();
-    if (className.isEmpty() == false) {
-        const int32_t classColorKey = m_classColorTable->getLabelKeyFromName(className);
-        if (classColorKey < 0) {
-            m_classColorTable->addLabel(className, 0.0f, 0.0f, 0.0f, 1.0f);
-        }
-    }
+
+// DO NOT WANT to add entries to name and class tables when the names are
+// not an exact match as partial matches are acceptable.
+//    const AString name = border->getName();
+//    if (name.isEmpty() == false) {
+//        const int32_t nameColorKey = m_nameColorTable->getLabelKeyFromName(name);
+//        if (nameColorKey < 0) {
+//            m_nameColorTable->addLabel(name, 0.0f, 0.0f, 0.0f, 1.0f);
+//        }
+//    }
+//    const AString className = border->getClassName();
+//    if (className.isEmpty() == false) {
+//        const int32_t classColorKey = m_classColorTable->getLabelKeyFromName(className);
+//        if (classColorKey < 0) {
+//            m_classColorTable->addLabel(className, 0.0f, 0.0f, 0.0f, 1.0f);
+//        }
+//    }
+    
     m_forceUpdateOfGroupAndNameHierarchy = true;
     setModified();
 }
@@ -750,6 +1003,7 @@ void BorderFile::setBorderMetadataValue(const AString& name, const AString& clas
     map<pair<AString, AString>, vector<AString> >::iterator iter = m_borderMDValues.find(make_pair(name, className));
     if (iter == m_borderMDValues.end())
     {
+        if (value == "") return;//don't create the metadata values array if we only store the empty string
         iter = m_borderMDValues.insert(make_pair(make_pair(name, className), vector<AString>(m_borderMDKeys.size()))).first;
     }
     CaretAssert(iter->second.size() == m_borderMDKeys.size());
@@ -969,112 +1223,40 @@ BorderFile::readFile(const AString& filename) throw (DataFileException)
 void 
 BorderFile::writeFile(const AString& filename) throw (DataFileException)
 {
-    checkFileWritability(filename);
-    
-    setFileName(filename);
-    
-    try {
-        if (canWriteAsVersion(3))
-        {
-            QFile myFile(filename);
-            if (!myFile.open(QIODevice::WriteOnly | QIODevice::Truncate)) throw DataFileException("could not open " + filename + " for writing");
-            QXmlStreamWriter myXML(&myFile);
-            myXML.setAutoFormatting(true);
-            writeVersion3(myXML);
-            clearModified();//TSC: huh?  borrowed from below, but...
-            return;
-        }
-        //
-        // Format the version string so that it ends with at most one zero
-        //
-        const AString versionString = AString::number(1.0);
-        
-        //
-        // Open the file
-        //
-        FileAdapter file;
-        AString errorMessage;
-        QTextStream* textStream = file.openQTextStreamForWritingFile(getFileName(),
-                                                                     errorMessage);
-        if (textStream == NULL) {
-            throw DataFileException(errorMessage);
-        }
-
-        //
-        // Create the xml writer
-        //
-        XmlWriter xmlWriter(*textStream);
-        
-        //
-        // Write header info
-        //
-        xmlWriter.writeStartDocument("1.0");
-        
-        //
-        // Write GIFTI root element
-        //
-        XmlAttributes attributes;
-        
-        //attributes.addAttribute("xmlns:xsi",
-        //                        "http://www.w3.org/2001/XMLSchema-instance");
-        //attributes.addAttribute("xsi:noNamespaceSchemaLocation",
-        //                        "http://brainvis.wustl.edu/caret6/xml_schemas/GIFTI_Caret.xsd");
-        attributes.addAttribute(BorderFile::XML_ATTRIBUTE_VERSION,
-                                versionString);
-        xmlWriter.writeStartElement(BorderFile::XML_TAG_BORDER_FILE,
-                                    attributes);
-        
-        //
-        // Write Metadata
-        //
-        if (m_metadata != NULL) {
-            m_metadata->writeAsXML(xmlWriter);
-        }
-            
-        //
-        // Write the class color table
-        //
-        xmlWriter.writeStartElement(XML_TAG_CLASS_COLOR_TABLE);
-        m_classColorTable->writeAsXML(xmlWriter);
-        xmlWriter.writeEndElement();
-        
-        //
-        // Write the name color table
-        //
-        xmlWriter.writeStartElement(XML_TAG_NAME_COLOR_TABLE);
-        m_nameColorTable->writeAsXML(xmlWriter);
-        xmlWriter.writeEndElement();
-        
-        
-        //
-        // Write borders
-        //
-        const int32_t numBorders = getNumberOfBorders();
-        for (int32_t i = 0; i < numBorders; i++) {
-            m_borders[i]->writeAsXML(xmlWriter);
-        }
-        
-        xmlWriter.writeEndElement();
-        xmlWriter.writeEndDocument();
-        
-        file.close();
-        
-        clearModified();
-    } catch (DataFileException& e) {
-        throw e;
-    } catch (const GiftiException& e) {
-        throw DataFileException(e);
-    } catch (const XmlException& e) {
-        throw DataFileException(e);
-    } catch (exception& e) {
-        throw DataFileException(e.what());
-    } catch (...) {
-        throw DataFileException("caught unknown exception type in BorderFile::writeFile");
+    if (canWriteAsVersion(3))
+    {
+        writeFile(filename, 3);
+    } else {
+        CaretLogWarning("border file missing information required for writing as version 3, falling back to older format");
+        writeFile(filename, 1);
     }
+}
+
+/**
+ * @return Error message for attempting a gui operation on an obsolete, multi-structure border file.
+ */
+AString
+BorderFile::getObsoleteMultiStructureFormatMessage()
+{
+    return ("This border file ("
+            + getFileNameNoPath()
+            + ") contains borders for multiple structures and must be split into single-structure border files.  "
+            "This can be done in the gui, using a selection in the Data menu, "
+            "or on the command line using -file-convert with the -border-version-convert option.");
 }
 
 void BorderFile::writeFile(const AString& filename, const int& version)
 {
+    if ( ! isSingleStructure()) {
+        throw DataFileException(filename,
+                                "Writing multi-structure border files is no longer supported ("
+                                + getFileNameNoPath()
+                                + ").  "
+                                "Any existing multi-structure border files should be split into single-structure border files.  "
+                                "This can be done on the command line using -file-convert with the -border-version-convert option, "
+                                "or in the gui, using a selection in the Data menu.");
+    }
+    
     if (!canWriteAsVersion(version)) throw DataFileException("cannot write border file as version '" + AString::number(version) + "'");
     checkFileWritability(filename);
     
@@ -1176,11 +1358,13 @@ void BorderFile::writeFile(const AString& filename, const int& version)
         }
                 
         clearModified();
-    } catch (DataFileException& e) {//even though this function doesn't have a throw specifier, don't throw anything strange
+    } catch (DataFileException& e) {//even though this function doesn't have a throw specifier, don't throw anything strange, since the other writeFile calls it
         throw e;
     } catch (const GiftiException& e) {
         throw DataFileException(e);
     } catch (const XmlException& e) {
+        throw DataFileException(e);
+    } catch (const CaretException& e) {
         throw DataFileException(e);
     } catch (exception& e) {
         throw DataFileException(e.what());
@@ -1196,7 +1380,7 @@ bool BorderFile::canWriteAsVersion(const int& version) const
         case 1:
             return true;
         case 3:
-            if (m_structure == StructureEnum::ALL) return false;
+            if (!StructureEnum::isSingleStructure(m_structure)) return false;
             if (m_numNodes == -1) return false;
             return true;
         default:
@@ -1237,7 +1421,8 @@ void BorderFile::writeVersion3(QXmlStreamWriter& output) const
         AString thisClass = classBorder->getClassName();//hierarchical representation in file
         output.writeStartElement("Class");
         output.writeAttribute("Name", thisClass);
-        writeColorHelper(output, getClassColorTable()->getLabel(thisClass));
+        writeColorHelper(output, getClassColorTable()->getLabelBestMatching(thisClass));
+        //writeColorHelper(output, getClassColorTable()->getLabel(thisClass));
         for (int j = i; j < numBorders; ++j)
         {
             if (used[j]) continue;
@@ -1247,7 +1432,8 @@ void BorderFile::writeVersion3(QXmlStreamWriter& output) const
                 AString thisName = nameBorder->getName();//multipart borders
                 output.writeStartElement("Border");
                 output.writeAttribute("Name", thisName);
-                writeColorHelper(output, getNameColorTable()->getLabel(thisName));
+                writeColorHelper(output, getNameColorTable()->getLabelBestMatching(thisName));
+                //writeColorHelper(output, getNameColorTable()->getLabel(thisName));
                 map<pair<AString, AString>, vector<AString> >::const_iterator iter = m_borderMDValues.find(make_pair(thisName, thisClass));
                 if (iter != m_borderMDValues.end())
                 {
@@ -1645,17 +1831,40 @@ BorderFile::addToDataFileContentInformation(DataFileContentInformation& dataFile
 {
     CaretDataFile::addToDataFileContentInformation(dataFileInformation);
     
-    QStringList fociNames = getAllBorderNamesSorted();
-    const int32_t numNames = fociNames.size();
-    if (numNames > 0) {
-        AString namesListText = "BORDER NAMES";
-        for (int32_t i = 0; i < numNames; i++) {
-            namesListText.appendWithNewLine("    "
-                                            + fociNames.at(i));
-            
+    const std::vector<StructureEnum::Enum> allStructures = getAllBorderStructures();
+    if (allStructures.size() >= 2) {
+        AString structuresText;
+        for (std::vector<StructureEnum::Enum>::const_iterator iter = allStructures.begin();
+             iter != allStructures.end();
+             iter++) {
+            structuresText += (StructureEnum::toGuiName(*iter) + " ");
         }
-        
-        dataFileInformation.addText(namesListText);
+        dataFileInformation.addNameAndValue("Border Structures", structuresText);
+    }
+    
+    int nameSize = 4, classSize = 0;//reserve space for headings, but classSize is only to know how much to reserve()
+    BorderMultiPartHelper myHelp(this);
+    for (int i = 0; i < (int)myHelp.borderPieceList.size(); ++i)
+    {
+        CaretAssert(myHelp.borderPieceList[i].size() > 0);
+        const Border* thisPart = getBorder(myHelp.borderPieceList[i][0]);
+        nameSize = max(nameSize, thisPart->getName().length());
+        classSize = max(classSize, thisPart->getClassName().length());
+    }
+    nameSize += 3;//minimum number spaces between fields
+    int numberSize = max(8, AString::number(myHelp.borderPieceList.size()).length() + 3);//spacing for border index
+    AString header = AString("INDEX").leftJustified(numberSize) + AString("NAME").leftJustified(nameSize) + "CLASS";
+    dataFileInformation.addText(header);
+    for (int i = 0; i < (int)myHelp.borderPieceList.size(); ++i)
+    {
+        CaretAssert(myHelp.borderPieceList[i].size() > 0);
+        const Border* thisPart = getBorder(myHelp.borderPieceList[i][0]);
+        AString line;
+        line.reserve(numberSize + nameSize + classSize + 1);
+        line = "\n" + AString::number(i + 1).leftJustified(numberSize);
+        line += thisPart->getName().leftJustified(nameSize);
+        line += thisPart->getClassName();
+        dataFileInformation.addText(line);
     }
 }
 
@@ -1941,5 +2150,39 @@ BorderFile::exportToCaret5Format(const std::vector<SurfaceFile*>& surfaceFiles,
     
 }
 
+BorderMultiPartHelper::BorderMultiPartHelper(const BorderFile* bf)
+{
+    int numBorderParts = bf->getNumberOfBorders();
+    for (int i = 0; i < numBorderParts; ++i)
+    {
+        const Border* thisPart = bf->getBorder(i);
+        map<pair<AString, AString>, int>::const_iterator iter = stringLookup.find(make_pair(thisPart->getName(), thisPart->getClassName()));
+        if (iter == stringLookup.end())
+        {
+            stringLookup.insert(make_pair(make_pair(thisPart->getName(), thisPart->getClassName()), (int)borderPieceList.size()));
+            borderPieceList.push_back(vector<int>(1, i));
+        } else {
+            borderPieceList[iter->second].push_back(i);
+        }
+    }
+}
 
-
+int BorderMultiPartHelper::fromNumberOrName(const AString& ident) const
+{
+    bool ok = false;
+    int whichBorder = ident.toInt(&ok) - 1;//first border is "1"
+    if (ok)
+    {
+        if (whichBorder < 0 || whichBorder >= (int)borderPieceList.size()) return -1;
+        return whichBorder;
+    } else {//only search for name if the string isn't a number, to prevent surprises
+        for (std::map<std::pair<AString, AString>, int>::const_iterator iter = stringLookup.begin(); iter != stringLookup.end(); ++iter)
+        {
+            if (iter->first.first == ident)
+            {
+                return iter->second;
+            }
+        }
+        return -1;
+    }
+}   

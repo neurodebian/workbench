@@ -59,6 +59,13 @@ namespace caret {
         
         void setStructure(const StructureEnum::Enum structure);
         
+        std::vector<StructureEnum::Enum> getAllBorderStructures() const;
+        
+        bool splitIntoSingleStructureFiles(const std::map<StructureEnum::Enum, AString>& singleStructureFileNames,
+                                           const std::map<StructureEnum::Enum, int32_t>& structureNumberOfNodes,
+                                           std::vector<BorderFile*>& singleStructureBorderFilesOut,
+                                           AString& errorMessageOut) const;
+
         GiftiMetaData* getFileMetaData();
         
         const GiftiMetaData* getFileMetaData() const;
@@ -76,6 +83,8 @@ namespace caret {
         int32_t getNumberOfNodes() const;
         
         void setNumberOfNodes(const int32_t& numNodes);
+        
+        void updateNumberOfNodesIfSingleStructure(const std::map<StructureEnum::Enum, int32_t>& structureToNodeCount);
         
         int32_t getNumberOfBorders() const;
         
@@ -147,6 +156,8 @@ namespace caret {
         
         void exportToCaret5Format(const std::vector<SurfaceFile*>& surfaceFiles,
                                   const AString& outputCaret5FilesPrefix) throw (DataFileException);
+        
+        AString getObsoleteMultiStructureFormatMessage();
         
         /** XML Tag for BorderFile element */
         static const AString XML_TAG_BORDER_FILE;
@@ -222,6 +233,14 @@ namespace caret {
         static const int32_t s_borderFileVersion;
     };
     
+    struct BorderMultiPartHelper
+    {
+        std::map<std::pair<AString, AString>, int> stringLookup;
+        std::vector<std::vector<int> > borderPieceList;
+        BorderMultiPartHelper(const BorderFile* bf);
+        int fromNumberOrName(const AString& ident) const;
+    };
+
 #ifdef __BORDER_FILE_DECLARE__
     const AString BorderFile::XML_TAG_BORDER_FILE = "BorderFile";
     const AString BorderFile::XML_ATTRIBUTE_VERSION = "Version";
