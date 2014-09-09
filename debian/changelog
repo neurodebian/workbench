@@ -1,4 +1,11 @@
-connectome-workbench (0.85+git460-g462f4cf-1) neurodebian; urgency=medium
+connectome-workbench (1.0-1) unstable; urgency=medium
+
+  * Fresh upstream release
+  * Initial upload to Debian proper (Closes: #744130)
+
+ -- Yaroslav Halchenko <debian@onerussian.com>  Tue, 09 Sep 2014 19:31:46 -0400
+
+connectome-workbench (0.85+git460-g462f4cf-1) UNRELEASED; urgency=medium
 
   * New upstream snapshot from v0.85-460-g462f4cf
 
