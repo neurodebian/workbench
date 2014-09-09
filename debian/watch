@@ -1,0 +1,4 @@
+version=3
+opts="uversionmangle=s/v//,filenamemangle=s/.*\/(.*)/connectome-workbench-$1/" \
+  http://github.com/Washington-University/workbench/releases .*archive/v?([\d\.rc]+).tar.gz
+
