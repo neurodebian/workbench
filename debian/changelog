@@ -1,7 +1,15 @@
-connectome-workbench (1.0-1) unstable; urgency=medium
+connectome-workbench (1.0-2) unstable; urgency=medium
+
+  * debian/copyright
+    - additional/adjusted entries. Thanks Thorsten
+      Alteholz for the review
+  * Re-upload to Debian proper (Closes: #744130)
+
+ -- Yaroslav Halchenko <debian@onerussian.com>  Tue, 21 Oct 2014 10:04:22 -0400
+
+connectome-workbench (1.0-1) neurodebian; urgency=medium
 
   * Fresh upstream release
-  * Initial upload to Debian proper (Closes: #744130)
 
  -- Yaroslav Halchenko <debian@onerussian.com>  Tue, 09 Sep 2014 19:31:46 -0400
 

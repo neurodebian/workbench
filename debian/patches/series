@@ -1,4 +1,5 @@
 #up_operations_osmesa
 #up_dynamic_linking_reorder
+up_copyright_fixes
 deb_build_without_git
 deb_system_ftgl
