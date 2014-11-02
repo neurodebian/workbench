@@ -17,6 +17,8 @@ else
 endif
 
 export DEB_LDFLAGS_MAINT_APPEND = -Wl,--as-needed
+export DEB_CFLAGS_MAINT_APPEND = -DNDEBUG
+export DEB_CXXFLAGS_MAINT_APPEND = -DNDEBUG
 
 # Uncomment this to turn on verbose mode.
 export DH_VERBOSE=1

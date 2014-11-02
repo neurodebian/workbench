@@ -1,3 +1,12 @@
+connectome-workbench (1.0-3) unstable; urgency=medium
+
+  * debian/rules
+    - explicitly provide -DNDEBUG for C{,XX}FLAGS to avoid building
+      performance impairing debug code (Thanks upstream Timothy
+      Coalson for the advisory)
+
+ -- Yaroslav Halchenko <debian@onerussian.com>  Sat, 01 Nov 2014 21:07:00 -0400
+
 connectome-workbench (1.0-2) unstable; urgency=medium
 
   * debian/copyright
