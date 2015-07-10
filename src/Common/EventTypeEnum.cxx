@@ -65,6 +65,14 @@ EventTypeEnum::initialize()
                                      "EVENT_INVALID", 
                                      "Invalid Event"));
     
+    enumData.push_back(EventTypeEnum(EVENT_ALERT_USER,
+                                     "EVENT_ALERT_USER",
+                                     "Alert user about something (if gui, a pop is displayed, otherwise logged at severe level"));
+    
+    enumData.push_back(EventTypeEnum(EVENT_BRAIN_RESET,
+                                     "EVENT_BRAIN_RESET",
+                                     "Brain has been reset"));
+                                     
     enumData.push_back(EventTypeEnum(EVENT_BRAIN_STRUCTURE_GET_ALL,
                                      "EVENT_BRAIN_STRUCTURE_GET_ALL",
                                      "Get all brain structures"));
@@ -85,6 +93,10 @@ EventTypeEnum::initialize()
                                      "EVENT_BROWSER_TAB_GET_ALL_VIEWED",
                                      "Get ALL Viewed browser tabs"));
 
+    enumData.push_back(EventTypeEnum(EVENT_BROWSER_TAB_INDICES_GET_ALL,
+                                     "EVENT_BROWSER_TAB_INDICES_GET_ALL",
+                                     "Browser Tab Indices Get All"));
+    
     enumData.push_back(EventTypeEnum(EVENT_BROWSER_TAB_NEW,
                                      "EVENT_BROWSER_TAB_NEW", 
                                      "Create a browser tab"));
@@ -101,6 +113,10 @@ EventTypeEnum::initialize()
                                      "EVENT_BROWSER_WINDOW_GRAPHICS_HAVE_BEEN_REDRAWN",
                                      "A Browser Window's graphics have been redrawn"));
     
+    enumData.push_back(EventTypeEnum(EVENT_BROWSER_WINDOW_MENUS_UPDATE,
+                                     "EVENT_BROWSER_WINDOW_MENUS_UPDATE",
+                                     "Update the browser windows menus"));
+    
     enumData.push_back(EventTypeEnum(EVENT_BROWSER_WINDOW_NEW,
                                      "EVENT_BROWSER_WINDOW_NEW", 
                                      "Create a new browser window"));
@@ -113,10 +129,14 @@ EventTypeEnum::initialize()
                                      "EVENT_CARET_MAPPABLE_DATA_FILE_MAPS_VIEWED_IN_OVERLAYS",
                                      "Get Caret Mappable data file maps viewed in overlays"));
     
+    enumData.push_back(EventTypeEnum(EVENT_CHART_MATRIX_YOKING_VALIDATION,
+                                     "EVENT_CHART_MATRIX_YOKING_VALIDATION",
+                                     "Validate Yoking of matrix chart's rows/columns"));
+
     enumData.push_back(EventTypeEnum(EVENT_DATA_FILE_ADD,
                                      "EVENT_DATA_FILE_ADD",
                                      "Add a data file to the Brain"));
-
+    
     enumData.push_back(EventTypeEnum(EVENT_DATA_FILE_DELETE,
                                      "EVENT_DATA_FILE_DELETE",
                                      "Delete a data file from the Brain"));
@@ -165,11 +185,23 @@ EventTypeEnum::initialize()
                                      "EVENT_IMAGE_CAPTURE",
                                      "Capture an Image of Browser Window Graphics Region"));
 
+    enumData.push_back(EventTypeEnum(EVENT_MAC_DOCK_MENU_UPDATE,
+                                     "EVENT_MAC_DOCK_MENU_UPDATE",
+                                     "Update the Mac Dock Menu"));
+    
+    enumData.push_back(EventTypeEnum(EVENT_MAP_YOKING_SELECT_MAP,
+                                     "EVENT_MAP_YOKING_SELECT_MAP", 
+                                     "Map Yoking Select Map"));
+    
+    enumData.push_back(EventTypeEnum(EVENT_MAP_YOKING_VALIDATION,
+                                     "EVENT_MAP_YOKING_VALIDATION",
+                                     "Map Yoking Validation"));
+    
     enumData.push_back(EventTypeEnum(EVENT_MODEL_ADD,
-                                     "EVENT_MODEL_ADD", 
+                                     "EVENT_MODEL_ADD",
                                      "Add a model"));
     
-    enumData.push_back(EventTypeEnum(EVENT_MODEL_DELETE, 
+    enumData.push_back(EventTypeEnum(EVENT_MODEL_DELETE,
                                     "EVENT_MODEL_DELETE", 
                                     "Delete a model"));
     
@@ -188,10 +220,6 @@ EventTypeEnum::initialize()
     enumData.push_back(EventTypeEnum(EVENT_OPERATING_SYSTEM_REQUEST_OPEN_DATA_FILE,
                                      "EVENT_OPERATING_SYSTEM_REQUEST_OPEN_DATA_FILE",
                                      "Operating system requests open data file (Mac only)"));
-    
-    enumData.push_back(EventTypeEnum(EVENT_OVERLAY_GET_YOKED,
-                                     "EVENT_OVERLAY_GET_YOKED",
-                                     "Get overlays yoked to a specific group"));
     
     enumData.push_back(EventTypeEnum(EVENT_OVERLAY_SETTINGS_EDITOR_SHOW,
                                      "EVENT_OVERLAY_SETTINGS_EDITOR_SHOW",
@@ -221,7 +249,11 @@ EventTypeEnum::initialize()
                                      "EVENT_SURFACES_GET", 
                                      "Get Surfaces"));
     
-    enumData.push_back(EventTypeEnum(EVENT_TOOLBOX_SELECTION_DISPLAY, 
+    enumData.push_back(EventTypeEnum(EVENT_SURFACE_STRUCTURES_VALID_GET,
+                                     "EVENT_SURFACE_STRUCTURES_VALID_GET",
+                                     "GGet valid surface strucutures and their number of node"));
+
+    enumData.push_back(EventTypeEnum(EVENT_TOOLBOX_SELECTION_DISPLAY,
                                      "EVENT_TOOLBOX_SELECTION_DISPLAY", 
                                      "Display or hide the selection toolbox"));
     
@@ -241,13 +273,21 @@ EventTypeEnum::initialize()
                                      "EVENT_UPDATE_YOKED_WINDOWS",
                                      "Update yoked windows graphics and toolbar"));
 
+    enumData.push_back(EventTypeEnum(EVENT_UPDATE_VOLUME_EDITING_TOOLBAR,
+                                     "EVENT_UPDATE_VOLUME_EDITING_TOOLBAR",
+                                     "Update the volume editing toolbar"));
+
     enumData.push_back(EventTypeEnum(EVENT_COUNT,
                                     "EVENT_COUNT", 
                                     "Count of events"));
     
     CaretAssertMessage((enumData.size() == static_cast<uint64_t>(EVENT_COUNT + 1)),
                        ("Number of EventTypeEnum::Enum values is incorrect.\n"
-                        "Have enumerated type been added?"));
+                        "Have enumerated type been added?\n"
+                        "enumData.size()="
+                        + AString::number(enumData.size())
+                        + "   EVENT_COUNT+1="
+                        + AString::number(EVENT_COUNT + 1)));
 }
 
 /**

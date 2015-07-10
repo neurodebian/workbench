@@ -100,15 +100,20 @@ void CiftiScalarsMap::setMapName(const int64_t& index, const QString& mapName) c
     m_maps[index].m_name = mapName;
 }
 
-bool CiftiScalarsMap::approximateMatch(const CiftiMappingType& rhs) const
+bool CiftiScalarsMap::approximateMatch(const CiftiMappingType& rhs, QString* explanation) const
 {
     switch (rhs.getType())
     {
         case SCALARS:
         case SERIES://maybe?
         case LABELS:
-            return getLength() == rhs.getLength();
+            if (getLength() != rhs.getLength())
+            {
+                if (explanation != NULL) *explanation = "mappings have different length";
+                return false;
+            } else return true;
         default:
+            if (explanation != NULL) *explanation = CiftiMappingType::mappingTypeToName(rhs.getType()) + " mapping never matches " + CiftiMappingType::mappingTypeToName(getType());
             return false;
     }
 }
@@ -150,7 +155,7 @@ void CiftiScalarsMap::readXML1(QXmlStreamReader& xml)
             {
                 if (xml.name() != "NamedMap")
                 {
-                    throw CaretException("unexpected element in scalars mapping type: " + xml.name().toString());
+                    throw CaretException("unexpected element in scalars map: " + xml.name().toString());
                 }
                 m_maps.push_back(ScalarMap());//HACK: because operator= is deliberately broken by GiftiMetadata for UUID
                 m_maps.back().readXML1(xml);
@@ -175,7 +180,7 @@ void CiftiScalarsMap::readXML2(QXmlStreamReader& xml)
             {
                 if (xml.name() != "NamedMap")
                 {
-                    throw CaretException("unexpected element in scalars mapping type: " + xml.name().toString());
+                    throw CaretException("unexpected element in scalars map: " + xml.name().toString());
                 }
                 m_maps.push_back(ScalarMap());//HACK: because operator= is deliberately broken by GiftiMetadata for UUID
                 m_maps.back().readXML2(xml);
@@ -216,6 +221,10 @@ void CiftiScalarsMap::ScalarMap::readXML1(QXmlStreamReader& xml)
                     m_name = xml.readElementText();//raises error if element encountered
                     if (xml.hasError()) return;
                     haveName = true;
+                } else if (name == "LabelTable") {
+                    CaretLogWarning("ignoring LabelTable in Cifti-1 Scalars mapping");
+                    xml.readElementText(QXmlStreamReader::SkipChildElements);//accept some malformed Cifti-1 files
+                    if (xml.hasError()) return;
                 } else {
                     throw CaretException("unexpected element in NamedMap: " + name.toString());
                 }

@@ -20,6 +20,7 @@
 
 #include <sstream>
 
+#include "CaretAssert.h"
 #include "CaretLogger.h"
 #include "PaletteColorMapping.h"
 #include "PaletteColorMappingSaxReader.h"
@@ -34,6 +35,7 @@ using namespace caret;
  */
 PaletteColorMappingSaxReader::PaletteColorMappingSaxReader(PaletteColorMapping* paletteColorMapping)
 {
+    CaretAssert(paletteColorMapping);
     this->state = STATE_NONE;
     this->stateStack.push(state);
     this->elementText = "";
@@ -55,7 +57,7 @@ void
 PaletteColorMappingSaxReader::startElement(const AString& /* namespaceURI */,
                                          const AString& /* localName */,
                                          const AString& qName,
-                                         const XmlAttributes& attributes)  throw (XmlSaxParserException)
+                                         const XmlAttributes& attributes) 
 {
    const STATE previousState = this->state;
 
@@ -144,7 +146,7 @@ toFloatVector(const AString& s)
 void 
 PaletteColorMappingSaxReader::endElement(const AString& /* namspaceURI */,
                                        const AString& /* localName */,
-                                       const AString& qName) throw (XmlSaxParserException)
+                                       const AString& qName)
 {
    switch (state) {
       case STATE_NONE:
@@ -160,6 +162,13 @@ PaletteColorMappingSaxReader::endElement(const AString& /* namspaceURI */,
                }
                else {
                    throw XmlSaxParserException("PaletteColorMappingXmlElements::auto scale percenter does not contain four values.");
+               }
+           }
+           else if (qName == PaletteColorMappingXmlElements::XML_TAG_AUTO_SCALE_ABSOLUTE_PERCENTAGE_VALUES) {
+               std::vector<float> values = toFloatVector(this->elementText);
+               if (values.size() >= 2) {
+                   this->paletteColorMapping->setAutoScaleAbsolutePercentageMinimum(values[0]);
+                   this->paletteColorMapping->setAutoScaleAbsolutePercentageMaximum(values[1]);
                }
            }
            else if (qName == PaletteColorMappingXmlElements::XML_TAG_DISPLAY_NEGATIVE) {
@@ -276,6 +285,9 @@ PaletteColorMappingSaxReader::endElement(const AString& /* namspaceURI */,
                                                + this->elementText);
                }
            }
+           else if (qName == PaletteColorMappingXmlElements::XML_TAG_THRESHOLD_NEG_MIN_POS_MAX_LINKED) {
+               this->paletteColorMapping->setThresholdNegMinPosMaxLinked(toBool(this->elementText));
+           }
            else if (qName == PaletteColorMappingXmlElements::XML_TAG_PALETTE_COLOR_MAPPING) {
                /* Top level tag, nothing to do */
            }
@@ -310,7 +322,7 @@ PaletteColorMappingSaxReader::endElement(const AString& /* namspaceURI */,
  * get characters in an element.
  */
 void 
-PaletteColorMappingSaxReader::characters(const char* ch) throw (XmlSaxParserException)
+PaletteColorMappingSaxReader::characters(const char* ch)
 {
    this->elementText += ch;
 }
@@ -319,7 +331,7 @@ PaletteColorMappingSaxReader::characters(const char* ch) throw (XmlSaxParserExce
  * a fatal error occurs.
  */
 void 
-PaletteColorMappingSaxReader::fatalError(const XmlSaxParserException& e) throw (XmlSaxParserException)
+PaletteColorMappingSaxReader::fatalError(const XmlSaxParserException& e)
 {
    throw e;
 }
@@ -328,26 +340,26 @@ PaletteColorMappingSaxReader::fatalError(const XmlSaxParserException& e) throw (
  * A warning occurs
  */
 void 
-PaletteColorMappingSaxReader::warning(const XmlSaxParserException& e) throw (XmlSaxParserException)
+PaletteColorMappingSaxReader::warning(const XmlSaxParserException& e)
 {    
     CaretLogWarning("XML Parser Warning: " + e.whatString());
 }
 
 // an error occurs
 void 
-PaletteColorMappingSaxReader::error(const XmlSaxParserException& e) throw (XmlSaxParserException)
+PaletteColorMappingSaxReader::error(const XmlSaxParserException& e)
 {   
     CaretLogSevere("XML Parser Error: " + e.whatString());
     throw e;
 }
 
 void 
-PaletteColorMappingSaxReader::startDocument()  throw (XmlSaxParserException)
+PaletteColorMappingSaxReader::startDocument() 
 {    
 }
 
 void 
-PaletteColorMappingSaxReader::endDocument() throw (XmlSaxParserException)
+PaletteColorMappingSaxReader::endDocument()
 {
 }
 

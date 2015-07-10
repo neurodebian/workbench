@@ -32,7 +32,9 @@ namespace caret {
     class ChartDataSource;
     class SelectionItemBorderSurface;
     class SelectionItemChartDataSeries;
+    class SelectionItemChartFrequencySeries;
     class SelectionItemChartMatrix;
+    class SelectionItemCiftiConnectivityMatrixRowColumn;
     class SelectionItemChartTimeSeries;
     class SelectionItemFocusSurface;
     class SelectionItemFocusVolume;
@@ -80,8 +82,14 @@ namespace caret {
         void generateChartDataSeriesIdentificationText(IdentificationStringBuilder& idText,
                                                        const SelectionItemChartDataSeries* idChartDataSeries) const;
         
+        void generateChartFrequencySeriesIdentificationText(IdentificationStringBuilder& idText,
+                                                       const SelectionItemChartFrequencySeries* idChartFrequencySeries) const;
+        
         void generateChartMatrixIdentificationText(IdentificationStringBuilder& idText,
                                                        const SelectionItemChartMatrix* idChartMatrix) const;
+
+        void generateCiftiConnectivityMatrixIdentificationText(IdentificationStringBuilder& idText,
+                                                               const SelectionItemCiftiConnectivityMatrixRowColumn* idCiftiConnMatrix) const;
         
         void generateChartTimeSeriesIdentificationText(IdentificationStringBuilder& idText,
                                                        const SelectionItemChartTimeSeries* idChartTimeSeries) const;

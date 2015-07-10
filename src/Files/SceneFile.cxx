@@ -31,6 +31,7 @@
 #include "CaretAssert.h"
 #include "CaretLogger.h"
 #include "DataFileContentInformation.h"
+#include "DataFileException.h"
 #include "FileAdapter.h"
 #include "FileInformation.h"
 #include "GiftiMetaData.h"
@@ -349,7 +350,7 @@ SceneFile::getFileMetaData() const
  *    If there is an error reading the file.
  */
 void 
-SceneFile::readFile(const AString& filenameIn) throw (DataFileException)
+SceneFile::readFile(const AString& filenameIn)
 {
     clear();
     
@@ -373,9 +374,7 @@ SceneFile::readFile(const AString& filenameIn) throw (DataFileException)
         int lineNum = e.getLineNumber();
         int colNum  = e.getColumnNumber();
         
-        AString msg =
-        "Parse Error while reading "
-        + filename;
+        AString msg = "Parse Error while reading:";
         
         if ((lineNum >= 0) && (colNum >= 0)) {
             msg += (" line/col ("
@@ -387,7 +386,8 @@ SceneFile::readFile(const AString& filenameIn) throw (DataFileException)
         
         msg += (": " + e.whatString());
         
-        DataFileException dfe(msg);
+        DataFileException dfe(filenameIn,
+                              msg);
         CaretLogThrowing(dfe);
         throw dfe;
     }
@@ -405,7 +405,7 @@ SceneFile::readFile(const AString& filenameIn) throw (DataFileException)
  *    If there is an error writing the file.
  */
 void 
-SceneFile::writeFile(const AString& filename) throw (DataFileException)
+SceneFile::writeFile(const AString& filename)
 {
     checkFileWritability(filename);
     
@@ -427,7 +427,8 @@ SceneFile::writeFile(const AString& filename) throw (DataFileException)
         QTextStream* textStream = file.openQTextStreamForWritingFile(this->getFileName(),
                                                                      errorMessage);
         if (textStream == NULL) {
-            throw DataFileException(errorMessage);
+            throw DataFileException(filename,
+                                    errorMessage);
         }
         
         //

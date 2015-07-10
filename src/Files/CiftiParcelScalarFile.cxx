@@ -27,6 +27,8 @@
 #include "ChartDataCartesian.h"
 #include "ChartMatrixDisplayProperties.h"
 #include "CiftiFile.h"
+#include "CiftiParcelReordering.h"
+#include "CiftiParcelReorderingModel.h"
 #include "CiftiXML.h"
 #include "FastStatistics.h"
 #include "NodeAndVoxelColoring.h"
@@ -63,11 +65,16 @@ CiftiParcelScalarFile::CiftiParcelScalarFile()
     m_selectedParcelColoringMode = CiftiParcelColoringModeEnum::CIFTI_PARCEL_COLORING_OUTLINE;
     m_selectedParcelColor = CaretColorEnum::WHITE;
     
+    m_parcelReorderingModel = new CiftiParcelReorderingModel(this);
+    
     m_sceneAssistant = new SceneClassAssistant();
     m_sceneAssistant->add<CiftiParcelColoringModeEnum, CiftiParcelColoringModeEnum::Enum>("m_selectedParcelColoringMode",
                                                                                           &m_selectedParcelColoringMode);
     m_sceneAssistant->add<CaretColorEnum, CaretColorEnum::Enum>("m_selectedParcelColor",
                                                                 &m_selectedParcelColor);
+    m_sceneAssistant->add("m_parcelReorderingModel",
+                          "CiftiParcelReorderingModel",
+                          m_parcelReorderingModel);
 }
 
 /**
@@ -79,6 +86,7 @@ CiftiParcelScalarFile::~CiftiParcelScalarFile()
         delete m_chartMatrixDisplayProperties[i];
     }
     
+    delete m_parcelReorderingModel;
     delete m_sceneAssistant;
 }
 
@@ -86,7 +94,7 @@ CiftiParcelScalarFile::~CiftiParcelScalarFile()
  * @return Is charting enabled for this file?
  */
 bool
-CiftiParcelScalarFile::isBrainordinateChartingEnabled(const int32_t tabIndex) const
+CiftiParcelScalarFile::isLineSeriesChartingEnabled(const int32_t tabIndex) const
 {
     CaretAssertArrayIndex(m_chartingEnabledForTab,
                           BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_TABS,
@@ -100,7 +108,7 @@ CiftiParcelScalarFile::isBrainordinateChartingEnabled(const int32_t tabIndex) co
  * is chartable if it contains more than one map.
  */
 bool
-CiftiParcelScalarFile::isBrainordinateChartingSupported() const
+CiftiParcelScalarFile::isLineSeriesChartingSupported() const
 {
     if (getNumberOfMaps() > 1) {
         return true;
@@ -116,9 +124,9 @@ CiftiParcelScalarFile::isBrainordinateChartingSupported() const
  *    Chart types supported by this file.
  */
 void
-CiftiParcelScalarFile::getSupportedBrainordinateChartDataTypes(std::vector<ChartDataTypeEnum::Enum>& chartDataTypesOut) const
+CiftiParcelScalarFile::getSupportedLineSeriesChartDataTypes(std::vector<ChartDataTypeEnum::Enum>& chartDataTypesOut) const
 {
-    helpGetSupportedBrainordinateChartDataTypes(chartDataTypesOut);
+    helpGetSupportedLineSeriesChartDataTypes(chartDataTypesOut);
 }
 
 /**
@@ -128,7 +136,7 @@ CiftiParcelScalarFile::getSupportedBrainordinateChartDataTypes(std::vector<Chart
  *    New status for charting enabled.
  */
 void
-CiftiParcelScalarFile::setBrainordinateChartingEnabled(const int32_t tabIndex,
+CiftiParcelScalarFile::setLineSeriesChartingEnabled(const int32_t tabIndex,
                                           const bool enabled)
 {
     CaretAssertArrayIndex(m_chartingEnabledForTab,
@@ -150,8 +158,8 @@ CiftiParcelScalarFile::setBrainordinateChartingEnabled(const int32_t tabIndex,
  *     of the pointer and must delete it when no longer needed.
  */
 ChartDataCartesian*
-CiftiParcelScalarFile::loadBrainordinateChartDataForSurfaceNode(const StructureEnum::Enum structure,
-                                                               const int32_t nodeIndex) throw (DataFileException)
+CiftiParcelScalarFile::loadLineSeriesChartDataForSurfaceNode(const StructureEnum::Enum structure,
+                                                               const int32_t nodeIndex)
 {
     ChartDataCartesian* chartData = helpLoadChartDataForSurfaceNode(structure,
                                                            nodeIndex);
@@ -166,7 +174,7 @@ CiftiParcelScalarFile::loadBrainordinateChartDataForSurfaceNode(const StructureE
 //                                        data)) {
 //            const int64_t numData = static_cast<int64_t>(data.size());
 //            
-//            chartData = new ChartDataCartesian(ChartDataTypeEnum::CHART_DATA_TYPE_DATA_SERIES,
+//            chartData = new ChartDataCartesian(ChartDataTypeEnum::CHART_DATA_TYPE_LINE_DATA_SERIES,
 //                                               ChartAxisUnitsEnum::CHART_AXIS_UNITS_NONE,
 //                                               ChartAxisUnitsEnum::CHART_AXIS_UNITS_NONE);
 //            for (int64_t i = 0; i < numData; i++) {
@@ -206,8 +214,8 @@ CiftiParcelScalarFile::loadBrainordinateChartDataForSurfaceNode(const StructureE
  *     of the pointer and must delete it when no longer needed.
  */
 ChartDataCartesian*
-CiftiParcelScalarFile::loadAverageBrainordinateChartDataForSurfaceNodes(const StructureEnum::Enum structure,
-                                                                      const std::vector<int32_t>& nodeIndices) throw (DataFileException)
+CiftiParcelScalarFile::loadAverageLineSeriesChartDataForSurfaceNodes(const StructureEnum::Enum structure,
+                                                                      const std::vector<int32_t>& nodeIndices)
 {
     ChartDataCartesian* chartData = helpLoadChartDataForSurfaceNodeAverage(structure,
                                                                   nodeIndices);
@@ -225,13 +233,27 @@ CiftiParcelScalarFile::loadAverageBrainordinateChartDataForSurfaceNodes(const St
  *     of the pointer and must delete it when no longer needed.
  */
 ChartDataCartesian*
-CiftiParcelScalarFile::loadBrainordinateChartDataForVoxelAtCoordinate(const float xyz[3]) throw (DataFileException)
+CiftiParcelScalarFile::loadLineSeriesChartDataForVoxelAtCoordinate(const float xyz[3])
 {
     ChartDataCartesian* chartData = helpLoadChartDataForVoxelAtCoordinate(xyz);
     return chartData;
 }
 
-
+/**
+ * Get the matrix dimensions.
+ *
+ * @param numberOfRowsOut
+ *    Number of rows in the matrix.
+ * @param numberOfColumnsOut
+ *    Number of rows in the matrix.
+ */
+void
+CiftiParcelScalarFile::getMatrixDimensions(int32_t& numberOfRowsOut,
+                                           int32_t& numberOfColumnsOut) const
+{
+    helpMapFileGetMatrixDimensions(numberOfRowsOut,
+                                   numberOfColumnsOut);
+}
 
 /**
  * Get the matrix RGBA coloring for this matrix data creator.
@@ -248,13 +270,32 @@ CiftiParcelScalarFile::loadBrainordinateChartDataForVoxelAtCoordinate(const floa
  */
 bool
 CiftiParcelScalarFile::getMatrixDataRGBA(int32_t& numberOfRowsOut,
-                                                     int32_t& numberOfColumnsOut,
-                                                     std::vector<float>& rgbaOut) const
+                                         int32_t& numberOfColumnsOut,
+                                         std::vector<float>& rgbaOut) const
 {
-    return helpLoadChartDataMatrixForMap(0,
-                                         numberOfRowsOut,
-                                         numberOfColumnsOut,
-                                         rgbaOut);
+    CiftiParcelLabelFile* parcelLabelFile = NULL;
+    int32_t parcelLabelFileMapIndex = -1;
+    bool enabled = false;
+    
+    std::vector<CiftiParcelLabelFile*> parcelLabelFiles;
+    getSelectedParcelLabelFileAndMapForReordering(parcelLabelFiles,
+                                                  parcelLabelFile,
+                                                  parcelLabelFileMapIndex,
+                                                  enabled);
+    
+    std::vector<int32_t> rowIndices;
+    if (enabled) {
+        const CiftiParcelReordering* parcelReordering = getParcelReordering(parcelLabelFile,
+                                                                            parcelLabelFileMapIndex);
+        if (parcelReordering != NULL) {
+            rowIndices = parcelReordering->getReorderedParcelIndices();
+        }
+    }
+    
+    return helpMapFileLoadChartDataMatrixRGBA(numberOfRowsOut,
+                                              numberOfColumnsOut,
+                                              rowIndices,
+                                              rgbaOut);
 }
 
 /**
@@ -276,7 +317,7 @@ CiftiParcelScalarFile::getMatrixDataRGBA(int32_t& numberOfRowsOut,
 bool
 CiftiParcelScalarFile::getMatrixCellAttributes(const int32_t rowIndex,
                                                            const int32_t columnIndex,
-                                                           float& cellValueOut,
+                                                           AString& cellValueOut,
                                                            AString& rowNameOut,
                                                            AString& columnNameOut) const
 {
@@ -298,7 +339,7 @@ CiftiParcelScalarFile::getMatrixCellAttributes(const int32_t rowIndex,
         m_ciftiFile->getRow(&rowData[0],
                                  rowIndex);
         CaretAssertVectorIndex(rowData, columnIndex);
-        cellValueOut = rowData[columnIndex];
+        cellValueOut = AString::number(rowData[columnIndex], 'f', 6);
         
         return true;
     }
@@ -355,7 +396,7 @@ void
 CiftiParcelScalarFile::getSupportedMatrixChartDataTypes(std::vector<ChartDataTypeEnum::Enum>& chartDataTypesOut) const
 {
     chartDataTypesOut.clear();
-    chartDataTypesOut.push_back(ChartDataTypeEnum::CHART_DATA_TYPE_MATRIX);
+    chartDataTypesOut.push_back(ChartDataTypeEnum::CHART_DATA_TYPE_MATRIX_LAYER);
 }
 
 /**
@@ -545,5 +586,155 @@ CiftiParcelScalarFile::restoreFileDataFromScene(const SceneAttributes* sceneAttr
         }
     }
 }
+
+/**
+ * Get the selected parcel label file used for reordering of parcels.
+ *
+ * @param compatibleParcelLabelFilesOut
+ *    All Parcel Label files that are compatible with file implementing
+ *    this interface.
+ * @param selectedParcelLabelFileOut
+ *    The selected parcel label file used for reordering the parcels.
+ *    May be NULL!
+ * @param selectedParcelLabelFileMapIndexOut
+ *    Map index in the selected parcel label file.
+ * @param enabledStatusOut
+ *    Enabled status of reordering.
+ */
+void
+CiftiParcelScalarFile::getSelectedParcelLabelFileAndMapForReordering(std::vector<CiftiParcelLabelFile*>& compatibleParcelLabelFilesOut,
+                                                                     CiftiParcelLabelFile* &selectedParcelLabelFileOut,
+                                                                     int32_t& selectedParcelLabelFileMapIndexOut,
+                                                                     bool& enabledStatusOut) const
+{
+    m_parcelReorderingModel->getSelectedParcelLabelFileAndMapForReordering(compatibleParcelLabelFilesOut,
+                                                                           selectedParcelLabelFileOut,
+                                                                           selectedParcelLabelFileMapIndexOut,
+                                                                           enabledStatusOut);
+}
+
+/**
+ * Set the selected parcel label file used for reordering of parcels.
+ *
+ * @param selectedParcelLabelFile
+ *    The selected parcel label file used for reordering the parcels.
+ *    May be NULL!
+ * @param selectedParcelLabelFileMapIndex
+ *    Map index in the selected parcel label file.
+ * @param enabledStatus
+ *    Enabled status of reordering.
+ */
+void
+CiftiParcelScalarFile::setSelectedParcelLabelFileAndMapForReordering(CiftiParcelLabelFile* selectedParcelLabelFile,
+                                                                     const int32_t selectedParcelLabelFileMapIndex,
+                                                                     const bool enabledStatus)
+{
+    m_parcelReorderingModel->setSelectedParcelLabelFileAndMapForReordering(selectedParcelLabelFile,
+                                                                           selectedParcelLabelFileMapIndex,
+                                                                           enabledStatus);
+}
+
+/**
+ * Get the parcel reordering for the given map index that was created using
+ * the given parcel label file and its map index.
+ *
+ * @param parcelLabelFile
+ *    The selected parcel label file used for reordering the parcels.
+ * @param parcelLabelFileMapIndex
+ *    Map index in the selected parcel label file.
+ * @return
+ *    Pointer to parcel reordering or NULL if not found.
+ */
+const CiftiParcelReordering*
+CiftiParcelScalarFile::getParcelReordering(const CiftiParcelLabelFile* parcelLabelFile,
+                                                       const int32_t parcelLabelFileMapIndex) const
+{
+    return m_parcelReorderingModel->getParcelReordering(parcelLabelFile,
+                                                        parcelLabelFileMapIndex);
+}
+
+/**
+ * Create the parcel reordering for the given map index using
+ * the given parcel label file and its map index.
+ *
+ * @param parcelLabelFile
+ *    The selected parcel label file used for reordering the parcels.
+ * @param parcelLabelFileMapIndex
+ *    Map index in the selected parcel label file.
+ * @param ciftiParcelsMap
+ *    The CIFTI parcels map that will or has been reordered.
+ * @param errorMessageOut
+ *    Error message output.  Will only be non-empty if NULL is returned.
+ * @return
+ *    Pointer to parcel reordering or NULL if not found.
+ */
+bool
+CiftiParcelScalarFile::createParcelReordering(const CiftiParcelLabelFile* parcelLabelFile,
+                                                          const int32_t parcelLabelFileMapIndex,
+                                                          AString& errorMessageOut)
+{
+    return m_parcelReorderingModel->createParcelReordering(parcelLabelFile,
+                                                           parcelLabelFileMapIndex,
+                                                           errorMessageOut);
+}
+
+
+/**
+ * @return True if loading attributes (column/row, yoking) are
+ * supported by this file type.
+ */
+bool
+CiftiParcelScalarFile::isSupportsLoadingAttributes()
+{
+    return false;
+}
+
+/**
+ * @return The matrix loading type (by row/column).
+ */
+ChartMatrixLoadingDimensionEnum::Enum
+CiftiParcelScalarFile::getMatrixLoadingDimension() const
+{
+    /*
+     * This file supports loading by column only !
+     */
+    return ChartMatrixLoadingDimensionEnum::CHART_MATRIX_LOADING_BY_COLUMN;
+}
+
+/**
+ * Set the matrix loading type (by row/column).
+ *
+ * @param matrixLoadingType
+ *    New value for matrix loading type.
+ */
+void
+CiftiParcelScalarFile::setMatrixLoadingDimension(const ChartMatrixLoadingDimensionEnum::Enum /* matrixLoadingType */)
+{
+    CaretLogSevere("Attempting to change matrix loading type for a file that only supports loading by column");
+}
+
+/**
+ * @return Selected yoking group.
+ */
+YokingGroupEnum::Enum
+CiftiParcelScalarFile::getYokingGroup() const
+{
+    /* not supported in this file */
+    return YokingGroupEnum::YOKING_GROUP_OFF;
+}
+
+/**
+ * Set the selected yoking group.
+ *
+ * @param yokingGroup
+ *    New value for yoking group.
+ */
+void
+CiftiParcelScalarFile::setYokingGroup(const YokingGroupEnum::Enum /* yokingGroup */)
+{
+    /* not supported in this file */
+}
+
+
 
 

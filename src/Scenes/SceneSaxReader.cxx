@@ -34,6 +34,7 @@
 #include "SceneIntegerArray.h"
 #include "SceneObjectMapIntegerKey.h"
 #include "ScenePathName.h"
+#include "ScenePathNameArray.h"
 #include "SceneSaxReader.h"
 #include "SceneString.h"
 #include "SceneStringArray.h"
@@ -79,7 +80,7 @@ void
 SceneSaxReader::startElement(const AString& /* namespaceURI */,
                              const AString& /* localName */,
                              const AString& qName,
-                             const XmlAttributes& attributes)  throw (XmlSaxParserException)
+                             const XmlAttributes& attributes) 
 {
     const STATE previousState = m_state;
     switch (m_state) {
@@ -233,7 +234,7 @@ SceneSaxReader::startElement(const AString& /* namespaceURI */,
  *     Attributes contained in the Object tag.
  */
 void 
-SceneSaxReader::processObjectStartTag(const XmlAttributes& attributes) throw (XmlSaxParserException)
+SceneSaxReader::processObjectStartTag(const XmlAttributes& attributes)
 {
     /*
      * Get attributes of the object element
@@ -310,7 +311,7 @@ SceneSaxReader::processObjectStartTag(const XmlAttributes& attributes) throw (Xm
  *     Attributes contained in the Object tag.
  */
 void 
-SceneSaxReader::processObjectArrayStartTag(const XmlAttributes& attributes) throw (XmlSaxParserException)
+SceneSaxReader::processObjectArrayStartTag(const XmlAttributes& attributes)
 {
     /*
      * Get attributes of the object element
@@ -369,8 +370,8 @@ SceneSaxReader::processObjectArrayStartTag(const XmlAttributes& attributes) thro
                                                 objectNumberOfElements);
             break;
         case SceneObjectDataTypeEnum::SCENE_PATH_NAME:
-            CaretAssert(0);
-            throw XmlSaxParserException("Arrays of scene paths not supported.");
+            sceneObject = new ScenePathNameArray(objectName,
+                                                 objectNumberOfElements);
             break;
         case SceneObjectDataTypeEnum::SCENE_STRING:
             sceneObject = new SceneStringArray(objectName, 
@@ -396,7 +397,7 @@ SceneSaxReader::processObjectArrayStartTag(const XmlAttributes& attributes) thro
  *     Attributes contained in the Object tag.
  */
 void 
-SceneSaxReader::processObjectMapStartTag(const XmlAttributes& attributes) throw (XmlSaxParserException)
+SceneSaxReader::processObjectMapStartTag(const XmlAttributes& attributes)
 {
     /*
      * Get attributes of the object element
@@ -436,7 +437,7 @@ SceneSaxReader::processObjectMapStartTag(const XmlAttributes& attributes) throw 
 void 
 SceneSaxReader::endElement(const AString& /* namspaceURI */,
                            const AString& /* localName */,
-                           const AString& /*qName*/) throw (XmlSaxParserException)
+                           const AString& /*qName*/)
 {
     const AString stringValue = m_elementText.trimmed();
     
@@ -628,8 +629,13 @@ SceneSaxReader::endElement(const AString& /* namspaceURI */,
                 }
                     break;
                 case SceneObjectDataTypeEnum::SCENE_PATH_NAME:
-                    CaretAssert(0);
-                    throw XmlSaxParserException("Arrays of scene paths not supported.");
+                {
+                    ScenePathNameArray* pathNameArray = dynamic_cast<ScenePathNameArray*>(sceneArray);
+                    CaretAssert(pathNameArray);
+                    pathNameArray->setScenePathNameAtIndex(m_objectArrayBeingReadElementIndexStack.top(),
+                                                           m_sceneFileName,
+                                                           stringValue);
+                }
                     break;
                 case SceneObjectDataTypeEnum::SCENE_STRING:
                 {
@@ -771,7 +777,7 @@ SceneSaxReader::addChildToParentClass(SceneObject* sceneObject)
  * get characters in an element.
  */
 void 
-SceneSaxReader::characters(const char* ch) throw (XmlSaxParserException)
+SceneSaxReader::characters(const char* ch)
 {
     m_elementText += ch;
 }
@@ -780,7 +786,7 @@ SceneSaxReader::characters(const char* ch) throw (XmlSaxParserException)
  * a fatal error occurs.
  */
 void 
-SceneSaxReader::fatalError(const XmlSaxParserException& e) throw (XmlSaxParserException)
+SceneSaxReader::fatalError(const XmlSaxParserException& e)
 {
     throw e;
 }
@@ -789,25 +795,25 @@ SceneSaxReader::fatalError(const XmlSaxParserException& e) throw (XmlSaxParserEx
  * A warning occurs
  */
 void 
-SceneSaxReader::warning(const XmlSaxParserException& e) throw (XmlSaxParserException)
+SceneSaxReader::warning(const XmlSaxParserException& e)
 {    
     CaretLogWarning("XML Parser Warning: " + e.whatString());
 }
 
 // an error occurs
 void 
-SceneSaxReader::error(const XmlSaxParserException& e) throw (XmlSaxParserException)
+SceneSaxReader::error(const XmlSaxParserException& e)
 {   
     throw e;
 }
 
 void 
-SceneSaxReader::startDocument()  throw (XmlSaxParserException)
+SceneSaxReader::startDocument() 
 {    
 }
 
 void 
-SceneSaxReader::endDocument() throw (XmlSaxParserException)
+SceneSaxReader::endDocument()
 {
 }
 

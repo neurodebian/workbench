@@ -26,6 +26,7 @@ QT4_WRAP_CPP(MOC_SOURCE_FILES ${MOC_INPUT_HEADER_FILES})
 #
 ADD_LIBRARY(Common
 ApplicationInformation.h
+ApplicationTypeEnum.h
 AString.h
 AStringNaturalComparison.h
 Base64.h
@@ -54,15 +55,21 @@ CaretPointer.h
 CaretPointLocator.h
 CaretPreferences.h
 CaretTemporaryFile.h
+CaretUndoCommand.h
+CaretUndoStack.h
 CubicSpline.h
 DataCompressZLib.h
 DataFile.h
 DataFileContentInformation.h
 DataFileException.h
 DataFileInterface.h
+DataFileTypeEnum.h
 DescriptiveStatistics.h
+DeveloperFlagsEnum.h
 ElapsedTimer.h
 Event.h
+EventAlertUser.h
+EventBrowserTabIndicesGetAll.h
 EventListenerInterface.h
 EventManager.h
 EventProgressUpdate.h
@@ -76,7 +83,6 @@ HtmlStringBuilder.h
 ImageCaptureMethodEnum.h
 Logger.h
 LogHandler.h
-LogHandlerInformationTextDisplay.h
 LogHandlerStandardError.h
 LogLevelEnum.h
 LogManager.h
@@ -88,6 +94,7 @@ ModelTransform.h
 MultiDimArray.h
 MultiDimIterator.h
 NetworkException.h
+NumericTextFormatting.h
 OctTree.h
 OpenGLDrawingMethodEnum.h
 PlainTextStringBuilder.h
@@ -107,11 +114,13 @@ SystemUtilities.h
 TileTabsConfiguration.h
 TracksModificationInterface.h
 Vector3D.h
+VectorOperation.h
 VoxelIJK.h
 YokingGroupEnum.h
 
 ${MOC_SOURCE_FILES}
 ${CMAKE_BINARY_DIR}/Common/ApplicationInformation.cxx
+ApplicationTypeEnum.cxx
 AString.cxx
 AStringNaturalComparison.cxx
 Base64.cxx
@@ -132,14 +141,20 @@ CaretObjectTracksModification.cxx
 CaretPointLocator.cxx
 CaretPreferences.cxx
 CaretTemporaryFile.cxx
+CaretUndoCommand.cxx
+CaretUndoStack.cxx
 CubicSpline.cxx
 DataCompressZLib.cxx
 DataFile.cxx
 DataFileContentInformation.cxx
 DataFileException.cxx
+DataFileTypeEnum.cxx
 DescriptiveStatistics.cxx
+DeveloperFlagsEnum.cxx
 ElapsedTimer.cxx
 Event.cxx
+EventAlertUser.cxx
+EventBrowserTabIndicesGetAll.cxx
 EventManager.cxx
 EventProgressUpdate.cxx
 EventTypeEnum.cxx
@@ -152,7 +167,6 @@ HtmlStringBuilder.cxx
 ImageCaptureMethodEnum.cxx
 Logger.cxx
 LogHandler.cxx
-LogHandlerInformationTextDisplay.cxx
 LogHandlerStandardError.cxx
 LogLevelEnum.cxx
 LogManager.cxx
@@ -161,6 +175,7 @@ MathFunctionEnum.cxx
 MathFunctions.cxx
 ModelTransform.cxx
 NetworkException.cxx
+NumericTextFormatting.cxx
 OpenGLDrawingMethodEnum.cxx
 PlainTextStringBuilder.cxx
 Plane.cxx
@@ -177,6 +192,7 @@ StructureEnum.cxx
 SystemUtilities.cxx
 TileTabsConfiguration.cxx
 Vector3D.cxx
+VectorOperation.cxx
 YokingGroupEnum.cxx
 )
 

@@ -23,14 +23,15 @@
 
 
 #include "CaretObject.h"
-#include "DataFileException.h"
+#include "EventListenerInterface.h"
 
 namespace caret {
 
     class Brain;
+    class CiftiMappableDataFile;
     class SurfaceFile;
     
-    class ChartingDataManager : public CaretObject {
+    class ChartingDataManager : public CaretObject, public EventListenerInterface {
         
     public:
         ChartingDataManager(Brain* brain);
@@ -38,14 +39,19 @@ namespace caret {
         virtual ~ChartingDataManager();
         
         void loadAverageChartForSurfaceNodes(const SurfaceFile* surfaceFile,
-                                             const std::vector<int32_t>& nodeIndices) const throw (DataFileException);
+                                             const std::vector<int32_t>& nodeIndices) const;
         
         void loadChartForSurfaceNode(const SurfaceFile* surfaceFile,
-                                     const int32_t nodeIndex) const throw (DataFileException);
+                                     const int32_t nodeIndex) const;
         
-        void loadChartForVoxelAtCoordinate(const float xyz[3]) const throw (DataFileException);
+        void loadChartForVoxelAtCoordinate(const float xyz[3]) const;
+        
+        void loadChartForCiftiMappableFileRow(CiftiMappableDataFile* ciftiMapFile,
+                                              const int32_t rowIndex) const;
         
         bool hasNetworkFiles() const;
+        
+        virtual void receiveEvent(Event* event);
         
     private:
         ChartingDataManager(const ChartingDataManager&);

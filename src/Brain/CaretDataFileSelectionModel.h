@@ -25,7 +25,7 @@
 #include "CaretObject.h"
 #include "DataFileTypeEnum.h"
 #include "SceneableInterface.h"
-
+#include "StructureEnum.h"
 
 namespace caret {
     class Brain;
@@ -38,7 +38,16 @@ namespace caret {
         static CaretDataFileSelectionModel* newInstanceForCaretDataFileType(Brain* brain,
                                                                             const DataFileTypeEnum::Enum dataFileType);
         
-        static CaretDataFileSelectionModel* newInstanceForChartableMatrixInterface(Brain* brain);
+        static CaretDataFileSelectionModel* newInstanceForCaretDataFileTypes(Brain* brain,
+                                                                            const std::vector<DataFileTypeEnum::Enum>& dataFileTypes);
+        
+        static CaretDataFileSelectionModel* newInstanceForCaretDataFileTypesInStructure(Brain* brain,
+                                                                             const StructureEnum::Enum structure,
+                                                                             const std::vector<DataFileTypeEnum::Enum>& dataFileTypes);
+        
+        static CaretDataFileSelectionModel* newInstanceForChartableMatrixParcelInterface(Brain* brain);
+        
+        static CaretDataFileSelectionModel* newInstanceForChartableMatrixSeriesInterface(Brain* brain);
         
         static CaretDataFileSelectionModel* newInstanceForMultiStructureBorderFiles(Brain* brain);
         
@@ -52,7 +61,13 @@ namespace caret {
         
         const CaretDataFile* getSelectedFile() const;
         
+        StructureEnum::Enum getStructure() const;
+        
+        void setStructure(const StructureEnum::Enum structure);
+        
         std::vector<CaretDataFile*> getAvailableFiles() const;
+        
+        void overrideAvailableDataFiles(std::vector<CaretDataFile*>& availableFiles);
         
         /**
          * @return Selected file dynamically cast to the templated
@@ -98,12 +113,14 @@ namespace caret {
 
     private:
         enum FileMode {
-            FILE_MODE_CHARTABLE_MATRIX_INTERFACE,
+            FILE_MODE_CHARTABLE_MATRIX_PARCEL_INTERFACE,
+            FILE_MODE_CHARTABLE_MATRIX_SERIES_INTERFACE,
             FILE_MODE_DATA_FILE_TYPE_ENUM,
             FILE_MODE_MULTI_STRUCTURE_BORDER_FILES
         };
         
         CaretDataFileSelectionModel(Brain* brain,
+                                    const StructureEnum::Enum structure,
                                     const FileMode fileMode);
         
         void copyHelperCaretDataFileSelectionModel(const CaretDataFileSelectionModel& obj);
@@ -112,9 +129,15 @@ namespace caret {
         
         const FileMode m_fileMode;
         
+        std::vector<CaretDataFile*> m_overrideOfAvailableFiles;
+        
+        bool m_overrideOfAvailableFilesValid;
+        
         Brain* m_brain;
         
-        DataFileTypeEnum::Enum m_dataFileType;
+        StructureEnum::Enum m_structure;
+        
+        std::vector<DataFileTypeEnum::Enum> m_dataFileTypes;
         
         mutable CaretDataFile* m_selectedFile;
         

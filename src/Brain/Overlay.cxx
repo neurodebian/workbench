@@ -62,11 +62,12 @@ Overlay::Overlay(const std::vector<StructureEnum::Enum>& includeSurfaceStructure
 m_includeVolumeFiles(includeVolumeFiles)
 {
     m_opacity = 1.0;
-    
+    m_selectedMapFile  = NULL;
+    m_selectedMapIndex = -1;
     m_name = "Overlay ";
     m_enabled = true;
     m_paletteDisplayedFlag = false;
-    m_yokingGroup = OverlayYokingGroupEnum::OVERLAY_YOKING_GROUP_OFF;
+    m_mapYokingGroup = MapYokingGroupEnum::MAP_YOKING_GROUP_OFF;
     
     m_wholeBrainVoxelDrawingMode = WholeBrainVoxelDrawingMode::DRAW_VOXELS_ON_TWO_D_SLICES;
     
@@ -76,8 +77,8 @@ m_includeVolumeFiles(includeVolumeFiles)
     m_sceneAssistant->add("m_paletteDisplayedFlag", &m_paletteDisplayedFlag);
     m_sceneAssistant->add<WholeBrainVoxelDrawingMode, WholeBrainVoxelDrawingMode::Enum>("m_wholeBrainVoxelDrawingMode",
                                                                                         &m_wholeBrainVoxelDrawingMode);
-    m_sceneAssistant->add<OverlayYokingGroupEnum, OverlayYokingGroupEnum::Enum>("m_yokingGroup",
-                                                                                &m_yokingGroup);
+    m_sceneAssistant->add<MapYokingGroupEnum, MapYokingGroupEnum::Enum>("m_mapYokingGroup",
+                                                                        &m_mapYokingGroup);
     
     EventManager::get()->addEventListener(this,
                                           EventTypeEnum::EVENT_OVERLAY_VALIDATE);
@@ -258,12 +259,10 @@ Overlay::copyData(const Overlay* overlay)
     m_opacity = overlay->m_opacity;
     m_enabled = overlay->m_enabled;
     
-//    m_mapFiles = overlay->m_mapFiles;
     m_selectedMapFile = overlay->m_selectedMapFile;
     m_selectedMapIndex = overlay->m_selectedMapIndex;
-//    m_selectedMapUniqueID = overlay->m_selectedMapUniqueID;
     m_paletteDisplayedFlag = overlay->m_paletteDisplayedFlag;
-    m_yokingGroup = overlay->m_yokingGroup;
+    m_mapYokingGroup = overlay->m_mapYokingGroup;
 }
 
 /**
@@ -285,36 +284,6 @@ Overlay::swapData(Overlay* overlay)
     delete swapOverlay;
 }
 
-///**
-// * Get the current selection.  If the current selection is
-// * invalid, new map data will be selected.
-// *
-// * @param mapDataFileTypeOut
-// *    Type of map file out.
-// * @param selectedMapUniqueIDOut
-// *    UniqueID of map that is selected.
-// */
-//void 
-//Overlay::getSelectionData(DataFileTypeEnum::Enum& mapDataFileTypeOut,
-//                          AString& selectedMapUniqueIDOut)
-//{
-//    std::vector<CaretMappableDataFile*> allFiles;
-//    CaretMappableDataFile* selectedFile;
-//    int32_t selectedIndex;
-//    getSelectionData(allFiles,
-//                           selectedFile,
-//                           selectedMapUniqueIDOut,
-//                           selectedIndex);
-//    
-//    mapDataFileTypeOut = DataFileTypeEnum::UNKNOWN;
-//    if (selectedFile != NULL) {
-//        mapDataFileTypeOut = selectedFile->getDataFileType();
-//    }
-//    else {
-//        selectedMapUniqueIDOut = "";
-//    }    
-//}
-
 /**
  * Return the selection information.  This method is typically
  * called to update the user-interface.
@@ -329,7 +298,6 @@ Overlay::getSelectionData(CaretMappableDataFile* &selectedMapFileOut,
                           int32_t& selectedMapIndexOut)
 {
     std::vector<CaretMappableDataFile*> mapFiles;
-    //AString mapUniqueID;
     
     getSelectionData(mapFiles, 
                            selectedMapFileOut, 
@@ -358,7 +326,6 @@ Overlay::getSelectionData(std::vector<CaretMappableDataFile*>& mapFilesOut,
 {
     mapFilesOut.clear();
     selectedMapFileOut = NULL;
-    //selectedMapUniqueIDOut = "";
     selectedMapIndexOut = -1;
     
     /**
@@ -405,18 +372,6 @@ Overlay::getSelectionData(std::vector<CaretMappableDataFile*>& mapFilesOut,
                         break;
                     }
                 }
-                
-//                const StructureEnum::Enum mapFileStructure = mapFile->getStructure();
-//                
-//                if (mapFileStructure == StructureEnum::ALL) {
-//                    useIt = true;
-//                }
-//                else if (std::find(m_includeSurfaceStructures.begin(),
-//                              m_includeSurfaceStructures.end(),
-//                              mapFile->getStructure())
-//                         != m_includeSurfaceStructures.end()) {
-//                    useIt = true;
-//                }
             }
         }
         if (mapFile->isVolumeMappable()) {
@@ -424,10 +379,6 @@ Overlay::getSelectionData(std::vector<CaretMappableDataFile*>& mapFilesOut,
             if (showVolumeMapFiles) {
                 useIt = true;
             }
-        }
-        
-        if (mappable == false) {
-            CaretLogSevere("Map file is neither surface nor volume mappable: " + mapFile->getFileName());
         }
         
         if (useIt) {
@@ -441,7 +392,12 @@ Overlay::getSelectionData(std::vector<CaretMappableDataFile*>& mapFilesOut,
     if (std::find(mapFilesOut.begin(), 
                   mapFilesOut.end(),
                   m_selectedMapFile) == mapFilesOut.end()) {
+        /*
+         * Invalidate seleted file and disable yoking since 
+         * the selected file will change.
+         */
         m_selectedMapFile = NULL;
+        m_mapYokingGroup = MapYokingGroupEnum::MAP_YOKING_GROUP_OFF;
     }
     
     /*
@@ -455,28 +411,8 @@ Overlay::getSelectionData(std::vector<CaretMappableDataFile*>& mapFilesOut,
         if (m_selectedMapIndex < 0) {
             m_selectedMapIndex = 0;
         }
-//        const int32_t mapIndex = m_selectedMapFile->getMapIndexFromUniqueID(m_selectedMapUniqueID);
-//        if (mapIndex < 0) {
-//            m_selectedMapUniqueID = m_selectedMapFile->getMapUniqueID(0);
-//        }
     }
     else {
-//        /*
-//         * Look for a file that contains the selected map unique ID.
-//         */
-//        if (m_selectedMapUniqueID.isEmpty() == false) {
-//            for (std::vector<CaretMappableDataFile*>::iterator iter = mapFilesOut.begin();
-//                 iter != mapFilesOut.end();
-//                 iter++) {
-//                CaretMappableDataFile* mapTypeFile = *iter;
-//                const int32_t mapIndex = mapTypeFile->getMapIndexFromUniqueID(m_selectedMapUniqueID);
-//                if (mapIndex >= 0) {
-//                    m_selectedMapFile = mapTypeFile;
-//                    break;
-//                }
-//            }
-//        }
-        
         /*
          * Use first map in first file that has one or more maps.
          */
@@ -489,7 +425,6 @@ Overlay::getSelectionData(std::vector<CaretMappableDataFile*>& mapFilesOut,
                     if (mapTypeFile->getNumberOfMaps() > 0) {
                         m_selectedMapFile = mapTypeFile;
                         m_selectedMapIndex = 0;
-//                        m_selectedMapUniqueID = mapTypeFile->getMapUniqueID(0);
                     }
                 }
             }
@@ -498,23 +433,20 @@ Overlay::getSelectionData(std::vector<CaretMappableDataFile*>& mapFilesOut,
     
     selectedMapFileOut = m_selectedMapFile;
     if (selectedMapFileOut != NULL) {
-        /*
-         * Update for overlay yoking
-         */
-        if (m_yokingGroup != OverlayYokingGroupEnum::OVERLAY_YOKING_GROUP_OFF) {
-            const int32_t yokeMapIndex = OverlayYokingGroupEnum::getSelectedMapIndex(m_yokingGroup);
-            if ((yokeMapIndex >= 0)
-                && (yokeMapIndex < selectedMapFileOut->getNumberOfMaps())) {
-                m_selectedMapIndex = yokeMapIndex;
-//                m_selectedMapUniqueID = selectedMapFileOut->getMapUniqueID(yokeMapIndex);
-            }
-            else if (yokeMapIndex >= selectedMapFileOut->getNumberOfMaps()) {
-                m_selectedMapIndex = selectedMapFileOut->getNumberOfMaps() - 1;
-//                selectedMapUniqueIDOut = selectedMapFileOut->getNumberOfMaps() - 1;
-            }
-        }
-        
-//        selectedMapUniqueIDOut = m_selectedMapUniqueID;
+//        /*
+//         * Update for overlay yoking
+//         */
+//        if (m_mapYokingGroup != MapYokingGroupEnum::MAP_YOKING_GROUP_OFF) {
+//            const int32_t yokeMapIndex = MapYokingGroupEnum::getSelectedMapIndex(m_mapYokingGroup);
+//            if ((yokeMapIndex >= 0)
+//                && (yokeMapIndex < selectedMapFileOut->getNumberOfMaps())) {
+//                m_selectedMapIndex = yokeMapIndex;
+//            }
+//            else if (yokeMapIndex >= selectedMapFileOut->getNumberOfMaps()) {
+//                m_selectedMapIndex = selectedMapFileOut->getNumberOfMaps() - 1;
+//            }
+//        }
+//        
         selectedMapIndexOut = m_selectedMapIndex;  //m_selectedMapFile->getMapIndexFromUniqueID(selectedMapUniqueIDOut);
     }
 }
@@ -532,13 +464,18 @@ Overlay::setSelectionData(CaretMappableDataFile* selectedMapFile,
 {
     m_selectedMapFile = selectedMapFile;
     m_selectedMapIndex = selectedMapIndex;
-//    m_selectedMapUniqueID = selectedMapFile->getMapUniqueID(selectedMapIndex);
     
-    if (m_yokingGroup != OverlayYokingGroupEnum::OVERLAY_YOKING_GROUP_OFF) {
-        if (selectedMapFile != NULL) {
-            OverlayYokingGroupEnum::setSelectedMapIndex(m_yokingGroup,
-                                                        selectedMapIndex);
+    if (m_mapYokingGroup != MapYokingGroupEnum::MAP_YOKING_GROUP_OFF) {
+        if (m_selectedMapFile == NULL) {
+            m_mapYokingGroup = MapYokingGroupEnum::MAP_YOKING_GROUP_OFF;
         }
+//        if (selectedMapFile != NULL) {
+//            MapYokingGroupEnum::setSelectedMapIndex(m_mapYokingGroup,
+//                                                        selectedMapIndex);
+//        }
+//        else {
+//            m_mapYokingGroup = MapYokingGroupEnum::MAP_YOKING_GROUP_OFF;
+//        }
     }
 }
 
@@ -563,48 +500,26 @@ Overlay::setPaletteDisplayEnabled(const bool enabled)
 }
 
 /**
- * @return Selected yoking group.
+ * @return Selected map yoking group.
  */
-OverlayYokingGroupEnum::Enum
-Overlay::getYokingGroup() const
+MapYokingGroupEnum::Enum
+Overlay::getMapYokingGroup() const
 {
-    return m_yokingGroup;
+    return m_mapYokingGroup;
 }
 
 /**
- * Set the selected yoking group.
+ * Set the map yoking group.
  *
- * @param yokingGroup
- *    New value for yoking group.
+ * @param mapYokingGroup
+ *    New value for map yoking group.
  */
 void
-Overlay::setYokingGroup(const OverlayYokingGroupEnum::Enum yokingGroup)
+Overlay::setMapYokingGroup(const MapYokingGroupEnum::Enum mapYokingGroup)
 {
-    m_yokingGroup = yokingGroup;
-    
-    if (m_yokingGroup == OverlayYokingGroupEnum::OVERLAY_YOKING_GROUP_OFF) {
-        return;
-    }
-    
-//    /*
-//     * Find another browser tab using the same yoking as 'me' and copy
-//     * yoked data from the other browser tab.
-//     */
-//    for (std::set<BrowserTabContent*>::iterator iter = s_allBrowserTabContent.begin();
-//         iter != s_allBrowserTabContent.end();
-//         iter++) {
-//        BrowserTabContent* btc = *iter;
-//        if (btc != this) {
-//            if (btc->getYokingGroup() == m_yokingGroup) {
-//                *m_viewingTransformation = *btc->m_viewingTransformation;
-//                *m_volumeSliceViewingTransformation = *btc->m_volumeSliceViewingTransformation;
-//                *m_volumeSliceSettings = *btc->m_volumeSliceSettings;
-//                *m_wholeBrainSliceSettings = *btc->m_wholeBrainSliceSettings;
-//                break;
-//            }
-//        }
-//    }
+    m_mapYokingGroup = mapYokingGroup;
 }
+
 
 /**
  * Create a scene for an instance of a class.
@@ -646,8 +561,6 @@ Overlay::saveToScene(const SceneAttributes* sceneAttributes,
                                 selectedMapFile->getFileName());
         sceneClass->addString("selectedMapFile",
                               selectedMapFile->getFileNameNoPath());
-//        sceneClass->addString("selectedMapUniqueID",
-//                              selectedMapUniqueID);
         sceneClass->addString("selectedMapName",
                               selectedMapFile->getMapName(selectedMapIndex));
         sceneClass->addInteger("selectedMapIndex",
@@ -658,8 +571,6 @@ Overlay::saveToScene(const SceneAttributes* sceneAttributes,
                                 "");
         sceneClass->addString("selectedMapFile",
                               "");
-//        sceneClass->addString("selectedMapUniqueID",
-//                              "");
         sceneClass->addString("selectedMapName",
                               "");
         sceneClass->addInteger("selectedMapIndex",
@@ -704,6 +615,22 @@ Overlay::restoreFromScene(const SceneAttributes* sceneAttributes,
     
     m_sceneAssistant->restoreMembers(sceneAttributes, 
                                      sceneClass);
+
+    /*
+     * OverlayYokingGroup was replaced by MapYokingGroup.
+     * If an overlay yoking group is found, convert it to 
+     * a map yoking group.
+     */
+    const AString overlayYokingGroupName = sceneClass->getEnumeratedTypeValueAsString("m_yokingGroup",
+                                                                      "");
+    if ( ! overlayYokingGroupName.isEmpty()) {
+        bool valid = false;
+        const MapYokingGroupEnum::Enum mapGroup = MapYokingGroupEnum::fromOverlayYokingGroupEnumName(overlayYokingGroupName,
+                                                                              &valid);
+        if (valid) {
+            m_mapYokingGroup = mapGroup;
+        }
+    }
     
     const AString selectedMapFileNameWithPath = sceneClass->getPathNameValue("selectedMapFileNameWithPath");
     
@@ -831,33 +758,6 @@ Overlay::restoreFromScene(const SceneAttributes* sceneAttributes,
             }
         }
     }
-    
-    
-//    /*
-//     * Second try to find file by filename WITHOUT path and map by unique ID
-//     */
-//    if (found == false) {
-//        if (selectedMapUniqueID.isEmpty() == false) {
-//            for (std::vector<CaretMappableDataFile*>::iterator iter = mapFiles.begin();
-//                 iter != mapFiles.end();
-//                 iter++) {
-//                CaretMappableDataFile* mapFile = *iter;
-//                const AString fileName = mapFile->getFileNameNoPath();
-//                if (fileName == selectedMapFileName) {
-//                    CaretMappableDataFile* mapFile = *iter;
-//                    matchedMapFile = mapFile;
-//                    
-//                    const int mapIndex = mapFile->getMapIndexFromUniqueID(selectedMapUniqueID);
-//                    if (mapIndex >= 0) {
-//                        setSelectionData(mapFile,
-//                                         mapIndex);
-//                        found = true;
-//                        break;
-//                    }
-//                }
-//            }
-//        }
-//    }
     
     if (found == false) {
         /*

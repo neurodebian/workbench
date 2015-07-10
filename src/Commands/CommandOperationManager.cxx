@@ -46,6 +46,7 @@
 #include "AlgorithmCiftiMergeDense.h"
 #include "AlgorithmCiftiPairwiseCorrelation.h"
 #include "AlgorithmCiftiParcellate.h"
+#include "AlgorithmCiftiParcelMappingToLabel.h"
 #include "AlgorithmCiftiReduce.h"
 #include "AlgorithmCiftiReorder.h"
 #include "AlgorithmCiftiReplaceStructure.h"
@@ -54,8 +55,10 @@
 #include "AlgorithmCiftiSeparate.h"
 #include "AlgorithmCiftiSmoothing.h"
 #include "AlgorithmCiftiTranspose.h"
+#include "AlgorithmCiftiVectorOperation.h"
 #include "AlgorithmCreateSignedDistanceVolume.h"
 #include "AlgorithmFiberDotProducts.h"
+#include "AlgorithmFociResample.h"
 #include "AlgorithmGiftiAllLabelsToROIs.h"
 #include "AlgorithmGiftiLabelAddPrefix.h"
 #include "AlgorithmGiftiLabelToROI.h"
@@ -78,6 +81,8 @@
 #include "AlgorithmMetricROIsToBorder.h"
 #include "AlgorithmMetricSmoothing.h"
 #include "AlgorithmMetricTFCE.h"
+#include "AlgorithmMetricVectorOperation.h"
+#include "AlgorithmMetricVectorTowardROI.h"
 #include "AlgorithmNodesInsideBorder.h" //-border-to-rois
 #include "AlgorithmSignedDistanceToSurface.h"
 #include "AlgorithmSurfaceAffineRegression.h"
@@ -116,6 +121,7 @@
 #include "AlgorithmVolumeSmoothing.h"
 #include "AlgorithmVolumeTFCE.h"
 #include "AlgorithmVolumeToSurfaceMapping.h"
+#include "AlgorithmVolumeVectorOperation.h"
 #include "AlgorithmVolumeWarpfieldResample.h"
 
 #include "OperationAddToSpecFile.h"
@@ -127,6 +133,9 @@
 #include "OperationCiftiChangeTimestep.h"
 #include "OperationCiftiConvert.h"
 #include "OperationCiftiConvertToScalar.h"
+#include "OperationCiftiCopyMapping.h"
+#include "OperationCiftiCreateDenseFromTemplate.h"
+#include "OperationCiftiCreateScalarSeries.h"
 #include "OperationCiftiEstimateFWHM.h"
 #include "OperationCiftiExportDenseMapping.h"
 #include "OperationCiftiLabelExportTable.h"
@@ -135,8 +144,11 @@
 #include "OperationCiftiMerge.h"
 #include "OperationCiftiPalette.h"
 #include "OperationCiftiResampleDconnMemory.h"
+#include "AlgorithmCiftiRestrictDenseMap.h"
 #include "OperationCiftiROIAverage.h"
 #include "OperationCiftiSeparateAll.h"
+#include "OperationCiftiStats.h"
+#include "OperationCiftiWeightedStats.h"
 #include "OperationConvertAffine.h"
 #include "OperationConvertFiberOrientations.h"
 #include "OperationConvertMatrix4ToMatrix2.h"
@@ -158,7 +170,9 @@
 #include "OperationMetricMath.h"
 #include "OperationMetricMerge.h"
 #include "OperationMetricPalette.h"
+#include "OperationMetricStats.h"
 #include "OperationMetricVertexSum.h"
+#include "OperationMetricWeightedStats.h"
 #include "OperationNiftiInformation.h"
 #include "OperationProbtrackXDotConvert.h"
 #include "OperationSetMapName.h"
@@ -173,6 +187,7 @@
 #include "OperationSurfaceGeodesicDistance.h"
 #include "OperationSurfaceGeodesicROIs.h"
 #include "OperationSurfaceInformation.h"
+#include "OperationSurfaceNormals.h"
 #include "OperationSurfaceVertexAreas.h"
 #include "OperationVolumeCapturePlane.h"
 #include "OperationVolumeCopyExtensions.h"
@@ -184,6 +199,8 @@
 #include "OperationVolumePalette.h"
 #include "OperationVolumeReorient.h"
 #include "OperationVolumeSetSpace.h"
+#include "OperationVolumeStats.h"
+#include "OperationVolumeWeightedStats.h"
 #include "OperationWbsparseMergeDense.h"
 #include "OperationZipSceneFile.h"
 #include "OperationZipSpecFile.h"
@@ -265,16 +282,20 @@ CommandOperationManager::CommandOperationManager()
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmCiftiMergeDense()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmCiftiPairwiseCorrelation()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmCiftiParcellate()));
+    this->commandOperations.push_back(new CommandParser(new AutoAlgorithmCiftiParcelMappingToLabel()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmCiftiReduce()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmCiftiReorder()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmCiftiReplaceStructure()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmCiftiResample()));
+    this->commandOperations.push_back(new CommandParser(new AutoAlgorithmCiftiRestrictDenseMap()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmCiftiROIsFromExtrema()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmCiftiSeparate()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmCiftiSmoothing()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmCiftiTranspose()));
+    this->commandOperations.push_back(new CommandParser(new AutoAlgorithmCiftiVectorOperation()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmCreateSignedDistanceVolume()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmFiberDotProducts()));
+    this->commandOperations.push_back(new CommandParser(new AutoAlgorithmFociResample()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmGiftiAllLabelsToROIs()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmGiftiLabelAddPrefix()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmGiftiLabelToROI()));
@@ -297,6 +318,8 @@ CommandOperationManager::CommandOperationManager()
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmMetricROIsToBorder()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmMetricSmoothing()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmMetricTFCE()));
+    this->commandOperations.push_back(new CommandParser(new AutoAlgorithmMetricVectorOperation()));
+    this->commandOperations.push_back(new CommandParser(new AutoAlgorithmMetricVectorTowardROI()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmNodesInsideBorder()));//-border-to-rois
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmSignedDistanceToSurface()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmSurfaceAffineRegression()));
@@ -335,6 +358,7 @@ CommandOperationManager::CommandOperationManager()
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmVolumeSmoothing()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmVolumeTFCE()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmVolumeToSurfaceMapping()));
+    this->commandOperations.push_back(new CommandParser(new AutoAlgorithmVolumeVectorOperation()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmVolumeWarpfieldResample()));
     
     this->commandOperations.push_back(new CommandParser(new AutoOperationAddToSpecFile()));
@@ -346,6 +370,9 @@ CommandOperationManager::CommandOperationManager()
     this->commandOperations.push_back(new CommandParser(new AutoOperationCiftiChangeTimestep()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationCiftiConvert()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationCiftiConvertToScalar()));
+    this->commandOperations.push_back(new CommandParser(new AutoOperationCiftiCopyMapping()));
+    this->commandOperations.push_back(new CommandParser(new AutoOperationCiftiCreateDenseFromTemplate()));
+    this->commandOperations.push_back(new CommandParser(new AutoOperationCiftiCreateScalarSeries()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationCiftiEstimateFWHM()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationCiftiExportDenseMapping()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationCiftiLabelExportTable()));
@@ -355,7 +382,8 @@ CommandOperationManager::CommandOperationManager()
     this->commandOperations.push_back(new CommandParser(new AutoOperationCiftiPalette()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationCiftiResampleDconnMemory()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationCiftiROIAverage()));
-    this->commandOperations.push_back(new CommandParser(new AutoOperationCiftiSeparateAll()));
+    this->commandOperations.push_back(new CommandParser(new AutoOperationCiftiStats()));
+    this->commandOperations.push_back(new CommandParser(new AutoOperationCiftiWeightedStats()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationConvertAffine()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationConvertFiberOrientations()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationConvertMatrix4ToMatrix2()));
@@ -377,10 +405,10 @@ CommandOperationManager::CommandOperationManager()
     this->commandOperations.push_back(new CommandParser(new AutoOperationMetricMath()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationMetricMerge()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationMetricPalette()));
-    this->commandOperations.push_back(new CommandParser(new AutoOperationMetricVertexSum()));
+    this->commandOperations.push_back(new CommandParser(new AutoOperationMetricStats()));
+    this->commandOperations.push_back(new CommandParser(new AutoOperationMetricWeightedStats()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationNiftiInformation()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationProbtrackXDotConvert()));
-    this->commandOperations.push_back(new CommandParser(new AutoOperationSetMapName()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationSetMapNames()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationSetStructure()));
     if (OperationShowScene::isShowSceneCommandAvailable()) {
@@ -394,6 +422,7 @@ CommandOperationManager::CommandOperationManager()
     this->commandOperations.push_back(new CommandParser(new AutoOperationSurfaceGeodesicDistance()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationSurfaceGeodesicROIs()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationSurfaceInformation()));
+    this->commandOperations.push_back(new CommandParser(new AutoOperationSurfaceNormals()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationSurfaceVertexAreas()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationVolumeCapturePlane()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationVolumeCopyExtensions()));
@@ -405,6 +434,8 @@ CommandOperationManager::CommandOperationManager()
     this->commandOperations.push_back(new CommandParser(new AutoOperationVolumePalette()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationVolumeReorient()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationVolumeSetSpace()));
+    this->commandOperations.push_back(new CommandParser(new AutoOperationVolumeStats()));
+    this->commandOperations.push_back(new CommandParser(new AutoOperationVolumeWeightedStats()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationWbsparseMergeDense()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationZipSceneFile()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationZipSpecFile()));
@@ -419,6 +450,10 @@ CommandOperationManager::CommandOperationManager()
 #endif // WORKBENCH_HAVE_C11X
     this->commandOperations.push_back(new CommandGiftiConvert());
     this->commandOperations.push_back(new CommandUnitTest());
+    
+    this->deprecatedOperations.push_back(new CommandParser(new AutoOperationCiftiSeparateAll()));
+    this->deprecatedOperations.push_back(new CommandParser(new AutoOperationMetricVertexSum()));
+    this->deprecatedOperations.push_back(new CommandParser(new AutoOperationSetMapName()));
 }
 
 /**
@@ -432,6 +467,12 @@ CommandOperationManager::~CommandOperationManager()
         this->commandOperations[i] = NULL;
     }
     this->commandOperations.clear();
+    uint64_t numberOfDeprecated = this->deprecatedOperations.size();
+    for (uint64_t i = 0; i < numberOfDeprecated; i++) {
+        delete this->deprecatedOperations[i];
+        this->deprecatedOperations[i] = NULL;
+    }
+    this->deprecatedOperations.clear();
 }
 
 /**
@@ -443,12 +484,20 @@ CommandOperationManager::~CommandOperationManager()
  *    If the command failed.
  */
 void 
-CommandOperationManager::runCommand(ProgramParameters& parameters) throw (CommandException)
+CommandOperationManager::runCommand(ProgramParameters& parameters)
 {
-    vector<AString> globalOptionArgs;//not used yet
-    bool preventProvenance = getGlobalOption(parameters, "-disable-provenance", 0, globalOptionArgs);//check these BEFORE we test if we have a command switch
+    vector<AString> globalOptionArgs;
+    bool preventProvenance = getGlobalOption(parameters, "-disable-provenance", 0, globalOptionArgs);//check these BEFORE we test if we have a command switch, because they remove the switch and arguments from the ProgramParameters
+    if (getGlobalOption(parameters, "-logging", 1, globalOptionArgs))
+    {
+        bool valid = false;
+        const LogLevelEnum::Enum level = LogLevelEnum::fromName(globalOptionArgs[0], &valid);
+        if (!valid) throw CommandException("unrecognized logging level: '" + globalOptionArgs[0] + "'");
+        CaretLogger::getLogger()->setLevel(level);
+    }
 
     const uint64_t numberOfCommands = this->commandOperations.size();
+    const uint64_t numberOfDeprecated = this->deprecatedOperations.size();
 
     if (parameters.hasNext() == false) {
         printHelpInfo();
@@ -456,51 +505,60 @@ CommandOperationManager::runCommand(ProgramParameters& parameters) throw (Comman
     }
     
     AString commandSwitch;
-    try {
-        commandSwitch = parameters.nextString("Command Name");
+    commandSwitch = parameters.nextString("Command Name");
+    
+    if (commandSwitch == "-help")
+    {
+        printHelpInfo();
+    } else if (commandSwitch == "-arguments-help") {
+        printArgumentsHelp("wb_command");
+    } else if (commandSwitch == "-version") {
+        printVersionInfo();
+    } else if (commandSwitch == "-list-commands") {
+        printAllCommands();
+    } else if (commandSwitch == "-list-deprecated-commands") {
+        printDeprecatedCommands();
+    } else if (commandSwitch == "-all-commands-help") {
+        printAllCommandsHelpInfo("wb_command");
+    } else {
         
-        if (commandSwitch == "-help")
+        CommandOperation* operation = NULL;
+        
+        for (uint64_t i = 0; i < numberOfCommands; i++)
         {
-            printHelpInfo();
-        } else if (commandSwitch == "-arguments-help") {
-            printArgumentsHelp(parameters.getProgramName());
-        } else if (commandSwitch == "-version") {
-            printVersionInfo();
-        } else if (commandSwitch == "-list-commands") {
-            printAllCommands();
-        } else if (commandSwitch == "-all-commands-help") {
-            printAllCommandsHelpInfo(parameters.getProgramName());
-        } else {
-            
-            CommandOperation* operation = NULL;
-            
-            for (uint64_t i = 0; i < numberOfCommands; i++) {
-                if (this->commandOperations[i]->getCommandLineSwitch() == commandSwitch) {
-                    operation = this->commandOperations[i];
+            if (this->commandOperations[i]->getCommandLineSwitch() == commandSwitch)
+            {
+                operation = this->commandOperations[i];
+                break;
+            }
+        }
+        if (operation == NULL)
+        {
+            for (uint64_t i = 0; i < numberOfDeprecated; i++)
+            {
+                if (this->deprecatedOperations[i]->getCommandLineSwitch() == commandSwitch)
+                {
+                    operation = this->deprecatedOperations[i];
                     break;
                 }
             }
-            
-            if (operation == NULL) {
-                if (!parameters.hasNext())
-                {
-                    printAllCommandsMatching(commandSwitch);
-                } else {
-                    throw CommandException("Command \"" + commandSwitch + "\" not found.");
-                }
+        }
+        
+        if (operation == NULL) {
+            if (!parameters.hasNext())
+            {
+                printAllCommandsMatching(commandSwitch);
             } else {
-                if (!parameters.hasNext() && operation->takesParameters())
-                {
-                    cout << operation->getHelpInformation(parameters.getProgramName()) << endl;
-                } else {
-                    operation->execute(parameters, preventProvenance);
-                }
+                throw CommandException("Command \"" + commandSwitch + "\" not found.");
+            }
+        } else {
+            if (!parameters.hasNext() && operation->takesParameters())
+            {
+                cout << operation->getHelpInformation("wb_command") << endl;
+            } else {
+                operation->execute(parameters, preventProvenance);
             }
         }
-    }
-    catch (ProgramParametersException& e) {
-        cerr << "caught PPE" << endl;
-        throw CommandException(e);
     }
 }
 
@@ -519,9 +577,9 @@ bool CommandOperationManager::getGlobalOption(ProgramParameters& parameters, con
                 if (!parameters.hasNext())
                 {
                     throw CommandException("missing argument #" + AString::number(i + 1) + " to global option '" + optionString + "'");
-                    arguments.push_back(parameters.nextString("global option argument"));
-                    parameters.remove();
                 }
+                arguments.push_back(parameters.nextString("global option argument"));
+                parameters.remove();
             }
             parameters.setParameterIndex(0);
             return true;
@@ -544,6 +602,43 @@ CommandOperationManager::printAllCommands()
     const uint64_t numberOfCommands = this->commandOperations.size();
     for (uint64_t i = 0; i < numberOfCommands; i++) {
         CommandOperation* op = this->commandOperations[i];
+        
+        const AString cmdSwitch = op->getCommandLineSwitch();
+        const int64_t switchLength = cmdSwitch.length();
+        if (switchLength > longestSwitch) {
+            longestSwitch = switchLength;
+        }
+        
+        cmdMap.insert(make_pair(cmdSwitch,
+                                     op->getOperationShortDescription()));
+#ifndef NDEBUG
+        const AString helpInfo = op->getHelpInformation("");//TSC: generating help info takes a little processing (populating and walking an OperationParameters tree for each command)
+        if (helpInfo.isEmpty()) {//So, test the same define as for asserts and skip this check in release
+            CaretLogSevere("Command has no help info: " + cmdSwitch);
+        }
+#endif
+    }
+
+    for (map<AString, AString>::iterator iter = cmdMap.begin();
+         iter != cmdMap.end();
+         iter++) {
+        AString cmdSwitch = iter->first;
+        cmdSwitch = cmdSwitch.leftJustified(longestSwitch + 2, ' ');
+        AString description = iter->second;
+        
+        cout << qPrintable(cmdSwitch) << qPrintable(description) << endl;
+    }
+}
+
+void CommandOperationManager::printDeprecatedCommands()
+{
+    map<AString, AString> cmdMap;
+    
+    int64_t longestSwitch = 0;
+    
+    const uint64_t numberOfDeprecated = this->deprecatedOperations.size();
+    for (uint64_t i = 0; i < numberOfDeprecated; i++) {
+        CommandOperation* op = this->deprecatedOperations[i];
         
         const AString cmdSwitch = op->getCommandLineSwitch();
         const int64_t switchLength = cmdSwitch.length();
@@ -630,7 +725,7 @@ CommandOperationManager::printAllCommandsMatching(const AString& partialSwitch)
  *   A vector containing the command operations.
  * Do not modify the returned value.
  */
-std::vector<CommandOperation*> 
+vector<CommandOperation*> 
 CommandOperationManager::getCommandOperations()
 {
     return this->commandOperations;
@@ -638,16 +733,29 @@ CommandOperationManager::getCommandOperations()
 
 void CommandOperationManager::printHelpInfo()
 {
-    printVersionInfo();
+    cout << ApplicationInformation().getSummaryInformationInString("\n");
+    //guide for wrap, assuming 80 columns:                                                  |
     cout << endl << "Information options:" << endl;
-    cout << "   -help                 print this help info" << endl;
-    cout << "   -arguments-help       explain how to read the help info for subcommands" << endl;
-    cout << "   -version              print version information only" << endl;
-    cout << "   -list-commands        print all non-information (processing) subcommands" << endl;
-    cout << "   -all-commands-help    print all non-information (processing) subcommands and" << endl;
-    cout << "                            their help info - VERY LONG" << endl;
+    cout << "   -help                       show this help info" << endl;
+    cout << "   -arguments-help             explain the format of subcommand help info" << endl;
+    cout << "   -version                    show extended version information" << endl;
+    cout << "   -list-commands              list all processing subcommands" << endl;
+    cout << "   -list-deprecated-commands   list deprecated subcommands" << endl;
+    cout << "   -all-commands-help          show all processing subcommands and their help" << endl;
+    cout << "                                  info - VERY LONG" << endl;
     cout << endl << "Global options (can be added to any command):" << endl;
-    cout << "   -disable-provenance   don't generate provenance info in output files" << endl;
+    cout << "   -disable-provenance         don't generate provenance info in output files" << endl;
+    cout << "   -logging <level>            set the logging level, valid values are:" << endl;
+    vector<LogLevelEnum::Enum> logLevels;
+    LogLevelEnum::getAllEnums(logLevels);
+    for (vector<LogLevelEnum::Enum>::iterator iter = logLevels.begin();
+         iter != logLevels.end();
+         iter++) {
+        cout << "            " << LogLevelEnum::toName(*iter) << endl;
+    }
+    cout << endl;
+    cout << "To get the help information on a processing subcommand, run it without any" << endl;
+    cout << "   additional arguments." << endl;
     cout << endl;
     cout << "If the first argument is not recognized, all processing commands that start" << endl;
     cout << "   with the argument are displayed" << endl;
@@ -665,28 +773,31 @@ void CommandOperationManager::printArgumentsHelp(const AString& programName)
     cout << "$ " << programName << " -volume-math" << endl;
     cout << "EVALUATE EXPRESSION ON VOLUME FILES" << endl;
     cout << "   " << programName << " -volume-math" << endl;
-    cout << "      <expression>" << endl;
-    cout << "      <volume-out>" << endl;
-    cout << "      [-fixnan]" << endl;
-    cout << "         <replace>" << endl;
-    cout << "      [-var] (repeatable)" << endl;
-    cout << "         <name>" << endl;
-    cout << "         <volume>" << endl;
-    cout << "         [-subvolume]" << endl;
-    cout << "            <subvol>" << endl;
-    cout << "         [-repeat]" << endl;
+    cout << "      <expression> - the expression to evaluate, in quotes" << endl;
+    cout << "      <volume-out> - output - the output volume" << endl;
+    cout << endl;
+    cout << "      [-fixnan] - replace NaN results with a value" << endl;
+    cout << "         <replace> - value to replace NaN with" << endl;
+    cout << endl;
+    cout << "      [-var] (repeatable) - repeatable - a volume file to use as a variable" << endl;
+    cout << "         <name> - the name of the variable, as used in the expression" << endl;
+    cout << "         <volume> - the volume file to use as this variable" << endl;
+    cout << endl;
+    cout << "         [-subvolume] - select a single subvolume" << endl;
+    cout << "            <subvol> - the subvolume number or name" << endl;
+    cout << endl;
+    cout << "         [-repeat] - reuse a single subvolume for each subvolume of calculation" << endl;
     cout << "..." << endl;
     cout << endl;
     //guide for wrap, assuming 80 columns:                                                  |
-    cout << "   '<expression>' and '<volume-out>' denote mandatory parameters, '[-fixnan]'" << endl;
+    cout << "   '<expression>' and '<volume-out>' denote mandatory parameters.  '[-fixnan]'" << endl;
     cout << "   denotes an option taking one mandatory parameter '<replace>', and" << endl;
     cout << "   '[-var] (repeatable)' denotes a repeatable option with mandatory parameters" << endl;
-    cout << "   '<name>' and '<volume>', and two suboptions, '[-subvolume]', which has a" << endl;
-    cout << "   mandatory parameter '<subvol>', and '[-repeat]', which has no parameters." << endl;
-    cout << "   Commands also provide additional help info along with descriptions of" << endl;
-    cout << "   options and parameters below the section in the example.  Each option starts" << endl;
-    cout << "   a new scope, and all options and arguments end any scope that they are not" << endl;
-    cout << "   valid in.  For example, this command is correct:" << endl;
+    cout << "   '<name>' and '<volume>', and two suboptions: '[-subvolume]', which has a" << endl;
+    cout << "   mandatory parameter '<subvol>', and '[-repeat]', which takes no parameters." << endl;
+    cout << "   Commands also provide additional help info below the section in the example." << endl;
+    cout << "   Each option starts a new scope, and all options and arguments end any scope" << endl;
+    cout << "   that they are not valid in.  For example, this command is correct:" << endl;
     cout << endl;
     cout << "$ " << programName << " -volume-math 'sin(x)' sin_x.nii.gz -fixnan 0 -var x x.nii.gz -subvolume 1" << endl;
     cout << endl;

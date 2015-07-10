@@ -33,14 +33,18 @@
 
 #include "SelectionItemBorderSurface.h"
 #include "SelectionItemChartDataSeries.h"
+#include "SelectionItemChartFrequencySeries.h"
 #include "SelectionItemChartMatrix.h"
 #include "SelectionItemChartTimeSeries.h"
+#include "SelectionItemCiftiConnectivityMatrixRowColumn.h"
 #include "SelectionItemFocusSurface.h"
 #include "SelectionItemFocusVolume.h"
 #include "SelectionItemSurfaceNode.h"
 #include "SelectionItemSurfaceNodeIdentificationSymbol.h"
 #include "SelectionItemSurfaceTriangle.h"
 #include "SelectionItemVoxel.h"
+#include "SelectionItemVoxelEditing.h"
+#include "SelectionItemVoxelIdentificationSymbol.h"
 #include "IdentificationTextGenerator.h"
 #include "Surface.h"
 
@@ -62,7 +66,9 @@ SelectionManager::SelectionManager()
 {
     m_surfaceBorderIdentification = new SelectionItemBorderSurface();
     m_chartDataSeriesIdentification = new SelectionItemChartDataSeries();
+    m_chartDataFrequencyIdentification = new SelectionItemChartFrequencySeries();
     m_chartMatrixIdentification     = new SelectionItemChartMatrix();
+    m_ciftiConnectivityMatrixRowColumnIdentfication = new SelectionItemCiftiConnectivityMatrixRowColumn();
     m_chartTimeSeriesIdentification = new SelectionItemChartTimeSeries();
     m_surfaceFocusIdentification = new SelectionItemFocusSurface();
     m_volumeFocusIdentification = new SelectionItemFocusVolume();
@@ -70,16 +76,22 @@ SelectionManager::SelectionManager()
     m_surfaceNodeIdentificationSymbol = new SelectionItemSurfaceNodeIdentificationSymbol();
     m_surfaceTriangleIdentification = new SelectionItemSurfaceTriangle();
     m_voxelIdentification = new SelectionItemVoxel();
+    m_voxelIdentificationSymbol = new SelectionItemVoxelIdentificationSymbol();
+    m_voxelEditingIdentification = new SelectionItemVoxelEditing();
     
     m_allSelectionItems.push_back(m_surfaceBorderIdentification);
     m_allSelectionItems.push_back(m_chartDataSeriesIdentification);
+    m_allSelectionItems.push_back(m_chartDataFrequencyIdentification);
     m_allSelectionItems.push_back(m_chartMatrixIdentification);
     m_allSelectionItems.push_back(m_chartTimeSeriesIdentification);
+    m_allSelectionItems.push_back(m_ciftiConnectivityMatrixRowColumnIdentfication);
     m_allSelectionItems.push_back(m_surfaceFocusIdentification);
     m_allSelectionItems.push_back(m_surfaceNodeIdentification);
     m_allSelectionItems.push_back(m_surfaceNodeIdentificationSymbol);
     m_allSelectionItems.push_back(m_surfaceTriangleIdentification);
     m_allSelectionItems.push_back(m_voxelIdentification);
+    m_allSelectionItems.push_back(m_voxelIdentificationSymbol);
+    m_allSelectionItems.push_back(m_voxelEditingIdentification);
     m_allSelectionItems.push_back(m_volumeFocusIdentification);
     
     m_surfaceSelectedItems.push_back(m_surfaceNodeIdentification);
@@ -89,6 +101,7 @@ SelectionManager::SelectionManager()
     m_layeredSelectedItems.push_back(m_surfaceFocusIdentification);
     
     m_volumeSelectedItems.push_back(m_voxelIdentification);
+    m_volumeSelectedItems.push_back(m_voxelEditingIdentification);
     m_volumeSelectedItems.push_back(m_volumeFocusIdentification);
     
     m_idTextGenerator = new IdentificationTextGenerator();
@@ -111,10 +124,14 @@ SelectionManager::~SelectionManager()
     m_surfaceBorderIdentification = NULL;
     delete m_chartDataSeriesIdentification;
     m_chartDataSeriesIdentification = NULL;
+    delete m_chartDataFrequencyIdentification;
+    m_chartDataFrequencyIdentification = NULL;
     delete m_chartMatrixIdentification;
     m_chartMatrixIdentification = NULL;
     delete m_chartTimeSeriesIdentification;
     m_chartTimeSeriesIdentification = NULL;
+    delete m_ciftiConnectivityMatrixRowColumnIdentfication;
+    m_ciftiConnectivityMatrixRowColumnIdentfication = NULL;
     delete m_surfaceFocusIdentification;
     m_surfaceFocusIdentification = NULL;
     delete m_surfaceNodeIdentification;
@@ -125,6 +142,10 @@ SelectionManager::~SelectionManager()
     m_surfaceTriangleIdentification = NULL;
     delete m_voxelIdentification;
     m_voxelIdentification = NULL;
+    delete m_voxelEditingIdentification;
+    m_voxelEditingIdentification = NULL;
+    delete m_voxelIdentificationSymbol;
+    m_voxelIdentificationSymbol = NULL;
     delete m_volumeFocusIdentification;
     m_volumeFocusIdentification = NULL;
     delete m_idTextGenerator;
@@ -237,6 +258,18 @@ SelectionManager::filterSelections(const bool applySelectionBackgroundFiltering)
         }
     }
     
+    if (m_voxelIdentificationSymbol->isValid()
+         && m_voxelIdentification->isValid()) {
+        const double depthDiff = (m_voxelIdentificationSymbol->getScreenDepth()
+                                  - m_voxelIdentification->getScreenDepth());
+        if (depthDiff > 0.01) {
+            m_voxelIdentificationSymbol->reset();
+        }
+        else {
+            m_voxelIdentification->reset();
+        }
+    }
+        
     if (applySelectionBackgroundFiltering) {
          clearDistantSelections();
     }
@@ -328,7 +361,6 @@ SelectionManager::clearOtherSelectedItems(SelectionItem* selectedItem)
             item->reset();
         }
     }
-    
 }
 
 /**
@@ -358,6 +390,23 @@ SelectionManager::getMinimumDepthFromMultipleSelections(std::vector<SelectionIte
     }
     
     return minDepthItem;
+}
+
+/**
+ * Set the enabled status for all selection items.
+ *
+ * @param status
+ *    New status for ALL selection items.
+ */
+void
+SelectionManager::setAllSelectionsEnabled(const bool status)
+{
+    for (std::vector<SelectionItem*>::iterator iter = m_allSelectionItems.begin();
+         iter != m_allSelectionItems.end();
+         iter++) {
+        SelectionItem* item = *iter;
+        item->setEnabledForSelection(status);
+    }
 }
 
 /**
@@ -461,6 +510,42 @@ SelectionManager::getVoxelIdentification()
 }
 
 /**
+ * @return Identification for voxel identification system.
+ */
+const SelectionItemVoxelIdentificationSymbol*
+SelectionManager::getVoxelIdentificationSymbol() const
+{
+    return m_voxelIdentificationSymbol;
+}
+
+/**
+ * @return Identification for voxels.
+ */
+SelectionItemVoxelIdentificationSymbol*
+SelectionManager::getVoxelIdentificationSymbol()
+{
+    return m_voxelIdentificationSymbol;
+}
+
+/**
+ * @return Identification for voxel editing.
+ */
+const SelectionItemVoxelEditing*
+SelectionManager::getVoxelEditingIdentification() const
+{
+    return m_voxelEditingIdentification;
+}
+
+/**
+ * @return Identification for voxel editing.
+ */
+SelectionItemVoxelEditing*
+SelectionManager::getVoxelEditingIdentification()
+{
+    return m_voxelEditingIdentification;
+}
+
+/**
  * @return Identification for borders.
  */
 SelectionItemBorderSurface* 
@@ -533,6 +618,25 @@ SelectionManager::getChartDataSeriesIdentification() const
 }
 
 /**
+ * @return Identification for frequency-series chart.
+ */
+SelectionItemChartFrequencySeries*
+SelectionManager::getChartFrequencySeriesIdentification()
+{
+    return m_chartDataFrequencyIdentification;
+}
+
+/**
+ * @return Identification for frequency-series chart (const method).
+ */
+const SelectionItemChartFrequencySeries*
+SelectionManager::getChartFrequencySeriesIdentification() const
+{
+    return m_chartDataFrequencyIdentification;
+}
+
+
+/**
  * @return Identification for matrix chart.
  */
 SelectionItemChartMatrix*
@@ -550,7 +654,23 @@ SelectionManager::getChartMatrixIdentification() const
     return m_chartMatrixIdentification;
 }
 
+/**
+ * @return Identification for CIFTI Connectivity Matrix Row/Column.
+ */
+SelectionItemCiftiConnectivityMatrixRowColumn*
+SelectionManager::getCiftiConnectivityMatrixRowColumnIdentification()
+{
+    return m_ciftiConnectivityMatrixRowColumnIdentfication;
+}
 
+/**
+ * @return Identification for CIFTI Connectivity Matrix Row/Column.
+ */
+const SelectionItemCiftiConnectivityMatrixRowColumn*
+SelectionManager::getCiftiConnectivityMatrixRowColumnIdentification() const
+{
+    return m_ciftiConnectivityMatrixRowColumnIdentfication;
+}
 
 /**
  * @return Identification for time-series chart.

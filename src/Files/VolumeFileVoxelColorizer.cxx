@@ -143,8 +143,23 @@ VolumeFileVoxelColorizer::assignVoxelColorsForMap(const int32_t mapIndex,
         case SubvolumeAttributes::UNKNOWN:
         case SubvolumeAttributes::ANATOMY:
         case SubvolumeAttributes::FUNCTIONAL:
+        {
             CaretAssert(palette);
-            NodeAndVoxelColoring::colorScalarsWithPalette(m_volumeFile->getMapFastStatistics(mapIndex),
+
+            
+            FastStatistics* statistics = NULL;
+            switch (m_volumeFile->getPaletteNormalizationMode()) {
+                case PaletteNormalizationModeEnum::NORMALIZATION_ALL_MAP_DATA:
+                    statistics = const_cast<FastStatistics*>(m_volumeFile->getFileFastStatistics());
+                    break;
+                case PaletteNormalizationModeEnum::NORMALIZATION_SELECTED_MAP_DATA:
+                    statistics = const_cast<FastStatistics*>(m_volumeFile->getMapFastStatistics(mapIndex));
+                    break;
+            }
+            CaretAssert(statistics);
+            
+
+            NodeAndVoxelColoring::colorScalarsWithPalette(statistics, //m_volumeFile->getMapFastStatistics(mapIndex),
                                                           m_volumeFile->getMapPaletteColorMapping(mapIndex),
                                                           palette,
                                                           mapDataPointer,
@@ -153,6 +168,7 @@ VolumeFileVoxelColorizer::assignVoxelColorsForMap(const int32_t mapIndex,
                                                           m_mapRGBA[mapIndex],
                                                           ignoreThresholding);
             m_mapColoringValid[mapIndex] = true;
+        }
             break;
         case SubvolumeAttributes::LABEL:
             if (m_voxelCountPerMap > 0) {
@@ -179,32 +195,6 @@ VolumeFileVoxelColorizer::assignVoxelColorsForMap(const int32_t mapIndex,
                    + AString::number(timer.getElapsedTimeMilliseconds())
                    + " milliseconds");
 }
-
-///**
-// * Assign voxel coloring for a map in the background.  This method will
-// * launch the assignment of voxel coloring in a separate thread and then
-// * return.
-// *
-// * @param mapIndex
-// *     Index of map.
-// * @param palette
-// *     Palette used for scalar color assignment.
-// * @param thresholdVolume
-// *     Volume that contains thresholding (if NULL indicates no thresholding).
-// * @param thresholdVolumeMapIndex
-// *     Index of map in thresholding volume.
-// */
-//void
-//VolumeFileVoxelColorizer::assignVoxelColorsForMapInBackground(const int32_t mapIndex,
-//                                                              const Palette* palette,
-//                                                              const VolumeFile* thresholdVolume,
-//                                                              const int32_t thresholdVolumeMapIndex)
-//{
-//    assignVoxelColorsForMap(mapIndex,
-//                            palette,
-//                            thresholdVolume,
-//                            thresholdVolumeMapIndex);
-//}
 
 /**
  * Invalidate the RGBA coloring for all maps.
@@ -234,8 +224,10 @@ VolumeFileVoxelColorizer::invalidateColoring()
  *    Index of selected tab.
  * @param rgbaOut
  *    RGBA color components out.
+ * @return
+ *    Number of voxels with alpha greater than zero
  */
-void
+int64_t
 VolumeFileVoxelColorizer::getVoxelColorsForSliceInMap(const int32_t mapIndex,
                                                       const VolumeSliceViewPlaneEnum::Enum slicePlane,
                                                       const int64_t sliceIndex,
@@ -283,6 +275,8 @@ VolumeFileVoxelColorizer::getVoxelColorsForSliceInMap(const int32_t mapIndex,
         CaretAssert(labelTable);
     }
     
+    int64_t validVoxelCount = 0;
+    
     /*
      * Output RGBA values for slice
      */
@@ -290,9 +284,6 @@ VolumeFileVoxelColorizer::getVoxelColorsForSliceInMap(const int32_t mapIndex,
     for (int64_t k = kStart; k <= kEnd; k++) {
         for (int64_t j = jStart; j <= jEnd; j++) {
             for (int64_t i = iStart; i <= iEnd; i++) {
-                /*
-                 * Zero indices are
-                 */
                 const int64_t rgbaOffset = getRgbaOffsetForVoxelIndex(i, j, k);
                 CaretAssertArrayIndex(mapRGBA, m_mapRGBACount, rgbaOffset);
                 rgbaOut[rgbaOutIndex]   = mapRGBA[rgbaOffset];
@@ -323,11 +314,187 @@ VolumeFileVoxelColorizer::getVoxelColorsForSliceInMap(const int32_t mapIndex,
                     }
                 }
                 
+                if (alpha > 0.0) {
+                    ++validVoxelCount;
+                }
                 rgbaOut[rgbaOutIndex+3] = alpha;
                 rgbaOutIndex += 4;
             }
         }
     }
+    
+    return validVoxelCount;
+}
+
+/**
+ * Get voxel coloring for a sub-slice in a map.  If voxel coloring is not ready
+ * (it may be running in a different thread) this method will wait until the
+ * coloring is valid prior to returning the slice's coloring.
+ *
+ * @param mapIndex
+ *     Index of map.
+ * @param slicePlane
+ *    Plane of the slice.
+ * @param sliceIndex
+ *    Index of the slice.
+ * @param firstCornerVoxelIndex 
+ *    Indices of voxel for first corner of sub-slice (inclusive).
+ * @param lastCornerVoxelIndex
+ *    Indices of voxel for last corner of sub-slice (inclusive).
+ * @param voxelCountIJK
+ *    Voxel counts for each axis.
+ * @param displayGroup
+ *    The selected display group.
+ * @param tabIndex
+ *    Index of selected tab.
+ * @param rgbaOut
+ *    RGBA color components out.
+ * @return
+ *    Number of voxels with alpha greater than zero
+ */
+int64_t
+VolumeFileVoxelColorizer::getVoxelColorsForSubSliceInMap(const int32_t mapIndex,
+                                                         const VolumeSliceViewPlaneEnum::Enum slicePlane,
+                                                         const int64_t sliceIndex,
+                                                         const int64_t firstCornerVoxelIndex[3],
+                                                         const int64_t lastCornerVoxelIndex[3],
+                                                         const int64_t voxelCountIJK[3],
+                                                         const DisplayGroupEnum::Enum displayGroup,
+                                                         const int32_t tabIndex,
+                                                         uint8_t* rgbaOut) const
+{
+    CaretAssertVectorIndex(m_mapRGBA, mapIndex);
+    CaretAssert(sliceIndex >= 0);
+    CaretAssert(rgbaOut);
+    
+    int64_t iStart = firstCornerVoxelIndex[0];
+    int64_t iEnd   = lastCornerVoxelIndex[0];
+    int64_t jStart = firstCornerVoxelIndex[1];
+    int64_t jEnd   = lastCornerVoxelIndex[1];
+    int64_t kStart = firstCornerVoxelIndex[2];
+    int64_t kEnd   = lastCornerVoxelIndex[2];
+    switch (slicePlane) {
+        case VolumeSliceViewPlaneEnum::ALL:
+            CaretAssert(0);
+            break;
+        case VolumeSliceViewPlaneEnum::AXIAL:
+            kStart = sliceIndex;
+            kEnd   = sliceIndex;
+            break;
+        case VolumeSliceViewPlaneEnum::CORONAL:
+            jStart = sliceIndex;
+            jEnd   = sliceIndex;
+            break;
+        case VolumeSliceViewPlaneEnum::PARASAGITTAL:
+            iStart = sliceIndex;
+            iEnd   = sliceIndex;
+            break;
+    }
+    
+    const int64_t voxelCount = (voxelCountIJK[0] * voxelCountIJK[1] * voxelCountIJK[2]);
+    const int64_t rgbaCount = voxelCount * 4;
+    
+    /*
+     * Pointer to maps RGBA values
+     */
+    const uint8_t* mapRGBA = m_mapRGBA[mapIndex];
+    
+    const GiftiLabelTable* labelTable = (m_volumeFile->isMappedWithLabelTable()
+                                         ? m_volumeFile->getMapLabelTable(mapIndex)
+                                         : NULL);
+    if (m_volumeFile->isMappedWithLabelTable()) {
+        CaretAssert(labelTable);
+    }
+    
+    int64_t validVoxelCount = 0;
+    
+    {
+        int64_t rgbaOutIndex = 0;
+        
+        /*
+         * Note that step indices may be positive or negative
+         */
+        const int64_t kStep = ((kEnd < kStart) ? -1 : 1);
+        const int64_t jStep = ((jEnd < jStart) ? -1 : 1);
+        const int64_t iStep = ((iEnd < iStart) ? -1 : 1);
+        
+        int64_t k = kStart;
+        bool kLoopFlag = true;
+        while (kLoopFlag) {
+            
+            int64_t j = jStart;
+            bool jLoopFlag = true;
+            while (jLoopFlag) {
+                
+                int64_t i = iStart;
+                bool iLoopFlag = true;
+                while (iLoopFlag) {
+                    /*
+                     * Zero indices are
+                     */
+                    const int64_t rgbaOffset = getRgbaOffsetForVoxelIndex(i, j, k);
+                    CaretAssertArrayIndex(mapRGBA, m_mapRGBACount, rgbaOffset);
+                    CaretAssertArrayIndex(rgbaOut, rgbaCount, rgbaOutIndex + 3);
+                    rgbaOut[rgbaOutIndex]   = mapRGBA[rgbaOffset];
+                    rgbaOut[rgbaOutIndex+1] = mapRGBA[rgbaOffset+1];
+                    rgbaOut[rgbaOutIndex+2] = mapRGBA[rgbaOffset+2];
+                    uint8_t alpha = mapRGBA[rgbaOffset+3];
+                    
+                    if (alpha > 0) {
+                        if (labelTable != NULL) {
+                            /*
+                             * For label data, verify that the label is displayed.
+                             * If NOT displayed, zero out the alpha value to
+                             * prevent display of the data.
+                             */
+                            const int32_t dataValue = static_cast<int32_t>(m_volumeFile->getValue(i,
+                                                                                                  j,
+                                                                                                  k,
+                                                                                                  mapIndex));
+                            const GiftiLabel* label = labelTable->getLabel(dataValue);
+                            if (label != NULL) {
+                                const GroupAndNameHierarchyItem* item = label->getGroupNameSelectionItem();
+                                if (item != NULL) {
+                                    if (item->isSelected(displayGroup, tabIndex) == false) {
+                                        alpha = 0;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
+                    if (alpha > 0.0) {
+                        ++validVoxelCount;
+                    }
+                    rgbaOut[rgbaOutIndex+3] = alpha;
+                    rgbaOutIndex += 4;
+                    
+                    if (i == iEnd) {
+                        iLoopFlag = false;
+                    }
+                    else {
+                        i += iStep;
+                    }
+                }
+                
+                if (j == jEnd) {
+                    jLoopFlag = false;
+                }
+                else {
+                    j += jStep;
+                }
+            }
+            
+            if (k == kEnd) {
+                kLoopFlag = false;
+            }
+            else {
+                k += kStep;
+            }
+        }
+    }
+    
+    return validVoxelCount;
 }
 
 /**
@@ -413,45 +580,3 @@ VolumeFileVoxelColorizer::clearVoxelColoringForMap(const int64_t mapIndex)
     }
 }
 
-/**
- * Set the RGBA coloring for a voxel in a map.
- *
- * @param i
- *    Parasaggital index
- * @param j
- *    Coronal index
- * @param k
- *    Axial index
- * @param mapIndex
- *    Index of map.
- * @param rgbaFloat
- *    RGBA color components for voxel.
- */
-//void
-//VolumeFileVoxelColorizer::setVoxelColorInMap(const int64_t i,
-//                                             const int64_t j,
-//                                             const int64_t k,
-//                                             const int64_t mapIndex,
-//                                             const float rgbaFloat[4])
-//
-//{
-//    /*
-//     * Pointer to maps RGBA values
-//     */
-//    CaretAssertVectorIndex(m_mapRGBA, mapIndex);
-//    uint8_t* mapRGBA = m_mapRGBA[mapIndex];
-//    int64_t rgbaOffset = m_volumeFile->getIndex(i,
-//                                                j,
-//                                                k,
-//                                                mapIndex);
-//    rgbaOffset *= 4;
-//    CaretAssertArrayIndex(mapRGBA, m_mapRGBACount, rgbaOffset);
-//    mapRGBA[rgbaOffset]   = static_cast<uint8_t>(rgbaFloat[0] * 255.0);
-//    mapRGBA[rgbaOffset+1] = static_cast<uint8_t>(rgbaFloat[1] * 255.0);
-//    mapRGBA[rgbaOffset+2] = static_cast<uint8_t>(rgbaFloat[2] * 255.0);
-//    float alpha = rgbaFloat[3];
-//    if (alpha < 0.0) {
-//        alpha = 0.0;
-//    }
-//    mapRGBA[rgbaOffset+3] = static_cast<uint8_t>(alpha * 255.0);
-//}

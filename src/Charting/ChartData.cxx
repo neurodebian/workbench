@@ -151,15 +151,22 @@ ChartData::newChartDataForChartDataType(const ChartDataTypeEnum::Enum chartDataT
         case ChartDataTypeEnum::CHART_DATA_TYPE_INVALID:
             CaretAssert(0);
             break;
-        case ChartDataTypeEnum::CHART_DATA_TYPE_MATRIX:
+        case ChartDataTypeEnum::CHART_DATA_TYPE_MATRIX_LAYER:
             CaretAssert(0);
             break;
-        case ChartDataTypeEnum::CHART_DATA_TYPE_DATA_SERIES:
+        case ChartDataTypeEnum::CHART_DATA_TYPE_MATRIX_SERIES:
+            break;
+        case ChartDataTypeEnum::CHART_DATA_TYPE_LINE_DATA_SERIES:
             chartData = new ChartDataCartesian(chartDataType,
                                                ChartAxisUnitsEnum::CHART_AXIS_UNITS_NONE,
                                                ChartAxisUnitsEnum::CHART_AXIS_UNITS_NONE);
             break;
-        case ChartDataTypeEnum::CHART_DATA_TYPE_TIME_SERIES:
+        case ChartDataTypeEnum::CHART_DATA_TYPE_LINE_FREQUENCY_SERIES:
+            chartData = new ChartDataCartesian(chartDataType,
+                                               ChartAxisUnitsEnum::CHART_AXIS_UNITS_NONE,
+                                               ChartAxisUnitsEnum::CHART_AXIS_UNITS_TIME_SECONDS);
+            break;
+        case ChartDataTypeEnum::CHART_DATA_TYPE_LINE_TIME_SERIES:
             chartData = new ChartDataCartesian(chartDataType,
                                                ChartAxisUnitsEnum::CHART_AXIS_UNITS_NONE,
                                                ChartAxisUnitsEnum::CHART_AXIS_UNITS_TIME_SECONDS);
@@ -293,6 +300,18 @@ AString
 ChartData::getUniqueIdentifier() const
 {
     return m_uniqueIdentifier;
+}
+
+/**
+ * Set the unique identifier.
+ *
+ * @param uniqueIdentifier
+ *    The new unique identifier.
+ */
+void
+ChartData::setUniqueIdentifier(const AString& uniqueIdentifier)
+{
+    m_uniqueIdentifier = uniqueIdentifier;
 }
 
 /**

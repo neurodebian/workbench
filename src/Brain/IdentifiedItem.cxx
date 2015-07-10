@@ -40,11 +40,9 @@ using namespace caret;
  *
  */
 IdentifiedItem::IdentifiedItem()
-: CaretObject(),
-  m_text("")
+: CaretObject()
 {
-    m_sceneAssistant = new SceneClassAssistant();
-    m_sceneAssistant->add("m_text", &m_text);
+    initializeMembers();
 }
 
 /**
@@ -54,11 +52,10 @@ IdentifiedItem::IdentifiedItem()
  *    Text describing the identified item.
  */
 IdentifiedItem::IdentifiedItem(const AString& text)
-: CaretObject(),
-m_text(text)
+: CaretObject()
 {
-    m_sceneAssistant = new SceneClassAssistant();
-    m_sceneAssistant->add("m_text", &m_text);
+    initializeMembers();
+    m_text = text;
 }
 
 /**
@@ -77,8 +74,7 @@ IdentifiedItem::~IdentifiedItem()
 IdentifiedItem::IdentifiedItem(const IdentifiedItem& obj)
 : CaretObject(obj), SceneableInterface()
 {
-    m_sceneAssistant = new SceneClassAssistant();
-    m_sceneAssistant->add("m_text", &m_text);
+    this->initializeMembers();
     
     this->copyHelperIdentifiedItem(obj);
 }
@@ -101,6 +97,22 @@ IdentifiedItem::operator=(const IdentifiedItem& obj)
 }
 
 /**
+ * Initialize a new instance of this class.
+ */
+void
+IdentifiedItem::initializeMembers()
+{
+    m_text.clear();
+    m_showIdentificationSymbol = true;
+    
+    m_sceneAssistant = new SceneClassAssistant();
+    m_sceneAssistant->add("m_text", &m_text);
+    m_sceneAssistant->add("m_showIdentificationSymbol",
+                          &m_showIdentificationSymbol);
+}
+                          
+
+/**
  * Helps with copying an object of this type.
  * @param obj
  *    Object that is copied.
@@ -109,6 +121,7 @@ void
 IdentifiedItem::copyHelperIdentifiedItem(const IdentifiedItem& obj)
 {
     m_text = obj.m_text;
+    m_showIdentificationSymbol = obj.m_showIdentificationSymbol;
 }
 
 /**
@@ -159,6 +172,29 @@ AString
 IdentifiedItem::toString() const
 {
     return ("m_text=" + m_text);
+}
+
+/**
+ * @return Is the identification symbol displayed for this item?
+ */
+bool
+IdentifiedItem::isShowIdentificationSymbol() const
+{
+    return m_showIdentificationSymbol;
+}
+
+/**
+ * Set show identification symbol for this item.
+ * By default the symbol is on but sub-classes
+ * can call this method to change the status.
+ *
+ * @param showSymbol
+ *     New status for showing identification symbol.
+ */
+void
+IdentifiedItem::setShowIdentificationSymbol(const bool showSymbol)
+{
+    m_showIdentificationSymbol = showSymbol;
 }
 
 /**

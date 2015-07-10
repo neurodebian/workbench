@@ -22,6 +22,7 @@
 #include <QTextStream>
 
 #include "CaretLogger.h"
+#include "DataFileException.h"
 #include "TextFile.h"
 
 using namespace caret;
@@ -74,16 +75,15 @@ TextFile::isEmpty() const
  *    If there is an error reading the file.
  */
 void 
-TextFile::readFile(const AString& filename) throw (DataFileException)
+TextFile::readFile(const AString& filename)
 {
     clear();
     checkFileReadability(filename);
     
     QFile file(filename);
     if (file.open(QFile::ReadOnly) == false) {
-        throw DataFileException("Unable to open \""
-                                + filename
-                                + " for reading.");
+        throw DataFileException(filename,
+                                "Unable to open for reading.");
     }
 
     QTextStream textStream(&file);
@@ -106,15 +106,14 @@ TextFile::readFile(const AString& filename) throw (DataFileException)
  *    If there is an error writing the file.
  */
 void 
-TextFile::writeFile(const AString& filename) throw (DataFileException)
+TextFile::writeFile(const AString& filename)
 {
     checkFileWritability(filename);
     
     QFile file(filename);
     if (file.open(QFile::WriteOnly) == false) {
-        throw DataFileException("Unable to open \""
-                                + filename
-                                + " for writing.");
+        throw DataFileException(filename,
+                                "Unable to open for writing.");
     }
     
     QTextStream textStream(&file);

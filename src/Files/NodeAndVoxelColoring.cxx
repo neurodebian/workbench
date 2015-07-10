@@ -211,7 +211,7 @@ NodeAndVoxelColoring::colorScalarsWithPalettePrivate(const FastStatistics* stati
                 rgbaFloat[i4]   =  0.0;
                 rgbaFloat[i4+1] =  0.0;
                 rgbaFloat[i4+2] =  0.0;
-                rgbaFloat[i4+3] = -1.0;
+                rgbaFloat[i4+3] =  0.0;
                 break;
             case COLOR_TYPE_UNSIGNED_BTYE:
                 rgbaUnsignedByte[i4]   =  0;
@@ -227,12 +227,12 @@ NodeAndVoxelColoring::colorScalarsWithPalettePrivate(const FastStatistics* stati
         /*
          * Positive/Zero/Negative Test
          */
-        if (scalar > NodeAndVoxelColoring::SMALL_POSITIVE) {
+        if (scalar > PaletteColorMapping::SMALL_POSITIVE) {   // JWH 24 April 2015    NodeAndVoxelColoring::SMALL_POSITIVE) {
             if (hidePositiveValues) {
                 continue;
             }
         }
-        else if (scalar < NodeAndVoxelColoring::SMALL_NEGATIVE) {
+        else if (scalar < PaletteColorMapping::SMALL_NEGATIVE) {  // JWH 24 April 2015  NodeAndVoxelColoring::SMALL_NEGATIVE) {
             if (hideNegativeValues) {
                 continue;
             }
@@ -255,7 +255,7 @@ NodeAndVoxelColoring::colorScalarsWithPalettePrivate(const FastStatistics* stati
              0.0,
              0.0,
              0.0,
-            -1.0
+             0.0
         };
         
         const float normalValue = normalizedValues[i];
@@ -319,7 +319,7 @@ NodeAndVoxelColoring::colorScalarsWithPalettePrivate(const FastStatistics* stati
             }
         }
         if (thresholdPassedFlag == false) {
-            rgbaOut[3] = -1.0;
+            rgbaOut[3] = 0.0;
             if (showMappedThresholdFailuresInGreen) {
                 if (thresholdType == PaletteThresholdTypeEnum::THRESHOLD_TYPE_MAPPED) {
                     if (threshold > 0.0f) {
@@ -598,41 +598,44 @@ NodeAndVoxelColoring::colorIndicesWithLabelTableForDisplayGroupTabPrivate(const 
         const GiftiLabel* gl = labelTable->getLabel(labelKey);
         if (gl != NULL) {
             const GroupAndNameHierarchyItem* item = gl->getGroupNameSelectionItem();
+            bool colorDataFlag = false;
             if (item != NULL) {
-                bool colorDataFlag = false;
                 if (tabIndex == NodeAndVoxelColoring::INVALID_TAB_INDEX) {
                     colorDataFlag = true;
                 }
                 else if (item->isSelected(displayGroup, tabIndex)) {
                     colorDataFlag = true;
                 }
-                
-                if (colorDataFlag) {
-                    gl->getColor(labelRGBA);
-                    if (labelRGBA[3] > 0.0) {
-                        const int64_t i4 = i * 4;
-                        
-                        switch (colorDataType) {
-                            case COLOR_TYPE_FLOAT:
-                                CaretAssertArrayIndex(rgbaFloat, numberOfIndices * 4, i*4+3);
-                                rgbaFloat[i*4] = labelRGBA[0];
-                                rgbaFloat[i*4+1] = labelRGBA[1];
-                                rgbaFloat[i*4+2] = labelRGBA[2];
-                                rgbaFloat[i*4+3] = labelRGBA[3];
-                                break;
-                            case COLOR_TYPE_UNSIGNED_BTYE:
-                                CaretAssertArrayIndex(rgbaUnsignedByte, numberOfIndices * 4, i*4+3);
-                                rgbaUnsignedByte[i4]   = labelRGBA[0] * 255.0;
-                                rgbaUnsignedByte[i4+1] = labelRGBA[1] * 255.0;
-                                rgbaUnsignedByte[i4+2] = labelRGBA[2] * 255.0;
-                                if (labelRGBA[3] > 0.0) {
-                                    rgbaUnsignedByte[i4+3] = labelRGBA[3] * 255.0;
-                                }
-                                else {
-                                    rgbaUnsignedByte[i4+3] = 0;
-                                }
-                                break;
-                        }
+            }
+            else {
+                colorDataFlag = true;
+            }
+            
+            if (colorDataFlag) {
+                gl->getColor(labelRGBA);
+                if (labelRGBA[3] > 0.0) {
+                    const int64_t i4 = i * 4;
+                    
+                    switch (colorDataType) {
+                        case COLOR_TYPE_FLOAT:
+                            CaretAssertArrayIndex(rgbaFloat, numberOfIndices * 4, i*4+3);
+                            rgbaFloat[i*4] = labelRGBA[0];
+                            rgbaFloat[i*4+1] = labelRGBA[1];
+                            rgbaFloat[i*4+2] = labelRGBA[2];
+                            rgbaFloat[i*4+3] = labelRGBA[3];
+                            break;
+                        case COLOR_TYPE_UNSIGNED_BTYE:
+                            CaretAssertArrayIndex(rgbaUnsignedByte, numberOfIndices * 4, i*4+3);
+                            rgbaUnsignedByte[i4]   = labelRGBA[0] * 255.0;
+                            rgbaUnsignedByte[i4+1] = labelRGBA[1] * 255.0;
+                            rgbaUnsignedByte[i4+2] = labelRGBA[2] * 255.0;
+                            if (labelRGBA[3] > 0.0) {
+                                rgbaUnsignedByte[i4+3] = labelRGBA[3] * 255.0;
+                            }
+                            else {
+                                rgbaUnsignedByte[i4+3] = 0;
+                            }
+                            break;
                     }
                 }
             }
@@ -724,28 +727,6 @@ NodeAndVoxelColoring::convertSliceColoringToOutlineMode(uint8_t* rgbaInOut,
                                                         const int64_t xdim,
                                                         const int64_t ydim)
 {
-    //    switch (labelDrawingType) {
-    //        case LabelDrawingTypeEnum::DRAW_FILLED_LABEL_COLOR:
-    //            break;
-    //        case LabelDrawingTypeEnum::DRAW_FILLED_BLACK_OUTLINE:
-    //            break;
-    //        case LabelDrawingTypeEnum::DRAW_FILLED_WHITE_OUTLINE:
-    //            break;
-    //        case LabelDrawingTypeEnum::DRAW_OUTLINE_LABEL_COLOR:
-    //            break;
-    //        case LabelDrawingTypeEnum::DRAW_OUTLINE_BLACK:
-    //            break;
-    //        case LabelDrawingTypeEnum::DRAW_OUTLINE_WHITE:
-    //            break;
-    //    }
-    //    bool isOutlineMode = false;
-    //    switch (labelDrawingType) {
-    //        case LabelDrawingTypeEnum::DRAW_FILLED:
-    //            break;
-    //        case LabelDrawingTypeEnum::DRAW_OUTLINE:
-    //            isOutlineMode = true;
-    //            break;
-    //    }
     /*
      * Copy the rgba colors
      */

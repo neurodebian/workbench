@@ -20,6 +20,7 @@
 /*LICENSE_END*/
 
 #include <algorithm>
+#include <cmath>
 #include <limits>
 #include <vector>
 
@@ -31,6 +32,7 @@
 #include <QGridLayout>
 #include <QGroupBox>
 #include <QLabel>
+#include <QMenu>
 #include <QPushButton>
 #include <QRadioButton>
 #include <QSlider>
@@ -42,6 +44,7 @@
 
 #include "Brain.h"
 #include "CaretMappableDataFile.h"
+#include "CursorDisplayScoped.h"
 #include "EnumComboBoxTemplate.h"
 #include "EventCaretMappableDataFilesGet.h"
 #include "EventGraphicsUpdateAllWindows.h"
@@ -50,7 +53,9 @@
 #include "FastStatistics.h"
 #include "GuiManager.h"
 #include "Histogram.h"
+#include "MathFunctions.h"
 #include "NodeAndVoxelColoring.h"
+#include "NumericTextFormatting.h"
 #include "Palette.h"
 #include "PaletteColorMapping.h"
 #include "PaletteFile.h"
@@ -59,9 +64,10 @@
 #include "WuQWidgetObjectGroup.h"
 #include "WuQDoubleSlider.h"
 #include "WuQFactory.h"
+#include "WuQMessageBox.h"
 #include "WuQtUtilities.h"
+#include "WuQwtPlot.h"
 
-#include "qwt_plot.h"
 #include "qwt_plot_curve.h"
 #include "qwt_plot_histogram.h"
 #include "qwt_plot_intervalcurve.h"
@@ -71,6 +77,8 @@
 
 using namespace caret;
 
+/* The QSlider uses integer for min/max so use max-int / 4  (approximately) */
+static const int32_t BIG_NUMBER = 500000000;
 
     
 /**
@@ -91,8 +99,11 @@ using namespace caret;
 MapSettingsPaletteColorMappingWidget::MapSettingsPaletteColorMappingWidget(QWidget* parent)
 : QWidget(parent)
 {
+    m_previousCaretMappableDataFile = NULL;
+    
     /*
      * No context menu, it screws things up
+     * but one is used on the histogram plot
      */
     this->setContextMenuPolicy(Qt::NoContextMenu);
     
@@ -111,6 +122,8 @@ MapSettingsPaletteColorMappingWidget::MapSettingsPaletteColorMappingWidget(QWidg
     
     QWidget* dataOptionsWidget = this->createDataOptionsSection();
     
+    QWidget* normalizationWidget = this->createNormalizationControlSection();
+    
     QWidget* paletteWidget = this->createPaletteSection();
 
     QWidget* thresholdWidget = this->createThresholdSection();
@@ -123,8 +136,9 @@ MapSettingsPaletteColorMappingWidget::MapSettingsPaletteColorMappingWidget(QWidg
     leftLayout->addStretch();
     
     QVBoxLayout* optionsLayout = new QVBoxLayout();
+    optionsLayout->addWidget(normalizationWidget);
     optionsLayout->addWidget(dataOptionsWidget);
-    optionsLayout->addStretch(10000);
+    optionsLayout->addStretch(100);
     
     QWidget* bottomRightWidget = new QWidget();
     QHBoxLayout* bottomRightLayout = new QHBoxLayout(bottomRightWidget);
@@ -162,7 +176,7 @@ MapSettingsPaletteColorMappingWidget::~MapSettingsPaletteColorMappingWidget()
 void 
 MapSettingsPaletteColorMappingWidget::updateWidget()
 {
-    this->updateEditor(this->caretMappableDataFile, 
+    this->updateEditorInternal(this->caretMappableDataFile, 
                        this->mapFileIndex);
 }
 
@@ -175,7 +189,7 @@ MapSettingsPaletteColorMappingWidget::thresholdTypeChanged(int indx)
     PaletteThresholdTypeEnum::Enum paletteThresholdType = static_cast<PaletteThresholdTypeEnum::Enum>(this->thresholdTypeComboBox->itemData(indx).toInt());
     this->paletteColorMapping->setThresholdType(paletteThresholdType);
     
-    this->updateEditor(this->caretMappableDataFile, 
+    this->updateEditorInternal(this->caretMappableDataFile,
                        this->mapFileIndex);
     
     this->applySelections();
@@ -195,41 +209,118 @@ MapSettingsPaletteColorMappingWidget::updateThresholdControlsMinimumMaximumRange
                 const PaletteThresholdRangeModeEnum::Enum thresholdRangeMode = paletteColorMapping->getThresholdRangeMode();
                 this->thresholdRangeModeComboBox->setSelectedItem<PaletteThresholdRangeModeEnum, PaletteThresholdRangeModeEnum::Enum>(thresholdRangeMode);
                 
-                float maxValue = std::numeric_limits<float>::max();
+                float maxValue = BIG_NUMBER;
                 float minValue = -maxValue;
-                
-                bool enableSliders = true;
+                float stepMax = maxValue;
+                float stepMin = minValue;
                 
                 switch (thresholdRangeMode) {
                     case PaletteThresholdRangeModeEnum::PALETTE_THRESHOLD_RANGE_MODE_FILE:
                         this->caretMappableDataFile->getDataRangeFromAllMaps(minValue,
                                                                              maxValue);
+                        stepMin = minValue;
+                        stepMax = maxValue;
                         break;
                     case PaletteThresholdRangeModeEnum::PALETTE_THRESHOLD_RANGE_MODE_MAP:
                     {
-                        const FastStatistics* stats = this->caretMappableDataFile->getMapFastStatistics(this->mapFileIndex);
-                        if (stats != NULL) {
-                            minValue = stats->getMin();
-                            maxValue = stats->getMax();
+                        
+                        FastStatistics* statistics = NULL;
+                        switch (this->caretMappableDataFile->getPaletteNormalizationMode()) {
+                            case PaletteNormalizationModeEnum::NORMALIZATION_ALL_MAP_DATA:
+                                statistics = const_cast<FastStatistics*>(this->caretMappableDataFile->getFileFastStatistics());
+                                break;
+                            case PaletteNormalizationModeEnum::NORMALIZATION_SELECTED_MAP_DATA:
+                                statistics = const_cast<FastStatistics*>(this->caretMappableDataFile->getMapFastStatistics(this->mapFileIndex));
+                                break;
+                        }
+                        
+                        if (statistics != NULL) {
+                            minValue = statistics->getMin();
+                            maxValue = statistics->getMax();
+                            stepMin = minValue;
+                            stepMax = maxValue;
                         }
                     }
                         break;
                     case PaletteThresholdRangeModeEnum::PALETTE_THRESHOLD_RANGE_MODE_UNLIMITED:
-                        enableSliders = false;
+                    {
+                        /*
+                         * For unlimited range, use twice the maximum value in the file
+                         * Using very large values can cause problems with some
+                         * Qt widgets.
+                         */
+                        float allMapMinValue = 0.0;
+                        float allMapMaxValue = 0.0;
+                        this->caretMappableDataFile->getDataRangeFromAllMaps(allMapMinValue,
+                                                                             allMapMaxValue);
+                        if (allMapMaxValue > allMapMinValue) {
+                            const float absMax = std::max(std::fabs(allMapMaxValue),
+                                                          std::fabs(allMapMinValue));
+                            minValue = -absMax * 2.0;
+                            maxValue =  absMax * 2.0;
+                        }
+                        stepMin = minValue;
+                        stepMax = maxValue;
+                    }
                         break;
                 }
                 
-                this->thresholdLowSlider->setRange(minValue,
-                                                   maxValue);
-                this->thresholdHighSlider->setRange(minValue,
-                                                    maxValue);
-                this->thresholdLowSpinBox->setRange(minValue,
-                                                    maxValue);
-                this->thresholdHighSpinBox->setRange(minValue,
-                                                     maxValue);
+                /*
+                 * Set the spin box step value to one percent of 
+                 * the data's range.
+                 */
+                float stepValue = 1.0;
+                const float diff = stepMax - stepMin;
+                if (diff > 0.0) {
+                    stepValue = diff / 100.0;
+                }
                 
-                this->thresholdLowSlider->getWidget()->setEnabled(enableSliders);
-                this->thresholdHighSlider->getWidget()->setEnabled(enableSliders);
+                float lowMin = minValue;
+                float lowMax = maxValue;
+                float highMin = minValue;
+                float highMax = maxValue;
+                
+                if (this->paletteColorMapping->isThresholdNegMinPosMaxLinked()) {
+                    const float absMax = std::max(std::fabs(minValue),
+                                                  std::fabs(maxValue));
+                    
+                    lowMin = -absMax;
+                    lowMax = 0.0;
+                    highMin = 0.0;
+                    highMax = absMax;
+                }
+                
+                this->thresholdLowSlider->setRange(lowMin,
+                                                   lowMax);
+                this->thresholdHighSlider->setRange(highMin,
+                                                    highMax);
+                
+                /*
+                 * Since there are multiple ways for the user to adjust
+                 * a threshold (slider or spin box) these controls must
+                 * dispaly the same values.  In addition, linking the 
+                 * thresholds requires updating the spin boxes and sliders
+                 * for both low and high thresholding.
+                 * 
+                 * The spin box allows the user to hold down one of the 
+                 * arrow keys to continuously update the data.  However,
+                 * if any of the spin box's "set" methods are called
+                 * while the user holds down the arrow, holding down of
+                 * the arrow key will not work.  So, when the signal is
+                 * emitted for the spin box value being changed, we need
+                 * to avoid updating that spin box during that time.
+                 */
+                if (allowUpdateOfThresholdLowSpinBox) {
+                    this->thresholdLowSpinBox->setRange(lowMin,
+                                                        lowMax);
+                    this->thresholdLowSpinBox->setSingleStep(stepValue);
+                }
+
+                if (allowUpdateOfThresholdHighSpinBox) {
+                    this->thresholdHighSpinBox->setRange(highMin,
+                                                         highMax);
+                    this->thresholdHighSpinBox->setSingleStep(stepValue);
+                }
             }
         }
     }
@@ -245,9 +336,28 @@ MapSettingsPaletteColorMappingWidget::applyAndUpdate()
 {
     this->applySelections();
     
-    this->updateEditor(this->caretMappableDataFile, 
-                       this->mapFileIndex);
-    
+    this->updateEditorInternal(this->caretMappableDataFile,
+                              this->mapFileIndex);
+}
+
+/**
+ * Update after a threshold value is changed.
+ *
+ * @param lowThreshold
+ *    New value for low threshold.
+ * @param highThreshold
+ *    New value for high threshold.
+ */
+void
+MapSettingsPaletteColorMappingWidget::updateAfterThresholdValuesChanged(const float lowThreshold,
+                                                                        const float highThreshold)
+{
+    const PaletteThresholdTypeEnum::Enum threshType = this->paletteColorMapping->getThresholdType();
+    this->paletteColorMapping->setThresholdMinimum(threshType, lowThreshold);
+    this->paletteColorMapping->setThresholdMaximum(threshType, highThreshold);
+    updateThresholdSection();
+    updateHistogramPlot();
+    updateColoringAndGraphics();
 }
 
 /**
@@ -258,31 +368,21 @@ MapSettingsPaletteColorMappingWidget::applyAndUpdate()
 void 
 MapSettingsPaletteColorMappingWidget::thresholdLowSpinBoxValueChanged(double thresholdLow)
 {
-    float thresholdHigh = this->thresholdHighSpinBox->value();
-    if (thresholdLow > thresholdHigh) {
-        thresholdHigh = thresholdLow;
+    const PaletteThresholdTypeEnum::Enum threshType = this->paletteColorMapping->getThresholdType();
+    float thresholdHigh = this->paletteColorMapping->getThresholdMaximum(threshType);
+    if (this->paletteColorMapping->isThresholdNegMinPosMaxLinked()) {
+        thresholdHigh = -thresholdLow;
+    }
+    else {
+        if (thresholdLow > thresholdHigh) {
+            thresholdHigh = thresholdLow;
+        }
     }
     
-    /*
-     * Update OTHER threshold controls with new value.
-     */
-    this->thresholdHighSpinBox->blockSignals(true);
-    this->thresholdHighSpinBox->setValue(thresholdHigh);
-    this->thresholdHighSpinBox->blockSignals(false);
-    
-    this->thresholdHighSlider->blockSignals(true);
-    this->thresholdHighSlider->setValue(thresholdHigh);
-    this->thresholdHighSlider->blockSignals(false);
-    
-//    this->thresholdLowSpinBox->blockSignals(true);
-//    this->thresholdLowSpinBox->setValue(thresholdLow);
-//    this->thresholdLowSpinBox->blockSignals(false);
-    
-    this->thresholdLowSlider->blockSignals(true);
-    this->thresholdLowSlider->setValue(thresholdLow);
-    this->thresholdLowSlider->blockSignals(false);
-    
-    this->applySelections();
+    allowUpdateOfThresholdLowSpinBox = false;
+    updateAfterThresholdValuesChanged(thresholdLow,
+                                      thresholdHigh);
+    allowUpdateOfThresholdLowSpinBox = true;
 }
 
 /**
@@ -293,27 +393,21 @@ MapSettingsPaletteColorMappingWidget::thresholdLowSpinBoxValueChanged(double thr
 void 
 MapSettingsPaletteColorMappingWidget::thresholdHighSpinBoxValueChanged(double thresholdHigh)
 {
-    float thresholdLow = this->thresholdLowSpinBox->value();
-    if (thresholdHigh < thresholdLow) {
-        thresholdLow = thresholdHigh;
+    const PaletteThresholdTypeEnum::Enum threshType = this->paletteColorMapping->getThresholdType();
+    float thresholdLow = this->paletteColorMapping->getThresholdMinimum(threshType);
+    if (this->paletteColorMapping->isThresholdNegMinPosMaxLinked()) {
+        thresholdLow = -thresholdHigh;
     }
-    //    this->thresholdHighSpinBox->blockSignals(true);
-    //    this->thresholdHighSpinBox->setValue(thresholdHigh);
-    //    this->thresholdHighSpinBox->blockSignals(false);
-    
-    this->thresholdHighSlider->blockSignals(true);
-    this->thresholdHighSlider->setValue(thresholdHigh);
-    this->thresholdHighSlider->blockSignals(false);
-    
-    this->thresholdLowSpinBox->blockSignals(true);
-    this->thresholdLowSpinBox->setValue(thresholdLow);
-    this->thresholdLowSpinBox->blockSignals(false);
-    
-    this->thresholdLowSlider->blockSignals(true);
-    this->thresholdLowSlider->setValue(thresholdLow);
-    this->thresholdLowSlider->blockSignals(false);
-    
-    this->applySelections();
+    else {
+        if (thresholdHigh < thresholdLow) {
+            thresholdLow = thresholdHigh;
+        }
+    }
+
+    allowUpdateOfThresholdHighSpinBox = false;
+    updateAfterThresholdValuesChanged(thresholdLow,
+                                      thresholdHigh);    
+    allowUpdateOfThresholdHighSpinBox = true;
 }
 
 /**
@@ -321,31 +415,21 @@ MapSettingsPaletteColorMappingWidget::thresholdHighSpinBoxValueChanged(double th
  * @param thresholdLow
  *    New value.
  */
-void 
+void
 MapSettingsPaletteColorMappingWidget::thresholdLowSliderValueChanged(double thresholdLow)
 {
-    float thresholdHigh = this->thresholdHighSpinBox->value();
-    if (thresholdLow > thresholdHigh) {
-        thresholdHigh = thresholdLow;
+    const PaletteThresholdTypeEnum::Enum threshType = this->paletteColorMapping->getThresholdType();
+    float thresholdHigh = this->paletteColorMapping->getThresholdMaximum(threshType);
+    if (this->paletteColorMapping->isThresholdNegMinPosMaxLinked()) {
+        thresholdHigh = -thresholdLow;
     }
-    
-    this->thresholdHighSpinBox->blockSignals(true);
-    this->thresholdHighSpinBox->setValue(thresholdHigh);
-    this->thresholdHighSpinBox->blockSignals(false);
-    
-    this->thresholdHighSlider->blockSignals(true);
-    this->thresholdHighSlider->setValue(thresholdHigh);
-    this->thresholdHighSlider->blockSignals(false);
-    
-    this->thresholdLowSpinBox->blockSignals(true);
-    this->thresholdLowSpinBox->setValue(thresholdLow);
-    this->thresholdLowSpinBox->blockSignals(false);
-    
-//    this->thresholdLowSlider->blockSignals(true);
-//    this->thresholdLowSlider->setValue(thresholdLow);
-//    this->thresholdLowSlider->blockSignals(false);
-    
-    this->applySelections();
+    else {
+        if (thresholdLow > thresholdHigh) {
+            thresholdHigh = thresholdLow;
+        }
+    }
+    updateAfterThresholdValuesChanged(thresholdLow,
+                                      thresholdHigh);
 }
 
 /**
@@ -353,31 +437,73 @@ MapSettingsPaletteColorMappingWidget::thresholdLowSliderValueChanged(double thre
  * @param thresholdHigh
  *    New value.
  */
-void 
+void
 MapSettingsPaletteColorMappingWidget::thresholdHighSliderValueChanged(double thresholdHigh)
 {
-    float thresholdLow = this->thresholdLowSpinBox->value();
-    if (thresholdHigh < thresholdLow) {
-        thresholdLow = thresholdHigh;
+    const PaletteThresholdTypeEnum::Enum threshType = this->paletteColorMapping->getThresholdType();
+    float thresholdLow = this->paletteColorMapping->getThresholdMinimum(threshType);
+    if (this->paletteColorMapping->isThresholdNegMinPosMaxLinked()) {
+        thresholdLow = -thresholdHigh;
     }
-    
-    this->thresholdHighSpinBox->blockSignals(true);
-    this->thresholdHighSpinBox->setValue(thresholdHigh);
-    this->thresholdHighSpinBox->blockSignals(false);
-    
-//    this->thresholdHighSlider->blockSignals(true);
-//    this->thresholdHighSlider->setValue(thresholdHigh);
-//    this->thresholdHighSlider->blockSignals(false);
-    
-    this->thresholdLowSpinBox->blockSignals(true);
-    this->thresholdLowSpinBox->setValue(thresholdLow);
-    this->thresholdLowSpinBox->blockSignals(false);
-    
-    this->thresholdLowSlider->blockSignals(true);
-    this->thresholdLowSlider->setValue(thresholdLow);
-    this->thresholdLowSlider->blockSignals(false);
-    
-    this->applySelections();
+    else {
+        if (thresholdHigh < thresholdLow) {
+            thresholdLow = thresholdHigh;
+        }
+    }
+    updateAfterThresholdValuesChanged(thresholdLow,
+                                      thresholdHigh);
+}
+
+/**
+ * Called when the threshold link check box is toggled.
+ *
+ * @param checked
+ *    Checked status of the checkbox.
+ */
+void
+MapSettingsPaletteColorMappingWidget::thresholdLinkCheckBoxToggled(bool checked)
+{
+    if (this->paletteColorMapping != NULL) {
+        this->paletteColorMapping->setThresholdNegMinPosMaxLinked(checked);
+        
+        const PaletteThresholdTypeEnum::Enum threshType = this->paletteColorMapping->getThresholdType();
+        float lowValue = this->paletteColorMapping->getThresholdMinimum(threshType);
+        float highValue = this->paletteColorMapping->getThresholdMaximum(threshType);
+        
+        if (checked) {
+            if (highValue > 0.0) {
+                lowValue = -highValue;
+            }
+            else if (lowValue < 0.0) {
+                highValue = -lowValue;
+            }
+            else {
+                highValue =  1.0;
+                lowValue  = -1.0;
+            }
+        }
+        
+        updateAfterThresholdValuesChanged(lowValue,
+                                          highValue);
+    }
+}
+
+/**
+ * Update coloring and graphics
+ */
+void
+MapSettingsPaletteColorMappingWidget::updateColoringAndGraphics()
+{
+    PaletteFile* paletteFile = GuiManager::get()->getBrain()->getPaletteFile();
+    if (this->applyAllMapsCheckBox->isChecked()) {
+        this->caretMappableDataFile->updateScalarColoringForAllMaps(paletteFile);
+    }
+    else {
+        this->caretMappableDataFile->updateScalarColoringForMap(this->mapFileIndex,
+                                                                paletteFile);
+    }
+    EventManager::get()->sendEvent(EventSurfaceColoringInvalidate().getPointer());
+    EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
 }
 
 /**
@@ -388,6 +514,12 @@ MapSettingsPaletteColorMappingWidget::thresholdHighSliderValueChanged(double thr
 QWidget* 
 MapSettingsPaletteColorMappingWidget::createThresholdSection()
 {
+    allowUpdateOfThresholdLowSpinBox  = true;
+    allowUpdateOfThresholdHighSpinBox = true;
+    
+    /*
+     * Threshold types on/off
+     */
     QLabel* thresholdTypeLabel = new QLabel("Type");
     std::vector<PaletteThresholdTypeEnum::Enum> thresholdTypes;
     PaletteThresholdTypeEnum::getAllEnums(thresholdTypes);
@@ -413,11 +545,55 @@ MapSettingsPaletteColorMappingWidget::createThresholdSection()
                                       "   Map:  Range is from all values in selected map.\n"
                                       "   Unlimited: Range is +/- infinity.");
     this->thresholdRangeModeComboBox->getWidget()->setToolTip(WuQtUtilities::createWordWrappedToolTipText(rangeModeToolTip));
-                                      
+    
+    /*
+     * Linking of low/high thresholds
+     */
+    QPixmap chainLinkPixmap;
+    const bool chainLinkPixmapValid = WuQtUtilities::loadPixmap(":/PaletteSettings/chain_link_icon.png",
+                                                                chainLinkPixmap);
+    
+    
+    const AString linkToolTipText("When linked, both low and high are the same\n"
+                                  "ABSOLUTE value with low always being negative and\n"
+                                  "high always being positive.\n"
+                                  "   low range:  [- maximum-absolute value, 0]\n"
+                                  "   high range: [0, + maximum-absolute-value]\n"
+                                  "\n"
+                                  "When NOT linked, the low and high range controls\n"
+                                  "operate independently.\n"
+                                  "   low and high range: [minimum-value, maximum-value]\n"
+                                  "\n"
+                                  "NOTE: When 'Link' is unchecked, the thresholds may \n"
+                                  "change due to a difference in the allowable range of \n"
+                                  "values while linked and unlinked.");
+
+    this->thresholdLinkCheckBox = new QCheckBox("");
+    QObject::connect(this->thresholdLinkCheckBox, SIGNAL(toggled(bool)),
+                     this, SLOT(thresholdLinkCheckBoxToggled(bool)));
+    this->thresholdLinkCheckBox->setToolTip(linkToolTipText);
+    this->thresholdWidgetGroup->add(this->thresholdLinkCheckBox);
+    
+    QLabel* linkLabel = new QLabel();
+    if (chainLinkPixmapValid) {
+        linkLabel->setPixmap(chainLinkPixmap);
+    }
+    else {
+        linkLabel->setText("Link");
+    }
+    linkLabel->setToolTip(linkToolTipText);
+    
+    QVBoxLayout* linkLayout = new QVBoxLayout();
+    linkLayout->addWidget(this->thresholdLinkCheckBox);
+    linkLayout->addWidget(linkLabel);
+    
+    /*
+     * Sliders and Spin Boxes for adjustment
+     */
     QLabel* thresholdLowLabel = new QLabel("Low");
     QLabel* thresholdHighLabel = new QLabel("High");
-    const float thresholdMinimum = -std::numeric_limits<float>::max();
-    const float thresholdMaximum =  std::numeric_limits<float>::max();
+    const float thresholdMinimum = -BIG_NUMBER;
+    const float thresholdMaximum =  BIG_NUMBER;
     
     this->thresholdLowSlider = new WuQDoubleSlider(Qt::Horizontal,
                                                    this);
@@ -444,6 +620,7 @@ MapSettingsPaletteColorMappingWidget::createThresholdSection()
                                                                    3,
                                                                    this,
                                                                    SLOT(thresholdLowSpinBoxValueChanged(double)));
+    this->thresholdLowSpinBox->setAccelerated(true);
     WuQtUtilities::setToolTipAndStatusTip(this->thresholdLowSpinBox,
                                           "Adjust the low threshold value");
     this->thresholdWidgetGroup->add(this->thresholdLowSpinBox);
@@ -484,16 +661,18 @@ MapSettingsPaletteColorMappingWidget::createThresholdSection()
     QGridLayout* thresholdAdjustmentLayout = new QGridLayout(thresholdAdjustmentWidget);
     this->setLayoutSpacingAndMargins(thresholdAdjustmentLayout);
     thresholdAdjustmentLayout->setColumnStretch(0, 0);
-    thresholdAdjustmentLayout->setColumnStretch(1, 100);
-    thresholdAdjustmentLayout->setColumnStretch(2, 0);
-    thresholdAdjustmentLayout->addWidget(thresholdHighLabel, 0, 0);
-    thresholdAdjustmentLayout->addWidget(this->thresholdHighSlider->getWidget(), 0, 1);
-    thresholdAdjustmentLayout->addWidget(this->thresholdHighSpinBox, 0, 2);
-    thresholdAdjustmentLayout->addWidget(thresholdLowLabel, 1, 0);
-    thresholdAdjustmentLayout->addWidget(this->thresholdLowSlider->getWidget(), 1, 1);
-    thresholdAdjustmentLayout->addWidget(this->thresholdLowSpinBox, 1, 2);
-    thresholdAdjustmentLayout->addWidget(this->thresholdShowInsideRadioButton, 2, 0, 1, 3, Qt::AlignLeft);
-    thresholdAdjustmentLayout->addWidget(this->thresholdShowOutsideRadioButton, 3, 0, 1, 3, Qt::AlignLeft);
+    thresholdAdjustmentLayout->setColumnStretch(1, 0);
+    thresholdAdjustmentLayout->setColumnStretch(2, 100);
+    thresholdAdjustmentLayout->setColumnStretch(3, 0);
+    thresholdAdjustmentLayout->addLayout(linkLayout, 0, 0, 2, 1, Qt::AlignCenter);
+    thresholdAdjustmentLayout->addWidget(thresholdHighLabel, 0, 1);
+    thresholdAdjustmentLayout->addWidget(this->thresholdHighSlider->getWidget(), 0, 2);
+    thresholdAdjustmentLayout->addWidget(this->thresholdHighSpinBox, 0, 3);
+    thresholdAdjustmentLayout->addWidget(thresholdLowLabel, 1, 1);
+    thresholdAdjustmentLayout->addWidget(this->thresholdLowSlider->getWidget(), 1, 2);
+    thresholdAdjustmentLayout->addWidget(this->thresholdLowSpinBox, 1, 3);
+    thresholdAdjustmentLayout->addWidget(this->thresholdShowInsideRadioButton, 2, 0, 1, 4, Qt::AlignLeft);
+    thresholdAdjustmentLayout->addWidget(this->thresholdShowOutsideRadioButton, 3, 0, 1, 4, Qt::AlignLeft);
     thresholdAdjustmentWidget->setFixedHeight(thresholdAdjustmentWidget->sizeHint().height());
     
     QWidget* topWidget = new QWidget();
@@ -514,6 +693,7 @@ MapSettingsPaletteColorMappingWidget::createThresholdSection()
     thresholdGroupBox->setFixedHeight(thresholdGroupBox->sizeHint().height());
     
     this->thresholdAdjustmentWidgetGroup = new WuQWidgetObjectGroup(this);
+    this->thresholdAdjustmentWidgetGroup->add(this->thresholdLinkCheckBox);
     this->thresholdAdjustmentWidgetGroup->add(thresholdLowLabel);
     this->thresholdAdjustmentWidgetGroup->add(thresholdHighLabel);
     this->thresholdAdjustmentWidgetGroup->add(this->thresholdLowSlider);
@@ -632,7 +812,14 @@ MapSettingsPaletteColorMappingWidget::createHistogramControlSection()
 QWidget* 
 MapSettingsPaletteColorMappingWidget::createHistogramSection()
 {
-    this->thresholdPlot = new QwtPlot();
+    //this->thresholdPlot = new QwtPlot();
+    this->thresholdPlot = new WuQwtPlot();
+    QObject::connect(this->thresholdPlot, SIGNAL(contextMenuDisplay(QContextMenuEvent*,
+                                                                    float,
+                                                                    float)),
+                     this, SLOT(contextMenuDisplayRequested(QContextMenuEvent*,
+                                                            float,
+                                                            float)));
     this->thresholdPlot->plotLayout()->setAlignCanvasToScales(true);
     
     /*
@@ -671,6 +858,66 @@ MapSettingsPaletteColorMappingWidget::createHistogramSection()
     layout->addWidget(resetViewToolButton, 0, Qt::AlignHCenter);
     WuQtUtilities::setLayoutSpacingAndMargins(layout, 2, 0);
     return  widget;
+}
+
+/**
+ * Called when the context menu is to be displayed.
+ *
+ * @param event
+ *    The context menu event.
+ * @param graphX
+ *    X-coordinate on plot.
+ * @param graphY
+ *    Y-coordinate on plot.
+ */
+void
+MapSettingsPaletteColorMappingWidget::contextMenuDisplayRequested(QContextMenuEvent* event,
+                                                                  float graphX,
+                                                                  float /*graphY*/)
+{
+    if (this->paletteColorMapping != NULL) {
+        const PaletteThresholdTypeEnum::Enum threshType = this->paletteColorMapping->getThresholdType();
+        if (threshType != PaletteThresholdTypeEnum::THRESHOLD_TYPE_OFF) {
+            const float absValue = std::fabs(graphX);
+            AString textValue = NumericTextFormatting::formatValue(absValue);
+            CursorDisplayScoped cursor;
+            cursor.showCursor(Qt::ArrowCursor);
+            QMenu menu(this);
+            
+            QAction* linkedAction = NULL;
+            QAction* minThreshAction = NULL;
+            QAction* maxThreshAction = NULL;
+            if (this->paletteColorMapping->isThresholdNegMinPosMaxLinked()) {
+                linkedAction = menu.addAction("Set Thresholds to -"
+                                              + textValue
+                                              + " and " + textValue);
+            }
+            else {
+                minThreshAction = menu.addAction("Set Minimum Threshold to " + textValue);
+                maxThreshAction = menu.addAction("Set Maximum Threshold to " + textValue);
+            }
+            
+            QAction* selectedAction = menu.exec(event->globalPos());
+            if (selectedAction != NULL) {
+                float minThresh = this->paletteColorMapping->getThresholdMinimum(threshType);
+                float maxThresh = this->paletteColorMapping->getThresholdMaximum(threshType);
+                
+                if (selectedAction == linkedAction) {
+                    minThresh = -absValue;
+                    maxThresh =  absValue;
+                }
+                else if (selectedAction == minThreshAction) {
+                    minThresh = graphX;
+                }
+                else if (selectedAction == maxThreshAction) {
+                    maxThresh = graphX;
+                }
+                
+                updateAfterThresholdValuesChanged(minThresh,
+                                                  maxThresh);
+            }
+        }
+    }
 }
 
 /**
@@ -725,18 +972,22 @@ MapSettingsPaletteColorMappingWidget::createPaletteSection()
      * Color Mapping
      */
     this->scaleAutoRadioButton = new QRadioButton("Full"); //Auto Scale");
+    this->scaleAutoAbsolutePercentageRadioButton = new QRadioButton("Abs Pct");
     this->scaleAutoPercentageRadioButton = new QRadioButton("Percent"); //"Auto Scale Percentage");
     this->scaleFixedRadioButton = new QRadioButton("Fixed"); //"Fixed Scale");
     
     WuQtUtilities::setToolTipAndStatusTip(this->scaleAutoRadioButton, 
-                                          "Map (most negative, zero, most positive) data values to (-1, 0, 1) in palette");
-    WuQtUtilities::setToolTipAndStatusTip(this->scaleAutoPercentageRadioButton, 
+                                          "Map (most negative, zero, most positive) data values to (-1, 0, 0, 1) in palette");
+    WuQtUtilities::setToolTipAndStatusTip(this->scaleAutoAbsolutePercentageRadioButton,
+                                          "Map (most absolute percentiles (NOT percentages) data values to (-1, 0, 0, 1) in palette");
+    WuQtUtilities::setToolTipAndStatusTip(this->scaleAutoPercentageRadioButton,
                                           "Map percentiles (NOT percentages) of (most neg, least neg, least pos, most pos) data values to (-1, 0, 0, 1) in palette");
     WuQtUtilities::setToolTipAndStatusTip(this->scaleFixedRadioButton, 
                                           "Map specified values (most neg, least neg, least pos, most pos) to (-1, 0, 0, 1) in palette");
     QButtonGroup* scaleButtonGroup = new QButtonGroup(this);
     this->paletteWidgetGroup->add(scaleButtonGroup);
     scaleButtonGroup->addButton(this->scaleAutoRadioButton);
+    scaleButtonGroup->addButton(this->scaleAutoAbsolutePercentageRadioButton);
     scaleButtonGroup->addButton(this->scaleAutoPercentageRadioButton);
     scaleButtonGroup->addButton(this->scaleFixedRadioButton);
     QObject::connect(scaleButtonGroup, SIGNAL(buttonClicked(int)),
@@ -803,10 +1054,39 @@ MapSettingsPaletteColorMappingWidget::createPaletteSection()
     this->scaleAutoPercentagePositiveMaximumSpinBox->setFixedWidth(percentSpinBoxWidth);
     
     /*
+     * Absolute percentage mapping
+     */
+    this->scaleAutoAbsolutePercentageMinimumSpinBox =
+    WuQFactory::newDoubleSpinBoxWithMinMaxStepDecimalsSignalDouble(0.0,
+                                                                   100.0,
+                                                                   1.0,
+                                                                   2,
+                                                                   this,
+                                                                   SLOT(applySelections()));
+    
+    WuQtUtilities::setToolTipAndStatusTip(this->scaleAutoAbsolutePercentageMinimumSpinBox,
+                                          "Map percentile (NOT percentage) least absolute value to 0.0 in palette");
+    this->paletteWidgetGroup->add(this->scaleAutoAbsolutePercentageMinimumSpinBox);
+    this->scaleAutoAbsolutePercentageMinimumSpinBox->setFixedWidth(percentSpinBoxWidth);
+    
+    this->scaleAutoAbsolutePercentageMaximumSpinBox =
+    WuQFactory::newDoubleSpinBoxWithMinMaxStepDecimalsSignalDouble(0.0,
+                                                                   100.0,
+                                                                   1.0,
+                                                                   2,
+                                                                   this,
+                                                                   SLOT(applySelections()));
+    
+    WuQtUtilities::setToolTipAndStatusTip(this->scaleAutoAbsolutePercentageMaximumSpinBox,
+                                          "Map percentile (NOT percentage) most absolute value to 1.0 in palette");
+    this->paletteWidgetGroup->add(this->scaleAutoAbsolutePercentageMaximumSpinBox);
+    this->scaleAutoAbsolutePercentageMaximumSpinBox->setFixedWidth(percentSpinBoxWidth);
+
+    /*
      * Fixed mapping
      */
     this->scaleFixedNegativeMaximumSpinBox =
-    WuQFactory::newDoubleSpinBoxWithMinMaxStepDecimalsSignalDouble(-std::numeric_limits<float>::max(),
+    WuQFactory::newDoubleSpinBoxWithMinMaxStepDecimalsSignalDouble(-BIG_NUMBER,
                                                                    0.0,
                                                                    1.0,
                                                                    3,
@@ -819,7 +1099,7 @@ MapSettingsPaletteColorMappingWidget::createPaletteSection()
     this->scaleFixedNegativeMaximumSpinBox->setFixedWidth(fixedSpinBoxWidth);
     
     this->scaleFixedNegativeMinimumSpinBox =
-    WuQFactory::newDoubleSpinBoxWithMinMaxStepDecimalsSignalDouble(-std::numeric_limits<float>::max(),
+    WuQFactory::newDoubleSpinBoxWithMinMaxStepDecimalsSignalDouble(-BIG_NUMBER,
                                                                    0.0,
                                                                    1.0,
                                                                    3,
@@ -833,7 +1113,7 @@ MapSettingsPaletteColorMappingWidget::createPaletteSection()
     
     this->scaleFixedPositiveMinimumSpinBox =
     WuQFactory::newDoubleSpinBoxWithMinMaxStepDecimalsSignalDouble(0.0,
-                                                                   std::numeric_limits<float>::max(),
+                                                                   BIG_NUMBER,
                                                                    1.0,
                                                                    3,
                                                                    this,
@@ -846,7 +1126,7 @@ MapSettingsPaletteColorMappingWidget::createPaletteSection()
     
     this->scaleFixedPositiveMaximumSpinBox =
     WuQFactory::newDoubleSpinBoxWithMinMaxStepDecimalsSignalDouble(0.0,
-                                                                   std::numeric_limits<float>::max(),
+                                                                   BIG_NUMBER,
                                                                    1.0,
                                                                    3,
                                                                    this,
@@ -856,27 +1136,31 @@ MapSettingsPaletteColorMappingWidget::createPaletteSection()
                                           "Map this value to 1.0 in palette");
     this->paletteWidgetGroup->add(this->scaleFixedPositiveMaximumSpinBox);
     this->scaleFixedPositiveMaximumSpinBox->setFixedWidth(fixedSpinBoxWidth);
-    
+
     QWidget* colorMappingWidget = new QWidget();
     QGridLayout* colorMappingLayout = new QGridLayout(colorMappingWidget);
+    colorMappingLayout->setColumnStretch(0, 0);
+    colorMappingLayout->setColumnStretch(1, 100);
+    colorMappingLayout->setColumnStretch(2, 100);
     this->setLayoutSpacingAndMargins(colorMappingLayout);
-    colorMappingLayout->addWidget(this->scaleAutoRadioButton, 0, 0);
-    colorMappingLayout->addWidget(this->scaleAutoPercentageRadioButton, 0, 1);
-    colorMappingLayout->addWidget(this->scaleFixedRadioButton, 0, 2);
+    colorMappingLayout->addWidget(this->scaleAutoRadioButton, 0, 0, Qt::AlignHCenter);
+    colorMappingLayout->addWidget(this->scaleAutoAbsolutePercentageRadioButton, 0, 1, Qt::AlignHCenter);
+    colorMappingLayout->addWidget(this->scaleAutoPercentageRadioButton, 0, 2, Qt::AlignHCenter);
+    colorMappingLayout->addWidget(this->scaleFixedRadioButton, 0, 3, Qt::AlignHCenter);
     colorMappingLayout->addWidget(new QLabel("Pos Max"), 1, 0, Qt::AlignRight);
     colorMappingLayout->addWidget(new QLabel("Pos Min"), 2, 0, Qt::AlignRight);
     colorMappingLayout->addWidget(new QLabel("Neg Min"), 3, 0, Qt::AlignRight);
     colorMappingLayout->addWidget(new QLabel("Neg Max"), 4, 0, Qt::AlignRight);
-    colorMappingLayout->addWidget(this->scaleAutoPercentagePositiveMaximumSpinBox, 1, 1);
-    colorMappingLayout->addWidget(this->scaleAutoPercentagePositiveMinimumSpinBox, 2, 1);
-    colorMappingLayout->addWidget(this->scaleAutoPercentageNegativeMinimumSpinBox, 3, 1);
-    colorMappingLayout->addWidget(this->scaleAutoPercentageNegativeMaximumSpinBox, 4, 1);
-    colorMappingLayout->addWidget(this->scaleFixedPositiveMaximumSpinBox, 1, 2);
-    colorMappingLayout->addWidget(this->scaleFixedPositiveMinimumSpinBox, 2, 2);
-    colorMappingLayout->addWidget(this->scaleFixedNegativeMinimumSpinBox, 3, 2);
-    colorMappingLayout->addWidget(this->scaleFixedNegativeMaximumSpinBox, 4, 2);
-    colorMappingWidget->setFixedSize(colorMappingWidget->sizeHint());
-
+    colorMappingLayout->addWidget(this->scaleAutoAbsolutePercentageMaximumSpinBox, 1, 1);
+    colorMappingLayout->addWidget(this->scaleAutoAbsolutePercentageMinimumSpinBox, 2, 1);
+    colorMappingLayout->addWidget(this->scaleAutoPercentagePositiveMaximumSpinBox, 1, 2);
+    colorMappingLayout->addWidget(this->scaleAutoPercentagePositiveMinimumSpinBox, 2, 2);
+    colorMappingLayout->addWidget(this->scaleAutoPercentageNegativeMinimumSpinBox, 3, 2);
+    colorMappingLayout->addWidget(this->scaleAutoPercentageNegativeMaximumSpinBox, 4, 2);
+    colorMappingLayout->addWidget(this->scaleFixedPositiveMaximumSpinBox, 1, 3);
+    colorMappingLayout->addWidget(this->scaleFixedPositiveMinimumSpinBox, 2, 3);
+    colorMappingLayout->addWidget(this->scaleFixedNegativeMinimumSpinBox, 3, 3);
+    colorMappingLayout->addWidget(this->scaleFixedNegativeMaximumSpinBox, 4, 3);
 
     /*
      * Display Mode
@@ -899,9 +1183,11 @@ MapSettingsPaletteColorMappingWidget::createPaletteSection()
     WuQtUtilities::setToolTipAndStatusTip(this->displayModeZeroCheckBox, 
                                           "Enable/Disable the display of zero data.\n"
                                           "A value in the range ["
-                                          + AString::number(NodeAndVoxelColoring::SMALL_NEGATIVE, 'f', 6)
+                                          // JWH 24 April 2015+ AString::number(NodeAndVoxelColoring::SMALL_NEGATIVE, 'f', 6)
+                                          + AString::number(PaletteColorMapping::SMALL_NEGATIVE, 'f', 6)
                                           + ", "
-                                          + AString::number(NodeAndVoxelColoring::SMALL_POSITIVE, 'f', 6)
+                                          // JWH 24 April 2015+ AString::number(NodeAndVoxelColoring::SMALL_POSITIVE, 'f', 6)
+                                          + AString::number(PaletteColorMapping::SMALL_POSITIVE, 'f', 6)
                                           + "]\n"
                                           "is considered to be zero.");
     WuQtUtilities::setToolTipAndStatusTip(this->displayModeNegativeCheckBox, 
@@ -915,8 +1201,6 @@ MapSettingsPaletteColorMappingWidget::createPaletteSection()
     displayModeLayout->addWidget(this->displayModeZeroCheckBox);
     displayModeLayout->addStretch();
     displayModeLayout->addWidget(this->displayModePositiveCheckBox);
-    //displayModeWidget->setFixedSize(displayModeWidget->sizeHint());
-
     
     /*
      * Layout widgets
@@ -934,7 +1218,6 @@ MapSettingsPaletteColorMappingWidget::createPaletteSection()
     return paletteGroupBox;
 }
 
-
 /**
  * Update contents for editing a map settings for data in a caret
  * mappable data file.
@@ -944,8 +1227,90 @@ MapSettingsPaletteColorMappingWidget::createPaletteSection()
  * @param mapIndex
  *    Index of map for palette that is edited.
  */
-void 
+void
 MapSettingsPaletteColorMappingWidget::updateEditor(CaretMappableDataFile* caretMappableDataFile,
+                                                   const int32_t mapIndex)
+{
+    const bool palettesEqualFlag = caretMappableDataFile->isPaletteColorMappingEqualForAllMaps();
+    updateEditorInternal(caretMappableDataFile, mapIndex);
+    
+    if (m_previousCaretMappableDataFile != caretMappableDataFile) {
+        this->applyAllMapsCheckBox->blockSignals(true);
+        this->applyAllMapsCheckBox->setChecked(palettesEqualFlag);
+        this->applyAllMapsCheckBox->blockSignals(false);
+    }
+    
+    m_previousCaretMappableDataFile = caretMappableDataFile;
+}
+
+/**
+ * Update the threshold section.
+ */
+void
+MapSettingsPaletteColorMappingWidget::updateThresholdSection()
+{
+    this->thresholdWidgetGroup->blockAllSignals(true);
+    
+    const int32_t numTypes = this->thresholdTypeComboBox->count();
+    for (int32_t i = 0; i < numTypes; i++) {
+        const int value = this->thresholdTypeComboBox->itemData(i).toInt();
+        if (value == static_cast<int>(this->paletteColorMapping->getThresholdType())) {
+            this->thresholdTypeComboBox->setCurrentIndex(i);
+            break;
+        }
+    }
+    
+    const bool enableThresholdControls = (this->paletteColorMapping->getThresholdType() != PaletteThresholdTypeEnum::THRESHOLD_TYPE_OFF);
+    this->thresholdAdjustmentWidgetGroup->setEnabled(enableThresholdControls);
+    const float lowValue = this->paletteColorMapping->getThresholdMinimum(this->paletteColorMapping->getThresholdType());
+    const float highValue = this->paletteColorMapping->getThresholdMaximum(this->paletteColorMapping->getThresholdType());
+    
+    switch (this->paletteColorMapping->getThresholdTest()) {
+        case PaletteThresholdTestEnum::THRESHOLD_TEST_SHOW_OUTSIDE:
+            this->thresholdShowOutsideRadioButton->setChecked(true);
+            break;
+        case PaletteThresholdTestEnum::THRESHOLD_TEST_SHOW_INSIDE:
+            this->thresholdShowInsideRadioButton->setChecked(true);
+            break;
+    }
+    
+    const PaletteThresholdRangeModeEnum::Enum thresholdRangeMode = paletteColorMapping->getThresholdRangeMode();
+    this->thresholdRangeModeComboBox->blockSignals(true);
+    this->thresholdRangeModeComboBox->setSelectedItem<PaletteThresholdRangeModeEnum, PaletteThresholdRangeModeEnum::Enum>(thresholdRangeMode);
+    this->thresholdRangeModeComboBox->blockSignals(false);
+    updateThresholdControlsMinimumMaximumRangeValues();
+    
+    this->thresholdLowSlider->setValue(lowValue);
+    
+    this->thresholdHighSlider->setValue(highValue);
+    
+    if (allowUpdateOfThresholdLowSpinBox) {
+        this->thresholdLowSpinBox->setValue(lowValue);
+    }
+    
+    if (allowUpdateOfThresholdHighSpinBox) {
+        this->thresholdHighSpinBox->setValue(highValue);
+    }
+    
+    this->thresholdLinkCheckBox->setChecked(this->paletteColorMapping->isThresholdNegMinPosMaxLinked());
+    
+    this->thresholdWidgetGroup->blockAllSignals(false);
+}
+
+/**
+ * This PRIVATE method updates the editor content and MUST always be used
+ * when something within this class requires updating the displayed data.
+ *
+ * Update contents for editing a map settings for data in a caret
+ * mappable data file.
+ *
+ * @param caretMappableDataFile
+ *    Data file containing palette that is edited.
+ * @param mapIndexIn
+ *    Index of map for palette that is edited.
+ */
+void 
+MapSettingsPaletteColorMappingWidget::updateEditorInternal(CaretMappableDataFile* caretMappableDataFile,
                                                    const int32_t mapIndexIn)
 {
     this->caretMappableDataFile = caretMappableDataFile;
@@ -959,7 +1324,6 @@ MapSettingsPaletteColorMappingWidget::updateEditor(CaretMappableDataFile* caretM
     }
     
     this->paletteWidgetGroup->blockAllSignals(true);
-    this->thresholdWidgetGroup->blockAllSignals(true);
     
     const AString title =
     this->caretMappableDataFile->getFileNameNoPath()
@@ -992,10 +1356,15 @@ MapSettingsPaletteColorMappingWidget::updateEditor(CaretMappableDataFile* caretM
         }
         
         bool isPercentageSpinBoxesEnabled = false;
+        bool isAbsolutePercentageSpinBoxesEnabled = false;
         bool isFixedSpinBoxesEnabled = false;
         switch (this->paletteColorMapping->getScaleMode()) {
             case PaletteScaleModeEnum::MODE_AUTO_SCALE:
                 this->scaleAutoRadioButton->setChecked(true);
+                break;
+            case PaletteScaleModeEnum::MODE_AUTO_SCALE_ABSOLUTE_PERCENTAGE:
+                this->scaleAutoAbsolutePercentageRadioButton->setChecked(true);
+                isAbsolutePercentageSpinBoxesEnabled = true;
                 break;
             case PaletteScaleModeEnum::MODE_AUTO_SCALE_PERCENTAGE:
                 this->scaleAutoPercentageRadioButton->setChecked(true);
@@ -1015,7 +1384,12 @@ MapSettingsPaletteColorMappingWidget::updateEditor(CaretMappableDataFile* caretM
         this->scaleAutoPercentageNegativeMinimumSpinBox->setEnabled(isPercentageSpinBoxesEnabled);
         this->scaleAutoPercentagePositiveMinimumSpinBox->setEnabled(isPercentageSpinBoxesEnabled);
         this->scaleAutoPercentagePositiveMaximumSpinBox->setEnabled(isPercentageSpinBoxesEnabled);
-
+        
+        this->scaleAutoAbsolutePercentageMaximumSpinBox->setValue(this->paletteColorMapping->getAutoScaleAbsolutePercentageMaximum());
+        this->scaleAutoAbsolutePercentageMinimumSpinBox->setValue(this->paletteColorMapping->getAutoScaleAbsolutePercentageMinimum());
+        this->scaleAutoAbsolutePercentageMaximumSpinBox->setEnabled(isAbsolutePercentageSpinBoxesEnabled);
+        this->scaleAutoAbsolutePercentageMinimumSpinBox->setEnabled(isAbsolutePercentageSpinBoxesEnabled);
+        
         this->scaleFixedNegativeMaximumSpinBox->setValue(this->paletteColorMapping->getUserScaleNegativeMaximum());
         this->scaleFixedNegativeMinimumSpinBox->setValue(this->paletteColorMapping->getUserScaleNegativeMinimum());
         this->scaleFixedPositiveMinimumSpinBox->setValue(this->paletteColorMapping->getUserScalePositiveMinimum());
@@ -1031,50 +1405,25 @@ MapSettingsPaletteColorMappingWidget::updateEditor(CaretMappableDataFile* caretM
     
         this->interpolateColorsCheckBox->setChecked(this->paletteColorMapping->isInterpolatePaletteFlag());
         
-        const int32_t numTypes = this->thresholdTypeComboBox->count();
-        for (int32_t i = 0; i < numTypes; i++) {
-            const int value = this->thresholdTypeComboBox->itemData(i).toInt();
-            if (value == static_cast<int>(this->paletteColorMapping->getThresholdType())) {
-                this->thresholdTypeComboBox->setCurrentIndex(i);
-                break;
-            }
-        }
+        updateThresholdSection();
         
-        const bool enableThresholdControls = (this->paletteColorMapping->getThresholdType() != PaletteThresholdTypeEnum::THRESHOLD_TYPE_OFF);
-        this->thresholdAdjustmentWidgetGroup->setEnabled(enableThresholdControls);
-        const float lowValue = this->paletteColorMapping->getThresholdMinimum(this->paletteColorMapping->getThresholdType());
-        const float highValue = this->paletteColorMapping->getThresholdMaximum(this->paletteColorMapping->getThresholdType());        
-        
-        switch (this->paletteColorMapping->getThresholdTest()) {
-            case PaletteThresholdTestEnum::THRESHOLD_TEST_SHOW_OUTSIDE:
-                this->thresholdShowOutsideRadioButton->setChecked(true);
-                break;
-            case PaletteThresholdTestEnum::THRESHOLD_TEST_SHOW_INSIDE:
-                this->thresholdShowInsideRadioButton->setChecked(true);
-                break;
-        }
-        
-        const PaletteThresholdRangeModeEnum::Enum thresholdRangeMode = paletteColorMapping->getThresholdRangeMode();
-        this->thresholdRangeModeComboBox->blockSignals(true);
-        this->thresholdRangeModeComboBox->setSelectedItem<PaletteThresholdRangeModeEnum, PaletteThresholdRangeModeEnum::Enum>(thresholdRangeMode);
-        this->thresholdRangeModeComboBox->blockSignals(false);
-        updateThresholdControlsMinimumMaximumRangeValues();
-
         float minValue  = 0.0;
         float maxValue  = 0.0;
-        const FastStatistics* statistics = this->caretMappableDataFile->getMapFastStatistics(this->mapFileIndex);
-        if (statistics != NULL) {
-            minValue  = 0.0;
-            maxValue  = 0.0;
+        
+        FastStatistics* statistics = NULL;
+        switch (this->caretMappableDataFile->getPaletteNormalizationMode()) {
+            case PaletteNormalizationModeEnum::NORMALIZATION_ALL_MAP_DATA:
+                statistics = const_cast<FastStatistics*>(this->caretMappableDataFile->getFileFastStatistics());
+                break;
+            case PaletteNormalizationModeEnum::NORMALIZATION_SELECTED_MAP_DATA:
+                statistics = const_cast<FastStatistics*>(this->caretMappableDataFile->getMapFastStatistics(this->mapFileIndex));
+                break;
         }
         
-        this->thresholdLowSlider->setValue(lowValue);
-        
-        this->thresholdHighSlider->setValue(highValue);
-        
-        this->thresholdLowSpinBox->setValue(lowValue);
-        
-        this->thresholdHighSpinBox->setValue(highValue);
+        if (statistics != NULL) {
+            minValue  = statistics->getMin();
+            maxValue  = statistics->getMax();
+        }
         
         /*
          * Set fixed spin boxes so that they increment by 1% of data.
@@ -1092,8 +1441,9 @@ MapSettingsPaletteColorMappingWidget::updateEditor(CaretMappableDataFile* caretM
     
     this->updateHistogramPlot();
     
+    this->updateNormalizationControlSection();
+    
     this->paletteWidgetGroup->blockAllSignals(false);
-    this->thresholdWidgetGroup->blockAllSignals(false);
 }
 
 /**
@@ -1119,12 +1469,16 @@ MapSettingsPaletteColorMappingWidget::getHistogram(const FastStatistics* statist
         matchFlag = true;
         switch (this->paletteColorMapping->getScaleMode()) {
             case PaletteScaleModeEnum::MODE_AUTO_SCALE:
-                //mostPos  = std::numeric_limits<float>::max();
                 mostPos  = statisticsForAll->getMax();
                 leastPos = 0.0;
                 leastNeg = 0.0;
-                //mostNeg  = -std::numeric_limits<float>::max();
                 mostNeg  = statisticsForAll->getMin();
+                break;
+            case PaletteScaleModeEnum::MODE_AUTO_SCALE_ABSOLUTE_PERCENTAGE:
+                mostPos  = -statisticsForAll->getApproxAbsolutePercentile(this->scaleAutoAbsolutePercentageMaximumSpinBox->value());
+                leastPos = -statisticsForAll->getApproxAbsolutePercentile(this->scaleAutoAbsolutePercentageMinimumSpinBox->value());
+                leastNeg =  statisticsForAll->getApproxAbsolutePercentile(this->scaleAutoAbsolutePercentageMinimumSpinBox->value());
+                mostNeg  =  statisticsForAll->getApproxAbsolutePercentile(this->scaleAutoAbsolutePercentageMaximumSpinBox->value());
                 break;
             case PaletteScaleModeEnum::MODE_AUTO_SCALE_PERCENTAGE:
                 mostPos  = statisticsForAll->getApproxPositivePercentile(this->scaleAutoPercentagePositiveMaximumSpinBox->value());
@@ -1144,11 +1498,13 @@ MapSettingsPaletteColorMappingWidget::getHistogram(const FastStatistics* statist
         CaretAssert(0);
     }
     
+    const PaletteNormalizationModeEnum::Enum normMode = this->caretMappableDataFile->getPaletteNormalizationMode();
+    
     /*
      * Remove data that is not displayed
      */
     bool isZeroIncluded = true;
-    const Histogram* ret;
+    const Histogram* ret = NULL;
     if (matchFlag) {
         isZeroIncluded = this->displayModeZeroCheckBox->isChecked();
         
@@ -1160,15 +1516,37 @@ MapSettingsPaletteColorMappingWidget::getHistogram(const FastStatistics* statist
             mostPos  = 0.0;
             leastPos = 0.0;
         }
-        ret = this->caretMappableDataFile->getMapHistogram(this->mapFileIndex, 
-                                                         mostPos, 
-                                                         leastPos, 
-                                                         leastNeg, 
-                                                         mostNeg, 
-                                                         isZeroIncluded);
+        
+        switch (normMode) {
+            case PaletteNormalizationModeEnum::NORMALIZATION_ALL_MAP_DATA:
+                ret = this->caretMappableDataFile->getFileHistogram(mostPos,
+                                                                    leastPos,
+                                                                    leastNeg,
+                                                                    mostNeg,
+                                                                    isZeroIncluded);
+                break;
+            case PaletteNormalizationModeEnum::NORMALIZATION_SELECTED_MAP_DATA:
+                ret = this->caretMappableDataFile->getMapHistogram(this->mapFileIndex,
+                                                                   mostPos,
+                                                                   leastPos,
+                                                                   leastNeg,
+                                                                   mostNeg,
+                                                                   isZeroIncluded);
+                break;
+        }
     } else {
-        ret = caretMappableDataFile->getMapHistogram(this->mapFileIndex);
+        switch (normMode) {
+            case PaletteNormalizationModeEnum::NORMALIZATION_ALL_MAP_DATA:
+                ret = caretMappableDataFile->getFileHistogram();
+                break;
+            case PaletteNormalizationModeEnum::NORMALIZATION_SELECTED_MAP_DATA:
+                ret = caretMappableDataFile->getMapHistogram(this->mapFileIndex);
+                break;
+        }
     }
+    
+    CaretAssert(ret);
+    
     return ret;
 }
 
@@ -1184,18 +1562,28 @@ MapSettingsPaletteColorMappingWidget::updateHistogramPlot()
      */
     this->thresholdPlot->detachItems();
     
-    const FastStatistics* fastStatistics = caretMappableDataFile->getMapFastStatistics(mapFileIndex);
+    
+    FastStatistics* statistics = NULL;
+    switch (this->caretMappableDataFile->getPaletteNormalizationMode()) {
+        case PaletteNormalizationModeEnum::NORMALIZATION_ALL_MAP_DATA:
+            statistics = const_cast<FastStatistics*>(this->caretMappableDataFile->getFileFastStatistics());
+            break;
+        case PaletteNormalizationModeEnum::NORMALIZATION_SELECTED_MAP_DATA:
+            statistics = const_cast<FastStatistics*>(this->caretMappableDataFile->getMapFastStatistics(this->mapFileIndex));
+            break;
+    }
+    
     if ((this->paletteColorMapping != NULL)
-        && (fastStatistics != NULL)) {
+        && (statistics != NULL)) {
         PaletteFile* paletteFile = GuiManager::get()->getBrain()->getPaletteFile();
         
         /*
          * Data values table
          */
-        const float statsMean   = fastStatistics->getMean();
-        const float statsStdDev = fastStatistics->getSampleStdDev();
-        const float statsMin    = fastStatistics->getMin();
-        const float statsMax    = fastStatistics->getMax();
+        const float statsMean   = statistics->getMean();
+        const float statsStdDev = statistics->getSampleStdDev();
+        const float statsMin    = statistics->getMin();
+        const float statsMax    = statistics->getMax();
         this->statisticsMeanValueLabel->setText(QString::number(statsMean, 'f', 4));
         this->statisticsStandardDeviationLabel->setText(QString::number(statsStdDev, 'f', 4));
         this->statisticsMaximumValueLabel->setText(QString::number(statsMax, 'f', 4));
@@ -1204,7 +1592,7 @@ MapSettingsPaletteColorMappingWidget::updateHistogramPlot()
         /*
          * Get data for this histogram.
          */
-        const Histogram* myHist = getHistogram(fastStatistics);
+        const Histogram* myHist = getHistogram(statistics);
         //const int64_t* histogram = const_cast<int64_t*>(statistics->getHistogram());
         float minValue, maxValue;
         myHist->getRange(minValue, maxValue);
@@ -1246,7 +1634,7 @@ MapSettingsPaletteColorMappingWidget::updateHistogramPlot()
             const Palette* palette = paletteFile->getPaletteByName(this->paletteColorMapping->getSelectedPaletteName());
             if (this->histogramUsePaletteColors->isChecked()
                 && (palette != NULL)) {
-                NodeAndVoxelColoring::colorScalarsWithPalette(fastStatistics, 
+                NodeAndVoxelColoring::colorScalarsWithPalette(statistics,
                                                               paletteColorMapping, 
                                                               palette, 
                                                               dataValues, 
@@ -1312,10 +1700,6 @@ MapSettingsPaletteColorMappingWidget::updateHistogramPlot()
             QVector<QPointF> samples;
             samples.push_back(QPointF(startValue, dataFrequency));
             samples.push_back(QPointF(stopValue, dataFrequency));
-            //samples.push_back(QPointF(startValue, 0));
-            //samples.push_back(QPointF(stopValue, 0));
-            //samples.push_back(QPointF(stopValue, dataFrequency));
-            //samples.push_back(QPointF(startValue, dataFrequency));
             
             QwtPlotCurve* curve = new QwtPlotCurve();
             curve->setRenderHint(QwtPlotItem::RenderAntialiased);
@@ -1352,7 +1736,6 @@ MapSettingsPaletteColorMappingWidget::updateHistogramPlot()
                      * Draw shaded region to left of minimum threshold
                      */
                     QVector<QPointF> minSamples;
-                    //minSamples.push_back(QPointF(dataValues[0], maxDataFrequency));
                     minSamples.push_back(QPointF(plotMinValue, maxDataFrequency));
                     minSamples.push_back(QPointF(threshMinValue, maxDataFrequency));
                     
@@ -1375,7 +1758,6 @@ MapSettingsPaletteColorMappingWidget::updateHistogramPlot()
                     QVector<QPointF> maxSamples;
                     maxSamples.push_back(QPointF(threshMaxValue, maxDataFrequency));
                     maxSamples.push_back(QPointF(plotMaxValue, maxDataFrequency));
-                    //maxSamples.push_back(QPointF(dataValues[numHistogramValues - 1], maxDataFrequency));
                     
                     QwtPlotCurve* maxBox = new QwtPlotCurve();
                     maxBox->setRenderHint(QwtPlotItem::RenderAntialiased);
@@ -1403,7 +1785,6 @@ MapSettingsPaletteColorMappingWidget::updateHistogramPlot()
                     QwtPlotCurve* minBox = new QwtPlotCurve();
                     minBox->setRenderHint(QwtPlotItem::RenderAntialiased);
                     minBox->setVisible(true);
-                    //minBox->setStyle(QwtPlotCurve::Dots);
                     
                     QColor minColor(100, 100, 255, 160);
                     minBox->setBrush(QBrush(minColor)); //, Qt::Dense4Pattern));
@@ -1416,8 +1797,6 @@ MapSettingsPaletteColorMappingWidget::updateHistogramPlot()
                 }
                     break;
             }
-            
-            //z = z - 1;
             
             const bool showLinesFlag = false;
             if (showLinesFlag) {
@@ -1498,13 +1877,16 @@ void MapSettingsPaletteColorMappingWidget::applySelections()
     if (this->scaleAutoRadioButton->isChecked()) {
         this->paletteColorMapping->setScaleMode(PaletteScaleModeEnum::MODE_AUTO_SCALE);
     }
+    else if (this->scaleAutoAbsolutePercentageRadioButton->isChecked()) {
+        this->paletteColorMapping->setScaleMode(PaletteScaleModeEnum::MODE_AUTO_SCALE_ABSOLUTE_PERCENTAGE);
+    }
     else if (this->scaleAutoPercentageRadioButton->isChecked()) {
         this->paletteColorMapping->setScaleMode(PaletteScaleModeEnum::MODE_AUTO_SCALE_PERCENTAGE);
     }
     else if (this->scaleFixedRadioButton->isChecked()) {
         this->paletteColorMapping->setScaleMode(PaletteScaleModeEnum::MODE_USER_SCALE);
     }
-        
+    
     this->paletteColorMapping->setUserScaleNegativeMaximum(this->scaleFixedNegativeMaximumSpinBox->value());
     this->paletteColorMapping->setUserScaleNegativeMinimum(this->scaleFixedNegativeMinimumSpinBox->value());
     this->paletteColorMapping->setUserScalePositiveMinimum(this->scaleFixedPositiveMinimumSpinBox->value());
@@ -1514,6 +1896,9 @@ void MapSettingsPaletteColorMappingWidget::applySelections()
     this->paletteColorMapping->setAutoScalePercentageNegativeMinimum(this->scaleAutoPercentageNegativeMinimumSpinBox->value());
     this->paletteColorMapping->setAutoScalePercentagePositiveMinimum(this->scaleAutoPercentagePositiveMinimumSpinBox->value());
     this->paletteColorMapping->setAutoScalePercentagePositiveMaximum(this->scaleAutoPercentagePositiveMaximumSpinBox->value());
+    
+    this->paletteColorMapping->setAutoScaleAbsolutePercentageMaximum(this->scaleAutoAbsolutePercentageMaximumSpinBox->value());
+    this->paletteColorMapping->setAutoScaleAbsolutePercentageMinimum(this->scaleAutoAbsolutePercentageMinimumSpinBox->value());
     
     this->paletteColorMapping->setDisplayPositiveDataFlag(this->displayModePositiveCheckBox->isChecked());
     this->paletteColorMapping->setDisplayNegativeDataFlag(this->displayModeNegativeCheckBox->isChecked());
@@ -1561,18 +1946,7 @@ void MapSettingsPaletteColorMappingWidget::applySelections()
     
     this->updateHistogramPlot();
     
-    PaletteFile* paletteFile = GuiManager::get()->getBrain()->getPaletteFile();
-    
-    if (assignToAllMaps) {
-        this->caretMappableDataFile->updateScalarColoringForAllMaps(paletteFile);
-    }
-    else {
-        this->caretMappableDataFile->updateScalarColoringForMap(this->mapFileIndex,
-                                                             paletteFile);
-    }
-    
-    EventManager::get()->sendEvent(EventSurfaceColoringInvalidate().getPointer());
-    EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+    updateColoringAndGraphics();
 }
 
 /**
@@ -1587,6 +1961,160 @@ MapSettingsPaletteColorMappingWidget::setLayoutSpacingAndMargins(QLayout* layout
 }
 
 /**
+ * @return The normalization control section.
+ */
+QWidget*
+MapSettingsPaletteColorMappingWidget::createNormalizationControlSection()
+{
+    m_normalizationModeComboBox = new QComboBox();
+    QObject::connect(m_normalizationModeComboBox, SIGNAL(activated(int)),
+                     this, SLOT(normalizationModeComboBoxActivated(int)));
+
+    /*
+     * Initially load with all modes so that the combo box can
+     * be set to a fixed size that allows display of all text
+     */
+    std::vector<PaletteNormalizationModeEnum::Enum> allModes;
+    PaletteNormalizationModeEnum::getAllEnums(allModes);
+    for (std::vector<PaletteNormalizationModeEnum::Enum>::iterator allModesIter = allModes.begin();
+         allModesIter != allModes.end();
+         allModesIter++) {
+        const PaletteNormalizationModeEnum::Enum normalMode = *allModesIter;
+        m_normalizationModeComboBox->addItem(PaletteNormalizationModeEnum::toGuiName(normalMode),
+                                                 (int)PaletteNormalizationModeEnum::toIntegerCode(normalMode));
+    }
+    
+    m_normalizationModeComboBox->setToolTip(PaletteNormalizationModeEnum::getEnumToolTopInHTML());
+    
+    QGroupBox* groupBox = new QGroupBox("Data Normalization");
+    QVBoxLayout* layout = new QVBoxLayout(groupBox);
+    layout->addWidget(m_normalizationModeComboBox);
+    groupBox->setSizePolicy(QSizePolicy::Fixed,
+                            QSizePolicy::Fixed);
+    
+    return groupBox;
+}
+
+/**
+ * Update the normalization control section.
+ */
+void
+MapSettingsPaletteColorMappingWidget::updateNormalizationControlSection()
+{
+    m_normalizationModeComboBox->clear();
+    
+    std::vector<PaletteNormalizationModeEnum::Enum> validModes;
+    
+    if (this->caretMappableDataFile != NULL) {
+        this->caretMappableDataFile->getPaletteNormalizationModesSupported(validModes);
+        const int32_t numValidModes = static_cast<int32_t>(validModes.size());
+        if (numValidModes > 0) {
+            const PaletteNormalizationModeEnum::Enum selectedMode = this->caretMappableDataFile->getPaletteNormalizationMode();
+            int selectedModeIndex = -1;
+            
+            /*
+             * Loop through ALL modes so that the selections are always
+             * in a consistent order.
+             */
+            std::vector<PaletteNormalizationModeEnum::Enum> allModes;
+            PaletteNormalizationModeEnum::getAllEnums(allModes);
+            for (std::vector<PaletteNormalizationModeEnum::Enum>::iterator allModesIter = allModes.begin();
+                 allModesIter != allModes.end();
+                 allModesIter++) {
+                const PaletteNormalizationModeEnum::Enum normalMode = *allModesIter;
+                if (std::find(validModes.begin(),
+                              validModes.end(),
+                              normalMode) != validModes.end()) {
+                    if (selectedMode == normalMode) {
+                        selectedModeIndex = m_normalizationModeComboBox->count();
+                    }
+                    m_normalizationModeComboBox->addItem(PaletteNormalizationModeEnum::toGuiName(normalMode),
+                                                         (int)PaletteNormalizationModeEnum::toIntegerCode(normalMode));
+                }
+            }
+            
+            if (selectedModeIndex >= 0) {
+                m_normalizationModeComboBox->setCurrentIndex(selectedModeIndex);
+            }
+        }
+    }
+}
+
+/**
+ * Called when normalization combo box is changed by user.
+ */
+void
+MapSettingsPaletteColorMappingWidget::normalizationModeComboBoxActivated(int)
+{
+    if (this->caretMappableDataFile != NULL) {
+        
+        const int selectedIndex = m_normalizationModeComboBox->currentIndex();
+        if ((selectedIndex >= 0)
+            && (selectedIndex < m_normalizationModeComboBox->count())) {
+            const int32_t enumIntegerCode = m_normalizationModeComboBox->itemData(selectedIndex).toInt();
+            bool validFlag = false;
+            const PaletteNormalizationModeEnum::Enum mode = PaletteNormalizationModeEnum::fromIntegerCode(enumIntegerCode,
+                                                                                                          &validFlag);
+            if (validFlag) {
+                if (mode != this->caretMappableDataFile->getPaletteNormalizationMode()) {
+                    bool doItFlag = true;
+                    if (mode == PaletteNormalizationModeEnum::NORMALIZATION_ALL_MAP_DATA) {
+                        /*
+                         * When files are "large", using all file data may take
+                         * a very long time so allow the user to cancel.
+                         */
+                        const int64_t megabyte = 1000000;  // 10e6
+                        const int64_t warningDataSize = 100 * megabyte;
+                        const int64_t dataSize = this->caretMappableDataFile->getDataSizeUncompressedInBytes();
+                        
+                        if (dataSize > warningDataSize) {
+                            const int64_t gigabyte = 1000000000; // 10e9
+                            const int64_t numReallys = std::min(dataSize / gigabyte,
+                                                                (int64_t)10);
+                            AString veryString;
+                            if (numReallys > 0) {
+                                veryString = ("very"
+                                              + QString(", very").repeated(numReallys - 1)
+                                              + " ");
+                            }
+                            
+                            const AString message("File size is "
+                                                  + veryString
+                                                  + "large ("
+                                                  + FileInformation::fileSizeToStandardUnits(dataSize)
+                                                  + ").  This operation may take a "
+                                                  + veryString
+                                                  + "long time.");
+                            if (WuQMessageBox::warningOkCancel(m_normalizationModeComboBox,
+                                                               message)) {
+                                doItFlag = true;
+                            }
+                            else {
+                                doItFlag = false;
+                            }
+                        }
+                    }
+                    
+                    if (doItFlag) {
+                        CursorDisplayScoped cursor;
+                        cursor.showCursor(Qt::WaitCursor);
+                        
+                        this->caretMappableDataFile->setPaletteNormalizationMode(mode);
+                        this->updateEditorInternal(this->caretMappableDataFile,
+                                                   this->mapFileIndex);
+                        this->updateColoringAndGraphics();
+                    }
+                    else {
+                        this->updateNormalizationControlSection();
+                    }
+                }
+            }
+        }
+    }
+}
+
+
+/**
  * Called when the state of the apply all maps checkbox is changed.
  * @param checked
  *    New status of checkbox.
@@ -1594,8 +2122,6 @@ MapSettingsPaletteColorMappingWidget::setLayoutSpacingAndMargins(QLayout* layout
 void 
 MapSettingsPaletteColorMappingWidget::applyAllMapsCheckBoxStateChanged(bool checked)
 {
-    //applyAndUpdate();
-    //const bool checked = (state == Qt::Checked);
     if (checked) {
         this->applySelections();
     }
@@ -1696,8 +2222,7 @@ MapSettingsPaletteColorMappingWidget::applyToMultipleFilesPushbuttonClicked()
             }
         }
         
-        EventManager::get()->sendEvent(EventSurfaceColoringInvalidate().getPointer());
-        EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+        updateColoringAndGraphics();
     }
 }
 

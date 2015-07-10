@@ -29,8 +29,8 @@
 #include <map>
 
 #include "ChartDataTypeEnum.h"
-#include "DataFileException.h"
 #include "EventListenerInterface.h"
+#include "MapYokingGroupEnum.h"
 #include "Model.h"
 #include "StructureEnum.h"
 
@@ -39,12 +39,17 @@ namespace caret {
     class CaretDataFileSelectionModel;
     class ChartData;
     class ChartDataCartesian;
+    class ChartDataSource;
+    class ChartableLineSeriesBrainordinateInterface;
+    class ChartableLineSeriesInterface;
+    class ChartableLineSeriesRowColumnInterface;
     class ChartableMatrixInterface;
     class ChartModel;
     class ChartModelDataSeries;
+    class ChartModelFrequencySeries;
     class ChartModelTimeSeries;
-    class ChartableBrainordinateInterface;
     class CiftiConnectivityMatrixParcelFile;
+    class CiftiMappableDataFile;
     class OverlaySetArray;
     class SurfaceFile;
     
@@ -64,13 +69,19 @@ namespace caret {
         
         void loadChartDataForSurfaceNode(const StructureEnum::Enum structure,
                                          const int32_t surfaceNumberOfNodes,
-                                         const int32_t nodeIndex) throw (DataFileException);
+                                         const int32_t nodeIndex);
         
         void loadAverageChartDataForSurfaceNodes(const StructureEnum::Enum structure,
                                                  const int32_t surfaceNumberOfNodes,
-                                                               const std::vector<int32_t>& nodeIndices) throw (DataFileException);
+                                                               const std::vector<int32_t>& nodeIndices);
         
-        void loadChartDataForVoxelAtCoordinate(const float xyz[3]) throw (DataFileException);
+        void loadChartDataForVoxelAtCoordinate(const float xyz[3]);
+        
+        void loadChartDataForCiftiMappableFileRow(CiftiMappableDataFile* ciftiMapFile,
+                                                  const int32_t rowIndex);
+        
+        void loadChartDataForYokedCiftiMappableFiles(const MapYokingGroupEnum::Enum mapYokingGroup,
+                                                     const int32_t mapIndex);
         
         OverlaySet* getOverlaySet(const int tabIndex);
         
@@ -89,6 +100,10 @@ namespace caret {
         
         const ChartModelDataSeries* getSelectedDataSeriesChartModel(const int32_t tabIndex) const;
         
+        ChartModelFrequencySeries* getSelectedFrequencySeriesChartModel(const int32_t tabIndex);
+        
+        const ChartModelFrequencySeries* getSelectedFrequencySeriesChartModel(const int32_t tabIndex) const;
+        
         ChartModelTimeSeries* getSelectedTimeSeriesChartModel(const int32_t tabIndex);
         
         const ChartModelTimeSeries* getSelectedTimeSeriesChartModel(const int32_t tabIndex) const;
@@ -101,7 +116,9 @@ namespace caret {
         
         void reset();
         
-        CaretDataFileSelectionModel* getChartableMatrixFileSelectionModel(const int32_t tabIndex);
+        CaretDataFileSelectionModel* getChartableMatrixParcelFileSelectionModel(const int32_t tabIndex);
+        
+        CaretDataFileSelectionModel* getChartableMatrixSeriesFileSelectionModel(const int32_t tabIndex);
         
     protected:
         virtual void saveModelSpecificInformationToScene(const SceneAttributes* sceneAttributes,
@@ -124,6 +141,8 @@ namespace caret {
         
         const ChartModelDataSeries* getSelectedDataSeriesChartModelHelper(const int32_t tabIndex) const;
         
+        const ChartModelFrequencySeries* getSelectedFrequencySeriesChartModelHelper(const int32_t tabIndex) const;
+        
         const ChartModelTimeSeries* getSelectedTimeSeriesChartModelHelper(const int32_t tabIndex) const;
         
         void saveChartModelsToScene(const SceneAttributes* sceneAttributes,
@@ -134,7 +153,13 @@ namespace caret {
         void restoreChartModelsFromScene(const SceneAttributes* sceneAttributes,
                                          const SceneClass* sceneClass);
 
-        void getTabsAndChartFilesForChartLoading(std::map<ChartableBrainordinateInterface*, std::vector<int32_t> >& chartFileEnabledTabsOut) const;
+        void getTabsAndBrainordinateChartFilesForLineChartLoading(std::map<ChartableLineSeriesBrainordinateInterface*, std::vector<int32_t> >& chartBrainordinateFileEnabledTabsOut) const;
+
+        void getTabsAndRowColumnChartFilesForLineChartLoading(std::map<ChartableLineSeriesRowColumnInterface*, std::vector<int32_t> >& chartRowColumnFilesEnabledTabsOut) const;
+        
+        void getTabsAndLineSeriesChartFilesForLineChartLoading(std::map<ChartableLineSeriesInterface*, std::vector<int32_t> >& chartFileEnabledTabsOut) const;
+        
+        ChartData* loadCartesianChartWhenRestoringScene(const ChartData* chartData);
 
         /** Overlays sets for this model and for each tab */
         OverlaySetArray* m_overlaySetArray;
@@ -144,6 +169,9 @@ namespace caret {
         /** Chart model for data-series data */
         ChartModelDataSeries* m_chartModelDataSeries[BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_TABS];
         
+        /** Chart model for frequency-series data */
+        ChartModelFrequencySeries* m_chartModelFrequencySeries[BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_TABS];
+        
         /** Chart model for time-series data */
         ChartModelTimeSeries* m_chartModelTimeSeries[BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_TABS];
 
@@ -151,11 +179,16 @@ namespace caret {
         std::list<QWeakPointer<ChartDataCartesian> > m_dataSeriesChartData;
         
         /** Contains time series charts */
+        std::list<QWeakPointer<ChartDataCartesian> > m_frequencySeriesChartData;
+        
+        /** Contains time series charts */
         std::list<QWeakPointer<ChartDataCartesian> > m_timeSeriesChartData;
         
         std::vector<ChartableMatrixInterface*> m_previousChartMatrixFiles;
 
         CaretDataFileSelectionModel* m_chartableMatrixFileSelectionModel[BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_TABS];
+        
+        CaretDataFileSelectionModel* m_chartableMatrixSeriesFileSelectionModel[BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_TABS];
         
         SceneClassAssistant* m_sceneAssistant;
     };

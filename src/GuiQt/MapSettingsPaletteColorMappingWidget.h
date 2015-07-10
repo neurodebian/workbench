@@ -20,10 +20,10 @@
  *  51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 /*LICENSE_END*/
-
 #include <set>
 #include <stdint.h> // needed by windows
 #include <QWidget>
+#include <qwt_plot.h>
 
 class QAbstractButton;
 class QCheckBox;
@@ -45,6 +45,7 @@ namespace caret {
     class PaletteColorMapping;
     class WuQDoubleSlider;
     class WuQWidgetObjectGroup;
+    class WuQwtPlot;
     
     class MapSettingsPaletteColorMappingWidget : public QWidget {
         Q_OBJECT
@@ -53,7 +54,7 @@ namespace caret {
         MapSettingsPaletteColorMappingWidget(QWidget* parent = 0);
         
         void updateEditor(CaretMappableDataFile* caretMappableDataFile,
-                                 const int32_t mapIndex);
+                          const int32_t mapIndex);
                     
         virtual ~MapSettingsPaletteColorMappingWidget();
 
@@ -71,6 +72,8 @@ namespace caret {
         void thresholdHighSliderValueChanged(double);
         void thresholdTypeChanged(int);
         void thresholdRangeModeChanged();
+        void thresholdLinkCheckBoxToggled(bool);
+        
         
         void histogramControlChanged();
         void histogramResetViewButtonClicked();
@@ -81,14 +84,33 @@ namespace caret {
         
         void applyToMultipleFilesPushbuttonClicked();
         
+        void contextMenuDisplayRequested(QContextMenuEvent* event,
+                                         float graphX,
+                                         float graphY);
+        
+        void normalizationModeComboBoxActivated(int);
+        
     private:
+        void updateEditorInternal(CaretMappableDataFile* caretMappableDataFile,
+                                 const int32_t mapIndex);
+        
+
         QWidget* createPaletteSection();
         QWidget* createThresholdSection();
+        void updateThresholdSection();
         QWidget* createHistogramSection();
         QWidget* createHistogramControlSection();
+        QWidget* createNormalizationControlSection();
         QWidget* createDataOptionsSection();
         
+        void updateNormalizationControlSection();
+        
+        void updateAfterThresholdValuesChanged(const float lowThreshold,
+                                               const float highThreshold);
+        
         void updateHistogramPlot();
+        
+        void updateColoringAndGraphics();
         
         void updateThresholdControlsMinimumMaximumRangeValues();
         
@@ -104,6 +126,7 @@ namespace caret {
         QPushButton* applyToMultipleFilesPushButton;
         
         QRadioButton* scaleAutoRadioButton;
+        QRadioButton* scaleAutoAbsolutePercentageRadioButton;
         QRadioButton* scaleAutoPercentageRadioButton;
         QRadioButton* scaleFixedRadioButton;
         
@@ -111,6 +134,9 @@ namespace caret {
         QDoubleSpinBox* scaleAutoPercentageNegativeMinimumSpinBox;
         QDoubleSpinBox* scaleAutoPercentagePositiveMinimumSpinBox;
         QDoubleSpinBox* scaleAutoPercentagePositiveMaximumSpinBox;
+        
+        QDoubleSpinBox* scaleAutoAbsolutePercentageMinimumSpinBox;
+        QDoubleSpinBox* scaleAutoAbsolutePercentageMaximumSpinBox;
         
         QDoubleSpinBox* scaleFixedNegativeMaximumSpinBox;
         QDoubleSpinBox* scaleFixedNegativeMinimumSpinBox;
@@ -132,18 +158,24 @@ namespace caret {
         
         QDoubleSpinBox* thresholdLowSpinBox;
         QDoubleSpinBox* thresholdHighSpinBox;
+        bool allowUpdateOfThresholdLowSpinBox;
+        bool allowUpdateOfThresholdHighSpinBox;
         
         QRadioButton* thresholdShowInsideRadioButton;
         QRadioButton* thresholdShowOutsideRadioButton;
         
         EnumComboBoxTemplate* thresholdRangeModeComboBox;
         
-        QwtPlot* thresholdPlot;
+        QCheckBox* thresholdLinkCheckBox;
+
+        WuQwtPlot* thresholdPlot;
         
         QLabel* statisticsMinimumValueLabel;
         QLabel* statisticsMaximumValueLabel;
         QLabel* statisticsMeanValueLabel;
         QLabel* statisticsStandardDeviationLabel;
+        
+        QComboBox* m_normalizationModeComboBox;
         
         QRadioButton* histogramAllRadioButton;
         QRadioButton* histogramMatchPaletteRadioButton;
@@ -153,6 +185,7 @@ namespace caret {
         bool isHistogramColored;
         
         CaretMappableDataFile* caretMappableDataFile;
+        CaretMappableDataFile* m_previousCaretMappableDataFile;
         
         int32_t mapFileIndex;
         

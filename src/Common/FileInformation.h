@@ -82,15 +82,23 @@ namespace caret {
         
         AString getAbsolutePath() const;
         
+        AString getLastDirectory() const;
+        
         void getFileComponents(AString& absolutePathOut,
                                AString& fileNameWithoutExtensionOut,
                                AString& extensionWithoutDotOut) const;
+        
+        static AString assembleFileComponents(AString& pathName,
+                                              AString& fileNameWithoutExtension,
+                                              AString& extensionWithoutDot);
         
         bool remove();
         
         void getRemoteUrlUsernameAndPassword(AString& urlOut,
                                              AString& usernameOut,
                                              AString& passwordOut) const;
+        
+        static AString fileSizeToStandardUnits(const int64_t numberOfBytes);
         
     private:
         FileInformation(const FileInformation&);

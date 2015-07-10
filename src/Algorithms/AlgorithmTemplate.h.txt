@@ -3,7 +3,7 @@
 
 /*LICENSE_START*/
 /*
- *  Copyright (C) 2014  Washington University School of Medicine
+ *  Copyright (C) 2015  Washington University School of Medicine
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -24,7 +24,7 @@
 /*
 file->save as... and enter what you will name the class, plus .h
 
-find and replace these strings, without matching "whole word only" (plain text mode):
+find and replace these strings in plain text mode (not "whole word only"):
 
 AlgorithmName     : algorithm name, in CamelCase, with initial capital, same as what you saved the header file to
 ALGORITHM_NAME    : uppercase of algorithm name, with underscore between words, used in #ifdef guards

@@ -21,6 +21,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <new>
 
 #include "CaretAssert.h"
 
@@ -28,12 +29,14 @@
 #include "BorderFile.h"
 #include "BorderPointFromSearch.h"
 #include "Brain.h"
+#include "BrainordinateRegionOfInterest.h"
 #include "BrainStructure.h"
 #include "BrowserTabContent.h"
+#include "CaretDataFileHelper.h"
 #include "CaretLogger.h"
 #include "CaretPreferences.h"
 #include "ChartingDataManager.h"
-#include "ChartableBrainordinateInterface.h"
+#include "ChartableLineSeriesBrainordinateInterface.h"
 #include "CiftiBrainordinateDataSeriesFile.h"
 #include "CiftiBrainordinateLabelFile.h"
 #include "CiftiBrainordinateScalarFile.h"
@@ -43,15 +46,19 @@
 #include "CiftiFiberTrajectoryFile.h"
 #include "CiftiConnectivityMatrixParcelFile.h"
 #include "CiftiConnectivityMatrixParcelDenseFile.h"
+#include "CiftiParcelLabelFile.h"
 #include "CiftiParcelSeriesFile.h"
 #include "CiftiParcelScalarFile.h"
+#include "CiftiScalarDataSeriesFile.h"
 #include "DisplayPropertiesBorders.h"
 #include "DisplayPropertiesFiberOrientation.h"
 #include "DisplayPropertiesFoci.h"
+#include "DisplayPropertiesImages.h"
 #include "DisplayPropertiesLabels.h"
 #include "DisplayPropertiesSurface.h"
 #include "DisplayPropertiesVolume.h"
 #include "ElapsedTimer.h"
+#include "EventBrainReset.h"
 #include "EventBrowserTabGetAll.h"
 #include "EventCaretMappableDataFilesGet.h"
 #include "EventDataFileAdd.h"
@@ -71,6 +78,7 @@
 #include "FociFile.h"
 #include "GroupAndNameHierarchyModel.h"
 #include "IdentificationManager.h"
+#include "ImageFile.h"
 #include "MathFunctions.h"
 #include "MetricFile.h"
 #include "ModelChart.h"
@@ -133,6 +141,9 @@ Brain::Brain()
     m_displayPropertiesFoci = new DisplayPropertiesFoci();
     m_displayProperties.push_back(m_displayPropertiesFoci);
     
+    m_displayPropertiesImages = new DisplayPropertiesImages(this);
+    m_displayProperties.push_back(m_displayPropertiesImages);
+    
     m_displayPropertiesLabels = new DisplayPropertiesLabels();
     m_displayProperties.push_back(m_displayPropertiesLabels);
     
@@ -175,6 +186,10 @@ Brain::Brain()
                           "DisplayPropertiesFoci", 
                           m_displayPropertiesFoci);
     
+    m_sceneAssistant->add("m_displayPropertiesImages",
+                          "DisplayPropertiesImages",
+                          m_displayPropertiesImages);
+    
     m_sceneAssistant->add("m_displayPropertiesLabels",
                           "DisplayPropertiesLabels",
                           m_displayPropertiesLabels);
@@ -190,6 +205,8 @@ Brain::Brain()
     m_selectionManager = new SelectionManager();
 
     m_identificationManager = new IdentificationManager();
+    
+    m_brainordinateHighlightRegionOfInterest = new BrainordinateRegionOfInterest();
     
     updateChartModel();
 }
@@ -231,6 +248,7 @@ Brain::~Brain()
 
     delete m_selectionManager;
     delete m_identificationManager;
+    delete m_brainordinateHighlightRegionOfInterest;
 }
 
 /**
@@ -323,6 +341,67 @@ Brain::getBrainStructure(StructureEnum::Enum structure,
 }
 
 /**
+ * Increment and return the duplicate counter for the given data file type.
+ *
+ * @param dataFileType
+ *     Type of data file.
+ * @return
+ *     Next duplicate counter for the file type.
+ */
+int32_t
+Brain::getDuplicateFileNameCounterForFileType(const DataFileTypeEnum::Enum dataFileType)
+{
+    int32_t counterValue = 0;
+    
+    std::map<DataFileTypeEnum::Enum, int32_t>::iterator duplicateCounterIter = m_duplicateFileNameCounter.find(dataFileType);
+    if (duplicateCounterIter != m_duplicateFileNameCounter.end()) {
+        counterValue = duplicateCounterIter->second;
+    }
+    
+    /*
+     * Extremely unlikely that that this will happen
+     */
+    if (counterValue == std::numeric_limits<int32_t>::max()) {
+        counterValue = 0;
+    }
+    
+    ++counterValue;
+
+    m_duplicateFileNameCounter[dataFileType] = counterValue;
+    
+//    m_duplicateFileNameCounter.insert(std::make_pair(dataFileType,
+//                                                     counterValue));
+    
+    return counterValue;
+}
+
+/**
+ * Reset the duplicate file name counter for all data file types.  In some
+ * instances, the scene file counter is not altered and needs to be
+ * preserved.
+ *
+ * @param preserveSceneFileCounter
+ *    If true, do not reset the scene file duplicate counter.
+ */
+void
+Brain::resetDuplicateFileNameCounter(const bool preserveSceneFileCounter)
+{
+    int32_t sceneDuplicateCounter = -1;
+    if (preserveSceneFileCounter) {
+        std::map<DataFileTypeEnum::Enum, int32_t>::iterator sceneDuplicateIter = m_duplicateFileNameCounter.find(DataFileTypeEnum::SCENE);
+        if (sceneDuplicateIter != m_duplicateFileNameCounter.end()) {
+            sceneDuplicateCounter = sceneDuplicateIter->second;
+        }
+    }
+    m_duplicateFileNameCounter.clear();
+    if (sceneDuplicateCounter > 0) {
+        m_duplicateFileNameCounter.insert(std::make_pair(DataFileTypeEnum::SCENE,
+                                                         sceneDuplicateCounter));
+    }
+}
+
+
+/**
  * Reset the brain structure.
  * @param keepSceneFiles
  *    Status of keeping scene files.
@@ -332,8 +411,14 @@ Brain::getBrainStructure(StructureEnum::Enum structure,
 void 
 Brain::resetBrain(const ResetBrainKeepSceneFiles keepSceneFiles,
                   const ResetBrainKeepSpecFile keepSpecFile)
-{    m_isSpecFileBeingRead = false;
+{
+    m_isSpecFileBeingRead = false;
     
+    /*
+     * Clear the counters used to prevent duplicate file names.
+     */
+    resetDuplicateFileNameCounter(keepSceneFiles);
+
     int num = getNumberOfBrainStructures();
     for (int32_t i = 0; i < num; i++) {
         delete m_brainStructures[i];
@@ -364,6 +449,14 @@ Brain::resetBrain(const ResetBrainKeepSceneFiles keepSceneFiles,
         delete ff;
     }
     m_fociFiles.clear();
+    
+    for (std::vector<ImageFile*>::iterator ifi = m_imageFiles.begin();
+         ifi != m_imageFiles.end();
+         ifi++) {
+        ImageFile* img = *ifi;
+        delete img;
+    }
+    m_imageFiles.clear();
     
     for (std::vector<CiftiBrainordinateDataSeriesFile*>::iterator cdsfi = m_connectivityDataSeriesFiles.begin();
          cdsfi != m_connectivityDataSeriesFiles.end();
@@ -413,6 +506,14 @@ Brain::resetBrain(const ResetBrainKeepSceneFiles keepSceneFiles,
     }
     m_connectivityParcelSeriesFiles.clear();
     
+    for (std::vector<CiftiParcelLabelFile*>::iterator cpfi = m_connectivityParcelLabelFiles.begin();
+         cpfi != m_connectivityParcelLabelFiles.end();
+         cpfi++) {
+        CiftiParcelLabelFile* plf = *cpfi;
+        delete plf;
+    }
+    m_connectivityParcelLabelFiles.clear();
+    
     for (std::vector<CiftiParcelScalarFile*>::iterator clfi = m_connectivityParcelScalarFiles.begin();
          clfi != m_connectivityParcelScalarFiles.end();
          clfi++) {
@@ -420,6 +521,14 @@ Brain::resetBrain(const ResetBrainKeepSceneFiles keepSceneFiles,
         delete psf;
     }
     m_connectivityParcelScalarFiles.clear();
+    
+    for (std::vector<CiftiScalarDataSeriesFile*>::iterator clfi = m_connectivityScalarDataSeriesFiles.begin();
+         clfi != m_connectivityScalarDataSeriesFiles.end();
+         clfi++) {
+        CiftiScalarDataSeriesFile* psf = *clfi;
+        delete psf;
+    }
+    m_connectivityScalarDataSeriesFiles.clear();
     
     for (std::vector<CiftiFiberOrientationFile*>::iterator clfi = m_connectivityFiberOrientationFiles.begin();
          clfi != m_connectivityFiberOrientationFiles.end();
@@ -498,11 +607,15 @@ Brain::resetBrain(const ResetBrainKeepSceneFiles keepSceneFiles,
     m_selectionManager->reset();
     m_selectionManager->setLastSelectedItem(NULL);
     
+    m_brainordinateHighlightRegionOfInterest->clear();
+    
     if (m_modelChart != NULL) {
         m_modelChart->reset();
     }
     
     updateAfterFilesAddedOrRemoved();
+    
+    EventManager::get()->sendEvent(EventBrainReset(this).getPointer());
 }
 
 
@@ -563,11 +676,17 @@ Brain::resetBrainKeepSceneFiles()
                 break;
             case DataFileTypeEnum::CONNECTIVITY_PARCEL_DENSE:
                 break;
+            case DataFileTypeEnum::CONNECTIVITY_PARCEL_LABEL:
+                break;
             case DataFileTypeEnum::CONNECTIVITY_PARCEL_SCALAR:
                 break;
             case DataFileTypeEnum::CONNECTIVITY_PARCEL_SERIES:
                 break;
+            case DataFileTypeEnum::CONNECTIVITY_SCALAR_DATA_SERIES:
+                break;
             case DataFileTypeEnum::FOCI:
+                break;
+            case DataFileTypeEnum::IMAGE:
                 break;
             case DataFileTypeEnum::LABEL:
                 break;
@@ -645,7 +764,7 @@ Brain::addReadOrReloadSurfaceFile(const FileModeAddReadReload fileMode,
                        CaretDataFile* caretDataFile,
                        const AString& filename,
                        const StructureEnum::Enum structureIn,
-                       const bool markDataFileAsModified) throw (DataFileException)
+                       const bool markDataFileAsModified)
 {
     Surface* surface = NULL;
     StructureEnum::Enum structure = StructureEnum::INVALID;
@@ -681,7 +800,18 @@ Brain::addReadOrReloadSurfaceFile(const FileModeAddReadReload fileMode,
     
     if (readFlag) {
         try {
-            surface->readFile(filename);
+            try {
+                surface->readFile(filename);
+            }
+            catch (const std::bad_alloc&) {
+                /*
+                 * This DataFileException will be caught
+                 * in the outer try/catch and it will
+                 * clean up to avoid memory leaks.
+                 */
+                throw DataFileException(filename,
+                                        CaretDataFileHelper::createBadAllocExceptionMessage(filename));
+            }
         }
         catch (const DataFileException& dfe) {
             if (reloadFlag) {
@@ -714,10 +844,8 @@ Brain::addReadOrReloadSurfaceFile(const FileModeAddReadReload fileMode,
         if (caretDataFile == NULL) {
             delete surface;
         }
-        AString message = "Structure in "
-        + filename
-        + " is not valid.";
-        DataFileException e(message);
+        DataFileException e(filename,
+                            "Structure is not valid.");
         e.setErrorInvalidStructure(true);
         CaretLogThrowing(e);
         throw e;
@@ -736,6 +864,13 @@ Brain::addReadOrReloadSurfaceFile(const FileModeAddReadReload fileMode,
                 initializeOverlaysFlag = true;
             }
         }
+        
+        if (addFlag) {
+            std::vector<Surface*> allSurfaces;
+            bs->getSurfaces(allSurfaces);
+            updateDataFileNameIfDuplicate(allSurfaces,
+                                          surface);
+        }
         bs->addSurface(surface,
                        addFlag,
                        initializeOverlaysFlag);
@@ -747,7 +882,7 @@ Brain::addReadOrReloadSurfaceFile(const FileModeAddReadReload fileMode,
         AString message = "Failed to create a BrainStructure for surface with structure "
         + StructureEnum::toGuiName(structure)
         + ".";
-        DataFileException e(message);
+        DataFileException e(filename, message);
         CaretLogThrowing(e);
         throw e;
     }
@@ -781,7 +916,7 @@ Brain::addReadOrReloadLabelFile(const FileModeAddReadReload fileMode,
                      CaretDataFile* caretDataFile,
                      const AString& filename,
                      const StructureEnum::Enum structureIn,
-                     const bool markDataFileAsModified) throw (DataFileException)
+                     const bool markDataFileAsModified)
 {
     LabelFile* labelFile = NULL;
     StructureEnum::Enum structure = StructureEnum::INVALID;
@@ -817,7 +952,18 @@ Brain::addReadOrReloadLabelFile(const FileModeAddReadReload fileMode,
     
     if (readFlag) {
         try {
-            labelFile->readFile(filename);
+            try {
+                labelFile->readFile(filename);
+            }
+            catch (const std::bad_alloc&) {
+                /*
+                 * This DataFileException will be caught
+                 * in the outer try/catch and it will
+                 * clean up to avoid memory leaks.
+                 */
+                throw DataFileException(filename,
+                                        CaretDataFileHelper::createBadAllocExceptionMessage(filename));
+            }
         }
         catch (const DataFileException& dfe) {
             if (reloadFlag) {
@@ -850,10 +996,7 @@ Brain::addReadOrReloadLabelFile(const FileModeAddReadReload fileMode,
         if (caretDataFile == NULL) {
             delete labelFile;
         }
-        AString message = "Structure in "
-        + filename
-        + " is not valid.";
-        DataFileException e(message);
+        DataFileException e(filename, "Structure is not valid.");
         e.setErrorInvalidStructure(true);
         CaretLogThrowing(e);
         throw e;
@@ -862,6 +1005,12 @@ Brain::addReadOrReloadLabelFile(const FileModeAddReadReload fileMode,
     BrainStructure* bs = getBrainStructure(structure, false);
     if (bs != NULL) {
         try {
+            if (addFlag) {
+                std::vector<LabelFile*> allLabelFiles;
+                bs->getLabelFiles(allLabelFiles);
+                updateDataFileNameIfDuplicate(allLabelFiles,
+                                              labelFile);
+            }
             bs->addLabelFile(labelFile,
                              addFlag);
         }
@@ -879,7 +1028,7 @@ Brain::addReadOrReloadLabelFile(const FileModeAddReadReload fileMode,
         AString message = "Must read a surface with structure "
         + StructureEnum::toGuiName(structure)
         + " before reading its label files.";
-        DataFileException e(message);
+        DataFileException e(filename, message);
         CaretLogThrowing(e);
         throw e;
     }
@@ -913,7 +1062,7 @@ Brain::addReadOrReloadMetricFile(const FileModeAddReadReload fileMode,
                       CaretDataFile* caretDataFile,
                       const AString& filename,
                       const StructureEnum::Enum structureIn,
-                      const bool markDataFileAsModified) throw (DataFileException)
+                      const bool markDataFileAsModified)
 {
     MetricFile* metricFile = NULL;
     StructureEnum::Enum structure = StructureEnum::INVALID;
@@ -949,7 +1098,18 @@ Brain::addReadOrReloadMetricFile(const FileModeAddReadReload fileMode,
     
     if (readFlag) {
         try {
-            metricFile->readFile(filename);
+            try {
+                metricFile->readFile(filename);
+            }
+            catch (const std::bad_alloc&) {
+                /*
+                 * This DataFileException will be caught
+                 * in the outer try/catch and it will
+                 * clean up to avoid memory leaks.
+                 */
+                throw DataFileException(filename,
+                                        CaretDataFileHelper::createBadAllocExceptionMessage(filename));
+            }
         }
         catch (const DataFileException& dfe) {
             if (reloadFlag) {
@@ -982,10 +1142,7 @@ Brain::addReadOrReloadMetricFile(const FileModeAddReadReload fileMode,
         if (caretDataFile == NULL) {
             delete metricFile;
         }
-        AString message = "Structure in "
-        + filename
-        + " is not valid.";
-        DataFileException e(message);
+        DataFileException e(filename, "Structure is not valid.");
         e.setErrorInvalidStructure(true);
         CaretLogThrowing(e);
         throw e;
@@ -994,6 +1151,12 @@ Brain::addReadOrReloadMetricFile(const FileModeAddReadReload fileMode,
     BrainStructure* bs = getBrainStructure(structure, false);
     if (bs != NULL) {
         try {
+            if (addFlag) {
+                std::vector<MetricFile*> allMetricFiles;
+                bs->getMetricFiles(allMetricFiles);
+                updateDataFileNameIfDuplicate(allMetricFiles,
+                                              metricFile);
+            }
             bs->addMetricFile(metricFile,
                               addFlag);
         }
@@ -1011,7 +1174,7 @@ Brain::addReadOrReloadMetricFile(const FileModeAddReadReload fileMode,
         AString message = "Must read a surface with structure "
         + StructureEnum::toGuiName(structure)
         + " before reading its metric files.";
-        DataFileException e(message);
+        DataFileException e(filename, message);
         CaretLogThrowing(e);
         throw e;
     }
@@ -1045,7 +1208,7 @@ Brain::addReadOrReloadRgbaFile(const FileModeAddReadReload fileMode,
                     CaretDataFile* caretDataFile,
                     const AString& filename,
                     const StructureEnum::Enum structureIn,
-                    const bool markDataFileAsModified) throw (DataFileException)
+                    const bool markDataFileAsModified)
 {
     RgbaFile* rgbaFile = NULL;
     StructureEnum::Enum structure = StructureEnum::INVALID;
@@ -1082,7 +1245,18 @@ Brain::addReadOrReloadRgbaFile(const FileModeAddReadReload fileMode,
     
     if (readFlag) {
         try {
-            rgbaFile->readFile(filename);
+            try {
+                rgbaFile->readFile(filename);
+            }
+            catch (const std::bad_alloc&) {
+                /*
+                 * This DataFileException will be caught
+                 * in the outer try/catch and it will
+                 * clean up to avoid memory leaks.
+                 */
+                throw DataFileException(filename,
+                                        CaretDataFileHelper::createBadAllocExceptionMessage(filename));
+            }
         }
         catch (const DataFileException& dfe) {
             if (reloadFlag) {
@@ -1115,10 +1289,7 @@ Brain::addReadOrReloadRgbaFile(const FileModeAddReadReload fileMode,
         if (caretDataFile == NULL) {
             delete rgbaFile;
         }
-        AString message = "Structure in "
-                        + filename
-                        + " is not valid.";
-        DataFileException e(message);
+        DataFileException e(filename, "Structure is not valid.");
         e.setErrorInvalidStructure(true);
         CaretLogThrowing(e);
         throw e;
@@ -1127,6 +1298,13 @@ Brain::addReadOrReloadRgbaFile(const FileModeAddReadReload fileMode,
     BrainStructure* bs = getBrainStructure(structure, false);
     if (bs != NULL) {
         try {
+            if (addFlag) {
+                std::vector<RgbaFile*> allRgbaFiles;
+                bs->getRgbaFiles(allRgbaFiles);
+                updateDataFileNameIfDuplicate(allRgbaFiles,
+                                              rgbaFile);
+            }
+            
             bs->addRgbaFile(rgbaFile,
                             addFlag);
         }
@@ -1144,7 +1322,7 @@ Brain::addReadOrReloadRgbaFile(const FileModeAddReadReload fileMode,
         AString message = "Must read a surface with structure "
         + StructureEnum::toGuiName(structure)
         + " before reading its RGBA files.";
-        DataFileException e(message);
+        DataFileException e(filename, message);
         CaretLogThrowing(e);
         throw e;
     }
@@ -1175,7 +1353,7 @@ Brain::addReadOrReloadRgbaFile(const FileModeAddReadReload fileMode,
 VolumeFile*
 Brain::addReadOrReloadVolumeFile(const FileModeAddReadReload fileMode,
                       CaretDataFile* caretDataFile,
-                      const AString& filename) throw (DataFileException)
+                      const AString& filename)
 {
     VolumeFile* vf = NULL;
     if (caretDataFile != NULL) {
@@ -1203,7 +1381,18 @@ Brain::addReadOrReloadVolumeFile(const FileModeAddReadReload fileMode,
     
     if (readFlag) {
         try {
-            vf->readFile(filename);
+            try {
+                vf->readFile(filename);
+            }
+            catch (const std::bad_alloc&) {
+                /*
+                 * This DataFileException will be caught
+                 * in the outer try/catch and it will
+                 * clean up to avoid memory leaks.
+                 */
+                throw DataFileException(filename,
+                                        CaretDataFileHelper::createBadAllocExceptionMessage(filename));
+            }
         }
         catch (const DataFileException& e) {
             if (caretDataFile != NULL) {
@@ -1226,6 +1415,8 @@ Brain::addReadOrReloadVolumeFile(const FileModeAddReadReload fileMode,
                  + " seconds.");
     
     if (addFlag) {
+        updateDataFileNameIfDuplicate(m_volumeFiles,
+                                      vf);
         m_volumeFiles.push_back(vf);
     }
     
@@ -1287,7 +1478,7 @@ Brain::getVolumeFile(const int32_t volumeFileIndex) const
 BorderFile*
 Brain::addReadOrReloadBorderFile(const FileModeAddReadReload fileMode,
                       CaretDataFile* caretDataFile,
-                      const AString& filename) throw (DataFileException)
+                      const AString& filename)
 {
     BorderFile* bf = NULL;
     if (caretDataFile != NULL) {
@@ -1315,6 +1506,19 @@ Brain::addReadOrReloadBorderFile(const FileModeAddReadReload fileMode,
     
     if (readFlag) {
         try {
+            try {
+                bf->readFile(filename);
+            }
+            catch (const std::bad_alloc&) {
+                /*
+                 * This DataFileException will be caught
+                 * in the outer try/catch and it will
+                 * clean up to avoid memory leaks.
+                 */
+                throw DataFileException(filename,
+                                        CaretDataFileHelper::createBadAllocExceptionMessage(filename));
+            }
+
             /*
              * Create a map of structure to number of nodes
              */
@@ -1328,7 +1532,6 @@ Brain::addReadOrReloadBorderFile(const FileModeAddReadReload fileMode,
                                                               bs->getNumberOfNodes()));
             }
             
-            bf->readFile(filename);
             bf->updateNumberOfNodesIfSingleStructure(structureToNodeCountMap);
         }
         catch (DataFileException& dfe) {
@@ -1343,6 +1546,8 @@ Brain::addReadOrReloadBorderFile(const FileModeAddReadReload fileMode,
     }
     
     if (addFlag) {
+        updateDataFileNameIfDuplicate(m_borderFiles,
+                                      bf);
         m_borderFiles.push_back(bf);
     }
     
@@ -1366,7 +1571,7 @@ Brain::addReadOrReloadBorderFile(const FileModeAddReadReload fileMode,
 FociFile*
 Brain::addReadOrReloadFociFile(const FileModeAddReadReload fileMode,
                     CaretDataFile* caretDataFile,
-                    const AString& filename) throw (DataFileException)
+                    const AString& filename)
 {
     FociFile* ff = NULL;
     if (caretDataFile != NULL) {
@@ -1394,7 +1599,18 @@ Brain::addReadOrReloadFociFile(const FileModeAddReadReload fileMode,
     
     if (readFlag) {
         try {
-            ff->readFile(filename);
+            try {
+                ff->readFile(filename);
+            }
+            catch (const std::bad_alloc&) {
+                /*
+                 * This DataFileException will be caught
+                 * in the outer try/catch and it will
+                 * clean up to avoid memory leaks.
+                 */
+                throw DataFileException(filename,
+                                        CaretDataFileHelper::createBadAllocExceptionMessage(filename));
+            }
         }
         catch (DataFileException& dfe) {
             if (caretDataFile != NULL) {
@@ -1408,11 +1624,91 @@ Brain::addReadOrReloadFociFile(const FileModeAddReadReload fileMode,
     }
     
     if (addFlag) {
+        updateDataFileNameIfDuplicate(m_fociFiles,
+                                      ff);
         m_fociFiles.push_back(ff);
     }
     
     
     return ff;
+}
+
+/**
+ * Read a foci file.
+ *
+ * @param fileMode
+ *    Mode for file adding, reading, or reloading.
+ * @param caretDataFile
+ *    File that is added or reloaded (MUST NOT BE NULL).  If NULL,
+ *    the mode must be READING.
+ * @param filename
+ *    Name of the file.
+ * @throws DataFileException
+ *    If reading failed.
+ */
+ImageFile*
+Brain::addReadOrReloadImageFile(const FileModeAddReadReload fileMode,
+                               CaretDataFile* caretDataFile,
+                               const AString& filename)
+{
+    ImageFile* imageFile = NULL;
+    if (caretDataFile != NULL) {
+        imageFile = dynamic_cast<ImageFile*>(caretDataFile);
+        CaretAssert(imageFile);
+    }
+    else {
+        imageFile = new ImageFile();
+    }
+    
+    bool addFlag  = false;
+    bool readFlag = false;
+    switch (fileMode) {
+        case FILE_MODE_ADD:
+            addFlag = true;
+            break;
+        case FILE_MODE_READ:
+            addFlag = true;
+            readFlag = true;
+            break;
+        case FILE_MODE_RELOAD:
+            readFlag = true;
+            break;
+    }
+    
+    if (readFlag) {
+        try {
+            try {
+                imageFile->readFile(filename);
+            }
+            catch (const std::bad_alloc&) {
+                /*
+                 * This DataFileException will be caught
+                 * in the outer try/catch and it will
+                 * clean up to avoid memory leaks.
+                 */
+                throw DataFileException(filename,
+                                        CaretDataFileHelper::createBadAllocExceptionMessage(filename));
+            }
+        }
+        catch (DataFileException& dfe) {
+            if (caretDataFile != NULL) {
+                removeAndDeleteDataFile(caretDataFile);
+            }
+            else {
+                delete imageFile;
+            }
+            throw dfe;
+        }
+    }
+    
+    if (addFlag) {
+        updateDataFileNameIfDuplicate(m_imageFiles,
+                                      imageFile);
+        m_imageFiles.push_back(imageFile);
+    }
+    
+    
+    return imageFile;
 }
 
 /**
@@ -1425,7 +1721,7 @@ Brain::addReadOrReloadFociFile(const FileModeAddReadReload fileMode,
  *    If the file is found to be incompatible with the loaded surfaces.
  */
 void
-Brain::validateCiftiMappableDataFile(const CiftiMappableDataFile* ciftiMapFile) const throw (DataFileException)
+Brain::validateCiftiMappableDataFile(const CiftiMappableDataFile* ciftiMapFile) const
 {
     const int32_t numBrainStructures = getNumberOfBrainStructures();
     for (int32_t i = 0; i < numBrainStructures; i++) {
@@ -1435,16 +1731,15 @@ Brain::validateCiftiMappableDataFile(const CiftiMappableDataFile* ciftiMapFile) 
         const int numConnNodes = ciftiMapFile->getMappingSurfaceNumberOfNodes(structure);
         if (numConnNodes > 0) {
             if (numNodes != numConnNodes) {
-                AString msg = ("The CIFTI file "
-                               + ciftiMapFile->getFileNameNoPath()
-                               + " contains "
+                AString msg = ("The CIFTI file contains "
                                + AString::number(numConnNodes)
                                + " nodes for structure "
                                + StructureEnum::toGuiName(structure)
                                + " but the corresponding surface brain structure contains "
                                + AString::number(numNodes)
                                + " nodes.");
-                throw DataFileException(msg);
+                throw DataFileException(ciftiMapFile->getFileName(),
+                                        msg);
             }
         }
     }
@@ -1469,7 +1764,7 @@ Brain::validateCiftiMappableDataFile(const CiftiMappableDataFile* ciftiMapFile) 
 CiftiConnectivityMatrixDenseFile*
 Brain::addReadOrReloadConnectivityDenseFile(const FileModeAddReadReload fileMode,
                                  CaretDataFile* caretDataFile,
-                                 const AString& filename) throw (DataFileException)
+                                 const AString& filename)
 {
     CiftiConnectivityMatrixDenseFile* cmdf = NULL;
     if (caretDataFile != NULL) {
@@ -1497,7 +1792,19 @@ Brain::addReadOrReloadConnectivityDenseFile(const FileModeAddReadReload fileMode
     
     if (readFlag) {
         try {
-            cmdf->readFile(filename);
+            try {
+                cmdf->readFile(filename);
+            }
+            catch (const std::bad_alloc&) {
+                /*
+                 * This DataFileException will be caught
+                 * in the outer try/catch and it will
+                 * clean up to avoid memory leaks.
+                 */
+                throw DataFileException(filename,
+                                        CaretDataFileHelper::createBadAllocExceptionMessage(filename));
+            }
+            
             cmdf->clearModified();
             validateCiftiMappableDataFile(cmdf);
         }
@@ -1513,6 +1820,8 @@ Brain::addReadOrReloadConnectivityDenseFile(const FileModeAddReadReload fileMode
     }
     
     if (addFlag) {
+        updateDataFileNameIfDuplicate(m_connectivityMatrixDenseFiles,
+                                      cmdf);
         m_connectivityMatrixDenseFiles.push_back(cmdf);
     }
     
@@ -1537,7 +1846,7 @@ Brain::addReadOrReloadConnectivityDenseFile(const FileModeAddReadReload fileMode
 CiftiBrainordinateLabelFile*
 Brain::addReadOrReloadConnectivityDenseLabelFile(const FileModeAddReadReload fileMode,
                                       CaretDataFile* caretDataFile,
-                                      const AString& filename) throw (DataFileException)
+                                      const AString& filename)
 {
     CiftiBrainordinateLabelFile* file = NULL;
     if (caretDataFile != NULL) {
@@ -1565,7 +1874,19 @@ Brain::addReadOrReloadConnectivityDenseLabelFile(const FileModeAddReadReload fil
     
     if (readFlag) {
         try {
-            file->readFile(filename);
+            try {
+                file->readFile(filename);
+            }
+            catch (const std::bad_alloc&) {
+                /*
+                 * This DataFileException will be caught
+                 * in the outer try/catch and it will
+                 * clean up to avoid memory leaks.
+                 */
+                throw DataFileException(filename,
+                                        CaretDataFileHelper::createBadAllocExceptionMessage(filename));
+            }
+            
             validateCiftiMappableDataFile(file);
         }
         catch (const DataFileException& dfe) {
@@ -1580,6 +1901,8 @@ Brain::addReadOrReloadConnectivityDenseLabelFile(const FileModeAddReadReload fil
     }
     
     if (addFlag) {
+        updateDataFileNameIfDuplicate(m_connectivityDenseLabelFiles,
+                                      file);
         m_connectivityDenseLabelFiles.push_back(file);
     }
     
@@ -1602,7 +1925,7 @@ Brain::addReadOrReloadConnectivityDenseLabelFile(const FileModeAddReadReload fil
 CiftiConnectivityMatrixDenseParcelFile*
 Brain::addReadOrReloadConnectivityMatrixDenseParcelFile(const FileModeAddReadReload fileMode,
                                              CaretDataFile* caretDataFile,
-                                             const AString& filename) throw (DataFileException)
+                                             const AString& filename)
 {
     CiftiConnectivityMatrixDenseParcelFile* file = NULL;
     if (caretDataFile != NULL) {
@@ -1630,7 +1953,19 @@ Brain::addReadOrReloadConnectivityMatrixDenseParcelFile(const FileModeAddReadRel
     
     if (readFlag) {
         try {
-            file->readFile(filename);
+            try {
+                file->readFile(filename);
+            }
+            catch (const std::bad_alloc&) {
+                /*
+                 * This DataFileException will be caught
+                 * in the outer try/catch and it will
+                 * clean up to avoid memory leaks.
+                 */
+                throw DataFileException(filename,
+                                        CaretDataFileHelper::createBadAllocExceptionMessage(filename));
+            }
+            
             validateCiftiMappableDataFile(file);
         }
         catch (const DataFileException& dfe) {
@@ -1645,6 +1980,8 @@ Brain::addReadOrReloadConnectivityMatrixDenseParcelFile(const FileModeAddReadRel
     }
     
     if (addFlag) {
+        updateDataFileNameIfDuplicate(m_connectivityMatrixDenseParcelFiles,
+                                      file);
         m_connectivityMatrixDenseParcelFiles.push_back(file);
     }
     
@@ -1666,6 +2003,8 @@ Brain::updateFiberTrajectoryMatchingFiberOrientationFiles()
         trajFile->updateMatchingFiberOrientationFileFromList(m_connectivityFiberOrientationFiles);
     }
 }
+
+
 /**
  * Read a connectivity dense scalar file.
  *
@@ -1682,7 +2021,7 @@ Brain::updateFiberTrajectoryMatchingFiberOrientationFiles()
 CiftiBrainordinateScalarFile*
 Brain::addReadOrReloadConnectivityDenseScalarFile(const FileModeAddReadReload fileMode,
                                        CaretDataFile* caretDataFile,
-                                       const AString& filename) throw (DataFileException)
+                                       const AString& filename)
 {
     CiftiBrainordinateScalarFile* clf = NULL;
     if (caretDataFile != NULL) {
@@ -1710,7 +2049,19 @@ Brain::addReadOrReloadConnectivityDenseScalarFile(const FileModeAddReadReload fi
     
     if (readFlag) {
         try {
-            clf->readFile(filename);
+            try {
+                clf->readFile(filename);
+            }
+            catch (const std::bad_alloc&) {
+                /*
+                 * This DataFileException will be caught
+                 * in the outer try/catch and it will
+                 * clean up to avoid memory leaks.
+                 */
+                throw DataFileException(filename,
+                                        CaretDataFileHelper::createBadAllocExceptionMessage(filename));
+            }
+            
             validateCiftiMappableDataFile(clf);
         }
         catch (const DataFileException& dfe) {
@@ -1725,6 +2076,8 @@ Brain::addReadOrReloadConnectivityDenseScalarFile(const FileModeAddReadReload fi
     }
     
     if (addFlag) {
+        updateDataFileNameIfDuplicate(m_connectivityDenseScalarFiles,
+                                      clf);
         m_connectivityDenseScalarFiles.push_back(clf);
     }
     
@@ -1747,7 +2100,7 @@ Brain::addReadOrReloadConnectivityDenseScalarFile(const FileModeAddReadReload fi
 CiftiParcelSeriesFile*
 Brain::addReadOrReloadConnectivityParcelSeriesFile(const FileModeAddReadReload fileMode,
                                         CaretDataFile* caretDataFile,
-                                        const AString& filename) throw (DataFileException)
+                                        const AString& filename)
 {
     CiftiParcelSeriesFile* clf = NULL;
     if (caretDataFile != NULL) {
@@ -1775,7 +2128,19 @@ Brain::addReadOrReloadConnectivityParcelSeriesFile(const FileModeAddReadReload f
     
     if (readFlag) {
         try {
-            clf->readFile(filename);
+            try {
+                clf->readFile(filename);
+            }
+            catch (const std::bad_alloc&) {
+                /*
+                 * This DataFileException will be caught
+                 * in the outer try/catch and it will
+                 * clean up to avoid memory leaks.
+                 */
+                throw DataFileException(filename,
+                                        CaretDataFileHelper::createBadAllocExceptionMessage(filename));
+            }
+            
             validateCiftiMappableDataFile(clf);
         }
         catch (const DataFileException& dfe) {
@@ -1790,11 +2155,93 @@ Brain::addReadOrReloadConnectivityParcelSeriesFile(const FileModeAddReadReload f
     }
     
     if (addFlag) {
+        updateDataFileNameIfDuplicate(m_connectivityParcelSeriesFiles,
+                                      clf);
         m_connectivityParcelSeriesFiles.push_back(clf);
     }
     
     return clf;
 }
+
+/**
+ * Read a connectivity parcel label file.
+ *
+ * @param fileMode
+ *    Mode for file adding, reading, or reloading.
+ * @param caretDataFile
+ *    File that is added or reloaded (MUST NOT BE NULL).  If NULL,
+ *    the mode must be READING.
+ * @param filename
+ *    Name of the file.
+ * @throws DataFileException
+ *    If reading failed.
+ */
+CiftiParcelLabelFile*
+Brain::addReadOrReloadConnectivityParcelLabelFile(const FileModeAddReadReload fileMode,
+                                                   CaretDataFile* caretDataFile,
+                                                   const AString& filename)
+{
+    CiftiParcelLabelFile* clf = NULL;
+    if (caretDataFile != NULL) {
+        clf = dynamic_cast<CiftiParcelLabelFile*>(caretDataFile);
+        CaretAssert(clf);
+    }
+    else {
+        clf = new CiftiParcelLabelFile();
+    }
+    
+    bool addFlag  = false;
+    bool readFlag = false;
+    switch (fileMode) {
+        case FILE_MODE_ADD:
+            addFlag = true;
+            break;
+        case FILE_MODE_READ:
+            addFlag = true;
+            readFlag = true;
+            break;
+        case FILE_MODE_RELOAD:
+            readFlag = true;
+            break;
+    }
+    
+    if (readFlag) {
+        try {
+            try {
+                clf->readFile(filename);
+            }
+            catch (const std::bad_alloc&) {
+                /*
+                 * This DataFileException will be caught
+                 * in the outer try/catch and it will
+                 * clean up to avoid memory leaks.
+                 */
+                throw DataFileException(filename,
+                                        CaretDataFileHelper::createBadAllocExceptionMessage(filename));
+            }
+            
+            validateCiftiMappableDataFile(clf);
+        }
+        catch (const DataFileException& dfe) {
+            if (caretDataFile != NULL) {
+                removeAndDeleteDataFile(caretDataFile);
+            }
+            else {
+                delete clf;
+            }
+            throw dfe;
+        }
+    }
+    
+    if (addFlag) {
+        updateDataFileNameIfDuplicate(m_connectivityParcelLabelFiles,
+                                      clf);
+        m_connectivityParcelLabelFiles.push_back(clf);
+    }
+    
+    return clf;
+}
+
 
 /**
  * Read a connectivity parcel scalar file.
@@ -1812,7 +2259,7 @@ Brain::addReadOrReloadConnectivityParcelSeriesFile(const FileModeAddReadReload f
 CiftiParcelScalarFile*
 Brain::addReadOrReloadConnectivityParcelScalarFile(const FileModeAddReadReload fileMode,
                                         CaretDataFile* caretDataFile,
-                                        const AString& filename) throw (DataFileException)
+                                        const AString& filename)
 {
     CiftiParcelScalarFile* clf = NULL;
     if (caretDataFile != NULL) {
@@ -1840,7 +2287,19 @@ Brain::addReadOrReloadConnectivityParcelScalarFile(const FileModeAddReadReload f
     
     if (readFlag) {
         try {
-            clf->readFile(filename);
+            try {
+                clf->readFile(filename);
+            }
+            catch (const std::bad_alloc&) {
+                /*
+                 * This DataFileException will be caught
+                 * in the outer try/catch and it will
+                 * clean up to avoid memory leaks.
+                 */
+                throw DataFileException(filename,
+                                        CaretDataFileHelper::createBadAllocExceptionMessage(filename));
+            }
+
             validateCiftiMappableDataFile(clf);
         }
         catch (const DataFileException& dfe) {
@@ -1855,12 +2314,92 @@ Brain::addReadOrReloadConnectivityParcelScalarFile(const FileModeAddReadReload f
     }
     
     if (addFlag) {
+        updateDataFileNameIfDuplicate(m_connectivityParcelScalarFiles,
+                                      clf);
         m_connectivityParcelScalarFiles.push_back(clf);
     }
     
     return clf;
 }
 
+/**
+ * Read a connectivity scalar data series file.
+ *
+ * @param fileMode
+ *    Mode for file adding, reading, or reloading.
+ * @param caretDataFile
+ *    File that is added or reloaded (MUST NOT BE NULL).  If NULL,
+ *    the mode must be READING.
+ * @param filename
+ *    Name of the file.
+ * @throws DataFileException
+ *    If reading failed.
+ */
+CiftiScalarDataSeriesFile*
+Brain::addReadOrReloadConnectivityScalarDataSeriesFile(const FileModeAddReadReload fileMode,
+                                                       CaretDataFile* caretDataFile,
+                                                       const AString& filename)
+{
+    CiftiScalarDataSeriesFile* clf = NULL;
+    if (caretDataFile != NULL) {
+        clf = dynamic_cast<CiftiScalarDataSeriesFile*>(caretDataFile);
+        CaretAssert(clf);
+    }
+    else {
+        clf = new CiftiScalarDataSeriesFile();
+    }
+    
+    bool addFlag  = false;
+    bool readFlag = false;
+    switch (fileMode) {
+        case FILE_MODE_ADD:
+            addFlag = true;
+            break;
+        case FILE_MODE_READ:
+            addFlag = true;
+            readFlag = true;
+            break;
+        case FILE_MODE_RELOAD:
+            readFlag = true;
+            break;
+    }
+    
+    if (readFlag) {
+        try {
+            try {
+                clf->readFile(filename);
+            }
+            catch (const std::bad_alloc&) {
+                /*
+                 * This DataFileException will be caught
+                 * in the outer try/catch and it will
+                 * clean up to avoid memory leaks.
+                 */
+                throw DataFileException(filename,
+                                        CaretDataFileHelper::createBadAllocExceptionMessage(filename));
+            }
+            
+            validateCiftiMappableDataFile(clf);
+        }
+        catch (const DataFileException& dfe) {
+            if (caretDataFile != NULL) {
+                removeAndDeleteDataFile(caretDataFile);
+            }
+            else {
+                delete clf;
+            }
+            throw dfe;
+        }
+    }
+    
+    if (addFlag) {
+        updateDataFileNameIfDuplicate(m_connectivityScalarDataSeriesFiles,
+                                      clf);
+        m_connectivityScalarDataSeriesFiles.push_back(clf);
+    }
+    
+    return clf;
+}
 
 /**
  * Find a cifti scalar file containing shape information.
@@ -2010,7 +2549,7 @@ Brain::getCiftiShapeMap(CiftiBrainordinateScalarFile* &ciftiScalarShapeFileOut,
 CiftiFiberOrientationFile*
 Brain::addReadOrReloadConnectivityFiberOrientationFile(const FileModeAddReadReload fileMode,
                                             CaretDataFile* caretDataFile,
-                                            const AString& filename) throw (DataFileException)
+                                            const AString& filename)
 {
     CiftiFiberOrientationFile* cfof = NULL;
     if (caretDataFile != NULL) {
@@ -2038,7 +2577,18 @@ Brain::addReadOrReloadConnectivityFiberOrientationFile(const FileModeAddReadRelo
     
     if (readFlag) {
         try {
-            cfof->readFile(filename);
+            try {
+                cfof->readFile(filename);
+            }
+            catch (const std::bad_alloc&) {
+                /*
+                 * This DataFileException will be caught
+                 * in the outer try/catch and it will
+                 * clean up to avoid memory leaks.
+                 */
+                throw DataFileException(filename,
+                                        CaretDataFileHelper::createBadAllocExceptionMessage(filename));
+            }
         }
         catch (const DataFileException& dfe) {
             if (caretDataFile != NULL) {
@@ -2072,6 +2622,8 @@ Brain::addReadOrReloadConnectivityFiberOrientationFile(const FileModeAddReadRelo
     }
     
     if (addFlag) {
+        updateDataFileNameIfDuplicate(m_connectivityFiberOrientationFiles,
+                                      cfof);
         m_connectivityFiberOrientationFiles.push_back(cfof);
     }
     
@@ -2094,7 +2646,7 @@ Brain::addReadOrReloadConnectivityFiberOrientationFile(const FileModeAddReadRelo
 CiftiFiberTrajectoryFile*
 Brain::addReadOrReloadConnectivityFiberTrajectoryFile(const FileModeAddReadReload fileMode,
                                            CaretDataFile* caretDataFile,
-                                           const AString& filename) throw (DataFileException)
+                                           const AString& filename)
 {
     CiftiFiberTrajectoryFile* cftf = NULL;
     if (caretDataFile != NULL) {
@@ -2122,7 +2674,18 @@ Brain::addReadOrReloadConnectivityFiberTrajectoryFile(const FileModeAddReadReloa
     
     if (readFlag) {
         try {
-            cftf->readFile(filename);
+            try {
+                cftf->readFile(filename);
+            }
+            catch (const std::bad_alloc&) {
+                /*
+                 * This DataFileException will be caught
+                 * in the outer try/catch and it will
+                 * clean up to avoid memory leaks.
+                 */
+                throw DataFileException(filename,
+                                        CaretDataFileHelper::createBadAllocExceptionMessage(filename));
+            }
         }
         catch (const DataFileException& dfe) {
             if (caretDataFile != NULL) {
@@ -2136,6 +2699,8 @@ Brain::addReadOrReloadConnectivityFiberTrajectoryFile(const FileModeAddReadReloa
     }
     
     if (addFlag) {
+        updateDataFileNameIfDuplicate(m_connectivityFiberTrajectoryFiles,
+                                      cftf);
         m_connectivityFiberTrajectoryFiles.push_back(cftf);
     }
     
@@ -2158,7 +2723,7 @@ Brain::addReadOrReloadConnectivityFiberTrajectoryFile(const FileModeAddReadReloa
 CiftiConnectivityMatrixParcelFile*
 Brain::addReadOrReloadConnectivityMatrixParcelFile(const FileModeAddReadReload fileMode,
                                         CaretDataFile* caretDataFile,
-                                        const AString& filename) throw (DataFileException)
+                                        const AString& filename)
 {
     CiftiConnectivityMatrixParcelFile* file = NULL;
     if (caretDataFile != NULL) {
@@ -2186,7 +2751,19 @@ Brain::addReadOrReloadConnectivityMatrixParcelFile(const FileModeAddReadReload f
     
     if (readFlag) {
         try {
-            file->readFile(filename);
+            try {
+                file->readFile(filename);
+            }
+            catch (const std::bad_alloc&) {
+                /*
+                 * This DataFileException will be caught
+                 * in the outer try/catch and it will
+                 * clean up to avoid memory leaks.
+                 */
+                throw DataFileException(filename,
+                                        CaretDataFileHelper::createBadAllocExceptionMessage(filename));
+            }
+
             validateCiftiMappableDataFile(file);
         }
         catch (const DataFileException& dfe) {
@@ -2201,6 +2778,8 @@ Brain::addReadOrReloadConnectivityMatrixParcelFile(const FileModeAddReadReload f
     }
     
     if (addFlag) {
+        updateDataFileNameIfDuplicate(m_connectivityMatrixParcelFiles,
+                                      file);
         m_connectivityMatrixParcelFiles.push_back(file);
     }
     
@@ -2223,7 +2802,7 @@ Brain::addReadOrReloadConnectivityMatrixParcelFile(const FileModeAddReadReload f
 CiftiConnectivityMatrixParcelDenseFile*
 Brain::addReadOrReloadConnectivityMatrixParcelDenseFile(const FileModeAddReadReload fileMode,
                                              CaretDataFile* caretDataFile,
-                                             const AString& filename) throw (DataFileException)
+                                             const AString& filename)
 {
     CiftiConnectivityMatrixParcelDenseFile* file = NULL;
     if (caretDataFile != NULL) {
@@ -2251,7 +2830,19 @@ Brain::addReadOrReloadConnectivityMatrixParcelDenseFile(const FileModeAddReadRel
     
     if (readFlag) {
         try {
-            file->readFile(filename);
+            try {
+                file->readFile(filename);
+            }
+            catch (const std::bad_alloc&) {
+                /*
+                 * This DataFileException will be caught
+                 * in the outer try/catch and it will
+                 * clean up to avoid memory leaks.
+                 */
+                throw DataFileException(filename,
+                                        CaretDataFileHelper::createBadAllocExceptionMessage(filename));
+            }
+
             validateCiftiMappableDataFile(file);
         }
         catch (const DataFileException& dfe) {
@@ -2266,6 +2857,8 @@ Brain::addReadOrReloadConnectivityMatrixParcelDenseFile(const FileModeAddReadRel
     }
     
     if (addFlag) {
+        updateDataFileNameIfDuplicate(m_connectivityMatrixParcelDenseFiles,
+                                      file);
         m_connectivityMatrixParcelDenseFiles.push_back(file);
     }
     
@@ -2288,7 +2881,7 @@ Brain::addReadOrReloadConnectivityMatrixParcelDenseFile(const FileModeAddReadRel
 CiftiBrainordinateDataSeriesFile*
 Brain::addReadOrReloadConnectivityDataSeriesFile(const FileModeAddReadReload fileMode,
                                       CaretDataFile* caretDataFile,
-                                      const AString& filename) throw (DataFileException)
+                                      const AString& filename)
 {
     CiftiBrainordinateDataSeriesFile* file = NULL;
     if (caretDataFile != NULL) {
@@ -2316,7 +2909,19 @@ Brain::addReadOrReloadConnectivityDataSeriesFile(const FileModeAddReadReload fil
     
     if (readFlag) {
         try {
-            file->readFile(filename);
+            try {
+                file->readFile(filename);
+            }
+            catch (const std::bad_alloc&) {
+                /*
+                 * This DataFileException will be caught
+                 * in the outer try/catch and it will
+                 * clean up to avoid memory leaks.
+                 */
+                throw DataFileException(filename,
+                                        CaretDataFileHelper::createBadAllocExceptionMessage(filename));
+            }
+            
             validateCiftiMappableDataFile(file);
         }
         catch (const DataFileException& dfe) {
@@ -2331,6 +2936,8 @@ Brain::addReadOrReloadConnectivityDataSeriesFile(const FileModeAddReadReload fil
     }
     
     if (addFlag) {
+        updateDataFileNameIfDuplicate(m_connectivityDataSeriesFiles,
+                                      file);
         m_connectivityDataSeriesFiles.push_back(file);
     }
     
@@ -2353,7 +2960,7 @@ Brain::addReadOrReloadConnectivityDataSeriesFile(const FileModeAddReadReload fil
 PaletteFile*
 Brain::addReadOrReloadPaletteFile(const FileModeAddReadReload fileMode,
                        CaretDataFile* /*caretDataFile*/,
-                       const AString& /*filename*/) throw (DataFileException)
+                       const AString& filename)
 {
     bool addFlag  = false;
     bool readFlag = false;
@@ -2378,7 +2985,8 @@ Brain::addReadOrReloadPaletteFile(const FileModeAddReadReload fileMode,
         
     }
     
-    throw DataFileException("Reading not implemented for: palette");
+    throw DataFileException(filename,
+                            "Reading not implemented for: palette");
     
     return NULL;
 }
@@ -2399,7 +3007,7 @@ Brain::addReadOrReloadPaletteFile(const FileModeAddReadReload fileMode,
 SceneFile*
 Brain::addReadOrReloadSceneFile(const FileModeAddReadReload fileMode,
                      CaretDataFile* caretDataFile,
-                     const AString& filename) throw (DataFileException)
+                     const AString& filename)
 {
     SceneFile* sf = NULL;
     if (caretDataFile != NULL) {
@@ -2427,7 +3035,18 @@ Brain::addReadOrReloadSceneFile(const FileModeAddReadReload fileMode,
     
     if (readFlag) {
         try {
-            sf->readFile(filename);
+            try {
+                sf->readFile(filename);
+            }
+            catch (const std::bad_alloc&) {
+                /*
+                 * This DataFileException will be caught
+                 * in the outer try/catch and it will
+                 * clean up to avoid memory leaks.
+                 */
+                throw DataFileException(filename,
+                                        CaretDataFileHelper::createBadAllocExceptionMessage(filename));
+            }
         }
         catch (DataFileException& dfe) {
             if (caretDataFile != NULL) {
@@ -2441,6 +3060,8 @@ Brain::addReadOrReloadSceneFile(const FileModeAddReadReload fileMode,
     }
     
     if (addFlag) {
+        updateDataFileNameIfDuplicate(m_sceneFiles,
+                                      sf);
         m_sceneFiles.push_back(sf);
     }
     
@@ -2564,14 +3185,14 @@ Brain::getAllCiftiMappableDataFiles(std::vector<CiftiMappableDataFile*>& allCift
 
 /**
  * Get all of the Brainordinate Chartable Data Files.  Only files that implement the 
- * ChartableBrainordinateInterface AND return true for ChartableBrainordinateInterface::isChartingSupported()
+ * ChartableLineSeriesBrainordinateInterface AND return true for ChartableLineSeriesBrainordinateInterface::isLineSeriesChartDataTypeSupported()
  * are included in the returned files.
  *
  * @param chartableDataFilesOut
  *    Contains all chartable data files upon exit.
  */
 void
-Brain::getAllChartableBrainordinateDataFiles(std::vector<ChartableBrainordinateInterface*>& chartableDataFilesOut) const
+Brain::getAllChartableBrainordinateDataFiles(std::vector<ChartableLineSeriesBrainordinateInterface*>& chartableDataFilesOut) const
 {
     chartableDataFilesOut.clear();
     
@@ -2581,9 +3202,9 @@ Brain::getAllChartableBrainordinateDataFiles(std::vector<ChartableBrainordinateI
     for (std::vector<CaretDataFile*>::iterator iter = allFiles.begin();
          iter != allFiles.end();
          iter++) {
-        ChartableBrainordinateInterface* chartFile = dynamic_cast<ChartableBrainordinateInterface*>(*iter);
+        ChartableLineSeriesBrainordinateInterface* chartFile = dynamic_cast<ChartableLineSeriesBrainordinateInterface*>(*iter);
         if (chartFile != NULL) {
-            if (chartFile->isBrainordinateChartingSupported()) {
+            if (chartFile->isLineSeriesChartingSupported()) {
                 chartableDataFilesOut.push_back(chartFile);
             }
         }
@@ -2591,8 +3212,36 @@ Brain::getAllChartableBrainordinateDataFiles(std::vector<ChartableBrainordinateI
 }
 
 /**
- * Get all of the Brainordinate Chartable Data Files.  Only files that implement the
- * ChartableBrainordinateInterface AND return true for ChartableBrainordinateInterface::isChartingSupported()
+ * Get all of the Line Series Chartable Data Files.  Only files that implement the
+ * ChartableLineSeriesInterface AND return true for ChartableLineSeriesInterface::isLineSeriesChartDataTypeSupported()
+ * are included in the returned files.
+ *
+ * @param chartableDataFilesOut
+ *    Contains all chartable data files upon exit.
+ */
+void
+Brain::getAllChartableLineSeriesDataFiles(std::vector<ChartableLineSeriesInterface*>& chartableDataFilesOut) const
+{
+    chartableDataFilesOut.clear();
+    
+    std::vector<CaretDataFile*> allFiles;
+    getAllDataFiles(allFiles);
+    
+    for (std::vector<CaretDataFile*>::iterator iter = allFiles.begin();
+         iter != allFiles.end();
+         iter++) {
+        ChartableLineSeriesInterface* chartFile = dynamic_cast<ChartableLineSeriesInterface*>(*iter);
+        if (chartFile != NULL) {
+            if (chartFile->isLineSeriesChartingSupported()) {
+                chartableDataFilesOut.push_back(chartFile);
+            }
+        }
+    }
+}
+
+/**
+ * Get all of the Line Series Chartable Data Files.  Only files that implement the
+ * ChartableLineSeriesInterface AND return true for ChartableLineSeriesInterface::isLineSeriesChartDataTypeSupported()
  * and support a chart of the given data type are included in the returned files.
  *
  * @param chartDataType
@@ -2601,36 +3250,35 @@ Brain::getAllChartableBrainordinateDataFiles(std::vector<ChartableBrainordinateI
  *    Contains all chartable data files upon exit.
  */
 void
-Brain::getAllChartableBrainordinateDataFilesForChartDataType(const ChartDataTypeEnum::Enum chartDataType,
-                                                std::vector<ChartableBrainordinateInterface*>& chartableDataFilesOut) const
+Brain::getAllChartableLineSeriesDataFilesForChartDataType(const ChartDataTypeEnum::Enum chartDataType,
+                                                std::vector<ChartableLineSeriesInterface*>& chartableDataFilesOut) const
 {
     chartableDataFilesOut.clear();
     
-    std::vector<ChartableBrainordinateInterface*> chartFiles;
-    getAllChartableBrainordinateDataFiles(chartFiles);
+    std::vector<ChartableLineSeriesInterface*> chartFiles;
+    getAllChartableLineSeriesDataFiles(chartFiles);
     
-    for (std::vector<ChartableBrainordinateInterface*>::iterator iter = chartFiles.begin();
+    for (std::vector<ChartableLineSeriesInterface*>::iterator iter = chartFiles.begin();
          iter != chartFiles.end();
          iter++) {
-        ChartableBrainordinateInterface* chartFile = *iter;
-        if (chartFile->isBrainordinateChartDataTypeSupported(chartDataType)) {
+        ChartableLineSeriesInterface* chartFile = *iter;
+        if (chartFile->isLineSeriesChartDataTypeSupported(chartDataType)) {
             chartableDataFilesOut.push_back(chartFile);
         }
     }
 }
 
-
 /**
  * Get all of the Brainordinate Chartable Data Files.  Only files that implement the
- * ChartableBrainordinateInterface, return true for ChartableBrainordinateInterface::isChartingSupported(),
- * AND return true for ChartableBrainordinateInterface::isChartingEnabled() for any tab index
+ * ChartableLineSeriesBrainordinateInterface, return true for ChartableLineSeriesBrainordinateInterface::isChartingSupported(),
+ * AND return true for ChartableLineSeriesBrainordinateInterface::isChartingEnabled() for any tab index
  * are included in the returned files.
  *
  * @param chartableDataFilesOut
  *    Contains all chartable data files upon exit.
  */
 void
-Brain::getAllChartableBrainordinateDataFilesWithChartingEnabled(std::vector<ChartableBrainordinateInterface*>& chartableDataFilesOut) const
+Brain::getAllChartableBrainordinateDataFilesWithChartingEnabled(std::vector<ChartableLineSeriesBrainordinateInterface*>& chartableDataFilesOut) const
 {
     chartableDataFilesOut.clear();
     
@@ -2645,12 +3293,12 @@ Brain::getAllChartableBrainordinateDataFilesWithChartingEnabled(std::vector<Char
     for (std::vector<CaretDataFile*>::iterator iter = allFiles.begin();
          iter != allFiles.end();
          iter++) {
-        ChartableBrainordinateInterface* chartFile = dynamic_cast<ChartableBrainordinateInterface*>(*iter);
+        ChartableLineSeriesBrainordinateInterface* chartFile = dynamic_cast<ChartableLineSeriesBrainordinateInterface*>(*iter);
         if (chartFile != NULL) {
-            if (chartFile->isBrainordinateChartingSupported()) {
+            if (chartFile->isLineSeriesChartingSupported()) {
                 for (int32_t iTab = 0; iTab < numTabs; iTab++) {
                     const int32_t tabIndex = tabIndices[iTab];
-                    if (chartFile->isBrainordinateChartingEnabled(tabIndex)) {
+                    if (chartFile->isLineSeriesChartingEnabled(tabIndex)) {
                         chartableDataFilesOut.push_back(chartFile);
                         break;
                     }
@@ -2809,6 +3457,53 @@ Brain::getConnectivityDenseScalarFiles(std::vector<CiftiBrainordinateScalarFile*
     connectivityDenseScalarFilesOut = m_connectivityDenseScalarFiles;
 }
 
+
+/**
+ * @return Number of connectivity parcel label files.
+ */
+int32_t
+Brain::getNumberOfConnectivityParcelLabelFiles() const
+{
+    return m_connectivityParcelLabelFiles.size();
+}
+
+/**
+ * Get the connectivity parcel label file at the given index.
+ * @param indx
+ *    Index of file.
+ * @return Connectivity parcel label file at index.
+ */
+CiftiParcelLabelFile*
+Brain::getConnectivityParcelLabelFile(int32_t indx)
+{
+    CaretAssertVectorIndex(m_connectivityParcelLabelFiles, indx);
+    return m_connectivityParcelLabelFiles[indx];
+}
+
+/**
+ * Get the connectivity parcel label file at the given index.
+ * @param indx
+ *    Index of file.
+ * @return Connectivity parcel label file at index.
+ */
+const CiftiParcelLabelFile*
+Brain::getConnectivityParcelLabelFile(int32_t indx) const
+{
+    CaretAssertVectorIndex(m_connectivityParcelLabelFiles, indx);
+    return m_connectivityParcelLabelFiles[indx];
+}
+
+/**
+ * Get ALL connectivity parcel label files.
+ * @param connectivityParcelLabelFilesOut
+ *   Contains all connectivity parcel label files on exit.
+ */
+void
+Brain::getConnectivityParcelLabelFiles(std::vector<CiftiParcelLabelFile*>& connectivityParcelLabelFilesOut) const
+{
+    connectivityParcelLabelFilesOut = m_connectivityParcelLabelFiles;
+}
+
 /**
  * @return Number of connectivity parcel scalar files.
  */
@@ -2853,6 +3548,52 @@ void
 Brain::getConnectivityParcelScalarFiles(std::vector<CiftiParcelScalarFile*>& connectivityParcelScalarFilesOut) const
 {
     connectivityParcelScalarFilesOut = m_connectivityParcelScalarFiles;
+}
+
+/**
+ * @return Number of connectivity parcel scalar files.
+ */
+int32_t
+Brain::getNumberOfConnectivityScalarDataSeriesFiles() const
+{
+    return m_connectivityScalarDataSeriesFiles.size();
+}
+
+/**
+ * Get the connectivity parcel scalar file at the given index.
+ * @param indx
+ *    Index of file.
+ * @return Connectivity parcel scalar file at index.
+ */
+CiftiScalarDataSeriesFile*
+Brain::getConnectivityScalarDataSeriesFile(int32_t indx)
+{
+    CaretAssertVectorIndex(m_connectivityScalarDataSeriesFiles, indx);
+    return m_connectivityScalarDataSeriesFiles[indx];
+}
+
+/**
+ * Get the connectivity parcel scalar file at the given index.
+ * @param indx
+ *    Index of file.
+ * @return Connectivity parcel scalar file at index.
+ */
+const CiftiScalarDataSeriesFile*
+Brain::getConnectivityScalarDataSeriesFile(int32_t indx) const
+{
+    CaretAssertVectorIndex(m_connectivityScalarDataSeriesFiles, indx);
+    return m_connectivityScalarDataSeriesFiles[indx];
+}
+
+/**
+ * Get ALL connectivity parcel scalar files.
+ * @param connectivityScalarDataSeriesFilesOut
+ *   Contains all connectivity parcel files on exit.
+ */
+void
+Brain::getConnectivityScalarDataSeriesFiles(std::vector<CiftiScalarDataSeriesFile*>& connectivityScalarDataSeriesFilesOut) const
+{
+    connectivityScalarDataSeriesFilesOut = m_connectivityScalarDataSeriesFiles;
 }
 
 /**
@@ -3167,7 +3908,7 @@ Brain::getAllCiftiConnectivityMatrixFiles(std::vector<CiftiMappableConnectivityM
  *    If there is an error.
  */
 void
-Brain::addDataFile(CaretDataFile* caretDataFile) throw (DataFileException)
+Brain::addDataFile(CaretDataFile* caretDataFile)
 {
     CaretAssert(caretDataFile);
     
@@ -3250,6 +3991,13 @@ Brain::addDataFile(CaretDataFile* caretDataFile) throw (DataFileException)
                     m_connectivityMatrixParcelDenseFiles.push_back(file);
                 }
                     break;
+                case DataFileTypeEnum::CONNECTIVITY_PARCEL_LABEL:
+                {
+                    CiftiParcelLabelFile* file = dynamic_cast<CiftiParcelLabelFile*>(caretDataFile);
+                    CaretAssert(file);
+                    m_connectivityParcelLabelFiles.push_back(file);
+                }
+                    break;
                 case DataFileTypeEnum::CONNECTIVITY_PARCEL_SCALAR:
                 {
                     CiftiParcelScalarFile* file = dynamic_cast<CiftiParcelScalarFile*>(caretDataFile);
@@ -3264,6 +4012,13 @@ Brain::addDataFile(CaretDataFile* caretDataFile) throw (DataFileException)
                     m_connectivityParcelSeriesFiles.push_back(file);
                 }
                     break;
+                case DataFileTypeEnum::CONNECTIVITY_SCALAR_DATA_SERIES:
+                {
+                    CiftiScalarDataSeriesFile* file = dynamic_cast<CiftiScalarDataSeriesFile*>(caretDataFile);
+                    CaretAssert(file);
+                    m_connectivityScalarDataSeriesFiles.push_back(file);
+                }
+                    break;
                 case DataFileTypeEnum::FOCI:
                 {
                     FociFile* file = dynamic_cast<FociFile*>(caretDataFile);
@@ -3271,15 +4026,24 @@ Brain::addDataFile(CaretDataFile* caretDataFile) throw (DataFileException)
                     m_fociFiles.push_back(file);
                 }
                     break;
+                case DataFileTypeEnum::IMAGE:
+                {
+                    ImageFile* file = dynamic_cast<ImageFile*>(caretDataFile);
+                    CaretAssert(file);
+                    m_imageFiles.push_back(file);
+                }
+                    break;
                 case DataFileTypeEnum::LABEL:
                 {
                     LabelFile* file = dynamic_cast<LabelFile*>(caretDataFile);
                     CaretAssert(file);
                     if (structure == StructureEnum::INVALID) {
-                        throw DataFileException("Structure in label file is INVALID.");
+                        throw DataFileException(file->getFileName(),
+                                                "Structure in label file is INVALID.");
                     }
                     if (brainStructure == NULL) {
-                        throw DataFileException("Must load surface(s) with matching structure prior to label files");
+                        throw DataFileException(file->getFileName(),
+                                                "Must load surface(s) with matching structure prior to label files");
                     }
                     brainStructure->addLabelFile(file,
                                                  true);
@@ -3290,10 +4054,12 @@ Brain::addDataFile(CaretDataFile* caretDataFile) throw (DataFileException)
                     MetricFile* file = dynamic_cast<MetricFile*>(caretDataFile);
                     CaretAssert(file);
                     if (structure == StructureEnum::INVALID) {
-                        throw DataFileException("Structure in metric file is INVALID.");
+                        throw DataFileException(file->getFileName(),
+                                                "Structure in metric file is INVALID.");
                     }
                     if (brainStructure == NULL) {
-                        throw DataFileException("Must load surface(s) with matching structure prior to metric files");
+                        throw DataFileException(file->getFileName(),
+                                                "Must load surface(s) with matching structure prior to metric files");
                     }
                     brainStructure->addMetricFile(file,
                                                  true);
@@ -3301,7 +4067,8 @@ Brain::addDataFile(CaretDataFile* caretDataFile) throw (DataFileException)
                     break;
                 case DataFileTypeEnum::PALETTE:
                 {
-                    throw DataFileException("Adding palette files not supported at this time.");
+                    throw DataFileException(caretDataFile->getFileName(),
+                                            "Adding palette files not supported at this time.");
                 }
                     break;
                 case DataFileTypeEnum::RGBA:
@@ -3309,10 +4076,12 @@ Brain::addDataFile(CaretDataFile* caretDataFile) throw (DataFileException)
                     RgbaFile* file = dynamic_cast<RgbaFile*>(caretDataFile);
                     CaretAssert(file);
                     if (structure == StructureEnum::INVALID) {
-                        throw DataFileException("Structure in rgba file is INVALID.");
+                        throw DataFileException(file->getFileName(),
+                                                "Structure in rgba file is INVALID.");
                     }
                     if (brainStructure == NULL) {
-                        throw DataFileException("Must load surface(s) with matching structure prior to label files");
+                        throw DataFileException(file->getFileName(),
+                                                "Must load surface(s) with matching structure prior to label files");
                     }
                     brainStructure->addRgbaFile(file,
                                                  true);
@@ -3327,16 +4096,19 @@ Brain::addDataFile(CaretDataFile* caretDataFile) throw (DataFileException)
                     break;
                 case DataFileTypeEnum::SPECIFICATION:
                     CaretLogSevere("PROGRAM ERROR: Reading spec file should never call Brain::addReadOrReloadDataFile()");
-                    throw DataFileException("PROGRAM ERROR: Reading spec file should never call Brain::addReadOrReloadDataFile()");
+                    throw DataFileException(caretDataFile->getFileName(),
+                                            "PROGRAM ERROR: Reading spec file should never call Brain::addReadOrReloadDataFile()");
                     break;
                 case DataFileTypeEnum::SURFACE:
                 {
                     Surface* file = dynamic_cast<Surface*>(caretDataFile);
                     if (structure == StructureEnum::INVALID) {
-                        throw DataFileException("Structure in surface file is INVALID.");
+                        throw DataFileException(file->getFileName(),
+                                                "Structure in surface file is INVALID.");
                     }
                     if (file == NULL) {
-                        throw DataFileException("Cannot add SurfaceFile but can add a Surface.");
+                        throw DataFileException(file->getFileName(),
+                                                "Cannot add SurfaceFile but can add a Surface.");
                     }
                     if (brainStructure == NULL) {
                         brainStructure = getBrainStructure(structure,
@@ -3348,7 +4120,8 @@ Brain::addDataFile(CaretDataFile* caretDataFile) throw (DataFileException)
                 }
                     break;
                 case DataFileTypeEnum::UNKNOWN:
-                    throw DataFileException("Unable to read files of type");
+                    throw DataFileException(caretDataFile->getFileName(),
+                                            "Unable to read files of type UNKNOWN.  Filename extension may be invalid.");
                     break;
                 case DataFileTypeEnum::VOLUME:
                 {
@@ -3426,9 +4199,49 @@ Brain::getFociFile(const int32_t indx) const
 }
 
 /**
+ * @return All image files.
+ */
+const std::vector<ImageFile*>
+Brain::getAllImagesFiles() const
+{
+    return m_imageFiles;
+}
+
+/**
+ * @return Number of image files.
+ */
+int32_t
+Brain::getNumberOfImageFiles() const
+{
+    return m_imageFiles.size();
+}
+
+/**
+ * @return The image file.
+ * @param indx Index of the image file.
+ */
+ImageFile*
+Brain::getImageFile(const int32_t indx)
+{
+    CaretAssertVectorIndex(m_imageFiles, indx);
+    return m_imageFiles[indx];
+}
+
+/**
+ * @return The image file.
+ * @param indx Index of the image file.
+ */
+const ImageFile*
+Brain::getImageFile(const int32_t indx) const
+{
+    CaretAssertVectorIndex(m_imageFiles, indx);
+    return m_imageFiles[indx];
+}
+
+/**
  * @return Number of scene files.
  */
-int32_t 
+int32_t
 Brain::getNumberOfSceneFiles() const
 {
     return m_sceneFiles.size();
@@ -3520,28 +4333,28 @@ Brain::getSurfaceWithName(const AString& surfaceFileName,
 }
 
 /**
- * @return The volume interaction surfaces from all brain structures.
+ * @return The primary anatomical surfaces from all brain structures.
  */
 std::vector<const Surface*>
-Brain::getVolumeInteractionSurfaces() const
+Brain::getPrimaryAnatomicalSurfaces() const
 {
     std::vector<const Surface*> surfaces;
     
     const int32_t numBrainStructures = getNumberOfBrainStructures();
     for (int32_t i = 0; i < numBrainStructures; i++) {
-        surfaces.push_back(m_brainStructures[i]->getVolumeInteractionSurface());
+        surfaces.push_back(m_brainStructures[i]->getPrimaryAnatomicalSurface());
     }
     
     return surfaces;
 }
 
 /**
- * @return The volume interaction surfaces from all brain structures.
+ * @return The primary anatomical surfaces from all brain structures.
  */
 std::vector<const SurfaceFile*>
-Brain::getVolumeInteractionSurfaceFiles() const
+Brain::getPrimaryAnatomicalSurfaceFiles() const
 {
-    std::vector<const Surface*> surfaces = getVolumeInteractionSurfaces();
+    std::vector<const Surface*> surfaces = getPrimaryAnatomicalSurfaces();
     std::vector<const SurfaceFile*> surfaceFiles;
     surfaceFiles.insert(surfaceFiles.end(),
                         surfaces.begin(),
@@ -3551,21 +4364,21 @@ Brain::getVolumeInteractionSurfaceFiles() const
 }
 
 /**
- * Get the volume interaction surface for the given structure.
+ * Get the primary anatomical surface for the given structure.
  *
  * @param structure
- *    Structure for which a volume interaction surface is requested.
+ *    Structure for which a primary anatomical surface is requested.
  * @return
- *    The volume interaction surface corresonding to the given structure.
+ *    The primary anatomical surface corresonding to the given structure.
  *    NULL may be returned if a surface is not available.
  */
 const Surface*
-Brain::getVolumeInteractionSurfaceForStructure(const StructureEnum::Enum structure) const
+Brain::getPrimaryAnatomicalSurfaceForStructure(const StructureEnum::Enum structure) const
 {
     const int32_t numBrainStructures = getNumberOfBrainStructures();
     for (int32_t i = 0; i < numBrainStructures; i++) {
         if (m_brainStructures[i]->getStructure() == structure) {
-            return m_brainStructures[i]->getVolumeInteractionSurface();
+            return m_brainStructures[i]->getPrimaryAnatomicalSurface();
         }
     }
     
@@ -3574,7 +4387,7 @@ Brain::getVolumeInteractionSurfaceForStructure(const StructureEnum::Enum structu
 
 
 /**
- * Get the volume interaction surface nearest the given coordinate and
+ * Get the primary anatomical surface nearest the given coordinate and
  * within the given tolerance.
  *
  * @param xyz
@@ -3585,7 +4398,7 @@ Brain::getVolumeInteractionSurfaceForStructure(const StructureEnum::Enum structu
  *     Nearest surface or NULL if nearest surface not within tolerance.
  */
 Surface*
-Brain::getVolumeInteractionSurfaceNearestCoordinate(const float xyz[3],
+Brain::getPrimaryAnatomicalSurfaceNearestCoordinate(const float xyz[3],
                                                       const float tolerance)
 {
     Surface* nearestSurface = NULL;
@@ -3595,7 +4408,7 @@ Brain::getVolumeInteractionSurfaceNearestCoordinate(const float xyz[3],
     
     const int32_t numBrainStructures = getNumberOfBrainStructures();
     for (int32_t i = 0; i < numBrainStructures; i++) {
-        Surface* surface = m_brainStructures[i]->getVolumeInteractionSurface();
+        Surface* surface = m_brainStructures[i]->getPrimaryAnatomicalSurface();
         const int32_t nodeIndex = surface->closestNode(xyz,
                                                 tolerance);
         if (nodeIndex >= 0) {
@@ -3617,7 +4430,7 @@ Brain::getVolumeInteractionSurfaceNearestCoordinate(const float xyz[3],
 void
 Brain::updateChartModel()
 {
-    std::vector<ChartableBrainordinateInterface*> chartableBrainordinateFiles;
+    std::vector<ChartableLineSeriesBrainordinateInterface*> chartableBrainordinateFiles;
     getAllChartableBrainordinateDataFiles(chartableBrainordinateFiles);
     
     std::vector<ChartableMatrixInterface*> chartableMatrixFiles;
@@ -3874,7 +4687,7 @@ Brain::processReadDataFileEvent(EventDataFileRead* readDataFileEvent)
  *    Type of data file to read.
  * @param structure
  *    Struture of file (used if not invalid)
- * @param dataFileName
+ * @param dataFileNameIn
  *    Name of data file to read.
  * @param markDataFileAsModified
  *    If file has invalid structure and settings structure, mark file modified
@@ -3889,9 +4702,11 @@ Brain::addReadOrReloadDataFile(const FileModeAddReadReload fileMode,
                             CaretDataFile* caretDataFile,
                             const DataFileTypeEnum::Enum dataFileType,
                             const StructureEnum::Enum structure,
-                            const AString& dataFileName,
-                            const bool markDataFileAsModified) throw (DataFileException)
+                            const AString& dataFileNameIn,
+                            const bool markDataFileAsModified)
 {
+    AString dataFileName = dataFileNameIn;
+    
     CaretDataFile* caretDataFileRead = NULL;
 
     switch (fileMode) {
@@ -3962,6 +4777,11 @@ Brain::addReadOrReloadDataFile(const FileModeAddReadReload fileMode,
                                                                           caretDataFile,
                                                                           dataFileName);
                 break;
+            case DataFileTypeEnum::CONNECTIVITY_PARCEL_LABEL:
+                caretDataFileRead  = addReadOrReloadConnectivityParcelLabelFile(fileMode,
+                                                                                 caretDataFile,
+                                                                                 dataFileName);
+                break;
             case DataFileTypeEnum::CONNECTIVITY_PARCEL_SCALAR:
                 caretDataFileRead  = addReadOrReloadConnectivityParcelScalarFile(fileMode,
                                                                      caretDataFile,
@@ -3972,10 +4792,20 @@ Brain::addReadOrReloadDataFile(const FileModeAddReadReload fileMode,
                                                                      caretDataFile,
                                                                          dataFileName);
                 break;
+            case DataFileTypeEnum::CONNECTIVITY_SCALAR_DATA_SERIES:
+                caretDataFileRead  = addReadOrReloadConnectivityScalarDataSeriesFile(fileMode,
+                                                             caretDataFile,
+                                                             dataFileName);
+                break;
             case DataFileTypeEnum::FOCI:
                 caretDataFileRead  = addReadOrReloadFociFile(fileMode,
                                                  caretDataFile,
                                                  dataFileName);
+                break;
+            case DataFileTypeEnum::IMAGE:
+                caretDataFileRead  = addReadOrReloadImageFile(fileMode,
+                                                             caretDataFile,
+                                                             dataFileName);
                 break;
             case DataFileTypeEnum::LABEL:
                 caretDataFileRead  = addReadOrReloadLabelFile(fileMode,
@@ -4010,7 +4840,8 @@ Brain::addReadOrReloadDataFile(const FileModeAddReadReload fileMode,
                 break;
             case DataFileTypeEnum::SPECIFICATION:
                 CaretLogSevere("PROGRAM ERROR: Reading spec file should never call Brain::addReadOrReloadDataFile()");
-                throw DataFileException("PROGRAM ERROR: Reading spec file should never call Brain::addReadOrReloadDataFile()");
+                throw DataFileException(dataFileName,
+                                        "PROGRAM ERROR: Reading spec file should never call Brain::addReadOrReloadDataFile()");
                 break;
             case DataFileTypeEnum::SURFACE:
                 caretDataFileRead  = addReadOrReloadSurfaceFile(fileMode,
@@ -4020,7 +4851,8 @@ Brain::addReadOrReloadDataFile(const FileModeAddReadReload fileMode,
                                                     markDataFileAsModified);
                 break;
             case DataFileTypeEnum::UNKNOWN:
-                throw DataFileException("Unable to read files of type");
+                throw DataFileException(dataFileName,
+                                        "Unable to read files of type UNKNOWN.  May have invalid filename extenson.");
                 break;
             case DataFileTypeEnum::VOLUME:
                 caretDataFileRead  = addReadOrReloadVolumeFile(fileMode,
@@ -4030,6 +4862,12 @@ Brain::addReadOrReloadDataFile(const FileModeAddReadReload fileMode,
         }
         
         if (caretDataFileRead != NULL) {
+            /*
+             * NOTE: Name may have changed if it is a duplicate file name
+             * for the data type.
+             */
+            dataFileName = caretDataFileRead->getFileName();
+            
             m_specFile->addCaretDataFile(caretDataFileRead);
             
         }
@@ -4047,9 +4885,19 @@ Brain::addReadOrReloadDataFile(const FileModeAddReadReload fileMode,
                        + " seconds.");
         CaretLogInfo(msg);
     }
-    catch (const DataFileException& dfe) {
+    catch (DataFileException& dfe) {
+        /*
+         * If "caretDataFile" is not NULL, then we were trying to
+         * RELOAD a file so remove it from the "loaded files"
+         */
         if (caretDataFile != NULL) {
             m_specFile->removeCaretDataFile(caretDataFile);
+        }
+        else {
+            if (caretDataFileRead != NULL) {
+                delete caretDataFileRead;
+                caretDataFileRead = NULL;
+            }
         }
         throw dfe;
     }
@@ -4084,7 +4932,7 @@ CaretDataFile*
 Brain::readDataFile(const DataFileTypeEnum::Enum dataFileType,
                     const StructureEnum::Enum structure,
                     const AString& dataFileNameIn,
-                    const bool markDataFileAsModified) throw (DataFileException)
+                    const bool markDataFileAsModified)
 {
     AString dataFileName = dataFileNameIn;
     
@@ -4099,8 +4947,8 @@ Brain::readDataFile(const DataFileTypeEnum::Enum dataFileType,
     if (DataFile::isFileOnNetwork(dataFileName) == false) {
         FileInformation fileInfoFullPath(dataFileName);
         if (fileInfoFullPath.exists() == false) {
-            throw DataFileException(dataFileName
-                                    + " does not exist!");
+            throw DataFileException(dataFileName,
+                                    "File does not exist!");
         }
     }
     
@@ -4252,14 +5100,14 @@ Brain::loadFilesSelectedInSpecFile(EventSpecFileReadDataFiles* readSpecFileDataF
     m_paletteFile->clearModified();
     
     /*
-     * Reset the volume interaction surfaces since they can get set
+     * Reset the primary anatomical surfaces since they can get set
      * incorrectly when loading files
      */
     for (std::vector<BrainStructure*>::iterator bsi = m_brainStructures.begin();
          bsi != m_brainStructures.end();
          bsi++) {
         BrainStructure* bs = *bsi;
-        bs->setVolumeInteractionSurface(NULL);
+        bs->setPrimaryAnatomicalSurface(NULL);
     }
     
     /*
@@ -4587,14 +5435,14 @@ Brain::updateFileNameForReading(const AString& filename)
  *    the input filename was a relative path.
  */
 AString 
-Brain::updateFileNameForWriting(const AString& filename) throw (DataFileException)
+Brain::updateFileNameForWriting(const AString& filename)
 {
     /*
      * If file is on network, leave it unchanged
      */
     if (DataFile::isFileOnNetwork(filename)) {
-        throw DataFileException("Cannot write file on network: " 
-                                + filename);
+        throw DataFileException(filename,
+                                "Cannot write file on network.");
     }
     
     FileInformation fileInfo(filename);
@@ -4858,6 +5706,8 @@ Brain::getAllMappableDataFiles(std::vector<CaretMappableDataFile*>& allCaretMapp
 /**
  * Get All CaretMappableDataFiles of the given data file type.
  *
+ * @param dataFileType
+ *   Type of data file.
  * @param caretMappableDataFilesOut
  *   Contains CaretMappableDataFiles matching data file type upon exit.
  */
@@ -4881,6 +5731,66 @@ Brain::getAllMappableDataFileWithDataFileType(const DataFileTypeEnum::Enum dataF
 }
 
 /**
+ * Get All CaretMappableDataFiles of the given data file types.
+ *
+ * @param dataFileType
+ *   Type of data file.
+ * @param caretMappableDataFilesOut
+ *   Contains CaretMappableDataFiles matching data file type upon exit.
+ */
+void
+Brain::getAllMappableDataFileWithDataFileTypes(const std::vector<DataFileTypeEnum::Enum>& dataFileTypes,
+                                             std::vector<CaretMappableDataFile*>& caretMappableDataFilesOut) const
+{
+    caretMappableDataFilesOut.clear();
+    
+    std::vector<CaretMappableDataFile*> allFiles;
+    getAllMappableDataFiles(allFiles);
+    
+    for (std::vector<CaretMappableDataFile*>::iterator iter = allFiles.begin();
+         iter != allFiles.end();
+         iter++) {
+        CaretMappableDataFile* cmdf = *iter;
+        if (std::find(dataFileTypes.begin(),
+                      dataFileTypes.end(),
+                      cmdf->getDataFileType()) != dataFileTypes.end()) {
+            caretMappableDataFilesOut.push_back(cmdf);
+        }
+    }
+}
+
+
+/**
+ * Get all CaretDataFiles of the given data file types.
+ *
+ * @param dataFileTypes
+ *     Types of data files.
+ * @param caretDataFilesOut
+ *     Data file of the given data file type that were found.
+ */
+void
+Brain::getAllDataFilesWithDataFileTypes(const std::vector<DataFileTypeEnum::Enum>& dataFileTypes,
+                                      std::vector<CaretDataFile*>& caretDataFilesOut) const
+{
+    caretDataFilesOut.clear();
+    
+    std::vector<CaretDataFile*> allDataFiles;
+    getAllDataFiles(allDataFiles,
+                    true);
+    
+    for (std::vector<CaretDataFile*>::iterator iter = allDataFiles.begin();
+         iter != allDataFiles.end();
+         iter++) {
+        CaretDataFile* cdf = *iter;
+        if (std::find(dataFileTypes.begin(),
+                      dataFileTypes.end(),
+                      cdf->getDataFileType()) != dataFileTypes.end()) {
+            caretDataFilesOut.push_back(cdf);
+        }
+    }
+}
+
+/**
  * Get all CaretDataFiles of the given data file type.
  *
  * @param dataFileType
@@ -4892,21 +5802,26 @@ void
 Brain::getAllDataFilesWithDataFileType(const DataFileTypeEnum::Enum dataFileType,
                                      std::vector<CaretDataFile*>& caretDataFilesOut) const
 {
+    std::vector<DataFileTypeEnum::Enum> dataFileTypes;
+    dataFileTypes.push_back(dataFileType);
     
-    std::vector<CaretDataFile*> allDataFiles;
-    getAllDataFiles(allDataFiles,
-                    true);
-    
-    for (std::vector<CaretDataFile*>::iterator iter = allDataFiles.begin();
-         iter != allDataFiles.end();
-         iter++) {
-        CaretDataFile* cdf = *iter;
-        if (cdf->getDataFileType() == dataFileType) {
-            caretDataFilesOut.push_back(cdf);
-        }
-    }
-    
-    caretDataFilesOut.clear();
+    getAllDataFilesWithDataFileTypes(dataFileTypes,
+                                     caretDataFilesOut);
+
+//    caretDataFilesOut.clear();
+//    
+//    std::vector<CaretDataFile*> allDataFiles;
+//    getAllDataFiles(allDataFiles,
+//                    true);
+//    
+//    for (std::vector<CaretDataFile*>::iterator iter = allDataFiles.begin();
+//         iter != allDataFiles.end();
+//         iter++) {
+//        CaretDataFile* cdf = *iter;
+//        if (cdf->getDataFileType() == dataFileType) {
+//            caretDataFilesOut.push_back(cdf);
+//        }
+//    }
 }
 
 
@@ -4941,6 +5856,10 @@ Brain::getAllDataFiles(std::vector<CaretDataFile*>& allDataFilesOut,
     allDataFilesOut.insert(allDataFilesOut.end(),
                            m_fociFiles.begin(),
                            m_fociFiles.end());
+    
+    allDataFilesOut.insert(allDataFilesOut.end(),
+                           m_imageFiles.begin(),
+                           m_imageFiles.end());
     
     allDataFilesOut.insert(allDataFilesOut.end(),
                            m_connectivityDenseScalarFiles.begin(),
@@ -4979,12 +5898,20 @@ Brain::getAllDataFiles(std::vector<CaretDataFile*>& allDataFilesOut,
                            m_connectivityMatrixParcelDenseFiles.end());
     
     allDataFilesOut.insert(allDataFilesOut.end(),
+                           m_connectivityParcelLabelFiles.begin(),
+                           m_connectivityParcelLabelFiles.end());
+    
+    allDataFilesOut.insert(allDataFilesOut.end(),
                            m_connectivityParcelScalarFiles.begin(),
                            m_connectivityParcelScalarFiles.end());
     
     allDataFilesOut.insert(allDataFilesOut.end(),
                            m_connectivityParcelSeriesFiles.begin(),
                            m_connectivityParcelSeriesFiles.end());
+    
+    allDataFilesOut.insert(allDataFilesOut.end(),
+                           m_connectivityScalarDataSeriesFiles.begin(),
+                           m_connectivityScalarDataSeriesFiles.end());
     
     allDataFilesOut.push_back(m_paletteFile);
     
@@ -5117,7 +6044,7 @@ Brain::getAllModifiedFiles(const std::vector<DataFileTypeEnum::Enum>& excludeThe
  *    DataFileException if there was an error writing the file.
  */
 void 
-Brain::writeDataFile(CaretDataFile* caretDataFile) throw (DataFileException)
+Brain::writeDataFile(CaretDataFile* caretDataFile)
 {
     /*
      * If file is relative path, update path using current directory
@@ -5240,6 +6167,14 @@ Brain::removeWithoutDeleteDataFilePrivate(const CaretDataFile* caretDataFile)
         return true;
     }
     
+    std::vector<CiftiParcelLabelFile*>::iterator connParcelLabelIterator = std::find(m_connectivityParcelLabelFiles.begin(),
+                                                                                     m_connectivityParcelLabelFiles.end(),
+                                                                                     caretDataFile);
+    if (connParcelLabelIterator != m_connectivityParcelLabelFiles.end()) {
+        m_connectivityParcelLabelFiles.erase(connParcelLabelIterator);
+        return true;
+    }
+    
     std::vector<CiftiParcelScalarFile*>::iterator connParcelScalarIterator = std::find(m_connectivityParcelScalarFiles.begin(),
                                                                                        m_connectivityParcelScalarFiles.end(),
                                                                                        caretDataFile);
@@ -5248,6 +6183,13 @@ Brain::removeWithoutDeleteDataFilePrivate(const CaretDataFile* caretDataFile)
         return true;
     }
     
+    std::vector<CiftiScalarDataSeriesFile*>::iterator connScalarDataSeriesIterator = std::find(m_connectivityScalarDataSeriesFiles.begin(),
+                                                                                               m_connectivityScalarDataSeriesFiles.end(),
+                                                                                               caretDataFile);
+    if (connScalarDataSeriesIterator != m_connectivityScalarDataSeriesFiles.end()) {
+        m_connectivityScalarDataSeriesFiles.erase(connScalarDataSeriesIterator);
+        return true;
+    }
     
     std::vector<CiftiFiberOrientationFile*>::iterator connFiberOrientationIterator = std::find(m_connectivityFiberOrientationFiles.begin(),
                                                                                                m_connectivityFiberOrientationFiles.end(),
@@ -5286,6 +6228,14 @@ Brain::removeWithoutDeleteDataFilePrivate(const CaretDataFile* caretDataFile)
                                                               caretDataFile);
     if (fociIterator != m_fociFiles.end()) {
         m_fociFiles.erase(fociIterator);
+        return true;
+    }
+    
+    std::vector<ImageFile*>::iterator imageIterator = std::find(m_imageFiles.begin(),
+                                                                m_imageFiles.end(),
+                                                                caretDataFile);
+    if (imageIterator != m_imageFiles.end()) {
+        m_imageFiles.erase(imageIterator);
         return true;
     }
     
@@ -5390,6 +6340,24 @@ const DisplayPropertiesFoci*
 Brain::getDisplayPropertiesFoci() const
 {
     return m_displayPropertiesFoci;
+}
+
+/**
+ * @return The label display properties.
+ */
+DisplayPropertiesImages*
+Brain::getDisplayPropertiesImages()
+{
+    return m_displayPropertiesImages;
+}
+
+/**
+ * @return The label display properties.
+ */
+const DisplayPropertiesImages*
+Brain::getDisplayPropertiesImages() const
+{
+    return m_displayPropertiesImages;
 }
 
 /**
@@ -5575,6 +6543,9 @@ Brain::saveToScene(const SceneAttributes* sceneAttributes,
     sceneClass->addClass(m_identificationManager->saveToScene(sceneAttributes,
                                                               "m_identificationManager"));
     
+    sceneClass->addClass(m_brainordinateHighlightRegionOfInterest->saveToScene(sceneAttributes,
+                                                                               "m_brainordinateHighlightRegionOfInterest"));
+    
     return sceneClass;
 }
 
@@ -5758,6 +6729,9 @@ Brain::restoreFromScene(const SceneAttributes* sceneAttributes,
 
     m_identificationManager->restoreFromScene(sceneAttributes,
                                               sceneClass->getClass("m_identificationManager"));
+    
+    m_brainordinateHighlightRegionOfInterest->restoreFromScene(sceneAttributes,
+                                                               sceneClass->getClass("m_brainordinateHighlightRegionOfInterest"));
 }
 
 /**
@@ -5776,6 +6750,19 @@ IdentificationManager*
 Brain::getIdentificationManager()
 {
     return m_identificationManager;
+}
+
+/** Region of interest for highlighting brainordinates */
+BrainordinateRegionOfInterest*
+Brain::getBrainordinateHighlightRegionOfInterest()
+{
+    return m_brainordinateHighlightRegionOfInterest;
+}
+
+const BrainordinateRegionOfInterest*
+Brain::getBrainordinateHighlightRegionOfInterest() const
+{
+    return m_brainordinateHighlightRegionOfInterest;
 }
 
 /**

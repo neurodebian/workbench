@@ -130,6 +130,7 @@ OperationParameters* AlgorithmCiftiResample::getParameters()
         "If spheres are not specified for a surface structure which exists in the cifti files, its data is copied without resampling or dilation.  " +
         "Dilation is done with the 'nearest' method, and is done on <new-sphere> for surface data.  " +
         "Volume components are padded before dilation so that dilation doesn't run into the edge of the component bounding box.\n\n" +
+        "The recommended resampling methods are ADAP_BARY_AREA and CUBIC (cubic spline), except for label data which should use ADAP_BARY_AREA and ENCLOSING_VOXEL.\n\n" +
         "The <volume-method> argument must be one of the following:\n\n" +
         "CUBIC\nENCLOSING_VOXEL\nTRILINEAR\n\n" +
         "The <surface-method> argument must be one of the following:\n\n";
@@ -355,9 +356,11 @@ pair<bool, AString> AlgorithmCiftiResample::checkForErrors(const CiftiFile* myCi
 {
     if (direction > 1) return make_pair(true, AString("unsupported mapping direction for cifti resample"));
     const CiftiXML& myInputXML = myCiftiIn->getCiftiXML();
+    if (myInputXML.getNumberOfDimensions() != 2) return make_pair(true, AString("cifti resample only supports 2D cifti"));
     if (myInputXML.getMappingType(direction) != CiftiMappingType::BRAIN_MODELS) return make_pair(true, AString("direction for input must contain brain models"));
     const CiftiBrainModelsMap& inModels = myInputXML.getBrainModelsMap(direction);
     const CiftiXML& myTemplateXML = myTemplate->getCiftiXML();
+    if (templateDir < 0 || templateDir >= myTemplateXML.getNumberOfDimensions()) return make_pair(true, AString("specified template direction does not exist in template file"));
     if (myTemplateXML.getMappingType(templateDir) != CiftiMappingType::BRAIN_MODELS) return make_pair(true, AString("direction for template must contain brain models"));
     const CiftiBrainModelsMap& outModels = myTemplate->getCiftiXML().getBrainModelsMap(templateDir);
     vector<StructureEnum::Enum> surfList = outModels.getSurfaceStructureList(), volList = outModels.getVolumeStructureList();
@@ -423,7 +426,7 @@ pair<bool, AString> AlgorithmCiftiResample::checkForErrors(const CiftiFile* myCi
     return make_pair(false, AString());
 }
 
-namespace _algorithm_cifti_resample
+namespace
 {//so that we don't need these in the header file
     struct ResampleCache
     {//a place to stuff anything that can be precomputed or reused for applying to the same structure in multiple maps
@@ -449,9 +452,9 @@ namespace _algorithm_cifti_resample
                             const SurfaceFile* curRightSphere, const SurfaceFile* newRightSphere, const MetricFile* curRightAreas, const MetricFile* newRightAreas,
                             const SurfaceFile* curCerebSphere, const SurfaceFile* newCerebSphere, const MetricFile* curCerebAreas, const MetricFile* newCerebAreas)
     {
-        const CiftiXML& myInputXML = myCiftiIn->getCiftiXML(), myOutXML = myCiftiOut->getCiftiXML();
+        const CiftiXML& myInputXML = myCiftiIn->getCiftiXML(), &myOutXML = myCiftiOut->getCiftiXML();
         bool labelMode = (myInputXML.getMappingType(CiftiXML::ALONG_COLUMN) == CiftiMappingType::LABELS);
-        const CiftiBrainModelsMap& inModels = myInputXML.getBrainModelsMap(CiftiXML::ALONG_ROW), outModels = myOutXML.getBrainModelsMap(CiftiXML::ALONG_ROW);
+        const CiftiBrainModelsMap& inModels = myInputXML.getBrainModelsMap(CiftiXML::ALONG_ROW), &outModels = myOutXML.getBrainModelsMap(CiftiXML::ALONG_ROW);
         vector<StructureEnum::Enum> surfList = outModels.getSurfaceStructureList(), volList = outModels.getVolumeStructureList();
         int numSurfStructs = (int)surfList.size(), numVolStructs = (int)volList.size();
         for (int i = 0; i < numSurfStructs; ++i)//initialize reusables
@@ -629,8 +632,6 @@ namespace _algorithm_cifti_resample
         }
     }
 }
-
-using namespace _algorithm_cifti_resample;
 
 AlgorithmCiftiResample::AlgorithmCiftiResample(ProgressObject* myProgObj, const CiftiFile* myCiftiIn, const int& direction, const CiftiFile* myTemplate, const int& templateDir,
                                                const SurfaceResamplingMethodEnum::Enum& mySurfMethod, const VolumeFile::InterpType& myVolMethod, CiftiFile* myCiftiOut,

@@ -23,7 +23,7 @@
 
 
 #include "BrainConstants.h"
-#include "ChartableBrainordinateInterface.h"
+#include "ChartableLineSeriesBrainordinateInterface.h"
 #include "CiftiMappableDataFile.h"
 
 namespace caret {
@@ -32,7 +32,7 @@ namespace caret {
     
     class CiftiBrainordinateScalarFile :
     public CiftiMappableDataFile,
-    public ChartableBrainordinateInterface {
+    public ChartableLineSeriesBrainordinateInterface {
     
     public:
         CiftiBrainordinateScalarFile();
@@ -42,23 +42,23 @@ namespace caret {
         static CiftiBrainordinateScalarFile* newInstanceFromRowInCiftiConnectivityMatrixFile(const CiftiMappableConnectivityMatrixDataFile* ciftiMatrixFile,
                                                                                              AString& errorMessageOut);
 
-        virtual bool isBrainordinateChartingEnabled(const int32_t tabIndex) const;
+        virtual bool isLineSeriesChartingEnabled(const int32_t tabIndex) const;
         
-        virtual void setBrainordinateChartingEnabled(const int32_t tabIndex,
+        virtual void setLineSeriesChartingEnabled(const int32_t tabIndex,
                                         const bool enabled);
         
-        virtual bool isBrainordinateChartingSupported() const;
+        virtual bool isLineSeriesChartingSupported() const;
 
-        virtual ChartDataCartesian* loadBrainordinateChartDataForSurfaceNode(const StructureEnum::Enum structure,
-                                                                                   const int32_t nodeIndex) throw (DataFileException);
+        virtual ChartDataCartesian* loadLineSeriesChartDataForSurfaceNode(const StructureEnum::Enum structure,
+                                                                                   const int32_t nodeIndex);
         
-        virtual ChartDataCartesian* loadAverageBrainordinateChartDataForSurfaceNodes(const StructureEnum::Enum structure,
-                                                               const std::vector<int32_t>& nodeIndices) throw (DataFileException);
+        virtual ChartDataCartesian* loadAverageLineSeriesChartDataForSurfaceNodes(const StructureEnum::Enum structure,
+                                                               const std::vector<int32_t>& nodeIndices);
         
-        virtual ChartDataCartesian* loadBrainordinateChartDataForVoxelAtCoordinate(const float xyz[3]) throw (DataFileException);
+        virtual ChartDataCartesian* loadLineSeriesChartDataForVoxelAtCoordinate(const float xyz[3]);
         
 
-        virtual void getSupportedBrainordinateChartDataTypes(std::vector<ChartDataTypeEnum::Enum>& chartDataTypesOut) const;
+        virtual void getSupportedLineSeriesChartDataTypes(std::vector<ChartDataTypeEnum::Enum>& chartDataTypesOut) const;
         
     private:
         CiftiBrainordinateScalarFile(const CiftiBrainordinateScalarFile&);

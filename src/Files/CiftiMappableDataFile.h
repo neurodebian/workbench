@@ -36,6 +36,7 @@ namespace caret {
     class ChartData;
     class ChartDataCartesian;
     class CiftiFile;
+    class CiftiParcelsMap;
     class CiftiXML;
     class FastStatistics;
     class GroupAndNameHierarchyModel;
@@ -56,6 +57,10 @@ namespace caret {
              * Invalid data access method.
              */
             DATA_ACCESS_METHOD_INVALID,
+            /**
+             * No access to data
+             */
+            DATA_ACCESS_NONE,
             /**
              * The data is accessed from CiftiFile using ROW Methods
              * and from the XML using ALONG_COLUMN
@@ -124,24 +129,15 @@ namespace caret {
             FILE_MAP_DATA_TYPE_MULTI_MAP
         };
         
-        /**
-         * Method for computation of histogram and statistics.
-         */
-        enum HistogramAndStatisticsMethod {
-            /**
-             * Invalid histogram and statistics computation method.
-             */
-            HISTOGRAM_AND_STATISTICS_INVALID,
-            /**
-             * Histogram and statistics are computed using all data in the file.
-             */
-            HISTOGRAM_AND_STATISTICS_USE_ALL_FILE_DATA,
-            /**
-             * Histogram and statistics are computed uniquely for each map.
-             */
-            HISTOGRAM_AND_STATISTICS_USE_MAP_DATA
-        };
         
+        /** How to read the file */
+        enum FileDataReadingType {
+            /** Read all data in the file */
+            FILE_READ_DATA_ALL,
+            /** Open the file but only read data as needed */
+            FILE_READ_DATA_AS_NEEDED
+        };
+
         CiftiMappableDataFile(const DataFileTypeEnum::Enum dataFileType);
         
     public:
@@ -157,6 +153,9 @@ namespace caret {
         static void addCiftiXmlToDataFileContentInformation(DataFileContentInformation& dataFileInformation,
                                                             const CiftiXML& ciftiXML);
         
+        static void getDataFileContentInformationForGenericCiftiFile(const AString& filename,
+                                                                     DataFileContentInformation& dataFileInformation);
+        
         virtual void clear();
         
         virtual bool isEmpty() const;
@@ -171,11 +170,11 @@ namespace caret {
         
         virtual const GiftiMetaData* getFileMetaData() const;
         
-//        virtual void setPreferOnDiskReading(const bool& prefer);
+        virtual void setPreferOnDiskReading(const bool& prefer);
         
-        virtual void readFile(const AString& ciftiMapFileName) throw (DataFileException);
+        virtual void readFile(const AString& ciftiMapFileName);
         
-        virtual void writeFile(const AString& filename) throw (DataFileException);
+        virtual void writeFile(const AString& filename);
         
         virtual bool isSurfaceMappable() const;
         
@@ -209,15 +208,37 @@ namespace caret {
                                                  const float mostNegativeValueInclusive,
                                                  const bool includeZeroValues);
         
+        virtual void getPaletteNormalizationModesSupported(std::vector<PaletteNormalizationModeEnum::Enum>& modesSupportedOut);
+        
+        virtual int64_t getDataSizeUncompressedInBytes() const;
+        
+        virtual const FastStatistics* getFileFastStatistics();
+        
+        virtual const Histogram* getFileHistogram();
+        
+        virtual const Histogram* getFileHistogram(const float mostPositiveValueInclusive,
+                                                  const float leastPositiveValueInclusive,
+                                                  const float leastNegativeValueInclusive,
+                                                  const float mostNegativeValueInclusive,
+                                                  const bool includeZeroValues);
+        
         virtual PaletteColorMapping* getMapPaletteColorMapping(const int32_t mapIndex);
         
         virtual const PaletteColorMapping* getMapPaletteColorMapping(const int32_t mapIndex) const;
+        
+        const CiftiParcelsMap* getCiftiParcelsMapForBrainordinateMapping() const;
+        
+        const CiftiParcelsMap* getCiftiParcelsMapForLoading() const;
+        
+        const CiftiParcelsMap* getCiftiParcelsMapForDirection(const int direction) const;
         
         virtual bool isMappedWithLabelTable() const;
         
         virtual GiftiLabelTable* getMapLabelTable(const int32_t mapIndex);
         
         virtual const GiftiLabelTable* getMapLabelTable(const int32_t mapIndex) const;
+        
+        virtual void updateScalarColoringForAllMaps(const PaletteFile* paletteFile);
         
         virtual void updateScalarColoringForMap(const int32_t mapIndex,
                                                 const PaletteFile* paletteFile);
@@ -266,13 +287,24 @@ namespace caret {
         
         virtual void getVoxelSpaceBoundingBox(BoundingBox& boundingBoxOut) const;
         
-        virtual void getVoxelColorsForSliceInMap(const PaletteFile* paletteFile,
+        virtual int64_t getVoxelColorsForSliceInMap(const PaletteFile* paletteFile,
                                                  const int32_t mapIndex,
                                                  const VolumeSliceViewPlaneEnum::Enum slicePlane,
                                                  const int64_t sliceIndex,
                                                  const DisplayGroupEnum::Enum displayGroup,
                                                  const int32_t tabIndex,
                                                  uint8_t* rgbaOut) const;
+        
+        virtual int64_t getVoxelColorsForSubSliceInMap(const PaletteFile* paletteFile,
+                                                    const int32_t mapIndex,
+                                                    const VolumeSliceViewPlaneEnum::Enum slicePlane,
+                                                    const int64_t sliceIndex,
+                                                    const int64_t firstCornerVoxelIndex[3],
+                                                    const int64_t lastCornerVoxelIndex[3],
+                                                    const int64_t voxelCountIJK[3],
+                                                    const DisplayGroupEnum::Enum displayGroup,
+                                                    const int32_t tabIndex,
+                                                    uint8_t* rgbaOut) const;
         
         virtual void getVoxelColorInMap(const PaletteFile* paletteFile,
                                         const int64_t indexIn1,
@@ -299,6 +331,13 @@ namespace caret {
                                             float& numericalValueOut,
                                             bool& numericalValueOutValid,
                                             AString& textValueOut) const;
+        
+        virtual bool getMapVolumeVoxelValues(const std::vector<int32_t> mapIndices,
+                                             const float xyz[3],
+                                             int64_t ijkOut[3],
+                                             std::vector<float>& numericalValuesOut,
+                                             std::vector<bool>& numericalValuesOutValid,
+                                             AString& textValueOut) const;
         
         int64_t getMapDataOffsetForVoxelAtCoordinate(const float coordinate[3],
                                                      const int32_t mapIndex) const;
@@ -334,6 +373,14 @@ namespace caret {
                                             bool& numericalValueOutValid,
                                             AString& textValueOut) const;
         
+        virtual bool getMapSurfaceNodeValues(const std::vector<int32_t>& mapIndices,
+                                             const StructureEnum::Enum structure,
+                                             const int nodeIndex,
+                                             const int32_t numberOfNodes,
+                                             std::vector<float>& numericalValuesOut,
+                                             std::vector<bool>& numericalValuesOutValid,
+                                             AString& textValueOut) const;
+        
         virtual bool getSurfaceNodeIdentificationForMaps(const std::vector<int32_t>& mapIndices,
                                                             const StructureEnum::Enum structure,
                                                             const int nodeIndex,
@@ -349,7 +396,8 @@ namespace caret {
         bool getSeriesDataForVoxelAtCoordinate(const float xyz[3],
                                                std::vector<float>& seriesDataOut) const;
         
-        virtual bool getMapSurfaceNodeColoring(const int32_t mapIndex,
+        virtual bool getMapSurfaceNodeColoring(const PaletteFile* paletteFile,
+                                               const int32_t mapIndex,
                                                const StructureEnum::Enum structure,
                                                float* surfaceRGBAOut,
                                                float* dataValuesOut,
@@ -367,9 +415,14 @@ namespace caret {
         virtual bool getDataRangeFromAllMaps(float& dataRangeMinimumOut,
                                              float& dataRangeMaximumOut) const;
         
+        bool getMapDataForSurface(const int32_t mapIndex,
+                                  const StructureEnum::Enum structure,
+                                  std::vector<float>& surfaceMapData,
+                                  std::vector<float>* roiData = NULL) const;
+        
         void setMapDataForSurface(const int32_t mapIndex,
                                   const StructureEnum::Enum structure,
-                                  const std::vector<float> surfaceMapData) throw (DataFileException);
+                                  const std::vector<float> surfaceMapData);
         
         bool getParcelNodesElementForSelectedParcel(std::set<int64_t> &parcelNodesOut,
                                                     const StructureEnum::Enum &structure,
@@ -384,7 +437,7 @@ namespace caret {
                                           bool& surfaceNodeValidOut,
                                           int64_t voxelIJKOut[3],
                                           float voxelXYZOut[3],
-                                          bool& voxelValidOut) const throw (DataFileException);
+                                          bool& voxelValidOut) const;
         
     private:
         
@@ -404,22 +457,49 @@ namespace caret {
     
         virtual void getFileData(std::vector<float>& data) const;
         
+        const CiftiFile* getCiftiFile() const { return m_ciftiFile; }
+        
     protected:
+        virtual bool getParcelLabelMapSurfaceNodeValue(const int32_t mapIndex,
+                                            const StructureEnum::Enum structure,
+                                            const int nodeIndex,
+                                            const int32_t numberOfNodes,
+                                            float& numericalValueOut,
+                                            bool& numericalValueOutValid,
+                                            AString& textValueOut) const;
+        
         void updateForChangeInMapDataWithMapIndex(const int32_t mapIndex);
         
         ChartDataCartesian* helpLoadChartDataForSurfaceNode(const StructureEnum::Enum structure,
-                                                       const int32_t nodeIndex) throw (DataFileException);
+                                                       const int32_t nodeIndex);
         
         ChartDataCartesian* helpLoadChartDataForSurfaceNodeAverage(const StructureEnum::Enum structure,
-                                                          const std::vector<int32_t>& nodeIndices) throw (DataFileException);
+                                                          const std::vector<int32_t>& nodeIndices);
         
-        ChartDataCartesian* helpLoadChartDataForVoxelAtCoordinate(const float xyz[3]) throw (DataFileException);
+        ChartDataCartesian* helpLoadChartDataForVoxelAtCoordinate(const float xyz[3]);
         
-        bool helpLoadChartDataMatrixForMap(const int32_t mapIndex,
-                                                       int32_t& numberOfRowsOut,
-                                                       int32_t& numberOfColumnsOut,
-                                                       std::vector<float>& rgbaOut) const;
-
+        void helpMapFileGetMatrixDimensions(int32_t& numberOfRowsOut,
+                                            int32_t& numberOfColumnsOut) const;
+        
+        bool helpMapFileLoadChartDataMatrixRGBA(int32_t& numberOfRowsOut,
+                                                int32_t& numberOfColumnsOut,
+                                                const std::vector<int32_t>& rowIndicesIn,
+                                                std::vector<float>& rgbaOut) const;
+        
+        bool helpMatrixFileLoadChartDataMatrixRGBA(int32_t& numberOfRowsOut,
+                                                   int32_t& numberOfColumnsOut,
+                                                   const std::vector<int32_t>& rowIndicesIn,
+                                                   std::vector<float>& rgbaOut) const;
+        
+//        bool helpLoadChartDataMatrixRGBA(int32_t& numberOfRowsOut,
+//                                         int32_t& numberOfColumnsOut,
+//                                         std::vector<float>& rgbaOut) const;
+//
+//        bool helpLoadChartDataMatrixRGBAWithRowIndicese(int32_t& numberOfRowsOut,
+//                                                        int32_t& numberOfColumnsOut,
+//                                                        const std::vector<int32_t>& rowIndices,
+//                                                        std::vector<float>& rgbaOut) const;
+        
     private:
         class MapContent : public CaretObjectTracksModification {
             
@@ -440,7 +520,8 @@ namespace caret {
             void updateForChangeInMapData();
             
             void updateColoring(const std::vector<float>& data,
-                                const PaletteFile* paletteFile);
+                                const PaletteFile* paletteFile,
+                                const FastStatistics* fastStatistics);
             
             bool isFastStatisticsValid() const;
             
@@ -535,15 +616,15 @@ namespace caret {
         void clearPrivate();
         
     protected:
-        void initializeAfterReading(const AString& filename) throw (DataFileException);
+        void initializeAfterReading(const AString& filename);
         
-        void validateMappingTypes(const AString& filename) throw (DataFileException);
+        void validateMappingTypes(const AString& filename);
         
-        //static AString ciftiIndexTypeToName(const IndicesMapToDataType ciftiIndexType);
+        void resetDataLoadingMembers();
         
         void validateKeysAndLabels() const;
         
-        virtual void validateAfterFileReading() throw (DataFileException);
+        virtual void validateAfterFileReading();
         
         virtual void saveFileDataToScene(const SceneAttributes* sceneAttributes,
                                          SceneClass* sceneClass);
@@ -555,12 +636,19 @@ namespace caret {
                                                              const int64_t surfaceNumberOfNodes,
                                                              std::vector<int64_t>& dataIndicesForNodes) const;
         
+        void setupCiftiReadingMappingDirection();
+        
         static AString mappingTypeToName(const CiftiMappingType::MappingType mappingType);
 
         /**
          * Point to the CIFTI file object.
          */
         CaretPointer<CiftiFile> m_ciftiFile;
+        
+        /**
+         * How to read data from the file
+         */
+        FileDataReadingType m_fileDataReadingType;
         
         /**
          * Method used when reading data from the file.
@@ -588,10 +676,10 @@ namespace caret {
          */
         PaletteColorMappingSourceType m_paletteColorMappingSource;
         
-        /**
-         * Method for computing histogram and statistic for palette mapped data.
+        /*
+         * Supported palette normalization modes
          */
-        HistogramAndStatisticsMethod m_histogramAndStatisticsMethod;
+        std::vector<PaletteNormalizationModeEnum::Enum> m_paletteNormalizationModesSupported;
         
         /**
          * Type of data in the file's map(s).
@@ -637,6 +725,9 @@ namespace caret {
         /** force an update of the class and name hierarchy */
         mutable bool m_forceUpdateOfGroupAndNameHierarchy;
 
+        
+        static const int32_t S_CIFTI_XML_ALONG_INVALID;
+        
 //        std::vector<int64_t> m_ciftiDimensions;
         
         // ADD_NEW_MEMBERS_HERE
@@ -644,7 +735,7 @@ namespace caret {
     };
     
 #ifdef __CIFTI_MAPPABLE_DATA_FILE_DECLARE__
-    // <PLACE DECLARATIONS OF STATIC MEMBERS HERE>
+    const int32_t CiftiMappableDataFile::S_CIFTI_XML_ALONG_INVALID = -1;
 #endif // __CIFTI_MAPPABLE_DATA_FILE_DECLARE__
     
 } // namespace

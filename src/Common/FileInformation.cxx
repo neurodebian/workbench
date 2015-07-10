@@ -27,6 +27,7 @@
 
 #include "CaretLogger.h"
 #include "DataFile.h"
+#include "DataFileTypeEnum.h"
 
 using namespace caret;
 
@@ -468,24 +469,44 @@ FileInformation::getCanonicalPath() const
 /**
  * @return The file name's extension.
  *
- * For a remote file, the extension is anything after the last
- * "." in the file's name.  If there is no "." an empty string
- * is returned.
+ * Many Workbench files have filename extensions that include a 
+ * dot (nii.gz, pconn.nii, etc) AND users sometimes include dots
+ * in the names of the files (Glasser_PilotIII.L.20k_fs_LR.shape.gii)
+ * so FileInfo::suffix and FileInfo::completeSuffix methods will
+ * not provide the correct file extension.
+ *
+ * This method will compare the end of the file's name to every Workbench
+ * file extension.  If there is a match, this extension is returned.
+ * Otherwise FileInfo::suffix is called and that will return anything
+ * after but not including the last dot.
  */
 AString
 FileInformation::getFileExtension() const
 {
-    if (m_isRemoteFile) {
-        AString ext = getFileName();
-        const int indx = ext.lastIndexOf('.');
-        if ((indx >= 0) && (indx < ext.length())) {
-            ext = ext.mid(indx + 1);
-            return ext;
-        }
-        else {
-            return "";
+    const std::vector<AString> workbenchExtensions = DataFileTypeEnum::getFilesExtensionsForEveryFile();
+
+    for (std::vector<AString>::const_iterator extIter = workbenchExtensions.begin();
+         extIter != workbenchExtensions.end();
+         extIter++) {
+        const AString extension = *extIter;
+        if ( ! extension.isEmpty()) {
+            if (getFileName().endsWith(extension)) {
+                return extension;
+            }
         }
     }
+    
+//    if (m_isRemoteFile) {
+//        AString ext = getFileName();
+//        const int indx = ext.lastIndexOf('.');
+//        if ((indx >= 0) && (indx < ext.length())) {
+//            ext = ext.mid(indx + 1);
+//            return ext;
+//        }
+//        else {
+//            return "";
+//        }
+//    }
     
     return m_fileInfo.suffix();
 }
@@ -499,7 +520,7 @@ FileInformation::getFileExtension() const
  * Example: /Volumes/myelin1/caret7_gui_design/data/HCP_demo/areas.border
  * Returns
  *   absolutePathOut => /Volumes/myelin1/caret7_gui_design/data/HCP_demo
- *   fileNameWithoutExtensionOut => areas.
+ *   fileNameWithoutExtensionOut => areas
  *   extensionWithoutDotOut => border
  *
  * @param absolutePathOut
@@ -529,6 +550,34 @@ FileInformation::getFileComponents(AString& absolutePathOut,
 }
 
 /**
+ * Assemble the file components into a file path and name.
+ *
+ * @param pathName
+ *     Path for file (may be absolute, relative, or empty).
+ * @param fileNameWithoutExtension
+ *     Name of file without extension.
+ * @param extensionWithoutDot
+ *     The file extension without the leading dot.
+ */
+AString
+FileInformation::assembleFileComponents(AString& pathName,
+                                        AString& fileNameWithoutExtension,
+                                        AString& extensionWithoutDot)
+{
+    AString name;
+    if ( ! pathName.isEmpty()) {
+        name += (pathName + "/");
+    }
+    name += fileNameWithoutExtension;
+    if ( ! extensionWithoutDot.isEmpty()) {
+        name += ("." + extensionWithoutDot);
+    }
+
+    return name;
+}
+
+
+/**
  * @return The file's absolute path.
  * Note: A remote file returns the original, full URL.
  */
@@ -540,6 +589,12 @@ FileInformation::getAbsolutePath() const
     }
     
     return m_fileInfo.absolutePath();
+}
+
+AString FileInformation::getLastDirectory() const
+{
+    QStringList myList = getPathName().split('/', QString::SkipEmptyParts);//QT always uses /, even on windows
+    return myList[myList.size() - 1];
 }
 
 /**
@@ -586,6 +641,30 @@ FileInformation::getRemoteUrlUsernameAndPassword(AString& urlOut,
     }
     
     urlOut = getAbsoluteFilePath();
+}
+
+/**
+ * Convert the number of bytes to a string that includes standard units
+ * (ie: Bytes, Kilobytes, Megabytes, Gigabytes, etc.)
+ *
+ * @param numberOfBytes
+ *    The number of bytes.
+ * @return
+ *    String with the size in standard units.
+ */
+AString
+FileInformation::fileSizeToStandardUnits(const int64_t numberOfBytes)
+{
+    double bytes = numberOfBytes;
+    short index = 0;
+    static const char *labels[9] = {" Bytes", " Kilobytes", " Megabytes", " Gigabytes", " Terabytes", " Petabytes", " Exabytes", " Zettabytes", " Yottabytes"};
+    while (index < 8 && bytes > 1000.0f)
+    {
+        ++index;
+        bytes = bytes / 1000.0f;//using 1024 would make it Kibibytes, etc
+    }
+    AString sizeString = AString::number(bytes, 'f', 2) + labels[index];//2 digits after decimal point
+    return sizeString;
 }
 
 

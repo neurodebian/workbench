@@ -43,12 +43,12 @@ using namespace caret;
 ChartMatrixDisplayProperties::ChartMatrixDisplayProperties()
 : CaretObject()
 {
-    m_matrixLoadingType = ChartMatrixLoadingTypeEnum::CHART_MATRIX_LOAD_BY_ROW;
-    m_yokingGroup = YokingGroupEnum::YOKING_GROUP_OFF;
     m_scaleMode  = ChartMatrixScaleModeEnum::CHART_MATRIX_SCALE_AUTO;
     m_cellWidth  = 10.0;
     m_cellHeight = 10.0;
     m_colorBarDisplayed = false;
+    m_highlightSelectedRowColumn = true;
+    m_displayGridLines = true;
     resetPropertiesToDefault();
     
     m_sceneAssistant = new SceneClassAssistant();
@@ -57,11 +57,8 @@ ChartMatrixDisplayProperties::ChartMatrixDisplayProperties()
     m_sceneAssistant->add("m_viewZooming", &m_viewZooming);
     m_sceneAssistant->addArray("m_viewPanning", m_viewPanning, 2, 0.0);
     m_sceneAssistant->add("m_colorBarDisplayed", &m_colorBarDisplayed);
-    
-    m_sceneAssistant->add<ChartMatrixLoadingTypeEnum, ChartMatrixLoadingTypeEnum::Enum>("m_matrixLoadingType",
-                                                                                        &m_matrixLoadingType);
-    m_sceneAssistant->add<YokingGroupEnum, YokingGroupEnum::Enum>("m_yokingGroup",
-                                                                  &m_yokingGroup);
+    m_sceneAssistant->add("m_highlightSelectedRowColumn", &m_highlightSelectedRowColumn);
+    m_sceneAssistant->add("m_displayGridLines", &m_displayGridLines);
     
     m_sceneAssistant->add<ChartMatrixScaleModeEnum, ChartMatrixScaleModeEnum::Enum>("m_scaleMode",
                                                                                     &m_scaleMode);
@@ -127,8 +124,6 @@ ChartMatrixDisplayProperties::resetPropertiesToDefault()
 void 
 ChartMatrixDisplayProperties::copyHelperChartMatrixDisplayProperties(const ChartMatrixDisplayProperties& obj)
 {
-    m_matrixLoadingType = obj.m_matrixLoadingType;
-    m_yokingGroup    = obj.m_yokingGroup;
     m_viewPanning[0] = obj.m_viewPanning[0];
     m_viewPanning[1] = obj.m_viewPanning[1];
     m_viewZooming    = obj.m_viewZooming;
@@ -148,73 +143,6 @@ ChartMatrixDisplayProperties::toString() const
     return "ChartMatrixDisplayProperties";
 }
 
-/**
- * @return The matrix loading type (by row/column).
- */
-ChartMatrixLoadingTypeEnum::Enum
-ChartMatrixDisplayProperties::getMatrixLoadingType() const
-{
-    return m_matrixLoadingType;
-}
-
-/**
- * Set the matrix loading type (by row/column).
- *
- * @param matrixLoadingType
- *    New value for matrix loading type.
- */
-void
-ChartMatrixDisplayProperties::setMatrixLoadingType(const ChartMatrixLoadingTypeEnum::Enum matrixLoadingType)
-{
-    m_matrixLoadingType = matrixLoadingType;
-}
-
-/**
- * @return Selected yoking group.
- */
-YokingGroupEnum::Enum
-ChartMatrixDisplayProperties::getYokingGroup() const
-{
-    return m_yokingGroup;
-}
-
-/**
- * Set the selected yoking group.
- *
- * @param yokingGroup
- *    New value for yoking group.
- */
-void
-ChartMatrixDisplayProperties::setYokingGroup(const YokingGroupEnum::Enum yokingGroup)
-{
-    m_yokingGroup = yokingGroup;
-    
-    if (m_yokingGroup == YokingGroupEnum::YOKING_GROUP_OFF) {
-        return;
-    }
-    
-//    /*
-//     * Find another browser tab using the same yoking as 'me' and copy
-//     * yoked data from the other browser tab.
-//     */
-//    for (std::set<BrowserTabContent*>::iterator iter = s_allBrowserTabContent.begin();
-//         iter != s_allBrowserTabContent.end();
-//         iter++) {
-//        BrowserTabContent* btc = *iter;
-//        if (btc != this) {
-//            if (btc->getYokingGroup() == m_yokingGroup) {
-//                *m_viewingTransformation = *btc->m_viewingTransformation;
-//                *m_flatSurfaceViewingTransformation = *btc->m_flatSurfaceViewingTransformation;
-//                *m_cerebellumViewingTransformation = *btc->m_cerebellumViewingTransformation;
-//                *m_volumeSliceViewingTransformation = *btc->m_volumeSliceViewingTransformation;
-//                *m_volumeSliceSettings = *btc->m_volumeSliceSettings;
-//                *m_obliqueVolumeRotationMatrix = *btc->m_obliqueVolumeRotationMatrix;
-//                *m_clippingPlaneGroup = *btc->m_clippingPlaneGroup;
-//                break;
-//            }
-//        }
-//    }
-}
 
 /**
  * @return Widgth of matrix cell in pixels
@@ -399,6 +327,48 @@ void
 ChartMatrixDisplayProperties::setColorBarDisplayed(const bool displayed)
 {
     m_colorBarDisplayed = displayed;
+}
+
+/**
+ * Is the selected row/column highlighted?
+ */
+bool
+ChartMatrixDisplayProperties::isSelectedRowColumnHighlighted() const
+{
+    return m_highlightSelectedRowColumn;
+}
+
+/**
+ * Set the selected row/column highlighted status.
+ *
+ * @param highlightStatus
+ *    New status for lighlighting selected row/column.
+ */
+void
+ChartMatrixDisplayProperties::setSelectedRowColumnHighlighted(const bool highlightStatus)
+{
+    m_highlightSelectedRowColumn = highlightStatus;
+}
+
+/**
+ * Are the grid lines displayed?
+ */
+bool
+ChartMatrixDisplayProperties::isGridLinesDisplayed() const
+{
+    return m_displayGridLines;
+}
+
+/**
+ * Set the grid lines displayed for the given tab.
+ *
+ * @param displayGridLines
+ *     True if grid lines are displayed, else false.
+ */
+void
+ChartMatrixDisplayProperties::setGridLinesDisplayed(const bool displayGridLines)
+{
+    m_displayGridLines = displayGridLines;
 }
 
 

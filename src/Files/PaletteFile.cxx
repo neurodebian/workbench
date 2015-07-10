@@ -19,6 +19,7 @@
 /*LICENSE_END*/
 
 #include "CaretLogger.h"
+#include "DataFileException.h"
 #include "GiftiLabel.h"
 #include "GiftiMetaData.h"
 #include "Palette.h"
@@ -359,12 +360,13 @@ PaletteFile::assignColorsToPalette(Palette& p)
  *    If the file was not successfully read.
  */
 void 
-PaletteFile::readFile(const AString& /*filename*/) throw (DataFileException)
+PaletteFile::readFile(const AString& filename)
 {
     clear();
 //    checkFileReadability(filename);
     
-    throw DataFileException("Reading of PaletteFile not implemented.");
+    throw DataFileException(filename,
+                            "Reading of PaletteFile not implemented.");
 }
 
 /**
@@ -376,11 +378,12 @@ PaletteFile::readFile(const AString& /*filename*/) throw (DataFileException)
  *    If the file was not successfully written.
  */
 void 
-PaletteFile::writeFile(const AString& /*filename*/) throw (DataFileException)
+PaletteFile::writeFile(const AString& filename)
 {
 //    checkFileWritability(filename);
     
-    throw DataFileException("Reading of PaletteFile not implemented.");
+    throw DataFileException(filename,
+                            "Reading of PaletteFile not implemented.");
 }
 
 /**
@@ -1123,7 +1126,7 @@ PaletteFile::addDefaultPalettes()
      *
      * lut->m_lutName = std::string("Red");
      */
-    if (this->getPaletteByName("fsl_red") == false) {
+    if (this->getPaletteByName("fsl_red") == NULL) {
         Palette fslRed;
         fslRed.setName("fsl_red");
         
@@ -1142,7 +1145,7 @@ PaletteFile::addDefaultPalettes()
         addPalette(fslRed);
     }
     
-    if (this->getPaletteByName("fsl_green") == false) {
+    if (this->getPaletteByName("fsl_green") == NULL) {
         Palette fslYellow;
         fslYellow.setName("fsl_green");
         
@@ -1161,7 +1164,7 @@ PaletteFile::addDefaultPalettes()
         addPalette(fslYellow);
     }
     
-    if (this->getPaletteByName("fsl_blue") == false) {
+    if (this->getPaletteByName("fsl_blue") == NULL) {
         Palette fslYellow;
         fslYellow.setName("fsl_blue");
         
@@ -1180,7 +1183,7 @@ PaletteFile::addDefaultPalettes()
         addPalette(fslYellow);
     }
     
-    if (this->getPaletteByName("fsl_yellow") == false) {
+    if (this->getPaletteByName("fsl_yellow") == NULL) {
         Palette fslYellow;
         fslYellow.setName("fsl_yellow");
         
@@ -1813,6 +1816,8 @@ PaletteFile::setDefaultPaletteColorMapping(PaletteColorMapping* paletteColorMapp
             break;
         case DataFileTypeEnum::CONNECTIVITY_PARCEL_DENSE:
             break;
+        case DataFileTypeEnum::CONNECTIVITY_PARCEL_LABEL:
+            break;
         case DataFileTypeEnum::CONNECTIVITY_PARCEL_SCALAR:
             break;
         case DataFileTypeEnum::CONNECTIVITY_PARCEL_SERIES:
@@ -1828,7 +1833,12 @@ PaletteFile::setDefaultPaletteColorMapping(PaletteColorMapping* paletteColorMapp
         case DataFileTypeEnum::CONNECTIVITY_FIBER_TRAJECTORY_TEMPORARY:
             invalid = true;
             break;
+        case DataFileTypeEnum::CONNECTIVITY_SCALAR_DATA_SERIES:
+            break;
         case DataFileTypeEnum::FOCI:
+            invalid = true;
+            break;
+        case DataFileTypeEnum::IMAGE:
             invalid = true;
             break;
         case DataFileTypeEnum::LABEL:

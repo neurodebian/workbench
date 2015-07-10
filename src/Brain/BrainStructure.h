@@ -29,7 +29,6 @@
 
 #include "BrainConstants.h"
 #include "CaretObject.h"
-#include "DataFileException.h"
 #include "EventListenerInterface.h"
 #include "SceneableInterface.h"
 #include "StructureEnum.h"
@@ -74,17 +73,17 @@ namespace caret {
 
     public:
         void addLabelFile(LabelFile* labelFile,
-                          const bool addFileToBrainStructure) throw (DataFileException);
+                          const bool addFileToBrainStructure);
         
         void addMetricFile(MetricFile* metricFile,
-                           const bool addFileToBrainStructure) throw (DataFileException);
+                           const bool addFileToBrainStructure);
         
         void addRgbaFile(RgbaFile* rgbaFile,
-                         const bool addFileToBrainStructure) throw (DataFileException);
+                         const bool addFileToBrainStructure);
         
         void addSurface(Surface* surface,
                         const bool addFileToBrainStructure,
-                        const bool initilizeOverlaysFlag) throw (DataFileException);
+                        const bool initilizeOverlaysFlag);
         
         int getNumberOfSurfaces() const;
         
@@ -97,9 +96,9 @@ namespace caret {
         
         bool containsSurface(const Surface* surface);
         
-        const Surface* getVolumeInteractionSurface() const;
+        const Surface* getPrimaryAnatomicalSurface() const;
         
-        Surface* getVolumeInteractionSurface();
+        Surface* getPrimaryAnatomicalSurface();
         
         const Surface* getSurfaceContainingTextInName(const AString& text) const;
         
@@ -108,7 +107,9 @@ namespace caret {
         Surface* getSurfaceWithName(const AString& surfaceFileName,
                                     const bool useAbsolutePath);
         
-        void setVolumeInteractionSurface(Surface* surface);
+        void getSurfaces(std::vector<Surface*>& surfacesOut) const;
+        
+        void setPrimaryAnatomicalSurface(Surface* surface);
         
         Brain* getBrain();
         
@@ -164,7 +165,7 @@ namespace caret {
         void initializeOverlays();
         
     private:
-        const Surface* getVolumeInteractionSurfacePrivate() const;
+        const Surface* getPrimaryAnatomicalSurfacePrivate() const;
         
         const Surface* getSurfaceContainingTextInNamePrivate(const AString& text) const;
 
@@ -198,7 +199,7 @@ namespace caret {
         
         BrainStructureNodeAttributes* m_nodeAttributes;
         
-        mutable Surface* m_volumeInteractionSurface;
+        mutable Surface* m_primaryAnatomicalSurface;
     };
     
 #ifdef __BRAIN_STRUCTURE_DEFINE__

@@ -35,6 +35,7 @@
 
 class QAction;
 class QDialog;
+class QMenu;
 class QWidget;
 class MovieDialog;
 
@@ -47,6 +48,7 @@ namespace caret {
     class CursorManager;
     class CustomViewDialog;
     class HelpViewerDialog;
+    class IdentifyBrainordinateDialog;
     class ImageFile;
     class ImageCaptureDialog;
     class InformationDisplayDialog;
@@ -113,6 +115,8 @@ namespace caret {
         
         QAction* getInformationDisplayDialogEnabledAction();
         
+        QAction* getIdentifyBrainordinateDialogDisplayAction();
+        
         QAction* getSceneDialogDisplayAction();
         
         QAction* getHelpViewerDialogDisplayAction();
@@ -131,7 +135,9 @@ namespace caret {
         void processShowPreferencesDialog(BrainBrowserWindow* browserWindow);
         void processShowInformationDisplayDialog(const bool forceDisplayOfDialog);
         void processShowTileTabsConfigurationDialog(BrainBrowserWindow* browserWindow);
-                
+        void showHideIdentfyBrainordinateDialog(const bool status,
+                                                BrainBrowserWindow* parentBrainBrowserWindow);
+        
         void processShowSceneDialog(BrainBrowserWindow* browserWindow);
         
         void processShowSurfacePropertiesEditorDialog(BrainBrowserWindow* browserWindow);
@@ -164,12 +170,16 @@ namespace caret {
         
         void showHideInfoWindowSelected(bool);
         
+        void showIdentifyBrainordinateDialogActionToggled(bool);
+        
         void sceneDialogDisplayActionToggled(bool);
         
         void showHelpDialogActionToggled(bool);
+        
     private slots:
         void helpDialogWasClosed();
         void sceneDialogWasClosed();
+        void identifyBrainordinateDialogWasClosed();
         
     private:
         GuiManager(QObject* parent = 0);
@@ -194,6 +204,7 @@ namespace caret {
         
 //        void processShowHelpViewerDialog(BrainBrowserWindow* browserWindow,
 //                                         const AString& helpPageName);
+        
         
         void addNonModalDialog(QWidget* dialog);
         
@@ -238,6 +249,8 @@ namespace caret {
         
         InformationDisplayDialog* m_informationDisplayDialog;
         
+        IdentifyBrainordinateDialog* m_identifyBrainordinateDialog;
+        
         SceneDialog* sceneDialog;
         
         QAction* m_sceneDialogDisplayAction;
@@ -249,6 +262,8 @@ namespace caret {
         CursorManager* cursorManager;
         
         QAction* m_informationDisplayDialogEnabledAction;
+        
+        QAction* m_identifyBrainordinateDialogEnabledAction;
         
         BugReportDialog* m_bugReportDialog;
         

@@ -63,13 +63,13 @@ void CiftiBrainModelsMap::BrainModelPriv::setupSurface(const int64_t& start)
 {
     if (m_surfaceNumberOfNodes < 1)
     {
-        throw CaretException("surface must have at least 1 node");
+        throw CaretException("surface must have at least 1 vertex");
     }
     m_modelStart = start;
     int64_t listSize = (int64_t)m_nodeIndices.size();
     if (listSize == 0)
     {
-        throw CaretException("node list must have nonzero length");//NOTE: technically not required by Cifti-1, remove if problematic
+        throw CaretException("vertex list must have nonzero length");//NOTE: technically not required by Cifti-1, remove if problematic
     }
     m_modelEnd = start + listSize;//one after last
     vector<bool> used(m_surfaceNumberOfNodes, false);
@@ -125,13 +125,14 @@ void CiftiBrainModelsMap::addVolumeModel(const StructureEnum::Enum& structure, c
         int64_t index3 = index * 3;
         if (ijkList[index3] < 0 || ijkList[index3 + 1] < 0 || ijkList[index3 + 2] < 0)
         {
-            throw CaretException("found negative index triple in voxel list");
+            throw CaretException("found negative index in voxel list");
         }
         if (!m_ignoreVolSpace && (ijkList[index3] >= dims[0] ||
                                     ijkList[index3 + 1] >= dims[1] ||
                                     ijkList[index3 + 2] >= dims[2]))
         {
-            throw CaretException("found invalid index triple in voxel list");
+            throw CaretException("found invalid index triple in voxel list: (" + AString::number(ijkList[index3]) + ", "
+                                  + AString::number(ijkList[index3 + 1]) + ", " + AString::number(ijkList[index3 + 2]) + ")");
         }
         if (tempLookup.find(ijkList[index3], ijkList[index3 + 1], ijkList[index3 + 2]) != NULL)
         {
@@ -239,6 +240,8 @@ vector<CiftiBrainModelsMap::ModelInfo> CiftiBrainModelsMap::getModelInfo() const
     {
         ret[i].m_structure = m_modelsInfo[i].m_brainStructure;
         ret[i].m_type = m_modelsInfo[i].m_type;
+        ret[i].m_indexStart = m_modelsInfo[i].m_modelStart;
+        ret[i].m_indexCount = m_modelsInfo[i].m_modelEnd - m_modelsInfo[i].m_modelStart;
     }
     return ret;
 }
@@ -444,9 +447,31 @@ bool CiftiBrainModelsMap::operator==(const CiftiMappingType& rhs) const
     return (m_modelsInfo == myrhs.m_modelsInfo);//NOTE: these are sorted by index range, so this works
 }
 
-bool CiftiBrainModelsMap::approximateMatch(const CiftiMappingType& rhs) const
+bool CiftiBrainModelsMap::approximateMatch(const CiftiMappingType& rhs, QString* explanation) const
 {
-    return (*this) == rhs;//there is no user-specified metadata, and it cannot match other types, so use ==
+    if (rhs.getType() != getType())
+    {
+        if (explanation != NULL) *explanation = CiftiMappingType::mappingTypeToName(rhs.getType()) + " mapping never matches " + CiftiMappingType::mappingTypeToName(getType());
+        return false;
+    }
+    const CiftiBrainModelsMap& myrhs = dynamic_cast<const CiftiBrainModelsMap&>(rhs);//there is no user-specified metadata, but we want informative messages, so copy and modify the code from ==
+    CaretAssert(!m_ignoreVolSpace && !myrhs.m_ignoreVolSpace);//these should only be true while in the process of parsing cifti-1, never otherwise
+    if (m_haveVolumeSpace != myrhs.m_haveVolumeSpace)
+    {
+        if (explanation != NULL) *explanation = "one of the mappings has no volume data";
+        return false;
+    }
+    if (m_haveVolumeSpace && (m_volSpace != myrhs.m_volSpace))
+    {
+        if (explanation != NULL) *explanation = "mappings have a different volume space";
+        return false;
+    }
+    if (m_modelsInfo != myrhs.m_modelsInfo)
+    {
+        if (explanation != NULL) *explanation = "mappings include different brainordinates";
+        return false;
+    }
+    return true;
 }
 
 bool CiftiBrainModelsMap::BrainModelPriv::operator==(const BrainModelPriv& rhs) const
@@ -489,8 +514,7 @@ void CiftiBrainModelsMap::readXML1(QXmlStreamReader& xml)
                 QStringRef name = xml.name();
                 if (name != "BrainModel")
                 {
-                    xml.raiseError("unexpected element in brain models map: " + name.toString());
-                    return;
+                    throw CaretException("unexpected element in brain models map: " + name.toString());
                 }
                 ParseHelperModel thisModel;
                 thisModel.parseBrainModel1(xml);
@@ -512,11 +536,9 @@ void CiftiBrainModelsMap::readXML1(QXmlStreamReader& xml)
         {
             if (parsedModels[i].m_offset < curOffset)
             {
-                xml.raiseError("models overlap at index " + QString::number(parsedModels[i].m_offset) + ", model " + QString::number(i));
-                return;
+                throw CaretException("models overlap at index " + QString::number(parsedModels[i].m_offset) + ", model " + QString::number(i));
             } else {
-                xml.raiseError("index " + QString::number(curOffset) + " is not assigned to any model");
-                return;
+                throw CaretException("index " + QString::number(curOffset) + " is not assigned to any model");
             }
         }
         curOffset += parsedModels[i].m_count;
@@ -557,14 +579,14 @@ void CiftiBrainModelsMap::readXML2(QXmlStreamReader& xml)
                 } else if (name == "Volume") {
                     if (m_haveVolumeSpace)
                     {
-                        xml.raiseError("Volume specified more than once in Brain Models mapping type");
+                        throw CaretException("Volume specified more than once in Brain Models mapping type");
                     } else {
                         m_volSpace.readCiftiXML2(xml);
                         if (xml.hasError()) return;
                         m_haveVolumeSpace = true;
                     }
                 } else {
-                    xml.raiseError("unexpected element in brain models map: " + name.toString());
+                    throw CaretException("unexpected element in brain models map: " + name.toString());
                 }
                 break;//the readNext in the for will remove the BrainModel or Volume end element
             }
@@ -582,11 +604,9 @@ void CiftiBrainModelsMap::readXML2(QXmlStreamReader& xml)
         {
             if (parsedModels[i].m_offset < curOffset)
             {
-                xml.raiseError("models overlap at index " + QString::number(parsedModels[i].m_offset) + ", model " + QString::number(i));
-                return;
+                throw CaretException("models overlap at index " + QString::number(parsedModels[i].m_offset) + ", model " + QString::number(i));
             } else {
-                xml.raiseError("index " + QString::number(curOffset) + " is not assigned to any model");
-                return;
+                throw CaretException("index " + QString::number(curOffset) + " is not assigned to any model");
             }
         }
         curOffset += parsedModels[i].m_count;
@@ -611,8 +631,7 @@ void CiftiBrainModelsMap::ParseHelperModel::parseBrainModel1(QXmlStreamReader& x
     QXmlStreamAttributes attrs = xml.attributes();
     if (!attrs.hasAttribute("ModelType"))
     {
-        xml.raiseError("BrainModel missing required attribute ModelType");
-        return;
+        throw CaretException("BrainModel missing required attribute ModelType");
     }
     QStringRef value = attrs.value("ModelType");
     if (value == "CIFTI_MODEL_TYPE_SURFACE")
@@ -621,52 +640,51 @@ void CiftiBrainModelsMap::ParseHelperModel::parseBrainModel1(QXmlStreamReader& x
     } else if (value == "CIFTI_MODEL_TYPE_VOXELS") {
         m_type = VOXELS;
     } else {
-        xml.raiseError("invalid value for ModelType: " + value.toString());
-        return;
+        throw CaretException("invalid value for ModelType: " + value.toString());
     }
     if (!attrs.hasAttribute("BrainStructure"))
     {
-        xml.raiseError("BrainModel missing required attribute BrainStructure");
-        return;
+        throw CaretException("BrainModel missing required attribute BrainStructure");
     }
     value = attrs.value("BrainStructure");
     bool ok = false;
     m_brainStructure = StructureEnum::fromCiftiName(value.toString(), &ok);
     if (!ok)
     {
-        xml.raiseError("invalid value for BrainStructure: " + value.toString());
+        throw CaretException("invalid value for BrainStructure: " + value.toString());
     }
     if (!attrs.hasAttribute("IndexOffset"))
     {
-        xml.raiseError("BrainModel missing required attribute IndexOffset");
-        return;
+        throw CaretException("BrainModel missing required attribute IndexOffset");
     }
     value = attrs.value("IndexOffset");
     m_offset = value.toString().toLongLong(&ok);
     if (!ok || m_offset < 0)
     {
-        xml.raiseError("IndexOffset must be a positive integer");
+        throw CaretException("IndexOffset must be a non-negative integer");
     }
     if (!attrs.hasAttribute("IndexCount"))
     {
-        xml.raiseError("BrainModel missing required attribute IndexCount");
-        return;
+        throw CaretException("BrainModel missing required attribute IndexCount");
     }
     value = attrs.value("IndexCount");
     m_count = value.toString().toLongLong(&ok);
-    if (!ok || m_count < 0)
+    if (!ok || m_count < 1)//NOTE: not technically required by cifti-1, would need some rewriting to support empty brainmodels
     {
-        xml.raiseError("IndexCount must be a positive integer");
+        throw CaretException("IndexCount must be a positive integer");
     }
     if (m_type == SURFACE)
     {
         if (!attrs.hasAttribute("SurfaceNumberOfNodes"))
         {
-            xml.raiseError("BrainModel missing required attribute SurfaceNumberOfNodes");
-            return;
+            throw CaretException("BrainModel missing required attribute SurfaceNumberOfNodes");
         }
         value = attrs.value("SurfaceNumberOfNodes");
         m_surfaceNumberOfNodes = value.toString().toLongLong(&ok);
+        if (!ok || m_surfaceNumberOfNodes < 1)
+        {
+            throw CaretException("SurfaceNumberOfNodes must be a positive integer");
+        }
         if (!xml.readNextStartElement())//special case in cifti-1
         {
             m_nodeIndices.resize(m_count);
@@ -677,8 +695,7 @@ void CiftiBrainModelsMap::ParseHelperModel::parseBrainModel1(QXmlStreamReader& x
         } else {
             if (xml.name() != "NodeIndices")
             {
-                xml.raiseError("unexpected element in BrainModel of SURFACE type: " + xml.name().toString());
-                return;
+                throw CaretException("unexpected element in BrainModel of SURFACE type: " + xml.name().toString());
             }
             m_nodeIndices = readIndexArray(xml);
             xml.readNext();//remove the end element of NodeIndices
@@ -686,31 +703,26 @@ void CiftiBrainModelsMap::ParseHelperModel::parseBrainModel1(QXmlStreamReader& x
         if (xml.hasError()) return;
         if ((int64_t)m_nodeIndices.size() != m_count)
         {
-            xml.raiseError("number of node indices does not match IndexCount");
-            return;
+            throw CaretException("number of vertex indices does not match IndexCount");
         }
     } else {
         if (!xml.readNextStartElement())
         {
-            xml.raiseError("BrainModel requires a child element");
-            return;
+            throw CaretException("BrainModel requires a child element");
         }
         if (xml.name() != "VoxelIndicesIJK")
         {
-            xml.raiseError("unexpected element in BrainModel of VOXELS type: " + xml.name().toString());
-            return;
+            throw CaretException("unexpected element in BrainModel of VOXELS type: " + xml.name().toString());
         }
         m_voxelIndicesIJK = readIndexArray(xml);
         if (xml.hasError()) return;
         if (m_voxelIndicesIJK.size() % 3 != 0)
         {
-            xml.raiseError("number of voxel indices is not a multiple of 3");
-            return;
+            throw CaretException("number of voxel indices is not a multiple of 3");
         }
         if ((int64_t)m_voxelIndicesIJK.size() != m_count * 3)
         {
-            xml.raiseError("number of voxel indices does not match IndexCount");
-            return;
+            throw CaretException("number of voxel indices does not match IndexCount");
         }
         xml.readNext();//remove the end element of VoxelIndicesIJK
     }
@@ -719,8 +731,7 @@ void CiftiBrainModelsMap::ParseHelperModel::parseBrainModel1(QXmlStreamReader& x
         switch(xml.readNext())
         {
             case QXmlStreamReader::StartElement:
-                xml.raiseError("unexpected second element in BrainModel: " + xml.name().toString());
-                break;
+                throw CaretException("unexpected second element in BrainModel: " + xml.name().toString());
             default:
                 break;
         }
@@ -733,8 +744,7 @@ void CiftiBrainModelsMap::ParseHelperModel::parseBrainModel2(QXmlStreamReader& x
     QXmlStreamAttributes attrs = xml.attributes();
     if (!attrs.hasAttribute("ModelType"))
     {
-        xml.raiseError("BrainModel missing required attribute ModelType");
-        return;
+        throw CaretException("BrainModel missing required attribute ModelType");
     }
     QStringRef value = attrs.value("ModelType");
     if (value == "CIFTI_MODEL_TYPE_SURFACE")
@@ -743,92 +753,84 @@ void CiftiBrainModelsMap::ParseHelperModel::parseBrainModel2(QXmlStreamReader& x
     } else if (value == "CIFTI_MODEL_TYPE_VOXELS") {
         m_type = VOXELS;
     } else {
-        xml.raiseError("invalid value for ModelType: " + value.toString());
-        return;
+        throw CaretException("invalid value for ModelType: " + value.toString());
     }
     if (!attrs.hasAttribute("BrainStructure"))
     {
-        xml.raiseError("BrainModel missing required attribute BrainStructure");
-        return;
+        throw CaretException("BrainModel missing required attribute BrainStructure");
     }
     value = attrs.value("BrainStructure");
     bool ok = false;
     m_brainStructure = StructureEnum::fromCiftiName(value.toString(), &ok);
     if (!ok)
     {
-        xml.raiseError("invalid value for BrainStructure: " + value.toString());
+        throw CaretException("invalid value for BrainStructure: " + value.toString());
     }
     if (!attrs.hasAttribute("IndexOffset"))
     {
-        xml.raiseError("BrainModel missing required attribute IndexOffset");
-        return;
+        throw CaretException("BrainModel missing required attribute IndexOffset");
     }
     value = attrs.value("IndexOffset");
     m_offset = value.toString().toLongLong(&ok);
     if (!ok || m_offset < 0)
     {
-        xml.raiseError("IndexOffset must be a positive integer");
+        throw CaretException("IndexOffset must be a non-negative integer");
     }
     if (!attrs.hasAttribute("IndexCount"))
     {
-        xml.raiseError("BrainModel missing required attribute IndexCount");
-        return;
+        throw CaretException("BrainModel missing required attribute IndexCount");
     }
     value = attrs.value("IndexCount");
     m_count = value.toString().toLongLong(&ok);
-    if (!ok || m_offset < 0)
+    if (!ok || m_count < 1)
     {
-        xml.raiseError("IndexCount must be a positive integer");
+        throw CaretException("IndexCount must be a positive integer");
     }
     if (m_type == SURFACE)
     {
         if (!attrs.hasAttribute("SurfaceNumberOfVertices"))
         {
-            xml.raiseError("BrainModel missing required attribute SurfaceNumberOfVertices");
-            return;
+            throw CaretException("BrainModel missing required attribute SurfaceNumberOfVertices");
         }
         value = attrs.value("SurfaceNumberOfVertices");
         m_surfaceNumberOfNodes = value.toString().toLongLong(&ok);
+        if (!ok || m_surfaceNumberOfNodes < 1)
+        {
+            throw CaretException("SurfaceNumberOfVertices must be a positive integer");
+        }
         if (!xml.readNextStartElement())
         {
-            xml.raiseError("BrainModel requires a child element");
-            return;
+            throw CaretException("BrainModel requires a child element");
         }
         if (xml.name() != "VertexIndices")
         {
-            xml.raiseError("unexpected element in BrainModel of SURFACE type: " + xml.name().toString());
-            return;
+            throw CaretException("unexpected element in BrainModel of SURFACE type: " + xml.name().toString());
         }
         m_nodeIndices = readIndexArray(xml);
         if (xml.hasError()) return;
         if ((int64_t)m_nodeIndices.size() != m_count)
         {
-            xml.raiseError("number of node indices does not match IndexCount");
-            return;
+            throw CaretException("number of vertex indices does not match IndexCount");
         }
         xml.readNext();//remove the end element of NodeIndices
     } else {
         if (!xml.readNextStartElement())
         {
-            xml.raiseError("BrainModel requires a child element");
-            return;
+            throw CaretException("BrainModel requires a child element");
         }
         if (xml.name() != "VoxelIndicesIJK")
         {
-            xml.raiseError("unexpected element in BrainModel of VOXELS type: " + xml.name().toString());
-            return;
+            throw CaretException("unexpected element in BrainModel of VOXELS type: " + xml.name().toString());
         }
         m_voxelIndicesIJK = readIndexArray(xml);
         if (xml.hasError()) return;
         if (m_voxelIndicesIJK.size() % 3 != 0)
         {
-            xml.raiseError("number of voxel indices is not a multiple of 3");
-            return;
+            throw CaretException("number of voxel indices is not a multiple of 3");
         }
         if ((int64_t)m_voxelIndicesIJK.size() != m_count * 3)
         {
-            xml.raiseError("number of voxel indices does not match IndexCount");
-            return;
+            throw CaretException("number of voxel indices does not match IndexCount");
         }
         xml.readNext();//remove the end element of VoxelIndicesIJK
     }
@@ -837,8 +839,7 @@ void CiftiBrainModelsMap::ParseHelperModel::parseBrainModel2(QXmlStreamReader& x
         switch(xml.readNext())
         {
             case QXmlStreamReader::StartElement:
-                xml.raiseError("unexpected second element in BrainModel: " + xml.name().toString());
-                break;
+                throw CaretException("unexpected second element in BrainModel: " + xml.name().toString());
             default:
                 break;
         }
@@ -860,8 +861,11 @@ vector<int64_t> CiftiBrainModelsMap::ParseHelperModel::readIndexArray(QXmlStream
         ret.push_back(separated[i].toLongLong(&ok));
         if (!ok)
         {
-            xml.raiseError("found noninteger in index array: " + separated[i]);
-            return ret;
+            throw CaretException("found noninteger in index array: " + separated[i]);
+        }
+        if (ret.back() < 0)
+        {
+            throw CaretException("found negative integer in index array: " + separated[i]);
         }
     }
     return ret;

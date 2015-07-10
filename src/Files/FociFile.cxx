@@ -32,6 +32,7 @@
 #include "CaretAssert.h"
 #include "CaretLogger.h"
 #include "DataFileContentInformation.h"
+#include "DataFileException.h"
 #include "GroupAndNameHierarchyModel.h"
 #include "FileAdapter.h"
 #include "FociFileSaxReader.h"
@@ -502,7 +503,7 @@ FociFile::invalidateAllAssignedColors()
  *    If the file was not successfully read.
  */
 void 
-FociFile::readFile(const AString& filename) throw (DataFileException)
+FociFile::readFile(const AString& filename)
 {
     clear();
     
@@ -520,9 +521,7 @@ FociFile::readFile(const AString& filename) throw (DataFileException)
         int lineNum = e.getLineNumber();
         int colNum  = e.getColumnNumber();
         
-        AString msg =
-        "Parse Error while reading "
-        + filename;
+        AString msg = "Parse Error while reading:";
         
         if ((lineNum >= 0) && (colNum >= 0)) {
             msg += (" line/col ("
@@ -534,7 +533,8 @@ FociFile::readFile(const AString& filename) throw (DataFileException)
         
         msg += (": " + e.whatString());
         
-        DataFileException dfe(msg);
+        DataFileException dfe(filename,
+                              msg);
         CaretLogThrowing(dfe);
         throw dfe;
     }
@@ -563,7 +563,7 @@ FociFile::readFile(const AString& filename) throw (DataFileException)
  *    If the file was not successfully written.
  */
 void 
-FociFile::writeFile(const AString& filename) throw (DataFileException)
+FociFile::writeFile(const AString& filename)
 {
     checkFileWritability(filename);
     
@@ -583,7 +583,8 @@ FociFile::writeFile(const AString& filename) throw (DataFileException)
         QTextStream* textStream = file.openQTextStreamForWritingFile(getFileName(),
                                                                      errorMessage);
         if (textStream == NULL) {
-            throw DataFileException(errorMessage);
+            throw DataFileException(getFileName(),
+                                    errorMessage);
         }
         
         //

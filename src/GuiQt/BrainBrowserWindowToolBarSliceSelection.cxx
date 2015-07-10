@@ -37,6 +37,8 @@
 #include "BrowserTabContent.h"
 #include "CaretAssert.h"
 #include "EnumComboBoxTemplate.h"
+#include "EventManager.h"
+#include "EventUpdateVolumeEditingToolBar.h"
 #include "GuiManager.h"
 #include "ModelVolume.h"
 #include "ModelWholeBrain.h"
@@ -578,6 +580,7 @@ BrainBrowserWindowToolBarSliceSelection::volumeSliceProjectionTypeEnumComboBoxIt
     btc->setSliceProjectionType(sliceProjectionType);
     this->updateGraphicsWindow();
     this->updateOtherYokedWindows();
+    EventManager::get()->sendEvent(EventUpdateVolumeEditingToolBar().getPointer());
 }
 
 /**

@@ -23,12 +23,16 @@
 
 #include "CaretColorEnum.h"
 #include "ChartDataTypeEnum.h"
+#include "ChartMatrixLoadingDimensionEnum.h"
 #include "CiftiParcelColoringModeEnum.h"
+#include "YokingGroupEnum.h"
 
 namespace caret {
-
+    
     class CaretMappableDataFile;
     class ChartMatrixDisplayProperties;
+    class CiftiMappableDataFile;
+    class CiftiParcelsMap;
     
     class ChartableMatrixInterface {
         
@@ -38,6 +42,17 @@ namespace caret {
         virtual ~ChartableMatrixInterface() { }
         
     public:
+        /**
+         * Get the matrix dimensions.
+         *
+         * @param numberOfRowsOut
+         *    Number of rows in the matrix.
+         * @param numberOfColumnsOut
+         *    Number of rows in the matrix.
+         */
+        virtual void getMatrixDimensions(int32_t& numberOfRowsOut,
+                                         int32_t& numberOfColumnsOut) const = 0;
+        
         /**
          * Get the matrix RGBA coloring for this matrix data creator.
          *
@@ -73,55 +88,45 @@ namespace caret {
          */
         virtual bool getMatrixCellAttributes(const int32_t rowIndex,
                                              const int32_t columnIndex,
-                                             float& cellValueOut,
+                                             AString& cellValueOut,
                                              AString& rowNameOut,
                                              AString& columnNameOut) const = 0;
-
+        
         /**
-         * @return The CaretMappableDataFile that implements this interface (const methdod).
+         * @return The matrix display properties for the given tab.
+         * @param tabIndex
+         *    Index of tab.
          */
         virtual const ChartMatrixDisplayProperties* getChartMatrixDisplayProperties(const int32_t tabIndex) const = 0;
         
         /**
-         * @return The CaretMappableDataFile that implements this interface.
+         * @return The matrix display properties for the given tab.
+         * @param tabIndex
+         *    Index of tab.
          */
         virtual ChartMatrixDisplayProperties* getChartMatrixDisplayProperties(const int32_t tabIndex) = 0;
-        
-        /**
-         * @return Coloring mode for selected parcel.
-         */
-        virtual CiftiParcelColoringModeEnum::Enum getSelectedParcelColoringMode() const = 0;
-        
-        /**
-         * Set the coloring mode for selected parcel.
-         *
-         * @param coloringMode
-         *    New value for coloring mode.
-         */
-        virtual void setSelectedParcelColoringMode(const CiftiParcelColoringModeEnum::Enum coloringMode) = 0;
-        
-        /**
-         * @return Color for selected parcel.
-         */
-        virtual CaretColorEnum::Enum getSelectedParcelColor() const = 0;
-        
-        /**
-         * Set color for selected parcel.
-         *
-         * @param color
-         *    New color for selected parcel.
-         */
-        virtual void setSelectedParcelColor(const CaretColorEnum::Enum color) = 0;
         
         /**
          * @return The CaretMappableDataFile that implements this interface.
          */
         virtual CaretMappableDataFile* getMatrixChartCaretMappableDataFile();
         
-        /**
-         * @return The CaretMappableDataFile that implements this interface.
+         /**
+         * @return The CaretMappableDataFile that implements this interface (const methdod).
          */
         virtual const CaretMappableDataFile* getMatrixChartCaretMappableDataFile() const;
+        
+         /**
+          * @return The CiftiMappableDataFile that implements this interface.
+          * May be NULL !
+          */
+        virtual CiftiMappableDataFile* getMatrixChartCiftiMappableDataFile();
+        
+         /**
+          * @return The CiftiMappableDataFile that implements this interface (const methdod).
+          * May be NULL !
+          */
+        virtual const CiftiMappableDataFile* getMatrixChartCiftiMappableDataFile() const;
         
         /**
          * @return Is charting enabled for this file in the given tab?
@@ -142,7 +147,7 @@ namespace caret {
          *    New status for charting enabled.
          */
         virtual void setMatrixChartingEnabled(const int32_t tabIndex,
-                                                     const bool enabled) = 0;
+                                              const bool enabled) = 0;
         
         /**
          * Get chart data types supported by the file.
@@ -153,21 +158,21 @@ namespace caret {
         virtual void getSupportedMatrixChartDataTypes(std::vector<ChartDataTypeEnum::Enum>& chartDataTypesOut) const = 0;
         
         bool isMatrixChartDataTypeSupported(const ChartDataTypeEnum::Enum chartDataType) const;
-
+        
         // ADD_NEW_METHODS_HERE
-
+        
     private:
         ChartableMatrixInterface(const ChartableMatrixInterface&);
-
+        
         ChartableMatrixInterface& operator=(const ChartableMatrixInterface&);
         
         // ADD_NEW_MEMBERS_HERE
-
+        
     };
     
 #ifdef __CHARTABLE_MATRIX_INTERFACE_DECLARE__
     // <PLACE DECLARATIONS OF STATIC MEMBERS HERE>
 #endif // __CHARTABLE_MATRIX_INTERFACE_DECLARE__
-
+    
 } // namespace
 #endif  //__CHARTABLE_MATRIX_INTERFACE_H__

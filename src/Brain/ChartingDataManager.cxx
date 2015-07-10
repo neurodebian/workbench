@@ -25,6 +25,8 @@
 
 #include "Brain.h"
 #include "CaretAssert.h"
+#include "EventManager.h"
+#include "EventMapYokingSelectMap.h"
 #include "ModelChart.h"
 #include "SurfaceFile.h"
 
@@ -46,6 +48,11 @@ ChartingDataManager::ChartingDataManager(Brain* brain)
 m_brain(brain)
 {
     CaretAssert(brain);
+    
+    /*
+     * Need PROCESSED event (after others have handled the event)
+     */
+    EventManager::get()->addProcessedEventListener(this, EventTypeEnum::EVENT_MAP_YOKING_SELECT_MAP);
 }
 
 /**
@@ -53,6 +60,28 @@ m_brain(brain)
  */
 ChartingDataManager::~ChartingDataManager()
 {
+    EventManager::get()->removeAllEventsFromListener(this);
+}
+
+/**
+ * Receive an event.
+ *
+ * @param event
+ *     The event that the receive can respond to.
+ */
+void
+ChartingDataManager::receiveEvent(Event* event)
+{
+    if (event->getEventType() == EventTypeEnum::EVENT_MAP_YOKING_SELECT_MAP) {
+        EventMapYokingSelectMap* yokeMapEvent = dynamic_cast<EventMapYokingSelectMap*>(event);
+        CaretAssert(yokeMapEvent);
+        
+        ModelChart* modelChart = m_brain->getChartModel();
+        if (modelChart != NULL) {
+            modelChart->loadChartDataForYokedCiftiMappableFiles(yokeMapEvent->getMapYokingGroup(),
+                                                                yokeMapEvent->getMapIndex());
+        }
+    }
 }
 
 /**
@@ -65,7 +94,7 @@ ChartingDataManager::~ChartingDataManager()
  */
 void
 ChartingDataManager::loadAverageChartForSurfaceNodes(const SurfaceFile* surfaceFile,
-                                                     const std::vector<int32_t>& nodeIndices) const throw (DataFileException)
+                                                     const std::vector<int32_t>& nodeIndices) const
 {
     CaretAssert(surfaceFile);
     
@@ -87,7 +116,7 @@ ChartingDataManager::loadAverageChartForSurfaceNodes(const SurfaceFile* surfaceF
  */
 void
 ChartingDataManager::loadChartForSurfaceNode(const SurfaceFile* surfaceFile,
-                                             const int32_t nodeIndex) const throw (DataFileException)
+                                             const int32_t nodeIndex) const
 {
     CaretAssert(surfaceFile);
     
@@ -100,13 +129,35 @@ ChartingDataManager::loadChartForSurfaceNode(const SurfaceFile* surfaceFile,
 }
 
 /**
+ * Load chart data from given file at the given row.
+ *
+ * @param ciftiMapFile
+ *     The CIFTI file.
+ * @param rowIndex
+ *     Index of row in the file.
+ */
+void
+ChartingDataManager::loadChartForCiftiMappableFileRow(CiftiMappableDataFile* ciftiMapFile,
+                                                      const int32_t rowIndex) const
+{
+    CaretAssert(ciftiMapFile);
+    
+    ModelChart* modelChart = m_brain->getChartModel();
+    if (modelChart != NULL) {
+        modelChart->loadChartDataForCiftiMappableFileRow(ciftiMapFile,
+                                                         rowIndex);
+    }
+}
+
+
+/**
  * Load chart data for a voxel.
  *
  * @param xyz
  *     Coordinate of voxel.
  */
 void
-ChartingDataManager::loadChartForVoxelAtCoordinate(const float xyz[3]) const throw (DataFileException)
+ChartingDataManager::loadChartForVoxelAtCoordinate(const float xyz[3]) const
 {
     ModelChart* modelChart = m_brain->getChartModel();
     if (modelChart != NULL) {
@@ -126,7 +177,7 @@ ChartingDataManager::hasNetworkFiles() const
      */
     return false;
     
-//    std::vector<ChartableBrainordinateInterface*> chartFiles;
+//    std::vector<ChartableLineSeriesBrainordinateInterface*> chartFiles;
 //    if (requireChartingEnableInFiles) {
 //        m_brain->getAllChartableDataFilesWithChartingEnabled(chartFiles);
 //    }
@@ -134,10 +185,10 @@ ChartingDataManager::hasNetworkFiles() const
 //        m_brain->getAllChartableDataFiles(chartFiles);
 //    }
 //    
-//    for (std::vector<ChartableBrainordinateInterface*>::iterator fileIter = chartFiles.begin();
+//    for (std::vector<ChartableLineSeriesBrainordinateInterface*>::iterator fileIter = chartFiles.begin();
 //         fileIter != chartFiles.end();
 //         fileIter++) {
-//        ChartableBrainordinateInterface* chartFile = *fileIter;
+//        ChartableLineSeriesBrainordinateInterface* chartFile = *fileIter;
 //        
 //        CaretDataFile* caretDataFile = dynamic_cast<CaretDataFile*>(chartFile);
 //        CaretAssert(caretDataFile);

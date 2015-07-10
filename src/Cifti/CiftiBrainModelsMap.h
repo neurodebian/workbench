@@ -55,6 +55,7 @@ namespace caret
         {
             ModelType m_type;
             StructureEnum::Enum m_structure;
+            int64_t m_indexStart, m_indexCount;//these are intended only for summary info, use getSurfaceMap, etc for the index to vertex/voxel mappings
         };
         struct IndexInfo
         {
@@ -92,7 +93,7 @@ namespace caret
         MappingType getType() const { return BRAIN_MODELS; }
         int64_t getLength() const;
         bool operator==(const CiftiMappingType& rhs) const;
-        bool approximateMatch(const CiftiMappingType& rhs) const;
+        bool approximateMatch(const CiftiMappingType& rhs, QString* explanation = NULL) const;
         void readXML1(QXmlStreamReader& xml);
         void readXML2(QXmlStreamReader& xml);
         void writeXML1(QXmlStreamWriter& xml) const;

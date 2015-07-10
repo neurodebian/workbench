@@ -26,6 +26,7 @@
 #include "MetricFile.h"
 #include "SurfaceFile.h"
 #include "TopologyHelper.h"
+#include "Vector3D.h"
 
 #include <cmath>
 #include <vector>
@@ -57,12 +58,16 @@ OperationParameters* AlgorithmSurfaceDistortion::getParameters()
     
     ret->createOptionalParameter(5, "-caret5-method", "use the surface distortion method from caret5");
     
+    ret->createOptionalParameter(6, "-edge-method", "calculate distortion of edge lengths rather than areas");
+    
     ret->setHelpText(
-        AString("This command, when not using -caret5-method, is equivalent to using -surface-vertex-areas on each surface, ") +
+        AString("This command, when not using -caret5-method or -edge-method, is equivalent to using -surface-vertex-areas on each surface, ") +
         "smoothing both output metrics with the GEO_GAUSS_EQUAL method on the surface they came from if -smooth is specified, and then using the formula " +
         "'ln(distorted/reference)/ln(2)' on the smoothed results.\n\n" +
         "When using -caret5-method, it uses the surface distortion method from caret5, which takes the base 2 log of the ratio of tile areas, " +
-        "then averages those results at each vertex, and then smooths the result on the reference surface."
+        "then averages those results at each vertex, and then smooths the result on the reference surface.\n\n" +
+        "When using -edge-method, the -smooth option is ignored, and the output at each vertex is the average of 'abs(ln(refEdge/distortEdge)/ln(2))' over all edges " +
+        "connected to the vertex."
     );
     return ret;
 }
@@ -80,16 +85,19 @@ void AlgorithmSurfaceDistortion::useParameters(OperationParameters* myParams, Pr
         if (smooth <= 0.0f) throw AlgorithmException("smoothing kernel must be positive if specified");
     }
     bool caret5method = myParams->getOptionalParameter(5)->m_present;
-    AlgorithmSurfaceDistortion(myProgObj, referenceSurf, distortedSurf, myMetricOut, smooth, caret5method);
+    bool edgeMethod = myParams->getOptionalParameter(6)->m_present;
+    if (caret5method && edgeMethod) throw AlgorithmException("you may not specify both -caret5-method and -edge-method");
+    AlgorithmSurfaceDistortion(myProgObj, referenceSurf, distortedSurf, myMetricOut, smooth, caret5method, edgeMethod);
 }
 
 AlgorithmSurfaceDistortion::AlgorithmSurfaceDistortion(ProgressObject* myProgObj, const SurfaceFile* referenceSurf, const SurfaceFile* distortedSurf,
-                                                       MetricFile* myMetricOut, const float& smooth, const bool& caret5method) : AbstractAlgorithm(myProgObj)
+                                                       MetricFile* myMetricOut, const float& smooth, const bool& caret5method, const bool& edgeMethod) : AbstractAlgorithm(myProgObj)
 {
+    if (caret5method && edgeMethod) throw AlgorithmException("you may not use both caret5 and edge method flags");
     ProgressObject* smoothRef = NULL, *smoothDistort = NULL, *caret5Smooth = NULL;//uncomment these if you use another algorithm inside here
     if (myProgObj != NULL)
     {
-        if (smooth > 0.0f)
+        if (smooth > 0.0f && !edgeMethod)
         {
             if (caret5method)
             {
@@ -161,6 +169,34 @@ AlgorithmSurfaceDistortion::AlgorithmSurfaceDistortion(ProgressObject* myProgObj
             myMetricOut->setColumnName(0, "area distortion (caret5)");
         } else {
             myMetricOut->setValuesForColumn(0, nodescratch.data());
+        }
+    } else if (edgeMethod) {
+        myMetricOut->setColumnName(0, "edge distortion");
+        CaretPointer<TopologyHelper> myhelp = referenceSurf->getTopologyHelper();
+        const float* refCoords = referenceSurf->getCoordinateData(), *distortCoords = distortedSurf->getCoordinateData();
+        for (int i = 0; i < numNodes; ++i)
+        {
+            Vector3D refCenter = refCoords + i * 3;
+            Vector3D distortCenter = distortCoords + i * 3;
+            const vector<int32_t>& neighbors = myhelp->getNodeNeighbors(i);
+            int numNeigh = (int)neighbors.size();
+            float accum = 0.0f;
+            for (int j = 0; j < numNeigh; ++j)
+            {
+                Vector3D refNeigh = refCoords + neighbors[j] * 3;
+                Vector3D distortNeigh = distortCoords + neighbors[j] * 3;
+                float refLength = (refNeigh - refCenter).length();
+                float distortLength = (distortNeigh - distortCenter).length();
+                float ratio;
+                if (refLength < distortLength)
+                {
+                    ratio = distortLength / refLength;
+                } else {
+                    ratio = refLength / distortLength;
+                }
+                accum += log(ratio) / log(2.0f);
+            }
+            myMetricOut->setValue(i, 0, accum / numNeigh);
         }
     } else {
         myMetricOut->setColumnName(0, "area distortion");

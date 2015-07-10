@@ -34,6 +34,7 @@
 
 //tests
 #include "CiftiFileTest.h"
+#include "GeodesicHelperTest.h"
 #include "HttpTest.h"
 #include "HeapTest.h"
 #include "LookupTest.h"
@@ -64,15 +65,11 @@ int main(int argc, char** argv)
     srand(time(NULL));
     {
         QCoreApplication myApp(argc, argv);
-        caret_global_commandLine = argv[0];
-        for (int i = 1; i < argc; ++i)
-        {
-            caret_global_commandLine += " ";
-            caret_global_commandLine += argv[i];
-        }
-        SessionManager::createSessionManager();
+        caret_global_commandLine_init(argc, argv);
+        SessionManager::createSessionManager(ApplicationTypeEnum::APPLICATION_TYPE_COMMAND_LINE);
         vector<TestInterface*> mytests;
         mytests.push_back(new CiftiFileTest("ciftifile"));
+        mytests.push_back(new GeodesicHelperTest("geohelp"));
         mytests.push_back(new HeapTest("heap"));
         mytests.push_back(new HttpTest("http"));
         mytests.push_back(new LookupTest("lookup"));

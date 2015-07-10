@@ -26,6 +26,7 @@
 #include <QTemporaryFile>
 
 #include "CaretHttpManager.h"
+#include "DataFileException.h"
 
 using namespace caret;
 
@@ -138,14 +139,13 @@ CaretTemporaryFile::setFileName(const AString& filename)
  *    If the file was not successfully read.
  */
 void
-CaretTemporaryFile::readFile(const AString& filename) throw (DataFileException)
+CaretTemporaryFile::readFile(const AString& filename)
 {
     if (DataFile::isFileOnNetwork(filename)) {
         /*
          * Read file on network.
          * Sort of a kludge, read from the network as a string of bytes
-         * and then write the bytes to a temporary file.  Lastly,
-         * read the temporary file as a VolumeFile.
+         * and then write the bytes to a temporary file.
          */
         CaretHttpRequest request;
         request.m_method = CaretHttpManager::GET;
@@ -154,24 +154,27 @@ CaretTemporaryFile::readFile(const AString& filename) throw (DataFileException)
         CaretHttpManager::httpRequest(request,
                                       response);
         if (response.m_ok == false) {
-            QString msg = ("HTTP error retrieving: "
-                           + filename
-                           + "\nHTTP Response Code="
+            QString msg = ("HTTP error HTTP Response Code="
                            + AString::number(response.m_responseCode));
-            throw DataFileException(msg);
+            throw DataFileException(filename,
+                                    msg);
         }
         
         const int64_t numBytes = response.m_body.size();
         if (numBytes > 0) {
+            AString tempPath = QDir::tempPath();
+            if (!tempPath.endsWith('/')) tempPath += '/';//qt decided to make this behavior OS-dependent, for no apparent reason
+            m_temporaryFile->setFileTemplate(tempPath + "qt_temp.XXXXXX." + filename.section('/', -1).section('.', 1));//strip all but the filename, then take all the parts of the extension
             if (m_temporaryFile->open()) {
                 const int64_t numBytesWritten = m_temporaryFile->write(&response.m_body[0],
                                                                numBytes);
                 if (numBytesWritten != numBytes) {
-                    throw DataFileException("Error reading remote file "
-                                            + filename
-                                            + "  Tried to write "
+                    throw DataFileException(filename,
+                                            "  Tried to write "
                                             + QString::number(numBytes)
-                                            + " bytes to temporary file but only wrote "
+                                            + " bytes to temporary file "
+                                            + m_temporaryFile->fileName()
+                                            + " but only wrote "
                                             + AString::number(numBytesWritten)
                                             + " bytes.");
                 }
@@ -179,13 +182,13 @@ CaretTemporaryFile::readFile(const AString& filename) throw (DataFileException)
                 m_temporaryFile->close();
             }
             else {
-                throw DataFileException("Unable to open temporary file for writing its content: "
-                                        + filename);
+                throw DataFileException(filename,
+                                        "Unable to open temporary file for writing its content.");
             }
         }
         else {
-            throw DataFileException("Failed to read any data from file: "
-                                    + filename);
+            throw DataFileException(filename,
+                                    "Failed to read any data from file.");
         }
     }
     else {
@@ -203,11 +206,12 @@ CaretTemporaryFile::readFile(const AString& filename) throw (DataFileException)
                 if (m_temporaryFile->open()) {
                     const int64_t numBytesWritten = m_temporaryFile->write(byteArray);
                     if (numBytesWritten != numBytes) {
-                        throw DataFileException("Error reading file "
-                                                + filename
-                                                + "  Tried to write "
+                        throw DataFileException(filename,
+                                                "  Tried to write "
                                                 + QString::number(numBytes)
-                                                + " bytes to temporary file but only wrote "
+                                                + " bytes to temporary file "
+                                                + m_temporaryFile->fileName()
+                                                + " but only wrote "
                                                 + AString::number(numBytesWritten)
                                                 + " bytes.");
                     }
@@ -215,18 +219,18 @@ CaretTemporaryFile::readFile(const AString& filename) throw (DataFileException)
                     m_temporaryFile->close();
                 }
                 else {
-                    throw DataFileException("Unable to open temporary file for writing its content: "
-                                            + m_temporaryFile->fileName());
+                    throw DataFileException(m_temporaryFile->fileName(),
+                                            "Unable to open temporary file for writing its content.");
                 }
             }
             else {
-                throw DataFileException("No data read from file, is it empty?: "
-                                        + filename);
+                throw DataFileException(filename,
+                                        "No data read from file, is it empty?");
             }
         }
         else {
-            throw DataFileException("Unable to open file for reading its content: "
-                                    + filename);
+            throw DataFileException(filename,
+                                    "Unable to open file for reading its content.");
         }
     }
 }
@@ -241,13 +245,13 @@ CaretTemporaryFile::readFile(const AString& filename) throw (DataFileException)
  *    If the file was not successfully written.
  */
 void
-CaretTemporaryFile::writeFile(const AString& filename) throw (DataFileException)
+CaretTemporaryFile::writeFile(const AString& filename)
 {
     checkFileWritability(filename);
     
     if (isEmpty()) {
-        throw DataFileException("No data (temporary file is empty) to write to file: "
-                                + filename);
+        throw DataFileException(filename,
+                                "No data (temporary file is empty) to write to file.");
     }
 
     const QString tempFileName = m_temporaryFile->fileName();
@@ -263,14 +267,14 @@ CaretTemporaryFile::writeFile(const AString& filename) throw (DataFileException)
         }
         else {
             fileOut.close();
-            throw DataFileException("Unable to open file for writing its content: "
-                                    + filename);
+            throw DataFileException(filename,
+                                    "Unable to open file for writing its content.");
         }
     }
     else {
         fileIn.close();
-        throw DataFileException("Unable to open temporary file for reading its content: "
-                                + tempFileName);
+        throw DataFileException(tempFileName,
+                                "Unable to open temporary file for reading its content.");
     }
     
 }

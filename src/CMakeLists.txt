@@ -21,7 +21,9 @@ CMAKE_MINIMUM_REQUIRED (VERSION 2.8)
 IF(APPLE)
     ADD_DEFINITIONS(-DCARET_OS_MACOSX)
 ELSEIF(UNIX)
-    ADD_DEFINITIONS(-DCARET_OS_LINUX)
+    IF(${CMAKE_SYSTEM_NAME} MATCHES "Linux")
+        ADD_DEFINITIONS(-DCARET_OS_LINUX)
+    ENDIF(${CMAKE_SYSTEM_NAME} MATCHES "Linux")
 ELSEIF(WIN32)
     ADD_DEFINITIONS(-DCARET_OS_WINDOWS)
     IF(MSVC)
@@ -100,7 +102,8 @@ SET (GNU_11X_FLAGS "")
 SET (INTEL_11X_FLAGS "")
 IF (WORKBENCH_C11X)
     ADD_DEFINITIONS("-DWORKBENCH_HAVE_C11X")
-    SET (CLANG_11X_FLAGS "-std=c++11 -stdlib=libc++ -Wno-error=c++11-narrowing")
+    SET (CLANG_11X_FLAGS "-std=c++11 -stdlib=libstdc++ -Wno-error=c++11-narrowing")
+    ####SET (CLANG_11X_FLAGS "-std=c++11 -stdlib=libc++ -Wno-error=c++11-narrowing")
     SET (GNU_11X_FLAGS "-std=c++11 -Wno-error=c++11-narrowing")
     SET (INTEL_11X_FLAGS "-std=c++11 -Wno-error=c++11-narrowing")
 ENDIF (WORKBENCH_C11X)
@@ -131,7 +134,7 @@ IF (CLANG_FLAG)
     ##SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CLANG_11X_FLAGS} -W -Wall -Werror=return-type -Werror=switch -Wunused-parameter" CACHE STRING "C++ compiler options" FORCE)
 
     IF (WORKBENCH_C11X)
-        set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -std=c++11 -stdlib=libc++")
+        ####set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -std=c++11 -stdlib=libc++")
     ENDIF (WORKBENCH_C11X)
 ENDIF (CLANG_FLAG)
 
@@ -177,6 +180,12 @@ if (CMAKE_COMPILER_IS_GNUCC)
 
 endif()
 ENDIF (NOT MSVC)
+
+#
+# will set name of XCode project:  
+# disabled at this time
+#
+##PROJECT(BorderOptProject C CXX)
 
 FIND_PACKAGE(OpenSSL)
 IF(OPENSSL_FOUND)

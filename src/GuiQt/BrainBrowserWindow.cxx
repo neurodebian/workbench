@@ -50,12 +50,15 @@
 #include "CaretFileRemoteDialog.h"
 #include "CaretPreferences.h"
 #include "CursorDisplayScoped.h"
+#include "DataFileException.h"
+#include "DeveloperFlagsEnum.h"
 #include "DisplayPropertiesVolume.h"
 #include "EventBrowserWindowNew.h"
 #include "CaretLogger.h"
 #include "ElapsedTimer.h"
 #include "EventBrowserWindowCreateTabs.h"
 #include "EventDataFileRead.h"
+#include "EventMacDockMenuUpdate.h"
 #include "EventManager.h"
 #include "EventModelGetAll.h"
 #include "EventGraphicsUpdateAllWindows.h"
@@ -113,6 +116,8 @@ BrainBrowserWindow::BrainBrowserWindow(const int browserWindowIndex,
                                        Qt::WindowFlags flags)
 : QMainWindow(parent, flags)
 {
+    m_developMenuAction = NULL;
+    
     if (BrainBrowserWindow::s_firstWindowFlag) {
         BrainBrowserWindow::s_firstWindowFlag = false;
     }
@@ -224,15 +229,37 @@ BrainBrowserWindow::BrainBrowserWindow(const int browserWindowIndex,
     m_defaultWindowComponentStatus.isFeaturesToolBoxDisplayed = m_featuresToolBoxAction->isChecked();
     m_defaultWindowComponentStatus.isOverlayToolBoxDisplayed  = m_overlayToolBoxAction->isChecked();
     m_defaultWindowComponentStatus.isToolBarDisplayed = m_showToolBarAction->isChecked();
+    
+    EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_BROWSER_WINDOW_MENUS_UPDATE);
 }
 /**
  * Destructor.
  */
 BrainBrowserWindow::~BrainBrowserWindow()
 {
+    EventManager::get()->removeAllEventsFromListener(this);
+    
     delete m_defaultTileTabsConfiguration;
     delete m_sceneTileTabsConfiguration;
     delete m_sceneAssistant;
+}
+
+/**
+ * Receive an event.
+ *
+ * @param event
+ *     The event that the receive can respond to.
+ */
+void
+BrainBrowserWindow::receiveEvent(Event* event)
+{
+    if (event->getEventType() == EventTypeEnum::EVENT_BROWSER_WINDOW_MENUS_UPDATE) {
+        const CaretPreferences* prefs = SessionManager::get()->getCaretPreferences();
+        if (m_developMenuAction != NULL) {
+            m_developMenuAction->setVisible(prefs->isDevelopMenuEnabled());
+            event->setEventProcessed();
+        }
+    }
 }
 
 /**
@@ -294,6 +321,12 @@ BrainBrowserWindow::getBrowserWindowIndex() const
 void 
 BrainBrowserWindow::closeEvent(QCloseEvent* event)
 {
+    if (m_closeWithoutConfirmationFlag) {
+        m_closeWithoutConfirmationFlag = false;
+        event->accept();
+        return;
+    }
+    
     /*
      * The GuiManager may warn user about closing the 
      * window and the user may cancel closing of the window.
@@ -335,7 +368,7 @@ BrainBrowserWindow::keyPressEvent(QKeyEvent* event)
      * According to the documentation, if the key event was not acted upon,
      * pass it on the base class implementation.
      */
-    if (keyEventWasProcessed == false) {
+    if ( ! keyEventWasProcessed) {
         QMainWindow::keyPressEvent(event);
     }
 }
@@ -485,13 +518,16 @@ BrainBrowserWindow::createActions()
                                 m_toolbar,
                                 SLOT(closeSelectedTab()));
     
-    m_closeWindowAction = 
-    WuQtUtilities::createAction("Close Window",
+    m_closeWithoutConfirmationFlag = false;
+    m_closeWindowActionConfirmTitle  = "Close Window...";
+    m_closeWindowActionNoConfirmTitle = "Close Window";
+    m_closeWindowAction =
+    WuQtUtilities::createAction(m_closeWindowActionConfirmTitle,
                                 "Close the window",
                                 Qt::CTRL + Qt::SHIFT + Qt::Key_W,
                                 this,
                                 this,
-                                SLOT(close()));
+                                SLOT(processCloseWindow()));
     
     m_captureImageAction =
     WuQtUtilities::createAction("Capture Image...",
@@ -611,7 +647,7 @@ BrainBrowserWindow::createActions()
                                 SLOT(processTileWindows()));
     
     m_informationDialogAction =
-    WuQtUtilities::createAction("Information Window",
+    WuQtUtilities::createAction("Information...",
                                 "Show the Informaiton Window",
                                 this,
                                 guiManager,
@@ -698,10 +734,9 @@ BrainBrowserWindow::createMenus()
         menubar->addMenu(connectMenu);
     }
     
-    if (prefs->isDevelopMenuEnabled()) {
-        QMenu* developMenu = createMenuDevelop();
-        menubar->addMenu(developMenu);
-    }
+    QMenu* developMenu = createMenuDevelop();
+    m_developMenuAction = menubar->addMenu(developMenu);
+    m_developMenuAction->setVisible(prefs->isDevelopMenuEnabled());
     
     menubar->addMenu(createMenuWindow());
     menubar->addMenu(createMenuHelp());
@@ -715,6 +750,8 @@ BrainBrowserWindow::createMenuDevelop()
 {
     QMenu* menu = new QMenu("Develop",
                             this);
+    QObject::connect(menu, SIGNAL(aboutToShow()),
+                     this, SLOT(developerMenuAboutToShow()));
     menu->addAction(m_developerExportVtkFileAction);
     
     /*
@@ -724,8 +761,94 @@ BrainBrowserWindow::createMenuDevelop()
     
     menu->addAction(m_developerGraphicsTimingAction);
     
+    std::vector<DeveloperFlagsEnum::Enum> developerFlags;
+    DeveloperFlagsEnum::getAllEnums(developerFlags);
+    
+    m_developerFlagsActionGroup = NULL;
+    
+    if ( ! developerFlags.empty()) {
+        menu->addSeparator();
+        
+        m_developerFlagsActionGroup = new QActionGroup(this);
+        m_developerFlagsActionGroup->setExclusive(false);
+        QObject::connect(m_developerFlagsActionGroup, SIGNAL(triggered(QAction*)),
+                         this, SLOT(developerMenuFlagTriggered(QAction*)));
+        
+        for (std::vector<DeveloperFlagsEnum::Enum>::iterator iter = developerFlags.begin();
+             iter != developerFlags.end();
+             iter++) {
+            const DeveloperFlagsEnum::Enum flag = *iter;
+            
+            QAction* action = menu->addAction(DeveloperFlagsEnum::toGuiName(flag));
+            action->setCheckable(true);
+            action->setData(static_cast<int>(DeveloperFlagsEnum::toIntegerCode(flag)));
+            m_developerFlagsActionGroup->addAction(action);
+        }
+    }
+    
     return menu;
 }
+
+/**
+ * Called when developer menu is about to show.
+ */
+void
+BrainBrowserWindow::developerMenuAboutToShow()
+{
+    std::vector<DeveloperFlagsEnum::Enum> developerFlags;
+    DeveloperFlagsEnum::getAllEnums(developerFlags);
+    
+    QList<QAction*> actions = m_developerFlagsActionGroup->actions();
+    QListIterator<QAction*> iter(actions);
+    while (iter.hasNext()) {
+        QAction* action = iter.next();
+        const int integerCode = action->data().toInt();
+        
+        bool valid = false;
+        const DeveloperFlagsEnum::Enum enumValue = DeveloperFlagsEnum::fromIntegerCode(integerCode,
+                                                                                       &valid);
+        if (valid) {
+            const bool flag = DeveloperFlagsEnum::isFlag(enumValue);
+            action->setChecked(flag);
+        }
+        else {
+            CaretLogSevere("Failed to find develper flag for updating menu: "
+                           + action->text());
+        }
+    }
+}
+
+/**
+ * Called when developer flag is checked/unchecked.
+ *
+ * @param action
+ *    Action that is checked/unchecked.
+ */
+void
+BrainBrowserWindow::developerMenuFlagTriggered(QAction* action)
+{
+    const int integerCode = action->data().toInt();
+    
+    bool valid = false;
+    const DeveloperFlagsEnum::Enum enumValue = DeveloperFlagsEnum::fromIntegerCode(integerCode,
+                                                                                   &valid);
+    if (valid) {
+        DeveloperFlagsEnum::setFlag(enumValue,
+                                    action->isChecked());
+
+        /*
+         * Update graphics and GUI
+         */
+        EventManager::get()->sendEvent(EventSurfaceColoringInvalidate().getPointer());
+        EventManager::get()->sendEvent(EventUserInterfaceUpdate().getPointer());
+        EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+    }
+    else {
+        CaretLogSevere("Failed to find develper flag for reading menu: "
+                       + action->text());
+    }
+}
+
 
 /**
  * Create the file menu.
@@ -749,7 +872,11 @@ BrainBrowserWindow::createMenuFile()
     menu->addSeparator();
     menu->addAction(m_openFileAction);
     menu->addAction(m_openLocationAction);
-    m_recentSpecFileMenu = menu->addMenu("Open Recent Spec File");
+    
+    m_recentSpecFileMenuOpenConfirmTitle = "Open Recent Spec File";
+    m_recentSpecFileMenuLoadNoConfirmTitle = "Load All Files in Recent Spec File";
+
+    m_recentSpecFileMenu = menu->addMenu(m_recentSpecFileMenuOpenConfirmTitle);
     QObject::connect(m_recentSpecFileMenu, SIGNAL(aboutToShow()),
                      this, SLOT(processRecentSpecFileMenuAboutToBeDisplayed()));
     QObject::connect(m_recentSpecFileMenu, SIGNAL(triggered(QAction*)),
@@ -831,17 +958,85 @@ BrainBrowserWindow::processOverlayVerticalToolBoxVisibilityChanged(bool visible)
 void 
 BrainBrowserWindow::processFileMenuAboutToShow()
 {
+    if (isMacOptionKeyDown()) {
+        m_closeWindowAction->setText(m_closeWindowActionNoConfirmTitle);
+        m_recentSpecFileMenu->setTitle(m_recentSpecFileMenuLoadNoConfirmTitle);
+    }
+    else {
+        m_closeWindowAction->setText(m_closeWindowActionConfirmTitle);
+        m_recentSpecFileMenu->setTitle(m_recentSpecFileMenuOpenConfirmTitle);
+    }
 }
+
+void
+BrainBrowserWindow::processCloseWindow()
+{
+    if (m_closeWindowAction->text() == m_closeWindowActionConfirmTitle) {
+        /*
+         * When confirming, just use close slot and it will result
+         * in confirmation dialog being displayed.
+         */
+        m_closeWithoutConfirmationFlag = false;
+        close();
+    }
+    else if (m_closeWindowAction->text() == m_closeWindowActionNoConfirmTitle) {
+        m_closeWithoutConfirmationFlag = true;
+        close();
+    }
+    else {
+        CaretAssert(0);
+    }
+}
+
+/**
+ * @return Is the Option Key down on a Mac.
+ * Always returns false if not a Mac.
+ */
+bool
+BrainBrowserWindow::isMacOptionKeyDown() const
+{
+    bool keyDown = false;
+    
+#ifdef CARET_OS_MACOSX
+    keyDown = (QApplication::queryKeyboardModifiers() == Qt::AltModifier);
+#endif  // CARET_OS_MACOSX
+    
+    return keyDown;
+}
+
 
 /**
  * Called when Open Recent Spec File Menu is about to be displayed
  * and creates the content of the menu.
  */
-void 
+void  
 BrainBrowserWindow::processRecentSpecFileMenuAboutToBeDisplayed()
 {
     m_recentSpecFileMenu->clear();
     
+    const int32_t numRecentSpecFiles = BrainBrowserWindow::loadRecentSpecFileMenu(m_recentSpecFileMenu);
+    
+    if (numRecentSpecFiles > 0) {
+        m_recentSpecFileMenu->addSeparator();
+        QAction* action = new QAction("Clear Menu",
+                                      m_recentSpecFileMenu);
+        action->setData("CLEAR_CLEAR");
+        m_recentSpecFileMenu->addAction(action);
+    }
+}
+
+/**
+ * Load a menu with recent spec files.  This method only ADDS
+ * items to the menu, nothing is removed or cleared.
+ *
+ * @param recentSpecFileMenu
+ *    Menu to which recent spec files are added.
+ * @return
+ *    Returns the number of recent spec files added to the menu.
+ */
+int32_t
+BrainBrowserWindow::loadRecentSpecFileMenu(QMenu* recentSpecFileMenu)
+{
     CaretPreferences* prefs = SessionManager::get()->getCaretPreferences();
     std::vector<AString> recentSpecFiles;
     prefs->getPreviousSpecFiles(recentSpecFiles);
@@ -866,18 +1061,17 @@ BrainBrowserWindow::processRecentSpecFileMenuAboutToBeDisplayed()
         }
         
         QAction* action = new QAction(actionName,
-                                      m_recentSpecFileMenu);
+                                      recentSpecFileMenu);
+        /*
+         * If this "setData()" action changes you will need to update:
+         * (1) BrainBrowserWindow::processRecentSpecFileMenuSelection
+         * (2) MacDockMenu::menuActionTriggered
+         */
         action->setData(actionFullPath);
-        m_recentSpecFileMenu->addAction(action);
-    } 
-    
-    if (numRecentSpecFiles > 0) {
-        m_recentSpecFileMenu->addSeparator();
-        QAction* action = new QAction("Clear Menu",
-                                      m_recentSpecFileMenu);
-        action->setData("CLEAR_CLEAR");
-        m_recentSpecFileMenu->addAction(action);
+        recentSpecFileMenu->addAction(action);
     }
+    
+    return numRecentSpecFiles;
 }
 
 /**
@@ -898,22 +1092,28 @@ BrainBrowserWindow::processRecentSpecFileMenuSelection(QAction* itemAction)
         return;
     }
     
-    if (specFileName.isEmpty() == false) {
+    if ( ! specFileName.isEmpty()) {
         
         SpecFile specFile;
         try {
             specFile.readFile(specFileName);
             
-            if (GuiManager::get()->processShowOpenSpecFileDialog(&specFile,
-                                              this)) {
+            if (m_recentSpecFileMenu->title() == m_recentSpecFileMenuOpenConfirmTitle) {
+                if (GuiManager::get()->processShowOpenSpecFileDialog(&specFile,
+                                                                     this)) {
+                    m_toolbar->addDefaultTabsAfterLoadingSpecFile();
+                }
+            }
+            else if (m_recentSpecFileMenu->title() == m_recentSpecFileMenuLoadNoConfirmTitle) {
+                std::vector<AString> fileNamesToLoad;
+                fileNamesToLoad.push_back(specFileName);
+                loadFilesFromCommandLine(fileNamesToLoad,
+                                         BrainBrowserWindow::LOAD_SPEC_FILE_CONTENTS_VIA_COMMAND_LINE);
                 m_toolbar->addDefaultTabsAfterLoadingSpecFile();
             }
-//            Brain* brain = GuiManager::get()->getBrain();
-//            if (SpecFileManagementDialog::runOpenSpecFileDialog(brain,
-//                                                                &specFile,
-//                                                                this)) {
-//                m_toolbar->addDefaultTabsAfterLoadingSpecFile();
-//            }            
+            else {
+                CaretAssert(0);
+            }
         }
         catch (const DataFileException& e) {
             //errorMessages += e.whatString();
@@ -1253,18 +1453,18 @@ BrainBrowserWindow::createMenuSurface()
                     this,
                     SLOT(processShowSurfacePropertiesDialog()));
     
-    menu->addAction("Volume Interaction...", 
+    menu->addAction("Primary Anatomical...", 
                     this, 
-                    SLOT(processSurfaceMenuVolumeInteraction()));
+                    SLOT(processSurfaceMenuPrimaryAnatomical()));
     
     return menu;
 }
 
 /**
- * Called when Volume Interaction is selected from the surface menu.
+ * Called when Primary Anatomical is selected from the surface menu.
  */
 void 
-BrainBrowserWindow::processSurfaceMenuVolumeInteraction()
+BrainBrowserWindow::processSurfaceMenuPrimaryAnatomical()
 {
     Brain* brain = GuiManager::get()->getBrain();
     const int32_t numBrainStructures = brain->getNumberOfBrainStructures();
@@ -1272,20 +1472,20 @@ BrainBrowserWindow::processSurfaceMenuVolumeInteraction()
         return;
     }
     
-    WuQDataEntryDialog ded("Volume Interaction Surfaces",
+    WuQDataEntryDialog ded("Primary Anatomical Surfaces",
                            this);
     std::vector<SurfaceSelectionViewController*> surfaceSelectionControls;
     for (int32_t i = 0; i < numBrainStructures; i++) {
         BrainStructure* bs = brain->getBrainStructure(i);
         SurfaceSelectionViewController* ssc = ded.addSurfaceSelectionViewController(StructureEnum::toGuiName(bs->getStructure()), 
                                                                                     bs);
-        ssc->setSurface(bs->getVolumeInteractionSurface());
+        ssc->setSurface(bs->getPrimaryAnatomicalSurface());
         surfaceSelectionControls.push_back(ssc);
     }
     if (ded.exec() == WuQDataEntryDialog::Accepted) {
         for (int32_t i = 0; i < numBrainStructures; i++) {
             BrainStructure* bs = brain->getBrainStructure(i);
-            bs->setVolumeInteractionSurface(surfaceSelectionControls[i]->getSurface());
+            bs->setPrimaryAnatomicalSurface(surfaceSelectionControls[i]->getSurface());
         }
         EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
     }
@@ -1379,6 +1579,17 @@ BrainBrowserWindow::createMenuWindow()
     menu->addAction(m_moveTabsFromAllWindowsToOneWindowAction);
     menu->addMenu(m_moveSelectedTabToWindowMenu);
     menu->addSeparator();
+    
+    /*
+     * Cannot use the Identify action since it sets the "checkable" attribute
+     * and this will add checkbox and checkmark to the menu.  In addition,
+     * using the identify action would also hide the help viewer if it is
+     * displayed and we don't want that.
+     */
+    QAction* identifyAction = GuiManager::get()->getIdentifyBrainordinateDialogDisplayAction();
+    menu->addAction(identifyAction->text(),
+                    this, SLOT(processShowIdentifyBrainordinateDialog()));
+    
     menu->addAction(m_informationDialogAction);
     menu->addAction(GuiManager::get()->getSceneDialogDisplayAction());
     menu->addSeparator();
@@ -1432,6 +1643,25 @@ BrainBrowserWindow::processShowHelpInformation()
         helpAction->blockSignals(false);
     }
     helpAction->trigger();
+}
+
+void
+BrainBrowserWindow::processShowIdentifyBrainordinateDialog()
+{
+    /*
+     * Always display the identify dialog when selected from the menu.
+     * Even if the identify dialog is active it may be under other windows
+     * so triggering it will cause it to display.
+     */
+    GuiManager::get()->showHideIdentfyBrainordinateDialog(true,
+                                                          this);
+//    QAction* identifyAction = GuiManager::get()->getIdentifyBrainordinateDialogDisplayAction();
+//    if (identifyAction->isChecked()) {
+//        identifyAction->blockSignals(true);
+//        identifyAction->setChecked(false);
+//        identifyAction->blockSignals(false);
+//    }
+//    identifyAction->trigger();
 }
 
 /**
@@ -1671,7 +1901,7 @@ BrainBrowserWindow::processDataFileOpen()
      * Get all file filters.
      */
     std::vector<DataFileTypeEnum::Enum> dataFileTypes;
-    DataFileTypeEnum::getAllEnums(dataFileTypes, false, false);
+    DataFileTypeEnum::getAllEnums(dataFileTypes, false);
     QStringList filenameFilterList;
     filenameFilterList.append("Any File (*)");
     for (std::vector<DataFileTypeEnum::Enum>::const_iterator iter = dataFileTypes.begin();
@@ -2192,6 +2422,8 @@ BrainBrowserWindow::loadFiles(QWidget* parentForDialogs,
     if (sceneFileWasLoaded) {
         GuiManager::get()->processShowSceneDialog(this);
     }
+    
+    EventManager::get()->sendEvent(EventMacDockMenuUpdate().getPointer());
     
     return successFlag;
 }
@@ -3129,13 +3361,27 @@ BrainBrowserWindow::getDescriptionOfContent(PlainTextStringBuilder& descriptionO
     descriptionOut.addLine("Window "
                            + AString::number(getBrowserWindowIndex() + 1)
                            + ":");
+
+    std::vector<BrowserTabContent*> tabContent;
     
-    const BrowserTabContent* btc = getBrowserTabContent();
-    if (btc != NULL) {
-        descriptionOut.pushIndentation();
-        btc->getDescriptionOfContent(descriptionOut);
-        descriptionOut.popIndentation();
+    if (isTileTabsSelected()) {
+        m_toolbar->getAllTabContent(tabContent);
     }
+    else {
+        BrowserTabContent* btc = m_toolbar->getTabContentFromSelectedTab();
+        if (btc != NULL) {
+            tabContent.push_back(btc);
+        }
+    }
+    
+    descriptionOut.pushIndentation();
+    for (std::vector<BrowserTabContent*>::iterator iter = tabContent.begin();
+         iter != tabContent.end();
+         iter++) {
+        const BrowserTabContent* btc = *iter;
+        btc->getDescriptionOfContent(descriptionOut);
+    }
+    descriptionOut.popIndentation();
 }
 
 

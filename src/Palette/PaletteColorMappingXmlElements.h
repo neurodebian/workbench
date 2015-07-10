@@ -29,6 +29,7 @@ namespace PaletteColorMappingXmlElements {
     static const AString XML_TAG_PALETTE_COLOR_MAPPING = "PaletteColorMapping";
     static const AString XML_TAG_SCALE_MODE = "ScaleMode";
     static const AString XML_TAG_AUTO_SCALE_PERCENTAGE_VALUES = "AutoScalePercentageValues";
+    static const AString XML_TAG_AUTO_SCALE_ABSOLUTE_PERCENTAGE_VALUES = "AutoScaleAbsolutePercentageValues";
     static const AString XML_TAG_USER_SCALE_VALUES = "UserScaleValues";
     static const AString XML_TAG_PALETTE_NAME = "PaletteName";
     static const AString XML_TAG_INTERPOLATE = "InterpolatePalette";
@@ -43,6 +44,7 @@ namespace PaletteColorMappingXmlElements {
     static const AString XML_TAG_THRESHOLD_DATA_NAME = "ThresholdDataName";
     static const AString XML_TAG_THRESHOLD_FAILURE_IN_GREEN = "ThresholdFailureInGreen";
     static const AString XML_TAG_THRESHOLD_RANGE_MODE = "ThresholdRangeMode";
+    static const AString XML_TAG_THRESHOLD_NEG_MIN_POS_MAX_LINKED = "ThresholdLowHighLinked";
     
     static const AString XML_ATTRIBUTE_VERSION_NUMBER = "Version";
     static const int XML_VERSION_NUMBER = 1;

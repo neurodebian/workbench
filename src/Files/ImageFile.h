@@ -21,14 +21,15 @@
 #ifndef __IMAGE_FILE_H__
 #define __IMAGE_FILE_H__
 
-#include "DataFile.h"
+#include "CaretDataFile.h"
+#include "CaretPointer.h"
 
 class QImage;
 
 namespace caret {
     
 /// File for images
-class ImageFile : public DataFile {
+class ImageFile : public CaretDataFile {
 public:
     /**
      * Location of origin in image data.
@@ -55,6 +56,28 @@ public:
     
     void clear();
     
+    /**
+     * @return The structure for this file.
+     */
+    virtual StructureEnum::Enum getStructure() const;
+    
+    /**
+     * Set the structure for this file.
+     * @param structure
+     *   New structure for this file.
+     */
+    virtual void setStructure(const StructureEnum::Enum structure);
+    
+    /**
+     * @return Get access to the file's metadata.
+     */
+    virtual GiftiMetaData* getFileMetaData();
+    
+    /**
+     * @return Get access to unmodifiable file's metadata.
+     */
+    virtual const GiftiMetaData* getFileMetaData() const;
+    
     virtual bool compareFileForUnitTesting(const DataFile* df,
                                            const float tolerance,
                                            AString& messageOut) const;
@@ -67,9 +90,14 @@ public:
     
     void setFromQImage(const QImage& img);
     
-    virtual void readFile(const AString& filename) throw (DataFileException);
+    bool getImageBytesRGBA(const IMAGE_DATA_ORIGIN_LOCATION imageOrigin,
+                           std::vector<uint8_t>& bytesRGBA,
+                           int32_t& widthOut,
+                           int32_t& heightOut) const;
     
-    virtual void writeFile(const AString& filename) throw (DataFileException);
+    virtual void readFile(const AString& filename);
+    
+    virtual void writeFile(const AString& filename);
     
     void cropImageRemoveBackground(const int marginSize,
                                    const uint8_t backgroundColor[3]);
@@ -96,10 +124,10 @@ public:
     void resizeToWidth(const int32_t width);
     
     void getImageInByteArray(QByteArray& byteArrayOut,
-                             const AString& format) const throw (DataFileException);
+                             const AString& format) const;
     
     void setImageFromByteArray(const QByteArray& byteArray,
-                               const AString& format) throw (DataFileException);
+                               const AString& format);
     
     void combinePreservingAspectAndFillIfNeeded(const std::vector<ImageFile*>& imageFiles,
                                                 const int numImagesPerRow,
@@ -118,14 +146,16 @@ private:
     
     void insertImage(const QImage& otherImage,
                      const int x,
-                     const int y) throw (DataFileException);
+                     const int y);
     
     static void insertImage(const QImage& insertThisImage,
                             QImage& intoThisImage,
                             const int positionX,
-                            const int positionY) throw (DataFileException);
+                            const int positionY);
     
     QImage* m_image;
+    
+    CaretPointer<GiftiMetaData> m_fileMetaData;
 };
 
 } // namespace

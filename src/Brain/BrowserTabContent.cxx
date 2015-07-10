@@ -33,6 +33,7 @@
 #include "CaretAssert.h"
 #include "CaretDataFileSelectionModel.h"
 #include "CaretLogger.h"
+#include "CaretMappableDataFileAndMapSelectionModel.h"
 #include "ChartData.h"
 #include "ChartMatrixDisplayProperties.h"
 #include "CaretPreferences.h"
@@ -42,6 +43,7 @@
 #include "GroupAndNameHierarchyGroup.h"
 #include "GroupAndNameHierarchyModel.h"
 #include "GroupAndNameHierarchyName.h"
+#include "DeveloperFlagsEnum.h"
 #include "DisplayPropertiesBorders.h"
 #include "DisplayPropertiesFoci.h"
 #include "EventCaretMappableDataFileMapsViewedInOverlays.h"
@@ -1184,38 +1186,47 @@ BrowserTabContent::getDisplayedPaletteMapFiles(std::vector<CaretMappableDataFile
     if (useChartsFlag) {
         ModelChart* modelChart = getDisplayedChartModel();
         if (modelChart != NULL) {
+            CaretDataFileSelectionModel* fileModel = NULL;
+            
             switch (modelChart->getSelectedChartDataType(m_tabNumber)) {
                 case ChartDataTypeEnum::CHART_DATA_TYPE_INVALID:
                     break;
-                case ChartDataTypeEnum::CHART_DATA_TYPE_DATA_SERIES:
+                case ChartDataTypeEnum::CHART_DATA_TYPE_LINE_DATA_SERIES:
                     break;
-                case ChartDataTypeEnum::CHART_DATA_TYPE_MATRIX:
-                {
-                    CaretDataFileSelectionModel* fileModel = modelChart->getChartableMatrixFileSelectionModel(m_tabNumber);
-                    if (fileModel != NULL) {
-                        CaretDataFile* caretFile = fileModel->getSelectedFile();
-                        if (caretFile != NULL) {
-                            CaretMappableDataFile* mapFile = dynamic_cast<CaretMappableDataFile*>(caretFile);
-                            if (mapFile != NULL) {
-                                ChartableMatrixInterface* matrixFile = dynamic_cast<ChartableMatrixInterface*>(mapFile);
-                                if (matrixFile != NULL) {
-                                    ChartMatrixDisplayProperties* props = matrixFile->getChartMatrixDisplayProperties(m_tabNumber);
-                                    if (props->isColorBarDisplayed()) {
-                                        /*
-                                         * Matrix contains all file data and always
-                                         * uses a map index of zero.
-                                         */
-                                        mapFiles.push_back(mapFile);
-                                        mapIndices.push_back(0);
-                                    }
-                                }
+                case ChartDataTypeEnum::CHART_DATA_TYPE_LINE_FREQUENCY_SERIES:
+                    break;
+                case ChartDataTypeEnum::CHART_DATA_TYPE_LINE_TIME_SERIES:
+                    break;
+                case ChartDataTypeEnum::CHART_DATA_TYPE_MATRIX_LAYER:
+                    if (modelChart->getSelectedChartDataType(m_tabNumber) == ChartDataTypeEnum::CHART_DATA_TYPE_MATRIX_LAYER) {
+                        fileModel = modelChart->getChartableMatrixParcelFileSelectionModel(m_tabNumber);
+                    }
+                    break;
+                case ChartDataTypeEnum::CHART_DATA_TYPE_MATRIX_SERIES:
+                    if (modelChart->getSelectedChartDataType(m_tabNumber) == ChartDataTypeEnum::CHART_DATA_TYPE_MATRIX_SERIES) {
+                        fileModel = modelChart->getChartableMatrixSeriesFileSelectionModel(m_tabNumber);
+                    }
+            }
+            
+            if (fileModel != NULL) {
+                CaretDataFile* caretFile = fileModel->getSelectedFile();
+                if (caretFile != NULL) {
+                    CaretMappableDataFile* mapFile = dynamic_cast<CaretMappableDataFile*>(caretFile);
+                    if (mapFile != NULL) {
+                        ChartableMatrixInterface* matrixFile = dynamic_cast<ChartableMatrixInterface*>(mapFile);
+                        if (matrixFile != NULL) {
+                            ChartMatrixDisplayProperties* props = matrixFile->getChartMatrixDisplayProperties(m_tabNumber);
+                            if (props->isColorBarDisplayed()) {
+                                /*
+                                 * Matrix contains all file data and always
+                                 * uses a map index of zero.
+                                 */
+                                mapFiles.push_back(mapFile);
+                                mapIndices.push_back(0);
                             }
                         }
                     }
                 }
-                    break;
-                case ChartDataTypeEnum::CHART_DATA_TYPE_TIME_SERIES:
-                    break;
             }
         }
     }
@@ -1224,7 +1235,7 @@ BrowserTabContent::getDisplayedPaletteMapFiles(std::vector<CaretMappableDataFile
 /**
  * @return The volume surface outline model for this tab.
  */
-VolumeSurfaceOutlineSetModel* 
+VolumeSurfaceOutlineSetModel*
 BrowserTabContent::getVolumeSurfaceOutlineSet()
 {
     return m_volumeSurfaceOutlineSetModel;
@@ -1842,8 +1853,16 @@ BrowserTabContent::applyMouseRotation(BrainOpenGLViewportContent* viewportConten
                         
                         if (isClockwise
                             || isCounterClockwise) {
-                            const float mouseDelta = std::sqrt(static_cast<float>((mouseDeltaX * mouseDeltaX)
+                            float mouseDelta = std::sqrt(static_cast<float>((mouseDeltaX * mouseDeltaX)
                                                                                   + (mouseDeltaY * mouseDeltaY)));
+                            
+//                            /*
+//                             * Rotation needs to be oppposite for newer
+//                             * oblique slice drawing for volumes that
+//                             * do not have a voxel corresponding to
+//                             * the origin.
+//                             */
+//                            mouseDelta = -mouseDelta;
                             
                             switch (slicePlane) {
                                 case VolumeSliceViewPlaneEnum::ALL:
@@ -2093,8 +2112,14 @@ BrowserTabContent::applyMouseScaling(const int32_t /*mouseDX*/,
         ModelChart* modelChart = getDisplayedChartModel();
         CaretAssert(modelChart);
         
-        if (modelChart->getSelectedChartDataType(m_tabNumber) == ChartDataTypeEnum::CHART_DATA_TYPE_MATRIX) {
-            CaretDataFileSelectionModel* matrixSelectionModel = modelChart->getChartableMatrixFileSelectionModel(m_tabNumber);
+        CaretDataFileSelectionModel* matrixSelectionModel = NULL;
+        if (modelChart->getSelectedChartDataType(m_tabNumber) == ChartDataTypeEnum::CHART_DATA_TYPE_MATRIX_LAYER) {
+            matrixSelectionModel = modelChart->getChartableMatrixParcelFileSelectionModel(m_tabNumber);
+        }
+        
+        if (modelChart->getSelectedChartDataType(m_tabNumber) == ChartDataTypeEnum::CHART_DATA_TYPE_MATRIX_SERIES) {
+            matrixSelectionModel = modelChart->getChartableMatrixSeriesFileSelectionModel(m_tabNumber);
+        }
             if (matrixSelectionModel != NULL) {
                 ChartableMatrixInterface* chartableInterface = matrixSelectionModel->getSelectedFileOfType<ChartableMatrixInterface>();
                 if (chartableInterface != NULL) {
@@ -2110,7 +2135,6 @@ BrowserTabContent::applyMouseScaling(const int32_t /*mouseDX*/,
                     matrixProperties->setViewZooming(scaling);
                 }
             }
-        }        
     }
     else {
         float scaling = getViewingTransformation()->getScaling();
@@ -2156,6 +2180,7 @@ BrowserTabContent::applyMouseTranslation(BrainOpenGLViewportContent* viewportCon
         vf->getVoxelSpaceBoundingBox(mybox);
         float cubesize = std::max(std::max(mybox.getDifferenceX(), mybox.getDifferenceY()), mybox.getDifferenceZ());//factor volume bounding box into slowdown for zoomed in
         float slowdown = 0.005f * cubesize / volumeSliceScaling;//when zoomed in, make the movements slower to match - still changes based on viewport currently
+        slowdown = 1.0;
         
         float dx = 0.0;
         float dy = 0.0;
@@ -2223,19 +2248,24 @@ BrowserTabContent::applyMouseTranslation(BrainOpenGLViewportContent* viewportCon
         ModelChart* modelChart = getDisplayedChartModel();
         CaretAssert(modelChart);
         
-        if (modelChart->getSelectedChartDataType(m_tabNumber) == ChartDataTypeEnum::CHART_DATA_TYPE_MATRIX) {
-            CaretDataFileSelectionModel* matrixSelectionModel = modelChart->getChartableMatrixFileSelectionModel(m_tabNumber);
-            if (matrixSelectionModel != NULL) {
-                ChartableMatrixInterface* chartableInterface = matrixSelectionModel->getSelectedFileOfType<ChartableMatrixInterface>();
-                if (chartableInterface != NULL) {
-                    ChartMatrixDisplayProperties* matrixProperties = chartableInterface->getChartMatrixDisplayProperties(m_tabNumber);
-                    matrixProperties->setScaleMode(ChartMatrixScaleModeEnum::CHART_MATRIX_SCALE_MANUAL);
-                    float translation[2];
-                    matrixProperties->getViewPanning(translation);
-                    translation[0] += mouseDX;
-                    translation[1] += mouseDY;
-                    matrixProperties->setViewPanning(translation);
-                }
+        CaretDataFileSelectionModel* matrixSelectionModel = NULL;
+        if (modelChart->getSelectedChartDataType(m_tabNumber) == ChartDataTypeEnum::CHART_DATA_TYPE_MATRIX_LAYER) {
+            matrixSelectionModel = modelChart->getChartableMatrixParcelFileSelectionModel(m_tabNumber);
+        }
+        
+        if (modelChart->getSelectedChartDataType(m_tabNumber) == ChartDataTypeEnum::CHART_DATA_TYPE_MATRIX_SERIES) {
+            matrixSelectionModel = modelChart->getChartableMatrixSeriesFileSelectionModel(m_tabNumber);
+        }
+        if (matrixSelectionModel != NULL) {
+            ChartableMatrixInterface* chartableInterface = matrixSelectionModel->getSelectedFileOfType<ChartableMatrixInterface>();
+            if (chartableInterface != NULL) {
+                ChartMatrixDisplayProperties* matrixProperties = chartableInterface->getChartMatrixDisplayProperties(m_tabNumber);
+                matrixProperties->setScaleMode(ChartMatrixScaleModeEnum::CHART_MATRIX_SCALE_MANUAL);
+                float translation[2];
+                matrixProperties->getViewPanning(translation);
+                translation[0] += mouseDX;
+                translation[1] += mouseDY;
+                matrixProperties->setViewPanning(translation);
             }
         }
     }
@@ -2619,7 +2649,8 @@ BrowserTabContent::saveToScene(const SceneAttributes* sceneAttributes,
 {
     SceneClass* sceneClass = new SceneClass(instanceName,
                                             "BrowserTabContent",
-                                            3); // version 3 as of 4/22/2014
+                                            4);  // WB-491, 1/28/2015
+                                            //3); // version 3 as of 4/22/2014
 
     float obliqueMatrix[16];
     m_obliqueVolumeRotationMatrix->getMatrixForOpenGL(obliqueMatrix);
@@ -2774,6 +2805,90 @@ BrowserTabContent::restoreFromScene(const SceneAttributes* sceneAttributes,
      */
     if (sceneClass->getVersionNumber() < 3) {
         *m_flatSurfaceViewingTransformation = *m_viewingTransformation;
+    }
+    
+    /*
+     * Prior to WB-491 surface drawing used the maximum dimension for 
+     * scaling to fit the window height and this was almost
+     * always the Y-axis.  This worked well when the default view was
+     * a dorsal view with the anterior pole was at the top of the display
+     * and the posterior pole at the bottom of the display.  However
+     * the default view was changed to be a lateral view so the surface
+     * did not scale to fit the window and there were problems with the
+     * surfaces scaling improperly when the overlay toolbox was changed
+     * in height.
+     *
+     * This code adjusts the surface scaling for older scenes so that 
+     * older scenes are restored properly with the newer default scaling
+     * for a lateral view.
+     *
+     * See also: BrainOpenGLFixedPipeline::setOrthographicProjectionForWithBoundingBox()
+     */
+    if (sceneClass->getVersionNumber() < 4) {
+        Surface* surface = NULL;
+        switch (getSelectedModelType()) {
+            case ModelTypeEnum::MODEL_TYPE_CHART:
+                break;
+            case ModelTypeEnum::MODEL_TYPE_INVALID:
+                break;
+            case ModelTypeEnum::MODEL_TYPE_SURFACE:
+            {
+                ModelSurface* modelSurface = getDisplayedSurfaceModel();
+                if (modelSurface != NULL) {
+                    surface = modelSurface->getSurface();
+                }
+            }
+                break;
+            case ModelTypeEnum::MODEL_TYPE_SURFACE_MONTAGE:
+            {
+                ModelSurfaceMontage* modelMontage = getDisplayedSurfaceMontageModel();
+                if (modelMontage != NULL) {
+                    std::vector<SurfaceMontageViewport*> surfaceMontageViewports;
+                    modelMontage->getSurfaceMontageViewportsForDrawing(getTabNumber(),
+                                                                       surfaceMontageViewports);
+                    
+                    for (std::vector<SurfaceMontageViewport*>::iterator iter = surfaceMontageViewports.begin();
+                         iter != surfaceMontageViewports.end();
+                         iter++) {
+                        SurfaceMontageViewport* smv = *iter;
+                        if (smv->getSurface() != NULL) {
+                            surface = smv->getSurface();
+                            break;
+                        }
+                    }
+                }
+            }
+                break;
+            case ModelTypeEnum::MODEL_TYPE_VOLUME_SLICES:
+                break;
+            case ModelTypeEnum::MODEL_TYPE_WHOLE_BRAIN:
+            {
+                ModelWholeBrain* modelWholeBrain = getDisplayedWholeBrainModel();
+                if (modelWholeBrain != NULL) {
+                    std::vector<Surface*> allSurfaces = modelWholeBrain->getSelectedSurfaces(getTabNumber());
+                    if ( ! allSurfaces.empty()) {
+                        surface = allSurfaces[0];
+                    }
+                }
+            }
+                break;
+        }
+        
+        if (surface != NULL) {
+            if (surface->getSurfaceType() != SurfaceTypeEnum::FLAT) {
+                const BoundingBox* boundingBox = surface->getBoundingBox();
+                const float zDiff = boundingBox->getDifferenceZ();
+                const float maxDim =  std::max(std::max(boundingBox->getDifferenceX(),
+                                                        boundingBox->getDifferenceY()),
+                                               zDiff);
+                if (zDiff > 0.0) {
+                    const float scaleAdjustment = zDiff / maxDim;  //maxDim / zDiff;
+                    float scaling = getScaling();
+                    scaling *= scaleAdjustment;
+                    setScaling(scaling);
+                }
+            }
+        }
     }
 }
 

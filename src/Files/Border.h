@@ -102,20 +102,24 @@ namespace caret {
         
         void removeLastPoint();
         
-        void replacePoints(const Border* border);
-        
+        void replacePointsWithUndoSaving(const Border* border);
+
         void reverse();
         
+        void reviseExtendFromPointIndex(SurfaceFile* surfaceFile,
+                                        const int32_t pointIndex,
+                                        const Border* segment);
+        
         void reviseExtendFromEnd(SurfaceFile* surfaceFile,
-                                 const Border* segment) throw (BorderException);
+                                 const Border* segment);
         
         void reviseEraseFromEnd(SurfaceFile* surfaceFile,
-                                const Border* segment) throw (BorderException);
+                                const Border* segment);
         
         void reviseReplaceSegment(SurfaceFile* surfaceFile,
-                                  const Border* segment) throw (BorderException);
+                                  const Border* segment);
         
-        void writeAsXML(XmlWriter& xmlWriter) throw (XmlException);
+        void writeAsXML(XmlWriter& xmlWriter);
         
         void writeXML3(QXmlStreamWriter& xml) const;
         
@@ -163,6 +167,8 @@ namespace caret {
         float getSegmentLength(SurfaceFile* surfaceFile,
                                  const int32_t startPointIndex,
                                  const int32_t endPointIndex);
+        
+        void replacePoints(const Border* border);
         
         void saveBorderForUndoEditing();
         

@@ -30,6 +30,8 @@
 #include "EventBrowserTabGetAll.h"
 #include "EventManager.h"
 #include "IdentifiedItemNode.h"
+#include "IdentifiedItemVoxel.h"
+#include "MathFunctions.h"
 #include "SceneClassAssistant.h"
 #include "SceneClass.h"
 #include "ScenePrimitive.h"
@@ -54,8 +56,8 @@ IdentificationManager::IdentificationManager()
     m_contralateralIdentificationEnabled = false;
     m_identificationSymbolColor = CaretColorEnum::WHITE;
     m_identificationContralateralSymbolColor = CaretColorEnum::LIME;
-    m_identifcationSymbolSize = 6.0;
-    m_identifcationMostRecentSymbolSize = 10.0;
+    m_identifcationSymbolSize = 3.0;
+    m_identifcationMostRecentSymbolSize = 5.0;
     
     m_sceneAssistant->add("m_contralateralIdentificationEnabled",
                           &m_contralateralIdentificationEnabled);
@@ -146,17 +148,34 @@ IdentificationManager::getIdentificationText() const
 }
 
 /**
- * Remove all identification text.
+ * Remove all identification text.  Node and voxels items have their text
+ * removed and all other identification items are removed.
  */
 void
 IdentificationManager::removeIdentificationText()
 {
+    std::list<IdentifiedItem*> idItemsToKeep;
+    
     for (std::list<IdentifiedItem*>::iterator iter = m_identifiedItems.begin();
          iter != m_identifiedItems.end();
          iter++) {
         IdentifiedItem* item = *iter;
-        item->clearText();
+        IdentifiedItemNode* nodeItem   = dynamic_cast<IdentifiedItemNode*>(item);
+        IdentifiedItemVoxel* voxelItem = dynamic_cast<IdentifiedItemVoxel*>(item);
+        if ((nodeItem != NULL)
+            || (voxelItem != NULL)) {
+            item->clearText();
+            idItemsToKeep.push_back(item);
+        }
+        else {
+            if (m_mostRecentIdentifiedItem == item) {
+                m_mostRecentIdentifiedItem = NULL;
+            }
+            delete item;
+        }
     }
+    
+    m_identifiedItems = idItemsToKeep;
 }
 
 /**
@@ -180,28 +199,30 @@ IdentificationManager::getNodeIdentifiedItemsForSurface(const StructureEnum::Enu
         const IdentifiedItem* item = *iter;
         const IdentifiedItemNode* nodeItem = dynamic_cast<const IdentifiedItemNode*>(item);
         if (nodeItem != NULL) {
-            if (nodeItem->getSurfaceNumberOfNodes() == surfaceNumberOfNodes) {
-                bool useIt = false;
-                if (nodeItem->getStructure() == structure) {
-                    useIt = true;
-                }
-                else if (nodeItem->getContralateralStructure() == structure) {
-                    useIt = true;
-                }
-                if (useIt) {
-                    IdentifiedItemNode nodeID(*nodeItem);
-                    
-                    const float* symbolRGB = CaretColorEnum::toRGB(m_identificationSymbolColor);
-                    nodeID.setSymbolRGB(symbolRGB);
-                    const float* contralateralSymbolRGB = CaretColorEnum::toRGB(m_identificationContralateralSymbolColor);
-                    nodeID.setContralateralSymbolRGB(contralateralSymbolRGB);
-                    if (item == m_mostRecentIdentifiedItem) {
-                        nodeID.setSymbolSize(m_identifcationMostRecentSymbolSize);
+            if (nodeItem->isValid()) {
+                if (nodeItem->getSurfaceNumberOfNodes() == surfaceNumberOfNodes) {
+                    bool useIt = false;
+                    if (nodeItem->getStructure() == structure) {
+                        useIt = true;
                     }
-                    else {
-                        nodeID.setSymbolSize(m_identifcationSymbolSize);
+                    else if (nodeItem->getContralateralStructure() == structure) {
+                        useIt = true;
                     }
-                    nodeItemsOut.push_back(nodeID);
+                    if (useIt) {
+                        IdentifiedItemNode nodeID(*nodeItem);
+                        
+                        const float* symbolRGB = CaretColorEnum::toRGB(m_identificationSymbolColor);
+                        nodeID.setSymbolRGB(symbolRGB);
+                        const float* contralateralSymbolRGB = CaretColorEnum::toRGB(m_identificationContralateralSymbolColor);
+                        nodeID.setContralateralSymbolRGB(contralateralSymbolRGB);
+                        if (item == m_mostRecentIdentifiedItem) {
+                            nodeID.setSymbolSize(m_identifcationMostRecentSymbolSize);
+                        }
+                        else {
+                            nodeID.setSymbolSize(m_identifcationSymbolSize);
+                        }
+                        nodeItemsOut.push_back(nodeID);
+                    }
                 }
             }
         }
@@ -209,6 +230,34 @@ IdentificationManager::getNodeIdentifiedItemsForSurface(const StructureEnum::Enu
 
     return nodeItemsOut;
 }
+
+/**
+ * @return All identified voxels.
+ */
+std::vector<IdentifiedItemVoxel>
+IdentificationManager::getIdentifiedItemsForVolume() const
+{
+    std::vector<IdentifiedItemVoxel> itemsOut;
+    
+    for (std::list<IdentifiedItem*>::const_iterator iter = m_identifiedItems.begin();
+         iter != m_identifiedItems.end();
+         iter++) {
+        const IdentifiedItem* item = *iter;
+        const IdentifiedItemVoxel* voxelItem = dynamic_cast<const IdentifiedItemVoxel*>(item);
+        if (voxelItem != NULL) {
+            if (voxelItem->isValid()) {
+                IdentifiedItemVoxel voxelID(*voxelItem);
+                const float* symbolRGB = CaretColorEnum::toRGB(m_identificationSymbolColor);
+                voxelID.setSymbolRGB(symbolRGB);
+                voxelID.setSymbolSize(m_identifcationSymbolSize);
+                itemsOut.push_back(voxelID);
+            }
+        }
+    }
+    
+    return itemsOut;
+}
+
 
 /**
  * Remove any identification for the node in the surface with the given
@@ -246,7 +295,40 @@ IdentificationManager::removeIdentifiedNodeItem(const StructureEnum::Enum struct
 }
 
 /**
- * Remove all identified items. 
+ * Remove identified voxel at the given coordinate.
+ *
+ * @param xyz
+ *     Coordinates for voxel that is to be removed.
+ */
+void
+IdentificationManager::removeIdentifiedVoxelItem(const float xyz[3])
+{
+    const float tolerance = 0.01;
+    
+    for (std::list<IdentifiedItem*>::iterator iter = m_identifiedItems.begin();
+         iter != m_identifiedItems.end();
+         iter++) {
+        IdentifiedItem* item = *iter;
+        const IdentifiedItemVoxel* voxel = dynamic_cast<const IdentifiedItemVoxel*>(item);
+        if (voxel != NULL) {
+            if (voxel->isValid()) {
+                float voxelXYZ[3];
+                voxel->getXYZ(voxelXYZ);
+                
+                const float distSQ = MathFunctions::distanceSquared3D(xyz,
+                                                                      voxelXYZ);
+                if (distSQ < tolerance) {
+                    m_identifiedItems.erase(iter);
+                    delete item;
+                    return;
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Remove all identified items.
  */
 void
 IdentificationManager::removeAllIdentifiedItems()
@@ -264,30 +346,49 @@ IdentificationManager::removeAllIdentifiedItems()
 }
 
 /**
- * Remove all identified nodes.
+ * Remove all identification symbols while preserving text.
+ *
+ * Text from identification symbols for surface or volume are 
+ * inserted into new identified items and the symbol items
+ * are removed.
  */
 void
-IdentificationManager::removeAllIdentifiedNodes()
+IdentificationManager::removeAllIdentifiedSymbols()
 {
-    std::list<IdentifiedItem*> itemsToKeep;
+    std::list<IdentifiedItem*> idItemsToKeep;
     
     for (std::list<IdentifiedItem*>::iterator iter = m_identifiedItems.begin();
          iter != m_identifiedItems.end();
          iter++) {
         IdentifiedItem* item = *iter;
-        IdentifiedItemNode* nodeItem = dynamic_cast<IdentifiedItemNode*>(item);
-        if (nodeItem != NULL) {
-            if (m_mostRecentIdentifiedItem == nodeItem) {
+        IdentifiedItemNode* nodeItem   = dynamic_cast<IdentifiedItemNode*>(item);
+        IdentifiedItemVoxel* voxelItem = dynamic_cast<IdentifiedItemVoxel*>(item);
+        IdentifiedItem* itemToKeep = NULL;
+        if ((nodeItem != NULL)
+            || (voxelItem != NULL)) {
+            if (m_mostRecentIdentifiedItem == item) {
                 m_mostRecentIdentifiedItem = NULL;
             }
-            delete nodeItem;
+            
+            itemToKeep = new IdentifiedItem(item->getText());
+            delete item;
         }
         else {
-            itemsToKeep.push_back(item);
+            itemToKeep = item;
+        }
+        
+        if (itemToKeep != NULL) {
+            if (itemToKeep->getText().isEmpty()) {
+                delete itemToKeep;
+                itemToKeep = NULL;
+            }
+            else {
+                idItemsToKeep.push_back(itemToKeep);
+            }
         }
     }
     
-    m_identifiedItems = itemsToKeep;
+    m_identifiedItems = idItemsToKeep;
 }
 
 /**
@@ -476,6 +577,16 @@ IdentificationManager::restoreFromScene(const SceneAttributes* sceneAttributes,
                 }
                 else if (className == "IdentifiedItemNode") {
                     IdentifiedItemNode* item = new IdentifiedItemNode();
+                    item->restoreFromScene(sceneAttributes, sc);
+                    if (item->isValid()) {
+                        addIdentifiedItemPrivate(item);
+                    }
+                    else {
+                        delete item;
+                    }
+                }
+                else if (className == "IdentifiedItemVoxel") {
+                    IdentifiedItemVoxel* item = new IdentifiedItemVoxel();
                     item->restoreFromScene(sceneAttributes, sc);
                     if (item->isValid()) {
                         addIdentifiedItemPrivate(item);

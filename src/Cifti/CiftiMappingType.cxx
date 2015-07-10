@@ -20,6 +20,8 @@
 
 #include "CiftiMappingType.h"
 
+#include "CaretAssert.h"
+
 using namespace caret;
 
 CiftiMappingType::~CiftiMappingType()
@@ -33,4 +35,28 @@ int64_t CiftiMappingType::getIndexFromNumberOrName(const QString& numberOrName) 
     if (!ok) return -1;
     if (ret < 0 || ret >= getLength()) return -1;
     return ret;
+}
+
+QString CiftiMappingType::getIndexName(const int64_t&) const
+{
+    return "";
+}
+
+QString CiftiMappingType::mappingTypeToName(const CiftiMappingType::MappingType& type)
+{
+    switch (type)
+    {
+        case BRAIN_MODELS:
+            return "BRAIN_MODELS";
+        case PARCELS:
+            return "PARCELS";
+        case SERIES:
+            return "SERIES";
+        case SCALARS:
+            return "SCALARS";
+        case LABELS:
+            return "LABELS";
+    }
+    CaretAssert(0);
+    return "";
 }

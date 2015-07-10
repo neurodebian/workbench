@@ -204,6 +204,8 @@ void CiftiFile::getColumn(float* dataOut, const int64_t& index) const
 
 void CiftiFile::setCiftiXML(const CiftiXML& xml, const bool useOldMetadata)
 {
+    m_readingImpl.grabNew(NULL);//drop old implementation, as it is now invalid due to XML (and therefore matrix size) change
+    m_writingImpl.grabNew(NULL);
     if (xml.getNumberOfDimensions() == 0) throw DataFileException("setCiftiXML called with 0-dimensional CiftiXML");
     if (useOldMetadata)
     {
@@ -225,8 +227,10 @@ void CiftiFile::setCiftiXML(const CiftiXML& xml, const bool useOldMetadata)
         m_xml = xml;
     }
     m_dims = m_xml.getDimensions();
-    m_readingImpl.grabNew(NULL);//drop old implementation, as it is now invalid due to XML (and therefore matrix size) change
-    m_writingImpl.grabNew(NULL);
+    for (size_t i = 0; i < m_dims.size(); ++i)
+    {
+        if (m_dims[i] < 1) throw DataFileException("cifti xml dimensions must be greater than zero");
+    }
 }
 
 void CiftiFile::setCiftiXML(const CiftiXMLOld& xml, const bool useOldMetadata)
@@ -400,6 +404,7 @@ void CiftiMemoryImpl::setColumn(const float* dataIn, const int64_t& index)
 CiftiOnDiskImpl::CiftiOnDiskImpl(const QString& filename)
 {//opens existing file for reading
     m_nifti.openRead(filename);//read-only, so we don't need write permission to read a cifti file
+    if (m_nifti.getNumComponents() != 1) throw DataFileException("complex or rgb datatype found in file '" + filename + "', these are not supported in cifti");
     const NiftiHeader& myHeader = m_nifti.getHeader();
     int numExts = (int)myHeader.m_extensions.size(), whichExt = -1;
     for (int i = 0; i < numExts; ++i)
@@ -413,7 +418,20 @@ CiftiOnDiskImpl::CiftiOnDiskImpl(const QString& filename)
     if (whichExt == -1) throw DataFileException("no cifti extension found in file '" + filename + "'");
     m_xml.readXML(QByteArray(myHeader.m_extensions[whichExt]->m_bytes.data(), myHeader.m_extensions[whichExt]->m_bytes.size()));//CiftiXML should be under 2GB
     vector<int64_t> dimCheck = m_nifti.getDimensions();
-    if (dimCheck.size() < 5) throw DataFileException("invalid dimensions in cifti file '" + filename + "'");
+    if (dimCheck.size() < 5)
+    {
+        if (m_xml.getParsedVersion() == CiftiVersion(1, 0) && dimCheck.size() == 2)//QUIRK: we wrote some cifti-1 files with the dimensions in dim[1] and dim[2]
+        {
+            CaretLogWarning("invalid dimensions in cifti file '" + filename + "', attempting recovery");//becase cifti-1 was 2D only, we can try to recover
+            vector<int64_t> dimFix(4, 1);
+            dimFix.push_back(dimCheck[0]);
+            dimFix.push_back(dimCheck[1]);
+            dimCheck = dimFix;
+            m_nifti.overrideDimensions(dimCheck);//will actually get overridden again below since cifti-1 has reversed first dims
+        } else {
+            throw DataFileException("invalid dimensions in cifti file '" + filename + "'");
+        }
+    }
     for (int i = 0; i < 4; ++i)
     {
         if (dimCheck[i] != 1) throw DataFileException("non-singular dimension #" + QString::number(i + 1) + " in cifti file '" + filename + "'");
@@ -507,7 +525,7 @@ void CiftiOnDiskImpl::setColumn(const float* dataIn, const int64_t& index)
 {
     CaretAssert(m_xml.getNumberOfDimensions() == 2);//otherwise this shouldn't be called
     CaretAssert(index >= 0 && index < m_xml.getDimensionLength(CiftiXML::ALONG_ROW));
-    CaretLogFine("getColumn called on CiftiOnDiskImpl, this will be slow");//generate logging messages at a low priority
+    CaretLogFine("setColumn called on CiftiOnDiskImpl, this will be slow");//generate logging messages at a low priority
     vector<int64_t> indexSelect(2);
     indexSelect[0] = index;
     int64_t colLength = m_xml.getDimensionLength(CiftiXML::ALONG_COLUMN);
@@ -571,17 +589,17 @@ void CiftiXnatImpl::init(const QString& url)
     {
         throw DataFileException("only 2D cifti are supported via URL at this time");
     }
-    if (m_xml.getMappingType(CiftiXML::ALONG_COLUMN) == CiftiMappingType::SERIES && m_xml.getDimensionLength(CiftiXML::ALONG_ROW) < 1)
+    if (m_xml.getMappingType(CiftiXML::ALONG_ROW) == CiftiMappingType::SERIES && m_xml.getDimensionLength(CiftiXML::ALONG_ROW) < 1)
     {
         CaretHttpRequest rowRequest = m_baseRequest;
         rowRequest.m_queries.push_back(make_pair(AString("row-index"), AString("0")));
-        m_xml.getSeriesMap(CiftiXML::ALONG_COLUMN).setLength(getSizeFromReq(rowRequest));//number of timepoints along a row is the number of columns
+        m_xml.getSeriesMap(CiftiXML::ALONG_ROW).setLength(getSizeFromReq(rowRequest));
     }
-    if (m_xml.getMappingType(CiftiXML::ALONG_ROW) == CiftiMappingType::SERIES && m_xml.getDimensionLength(CiftiXML::ALONG_COLUMN) < 1)
+    if (m_xml.getMappingType(CiftiXML::ALONG_COLUMN) == CiftiMappingType::SERIES && m_xml.getDimensionLength(CiftiXML::ALONG_COLUMN) < 1)
     {
         CaretHttpRequest columnRequest = m_baseRequest;
         columnRequest.m_queries.push_back(make_pair(AString("column-index"), AString("0")));
-        m_xml.getSeriesMap(CiftiXML::ALONG_ROW).setLength(getSizeFromReq(columnRequest));//see above
+        m_xml.getSeriesMap(CiftiXML::ALONG_COLUMN).setLength(getSizeFromReq(columnRequest));
     }
     CaretLogFine("Connected URL: "
                    + url

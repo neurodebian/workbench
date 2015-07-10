@@ -32,10 +32,10 @@
 namespace caret
 {
     
-    struct NiftiExtension : public AbstractVolumeExtension
+    struct NiftiExtension
     {
         int32_t m_ecode;
-        ExtensionType getType() const { return NIFTI; }//should probably just say NIFTI, and have a separate version field for when NIFTI2 gets an updated extension format (probably with int64_t)
+        std::vector<char> m_bytes;
     };
     
     struct NiftiHeader : public AbstractHeader
@@ -48,7 +48,7 @@ namespace caret
         bool canWriteVersion(const int& version) const;
         bool isSwapped() const { return m_isSwapped; }
         int version() const { return m_version; }
-        HeaderType getType() const { return NIFTI; }//TODO: this should be changed to just "NIFTI", we don't deal with them separately - also, change to getHeaderType()
+        HeaderType getType() const { return NIFTI; }
         
         std::vector<int64_t> getDimensions() const;
         std::vector<std::vector<float> > getSForm() const;

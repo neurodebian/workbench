@@ -36,18 +36,22 @@
 #include "CaretLogger.h"
 #include "ChartMatrixDisplayProperties.h"
 #include "ChartModelDataSeries.h"
+#include "ChartModelFrequencySeries.h"
 #include "ChartModelTimeSeries.h"
 #include "ChartableMatrixInterface.h"
 #include "CaretPreferences.h"
 #include "ChartPoint.h"
 #include "CiftiMappableConnectivityMatrixDataFile.h"
+#include "CiftiParcelLabelFile.h"
 #include "CiftiParcelScalarFile.h"
+#include "CiftiScalarDataSeriesFile.h"
 #include "Brain.h"
 #include "ConnectivityDataLoaded.h"
 #include "EventCaretMappableDataFileMapsViewedInOverlays.h"
 #include "EventManager.h"
 #include "IdentificationWithColor.h"
 #include "SelectionItemChartDataSeries.h"
+#include "SelectionItemChartFrequencySeries.h"
 #include "SelectionItemChartMatrix.h"
 #include "SelectionItemChartTimeSeries.h"
 #include "SelectionManager.h"
@@ -113,6 +117,7 @@ BrainOpenGLChartDrawingFixedPipeline::drawCartesianChart(Brain* brain,
     m_fixedPipelineDrawing = fixedPipelineDrawing;
     m_tabIndex = tabIndex;
     m_chartModelDataSeriesBeingDrawnForIdentification = dynamic_cast<ChartModelDataSeries*>(cartesianChart);
+    m_chartModelFrequencySeriesBeingDrawnForIdentification = dynamic_cast<ChartModelFrequencySeries*>(cartesianChart);
     m_chartModelTimeSeriesBeingDrawnForIdentification = dynamic_cast<ChartModelTimeSeries*>(cartesianChart);
     m_chartCartesianSelectionTypeForIdentification = selectionItemDataType;
     m_chartableMatrixInterfaceBeingDrawnForIdentification = NULL;
@@ -124,6 +129,7 @@ BrainOpenGLChartDrawingFixedPipeline::drawCartesianChart(Brain* brain,
     saveStateOfOpenGL();
     
     SelectionItemChartDataSeries* chartDataSeriesID = m_brain->getSelectionManager()->getChartDataSeriesIdentification();
+    SelectionItemChartFrequencySeries* chartFrequencySeriesID = m_brain->getSelectionManager()->getChartFrequencySeriesIdentification();
     SelectionItemChartTimeSeries* chartTimeSeriesID = m_brain->getSelectionManager()->getChartTimeSeriesIdentification();
     
     /*
@@ -134,11 +140,9 @@ BrainOpenGLChartDrawingFixedPipeline::drawCartesianChart(Brain* brain,
         case BrainOpenGLFixedPipeline::MODE_DRAWING:
             break;
         case BrainOpenGLFixedPipeline::MODE_IDENTIFICATION:
-            if (chartDataSeriesID->isEnabledForSelection()) {
-                m_identificationModeFlag = true;
-                glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-            }
-            else if (chartTimeSeriesID->isEnabledForSelection()) {
+            if (chartDataSeriesID->isEnabledForSelection()
+                || chartFrequencySeriesID->isEnabledForSelection()
+                || chartTimeSeriesID->isEnabledForSelection()) {
                 m_identificationModeFlag = true;
                 glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
             }
@@ -272,6 +276,8 @@ BrainOpenGLChartDrawingFixedPipeline::drawCartesianChart(Brain* brain,
  *     Text rendering.
  * @param chartMatrixInterface
  *     Chart matrix interface containing matrix data.
+ * @param scalarDataSeriesMapIndex
+ *     Selected map in scalar data series file.
  * @param selectionItemDataType
  *     Selected data type.
  * @param tabIndex
@@ -283,6 +289,7 @@ BrainOpenGLChartDrawingFixedPipeline::drawMatrixChart(Brain* brain,
                                                       const int32_t viewport[4],
                                                       BrainOpenGLTextRenderInterface* textRenderer,
                                                       ChartableMatrixInterface* chartMatrixInterface,
+                                                      const int32_t scalarDataSeriesMapIndex,
                                                       const SelectionItemDataTypeEnum::Enum selectionItemDataType,
                                                       const int32_t tabIndex)
 {
@@ -290,22 +297,23 @@ BrainOpenGLChartDrawingFixedPipeline::drawMatrixChart(Brain* brain,
     m_fixedPipelineDrawing = fixedPipelineDrawing;
     m_tabIndex = tabIndex;
     m_chartModelDataSeriesBeingDrawnForIdentification = NULL;
+    m_chartModelFrequencySeriesBeingDrawnForIdentification = NULL;
     m_chartModelTimeSeriesBeingDrawnForIdentification = NULL;
     m_chartableMatrixInterfaceBeingDrawnForIdentification = chartMatrixInterface;
     m_chartableMatrixSelectionTypeForIdentification = selectionItemDataType;
     
     CaretAssert(chartMatrixInterface);
     
-    int32_t numberOfRows = 0;
-    int32_t numberOfColumns = 0;
-    std::vector<float> matrixRGBA;
-    chartMatrixInterface->getMatrixDataRGBA(numberOfRows,
-                                            numberOfColumns,
-                                            matrixRGBA);
-    if ((numberOfRows <= 0)
-        || (numberOfColumns <= 0)) {
-        return;
-    }
+//    int32_t numberOfRows = 0;
+//    int32_t numberOfColumns = 0;
+//    std::vector<float> matrixRGBA;
+//    chartMatrixInterface->getMatrixDataRGBA(numberOfRows,
+//                                            numberOfColumns,
+//                                            matrixRGBA);
+//    if ((numberOfRows <= 0)
+//        || (numberOfColumns <= 0)) {
+//        return;
+//    }
     
     saveStateOfOpenGL();
     
@@ -370,7 +378,8 @@ BrainOpenGLChartDrawingFixedPipeline::drawMatrixChart(Brain* brain,
     
     drawChartGraphicsMatrix(chartGraphicsDrawingViewport,
                             textRenderer,
-                            chartMatrixInterface);
+                            chartMatrixInterface,
+                            scalarDataSeriesMapIndex);
     
     /*
      * Process selection
@@ -963,15 +972,28 @@ BrainOpenGLChartDrawingFixedPipeline::drawChartDataCartesian(const int32_t chart
  *     The viewport.
  * @param textRenderer
  *     Text rendering.
- * @param chart
+ * @param chartMatrixInterface
  *     Chart that is drawn.
+ * @param scalarDataSeriesMapIndex
+ *     Selected map for scalar data series file.
  */
 void
 BrainOpenGLChartDrawingFixedPipeline::drawChartGraphicsMatrix(const int32_t viewport[4],
                                                               BrainOpenGLTextRenderInterface* /*textRenderer*/,
-                                                              ChartableMatrixInterface* chartMatrixInterface)
+                                                              ChartableMatrixInterface* chartMatrixInterface,
+                                                              const int32_t scalarDataSeriesMapIndex)
 {
     CaretAssert(chartMatrixInterface);
+    
+    CaretPreferences* prefs = SessionManager::get()->getCaretPreferences();
+    uint8_t highlightRGBByte[3];
+    //prefs->getColorChartMatrixGridLines(highlightRGBByte);
+    prefs->getColorForegroundChartView(highlightRGBByte);
+    const float highlightRGB[3] = {
+        highlightRGBByte[0] / 255.0,
+        highlightRGBByte[1] / 255.0,
+        highlightRGBByte[2] / 255.0
+    };
     
     int32_t numberOfRows = 0;
     int32_t numberOfColumns = 0;
@@ -979,21 +1001,47 @@ BrainOpenGLChartDrawingFixedPipeline::drawChartGraphicsMatrix(const int32_t view
     if (chartMatrixInterface->getMatrixDataRGBA(numberOfRows,
                                        numberOfColumns,
                                        matrixRGBA)) {
-        int64_t loadedRowIndex = -1;
+        std::set<int32_t> selectedColumnIndices;
+        std::set<int32_t> selectedRowIndices;
+        
         CiftiMappableConnectivityMatrixDataFile* connMapFile = dynamic_cast<CiftiMappableConnectivityMatrixDataFile*>(chartMatrixInterface);
         if (connMapFile != NULL) {
             const ConnectivityDataLoaded* connDataLoaded = connMapFile->getConnectivityDataLoaded();
             if (connDataLoaded != NULL) {
-                connDataLoaded->getRowLoading(loadedRowIndex);
+                int64_t loadedRowIndex = -1;
+                int64_t loadedColumnIndex = -1;
+                connDataLoaded->getRowColumnLoading(loadedRowIndex,
+                                                    loadedColumnIndex);
+                if (loadedRowIndex >= 0) {
+                    selectedRowIndices.insert(loadedRowIndex);
+                }
+                else if (loadedColumnIndex >= 0) {
+                    selectedColumnIndices.insert(loadedColumnIndex);
+                }
             }
         }
         
-        std::set<int32_t> selectedColumnIndices;
         CiftiParcelScalarFile* parcelScalarFile = dynamic_cast<CiftiParcelScalarFile*>(chartMatrixInterface);
         if (parcelScalarFile != NULL) {
             EventCaretMappableDataFileMapsViewedInOverlays mapOverlayEvent(parcelScalarFile);
             EventManager::get()->sendEvent(mapOverlayEvent.getPointer());
             selectedColumnIndices = mapOverlayEvent.getSelectedMapIndices();
+        }
+        
+        CiftiParcelLabelFile* parcelLabelFile = dynamic_cast<CiftiParcelLabelFile*>(chartMatrixInterface);
+        if (parcelLabelFile != NULL) {
+            EventCaretMappableDataFileMapsViewedInOverlays mapOverlayEvent(parcelLabelFile);
+            EventManager::get()->sendEvent(mapOverlayEvent.getPointer());
+            selectedColumnIndices = mapOverlayEvent.getSelectedMapIndices();
+        }
+        
+        CiftiScalarDataSeriesFile* scalarDataSeriesFile = dynamic_cast<CiftiScalarDataSeriesFile*>(chartMatrixInterface);
+        if (scalarDataSeriesFile != NULL) {
+            if (scalarDataSeriesMapIndex >= 0) {
+                //loadedRowIndex = scalarDataSeriesMapIndex;
+                selectedRowIndices.insert(scalarDataSeriesMapIndex);
+                // 12/29/2014 JWH selectedColumnIndices.insert(scalarDataSeriesMapIndex);
+            }
         }
         
         bool applyTransformationsFlag = false;
@@ -1048,6 +1096,11 @@ BrainOpenGLChartDrawingFixedPipeline::drawChartGraphicsMatrix(const int32_t view
                 break;
         }
         
+        const bool highlightSelectedRowColumnFlag = ( ( ! m_identificationModeFlag)
+                                                     && matrixProperties->isSelectedRowColumnHighlighted() );
+        const bool displayGridLinesFlag = ( ( ! m_identificationModeFlag)
+                                           && matrixProperties->isGridLinesDisplayed() );
+        
         /*
          * Set the coordinates for the area in which the matrix is drawn.
          */
@@ -1092,10 +1145,6 @@ BrainOpenGLChartDrawingFixedPipeline::drawChartGraphicsMatrix(const int32_t view
         quadVerticesFloatRGBA.reserve(numberOfRows * numberOfColumns * 4);
         std::vector<uint8_t> quadVerticesByteRGBA;
         quadVerticesByteRGBA.reserve(numberOfRows * numberOfColumns * 4);
-        
-        std::vector<float> loadedRowHighlightVerticesXYZ;
-        std::vector<float> loadedRowHighlightVerticesRGBA;
-        bool loadedRowDataValid = false;
         
         float cellY = (numberOfRows - 1) * cellHeight;
         for (int32_t rowIndex = 0; rowIndex < numberOfRows; rowIndex++) {
@@ -1180,49 +1229,6 @@ BrainOpenGLChartDrawingFixedPipeline::drawChartGraphicsMatrix(const int32_t view
                 cellX += cellWidth;
             }
             
-            if ( ! m_identificationModeFlag) {
-                if (rowIndex == loadedRowIndex) {
-                    const CaretColorEnum::Enum highlightColor = chartMatrixInterface->getSelectedParcelColor();
-                    const float* highlightRGB = CaretColorEnum::toRGB(highlightColor);
-                    loadedRowHighlightVerticesXYZ.push_back(0.0);
-                    loadedRowHighlightVerticesXYZ.push_back(cellY);
-                    loadedRowHighlightVerticesXYZ.push_back(0.0);
-                    loadedRowHighlightVerticesRGBA.push_back(highlightRGB[0]);
-                    loadedRowHighlightVerticesRGBA.push_back(highlightRGB[1]);
-                    loadedRowHighlightVerticesRGBA.push_back(highlightRGB[2]);
-                    loadedRowHighlightVerticesRGBA.push_back(1.0);
-                    
-                    loadedRowHighlightVerticesXYZ.push_back(numberOfColumns * cellWidth);
-                    loadedRowHighlightVerticesXYZ.push_back(cellY);
-                    loadedRowHighlightVerticesXYZ.push_back(0.0);
-                    loadedRowHighlightVerticesRGBA.push_back(highlightRGB[0]);
-                    loadedRowHighlightVerticesRGBA.push_back(highlightRGB[1]);
-                    loadedRowHighlightVerticesRGBA.push_back(highlightRGB[2]);
-                    loadedRowHighlightVerticesRGBA.push_back(1.0);
-                    
-                    loadedRowHighlightVerticesXYZ.push_back(numberOfColumns * cellWidth);
-                    loadedRowHighlightVerticesXYZ.push_back(cellY + cellHeight);
-                    loadedRowHighlightVerticesXYZ.push_back(0.0);
-                    loadedRowHighlightVerticesRGBA.push_back(highlightRGB[0]);
-                    loadedRowHighlightVerticesRGBA.push_back(highlightRGB[1]);
-                    loadedRowHighlightVerticesRGBA.push_back(highlightRGB[2]);
-                    loadedRowHighlightVerticesRGBA.push_back(1.0);
-                    
-                    
-                    loadedRowHighlightVerticesXYZ.push_back(0.0);
-                    loadedRowHighlightVerticesXYZ.push_back(cellY + cellHeight);
-                    loadedRowHighlightVerticesXYZ.push_back(0.0);
-                    loadedRowHighlightVerticesRGBA.push_back(highlightRGB[0]);
-                    loadedRowHighlightVerticesRGBA.push_back(highlightRGB[1]);
-                    loadedRowHighlightVerticesRGBA.push_back(highlightRGB[2]);
-                    loadedRowHighlightVerticesRGBA.push_back(1.0);
-
-                    CaretAssert(loadedRowHighlightVerticesXYZ.size() == 12);
-                    CaretAssert(loadedRowHighlightVerticesRGBA.size() == 16);
-                    
-                    loadedRowDataValid = true;
-                }
-            }
             cellY -= cellHeight;
         }
         
@@ -1242,6 +1248,13 @@ BrainOpenGLChartDrawingFixedPipeline::drawChartGraphicsMatrix(const int32_t view
             glEnd();
         }
         else {
+            /*
+             * Enable alpha blending so voxels that are not drawn from higher layers
+             * allow voxels from lower layers to be seen.
+             */
+            glEnable(GL_BLEND);
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+            
             CaretAssert((quadVerticesXYZ.size() / 3) == (quadVerticesFloatRGBA.size() / 4));
             const int32_t numberQuadVertices = static_cast<int32_t>(quadVerticesXYZ.size() / 3);
             glBegin(GL_QUADS);
@@ -1253,59 +1266,116 @@ BrainOpenGLChartDrawingFixedPipeline::drawChartGraphicsMatrix(const int32_t view
             }
             glEnd();
             
+            glDisable(GL_BLEND);
+
+            
             /*
              * Drawn an outline around the matrix elements.
              */
-            uint8_t gridLineColorBytes[3];
-            CaretPreferences* prefs = SessionManager::get()->getCaretPreferences();
-            prefs->getColorChartMatrixGridLines(gridLineColorBytes);
-            float gridLineColorFloats[4];
-            CaretPreferences::byteRgbToFloatRgb(gridLineColorBytes,
-                                                gridLineColorFloats);
-            gridLineColorFloats[3] = 1.0;
-            std::vector<float> outlineRGBA;
-            outlineRGBA.reserve(numberQuadVertices * 4);
-            for (int32_t i = 0; i < numberQuadVertices; i++) {
-                outlineRGBA.push_back(gridLineColorFloats[0]);
-                outlineRGBA.push_back(gridLineColorFloats[1]);
-                outlineRGBA.push_back(gridLineColorFloats[2]);
-                outlineRGBA.push_back(gridLineColorFloats[3]);
-            }
-            glPolygonMode(GL_FRONT, GL_LINE);
-            
-            glLineWidth(1.0);
-            glBegin(GL_QUADS);
-            for (int32_t i = 0; i < numberQuadVertices; i++) {
-                CaretAssertVectorIndex(outlineRGBA, i*4 + 3);
-                glColor4fv(&outlineRGBA[i*4]);
-                CaretAssertVectorIndex(quadVerticesXYZ, i*3 + 2);
-                glVertex3fv(&quadVerticesXYZ[i*3]);
-            }
-            glEnd();
-            
-            if (loadedRowDataValid) {
-                CaretAssert((loadedRowHighlightVerticesXYZ.size() / 3) == (loadedRowHighlightVerticesRGBA.size() / 4));
+            if (displayGridLinesFlag) {
+                uint8_t gridLineColorBytes[3];
+                prefs->getColorChartMatrixGridLines(gridLineColorBytes);
+                float gridLineColorFloats[4];
+                CaretPreferences::byteRgbToFloatRgb(gridLineColorBytes,
+                                                    gridLineColorFloats);
+                gridLineColorFloats[3] = 1.0;
+                std::vector<float> outlineRGBA;
+                outlineRGBA.reserve(numberQuadVertices * 4);
+                for (int32_t i = 0; i < numberQuadVertices; i++) {
+                    outlineRGBA.push_back(gridLineColorFloats[0]);
+                    outlineRGBA.push_back(gridLineColorFloats[1]);
+                    outlineRGBA.push_back(gridLineColorFloats[2]);
+                    outlineRGBA.push_back(gridLineColorFloats[3]);
+                }
                 
-                const int32_t numberOfVertices = static_cast<int32_t>(loadedRowHighlightVerticesXYZ.size() / 3);
+                glPolygonMode(GL_FRONT, GL_LINE);
+                glLineWidth(1.0);
+                glBegin(GL_QUADS);
+                for (int32_t i = 0; i < numberQuadVertices; i++) {
+                    CaretAssertVectorIndex(outlineRGBA, i*4 + 3);
+                    glColor4fv(&outlineRGBA[i*4]);
+                    CaretAssertVectorIndex(quadVerticesXYZ, i*3 + 2);
+                    glVertex3fv(&quadVerticesXYZ[i*3]);
+                }
+                glEnd();
+            }
+            
+            if ( (! selectedRowIndices.empty())
+                && highlightSelectedRowColumnFlag) {
+                std::vector<float> rowXYZ;
+                std::vector<float> rowRGBA;
+                
+                for (std::set<int32_t>::iterator rowIter = selectedRowIndices.begin();
+                     rowIter != selectedRowIndices.end();
+                     rowIter ++) {
+                    const float rowIndex = * rowIter;
+                    const float rowY = (numberOfRows - rowIndex - 1) * cellHeight;
+                    
+                    
+                    rowXYZ.push_back(0.0);
+                    rowXYZ.push_back(rowY);
+                    rowXYZ.push_back(0.0);
+                    rowRGBA.push_back(highlightRGB[0]);
+                    rowRGBA.push_back(highlightRGB[1]);
+                    rowRGBA.push_back(highlightRGB[2]);
+                    rowRGBA.push_back(1.0);
+                    
+                    rowXYZ.push_back(0.0);
+                    rowXYZ.push_back(rowY + cellHeight);
+                    rowXYZ.push_back(0.0);
+                    rowRGBA.push_back(highlightRGB[0]);
+                    rowRGBA.push_back(highlightRGB[1]);
+                    rowRGBA.push_back(highlightRGB[2]);
+                    rowRGBA.push_back(1.0);
+                    
+                    rowXYZ.push_back(numberOfColumns * cellWidth);
+                    rowXYZ.push_back(rowY + cellHeight);
+                    rowXYZ.push_back(0.0);
+                    rowRGBA.push_back(highlightRGB[0]);
+                    rowRGBA.push_back(highlightRGB[1]);
+                    rowRGBA.push_back(highlightRGB[2]);
+                    rowRGBA.push_back(1.0);
+                    
+                    
+                    rowXYZ.push_back(numberOfColumns * cellWidth);
+                    rowXYZ.push_back(rowY);
+                    rowXYZ.push_back(0.0);
+                    rowRGBA.push_back(highlightRGB[0]);
+                    rowRGBA.push_back(highlightRGB[1]);
+                    rowRGBA.push_back(highlightRGB[2]);
+                    rowRGBA.push_back(1.0);
+                }
+                
+                CaretAssert((rowXYZ.size() / 3) == (rowRGBA.size() / 4));
+                
+                const int32_t numberOfVertices = static_cast<int32_t>(rowXYZ.size() / 3);
+                const int32_t numberOfQuads = numberOfVertices / 4;
+                CaretAssert((numberOfQuads * 4) == numberOfVertices);
                 
                 /*
                  * As cells get larger, increase linewidth for selected row
                  */
-                float highlightLineWidth = std::max(((cellHeight * zooming) * 0.20), 3.0);
+                const float highlightLineWidth = std::max(((cellHeight * zooming) * 0.20), 3.0);
                 glLineWidth(highlightLineWidth);
                 
-                glBegin(GL_QUADS);
-                for (int32_t i = 0; i < numberOfVertices; i++) {
-                    CaretAssertVectorIndex(loadedRowHighlightVerticesRGBA, i*4 + 3);
-                    glColor4fv(&loadedRowHighlightVerticesRGBA[i*4]);
-                    CaretAssertVectorIndex(loadedRowHighlightVerticesXYZ, i*3 + 2);
-                    glVertex3fv(&loadedRowHighlightVerticesXYZ[i*3]);
+                for (int32_t iQuad = 0; iQuad < numberOfQuads; iQuad++) {
+                    glBegin(GL_LINE_LOOP);
+                    for (int32_t iVert = 0; iVert < 4; iVert++) {
+                        const int32_t rgbaOffset = (iQuad * 16) + (iVert * 4);
+                        CaretAssertVectorIndex(rowRGBA, rgbaOffset + 3);
+                        glColor4fv(&rowRGBA[rgbaOffset]);
+
+                        const int32_t xyzOffset = (iQuad * 12) + (iVert * 3);
+                        CaretAssertVectorIndex(rowXYZ, xyzOffset + 2);
+                        glVertex3fv(&rowXYZ[xyzOffset]);
+                    }
+                    glEnd();
                 }
-                glEnd();
                 glLineWidth(1.0);
             }
             
-            if ( ! selectedColumnIndices.empty()) {
+            if ( (! selectedColumnIndices.empty())
+                && highlightSelectedRowColumnFlag) {
                 std::vector<float> columnXYZ;
                 std::vector<float> columnRGBA;
                 
@@ -1314,9 +1384,6 @@ BrainOpenGLChartDrawingFixedPipeline::drawChartGraphicsMatrix(const int32_t view
                      colIter++) {
                     const float columnIndex = *colIter;
                     const float colX = columnIndex * cellWidth;
-                    
-                    const CaretColorEnum::Enum highlightColor = chartMatrixInterface->getSelectedParcelColor();
-                    const float* highlightRGB = CaretColorEnum::toRGB(highlightColor);
                     
                     columnXYZ.push_back(colX);
                     columnXYZ.push_back(0.0);
@@ -1355,23 +1422,31 @@ BrainOpenGLChartDrawingFixedPipeline::drawChartGraphicsMatrix(const int32_t view
                 CaretAssert((columnXYZ.size() / 3) == (columnRGBA.size() / 4));
                 
                 const int32_t numberOfVertices = static_cast<int32_t>(columnXYZ.size() / 3);
+                const int32_t numberOfQuads = numberOfVertices / 4;
+                CaretAssert((numberOfQuads * 4) == numberOfVertices);
                 
                 /*
                  * As cells get larger, increase linewidth for selected row
                  */
-                float highlightLineWidth = std::max(((cellHeight * zooming) * 0.20), 3.0);
+                const float highlightLineWidth = std::max(((cellHeight * zooming) * 0.20), 3.0);
                 glLineWidth(highlightLineWidth);
                 
-                glBegin(GL_QUADS);
-                for (int32_t i = 0; i < numberOfVertices; i++) {
-                    CaretAssertVectorIndex(columnRGBA, i*4 + 3);
-                    glColor4fv(&columnRGBA[i*4]);
-                    CaretAssertVectorIndex(columnXYZ, i*3 + 2);
-                    glVertex3fv(&columnXYZ[i*3]);
+                for (int32_t iQuad = 0; iQuad < numberOfQuads; iQuad++) {
+                    glBegin(GL_LINE_LOOP);
+                    for (int32_t iVert = 0; iVert < 4; iVert++) {
+                        const int32_t rgbaOffset = (iQuad * 16) + (iVert * 4);
+                        CaretAssertVectorIndex(columnRGBA, rgbaOffset + 3);
+                        glColor4fv(&columnRGBA[rgbaOffset]);
+                        
+                        const int32_t xyzOffset = (iQuad * 12) + (iVert * 3);
+                        CaretAssertVectorIndex(columnXYZ, xyzOffset + 2);
+                        glVertex3fv(&columnXYZ[xyzOffset]);
+                    }
+                    glEnd();
                 }
-                glEnd();
                 glLineWidth(1.0);
             }
+            
             glPolygonMode(GL_FRONT, GL_FILL);
         }
     }
@@ -1531,6 +1606,38 @@ BrainOpenGLChartDrawingFixedPipeline::processIdentification()
                 };
                 
                 m_fixedPipelineDrawing->setSelectedItemScreenXYZ(chartDataSeriesID,
+                                                                 lineXYZ);
+            }
+        }
+    }
+    else if (m_chartModelFrequencySeriesBeingDrawnForIdentification != NULL) {
+        m_fixedPipelineDrawing->getIndexFromColorSelection(m_chartCartesianSelectionTypeForIdentification,
+                                                           m_fixedPipelineDrawing->mouseX,
+                                                           m_fixedPipelineDrawing->mouseY,
+                                                           identifiedItemIndex,
+                                                           depth);
+        if (identifiedItemIndex >= 0) {
+            const int32_t idIndex = identifiedItemIndex * IDENTIFICATION_INDICES_PER_CHART_LINE;
+            const int32_t chartDataIndex = m_identificationIndices[idIndex];
+            const int32_t chartLineIndex = m_identificationIndices[idIndex + 1];
+            
+            SelectionItemChartFrequencySeries* chartFrequencySeriesID = m_brain->getSelectionManager()->getChartFrequencySeriesIdentification();
+            if (chartFrequencySeriesID->isOtherScreenDepthCloserToViewer(depth)) {
+                ChartDataCartesian* chartDataCartesian =
+                dynamic_cast<ChartDataCartesian*>(m_chartModelFrequencySeriesBeingDrawnForIdentification->getChartDataAtIndex(chartDataIndex));
+                CaretAssert(chartDataCartesian);
+                chartFrequencySeriesID->setChart(m_chartModelFrequencySeriesBeingDrawnForIdentification,
+                                                 chartDataCartesian,
+                                                 chartLineIndex);
+                
+                const ChartPoint* chartPoint = chartDataCartesian->getPointAtIndex(chartLineIndex);
+                const float lineXYZ[3] = {
+                    chartPoint->getX(),
+                    chartPoint->getY(),
+                    0.0
+                };
+                
+                m_fixedPipelineDrawing->setSelectedItemScreenXYZ(chartFrequencySeriesID,
                                                                  lineXYZ);
             }
         }

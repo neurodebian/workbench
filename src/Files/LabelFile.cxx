@@ -21,6 +21,7 @@
 #include "CaretAssert.h"
 #include "CaretLogger.h"
 #include "GroupAndNameHierarchyModel.h"
+#include "DataFileException.h"
 #include "DataFileTypeEnum.h"
 #include "GiftiFile.h"
 #include "GiftiLabel.h"
@@ -142,7 +143,7 @@ LabelFile::getGroupAndNameHierarchyModel() const
  * data arrays and proper data types/dimensions.
  */
 void 
-LabelFile::validateDataArraysAfterReading() throw (DataFileException)
+LabelFile::validateDataArraysAfterReading()
 {
     this->columnDataPointers.clear();
 
@@ -150,10 +151,24 @@ LabelFile::validateDataArraysAfterReading() throw (DataFileException)
     
     this->verifyDataArraysHaveSameNumberOfRows(0, 0);
     
+    bool haveWarned = false;
+    
     const int32_t numberOfDataArrays = this->giftiFile->getNumberOfDataArrays();
     for (int32_t i = 0; i < numberOfDataArrays; i++) {
-        int32_t* tempPointer = this->giftiFile->getDataArray(i)->getDataPointerInt();
-        if (tempPointer == NULL) throw DataFileException("found non-integer data array in label file '" + getFileName() + "'");
+        GiftiDataArray* thisArray = this->giftiFile->getDataArray(i);
+        if (thisArray->getDataType() != NiftiDataTypeEnum::NIFTI_TYPE_INT32)
+        {
+            thisArray->convertToDataType(NiftiDataTypeEnum::NIFTI_TYPE_INT32);
+            if (!haveWarned)
+            {
+                CaretLogWarning("label file '" + getFileName() + "' contains data array with data type other than int32");
+                haveWarned = true;
+            }
+        }
+        int32_t* tempPointer = thisArray->getDataPointerInt();
+        CaretAssert(tempPointer != NULL);
+        if (tempPointer == NULL) throw DataFileException(getFileName(),
+                                                         "failed to convert data array to int32.");//shouldn't happen, can probably be removed
         this->columnDataPointers.push_back(tempPointer);
     }
     
@@ -451,19 +466,17 @@ void LabelFile::setNumberOfNodesAndColumns(int32_t nodes, int32_t columns)
  */
 void 
 LabelFile::addMaps(const int32_t numberOfNodes,
-                       const int32_t numberOfMaps) throw (DataFileException)
+                       const int32_t numberOfMaps)
 {
     if (numberOfNodes <= 0) {
-        throw DataFileException("When adding maps to "
-                                + this->getFileNameNoPath()
-                                + " the number of nodes must be greater than zero");
+        throw DataFileException(getFileName(),
+                                "When adding maps the number of nodes must be greater than zero");
     }
     
     if (this->getNumberOfNodes() > 0) {
         if (numberOfNodes != this->getNumberOfNodes()) {
-            throw DataFileException("When adding maps to "
-                                    + this->getFileNameNoPath()
-                                    + " the requested number of nodes is "
+            throw DataFileException(getFileName(),
+                                    "When adding maps the requested number of nodes is "
                                     + AString::number(numberOfNodes)
                                     + " but the file contains "
                                     + AString::number(this->getNumberOfNodes())
@@ -472,7 +485,8 @@ LabelFile::addMaps(const int32_t numberOfNodes,
     }
     
     if (numberOfMaps <= 0) {
-        throw DataFileException("When adding maps, the number of maps must be greater than zero.");
+        throw DataFileException(getFileName(),
+                                "When adding maps, the number of maps must be greater than zero.");
     }
     
     const int32_t unassignedKey = this->getLabelTable()->getUnassignedLabelKey();

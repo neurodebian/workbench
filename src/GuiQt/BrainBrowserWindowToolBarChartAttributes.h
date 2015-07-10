@@ -25,6 +25,7 @@
 #include "BrainBrowserWindowToolBarComponent.h"
 #include "EventListenerInterface.h"
 
+class QCheckBox;
 class QDoubleSpinBox;
 class QStackedWidget;
 
@@ -117,6 +118,10 @@ namespace caret {
         
         void cellHeightSpinBoxValueChanged(double value);
         
+        void highlightSelectionCheckBoxClicked(bool checked);
+        
+        void displayGridLinesCheckBoxClicked(bool checked);
+        
         void resetButtonClicked();
         
     private:
@@ -127,6 +132,10 @@ namespace caret {
         QDoubleSpinBox* m_cellHeightSpinBox;
 
         WuQWidgetObjectGroup* m_manualWidgetsGroup;
+        
+        QCheckBox* m_highlightSelectionCheckBox;
+        
+        QCheckBox* m_displayGridLinesCheckBox;
         
     };
 #ifdef __BRAIN_BROWSER_WINDOW_TOOL_BAR_CHART_ATTRIBUTES_DECLARE__

@@ -18,6 +18,7 @@
  */
 /*LICENSE_END*/
 
+#include "CaretLogger.h"
 #include "DataFile.h"
 #include "FileInformation.h"
 #include "OperationZipSpecFile.h"
@@ -52,12 +53,12 @@ OperationParameters* OperationZipSpecFile::getParameters()
     OperationParameters* ret = new OperationParameters();
     ret->addStringParameter(1, "spec-file", "the specification file to add to zip file");
     
-    ret->addStringParameter(2, "extract-dir", "the directory created when the zip file is unzipped");
+    ret->addStringParameter(2, "extract-folder", "the name of the folder created when the zip file is unzipped");
     
     ret->addStringParameter(3, "zip-file", "out - the zip file that will be created");
     
-    OptionalParameter* baseOpt = ret->createOptionalParameter(4, "-base-dir", "specify a directory that all data files are somewhere within");
-    baseOpt->addStringParameter(1, "directory", "the directory that will become the root of the zipfile's directory structure");
+    OptionalParameter* baseOpt = ret->createOptionalParameter(4, "-base-dir", "specify a directory that all data files are somewhere within, this will become the root of the zipfile's directory structure");
+    baseOpt->addStringParameter(1, "directory", "the directory");
     
     ret->setHelpText(AString("If zip-file already exists, it will be overwritten.  ") +
         "If -base-dir is not specified, the directory containing the spec file is used for the base directory.  " +
@@ -90,16 +91,18 @@ void OperationZipSpecFile::useParameters(OperationParameters* myParams, Progress
         throw OperationException("extract-dir must contain characters");
     }
     
-    /*
-     * Verify that ZIP file DOES NOT exist
-     */
-    /*FileInformation zipFileInfo(zipFileName);
-    if (zipFileInfo.exists()) {
-        throw OperationException("ZIP file \""
-                                 + zipFileName
-                                 + "\" exists and this command will not overwrite the ZIP file.");
-    }//*/ //TSC: this is annoying, and all other commands overwrite existing output files without warning
-    
+    if (FileInformation(outputSubDirectory).isAbsolute())
+    {
+        CaretLogWarning("You have specified that the zip file should extract to an absolute path, this is generally frowned on.  "
+                        "The <extract-folder> parameter should generally be a string without '/' or '\\' in it.");
+    } else {
+        if (outputSubDirectory.indexOfAnyChar("/\\"))//assume backslashes work too
+        {
+            CaretLogWarning("You have specified that the zipfile should create multiple levels of otherwise empty directories "
+                            "before the file paths starting from the base directory, this is probably going to be inconvenient.  "
+                            "The <extract-folder> parameter should generally be a string without '/' or '\\' in it.");
+        }
+    }
     /*
      * Read the spec file and get the names of its data files.
      * Look for any files that are missing (name in spec file
@@ -171,7 +174,7 @@ void OperationZipSpecFile::useParameters(OperationParameters* myParams, Progress
      * Compress each of the files and add them to the zip file
      */
     AString errorMessage;
-    static const char *myUnits[9] = {" B", " KB", " MB", " GB", " TB", " PB", " EB", " ZB", " YB"};
+    static const char *myUnits[9] = {" B    ", " KB", " MB", " GB", " TB", " PB", " EB", " ZB", " YB"};
     for (int32_t i = 0; i < numberOfDataFiles; i++) {
         AString dataFileName = allDataFileNames[i];
         AString unzippedDataFileName = outputSubDirectory + "/" + dataFileName.mid(myBaseDir.size());//we know the string matches to the length of myBaseDir, and is cleaned, so we can just chop the right number of characters off
@@ -183,19 +186,19 @@ void OperationZipSpecFile::useParameters(OperationParameters* myParams, Progress
                                    + dataFileIn.errorString();
             break;
         }
-        int64_t fileSize = (float)dataFileIn.size() * 10;//fixed point, 1 decimal place
+        float fileSize = (float)dataFileIn.size();
         int unit = 0;
-        int64_t divisor = 1;
-        while (unit < 8 && fileSize / divisor > 9998)//don't let there be 4 digits to the left of decimal point
+        while (unit < 8 && fileSize >= 1000.0f)//don't let there be 4 digits to the left of decimal point
         {
             ++unit;
-            divisor *= 1024;//don't round until we decide on a divisor
+            fileSize /= 1000.0f;//use GB and friends, not GiB
         }
-        int fixedpt = (fileSize + divisor / 2) / divisor;
-        int ipart = fixedpt / 10;
-        int fpart = fixedpt % 10;
-        cout << ipart;
-        if (unit > 0) cout << "." << fpart;
+        if (unit > 0)
+        {
+            cout << AString::number(fileSize, 'f', 2);
+        } else {
+            cout << AString::number(fileSize);
+        }
         cout << myUnits[unit] << "     \t" << unzippedDataFileName;
         cout.flush();//don't endl until it finishes
         
@@ -213,14 +216,25 @@ void OperationZipSpecFile::useParameters(OperationParameters* myParams, Progress
         }
         
         const qint64 BUFFER_SIZE = 1024 * 1024;
-        char buffer[BUFFER_SIZE];
+        vector<char> buffer(BUFFER_SIZE);
         
-        while (dataFileIn.QIODevice::atEnd() == false) {
-            const qint64 numRead = dataFileIn.read(buffer, BUFFER_SIZE);
+        while (dataFileIn.atEnd() == false) {
+            const qint64 numRead = dataFileIn.read(buffer.data(), BUFFER_SIZE);
+            if (numRead < 0)
+            {
+                errorMessage = "Error reading from data file";
+                break;
+            }
             if (numRead > 0) {
-                dataFileOut.write(buffer, numRead);
+                qint64 result = dataFileOut.write(buffer.data(), numRead);
+                if (result != numRead)
+                {
+                    errorMessage = "Error writing to zip file";
+                    break;
+                }
             }
         }
+        if (!errorMessage.isEmpty()) break;
         
         dataFileIn.close();
         dataFileOut.close();

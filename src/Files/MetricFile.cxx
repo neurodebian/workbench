@@ -22,6 +22,7 @@
 #include "CaretLogger.h"
 #include "ChartDataCartesian.h"
 #include "ChartDataSource.h"
+#include "DataFileException.h"
 #include "DataFileTypeEnum.h"
 #include "GiftiFile.h"
 #include "MathFunctions.h"
@@ -51,7 +52,7 @@ MetricFile::MetricFile()
  */
 MetricFile::MetricFile(const MetricFile& sf)
 : GiftiTypeFile(sf),
-ChartableBrainordinateInterface()
+ChartableLineSeriesBrainordinateInterface()
 {
     this->copyHelperMetricFile(sf);
 }
@@ -100,7 +101,7 @@ MetricFile::clear()
  * data arrays and proper data types/dimensions.
  */
 void 
-MetricFile::validateDataArraysAfterReading() throw (DataFileException)
+MetricFile::validateDataArraysAfterReading()
 {
     this->columnDataPointers.clear();
 
@@ -127,11 +128,13 @@ MetricFile::validateDataArraysAfterReading() throw (DataFileException)
         } else {
             if (numDims != 2)
             {
-                throw DataFileException("Invalid number of dimensions in metric file '" + getFileName() + "': " + AString::number(numDims));
+                throw DataFileException(getFileName(),
+                                        "Invalid number of dimensions in metric file: " + AString::number(numDims));
             }
             if (numberOfDataArrays != 1)
             {
-                throw DataFileException("Two dimensional data arrays are not allowed in metric files with multiple data arrays");
+                throw DataFileException(getFileName(),
+                                        "Two dimensional data arrays are not allowed in metric files with multiple data arrays");
             }
             std::vector<int64_t> newdims = dims;
             newdims[1] = 1;
@@ -296,19 +299,17 @@ void MetricFile::setNumberOfNodesAndColumns(int32_t nodes, int32_t columns)
  */
 void 
 MetricFile::addMaps(const int32_t numberOfNodes,
-                       const int32_t numberOfMaps) throw (DataFileException)
+                       const int32_t numberOfMaps)
 {
     if (numberOfNodes <= 0) {
-        throw DataFileException("When adding maps to "
-                                + this->getFileNameNoPath()
-                                + " the number of nodes must be greater than zero");
+        throw DataFileException(getFileName(),
+                                "When adding maps the number of nodes must be greater than zero");
     }
     
     if (this->getNumberOfNodes() > 0) {
         if (numberOfNodes != this->getNumberOfNodes()) {
-            throw DataFileException("When adding maps to "
-                                    + this->getFileNameNoPath()
-                                    + " the requested number of nodes is "
+            throw DataFileException(getFileName(),
+                                    "When adding maps the requested number of nodes is "
                                     + AString::number(numberOfNodes)
                                     + " but the file contains "
                                     + AString::number(this->getNumberOfNodes())
@@ -317,7 +318,8 @@ MetricFile::addMaps(const int32_t numberOfNodes,
     }
     
     if (numberOfMaps <= 0) {
-        throw DataFileException("When adding maps, the number of maps must be greater than zero.");
+        throw DataFileException(getFileName(),
+                                "When adding maps, the number of maps must be greater than zero.");
     }
     
     if ((this->getNumberOfNodes() > 0) 
@@ -418,7 +420,7 @@ MetricFile::getDataRangeFromAllMaps(float& dataRangeMinimumOut,
  * @return Is charting enabled for this file?
  */
 bool
-MetricFile::isBrainordinateChartingEnabled(const int32_t tabIndex) const
+MetricFile::isLineSeriesChartingEnabled(const int32_t tabIndex) const
 {
     CaretAssertArrayIndex(m_chartingEnabledForTab,
                           BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_TABS,
@@ -432,7 +434,7 @@ MetricFile::isBrainordinateChartingEnabled(const int32_t tabIndex) const
  * is chartable if it contains more than one map.
  */
 bool
-MetricFile::isBrainordinateChartingSupported() const
+MetricFile::isLineSeriesChartingSupported() const
 {
     if (getNumberOfMaps() > 1) {
         return true;
@@ -448,7 +450,7 @@ MetricFile::isBrainordinateChartingSupported() const
  *    New status for charting enabled.
  */
 void
-MetricFile::setBrainordinateChartingEnabled(const int32_t tabIndex,
+MetricFile::setLineSeriesChartingEnabled(const int32_t tabIndex,
                                                  const bool enabled)
 {
     CaretAssertArrayIndex(m_chartingEnabledForTab,
@@ -464,9 +466,9 @@ MetricFile::setBrainordinateChartingEnabled(const int32_t tabIndex,
  *    Chart types supported by this file.
  */
 void
-MetricFile::getSupportedBrainordinateChartDataTypes(std::vector<ChartDataTypeEnum::Enum>& chartDataTypesOut) const
+MetricFile::getSupportedLineSeriesChartDataTypes(std::vector<ChartDataTypeEnum::Enum>& chartDataTypesOut) const
 {
-    helpGetSupportedBrainordinateChartDataTypes(chartDataTypesOut);
+    helpGetSupportedLineSeriesChartDataTypes(chartDataTypesOut);
 }
 
 /**
@@ -482,8 +484,8 @@ MetricFile::getSupportedBrainordinateChartDataTypes(std::vector<ChartDataTypeEnu
  *     of the pointer and must delete it when no longer needed.
  */
 ChartDataCartesian*
-MetricFile::loadBrainordinateChartDataForSurfaceNode(const StructureEnum::Enum structure,
-                                                          const int32_t nodeIndex) throw (DataFileException)
+MetricFile::loadLineSeriesChartDataForSurfaceNode(const StructureEnum::Enum structure,
+                                                          const int32_t nodeIndex)
 {
     ChartDataCartesian* chartData = NULL;
 
@@ -531,8 +533,8 @@ MetricFile::loadBrainordinateChartDataForSurfaceNode(const StructureEnum::Enum s
  *     of the pointer and must delete it when no longer needed.
  */
 ChartDataCartesian*
-MetricFile::loadAverageBrainordinateChartDataForSurfaceNodes(const StructureEnum::Enum structure,
-                                                                  const std::vector<int32_t>& nodeIndices) throw (DataFileException)
+MetricFile::loadAverageLineSeriesChartDataForSurfaceNodes(const StructureEnum::Enum structure,
+                                                                  const std::vector<int32_t>& nodeIndices)
 {
     ChartDataCartesian* chartData = NULL;
     
@@ -600,7 +602,7 @@ MetricFile::loadAverageBrainordinateChartDataForSurfaceNodes(const StructureEnum
  *     of the pointer and must delete it when no longer needed.
  */
 ChartDataCartesian*
-MetricFile::loadBrainordinateChartDataForVoxelAtCoordinate(const float * /*xyz[3]*/) throw (DataFileException)
+MetricFile::loadLineSeriesChartDataForVoxelAtCoordinate(const float * /*xyz[3]*/)
 {
     ChartDataCartesian* chartData = NULL; //helpLoadChartDataForVoxelAtCoordinate(xyz);
     return chartData;

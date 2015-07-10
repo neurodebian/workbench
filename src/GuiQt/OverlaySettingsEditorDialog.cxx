@@ -42,6 +42,7 @@
 #include "EventUserInterfaceUpdate.h"
 #include "GiftiLabelTableEditor.h"
 #include "MapSettingsFiberTrajectoryWidget.h"
+#include "MapSettingsLabelsWidget.h"
 #include "MapSettingsLayerWidget.h"
 #include "MapSettingsPaletteColorMappingWidget.h"
 #include "MapSettingsParcelsWidget.h"
@@ -94,7 +95,7 @@ OverlaySettingsEditorDialog::OverlaySettingsEditorDialog(QWidget* parent)
     
     QWidget* windowOptionsWidget = this->createWindowOptionsSection();
     
-    m_labelsWidget = createLabelsSection();
+    m_labelsWidget = new MapSettingsLabelsWidget();
     
     m_tabWidget = new QTabWidget();
     m_labelsWidgetTabIndex = m_tabWidget->addTab(m_labelsWidget,
@@ -199,6 +200,20 @@ OverlaySettingsEditorDialog::focusInEvent(QFocusEvent* /*event*/)
 }
 
 /**
+ * Update if the given overlay is displayed in the dialog.
+ * 
+ * @param overlay
+ *    The overlay.
+ */
+void
+OverlaySettingsEditorDialog::updateIfThisOverlayIsInDialog(Overlay* overlay)
+{
+    if (m_overlay == overlay) {
+        updateDialogContent(m_overlay);
+    }
+}
+
+/**
  * May be called to update the dialog's content.
  *
  * @param overlay
@@ -252,6 +267,7 @@ OverlaySettingsEditorDialog::updateDialogContent(Overlay* overlay)
                      * Update label editor
                      */
                     isLabelsValid = true;
+                    m_labelsWidget->updateContent(overlay);
                 }
             }
             
@@ -390,6 +406,13 @@ OverlaySettingsEditorDialog::updateDialog()
 void
 OverlaySettingsEditorDialog::closeButtonPressed()
 {
+    /*
+     * Clear the content since it could be tied to an overlay
+     * and we don't want the dialog updating if it is not
+     * visible.
+     */
+    updateDialogContent(NULL);
+    
     /*
      * Allow this dialog to be reused (checked means DO NOT reuse)
      */

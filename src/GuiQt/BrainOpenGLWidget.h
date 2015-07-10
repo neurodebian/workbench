@@ -29,9 +29,7 @@
 
 #include <stdint.h>
 #include "BrainConstants.h"
-#include "EventImageCapture.h"
 #include "EventListenerInterface.h"
-#include "ImageCaptureMethodEnum.h"
 
 class QMouseEvent;
 
@@ -42,6 +40,7 @@ namespace caret {
     class BrainOpenGLTextRenderInterface;
     class BrainOpenGLViewportContent;
     class BrowserTabContent;
+    class EventImageCapture;
     class SelectionManager;
     class Model;
     class MouseEvent;
@@ -49,7 +48,9 @@ namespace caret {
     class UserInputModeBorders;
     class UserInputModeFoci;
     class UserInputModeView;
-    class UserInputReceiverInterface;
+    class UserInputModeVolumeEdit;
+    class UserInputModeAbstract;
+    class VolumeFile;
     
     class BrainOpenGLWidget : public QGLWidget, public EventListenerInterface {
         Q_OBJECT
@@ -67,6 +68,10 @@ namespace caret {
         SelectionManager* performIdentification(const int x,
                                                      const int y,
                                                      const bool applySelectionBackgroundFiltering);
+        
+        SelectionManager* performIdentificationVoxelEditing(VolumeFile* editingVolumeFile,
+                                                            const int x,
+                                                            const int y);
         
         void performProjection(const int x,
                                const int y,
@@ -132,6 +137,8 @@ namespace caret {
         int32_t mouseMovementMinimumY;
         int32_t mouseMovementMaximumY;
         
+        bool mouseNewDraggingStartedFlag;
+        
         static const int32_t MOUSE_MOVEMENT_TOLERANCE;
         
         int mousePressX;
@@ -144,10 +151,11 @@ namespace caret {
         
         BrainOpenGLTextRenderInterface* textRenderer;
         
-        UserInputReceiverInterface* selectedUserInputProcessor;
+        UserInputModeAbstract* selectedUserInputProcessor;
         UserInputModeView* userInputViewModeProcessor;
         UserInputModeBorders* userInputBordersModeProcessor;
         UserInputModeFoci* userInputFociModeProcessor;
+        UserInputModeVolumeEdit* userInputVolumeEditModeProcessor;
         
         Border* borderBeingDrawn;
         

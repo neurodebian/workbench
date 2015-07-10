@@ -198,7 +198,7 @@ namespace caret {
          * has been read such as correct number of 
          * data arrays and proper data types/dimensions.
          */
-        virtual void validateDataArraysAfterReading() throw (DataFileException);
+        virtual void validateDataArraysAfterReading();
         
         void copyHelperSurfaceFile(const SurfaceFile& sf);
         
@@ -256,6 +256,8 @@ namespace caret {
         std::vector<float> normalVectors;
         
         bool m_normalsComputed;
+        
+        bool m_skipSanityCheck;
 
         /** The node coloring. */
         std::vector<float> nodeColoring;

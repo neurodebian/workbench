@@ -23,40 +23,43 @@
 
 
 #include "BrainConstants.h"
-#include "ChartableBrainordinateInterface.h"
-#include "ChartableMatrixInterface.h"
+#include "ChartableLineSeriesBrainordinateInterface.h"
+#include "ChartableMatrixParcelInterface.h"
 #include "CiftiMappableDataFile.h"
 
 namespace caret {
-
+    class CiftiParcelReorderingModel;
     class SceneClassAssistant;
     
     class CiftiParcelScalarFile : 
     public CiftiMappableDataFile,
-    public ChartableBrainordinateInterface,
-    public ChartableMatrixInterface {
+    public ChartableLineSeriesBrainordinateInterface,
+    public ChartableMatrixParcelInterface {
     
     public:
         CiftiParcelScalarFile();
         
         virtual ~CiftiParcelScalarFile();
         
-        virtual bool isBrainordinateChartingEnabled(const int32_t tabIndex) const;
+        virtual bool isLineSeriesChartingEnabled(const int32_t tabIndex) const;
         
-        virtual void setBrainordinateChartingEnabled(const int32_t tabIndex,
+        virtual void setLineSeriesChartingEnabled(const int32_t tabIndex,
                                         const bool enabled);
         
-        virtual bool isBrainordinateChartingSupported() const;
+        virtual bool isLineSeriesChartingSupported() const;
 
-        virtual ChartDataCartesian* loadBrainordinateChartDataForSurfaceNode(const StructureEnum::Enum structure,
-                                                                                   const int32_t nodeIndex) throw (DataFileException);
+        virtual ChartDataCartesian* loadLineSeriesChartDataForSurfaceNode(const StructureEnum::Enum structure,
+                                                                                   const int32_t nodeIndex);
         
-        virtual ChartDataCartesian* loadAverageBrainordinateChartDataForSurfaceNodes(const StructureEnum::Enum structure,
-                                                               const std::vector<int32_t>& nodeIndices) throw (DataFileException);
+        virtual ChartDataCartesian* loadAverageLineSeriesChartDataForSurfaceNodes(const StructureEnum::Enum structure,
+                                                               const std::vector<int32_t>& nodeIndices);
         
-        virtual ChartDataCartesian* loadBrainordinateChartDataForVoxelAtCoordinate(const float xyz[3]) throw (DataFileException);
+        virtual ChartDataCartesian* loadLineSeriesChartDataForVoxelAtCoordinate(const float xyz[3]);
         
-        virtual void getSupportedBrainordinateChartDataTypes(std::vector<ChartDataTypeEnum::Enum>& chartDataTypesOut) const;
+        virtual void getSupportedLineSeriesChartDataTypes(std::vector<ChartDataTypeEnum::Enum>& chartDataTypesOut) const;
+        
+        virtual void getMatrixDimensions(int32_t& numberOfRowsOut,
+                                         int32_t& numberOfColumnsOut) const;
         
         virtual bool getMatrixDataRGBA(int32_t& numberOfRowsOut,
                                        int32_t& numberOfColumnsOut,
@@ -64,7 +67,7 @@ namespace caret {
         
         virtual bool getMatrixCellAttributes(const int32_t rowIndex,
                                              const int32_t columnIndex,
-                                             float& cellValueOut,
+                                             AString& cellValueOut,
                                              AString& rowNameOut,
                                              AString& columnNameOut) const;
         
@@ -88,6 +91,32 @@ namespace caret {
         virtual CaretColorEnum::Enum getSelectedParcelColor() const;
         
         virtual void setSelectedParcelColor(const CaretColorEnum::Enum color);
+        
+        virtual void getSelectedParcelLabelFileAndMapForReordering(std::vector<CiftiParcelLabelFile*>& compatibleParcelLabelFilesOut,
+                                                                   CiftiParcelLabelFile* &selectedParcelLabelFileOut,
+                                                                   int32_t& selectedParcelLabelFileMapIndexOut,
+                                                                   bool& enabledStatusOut) const;
+        
+        virtual void setSelectedParcelLabelFileAndMapForReordering(CiftiParcelLabelFile* selectedParcelLabelFile,
+                                                                   const int32_t selectedParcelLabelFileMapIndex,
+                                                                   const bool enabledStatus);
+        
+        virtual bool createParcelReordering(const CiftiParcelLabelFile* parcelLabelFile,
+                                            const int32_t parcelLabelFileMapIndex,
+                                            AString& errorMessageOut);
+        
+        virtual const CiftiParcelReordering* getParcelReordering(const CiftiParcelLabelFile* parcelLabelFile,
+                                                                 const int32_t parcelLabelFileMapIndex) const;
+        
+        virtual bool isSupportsLoadingAttributes();
+        
+        virtual ChartMatrixLoadingDimensionEnum::Enum getMatrixLoadingDimension() const;
+        
+        virtual void setMatrixLoadingDimension(const ChartMatrixLoadingDimensionEnum::Enum matrixLoadingType);
+        
+        virtual YokingGroupEnum::Enum getYokingGroup() const;
+        
+        virtual void setYokingGroup(const YokingGroupEnum::Enum yokingType);
         
     private:
         CiftiParcelScalarFile(const CiftiParcelScalarFile&);
@@ -117,6 +146,9 @@ namespace caret {
         CiftiParcelColoringModeEnum::Enum m_selectedParcelColoringMode;
         
         CaretColorEnum::Enum m_selectedParcelColor;
+
+        CiftiParcelReorderingModel* m_parcelReorderingModel;
+        
         // ADD_NEW_MEMBERS_HERE
 
     };

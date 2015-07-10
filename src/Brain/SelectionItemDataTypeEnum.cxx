@@ -87,6 +87,10 @@ SelectionItemDataTypeEnum::initialize()
                                                  "CHART_DATA_SERIES",
                                                  "Data-Series Chart"));
     
+    enumData.push_back(SelectionItemDataTypeEnum(CHART_FREQUENCY_SERIES,
+                                                 "CHART_FREQUENCY_SERIES",
+                                                 "Frequency-Series Chart"));
+    
     enumData.push_back(SelectionItemDataTypeEnum(CHART_MATRIX,
                                                  "CHART_MATRIX",
                                                  "Matrix Chart"));
@@ -94,6 +98,10 @@ SelectionItemDataTypeEnum::initialize()
     enumData.push_back(SelectionItemDataTypeEnum(CHART_TIME_SERIES,
                                                  "CHART_TIME_SERIES",
                                                  "Time-Series Chart"));
+    
+    enumData.push_back(SelectionItemDataTypeEnum(CIFTI_CONNECTIVITY_MATRIX_ROW_COLUMN,
+                                                 "CIFTI_CONNECTIVITY_MATRIX_ROW_COLUMN",
+                                                 "CIFTI Connectivity Row or Column"));
     
     enumData.push_back(SelectionItemDataTypeEnum(FOCUS_SURFACE,
                                     "FOCUS_SURFACE", 
@@ -118,6 +126,14 @@ SelectionItemDataTypeEnum::initialize()
     enumData.push_back(SelectionItemDataTypeEnum(VOXEL, 
                                     "VOXEL", 
                                     "Voxel"));
+    
+    enumData.push_back(SelectionItemDataTypeEnum(VOXEL_EDITING,
+                                                 "VOXEL_EDITING",
+                                                 "Voxel Editing"));
+    
+    enumData.push_back(SelectionItemDataTypeEnum(VOXEL_IDENTIFICATION_SYMBOL,
+                                                 "VOXEL_IDENTIFICATION_SYMBOL",
+                                                 "Voxel Identification Symbol"));
     
 }
 

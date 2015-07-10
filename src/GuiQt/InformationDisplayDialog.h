@@ -60,8 +60,6 @@ namespace caret {
         
         void showPropertiesDialog();
         
-        void identifyBrainordinateTriggered();
-        
     private:
         InformationDisplayDialog(const InformationDisplayDialog&);
 
@@ -70,8 +68,6 @@ namespace caret {
         HyperLinkTextBrowser* m_informationTextBrowser;
         
         QAction* m_contralateralIdentificationAction;
-        
-        //QAction* m_volumeSliceIdentificationAction;
         
         QString m_informationText;
         

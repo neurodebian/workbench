@@ -28,7 +28,9 @@
 
 #include "CaretAssert.h"
 #include "CaretLogger.h"
+#include "DataFileException.h"
 #include "FileInformation.h"
+#include "GiftiMetaData.h"
 #include "ImageFile.h"
 
 using namespace caret;
@@ -37,8 +39,10 @@ using namespace caret;
  * Constructor.
  */
 ImageFile::ImageFile()
-: DataFile()
+: CaretDataFile(DataFileTypeEnum::IMAGE)
 {
+    m_fileMetaData.grabNew(new GiftiMetaData());
+    
     m_image = new QImage();
 }
 
@@ -48,8 +52,10 @@ ImageFile::ImageFile()
  *    QImage that is copied to this image file.
  */
 ImageFile::ImageFile(const QImage& qimage)
-: DataFile()
+: CaretDataFile(DataFileTypeEnum::IMAGE)
 {
+    m_fileMetaData.grabNew(new GiftiMetaData());
+    
     m_image = new QImage(qimage);
 }
 
@@ -70,7 +76,10 @@ ImageFile::ImageFile(const unsigned char* imageDataRGBA,
                      const int imageWidth,
                      const int imageHeight,
                      const IMAGE_DATA_ORIGIN_LOCATION imageOrigin)
+: CaretDataFile(DataFileTypeEnum::IMAGE)
 {
+    m_fileMetaData.grabNew(new GiftiMetaData());
+    
     m_image = new QImage(imageWidth,
                              imageHeight,
                              QImage::Format_RGB32);
@@ -135,6 +144,44 @@ ImageFile::clear()
     }
     m_image = new QImage();
     this->clearModified();
+}
+
+/**
+ * @return The structure for this file.
+ */
+StructureEnum::Enum
+ImageFile::getStructure() const
+{
+    return StructureEnum::INVALID;
+}
+
+/**
+ * Set the structure for this file.
+ * @param structure
+ *   New structure for this file.
+ */
+void
+ImageFile::setStructure(const StructureEnum::Enum /*structure */)
+{
+    /* File does not support structures */
+}
+
+/**
+ * @return Get access to the file's metadata.
+ */
+GiftiMetaData*
+ImageFile::getFileMetaData()
+{
+    return m_fileMetaData;
+}
+
+/**
+ * @return Get access to unmodifiable file's metadata.
+ */
+const GiftiMetaData*
+ImageFile::getFileMetaData() const
+{
+    return m_fileMetaData;
 }
 
 /**
@@ -574,7 +621,7 @@ ImageFile::combinePreservingAspectAndFillIfNeeded(const std::vector<ImageFile*>&
  *    If error reading image.
  */
 void
-ImageFile::readFile(const AString& filename) throw (DataFileException)
+ImageFile::readFile(const AString& filename)
 {
     clear();
     
@@ -654,39 +701,12 @@ ImageFile::appendImageAtBottom(const ImageFile& img)
 void
 ImageFile::insertImage(const QImage& otherImage,
                        const int x,
-                       const int y) throw (DataFileException)
+                       const int y)
 {
     ImageFile::insertImage(otherImage,
                            *m_image,
                            x,
                            y);
-    /*
-     if (x < 0) {
-     throw DataFileException("X position is less than zero.");
-     }
-     if (y < 0) {
-     throw DataFileException("Y position is less than zero.");
-     }
-     
-     const int otherWidth = otherImage.width();
-     const int otherHeight = otherImage.height();
-     
-     const int myWidth = image->width();
-     const int myHeight = image->height();
-     
-     if ((otherWidth + x) > myWidth) {
-     throw DataFileException("This image is not large enough to insert other image.");
-     }
-     if ((otherHeight + y) > myHeight) {
-     throw DataFileException("This image is not large enough to insert other image.");
-     }
-     
-     for (int i = 0; i < otherWidth; i++) {
-     for (int j = 0; j < otherHeight; j++) {
-     image->setPixel(x + i, y + j, otherImage.pixel(i, j));
-     }
-     }
-     */
     this->setModified();
 }
 
@@ -709,7 +729,7 @@ void
 ImageFile::insertImage(const QImage& insertThisImage,
                        QImage& intoThisImage,
                        const int positionX,
-                       const int positionY) throw (DataFileException)
+                       const int positionY)
 {
     if (positionX < 0) {
         throw DataFileException("X position is less than zero.");
@@ -819,7 +839,7 @@ ImageFile::compareFileForUnitTesting(const DataFile* dataFile,
  *    If error writing image.
  */
 void
-ImageFile::writeFile(const AString& filename) throw (DataFileException)
+ImageFile::writeFile(const AString& filename)
 {
     checkFileWritability(filename);
     
@@ -1060,6 +1080,77 @@ ImageFile::resizeToMaximumWidthOrHeight(const int32_t maximumWidthOrHeight)
 }
 
 /**
+ * Get the RGBA bytes from the image.
+ *
+ * @param bytesRGBA
+ *    The RGBA bytes in the image.
+ * @param widthOut
+ *    Width of the image.
+ * @param heightOut
+ *    Height of the image.
+ * @param imageOrigin
+ *     Location of first pixel in the image data.
+ * @return
+ *    True if the bytes, width, and height are valid, else false.
+ */
+bool
+ImageFile::getImageBytesRGBA(const IMAGE_DATA_ORIGIN_LOCATION imageOrigin,
+                             std::vector<uint8_t>& bytesRGBA,
+                             int32_t& widthOut,
+                             int32_t& heightOut) const
+{
+    bytesRGBA.clear();
+    widthOut = 0;
+    heightOut = 0;
+    
+    if (m_image != NULL) {
+        widthOut  = m_image->width();
+        heightOut = m_image->height();
+        if ((widthOut > 0)
+            && (heightOut > 0)) {
+            
+            bytesRGBA.resize(widthOut * heightOut * 4);
+            
+            bool isOriginAtTop = false;
+            switch (imageOrigin) {
+                case IMAGE_DATA_ORIGIN_AT_BOTTOM:
+                    isOriginAtTop = false;
+                    break;
+                case IMAGE_DATA_ORIGIN_AT_TOP:
+                    isOriginAtTop = true;
+                    break;
+            }
+            
+            /*
+             * Documentation for QImage states that setPixel may be very costly
+             * and recommends using the scanLine() method to access pixel data.
+             */
+            for (int y = 0; y < heightOut; y++) {
+                const int scanLineIndex = (isOriginAtTop
+                                           ? y
+                                           : heightOut -y - 1);
+                const uchar* scanLine = m_image->scanLine(scanLineIndex);
+                QRgb* rgbScanLine = (QRgb*)scanLine;
+                
+                for (int x = 0; x < widthOut; x++) {
+                    const int32_t contentOffset = (((y * widthOut) * 4)
+                                                   + (x * 4));
+                    QRgb& rgb = rgbScanLine[x];
+                    bytesRGBA[contentOffset] = static_cast<uint8_t>(qRed(rgb));
+                    bytesRGBA[contentOffset+1] = static_cast<uint8_t>(qGreen(rgb));
+                    bytesRGBA[contentOffset+2] = static_cast<uint8_t>(qBlue(rgb));
+                    bytesRGBA[contentOffset+3] = 255;
+                }
+            }
+            return true;
+        }
+    }
+    
+    return false;
+}
+
+
+/**
  * Essentially writes the image file to a byte array using the given format.
  *
  * @param byteArrayOut
@@ -1069,14 +1160,15 @@ ImageFile::resizeToMaximumWidthOrHeight(const int32_t maximumWidthOrHeight)
  */
 void
 ImageFile::getImageInByteArray(QByteArray& byteArrayOut,
-                               const AString& format) const throw (DataFileException)
+                               const AString& format) const
 {
     byteArrayOut.clear();
     
     if (m_image != NULL) {
         QBuffer buffer(&byteArrayOut);
         if ( ! buffer.open(QIODevice::WriteOnly)) {
-            throw DataFileException("PROGRAM ERROR: Unable to open byte array for output of image.");
+            throw DataFileException(getFileName(),
+                                    "PROGRAM ERROR: Unable to open byte array for output of image.");
         }
         
         bool successFlag = false;
@@ -1089,7 +1181,8 @@ ImageFile::getImageInByteArray(QByteArray& byteArrayOut,
         }
         
         if ( ! successFlag) {
-            throw DataFileException("Failed to write image to byte array.  "
+            throw DataFileException(getFileName(),
+                                    "Failed to write image to byte array.  "
                                     + buffer.errorString());
         }
     }
@@ -1105,7 +1198,7 @@ ImageFile::getImageInByteArray(QByteArray& byteArrayOut,
  */
 void
 ImageFile::setImageFromByteArray(const QByteArray& byteArray,
-                                 const AString& format) throw (DataFileException)
+                                 const AString& format)
 {
     bool successFlag = false;
     if (format.isEmpty()) {
@@ -1117,7 +1210,8 @@ ImageFile::setImageFromByteArray(const QByteArray& byteArray,
     }
     
     if ( ! successFlag) {
-        throw DataFileException("Failed to create image from byte array.");
+        throw DataFileException(getFileName(),
+                                "Failed to create image from byte array.");
     }
 }
 

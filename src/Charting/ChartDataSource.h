@@ -41,6 +41,8 @@ namespace caret {
         
         ChartDataSource& operator=(const ChartDataSource&);
         
+        void copy(const ChartDataSource* copyFrom);
+        
         virtual SceneClass* saveToScene(const SceneAttributes* sceneAttributes,
                                         const AString& instanceName);
         
@@ -77,6 +79,12 @@ namespace caret {
         void setVolumeVoxel(const AString& chartableFileName,
                             const float xyz[3]);
         
+        void getFileRow(AString& chartableFileName,
+                        int32_t& fileRowIndex) const;
+        
+        void setFileRow(const AString& chartableFileName,
+                        const int32_t fileRowIndex);
+        
         AString getDescription() const;
         
     private:
@@ -106,6 +114,8 @@ namespace caret {
         int32_t m_nodeIndex;
         
         float m_voxelXYZ[3];
+        
+        int32_t m_fileRowIndex;
         
         // ADD_NEW_MEMBERS_HERE
 

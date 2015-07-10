@@ -28,8 +28,8 @@
 #include <QMainWindow>
 
 #include "AString.h"
-#include "DataFileException.h"
 #include "DataFileTypeEnum.h"
+#include "EventListenerInterface.h"
 #include "SceneableInterface.h"
 
 class QAction;
@@ -52,11 +52,13 @@ namespace caret {
      * brain models.  It may contain multiple tabs
      * with each tab displaying brain models.
      */ 
-    class BrainBrowserWindow : public QMainWindow, public SceneableInterface  {
+    class BrainBrowserWindow : public QMainWindow, public EventListenerInterface, public SceneableInterface  {
         Q_OBJECT
         
     public:
         virtual ~BrainBrowserWindow();
+        
+        virtual void receiveEvent(Event* event);
         
         BrowserTabContent* getBrowserTabContent();
 
@@ -121,6 +123,8 @@ namespace caret {
         
         virtual void getDescriptionOfContent(PlainTextStringBuilder& descriptionOut) const;
         
+        static int32_t loadRecentSpecFileMenu(QMenu* recentSpecFileMenu);
+        
     protected:
         void closeEvent(QCloseEvent* event);
         void keyPressEvent(QKeyEvent* event);
@@ -138,12 +142,14 @@ namespace caret {
         void processRecordMovie();
         void processEditPreferences();
         void processCloseAllFiles();
+        void processCloseWindow();
         void processExitProgram();
         void processMoveAllTabsToOneWindow();
         void processViewFullScreenSelected();
         void processViewTileTabs();
         void processViewTileTabsConfigurationDialog();
         void processShowHelpInformation();
+        void processShowIdentifyBrainordinateDialog();
         
         void processMoveOverlayToolBoxToLeft();
         void processMoveOverlayToolBoxToBottom();
@@ -173,7 +179,7 @@ namespace caret {
         void processTileTabsMenuSelection(QAction*);
         
         void processSurfaceMenuInformation();
-        void processSurfaceMenuVolumeInteraction();
+        void processSurfaceMenuPrimaryAnatomical();
         
         void processConnectToAllenDataBase();
         void processConnectToConnectomeDataBase();
@@ -187,6 +193,8 @@ namespace caret {
         void processDevelopGraphicsTiming();
         
         void processDevelopExportVtkFile();
+        void developerMenuAboutToShow();
+        void developerMenuFlagTriggered(QAction*);
         
         void processProjectFoci();
         void processSplitBorderFiles();
@@ -245,12 +253,14 @@ namespace caret {
         void restoreWindowComponentStatus(const WindowComponentStatus& wcs);
         void saveWindowComponentStatus(WindowComponentStatus& wcs);
         
-        void openSpecFile(const AString& specFileName) throw (DataFileException);
+        void openSpecFile(const AString& specFileName);
         
         void processViewFullScreen(bool showFullScreenDisplay,
                                    const bool saveRestoreWindowStatus);
         
         void setViewTileTabs(const bool newStatus);
+        
+        bool isMacOptionKeyDown() const;
         
         /** Index of this window */
         int32_t m_browserWindowIndex;
@@ -278,6 +288,9 @@ namespace caret {
         QAction* m_closeTabAction;
         
         QAction* m_closeWindowAction;
+        AString m_closeWindowActionConfirmTitle;
+        AString m_closeWindowActionNoConfirmTitle;
+        bool m_closeWithoutConfirmationFlag;
         
         QAction* m_captureImageAction;
 
@@ -321,6 +334,8 @@ namespace caret {
         QAction* m_helpHcpFeatureRequestAction;
         QAction* m_helpWorkbenchBugReportAction;
         
+        QAction* m_developMenuAction;
+        QActionGroup* m_developerFlagsActionGroup;
         QAction* m_developerGraphicsTimingAction;
         QAction* m_developerExportVtkFileAction;
         
@@ -334,6 +349,8 @@ namespace caret {
         QMenu* m_moveSelectedTabToWindowMenu;
         
         QMenu* m_recentSpecFileMenu;
+        AString m_recentSpecFileMenuOpenConfirmTitle;
+        AString m_recentSpecFileMenuLoadNoConfirmTitle;
         
         BrainBrowserWindowOrientedToolBox* m_overlayHorizontalToolBox;
         BrainBrowserWindowOrientedToolBox* m_overlayVerticalToolBox;
@@ -351,7 +368,7 @@ namespace caret {
         
         WindowComponentStatus m_defaultWindowComponentStatus;
         WindowComponentStatus m_normalWindowComponentStatus;
-                
+        
         static bool s_firstWindowFlag;
         
         friend class BrainBrowserWindowToolBar;

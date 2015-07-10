@@ -23,13 +23,13 @@
 
 
 #include "CaretObject.h"
-#include "DataFileException.h"
 #include "VoxelIJK.h"
 
 namespace caret {
 
     class Brain;
     class CiftiConnectivityMatrixParcelFile;
+    class CiftiMappableConnectivityMatrixDataFile;
     class SurfaceFile;
     
     class CiftiConnectivityMatrixDataFileManager
@@ -44,24 +44,31 @@ namespace caret {
         bool loadDataForSurfaceNode(Brain* brain,
                                     const SurfaceFile* surfaceFile,
                                     const int32_t nodeIndex,
-                                    std::vector<AString>& rowColumnInformationOut) throw (DataFileException);
+                                    std::vector<AString>& rowColumnInformationOut);
         
         bool loadAverageDataForSurfaceNodes(Brain* brain,
                                             const SurfaceFile* surfaceFile,
-                                            const std::vector<int32_t>& nodeIndices) throw (DataFileException);
+                                            const std::vector<int32_t>& nodeIndices);
         
         bool loadDataForVoxelAtCoordinate(Brain* brain,
                                           const float xyz[3],
-                                          std::vector<AString>& rowColumnInformationOut) throw (DataFileException);
+                                          std::vector<AString>& rowColumnInformationOut);
         
         bool loadAverageDataForVoxelIndices(Brain* brain,
                                             const int64_t volumeDimensionIJK[3],
-                                            const std::vector<VoxelIJK>& voxelIndices) throw (DataFileException);
+                                            const std::vector<VoxelIJK>& voxelIndices);
 
-        bool loadRowFromParcelFile(Brain* brain,
-                                   CiftiConnectivityMatrixParcelFile* parcelFile,
-                                   const int32_t rowIndex,
-                                   std::vector<AString>& rowColumnInformationOut) throw (DataFileException);
+        bool loadRowOrColumnFromParcelFile(Brain* brain,
+                                           CiftiConnectivityMatrixParcelFile* ciftiConnMatrixFile,
+                                           const int32_t rowIndex,
+                                           const int32_t columnIndex,
+                                           std::vector<AString>& rowColumnInformationOut);
+        
+        bool loadRowOrColumnFromConnectivityMatrixFile(Brain* brain,
+                                                       CiftiMappableConnectivityMatrixDataFile* parcelFile,
+                                                       const int32_t rowIndex,
+                                                       const int32_t columnIndex,
+                                                       std::vector<AString>& rowColumnInformationOut);
         
         bool hasNetworkFiles(Brain* brain) const;
         

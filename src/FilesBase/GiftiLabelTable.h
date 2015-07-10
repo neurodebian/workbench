@@ -171,7 +171,7 @@ public:
 
     void createLabelsForKeys(const std::set<int32_t>& newKeys);
 
-    void writeAsXML(XmlWriter& xmlWriter) throw (GiftiException);
+    void writeAsXML(XmlWriter& xmlWriter);
 
     void writeAsXML(QXmlStreamWriter& xmlWriter) const;
 
@@ -180,10 +180,9 @@ public:
     AString toFormattedString(const AString& indentation) const;
 
     //void readFromXMLDOM(const Node* rootNode)
-    //        throw (GiftiException);
+    //       ;
 
-    void readFromXmlString(const AString& s)
-            throw (GiftiException);
+    void readFromXmlString(const AString& s);
 
     void readFromQXmlStreamReader(QXmlStreamReader& xml);
 
@@ -205,7 +204,10 @@ public:
     
     int32_t generateUnusedKey() const;
     
-    void exportToCaret5ColorFile(const AString& filename) const throw (GiftiException);
+    void changeLabelKey(const int32_t currentKey,
+                        const int32_t newKey);
+    
+    void exportToCaret5ColorFile(const AString& filename) const;
 
 private:
     void issueLabelKeyZeroWarning(const AString& name) const;

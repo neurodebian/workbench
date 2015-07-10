@@ -76,11 +76,21 @@ OperationParameters* AlgorithmCiftiFindClusters::getParameters()
     
     ret->createOptionalParameter(13, "-merged-volume", "treat volume components as if they were a single component");
     
+    OptionalParameter* sizeRatioOpt = ret->createOptionalParameter(15, "-size-ratio", "ignore clusters smaller than a given fraction of the largest cluster in the structure");
+    sizeRatioOpt->addDoubleParameter(1, "surface-ratio", "fraction of the structure's largest cluster area");
+    sizeRatioOpt->addDoubleParameter(2, "volume-ratio", "fraction of the structure's largest cluster volume");
+    
+    OptionalParameter* distanceOpt = ret->createOptionalParameter(16, "-distance", "ignore clusters further than a given distance from the largest cluster in the structure");
+    distanceOpt->addDoubleParameter(1, "surface-distance", "how far from the largest cluster a cluster can be, edge to edge, in mm");
+    distanceOpt->addDoubleParameter(2, "volume-distance", "how far from the largest cluster a cluster can be, edge to edge, in mm");
+    
     OptionalParameter* startOpt = ret->createOptionalParameter(14, "-start", "start labeling clusters from a value other than 1");
     startOpt->addIntegerParameter(1, "startval", "the value to give the first cluster found");
     
     ret->setHelpText(
-        AString("The input cifti file must have a brain models mapping on the chosen dimension, columns for .dtseries, and either for .dconn.  ") +
+        AString("Outputs a cifti file with nonzero integers for all brainordinates within a large enough cluster, and zeros elsewhere.  ") +
+        "The integers denote cluster membership (by default, first cluster found will use value 1, second cluster 2, etc).  " +
+        "The input cifti file must have a brain models mapping on the chosen dimension, columns for .dtseries, and either for .dconn.  " +
         "The ROI should have a brain models mapping along columns, exactly matching the mapping of the chosen direction in the input file.  " +
         "Data outside the ROI is ignored."
     );
@@ -151,9 +161,31 @@ void AlgorithmCiftiFindClusters::useParameters(OperationParameters* myParams, Pr
     {
         startVal = (int)startOpt->getInteger(1);
     }
+    OptionalParameter* sizeRatioOpt = myParams->getOptionalParameter(15);
+    float surfSizeRatio = -1.0f, volSizeRatio = -1.0f;
+    if (sizeRatioOpt->m_present)
+    {
+        surfSizeRatio = sizeRatioOpt->getDouble(1);
+        volSizeRatio = sizeRatioOpt->getDouble(2);
+        if (surfSizeRatio <= 0.0f && volSizeRatio <= 0.0f)
+        {
+            throw AlgorithmException("at least one size ratio must be positive");
+        }
+    }
+    OptionalParameter* distanceOpt = myParams->getOptionalParameter(16);
+    float surfDistCutoff = -1.0f, volDistCutoff = -1.0f;
+    if (distanceOpt->m_present)
+    {
+        surfDistCutoff = distanceOpt->getDouble(1);
+        volDistCutoff = distanceOpt->getDouble(2);
+        if (surfDistCutoff <= 0.0f && volDistCutoff <= 0.0f)
+        {
+            throw AlgorithmException("at least one distance cutoff must be positive");
+        }
+    }
     AlgorithmCiftiFindClusters(myProgObj, myCifti, surfThresh, surfSize, volThresh, volSize, myDir, myCiftiOut, lessThan,
                                myLeftSurf, myLeftAreas, myRightSurf, myRightAreas, myCerebSurf, myCerebAreas,
-                               roiCifti, mergedVol, startVal);
+                               roiCifti, mergedVol, startVal, NULL, surfSizeRatio, volSizeRatio, surfDistCutoff, volDistCutoff);
 }
 
 AlgorithmCiftiFindClusters::AlgorithmCiftiFindClusters(ProgressObject* myProgObj, const CiftiFile* myCifti,
@@ -162,9 +194,14 @@ AlgorithmCiftiFindClusters::AlgorithmCiftiFindClusters(ProgressObject* myProgObj
                                                        const SurfaceFile* myLeftSurf, const MetricFile* myLeftAreas,
                                                        const SurfaceFile* myRightSurf, const MetricFile* myRightAreas,
                                                        const SurfaceFile* myCerebSurf, const MetricFile* myCerebAreas,
-                                                       const CiftiFile* roiCifti, const bool& mergedVol, const int& startVal, int* endVal) : AbstractAlgorithm(myProgObj)
+                                                       const CiftiFile* roiCifti, const bool& mergedVol, const int& startVal, int* endVal,
+                                                       const float& surfSizeRatio, const float& volSizeRatio, const float& surfDistCutoff, const float& volDistCutoff) : AbstractAlgorithm(myProgObj)
 {
     LevelProgress myProgress(myProgObj);
+    if (startVal == 0)
+    {
+        throw AlgorithmException("0 is not a valid cluster marking start value");
+    }
     const CiftiXML& myXML = myCifti->getCiftiXML();
     if (myXML.getNumberOfDimensions() != 2) throw AlgorithmException("cifti separate only supported on 2D cifti");
     if (myDir >= myXML.getNumberOfDimensions() || myDir < 0) throw AlgorithmException("direction invalid for input cifti");
@@ -215,7 +252,7 @@ AlgorithmCiftiFindClusters::AlgorithmCiftiFindClusters(ProgressObject* myProgObj
         }
         if (myAreas != NULL && myAreas->getNumberOfNodes() != mySurf->getNumberOfNodes())
         {
-            throw AlgorithmException(surfType + " corected areas metric has the wrong number of vertices");
+            throw AlgorithmException(surfType + " corrected areas metric has the wrong number of vertices");
         }
     }
     myCiftiOut->setCiftiXML(myXML);
@@ -246,7 +283,7 @@ AlgorithmCiftiFindClusters::AlgorithmCiftiFindClusters(ProgressObject* myProgObj
         {//due to above testing, we know the structure mask is the same, so just overwrite the ROI from the mask
             AlgorithmCiftiSeparate(NULL, roiCifti, CiftiXML::ALONG_COLUMN, surfaceList[whichStruct], &myRoi);
         }
-        AlgorithmMetricFindClusters(NULL, mySurf, &myMetric, surfThresh, surfSize, &myMetricOut, lessThan, &myRoi, myAreas, -1, markVal, &markVal);
+        AlgorithmMetricFindClusters(NULL, mySurf, &myMetric, surfThresh, surfSize, &myMetricOut, lessThan, &myRoi, myAreas, -1, markVal, &markVal, surfSizeRatio, surfDistCutoff);
         AlgorithmCiftiReplaceStructure(NULL, myCiftiOut, myDir, surfaceList[whichStruct], &myMetricOut);
     }
     if (mergedVol)
@@ -260,7 +297,7 @@ AlgorithmCiftiFindClusters::AlgorithmCiftiFindClusters(ProgressObject* myProgObj
             {//due to above testing, we know the structure mask is the same, so just overwrite the ROI from the mask
                 AlgorithmCiftiSeparate(NULL, roiCifti, CiftiXMLOld::ALONG_COLUMN, &myRoi, offset, NULL, true);
             }
-            AlgorithmVolumeFindClusters(NULL, &myVol, volThresh, volSize, &myVolOut, lessThan, &myRoi, -1, markVal, &markVal);
+            AlgorithmVolumeFindClusters(NULL, &myVol, volThresh, volSize, &myVolOut, lessThan, &myRoi, -1, markVal, &markVal, volSizeRatio, volDistCutoff);
             AlgorithmCiftiReplaceStructure(NULL, myCiftiOut, myDir, &myVolOut, true);
         }
     } else {
@@ -274,7 +311,7 @@ AlgorithmCiftiFindClusters::AlgorithmCiftiFindClusters(ProgressObject* myProgObj
             {//due to above testing, we know the structure mask is the same, so just overwrite the ROI from the mask
                 AlgorithmCiftiSeparate(NULL, roiCifti, CiftiXML::ALONG_COLUMN, volumeList[whichStruct], &myRoi, offset, NULL, true);
             }
-            AlgorithmVolumeFindClusters(NULL, &myVol, volThresh, volSize, &myVolOut, lessThan, &myRoi, -1, markVal, &markVal);
+            AlgorithmVolumeFindClusters(NULL, &myVol, volThresh, volSize, &myVolOut, lessThan, &myRoi, -1, markVal, &markVal, volSizeRatio, volDistCutoff);
             AlgorithmCiftiReplaceStructure(NULL, myCiftiOut, myDir, volumeList[whichStruct], &myVolOut, true);
         }
     }

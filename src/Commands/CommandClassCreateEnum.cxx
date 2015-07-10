@@ -24,6 +24,7 @@
 
 #include "CaretAssertion.h"
 #include "CommandClassCreateEnum.h"
+#include "DataFileException.h"
 #include "FileInformation.h"
 #include "ProgramParameters.h"
 #include "TextFile.h"
@@ -93,8 +94,7 @@ CommandClassCreateEnum::getHelpInformation(const AString& /*programName*/)
  *   If there is an error in the parameters.
  */
 void 
-CommandClassCreateEnum::executeOperation(ProgramParameters& parameters) throw (CommandException,
-                                                               ProgramParametersException)
+CommandClassCreateEnum::executeOperation(ProgramParameters& parameters)
 {
     const AString enumClassName = parameters.nextString("Enum Class Name");
     int32_t numberOfEnumValues = parameters.nextInt("Number of Enum Values");

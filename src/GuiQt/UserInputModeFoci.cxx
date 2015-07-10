@@ -61,13 +61,14 @@ using namespace caret;
  * Constructor.
  */
 UserInputModeFoci::UserInputModeFoci(const int32_t windowIndex)
-: UserInputModeView(),
+: UserInputModeView(UserInputModeAbstract::FOCI),
   m_windowIndex(windowIndex)
 {
     m_inputModeFociWidget = new UserInputModeFociWidget(this,
                                                         windowIndex);
     m_mode = MODE_CREATE;
     m_editOperation = EDIT_OPERATION_PROPERTIES;
+    setWidgetForToolBar(m_inputModeFociWidget);
 }
 
 /**
@@ -76,15 +77,6 @@ UserInputModeFoci::UserInputModeFoci(const int32_t windowIndex)
 UserInputModeFoci::~UserInputModeFoci()
 {
     
-}
-
-/**
- * @return The input mode enumerated type.
- */
-UserInputModeFoci::UserInputMode
-UserInputModeFoci::getUserInputMode() const
-{
-    return UserInputReceiverInterface::FOCI;
 }
 
 /**
@@ -151,16 +143,12 @@ UserInputModeFoci::finish()
 }
 
 /**
- * @return A widget for display at the bottom of the
- * Browser Window Toolbar when this mode is active.
- * If no user-interface controls are needed, return NULL.
- * The toolbar will take ownership of the widget and
- * delete it so derived class MUST NOT delete the widget.
+ * Called to update the input receiver for various events.
  */
-QWidget*
-UserInputModeFoci::getWidgetForToolBar()
+void
+UserInputModeFoci::update()
 {
-    return this->m_inputModeFociWidget;
+    
 }
 
 /**
@@ -205,8 +193,8 @@ UserInputModeFoci::updateAfterFociChanged()
 }
 
 /**
- * Determine the structure for the given surface.  Find the volume interaction
- * surface for the structure and return it.  If no volume interaction surface
+ * Determine the structure for the given surface.  Find the primary anatomical
+ * surface for the structure and return it.  If no primary anatomical surface
  * is found, the return the surface that was passed in.
  */
 Surface*
@@ -216,7 +204,7 @@ UserInputModeFoci::getAnatomicalSurfaceForSurface(Surface* surface)
     const StructureEnum::Enum structure = surface->getStructure();
     BrainStructure* bs = brain->getBrainStructure(structure,
                                                   false);
-    Surface* anatSurf = bs->getVolumeInteractionSurface();
+    Surface* anatSurf = bs->getPrimaryAnatomicalSurface();
     if (anatSurf != NULL) {
         return anatSurf;
     }

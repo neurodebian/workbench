@@ -29,12 +29,14 @@
 
 namespace caret {
 
+    class Brain;
     class BrainStructure;
     class BrowserTabContent;
     class CiftiMappableConnectivityMatrixDataFile;
     class CiftiBrainordinateDataSeriesFile;
     class CiftiBrainordinateLabelFile;
     class CiftiBrainordinateScalarFile;
+    class CiftiParcelLabelFile;
     class CiftiParcelScalarFile;
     class CiftiParcelSeriesFile;
     class DisplayPropertiesLabels;
@@ -89,65 +91,66 @@ namespace caret {
                                  const Surface* surface,
                                  const LabelFile* labelFile,
                                  const int32_t mapIndex,
-                                 //const AString& labelMapUniqueID,
                                  const int32_t numberOfNodes,
                                  float* rgbv);
 
-        bool assignCiftiLabelColoring(const DisplayPropertiesLabels* displayPropertiesLabels,
+        bool assignCiftiDenseLabelColoring(const DisplayPropertiesLabels* displayPropertiesLabels,
                                       const int32_t browserTabIndex,
                                       const BrainStructure* brainStructure,
-                                  CiftiBrainordinateLabelFile* ciftiScalarFile,
+                                           const Surface* surface,
+                                  CiftiBrainordinateLabelFile* ciftiLabelFile,
                                       const int32_t mapIndex,
-                                      //const AString& metricMapUniqueID,
                                   const int32_t numberOfNodes,
                                   float* rgbv);
         
         bool assignCiftiScalarColoring(const BrainStructure* brainStructure,
                                        CiftiBrainordinateScalarFile* ciftiScalarFile,
                                        const int32_t mapIndex,
-                                       //const AString& metricMapUniqueID,
                                        const int32_t numberOfNodes,
                                        float* rgbv);
+        
+        bool assignCiftiParcelLabelColoring(const DisplayPropertiesLabels* displayPropertiesLabels,
+                                           const int32_t browserTabIndex,
+                                           const BrainStructure* brainStructure,
+                                            const Surface* surface,
+                                           CiftiParcelLabelFile* ciftiParcelLabelFile,
+                                           const int32_t mapIndex,
+                                           const int32_t numberOfNodes,
+                                           float* rgbv);
         
         bool assignCiftiParcelScalarColoring(const BrainStructure* brainStructure,
                                        CiftiParcelScalarFile* ciftiScalarFile,
                                              const int32_t mapIndex,
-                                             //const AString& metricMapUniqueID,
                                        const int32_t numberOfNodes,
                                        float* rgbv);
         
         bool assignCiftiDataSeriesColoring(const BrainStructure* brainStructure,
                                        CiftiBrainordinateDataSeriesFile* ciftiDataSeriesFile,
                                            const int32_t mapIndex,
-                                           //const AString& metricMapUniqueID,
                                        const int32_t numberOfNodes,
                                        float* rgbv);
         
         bool assignCiftiParcelSeriesColoring(const BrainStructure* brainStructure,
                                            CiftiParcelSeriesFile* ciftiParcelSeriesFile,
                                              const int32_t mapIndex,
-                                             //const AString& metricMapUniqueID,
                                            const int32_t numberOfNodes,
                                            float* rgbv);
         
         bool assignCiftiMappableConnectivityMatrixColoring(const BrainStructure* brainStructure,
                                                    CiftiMappableConnectivityMatrixDataFile* ciftiConnectivityMatrixFile,
                                                            const int32_t mapIndex,
-                                                           //const AString& selectedMapUniqueID,
                                                    const int32_t numberOfNodes,
                                                    float* rgbv);
         
         bool assignMetricColoring(const BrainStructure* brainStructure,
                                   MetricFile* metricFile,
                                   const int32_t mapIndex,
-                                  //const AString& metricMapUniqueID,
                                   const int32_t numberOfNodes,
                                   float* rgbv);
         
         bool assignRgbaColoring(const BrainStructure* brainStructure,
                                 const RgbaFile* rgbaFile,
                                 const int32_t mapIndex,
-                                //const AString& rgbaMapUniqueID,
                                 const int32_t numberOfNodes,
                                 float* rgbv);
         
@@ -158,7 +161,12 @@ namespace caret {
                                     const DisplayGroupEnum::Enum displayGroup,
                                     const int32_t browserTabIndex,
                                     const std::vector<float>& labelIndices,
+                                    const bool drawMedialWallFilledFlag,
                                     float* rgbv);
+        
+        void showBrainordinateHighlightRegionOfInterest(const Brain* brain,
+                                                        const Surface* surface,
+                                                        float* rgbaNodeColors);
     };
     
 #ifdef __SURFACE_NODE_COLORING_DECLARE__

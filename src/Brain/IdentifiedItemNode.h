@@ -47,7 +47,7 @@ namespace caret {
 
         virtual bool isValid() const;
         
-        AString getText() const;
+//        AString getText() const;
         
         StructureEnum::Enum getStructure() const;
         

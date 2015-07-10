@@ -51,10 +51,14 @@ public:
         BORDER_VOLUME,
         /** Data-Series Chart */
         CHART_DATA_SERIES,
+        /** Frequency-Series Chart */
+        CHART_FREQUENCY_SERIES,
         /** Matrix chart */
         CHART_MATRIX,
         /** Time-Series Chart */
         CHART_TIME_SERIES,
+        /** CIFTI Connectivity Matrix Row or Column */
+        CIFTI_CONNECTIVITY_MATRIX_ROW_COLUMN,
         /** Focus on Surface */
         FOCUS_SURFACE,
         /** Focus on Volume */
@@ -66,7 +70,11 @@ public:
         /** Surface Triangle */
         SURFACE_TRIANGLE,
         /** Volume Voxel */
-        VOXEL
+        VOXEL,
+        /** Voxel Editing */
+        VOXEL_EDITING,
+        /** Voxel identification symbol */
+        VOXEL_IDENTIFICATION_SYMBOL
     };
 
 

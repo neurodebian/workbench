@@ -33,12 +33,14 @@
 #include <cmath>
 
 #include <QStringList>
+#include <QImage>
 
 #include "Border.h"
 #include "BorderFile.h"
 #include "Brain.h"
 #include "BrainOpenGLChartDrawingFixedPipeline.h"
 #include "BrainOpenGLPrimitiveDrawing.h"
+#include "BrainOpenGLVolumeObliqueSliceDrawing.h"
 #include "BrainOpenGLVolumeSliceDrawing.h"
 #include "BrainOpenGLShapeCone.h"
 #include "BrainOpenGLShapeCube.h"
@@ -52,18 +54,23 @@
 #include "CaretDataFileSelectionModel.h"
 #include "CaretLogger.h"
 #include "CaretMappableDataFile.h"
+#include "CaretMappableDataFileAndMapSelectionModel.h"
 #include "CaretPreferences.h"
 #include "ChartableMatrixInterface.h"
+#include "ChartableMatrixSeriesInterface.h"
 #include "ChartModelDataSeries.h"
+#include "ChartModelFrequencySeries.h"
 #include "ChartModelTimeSeries.h"
 #include "CiftiBrainordinateLabelFile.h"
 #include "CiftiFiberOrientationFile.h"
 #include "CiftiFiberTrajectoryFile.h"
 #include "ClippingPlaneGroup.h"
+#include "DeveloperFlagsEnum.h"
 #include "DisplayGroupEnum.h"
 #include "DisplayPropertiesBorders.h"
 #include "DisplayPropertiesFiberOrientation.h"
 #include "DisplayPropertiesFoci.h"
+#include "DisplayPropertiesImages.h"
 #include "DisplayPropertiesLabels.h"
 #include "DisplayPropertiesSurface.h"
 #include "DisplayPropertiesVolume.h"
@@ -83,6 +90,7 @@
 #include "GroupAndNameHierarchyModel.h"
 #include "IdentifiedItemNode.h"
 #include "IdentificationManager.h"
+#include "ImageFile.h"
 #include "Matrix4x4.h"
 #include "SelectionItemBorderSurface.h"
 #include "SelectionItemFocusSurface.h"
@@ -427,6 +435,8 @@ BrainOpenGLFixedPipeline::drawModels(std::vector<BrainOpenGLViewportContent*>& v
                 glEnd();
             }
         }
+
+        drawBackgroundImage(vpContent);
         
 //        CaretLogFinest("Drawing Model "
 //                       + AString::number(i)
@@ -639,7 +649,7 @@ BrainOpenGLFixedPipeline::setViewportAndOrthographicProjection(const int32_t vie
  *    Volume for use in setting orthographic projection.
  */
 void
-BrainOpenGLFixedPipeline::setViewportAndOrthographicProjectionForVolume(const int32_t viewport[4],
+BrainOpenGLFixedPipeline::setViewportAndOrthographicProjectionForWholeBrainVolume(const int32_t viewport[4],
                                                                         const  ProjectionViewTypeEnum::Enum projectionType,
                                                                         const VolumeMappableInterface* volume)
 {
@@ -1683,15 +1693,6 @@ BrainOpenGLFixedPipeline::drawSurfaceTriangles(Surface* surface,
                                                             barycentricAreas, 
                                                             barycentricNodes, 
                                                             surface->getNumberOfNodes());
-                                /*
-                                this->modeProjectionData->setStructure(surface->getStructure());
-                                SurfaceProjectionBarycentric* barycentric =
-                                    this->modeProjectionData->getBarycentricProjection();
-                                barycentric->setProjectionSurfaceNumberOfNodes(surface->getNumberOfNodes());
-                                barycentric->setTriangleAreas(barycentricAreas);
-                                barycentric->setTriangleNodes(barycentricNodes);
-                                barycentric->setValid(true);
-                                */
                             }
                         }
                     }
@@ -1958,7 +1959,6 @@ BrainOpenGLFixedPipeline::drawSurfaceNodeAttributes(Surface* surface)
          iter != identifiedNodes.end();
          iter++) {
         const IdentifiedItemNode& nodeID = *iter;
-        
         identifiedNodeIndices.push_back(nodeID.getNodeIndex());
     }
     
@@ -1994,6 +1994,13 @@ BrainOpenGLFixedPipeline::drawSurfaceNodeAttributes(Surface* surface)
          iter != identifiedNodes.end();
          iter++) {
         const IdentifiedItemNode& nodeID = *iter;
+        
+        /*
+         * Show symbol for node ID?
+         */
+        if ( ! nodeID.isShowIdentificationSymbol()) {
+            continue;
+        }
         
         const int32_t nodeIndex = nodeID.getNodeIndex();
         const int32_t i3 = nodeIndex * 3;
@@ -2297,9 +2304,7 @@ BrainOpenGLFixedPipeline::drawBorder(const BorderDrawInfo& borderDrawInfo)
      * Draw lines
      */
     if (drawLines
-        && (numPointsToDraw > 1)) {    
-        //const float lineWidthInPixels = this->modelSizeToPixelSize(lineWidth);
-        //this->setLineWidth(lineWidthInPixels);
+        && (numPointsToDraw > 1)) {
         this->setLineWidth(lineWidth);
         
         this->disableLighting();
@@ -2862,7 +2867,7 @@ BrainOpenGLFixedPipeline::drawSurfaceBorders(Surface* surface)
             BrainStructure* bs = brain->getBrainStructure(border->getStructure(),
                                                           false);
             if (bs != NULL) {
-                borderDrawInfo.anatomicalSurface = bs->getVolumeInteractionSurface();
+                borderDrawInfo.anatomicalSurface = bs->getPrimaryAnatomicalSurface();
             }
             
             this->drawBorder(borderDrawInfo);
@@ -2972,28 +2977,42 @@ BrainOpenGLFixedPipeline::setupVolumeDrawInfo(BrowserTabContent* browserTabConte
                         WholeBrainVoxelDrawingMode::Enum wholeBrainVoxelDrawingMode = overlay->getWholeBrainVoxelDrawingMode();
                         
                         if (mapFile->isMappedWithPalette()) {
-                            const FastStatistics* statistics = mapFile->getMapFastStatistics(mapIndex);
+                            FastStatistics* statistics = NULL;
+                            switch (mapFile->getPaletteNormalizationMode()) {
+                                case PaletteNormalizationModeEnum::NORMALIZATION_ALL_MAP_DATA:
+                                    statistics = const_cast<FastStatistics*>(mapFile->getFileFastStatistics());
+                                    break;
+                                case PaletteNormalizationModeEnum::NORMALIZATION_SELECTED_MAP_DATA:
+                                    statistics = const_cast<FastStatistics*>(mapFile->getMapFastStatistics(mapIndex));
+                                    break;
+                            }
+                            //CaretAssert(statistics);
+                            
                             PaletteColorMapping* paletteColorMapping = mapFile->getMapPaletteColorMapping(mapIndex);
                             Palette* palette = paletteFile->getPaletteByName(paletteColorMapping->getSelectedPaletteName());
-                            if ((statistics != NULL)
-                                && (palette != NULL)) {
-                                bool useIt = true;
-                                
-                                if (volumeDrawInfoOut.empty() == false) {
-                                    /*
-                                     * If previous volume is the same as this
-                                     * volume, there is no need to draw it twice.
-                                     */
-                                    const VolumeDrawInfo& vdi = volumeDrawInfoOut[volumeDrawInfoOut.size() - 1];
-                                    if ((vdi.volumeFile == vf) 
-                                        && (opacity >= 1.0)
-                                        && (mapIndex == vdi.mapIndex)
-                                        && (*paletteColorMapping == *vdi.paletteColorMapping)) {
-                                        useIt = false;
-                                    }
-                                }
-                                if (useIt) {
+                            if (palette != NULL) {
+                                /*
+                                 * Statistics may be NULL for a dense connectome file
+                                 * that does not have any data loaded by user
+                                 * clicking on surface/volume.
+                                 */
+                                if (statistics != NULL) {
+                                    bool useIt = true;
                                     
+                                    if (volumeDrawInfoOut.empty() == false) {
+                                        /*
+                                         * If previous volume is the same as this
+                                         * volume, there is no need to draw it twice.
+                                         */
+                                        const VolumeDrawInfo& vdi = volumeDrawInfoOut[volumeDrawInfoOut.size() - 1];
+                                        if ((vdi.volumeFile == vf)
+                                            && (opacity >= 1.0)
+                                            && (mapIndex == vdi.mapIndex)
+                                            && (*paletteColorMapping == *vdi.paletteColorMapping)) {
+                                            useIt = false;
+                                        }
+                                    }
+                                    if (useIt) {
                                         VolumeDrawInfo vdi(mapFile,
                                                            vf,
                                                            brain,
@@ -3003,6 +3022,7 @@ BrainOpenGLFixedPipeline::setupVolumeDrawInfo(BrowserTabContent* browserTabConte
                                                            mapIndex,
                                                            opacity);
                                         volumeDrawInfoOut.push_back(vdi);
+                                    }
                                 }
                             }
                             else {
@@ -3055,48 +3075,42 @@ BrainOpenGLFixedPipeline::drawVolumeModel(BrowserTabContent* browserTabContent,
     
     VolumeSliceDrawingTypeEnum::Enum sliceDrawingType = browserTabContent->getSliceDrawingType();
     VolumeSliceProjectionTypeEnum::Enum sliceProjectionType = browserTabContent->getSliceProjectionType();
+
     
-//    if (USE_OLD_VOLUME_SLICE_DRAWING_FLAG) {
-//        VolumeSliceViewModeEnum::Enum sliceViewMode = VolumeSliceViewModeEnum::ORTHOGONAL;
-//        
-//        switch (sliceProjectionType) {
-//            case VolumeSliceProjectionTypeEnum::VOLUME_SLICE_PROJECTION_OBLIQUE:
-//                switch (sliceDrawingType) {
-//                    case VolumeSliceDrawingTypeEnum::VOLUME_SLICE_DRAW_MONTAGE:
-//                        sliceViewMode = VolumeSliceViewModeEnum::OBLIQUE;
-//                        break;
-//                    case VolumeSliceDrawingTypeEnum::VOLUME_SLICE_DRAW_SINGLE:
-//                        sliceViewMode = VolumeSliceViewModeEnum::OBLIQUE;
-//                        break;
-//                }
-//                break;
-//            case VolumeSliceProjectionTypeEnum::VOLUME_SLICE_PROJECTION_ORTHOGONAL:
-//                switch (sliceDrawingType) {
-//                    case VolumeSliceDrawingTypeEnum::VOLUME_SLICE_DRAW_MONTAGE:
-//                        sliceViewMode = VolumeSliceViewModeEnum::MONTAGE;
-//                        break;
-//                    case VolumeSliceDrawingTypeEnum::VOLUME_SLICE_DRAW_SINGLE:
-//                        sliceViewMode = VolumeSliceViewModeEnum::ORTHOGONAL;
-//                        break;
-//                }
-//                break;
-//        }
-//        OLD_BrainOpenGLVolumeSliceDrawing oldVolumeSliceDrawing;
-//        oldVolumeSliceDrawing.draw(this,
-//                                browserTabContent,
-//                                volumeDrawInfo,
-//                                sliceViewMode,
-//                                viewport);
-//    }
-//    else {
+    /*
+     * There is/was a flaw in volume drawing in that it does not "center"
+     * correctly when the voxel corresponding to the coordinate (0, 0, 0)
+     * is not within the volume.  It seems to be fixed for orthogonal
+     * drawing but oblique drawing probably needs a new algorithm to 
+     * fix the problem.
+     */
+    bool useNewDrawingFlag = false;
+    switch (sliceProjectionType) {
+        case VolumeSliceProjectionTypeEnum::VOLUME_SLICE_PROJECTION_OBLIQUE:
+            break;
+        case VolumeSliceProjectionTypeEnum::VOLUME_SLICE_PROJECTION_ORTHOGONAL:
+            useNewDrawingFlag = true;
+            break;
+    }
+    
+    if (useNewDrawingFlag) {
         BrainOpenGLVolumeSliceDrawing volumeSliceDrawing;
         volumeSliceDrawing.draw(this,
+                                browserTabContent,
+                                volumeDrawInfo,
+                                sliceDrawingType,
+                                sliceProjectionType,
+                                viewport);
+    }
+    else {
+        BrainOpenGLVolumeObliqueSliceDrawing obliqueVolumeSliceDrawing;
+        obliqueVolumeSliceDrawing.draw(this,
                                    browserTabContent,
                                    volumeDrawInfo,
                                    sliceDrawingType,
                                    sliceProjectionType,
                                    viewport);
-//    }
+    }
 }
 
 
@@ -4401,18 +4415,16 @@ BrainOpenGLFixedPipeline::drawWholeBrainModel(BrowserTabContent* browserTabConte
         underlayVolumeFile->getVoxelSpaceBoundingBox(volumeBoundingBox);
         volumeBoundingBox.getCenter(center);
     }
-//    else {
-        if (leftSurface != NULL) {
-            leftSurface->getBoundingBox()->getCenter(center);
+    if (leftSurface != NULL) {
+        leftSurface->getBoundingBox()->getCenter(center);
+        center[0] = 0.0;
+    }
+    else {
+        if (rightSurface != NULL) {
+            rightSurface->getBoundingBox()->getCenter(center);
             center[0] = 0.0;
         }
-        else {
-            if (rightSurface != NULL) {
-                rightSurface->getBoundingBox()->getCenter(center);
-                center[0] = 0.0;
-            }
-        }
-//    }
+    }
 
     /*
      * Use a surface (if available) to set the orthographic projection size
@@ -4431,7 +4443,7 @@ BrainOpenGLFixedPipeline::drawWholeBrainModel(BrowserTabContent* browserTabConte
                                                                  anySurface);
     }
     else if (underlayVolumeFile != NULL) {
-        this->setViewportAndOrthographicProjectionForVolume(viewport,
+        this->setViewportAndOrthographicProjectionForWholeBrainVolume(viewport,
                                                             ProjectionViewTypeEnum::PROJECTION_VIEW_LEFT_LATERAL,
                                                             underlayVolumeFile);
     }
@@ -4493,34 +4505,13 @@ BrainOpenGLFixedPipeline::drawWholeBrainModel(BrowserTabContent* browserTabConte
             VolumeSliceDrawingTypeEnum::Enum sliceDrawingType = browserTabContent->getSliceDrawingType();
             VolumeSliceProjectionTypeEnum::Enum sliceProjectionType = browserTabContent->getSliceProjectionType();
             
-//            if (USE_OLD_VOLUME_SLICE_DRAWING_FLAG) {
-//                VolumeSliceViewModeEnum::Enum sliceViewMode = VolumeSliceViewModeEnum::ORTHOGONAL;
-//                
-//                switch (sliceProjectionType) {
-//                    case VolumeSliceProjectionTypeEnum::VOLUME_SLICE_PROJECTION_OBLIQUE:
-//                        sliceViewMode = VolumeSliceViewModeEnum::OBLIQUE;
-//                        break;
-//                    case VolumeSliceProjectionTypeEnum::VOLUME_SLICE_PROJECTION_ORTHOGONAL:
-//                        sliceViewMode = VolumeSliceViewModeEnum::ORTHOGONAL;
-//                        break;
-//                }
-//
-//                OLD_BrainOpenGLVolumeSliceDrawing oldVolumeSliceDrawing;
-//                oldVolumeSliceDrawing.draw(this,
-//                                           browserTabContent,
-//                                           volumeDrawInfo,
-//                                           sliceViewMode,
-//                                           viewport);
-//            }
-//            else {
-                BrainOpenGLVolumeSliceDrawing volumeSliceDrawing;
-                volumeSliceDrawing.draw(this,
-                                        browserTabContent,
-                                        volumeDrawInfo,
-                                        sliceDrawingType,
-                                        sliceProjectionType,
-                                        viewport);
-//            }
+            BrainOpenGLVolumeSliceDrawing volumeSliceDrawing;
+            volumeSliceDrawing.draw(this,
+                                    browserTabContent,
+                                    volumeDrawInfo,
+                                    sliceDrawingType,
+                                    sliceProjectionType,
+                                    viewport);
         }
     }
     
@@ -4607,24 +4598,44 @@ BrainOpenGLFixedPipeline::drawChartData(BrowserTabContent* browserTabContent,
     const ChartDataTypeEnum::Enum chartDataType = chartModel->getSelectedChartDataType(tabIndex);
 
     SelectionItemDataTypeEnum::Enum selectionItemDataType = SelectionItemDataTypeEnum::INVALID;
+    int32_t scalarDataSeriesMapIndex = -1;
     
     switch (chartDataType) {
         case ChartDataTypeEnum::CHART_DATA_TYPE_INVALID:
             break;
-        case ChartDataTypeEnum::CHART_DATA_TYPE_DATA_SERIES:
+        case ChartDataTypeEnum::CHART_DATA_TYPE_LINE_DATA_SERIES:
             cartesianChart = chartModel->getSelectedDataSeriesChartModel(tabIndex);
             selectionItemDataType = SelectionItemDataTypeEnum::CHART_DATA_SERIES;
             break;
-        case ChartDataTypeEnum::CHART_DATA_TYPE_MATRIX:
+        case ChartDataTypeEnum::CHART_DATA_TYPE_LINE_FREQUENCY_SERIES:
+            cartesianChart = chartModel->getSelectedFrequencySeriesChartModel(tabIndex);
+            selectionItemDataType = SelectionItemDataTypeEnum::CHART_FREQUENCY_SERIES;
+            break;
+        case ChartDataTypeEnum::CHART_DATA_TYPE_LINE_TIME_SERIES:
+            cartesianChart = chartModel->getSelectedTimeSeriesChartModel(tabIndex);
+            selectionItemDataType = SelectionItemDataTypeEnum::CHART_TIME_SERIES;
+            break;
+        case ChartDataTypeEnum::CHART_DATA_TYPE_MATRIX_LAYER:
         {
-            CaretDataFileSelectionModel* matrixFileSelector = chartModel->getChartableMatrixFileSelectionModel(tabIndex);
+            CaretDataFileSelectionModel* matrixFileSelector = chartModel->getChartableMatrixParcelFileSelectionModel(tabIndex);
             matrixChartFile = matrixFileSelector->getSelectedFileOfType<ChartableMatrixInterface>();
             selectionItemDataType = SelectionItemDataTypeEnum::CHART_MATRIX;
         }
             break;
-        case ChartDataTypeEnum::CHART_DATA_TYPE_TIME_SERIES:
-            cartesianChart = chartModel->getSelectedTimeSeriesChartModel(tabIndex);
-            selectionItemDataType = SelectionItemDataTypeEnum::CHART_TIME_SERIES;
+        case ChartDataTypeEnum::CHART_DATA_TYPE_MATRIX_SERIES:
+        {
+            CaretDataFileSelectionModel* fileModel = chartModel->getChartableMatrixSeriesFileSelectionModel(tabIndex);
+            CaretDataFile* caretFile = fileModel->getSelectedFile();
+            if (caretFile != NULL) {
+                ChartableMatrixSeriesInterface* matrixSeriesFile = dynamic_cast<ChartableMatrixSeriesInterface*>(caretFile);
+                if (matrixSeriesFile != NULL) {
+                    matrixChartFile = matrixSeriesFile;
+                    selectionItemDataType = SelectionItemDataTypeEnum::CHART_MATRIX;
+                    scalarDataSeriesMapIndex = matrixSeriesFile->getSelectedMapIndex(tabIndex);
+                }
+                
+            }
+        }
             break;
     }
     
@@ -4645,6 +4656,7 @@ BrainOpenGLFixedPipeline::drawChartData(BrowserTabContent* browserTabContent,
                                      viewport,
                                      this->textRenderer,
                                      matrixChartFile,
+                                     scalarDataSeriesMapIndex,
                                      selectionItemDataType,
                                      this->windowTabIndex);
     }
@@ -4683,9 +4695,45 @@ BrainOpenGLFixedPipeline::setOrthographicProjectionForWithBoundingBox(const int3
 {
     CaretAssert(boundingBox);
     
-    const float modelHalfHeight = std::max(std::max(boundingBox->getDifferenceX(),
-                                                    boundingBox->getDifferenceY()),
-                                           boundingBox->getDifferenceZ()) / 2.0;
+    /*
+     * For a cortical surface, this largest dimension is the Y-Axis.
+     * This worked correctly when the default view was dorsal with
+     * the anterior pole at the top of the display and the posterior
+     * pole at the bottom of the display.
+     */
+    float modelHalfHeight = std::max(std::max(boundingBox->getDifferenceX(),
+                                              boundingBox->getDifferenceY()),
+                                              boundingBox->getDifferenceZ()) / 2.0;
+    
+    /*
+     * The default view was changed to a lateral view and the above
+     * code results in problems during some window resize operations.
+     * But, the Z-difference of a flat surface is zero.
+     *
+     * See also BrowserTabContent::restoreFromScene() that tries to make
+     * old scenes compatible with this new scaling.
+     */
+    const float zDiff = boundingBox->getDifferenceZ();
+    if (zDiff != 0.0) {
+        modelHalfHeight = zDiff / 2.0;
+        
+        const float yDiff = boundingBox->getDifferenceY();
+        if ((yDiff > 0.0)
+            && (viewport[2] > 0.0)) {
+            /*
+             * Note Z is vertical, Y is horizontal when viewed
+             */
+            const float surfaceAspectRatio  = zDiff / yDiff;
+            const float viewportAspectRatio = (static_cast<float>(viewport[3])
+                                               / static_cast<float>(viewport[2]));
+            
+            if (viewportAspectRatio > surfaceAspectRatio) {
+                const float modelHalfWidth = yDiff / 2.0;
+                modelHalfHeight = modelHalfWidth * viewportAspectRatio;
+            }
+        }
+    }
+    
     const float orthoHeight = modelHalfHeight * 1.02;
     
     setOrthographicProjectionWithHeight(viewport,
@@ -5233,6 +5281,121 @@ BrainOpenGLFixedPipeline::drawSquare(const uint8_t rgba[4],
 }
 
 /**
+ * Draw the user's selected image over the background
+ *
+ * vpContent
+ *    Viewport content which image is displayed.
+ */
+void
+BrainOpenGLFixedPipeline::drawBackgroundImage(BrainOpenGLViewportContent* vpContent)
+{
+    BrowserTabContent* btc = vpContent->getBrowserTabContent();
+    if (btc == NULL) {
+        return;
+    }
+    
+    Brain* brain = vpContent->getBrain();
+    DisplayPropertiesImages* dpi = brain->getDisplayPropertiesImages();
+    const int32_t tabIndex = btc->getTabNumber();
+    const DisplayGroupEnum::Enum displayGroup = dpi->getDisplayGroupForTab(tabIndex);
+    if (dpi->isDisplayed(displayGroup,
+                         tabIndex)) {
+        int modelViewport[4];
+        vpContent->getModelViewport(modelViewport);
+        
+        ImageFile* imageFile = dpi->getSelectedImageFile(displayGroup,
+                                                               tabIndex);
+        if (imageFile != NULL) {
+            drawImage(modelViewport,
+                      imageFile);
+        }
+    }
+}
+
+/**
+ * Draw the given QImage in the given viewport.
+ *
+ * @param viewport
+ *    The viewport dimensions.
+ * @param image
+ *    The QImage that is drawn.
+ */
+void
+BrainOpenGLFixedPipeline::drawImage(const int viewport[4],
+                                    const ImageFile* imageFile)
+{
+    int32_t imageWidth  = 0;
+    int32_t imageHeight = 0;
+    std::vector<uint8_t> imageBytesRGBA;
+    if ( ! imageFile->getImageBytesRGBA(ImageFile::IMAGE_DATA_ORIGIN_AT_BOTTOM,
+                                        imageBytesRGBA,
+                                        imageWidth,
+                                        imageHeight)) {
+        return;
+    }
+        
+    const float xScale = static_cast<float>(viewport[2])
+    / static_cast<float>(imageWidth);
+    const float yScale = static_cast<float>(viewport[3])
+    / static_cast<float>(imageHeight);
+    
+    float pixelZoom = 1.0;
+    float xPos = 0.0;
+    float yPos = 0.0;
+    
+    bool centerImageX = false, centerImageY = false;
+    if (xScale < yScale) {
+        pixelZoom = xScale;
+        centerImageY = true;
+    }
+    else {
+        pixelZoom = yScale;
+        centerImageX = true;
+    }
+    
+    if (centerImageY) {
+        // center image vertically
+        const float ySize = imageHeight * pixelZoom;
+        const float margin = viewport[3] - ySize;
+        yPos = margin * 0.5;
+    }
+    if (centerImageX) {
+        // center image horizontally
+        const float xSize = imageWidth * pixelZoom;
+        const float margin = viewport[3] - xSize;
+        xPos = margin * 0.5;
+    }
+    
+    glMatrixMode(GL_PROJECTION);
+    glPushMatrix();
+    glLoadIdentity();
+    const double nearClip = -1000.0;
+    const double farClip  =  1000.0;
+    glOrtho(0, viewport[2],
+            0, viewport[3],
+            nearClip, farClip);
+    glMatrixMode(GL_MODELVIEW);
+    glPushMatrix();
+    glLoadIdentity();
+    
+    //
+    // Draw image near far clipping plane
+    //
+    const float imageZ = 10.0 - farClip;
+    glRasterPos3f(xPos, yPos, imageZ); //-500.0); // set Z so image behind surface
+    glPixelZoom(pixelZoom, pixelZoom);
+    
+    glDrawPixels(imageWidth, imageHeight,
+                 GL_RGBA, GL_UNSIGNED_BYTE,
+                 (GLvoid*)&imageBytesRGBA[0]);
+    
+    glPopMatrix();
+    glMatrixMode(GL_PROJECTION);
+    glPopMatrix();
+    glMatrixMode(GL_MODELVIEW);
+}
+
+/**
  * Draw text at the given window coordinates.
  *
  * @param windowX
@@ -5410,42 +5573,6 @@ BrainOpenGLFixedPipeline::drawTextWindowCoordsWithBackground(const int windowX,
         BrainOpenGLPrimitiveDrawing::drawQuads(coords,
                                                normals,
                                                rgba);
-////        drawTextWindowCoords(windowX,
-////                             windowY,
-////                             text,
-////                             alignmentX,
-////                             alignmentY,
-////                             textStyle,
-////                             fontHeight);
-//        
-//        const int textX = (vpLeftX + vpRightX) / 2.0;
-//        const int textY = (vpBottomY + vpTopY) / 2.0;
-//        drawTextWindowCoords(textX,  //windowX,
-//                             textY,  //windowY,
-//                             text,
-//                             alignmentX,
-//                             alignmentY,
-//                             textStyle,
-//                             fontHeight);
-//        const int textAX = (vpRightX - vpLeftX)   / 2.0;
-//        const int textAY = (vpTopY   - vpBottomY) / 2.0;
-//        drawTextWindowCoords(textAX,  //windowX,
-//                             textAY,  //windowY,
-//                             "A",
-//                             alignmentX,
-//                             alignmentY,
-//                             textStyle,
-//                             fontHeight);
-//        
-//        const int textBX = (vpRightX - vpLeftX)   / 2.0;
-//        const int textBY = (vpTopY   - vpBottomY) / 2.0;
-//        drawTextWindowCoords(textAX,  //windowX,
-//                             textAY,  //windowY,
-//                             "B",
-//                             alignmentX,
-//                             alignmentY,
-//                             textStyle,
-//                             fontHeight);
         glPopMatrix();
         
         glMatrixMode(GL_PROJECTION);
@@ -5585,7 +5712,15 @@ BrainOpenGLFixedPipeline::drawAllPalettes(Brain* brain)
             const AString paletteName = pcm->getSelectedPaletteName();
             const Palette* palette = paletteFile->getPaletteByName(paletteName);
             if (palette != NULL) {
-                const FastStatistics* statistics = mapFiles[i]->getMapFastStatistics(mapIndex);
+                FastStatistics* statistics = NULL;
+                switch (mapFiles[i]->getPaletteNormalizationMode()) {
+                    case PaletteNormalizationModeEnum::NORMALIZATION_ALL_MAP_DATA:
+                        statistics = const_cast<FastStatistics*>(mapFiles[i]->getFileFastStatistics());
+                        break;
+                    case PaletteNormalizationModeEnum::NORMALIZATION_SELECTED_MAP_DATA:
+                        statistics = const_cast<FastStatistics*>(mapFiles[i]->getMapFastStatistics(mapIndex));
+                        break;
+                }
                 if (statistics != NULL) {
                     this->drawPalette(palette,
                                       pcm,
@@ -5885,54 +6020,79 @@ BrainOpenGLFixedPipeline::drawPalette(const Palette* palette,
         glEnd();
     }
     
-    float minMax[4] = { -1.0, 0.0, 0.0, 1.0 };
-    switch (paletteColorMapping->getScaleMode()) {
-        case PaletteScaleModeEnum::MODE_AUTO_SCALE:
-        {
-            float dummy;
-            statistics->getNonzeroRanges(minMax[0], dummy, dummy, minMax[3]);
+    AString textLeft;
+    AString textCenter;
+    AString textRight;
+    const bool useNewFormattingFlag = true;
+    if (useNewFormattingFlag) {
+        /*
+         * NEW FORMATTING !!!!!
+         */
+        paletteColorMapping->getPaletteColorBarScaleText(statistics,
+                                                         textLeft,
+                                                         textCenter,
+                                                         textRight);
+    }
+    else {
+        float minMax[4] = { -1.0, 0.0, 0.0, 1.0 };
+        switch (paletteColorMapping->getScaleMode()) {
+            case PaletteScaleModeEnum::MODE_AUTO_SCALE:
+            {
+                float dummy;
+                statistics->getNonzeroRanges(minMax[0], dummy, dummy, minMax[3]);
+            }
+                break;
+            case PaletteScaleModeEnum::MODE_AUTO_SCALE_ABSOLUTE_PERCENTAGE:
+            {
+                const float maxPct = paletteColorMapping->getAutoScaleAbsolutePercentageMaximum();
+                const float minPct = paletteColorMapping->getAutoScaleAbsolutePercentageMinimum();
+                
+                minMax[0] = -statistics->getApproxAbsolutePercentile(maxPct);
+                minMax[1] = -statistics->getApproxAbsolutePercentile(minPct);
+                minMax[2] =  statistics->getApproxAbsolutePercentile(minPct);
+                minMax[3] =  statistics->getApproxAbsolutePercentile(maxPct);
+            }
+                break;
+            case PaletteScaleModeEnum::MODE_AUTO_SCALE_PERCENTAGE:
+            {
+                const float negMaxPct = paletteColorMapping->getAutoScalePercentageNegativeMaximum();
+                const float negMinPct = paletteColorMapping->getAutoScalePercentageNegativeMinimum();
+                const float posMinPct = paletteColorMapping->getAutoScalePercentagePositiveMinimum();
+                const float posMaxPct = paletteColorMapping->getAutoScalePercentagePositiveMaximum();
+                
+                minMax[0] = statistics->getApproxNegativePercentile(negMaxPct);
+                minMax[1] = statistics->getApproxNegativePercentile(negMinPct);
+                minMax[2] = statistics->getApproxPositivePercentile(posMinPct);
+                minMax[3] = statistics->getApproxPositivePercentile(posMaxPct);
+            }
+                break;
+            case PaletteScaleModeEnum::MODE_USER_SCALE:
+                minMax[0] = paletteColorMapping->getUserScaleNegativeMaximum();
+                minMax[1] = paletteColorMapping->getUserScaleNegativeMinimum();
+                minMax[2] = paletteColorMapping->getUserScalePositiveMinimum();
+                minMax[3] = paletteColorMapping->getUserScalePositiveMaximum();
+                break;
         }
-            break;
-        case PaletteScaleModeEnum::MODE_AUTO_SCALE_PERCENTAGE:
-        {
-            const float negMaxPct = paletteColorMapping->getAutoScalePercentageNegativeMaximum();
-            const float negMinPct = paletteColorMapping->getAutoScalePercentageNegativeMinimum();
-            const float posMinPct = paletteColorMapping->getAutoScalePercentagePositiveMinimum();
-            const float posMaxPct = paletteColorMapping->getAutoScalePercentagePositiveMaximum();
-            
-            minMax[0] = statistics->getApproxNegativePercentile(negMaxPct);
-            minMax[1] = statistics->getApproxNegativePercentile(negMinPct);
-            minMax[2] = statistics->getApproxPositivePercentile(posMinPct);
-            minMax[3] = statistics->getApproxPositivePercentile(posMaxPct);
+        textLeft = AString::number(minMax[0], 'f', 1);
+        AString textCenterNeg = AString::number(minMax[1], 'f', 1);
+        if (textCenterNeg == "-0.0") {
+            textCenterNeg = "0.0";
         }
-            break;
-        case PaletteScaleModeEnum::MODE_USER_SCALE:
-            minMax[0] = paletteColorMapping->getUserScaleNegativeMaximum();
-            minMax[1] = paletteColorMapping->getUserScaleNegativeMinimum();
-            minMax[2] = paletteColorMapping->getUserScalePositiveMinimum();
-            minMax[3] = paletteColorMapping->getUserScalePositiveMaximum();
-            break;
-    }
-    
-    AString textLeft = AString::number(minMax[0], 'f', 1);
-    AString textCenterNeg = AString::number(minMax[1], 'f', 1);
-    if (textCenterNeg == "-0.0") {
-        textCenterNeg = "0.0";
-    }
-    AString textCenterPos = AString::number(minMax[2], 'f', 1);
-    AString textCenter = textCenterPos;
-    if (isNegativeDisplayed && isPositiveDisplayed) {
-        if (textCenterNeg != textCenterPos) {
-            textCenter = textCenterNeg + "/" + textCenterPos;
-        }
-    }
-    else if (isNegativeDisplayed) {
-        textCenter = textCenterNeg;
-    }
-    else if (isPositiveDisplayed) {
+        AString textCenterPos = AString::number(minMax[2], 'f', 1);
         textCenter = textCenterPos;
+        if (isNegativeDisplayed && isPositiveDisplayed) {
+            if (textCenterNeg != textCenterPos) {
+                textCenter = textCenterNeg + "/" + textCenterPos;
+            }
+        }
+        else if (isNegativeDisplayed) {
+            textCenter = textCenterNeg;
+        }
+        else if (isPositiveDisplayed) {
+            textCenter = textCenterPos;
+        }
+        textRight = AString::number(minMax[3], 'f', 1);
     }
-    AString textRight = AString::number(minMax[3], 'f', 1);
     
     /*
      * Reset to the models viewport for drawing text.
@@ -6000,82 +6160,6 @@ BrainOpenGLFixedPipeline::drawPalette(const Palette* palette,
     
     return;
 }
-
-///**
-// * Since OpenGL draws lines/points in pixels, map window coordinates to
-// * model coordinates to estimate the line width or points size in pixels
-// * for a line width or point size that is in model coordinates.
-// * @param modelSize
-// *    Size in model coordinates.
-// * @return
-// *    Size converted to pixels.
-// */
-//float 
-//BrainOpenGLFixedPipeline::modelSizeToPixelSize(const float modelSize)
-//{
-//    float pixelSize = modelSize;
-//    
-//    GLdouble modelview[16];
-//    GLdouble projection[16];
-//    glGetDoublev(GL_MODELVIEW_MATRIX, modelview);
-//    glGetDoublev(GL_PROJECTION_MATRIX, projection);
-//    
-//    GLint viewport[4];
-//    glGetIntegerv(GL_VIEWPORT, 
-//                  viewport);
-//    
-//    GLdouble windowA[3] = { viewport[0], viewport[1], 0.0 };
-//    GLdouble windowB[3] = { viewport[0] + viewport[2] - 1, viewport[1] + viewport[3] - 1, 0.0 };
-//    GLdouble modelA[3], modelB[3];
-//    if (gluUnProject(windowA[0], 
-//                     windowA[1], 
-//                     windowA[2], 
-//                     modelview, 
-//                     projection, 
-//                     viewport, 
-//                     &modelA[0], 
-//                     &modelA[1], 
-//                     &modelA[2]) == GL_TRUE) {
-//        if (gluUnProject(windowB[0], 
-//                         windowB[1], 
-//                         windowB[2], 
-//                         modelview, 
-//                         projection, 
-//                         viewport,
-//                         &modelB[0], 
-//                         &modelB[1], 
-//                         &modelB[2]) == GL_TRUE) {
-//            const double modelDist = MathFunctions::distance3D(modelA, modelB);
-//            const double windowDist = MathFunctions::distance3D(windowA, windowB);
-//            
-//            const float scaling = windowDist / modelDist;
-//            
-//            pixelSize *= scaling;
-//        }
-//    }
-//    return pixelSize;
-//}
-//
-///**
-// * Convert pixels into model size.
-// * 
-// * @param pixelSize
-// *    The pixel size
-// * @return
-// *    Model size coordinate space value
-// */
-//float
-//BrainOpenGLFixedPipeline::pixelSizeToModelSize(const float pixelSize)
-//{
-//    float modelSize = 1.0;
-//    
-//    const float value = modelSizeToPixelSize(pixelSize);
-//    if (value > 0) {
-//        modelSize /= value;
-//    }
-//    
-//    return modelSize;
-//}
 
 /**
  * @return A string containing the state of OpenGL (depth testing, lighting, etc.)
@@ -6170,7 +6254,6 @@ BrainOpenGLFixedPipeline::VolumeDrawInfo::VolumeDrawInfo(CaretMappableDataFile* 
     this->mapFile = mapFile;
     this->volumeFile = volumeFile;
     this->brain = brain;
-//    this->volumeType = volumeFile->getVolumeType();
     this->paletteColorMapping = paletteColorMapping;
     this->wholeBrainVoxelDrawingMode = wholeBrainVoxelDrawingMode;
     this->mapIndex = mapIndex;

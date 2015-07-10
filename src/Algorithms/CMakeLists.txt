@@ -40,17 +40,21 @@ AlgorithmCiftiLabelToROI.h
 AlgorithmCiftiMergeDense.h
 AlgorithmCiftiPairwiseCorrelation.h
 AlgorithmCiftiParcellate.h
+AlgorithmCiftiParcelMappingToLabel.h
 AlgorithmCiftiReduce.h
 AlgorithmCiftiReorder.h
 AlgorithmCiftiReplaceStructure.h
 AlgorithmCiftiResample.h
+AlgorithmCiftiRestrictDenseMap.h
 AlgorithmCiftiROIsFromExtrema.h
 AlgorithmCiftiSeparate.h
 AlgorithmCiftiSmoothing.h
 AlgorithmCiftiTranspose.h
+AlgorithmCiftiVectorOperation.h
 AlgorithmCreateSignedDistanceVolume.h
 AlgorithmException.h
 AlgorithmFiberDotProducts.h
+AlgorithmFociResample.h
 AlgorithmGiftiAllLabelsToROIs.h
 AlgorithmGiftiLabelAddPrefix.h
 AlgorithmGiftiLabelToROI.h
@@ -73,6 +77,8 @@ AlgorithmMetricROIsFromExtrema.h
 AlgorithmMetricROIsToBorder.h
 AlgorithmMetricSmoothing.h
 AlgorithmMetricTFCE.h
+AlgorithmMetricVectorOperation.h
+AlgorithmMetricVectorTowardROI.h
 AlgorithmNodesInsideBorder.h
 AlgorithmSignedDistanceToSurface.h
 AlgorithmSurfaceAffineRegression.h
@@ -111,6 +117,7 @@ AlgorithmVolumeROIsFromExtrema.h
 AlgorithmVolumeSmoothing.h
 AlgorithmVolumeTFCE.h
 AlgorithmVolumeToSurfaceMapping.h
+AlgorithmVolumeVectorOperation.h
 AlgorithmVolumeWarpfieldResample.h
 OverlapLogicEnum.h
 
@@ -137,17 +144,21 @@ AlgorithmCiftiLabelToROI.cxx
 AlgorithmCiftiMergeDense.cxx
 AlgorithmCiftiPairwiseCorrelation.cxx
 AlgorithmCiftiParcellate.cxx
+AlgorithmCiftiParcelMappingToLabel.cxx
 AlgorithmCiftiReduce.cxx
 AlgorithmCiftiReorder.cxx
 AlgorithmCiftiReplaceStructure.cxx
 AlgorithmCiftiResample.cxx
+AlgorithmCiftiRestrictDenseMap.cxx
 AlgorithmCiftiROIsFromExtrema.cxx
 AlgorithmCiftiSeparate.cxx
 AlgorithmCiftiSmoothing.cxx
 AlgorithmCiftiTranspose.cxx
+AlgorithmCiftiVectorOperation.cxx
 AlgorithmCreateSignedDistanceVolume.cxx
 AlgorithmException.cxx
 AlgorithmFiberDotProducts.cxx
+AlgorithmFociResample.cxx
 AlgorithmGiftiAllLabelsToROIs.cxx
 AlgorithmGiftiLabelAddPrefix.cxx
 AlgorithmGiftiLabelToROI.cxx
@@ -170,6 +181,8 @@ AlgorithmMetricROIsFromExtrema.cxx
 AlgorithmMetricROIsToBorder.cxx
 AlgorithmMetricSmoothing.cxx
 AlgorithmMetricTFCE.cxx
+AlgorithmMetricVectorOperation.cxx
+AlgorithmMetricVectorTowardROI.cxx
 AlgorithmNodesInsideBorder.cxx
 AlgorithmSignedDistanceToSurface.cxx
 AlgorithmSurfaceAffineRegression.cxx
@@ -208,6 +221,7 @@ AlgorithmVolumeROIsFromExtrema.cxx
 AlgorithmVolumeSmoothing.cxx
 AlgorithmVolumeTFCE.cxx
 AlgorithmVolumeToSurfaceMapping.cxx
+AlgorithmVolumeVectorOperation.cxx
 AlgorithmVolumeWarpfieldResample.cxx
 OverlapLogicEnum.cxx
 )

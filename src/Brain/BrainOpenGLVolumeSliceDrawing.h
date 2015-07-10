@@ -136,33 +136,14 @@ namespace caret {
          */
         class VoxelToDraw {
         public:
-            /**
-             * Create a voxel for drawing.
-             *
-             * @param center
-             *    Center of voxel.
-             * @param leftBottom
-             *    Left bottom coordinate of voxel.
-             * @param rightBottom
-             *    Right bottom coordinate of voxel.
-             * @param rightTop
-             *    Right top coordinate of voxel.
-             * @param leftTop
-             *    Left top coordinate of voxel.
-             */
             VoxelToDraw(const float center[3],
                         const double leftBottom[3],
                         const double rightBottom[3],
                         const double rightTop[3],
                         const double leftTop[3]);
-            /**
-             * Add a value from a volume slice.
-             *
-             * @param sliceIndex
-             *    Index of the slice.
-             * @param sliceOffset
-             *    Offset of value in the slice.
-             */
+            
+            void getDiffXYZ(float dxyzOut[3]) const;
+            
             void addVolumeValue(const int64_t sliceIndex,
                                 const int64_t sliceOffset);
             
@@ -223,6 +204,10 @@ namespace caret {
                                  const float sliceCoordinates[3],
                                  const Plane& plane);
         
+        void drawOrthogonalSliceWithCulling(const VolumeSliceViewPlaneEnum::Enum sliceViewPlane,
+                                            const float sliceCoordinates[3],
+                                            const Plane& plane);
+        
         void createSlicePlaneEquation(const VolumeSliceProjectionTypeEnum::Enum sliceProjectionType,
                                       const VolumeSliceViewPlaneEnum::Enum sliceViewPlane,
                                       const float sliceCoordinates[3],
@@ -236,8 +221,7 @@ namespace caret {
         
         void setVolumeSliceViewingAndModelingTransformations(const VolumeSliceProjectionTypeEnum::Enum sliceProjectionType,
                                                              const VolumeSliceViewPlaneEnum::Enum sliceViewPlane,
-                                                             const Plane& plane,
-                                                             const float sliceCoordinates[3]);
+                                                             const Plane& plane);
         
         void getAxesColor(const VolumeSliceViewPlaneEnum::Enum sliceViewPlane,
                           float rgbaOut[4]) const;
@@ -268,18 +252,42 @@ namespace caret {
         void setOrthographicProjection(const VolumeSliceViewPlaneEnum::Enum sliceViewPlane,
                                        const int viewport[4]);
         
-        void drawOrthogonalSliceVoxels(const VolumeSliceViewPlaneEnum::Enum sliceViewPlane,
-                                       const float sliceNormalVector[3],
-                                       const int64_t selectedSliceIndices[3],
+        void drawOrthogonalSliceVoxels(const float sliceNormalVector[3],
                                        const float coordinate[3],
                                        const float rowStep[3],
                                        const float columnStep[3],
                                        const int64_t numberOfColumns,
                                        const int64_t numberOfRows,
                                        const std::vector<uint8_t>& sliceRGBA,
+                                       const int64_t validVoxelCount,
+                                       const VolumeMappableInterface* volumeInterface,
                                        const int32_t volumeIndex,
                                        const int32_t mapIndex,
                                        const uint8_t sliceOpacity);
+        
+        void drawOrthogonalSliceVoxelsSingleQuads(const float sliceNormalVector[3],
+                                       const float coordinate[3],
+                                       const float rowStep[3],
+                                       const float columnStep[3],
+                                       const int64_t numberOfColumns,
+                                       const int64_t numberOfRows,
+                                       const std::vector<uint8_t>& sliceRGBA,
+                                       const VolumeMappableInterface* volumeInterface,
+                                       const int32_t volumeIndex,
+                                       const int32_t mapIndex,
+                                       const uint8_t sliceOpacity);
+        
+        void drawOrthogonalSliceVoxelsQuadIndicesAndStrips(const float sliceNormalVector[3],
+                                                           const float coordinate[3],
+                                                           const float rowStep[3],
+                                                           const float columnStep[3],
+                                                           const int64_t numberOfColumns,
+                                                           const int64_t numberOfRows,
+                                                           const std::vector<uint8_t>& sliceRGBA,
+                                                           const VolumeMappableInterface* volumeInterface,
+                                                           const int32_t volumeIndex,
+                                                           const int32_t mapIndex,
+                                                           const uint8_t sliceOpacity);
         
         bool getVoxelCoordinateBoundsAndSpacing(float boundsOut[6],
                                                 float spacingOut[3]);
@@ -287,12 +295,26 @@ namespace caret {
         void createObliqueTransformationMatrix(const float sliceCoordinates[3],
                                                Matrix4x4& obliqueTransformationMatrixOut);
         
+        void drawIdentificationSymbols(const Plane& plane);
+        
         void addVoxelToIdentification(const int32_t volumeIndex,
                                       const int32_t mapIndex,
                                       const int32_t voxelI,
                                       const int32_t voxelJ,
                                       const int32_t voxelK,
+                                      const float voxelDiffXYZ[3],
                                       uint8_t rgbaForColorIdentificationOut[4]);
+        
+        bool getVolumeDrawingViewDependentCulling(const VolumeSliceViewPlaneEnum::Enum sliceViewPlane,
+                                                  const float selectedSliceCoordinate,
+                                                  const VolumeMappableInterface* volumeFile,
+                                                  int64_t culledFirstVoxelIJKOut[3],
+                                                  int64_t culledLastVoxelIJKOut[3],
+                                                  float voxelDeltaXYZOut[3]);
+        
+        void showBrainordinateHighlightRegionOfInterest(const VolumeSliceViewPlaneEnum::Enum sliceViewPlane,
+                                                        const float sliceCoordinates[3],
+                                                        const float sliceNormalVector[3]);
         
         void processIdentification();
         
@@ -336,7 +358,7 @@ namespace caret {
     };
     
 #ifdef __BRAIN_OPEN_GL_VOLUME_SLICE_DRAWING_DECLARE__
-const int32_t BrainOpenGLVolumeSliceDrawing::IDENTIFICATION_INDICES_PER_VOXEL = 5;
+const int32_t BrainOpenGLVolumeSliceDrawing::IDENTIFICATION_INDICES_PER_VOXEL = 8;
 #endif // __BRAIN_OPEN_GL_VOLUME_SLICE_DRAWING_DECLARE__
 
 } // namespace

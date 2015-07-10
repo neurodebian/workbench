@@ -73,11 +73,14 @@ OperationParameters* AlgorithmCiftiSmoothing::getParameters()
     
     ret->createOptionalParameter(11, "-fix-zeros-surface", "treat values of zero on the surface as missing data");
     
+    ret->createOptionalParameter(12, "-merged-volume", "smooth across subcortical structure boundaries");
+    
     ret->setHelpText(
         AString("The input cifti file must have a brain models mapping on the chosen dimension, columns for .dtseries, and either for .dconn.  ") +
-        "Data in different structures is smoothed independently (i.e., \"parcel constrained\" smoothing), so volume structures that touch do not smooth across this boundary.  " +
+        "By default, data in different structures is smoothed independently (i.e., \"parcel constrained\" smoothing), so volume structures that touch do not smooth across this boundary.  " +
+        "Specify -merged-volume to ignore these boundaries.  " +
         "Surface smoothing uses the GEO_GAUSS_AREA smoothing method.\n\n" +
-        "The -*-corrected-areas options are intended for when it is unavoidable to smooth on a group average surface, it is only an approximate correction " +
+        "The -*-corrected-areas options are intended for when it is unavoidable to smooth on group average surfaces, it is only an approximate correction " +
         "for the reduction of structure in a group average surface.  It is better to smooth the data on individuals before averaging, when feasible.\n\n" +
         "The -fix-zeros-* options will treat values of zero as lack of data, and not use that value when generating the smoothed values, but will fill zeros with extrapolated values.  " +
         "The ROI should have a brain models mapping along columns, exactly matching the mapping of the chosen direction in the input file.  " +
@@ -142,14 +145,17 @@ void AlgorithmCiftiSmoothing::useParameters(OperationParameters* myParams, Progr
     }
     bool fixZerosVol = myParams->getOptionalParameter(10)->m_present;
     bool fixZerosSurf = myParams->getOptionalParameter(11)->m_present;
-    AlgorithmCiftiSmoothing(myProgObj, myCifti, surfKern, volKern, myDir, myCiftiOut, myLeftSurf, myLeftAreas, myRightSurf, myRightAreas, myCerebSurf, myCerebAreas, roiCifti, fixZerosVol, fixZerosSurf);
+    bool mergedVolume = myParams->getOptionalParameter(12)->m_present;
+    AlgorithmCiftiSmoothing(myProgObj, myCifti, surfKern, volKern, myDir, myCiftiOut,
+                            myLeftSurf, myRightSurf, myCerebSurf,
+                            roiCifti, fixZerosVol, fixZerosSurf,
+                            myLeftAreas, myRightAreas, myCerebAreas, mergedVolume);
 }
 
 AlgorithmCiftiSmoothing::AlgorithmCiftiSmoothing(ProgressObject* myProgObj, const CiftiFile* myCifti, const float& surfKern, const float& volKern, const int& myDir, CiftiFile* myCiftiOut,
-                                                 const SurfaceFile* myLeftSurf, const MetricFile* myLeftAreas,
-                                                 const SurfaceFile* myRightSurf, const MetricFile* myRightAreas,
-                                                 const SurfaceFile* myCerebSurf, const MetricFile* myCerebAreas,
-                                                 const CiftiFile* roiCifti, bool fixZerosVol, bool fixZerosSurf) : AbstractAlgorithm(myProgObj)
+                                                 const SurfaceFile* myLeftSurf, const SurfaceFile* myRightSurf, const SurfaceFile* myCerebSurf,
+                                                 const CiftiFile* roiCifti, bool fixZerosVol, bool fixZerosSurf,
+                                                 const MetricFile* myLeftAreas, const MetricFile* myRightAreas, const MetricFile* myCerebAreas, const bool& mergedVolume) : AbstractAlgorithm(myProgObj)
 {
     LevelProgress myProgress(myProgObj);
     const CiftiXMLOld& myXML = myCifti->getCiftiXMLOld();
@@ -215,7 +221,7 @@ AlgorithmCiftiSmoothing::AlgorithmCiftiSmoothing(ProgressObject* myProgObj, cons
         }
         if (myAreas != NULL && myAreas->getNumberOfNodes() != mySurf->getNumberOfNodes())
         {
-            throw AlgorithmException(surfType + " surface and vertex area metric have different number of nodes");
+            throw AlgorithmException(surfType + " surface and vertex area metric have different number of vertices");
         }
     }
     myCiftiOut->setCiftiXML(myXML);
@@ -249,17 +255,30 @@ AlgorithmCiftiSmoothing::AlgorithmCiftiSmoothing(ProgressObject* myProgObj, cons
         AlgorithmMetricSmoothing(NULL, mySurf, &myMetric, surfKern, &myMetricOut, &myRoi, false, fixZerosSurf, -1, myAreas);
         AlgorithmCiftiReplaceStructure(NULL, myCiftiOut, myDir, surfaceList[whichStruct], &myMetricOut);
     }
-    for (int whichStruct = 0; whichStruct < (int)volumeList.size(); ++whichStruct)
+    if (mergedVolume)
     {
         VolumeFile myVol, myRoi, myVolOut;
         int64_t offset[3];
-        AlgorithmCiftiSeparate(NULL, myCifti, myDir, volumeList[whichStruct], &myVol, offset, &myRoi, true);
+        AlgorithmCiftiSeparate(NULL, myCifti, myDir, &myVol, offset, &myRoi, true);
         if (roiCifti != NULL)
         {//due to above testing, we know the structure mask is the same, so just overwrite the ROI from the mask
-            AlgorithmCiftiSeparate(NULL, roiCifti, CiftiXMLOld::ALONG_COLUMN, volumeList[whichStruct], &myRoi, offset, NULL, true);
+            AlgorithmCiftiSeparate(NULL, roiCifti, CiftiXMLOld::ALONG_COLUMN, &myRoi, offset, NULL, true);
         }
         AlgorithmVolumeSmoothing(NULL, &myVol, volKern, &myVolOut, &myRoi, fixZerosVol);
-        AlgorithmCiftiReplaceStructure(NULL, myCiftiOut, myDir, volumeList[whichStruct], &myVolOut, true);
+        AlgorithmCiftiReplaceStructure(NULL, myCiftiOut, myDir, &myVolOut, true);
+    } else {
+        for (int whichStruct = 0; whichStruct < (int)volumeList.size(); ++whichStruct)
+        {
+            VolumeFile myVol, myRoi, myVolOut;
+            int64_t offset[3];
+            AlgorithmCiftiSeparate(NULL, myCifti, myDir, volumeList[whichStruct], &myVol, offset, &myRoi, true);
+            if (roiCifti != NULL)
+            {//due to above testing, we know the structure mask is the same, so just overwrite the ROI from the mask
+                AlgorithmCiftiSeparate(NULL, roiCifti, CiftiXMLOld::ALONG_COLUMN, volumeList[whichStruct], &myRoi, offset, NULL, true);
+            }
+            AlgorithmVolumeSmoothing(NULL, &myVol, volKern, &myVolOut, &myRoi, fixZerosVol);
+            AlgorithmCiftiReplaceStructure(NULL, myCiftiOut, myDir, volumeList[whichStruct], &myVolOut, true);
+        }
     }
 }
 

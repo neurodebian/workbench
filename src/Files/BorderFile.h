@@ -70,9 +70,9 @@ namespace caret {
         
         const GiftiMetaData* getFileMetaData() const;
         
-        void readFile(const AString& filename) throw (DataFileException);
+        void readFile(const AString& filename);
         
-        void writeFile(const AString& filename) throw (DataFileException);
+        void writeFile(const AString& filename);
         
         void writeFile(const AString& filename, const int& version);
         
@@ -92,12 +92,21 @@ namespace caret {
         
         const Border* getBorder(const int32_t indx) const;
         
+        bool containsBorder(const Border* border) const;
+        
         void findAllBordersWithEndPointNearSegmentFirstPoint(const DisplayGroupEnum::Enum displayGroup,
                                                const int32_t browserTabIndex,
                                                const SurfaceFile* surfaceFile,
                                                const Border* borderSegment,
                                                const float maximumDistance,
                                                std::vector<BorderPointFromSearch>& borderPointsOut) const;
+        
+        void findAllBordersWithAnyPointNearSegmentFirstPoint(const DisplayGroupEnum::Enum displayGroup,
+                                                             const int32_t browserTabIndex,
+                                                             const SurfaceFile* surfaceFile,
+                                                             const Border* borderSegment,
+                                                             const float maximumDistance,
+                                                             std::vector<BorderPointFromSearch>& borderPointsOut) const;
         
         
         void findAllBordersWithPointsNearBothSegmentEndPoints(const DisplayGroupEnum::Enum displayGroup,
@@ -106,6 +115,12 @@ namespace caret {
                                                  const Border* borderSegment,
                                                  const float maximumDistance,
                                                  std::vector<BorderPointFromSearch>& borderPointsOut) const;
+        
+        void findBordersInsideRegionOfInterest(const DisplayGroupEnum::Enum displayGroup,
+                                               const int32_t browserTabIndex,
+                                               const SurfaceFile* surfaceFile,
+                                               const std::vector<bool>& nodesInROI,
+                                               std::vector<std::pair<int32_t, Border*> >& insideCountAndBorderOut) const;
         
         void addBorder(Border* border);
         
@@ -155,7 +170,7 @@ namespace caret {
         static AString getFileVersionAsString();
         
         void exportToCaret5Format(const std::vector<SurfaceFile*>& surfaceFiles,
-                                  const AString& outputCaret5FilesPrefix) throw (DataFileException);
+                                  const AString& outputCaret5FilesPrefix);
         
         AString getObsoleteMultiStructureFormatMessage();
         
@@ -201,9 +216,11 @@ namespace caret {
         
         AString parseBorder3(QXmlStreamReader& xml, const AString& className);
         
-        static void colorAttribHelper3(QXmlStreamReader& xml, float rgbOut[3]);
+        static void colorAttribHelper3(const AString& filename,
+                                       QXmlStreamReader& xml, float rgbOut[3]);
         
-        static std::vector<AString> parseBorderMDValues3(QXmlStreamReader& xml);
+        static std::vector<AString> parseBorderMDValues3(const AString& filename,
+                                                         QXmlStreamReader& xml);
         
         GiftiMetaData* m_metadata;
         

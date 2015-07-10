@@ -48,7 +48,7 @@ VolumeSpace::VolumeSpace(const int64_t dims[3], const vector<vector<float> >& sf
     setSpace(dims, sform);
 }
 
-VolumeSpace::VolumeSpace(const int64_t dims[3], const float sform[16])
+VolumeSpace::VolumeSpace(const int64_t dims[3], const float sform[12])
 {
     setSpace(dims, sform);
 }
@@ -170,6 +170,13 @@ void VolumeSpace::getSpacingVectors(Vector3D& iStep, Vector3D& jStep, Vector3D& 
     FloatMatrix(m_sform).getAffineVectors(iStep, jStep, kStep, origin);
 }
 
+float VolumeSpace::getVoxelVolume() const
+{
+    Vector3D spacingVecs[4];
+    getSpacingVectors(spacingVecs[0], spacingVecs[1], spacingVecs[2], spacingVecs[3]);
+    return abs(spacingVecs[0].dot(spacingVecs[1].cross(spacingVecs[2])));
+}
+
 void VolumeSpace::getOrientAndSpacingForPlumb(OrientTypes* orientOut, float* spacingOut, float* originOut) const
 {
     CaretAssert(isPlumb());
@@ -185,13 +192,7 @@ void VolumeSpace::getOrientAndSpacingForPlumb(OrientTypes* orientOut, float* spa
             {
                 spacingOut[j] = m_sform[i][j];
                 originOut[j] = m_sform[i][3];
-                bool negative;
-                if (m_sform[i][j] > 0.0f)
-                {
-                    negative = true;
-                } else {
-                    negative = false;
-                }
+                bool negative = (m_sform[i][j] < 0.0f);
                 switch (i)
                 {
                 case 0:
@@ -215,7 +216,7 @@ void VolumeSpace::getOrientAndSpacingForPlumb(OrientTypes* orientOut, float* spa
     }
 }
 
-void VolumeSpace::getOrientation(VolumeSpace::OrientTypes orientOut[3]) const
+void VolumeSpace::getOrientation(OrientTypes orientOut[3]) const
 {
     Vector3D ivec, jvec, kvec, origin;
     getSpacingVectors(ivec, jvec, kvec, origin);
@@ -338,7 +339,7 @@ void VolumeSpace::readCiftiXML1(QXmlStreamReader& xml)
     }
     if (xml.name() != "TransformationMatrixVoxelIndicesIJKtoXYZ")
     {
-        throw CaretException("found unknown element in Volume: " + xml.name().toString());
+        throw CaretException("unexpected element in Volume: " + xml.name().toString());
     }
     QXmlStreamAttributes transattribs = xml.attributes();
     if (!transattribs.hasAttribute("UnitsXYZ"))//ignore the space attributes
@@ -420,7 +421,7 @@ void VolumeSpace::readCiftiXML2(QXmlStreamReader& xml)
     }
     if (xml.name() != "TransformationMatrixVoxelIndicesIJKtoXYZ")
     {
-        throw CaretException("found unknown element in Volume: " + xml.name().toString());
+        throw CaretException("unexpected element in Volume: " + xml.name().toString());
     }
     QXmlStreamAttributes transattribs = xml.attributes();
     if (!transattribs.hasAttribute("MeterExponent"))//ignore the space attributes

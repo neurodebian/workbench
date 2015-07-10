@@ -424,8 +424,11 @@ GiftiLabelTable::deleteLabel(const int32_t key)
    }
     LABELS_MAP_ITERATOR iter = this->labelsMap.find(key);
     if (iter != this->labelsMap.end()) {
+        GiftiLabel* gl = iter->second;
         this->labelsMap.erase(iter);
-        delete iter->second;
+        delete gl;
+        
+        setModified();
     }
 }
 
@@ -449,6 +452,7 @@ GiftiLabelTable::deleteLabel(const GiftiLabel* label)
          iter++) {
         if (iter->second == label) {
             this->labelsMap.erase(iter);
+            setModified();
             break;
         }
     }
@@ -1177,7 +1181,7 @@ GiftiLabelTable::createLabelsForKeys(const std::set<int32_t>& newKeys)
  *
  */
 void
-GiftiLabelTable::writeAsXML(XmlWriter& xmlWriter) throw (GiftiException)
+GiftiLabelTable::writeAsXML(XmlWriter& xmlWriter)
 {
     try {
         //
@@ -1398,7 +1402,7 @@ GiftiLabelTable::toFormattedString(const AString& indentation) const
  *
 void
 GiftiLabelTable::readFromXMLDOM(const Node* rootNode)
-            throw (GiftiException)
+           
 {
 }
 */
@@ -1412,7 +1416,7 @@ GiftiLabelTable::readFromXMLDOM(const Node* rootNode)
  */
 void
 GiftiLabelTable::readFromXmlString(const AString& /*s*/)
-            throw (GiftiException)
+           
 {
     CaretAssertMessage(0, "Not implemented yet!");
 }
@@ -1438,25 +1442,26 @@ void GiftiLabelTable::readFromQXmlStreamReader(QXmlStreamReader& xml)
         bool ok = false;
         QString temp = myAttrs.value(GiftiXmlElements::ATTRIBUTE_LABEL_KEY).toString();
         key = temp.toInt(&ok);
-        if (!ok) xml.raiseError("key attribute missing or noninteger");
+        if (!ok) xml.raiseError("Key attribute of Label missing or noninteger");
         temp = myAttrs.value(GiftiXmlElements::ATTRIBUTE_LABEL_RED).toString();
         rgba[0] = temp.toFloat(&ok);
-        if (!ok) xml.raiseError("red attribute missing or not a number");
+        if (!ok) xml.raiseError("Red attribute of Label missing or not a number");
         temp = myAttrs.value(GiftiXmlElements::ATTRIBUTE_LABEL_GREEN).toString();
         rgba[1] = temp.toFloat(&ok);
-        if (!ok) xml.raiseError("green attribute missing or not a number");
+        if (!ok) xml.raiseError("Green attribute of Label missing or not a number");
         temp = myAttrs.value(GiftiXmlElements::ATTRIBUTE_LABEL_BLUE).toString();
         rgba[2] = temp.toFloat(&ok);
-        if (!ok) xml.raiseError("blue attribute missing or not a number");
+        if (!ok) xml.raiseError("Blue attribute of Label missing or not a number");
         temp = myAttrs.value(GiftiXmlElements::ATTRIBUTE_LABEL_ALPHA).toString();
         if (temp == "")
         {
             rgba[3] = 1.0f;
         } else {
             rgba[3] = temp.toFloat(&ok);
-            if (!ok) xml.raiseError("alpha attribute not a number");
+            if (!ok) xml.raiseError("Alpha attribute of Label not a number");
         }
         temp = xml.readElementText();
+        if (xml.hasError()) return;
         if ((temp == "unknown" || temp == "Unknown") && rgba[3] == 0.0f)
         {
             if (haveUnassigned)
@@ -1585,6 +1590,47 @@ GiftiLabelTable::getKeysAndNames(std::map<int32_t, AString>& keysAndNamesOut) co
     }
 }
 
+/**
+ * Change the key of a label from 'currentKey' to 'newKey'.
+ * If a label exists with 'newKey', the label with 'newKey' is removed.
+ *
+ * @param currentKey
+ *     Key currently used by the label.
+ * @param newKey
+ *     New key for the label.
+ */
+void
+GiftiLabelTable::changeLabelKey(const int32_t currentKey,
+                                const int32_t newKey)
+{
+    /*
+     * Remove a label that uses 'newKey'.
+     */
+    if (this->labelsMap.find(newKey) != this->labelsMap.end()) {
+        deleteLabel(newKey);
+    }
+    
+    /*
+     * Get the label with 'currentKey' and remove it from the map.
+     */
+    LABELS_MAP_ITERATOR currentLabelIter = this->labelsMap.find(currentKey);
+    if (currentLabelIter == this->labelsMap.end()) {
+        CaretLogSevere("Attempting to change label key for non-existent label with key="
+                       + AString::number(currentKey));
+        return;
+    }
+    GiftiLabel* label = currentLabelIter->second;
+    this->labelsMap.erase(currentKey);
+    
+    /*
+     * Change the lable's key from 'currentKey' to 'newKey'
+     * and add the label into the label's map.
+     */
+    label->setKey(newKey);
+    this->labelsMap.insert(std::make_pair(newKey,
+                                          label));
+}
+
 
 bool GiftiLabelTable::matches(const GiftiLabelTable& rhs, const bool checkColors, const bool checkCoords) const
 {
@@ -1621,7 +1667,7 @@ GiftiLabelTable::issueLabelKeyZeroWarning(const AString& name) const
  * Export the content of the GIFTI Label Table to a Caret5 Color File.
  */
 void
-GiftiLabelTable::exportToCaret5ColorFile(const AString& filename) const throw (GiftiException)
+GiftiLabelTable::exportToCaret5ColorFile(const AString& filename) const
 {
     if (filename.isEmpty()) {
         throw GiftiException("Missing filename for export of label table to caret5 color file format.");

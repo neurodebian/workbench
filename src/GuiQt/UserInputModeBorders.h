@@ -21,7 +21,6 @@
  */
 /*LICENSE_END*/
 
-
 #include "UserInputModeView.h"
 
 namespace caret {
@@ -42,6 +41,7 @@ namespace caret {
             DRAW_OPERATION_CREATE,
             DRAW_OPERATION_ERASE,
             DRAW_OPERATION_EXTEND,
+            DRAW_OPERATION_OPTIMIZE,
             DRAW_OPERATION_REPLACE
         };
         
@@ -55,21 +55,19 @@ namespace caret {
         
         virtual ~UserInputModeBorders();
         
-        virtual UserInputMode getUserInputMode() const;
-        
         virtual void initialize();
         
         virtual void finish();
 
+        virtual void update();
+        
         Mode getMode() const;
         
         virtual void mouseLeftClick(const MouseEvent& mouseEvent);
         
         virtual void mouseLeftClickWithShift(const MouseEvent& mouseEvent);
         
-        virtual void mouseLeftDragWithAlt(const MouseEvent& mouseEvent);
-        
-        virtual QWidget* getWidgetForToolBar();
+        virtual void mouseLeftDragWithCtrlShift(const MouseEvent& mouseEvent);
         
         virtual CursorEnum::Enum getCursor() const;
 

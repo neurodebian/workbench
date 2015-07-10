@@ -37,7 +37,6 @@
 #include "GuiManager.h"
 #include "HyperLinkTextBrowser.h"
 #include "IdentificationManager.h"
-#include "IdentifyBrainordinateDialog.h"
 #include "InformationDisplayPropertiesDialog.h"
 #include "SceneClass.h"
 #include "SceneWindowGeometry.h"
@@ -97,7 +96,7 @@ InformationDisplayDialog::InformationDisplayDialog(BrainBrowserWindow* parent)
                                                       SLOT(copy()));
     
     QAction* removeIdSymbolAction = WuQtUtilities::createAction("RID",
-                                                                "Remove ID symbols from ALL surfaces",
+                                                                "Remove All ID symbols",
                                                                 this,
                                                                 this,
                                                                 SLOT(removeIdSymbols()));
@@ -107,20 +106,7 @@ InformationDisplayDialog::InformationDisplayDialog(BrainBrowserWindow* parent)
                                                           this,
                                                           this,
                                                           SLOT(showPropertiesDialog()));
-    
-//    m_volumeSliceIdentificationAction = WuQtUtilities::createAction("Volume ID",
-//                                                                    "Enable volume slice movement to selected brainordinate.",
-//                                                                    this,
-//                                                                    this,
-//                                                                    SLOT(volumeSliceIdentificationToggled(bool)));
-//    m_volumeSliceIdentificationAction->setCheckable(true);
-    
-    QAction* identifySurfaceAction = WuQtUtilities::createAction("Select\nBrainordinate",
-                                                                 "Enter a brainordinate for identification",
-                                                                 this,
-                                                                 this,
-                                                                 SLOT(identifyBrainordinateTriggered()));
-    
+        
     QObject::connect(m_informationTextBrowser, SIGNAL(copyAvailable(bool)),
                      copyAction, SLOT(setEnabled(bool)));
     copyAction->setEnabled(false);
@@ -142,11 +128,8 @@ InformationDisplayDialog::InformationDisplayDialog(BrainBrowserWindow* parent)
     idToolBarRight->addSeparator();
     idToolBarRight->addAction(m_contralateralIdentificationAction);
     idToolBarRight->addSeparator();
-//    idToolBarRight->addAction(m_volumeSliceIdentificationAction);
-//    idToolBarRight->addSeparator();
     idToolBarRight->addAction(settingsAction);
     idToolBarRight->addSeparator();
-    idToolBarRight->addAction(identifySurfaceAction);
     
     QWidget* widget = new QWidget();
     QHBoxLayout* layout = new QHBoxLayout(widget);
@@ -197,9 +180,6 @@ InformationDisplayDialog::updateDialog()
     m_contralateralIdentificationAction->blockSignals(true);
     m_contralateralIdentificationAction->setChecked(idManager->isContralateralIdentificationEnabled());
     m_contralateralIdentificationAction->blockSignals(false);
-//    m_volumeSliceIdentificationAction->blockSignals(true);
-//    m_volumeSliceIdentificationAction->setChecked(idManager->isVolumeIdentificationEnabled());
-//    m_volumeSliceIdentificationAction->blockSignals(false);
 }
 
 /**
@@ -269,17 +249,6 @@ InformationDisplayDialog::contralateralIdentificationToggled(bool)
     idManager->setContralateralIdentificationEnabled(m_contralateralIdentificationAction->isChecked());
 }
 
-///**
-// * Called when volume identification toolbutton is toggled.
-// */
-//void
-//InformationDisplayDialog::volumeSliceIdentificationToggled(bool)
-//{
-//    Brain* brain = GuiManager::get()->getBrain();
-//    IdentificationManager* idManager = brain->getIdentificationManager();
-//    idManager->setVolumeIdentificationEnabled(m_volumeSliceIdentificationAction->isChecked());
-//}
-
 /**
  * Clear the information text.
  */
@@ -290,6 +259,7 @@ InformationDisplayDialog::clearInformationText()
     IdentificationManager* idManager = brain->getIdentificationManager();
     idManager->removeIdentificationText();
     updateDialog();
+    EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
 }
 
 
@@ -301,7 +271,8 @@ InformationDisplayDialog::removeIdSymbols()
 {
     Brain* brain = GuiManager::get()->getBrain();
     IdentificationManager* idManager = brain->getIdentificationManager();
-    idManager->removeAllIdentifiedNodes();
+    idManager->removeAllIdentifiedSymbols();
+    updateDialog();
     EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
 }
 
@@ -347,19 +318,6 @@ InformationDisplayDialog::showPropertiesDialog()
     if (m_propertiesDialog == NULL) {
         m_propertiesDialog = new InformationDisplayPropertiesDialog(this);
     }
-    //m_propertiesDialog->setVisible(true);
     m_propertiesDialog->show();
-    //m_propertiesDialog->activateWindow();
-}
-
-/**
- * Allow user to identify a brainordinate by structure/node index.
- */
-void
-InformationDisplayDialog::identifyBrainordinateTriggered()
-{
-    IdentifyBrainordinateDialog idd(this);
-    idd.setSaveWindowPositionForNextTime();
-    idd.exec();
 }
 

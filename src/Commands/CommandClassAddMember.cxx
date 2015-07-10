@@ -23,6 +23,7 @@
 #include "CaretAssert.h"
 #include "CommandClassAddMember.h"
 #include "CommandClassCreate.h"
+#include "DataFileException.h"
 #include "FileInformation.h"
 #include "ProgramParameters.h"
 #include "TextFile.h"
@@ -102,8 +103,7 @@ CommandClassAddMember::getHelpInformation(const AString& /*programName*/)
  *   If there is an error in the parameters.
  */
 void 
-CommandClassAddMember::executeOperation(ProgramParameters& parameters) throw (CommandException,
-                                                               ProgramParametersException)
+CommandClassAddMember::executeOperation(ProgramParameters& parameters)
 {
     bool isAddToFiles = false;
     AString headerMemberCode = "";

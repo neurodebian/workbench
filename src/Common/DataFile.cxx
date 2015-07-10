@@ -20,6 +20,7 @@
 
 #include "DataFile.h"
 #include "DataFileContentInformation.h"
+#include "DataFileException.h"
 #include "FileInformation.h"
 
 using namespace caret;
@@ -201,7 +202,7 @@ DataFile::isFileOnNetwork(const AString& filename)
  *    If there is a problem that will prevent the file from being read.
  */
 void
-DataFile::checkFileReadability(const AString& filename) throw (DataFileException)
+DataFile::checkFileReadability(const AString& filename)
 {
     if (filename.isEmpty()) {
         throw DataFileException("Name of file for reading is empty.");
@@ -213,21 +214,18 @@ DataFile::checkFileReadability(const AString& filename) throw (DataFileException
     
     FileInformation fileInfo(filename);
     if (fileInfo.exists() == false) {
-        throw DataFileException("File named \""
-                                + filename
-                                + "\" does not exist.");
+        throw DataFileException(filename,
+                                "File does not exist.");
     }
     
     if (fileInfo.isDirectory()) {
-        throw DataFileException("File named \""
-                                + filename
-                                + "\" is a directory, not a file.");
+        throw DataFileException(filename,
+                                "Filename is a directory, not a file.");
     }
     
     if (fileInfo.isReadable() == false) {
-        throw DataFileException("File named \""
-                                + filename
-                                + "\" is not readable due its permissions.");
+        throw DataFileException(filename,
+                                "File is not readable due its permissions.");
     }
 }
 
@@ -241,7 +239,7 @@ DataFile::checkFileReadability(const AString& filename) throw (DataFileException
  *    If there is a problem that will prevent the file from being read.
  */
 void
-DataFile::checkFileWritability(const AString& filename) throw (DataFileException)
+DataFile::checkFileWritability(const AString& filename)
 {
     if (filename.isEmpty()) {
         throw DataFileException("Name of file for writing is empty.");
@@ -254,16 +252,14 @@ DataFile::checkFileWritability(const AString& filename) throw (DataFileException
     FileInformation fileInfo(filename);
     if (fileInfo.exists()) {
         if (fileInfo.isDirectory()) {
-            throw DataFileException("File named \""
-                                    + filename
-                                    + "\" is a directory, not a file.");
+            throw DataFileException(filename,
+                                    "Filename is a directory, not a file.");
         }
         
         
         if (fileInfo.isWritable() == false) {
-            throw DataFileException("File named \""
-                                    + filename
-                                    + "\" exists is not writable due its permissions.");
+            throw DataFileException(filename,
+                                    "File is not writable due its permissions.");
         }
     }
 }

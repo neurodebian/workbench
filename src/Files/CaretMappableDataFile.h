@@ -24,7 +24,9 @@
 
 #include "CaretDataFile.h"
 #include "ChartDataTypeEnum.h"
+#include "CaretPointer.h"
 #include "NiftiEnums.h"
+#include "PaletteNormalizationModeEnum.h"
 
 namespace caret {
 
@@ -33,6 +35,7 @@ namespace caret {
     class GiftiMetaData;
     class GiftiLabelTable;
     class Histogram;
+    class LabelDrawingProperties;
     class PaletteColorMapping;
     class PaletteFile;
     
@@ -199,6 +202,13 @@ namespace caret {
         virtual bool isMappedWithPalette() const = 0;
         
         /**
+         * @return The estimated size of data after it is uncompressed
+         * and loaded into RAM.  A negative value indicates that the
+         * file size cannot be computed.
+         */
+        virtual int64_t getDataSizeUncompressedInBytes() const = 0;
+        
+        /**
          * Get statistics describing the distribution of data
          * mapped with a color palette at the given index.
          *
@@ -250,6 +260,51 @@ namespace caret {
                                                               const bool includeZeroValues) = 0;
         
         /**
+         * Get statistics describing the distribution of data
+         * mapped with a color palette for all data within the file.
+         *
+         * @return
+         *    Fast statistics for data (will be NULL for data
+         *    not mapped using a palette).
+         */
+        virtual const FastStatistics* getFileFastStatistics() = 0;
+        /**
+         * Get histogram describing the distribution of data
+         * mapped with a color palette for all data within
+         * the file.
+         *
+         * @return
+         *    Histogram for data (will be NULL for data
+         *    not mapped using a palette).
+         */
+        virtual const Histogram* getFileHistogram() = 0;
+        
+        /**
+         * Get histogram describing the distribution of data
+         * mapped with a color palette for all data in the file
+         * within the given range of values.
+         *
+         * @param mostPositiveValueInclusive
+         *    Values more positive than this value are excluded.
+         * @param leastPositiveValueInclusive
+         *    Values less positive than this value are excluded.
+         * @param leastNegativeValueInclusive
+         *    Values less negative than this value are excluded.
+         * @param mostNegativeValueInclusive
+         *    Values more negative than this value are excluded.
+         * @param includeZeroValues
+         *    If true zero values (very near zero) are included.
+         * @return
+         *    Descriptive statistics for data (will be NULL for data
+         *    not mapped using a palette).
+         */
+        virtual const Histogram* getFileHistogram(const float mostPositiveValueInclusive,
+                                                   const float leastPositiveValueInclusive,
+                                                   const float leastNegativeValueInclusive,
+                                                   const float mostNegativeValueInclusive,
+                                                  const bool includeZeroValues) = 0;
+
+        /**
          * Get the palette color mapping for the map at the given index.
          *
          * @param mapIndex
@@ -300,6 +355,30 @@ namespace caret {
         virtual const GiftiLabelTable* getMapLabelTable(const int32_t mapIndex) const = 0;
         
         /**
+         * Get the palette normalization modes that are supported by the file.
+         *
+         * @param modesSupportedOut
+         *     Palette normalization modes supported by a file.  Will be
+         *     empty for files that are not mapped with a palette.  If there
+         *     is more than one suppported mode, the first mode in the
+         *     vector is assumed to be the default mode.
+         */
+        virtual void getPaletteNormalizationModesSupported(std::vector<PaletteNormalizationModeEnum::Enum>& modesSupportedOut) = 0;
+        
+        /**
+         * @return The palette normalization mode for the file.
+         */
+        virtual PaletteNormalizationModeEnum::Enum getPaletteNormalizationMode() const;
+
+        /**
+         * Set the palette normalization mode for the file.
+         *
+         * @param mode
+         *     New value for palette normalization mode.
+         */
+        virtual void setPaletteNormalizationMode(const PaletteNormalizationModeEnum::Enum mode);
+        
+        /**
          * Update coloring for all maps.
          *
          * @param paletteFile
@@ -317,6 +396,8 @@ namespace caret {
          */
         virtual void updateScalarColoringForMap(const int32_t mapIndex,
                                           const PaletteFile* paletteFile) = 0;
+        
+        virtual bool isPaletteColorMappingEqualForAllMaps() const;
         
         /**
          * @return The units for the 'interval' between two consecutive maps.
@@ -350,14 +431,18 @@ namespace caret {
         /* documented in cxx file. */
         bool isModified() const;
         
+        LabelDrawingProperties* getLabelDrawingProperties();
+        
+        const LabelDrawingProperties* getLabelDrawingProperties() const;
+        
     protected:
         CaretMappableDataFile(const CaretMappableDataFile&);
 
         CaretMappableDataFile& operator=(const CaretMappableDataFile&);
         
-        ChartDataCartesian* helpCreateCartesianChartData(const std::vector<float>& data) throw (DataFileException);
+        ChartDataCartesian* helpCreateCartesianChartData(const std::vector<float>& data);
         
-        void helpGetSupportedBrainordinateChartDataTypes(std::vector<ChartDataTypeEnum::Enum>& chartDataTypesOut) const;
+        void helpGetSupportedLineSeriesChartDataTypes(std::vector<ChartDataTypeEnum::Enum>& chartDataTypesOut) const;
         
         virtual void saveFileDataToScene(const SceneAttributes* sceneAttributes,
                                          SceneClass* sceneClass);
@@ -368,8 +453,12 @@ namespace caret {
     private:
         
         void copyCaretMappableDataFile(const CaretMappableDataFile&);
+        
+        CaretPointer<LabelDrawingProperties> m_labelDrawingProperties;
+
+        PaletteNormalizationModeEnum::Enum m_paletteNormalizationMode;
     };
-    
+
 #ifdef __CARET_MAPPABLE_DATA_FILE_DECLARE__
     // <PLACE DECLARATIONS OF STATIC MEMBERS HERE>
 #endif // __CARET_MAPPABLE_DATA_FILE_DECLARE__

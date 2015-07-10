@@ -24,10 +24,8 @@
 
 #include "BrainConstants.h"
 #include "CaretObject.h"
-#include "ChartMatrixLoadingTypeEnum.h"
 #include "ChartMatrixScaleModeEnum.h"
 #include "SceneableInterface.h"
-#include "YokingGroupEnum.h"
 
 
 namespace caret {
@@ -43,14 +41,6 @@ namespace caret {
         ChartMatrixDisplayProperties(const ChartMatrixDisplayProperties& obj);
 
         ChartMatrixDisplayProperties& operator=(const ChartMatrixDisplayProperties& obj);
-        
-        ChartMatrixLoadingTypeEnum::Enum getMatrixLoadingType() const;
-        
-        YokingGroupEnum::Enum getYokingGroup() const;
-        
-        void setYokingGroup(const YokingGroupEnum::Enum yokingType);
-        
-        void setMatrixLoadingType(const ChartMatrixLoadingTypeEnum::Enum matrixLoadingType);
         
         bool isColorBarDisplayed() const;
         
@@ -76,7 +66,15 @@ namespace caret {
         
         void setScaleMode(const ChartMatrixScaleModeEnum::Enum scaleMode);
         
+        bool isGridLinesDisplayed() const;
+        
+        void setGridLinesDisplayed(const bool displayGridLines);
+        
         void resetPropertiesToDefault();
+        
+        bool isSelectedRowColumnHighlighted() const;
+        
+        void setSelectedRowColumnHighlighted(const bool highlightStatus);
         
         // ADD_NEW_METHODS_HERE
 
@@ -123,14 +121,14 @@ namespace caret {
         /** scale mode for view of matrix*/
         ChartMatrixScaleModeEnum::Enum m_scaleMode;
         
-        /** Yoking group */
-        YokingGroupEnum::Enum m_yokingGroup;
-        
-        /** Matrix loading type */
-        ChartMatrixLoadingTypeEnum::Enum m_matrixLoadingType;
-        
         /** Display color bar */
         bool m_colorBarDisplayed;
+        
+        /** Highlight the selected row/column */
+        bool m_highlightSelectedRowColumn;
+        
+        /** Display grid lines */
+        bool m_displayGridLines;
         
         // ADD_NEW_MEMBERS_HERE
 

@@ -42,7 +42,7 @@ namespace caret {
         
         ~CommandOperationManager();
         
-        void runCommand(ProgramParameters& parameters) throw (CommandException);
+        void runCommand(ProgramParameters& parameters);
         
         std::vector<CommandOperation*> getCommandOperations();
         
@@ -54,6 +54,8 @@ namespace caret {
         CommandOperationManager& operator=(const CommandOperationManager&);
 
         void printAllCommands();
+        
+        void printDeprecatedCommands();
         
         void printAllCommandsMatching(const AString& partialSwitch);
         
@@ -68,7 +70,7 @@ namespace caret {
         bool getGlobalOption(ProgramParameters& parameters, const AString& optionString, const int& numArgs, std::vector<AString>& arguments);
         
     private:
-        std::vector<CommandOperation*> commandOperations;
+        std::vector<CommandOperation*> commandOperations, deprecatedOperations;
         
         static CommandOperationManager* singletonCommandOperationManager;
     };

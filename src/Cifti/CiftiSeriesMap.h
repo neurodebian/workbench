@@ -59,6 +59,10 @@ namespace caret
         void setUnit(const Unit& unit) { m_unit = unit; }
         void setLength(const int64_t& length) { CaretAssert(length > 0); m_length = length; }
         
+        static Unit stringToUnit(const QString& string, bool& ok);
+        static QString unitToString(const Unit& theUnit);
+        static std::vector<Unit> getAllUnits();
+        
         CiftiMappingType* clone() const { return new CiftiSeriesMap(*this); }
         MappingType getType() const { return SERIES; }
         int64_t getLength() const { return m_length; }
@@ -71,15 +75,20 @@ namespace caret
                     temp.m_start == m_start &&
                     temp.m_step == m_step);
         }
-        bool approximateMatch(const CiftiMappingType& rhs) const
+        bool approximateMatch(const CiftiMappingType& rhs, QString* explanation = NULL) const
         {
             switch (rhs.getType())
             {
                 case SCALARS://maybe?
                 case SERIES:
                 case LABELS://maybe?
-                    return getLength() == rhs.getLength();
+                    if (getLength() != rhs.getLength())
+                    {
+                        if (explanation != NULL) *explanation = "mappings have different length";
+                        return false;
+                    } else return true;
                 default:
+                    if (explanation != NULL) *explanation = CiftiMappingType::mappingTypeToName(rhs.getType()) + " mapping never matches " + CiftiMappingType::mappingTypeToName(getType());
                     return false;
             }
         }

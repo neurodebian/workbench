@@ -27,7 +27,7 @@
 #include "CaretMappableDataFile.h"
 #include "CaretMutex.h"
 #include "CaretVolumeExtension.h"
-#include "ChartableBrainordinateInterface.h"
+#include "ChartableLineSeriesBrainordinateInterface.h"
 #include "StructureEnum.h"
 #include "GiftiMetaData.h"
 #include "BoundingBox.h"
@@ -38,10 +38,11 @@
 namespace caret {
     
     class GroupAndNameHierarchyModel;
+    class VolumeFileEditorDelegate;
     class VolumeFileVoxelColorizer;
     class VolumeSpline;
     
-    class VolumeFile : public VolumeBase, public CaretMappableDataFile, public ChartableBrainordinateInterface
+    class VolumeFile : public VolumeBase, public CaretMappableDataFile, public ChartableLineSeriesBrainordinateInterface
     {
         VolumeFile(const VolumeFile&);
         
@@ -62,6 +63,11 @@ namespace caret {
             CaretPointer<FastStatistics> m_fastStatistics;
             CaretPointer<Histogram> m_histogram;
             CaretPointer<Histogram> m_histogramLimitedValues;
+            float m_histogramLimitedValuesMostPositiveValueInclusive;
+            float m_histogramLimitedValuesLeastPositiveValueInclusive;
+            float m_histogramLimitedValuesLeastNegativeValueInclusive;
+            float m_histogramLimitedValuesMostNegativeValueInclusive;
+            bool m_histogramLimitedValuesIncludeZeroValues;
             CaretPointer<GiftiMetaData> m_metadata;//NOTE: does not get saved currently!
         };
         
@@ -69,8 +75,23 @@ namespace caret {
         
         bool m_brickStatisticsValid;//so that setModified() doesn't do something slow
         
+        /** Fast statistics used when statistics computed on all data in file */
+        CaretPointer<FastStatistics> m_fileFastStatistics;
+        
+        /** Histogram used when statistics computed on all data in file */
+        CaretPointer<Histogram> m_fileHistogram;
+        
+        /** Histogram with limited values used when statistics computed on all data in file */
+        CaretPointer<Histogram> m_fileHistorgramLimitedValues;
+        
+        float m_fileHistogramLimitedValuesMostPositiveValueInclusive;
+        float m_fileHistogramLimitedValuesLeastPositiveValueInclusive;
+        float m_fileHistogramLimitedValuesLeastNegativeValueInclusive;
+        float m_fileHistogramLimitedValuesMostNegativeValueInclusive;
+        bool m_fileHistogramLimitedValuesIncludeZeroValues;
+        
         /** Performs coloring of voxels.  Will be NULL if coloring is disabled. */
-        VolumeFileVoxelColorizer* m_voxelColorizer;
+        CaretPointer<VolumeFileVoxelColorizer> m_voxelColorizer;
         
         mutable CaretMutex m_splineMutex;
         
@@ -89,10 +110,12 @@ namespace caret {
         mutable float m_dataRangeMaximum;
         
         /** Holds class and name hierarchy used for display selection */
-        mutable GroupAndNameHierarchyModel* m_classNameHierarchy;
+        mutable CaretPointer<GroupAndNameHierarchyModel> m_classNameHierarchy;
         
         /** force an update of the class and name hierarchy */
         mutable bool m_forceUpdateOfGroupAndNameHierarchy;
+        
+        CaretPointer<VolumeFileEditorDelegate> m_volumeFileEditorDelegate;
         
     protected:
         virtual void saveFileDataToScene(const SceneAttributes* sceneAttributes,
@@ -119,8 +142,6 @@ namespace caret {
         
         VolumeFile();
         VolumeFile(const std::vector<int64_t>& dimensionsIn, const std::vector<std::vector<float> >& indexToSpace, const int64_t numComponents = 1, SubvolumeAttributes::VolumeType whatType = SubvolumeAttributes::ANATOMY);
-        //convenience method for unsigned
-        VolumeFile(const std::vector<uint64_t>& dimensionsIn, const std::vector<std::vector<float> >& indexToSpace, const uint64_t numComponents = 1, SubvolumeAttributes::VolumeType whatType = SubvolumeAttributes::ANATOMY);
         ~VolumeFile();
         
         virtual void clear();
@@ -129,7 +150,8 @@ namespace caret {
         
         ///recreates the volume file storage with new size and spacing
         void reinitialize(const std::vector<int64_t>& dimensionsIn, const std::vector<std::vector<float> >& indexToSpace, const int64_t numComponents = 1, SubvolumeAttributes::VolumeType whatType = SubvolumeAttributes::ANATOMY);
-        void reinitialize(const std::vector<uint64_t>& dimensionsIn, const std::vector<std::vector<float> >& indexToSpace, const uint64_t numComponents = 1, SubvolumeAttributes::VolumeType whatType = SubvolumeAttributes::ANATOMY);
+        
+        void addSubvolumes(const int64_t& numToAdd);
         
         void setType(SubvolumeAttributes::VolumeType whatType);
         
@@ -152,9 +174,9 @@ namespace caret {
         ///returns true if volume space matches in spatial dimensions and sform
         bool matchesVolumeSpace(const int64_t dims[3], const std::vector<std::vector<float> >& sform) const;
         
-        void readFile(const AString& filename) throw (DataFileException);
+        void readFile(const AString& filename);
 
-        void writeFile(const AString& filename) throw (DataFileException);
+        void writeFile(const AString& filename);
 
         bool isEmpty() const { return VolumeBase::isEmpty(); }
         
@@ -192,7 +214,7 @@ namespace caret {
         
         bool isVolumeMappable() const { return true; }
         
-        int32_t getNumberOfMaps() const { return m_dimensions[3]; }
+        int32_t getNumberOfMaps() const { return getDimensionsPtr()[3]; }
         
         AString getMapName(const int32_t mapIndex) const;
         
@@ -214,7 +236,24 @@ namespace caret {
                                                               const float mostNegativeValueInclusive,
                                                               const bool includeZeroValues);
         
+        
+        virtual int64_t getDataSizeUncompressedInBytes() const;
+        
+        virtual const FastStatistics* getFileFastStatistics();
+        
+        virtual const Histogram* getFileHistogram();
+        
+        virtual const Histogram* getFileHistogram(const float mostPositiveValueInclusive,
+                                                  const float leastPositiveValueInclusive,
+                                                  const float leastNegativeValueInclusive,
+                                                  const float mostNegativeValueInclusive,
+                                                  const bool includeZeroValues);
+        
+        void getFileData(std::vector<float>& dataOut) const;
+        
         bool isMappedWithPalette() const;
+        
+        virtual void getPaletteNormalizationModesSupported(std::vector<PaletteNormalizationModeEnum::Enum>& modesSupportedOut);
         
         PaletteColorMapping* getMapPaletteColorMapping(const int32_t mapIndex);
         
@@ -237,7 +276,7 @@ namespace caret {
         void updateScalarColoringForMap(const int32_t mapIndex,
                                      const PaletteFile* paletteFile);
         
-        void getVoxelColorsForSliceInMap(const PaletteFile* paletteFile,
+        virtual int64_t getVoxelColorsForSliceInMap(const PaletteFile* paletteFile,
                                          const int32_t mapIndex,
                                          const VolumeSliceViewPlaneEnum::Enum slicePlane,
                                          const int64_t sliceIndex,
@@ -245,6 +284,17 @@ namespace caret {
                                          const int32_t tabIndex,
                                          uint8_t* rgbaOut) const;
 
+        virtual int64_t getVoxelColorsForSubSliceInMap(const PaletteFile* paletteFile,
+                                                    const int32_t mapIndex,
+                                                    const VolumeSliceViewPlaneEnum::Enum slicePlane,
+                                                    const int64_t sliceIndex,
+                                                    const int64_t firstCornerVoxelIndex[3],
+                                                    const int64_t lastCornerVoxelIndex[3],
+                                                    const int64_t voxelCountIJK[3],
+                                                    const DisplayGroupEnum::Enum displayGroup,
+                                                    const int32_t tabIndex,
+                                                    uint8_t* rgbaOut) const;
+        
         void getVoxelValuesForSliceInMap(const int32_t mapIndex,
                                          const VolumeSliceViewPlaneEnum::Enum slicePlane,
                                          const int64_t sliceIndex,
@@ -261,12 +311,6 @@ namespace caret {
         
         void clearVoxelColoringForMap(const int64_t mapIndex);
         
-//        void setVoxelColorInMap(const int64_t i,
-//                                 const int64_t j,
-//                                 const int64_t k,
-//                                 const int64_t mapIndex,
-//                                 const float rgba[4]);
-        
         virtual bool getDataRangeFromAllMaps(float& dataRangeMinimumOut,
                                              float& dataRangeMaximumOut) const;
         
@@ -274,23 +318,25 @@ namespace caret {
         
         const GroupAndNameHierarchyModel* getGroupAndNameHierarchyModel() const;
         
-        virtual bool isBrainordinateChartingEnabled(const int32_t tabIndex) const;
+        VolumeFileEditorDelegate* getVolumeFileEditorDelegate();
         
-        virtual void setBrainordinateChartingEnabled(const int32_t tabIndex,
+        virtual bool isLineSeriesChartingEnabled(const int32_t tabIndex) const;
+        
+        virtual void setLineSeriesChartingEnabled(const int32_t tabIndex,
                                         const bool enabled);
         
-        virtual bool isBrainordinateChartingSupported() const;
+        virtual bool isLineSeriesChartingSupported() const;
         
-        virtual ChartDataCartesian* loadBrainordinateChartDataForSurfaceNode(const StructureEnum::Enum structure,
-                                                                const int32_t nodeIndex) throw (DataFileException);
+        virtual ChartDataCartesian* loadLineSeriesChartDataForSurfaceNode(const StructureEnum::Enum structure,
+                                                                const int32_t nodeIndex);
         
-        virtual ChartDataCartesian* loadAverageBrainordinateChartDataForSurfaceNodes(const StructureEnum::Enum structure,
-                                                                        const std::vector<int32_t>& nodeIndices) throw (DataFileException);
+        virtual ChartDataCartesian* loadAverageLineSeriesChartDataForSurfaceNodes(const StructureEnum::Enum structure,
+                                                                        const std::vector<int32_t>& nodeIndices);
         
-        virtual ChartDataCartesian* loadBrainordinateChartDataForVoxelAtCoordinate(const float xyz[3]) throw (DataFileException);
+        virtual ChartDataCartesian* loadLineSeriesChartDataForVoxelAtCoordinate(const float xyz[3]);
         
         
-        virtual void getSupportedBrainordinateChartDataTypes(std::vector<ChartDataTypeEnum::Enum>& chartDataTypesOut) const;
+        virtual void getSupportedLineSeriesChartDataTypes(std::vector<ChartDataTypeEnum::Enum>& chartDataTypesOut) const;
         
     };
 

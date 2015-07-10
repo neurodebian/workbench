@@ -21,10 +21,7 @@
  */
 /*LICENSE_END*/
 
-
-
-
-#include "DataFileException.h"
+#include "AString.h"
 
 namespace caret {
 
@@ -33,7 +30,9 @@ namespace caret {
     class CaretDataFileHelper {
         
     public:
-        static CaretDataFile* readAnyCaretDataFile(const AString& filename, const bool& preferOnDisk = false) throw (DataFileException);
+        static CaretDataFile* readAnyCaretDataFile(const AString& filename, const bool& preferOnDisk = false);
+        
+        static AString createBadAllocExceptionMessage(const AString& filename);
         
     private:
         CaretDataFileHelper();

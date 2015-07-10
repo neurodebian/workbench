@@ -45,7 +45,7 @@ GiftiFileSaxReader::GiftiFileSaxReader(GiftiFile* giftiFileIn)
    this->state = STATE_NONE;
    this->stateStack.push(this->state);
    this->elementText = "";
-   this->dataArray = NULL;
+   this->dataArray.grabNew(NULL);
    this->labelTable = NULL;
     this->labelTableSaxReader = NULL;
     this->metaDataSaxReader = NULL;
@@ -67,7 +67,7 @@ void
 GiftiFileSaxReader::startElement(const AString& namespaceURI,
                                          const AString& localName,
                                          const AString& qName,
-                                         const XmlAttributes& attributes)  throw (XmlSaxParserException)
+                                         const XmlAttributes& attributes) 
 {
    const STATE previousState = this->state;
    switch (this->state) {
@@ -222,7 +222,7 @@ GiftiFileSaxReader::startElement(const AString& namespaceURI,
 void 
 GiftiFileSaxReader::endElement(const AString& namespaceURI,
                                        const AString& localName,
-                                       const AString& qName) throw (XmlSaxParserException)
+                                       const AString& qName)
 {
    switch (this->state) {
       case STATE_NONE:
@@ -254,8 +254,7 @@ GiftiFileSaxReader::endElement(const AString& namespaceURI,
                      this->processArrayData();
                  }
              }
-             this->giftiFile->addDataArray(this->dataArray);
-             this->dataArray = NULL;
+             this->giftiFile->addDataArray(this->dataArray.releasePointer());
          }
          else {
          }
@@ -311,7 +310,7 @@ GiftiFileSaxReader::endElement(const AString& namespaceURI,
  * create a data array.
  */
 void 
-GiftiFileSaxReader::createDataArray(const XmlAttributes& attributes) throw (XmlSaxParserException)
+GiftiFileSaxReader::createDataArray(const XmlAttributes& attributes)
 
 {
    //
@@ -499,7 +498,7 @@ GiftiFileSaxReader::createDataArray(const XmlAttributes& attributes) throw (XmlS
                      + subscriptOrderString);
    }
          
-   this->dataArray = new GiftiDataArray(intent);
+   this->dataArray.grabNew(new GiftiDataArray(intent));
     
     /*
      * Indicate that data has not been read.
@@ -511,37 +510,32 @@ GiftiFileSaxReader::createDataArray(const XmlAttributes& attributes) throw (XmlS
  * process the array data into numbers.
  */
 void 
-GiftiFileSaxReader::processArrayData() throw (XmlSaxParserException)
+GiftiFileSaxReader::processArrayData()
 {
     this->dataArrayDataHasBeenRead = true;
-   //
-   // Should the data arrays be read ?
-   //
-   //if (giftiFile->getReadMetaDataOnlyFlag()) {
-   //   return true;
-   //}
-   
-   try {
-      dataArray->readFromText(elementText, 
-                           this->endianForReadingArrayData,
-                           arraySubscriptingOrderForReadingArrayData,
-                           dataTypeForReadingArrayData,
-                           dimensionsForReadingArrayData,
-                           encodingForReadingArrayData,
-                           externalFileNameForReadingData,
-                           externalFileOffsetForReadingData,
-                              this->giftiFile->getReadMetaDataOnlyFlag());
-   }
-   catch (const GiftiException& e) {
-       throw XmlSaxParserException(e.whatString());
-   }
+
+    CaretAssert(dataArray);
+    try {
+        dataArray->readFromText(elementText,
+                                this->endianForReadingArrayData,
+                                arraySubscriptingOrderForReadingArrayData,
+                                dataTypeForReadingArrayData,
+                                dimensionsForReadingArrayData,
+                                encodingForReadingArrayData,
+                                externalFileNameForReadingData,
+                                externalFileOffsetForReadingData,
+                                this->giftiFile->getReadMetaDataOnlyFlag());
+    }
+    catch (const GiftiException& e) {
+        throw XmlSaxParserException(e.whatString());
+    }
 }
 
 /**
  * get characters in an element.
  */
 void 
-GiftiFileSaxReader::characters(const char* ch) throw (XmlSaxParserException)
+GiftiFileSaxReader::characters(const char* ch)
 {
     if (this->metaDataSaxReader != NULL) {
         this->metaDataSaxReader->characters(ch);
@@ -558,7 +552,7 @@ GiftiFileSaxReader::characters(const char* ch) throw (XmlSaxParserException)
  * a fatal error occurs.
  */
 void 
-GiftiFileSaxReader::fatalError(const XmlSaxParserException& e) throw (XmlSaxParserException)
+GiftiFileSaxReader::fatalError(const XmlSaxParserException& e)
 {
 /*
    std::ostringstream str;
@@ -579,26 +573,26 @@ GiftiFileSaxReader::fatalError(const XmlSaxParserException& e) throw (XmlSaxPars
 
 // a warning occurs
 void 
-GiftiFileSaxReader::warning(const XmlSaxParserException& e) throw (XmlSaxParserException)
+GiftiFileSaxReader::warning(const XmlSaxParserException& e)
 {    
     CaretLogWarning("XML Parser Warning: " + e.whatString());
 }
 
 // an error occurs
 void 
-GiftiFileSaxReader::error(const XmlSaxParserException& e) throw (XmlSaxParserException)
+GiftiFileSaxReader::error(const XmlSaxParserException& e)
 {   
     CaretLogSevere("XML Parser Error: " + e.whatString());
     throw e;
 }
 
 void 
-GiftiFileSaxReader::startDocument()  throw (XmlSaxParserException)
+GiftiFileSaxReader::startDocument() 
 {    
 }
 
 void 
-GiftiFileSaxReader::endDocument() throw (XmlSaxParserException)
+GiftiFileSaxReader::endDocument()
 {
 }
 

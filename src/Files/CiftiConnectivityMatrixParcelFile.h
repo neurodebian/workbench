@@ -23,14 +23,19 @@
 
 #include "BrainConstants.h"
 #include "CiftiMappableConnectivityMatrixDataFile.h"
-#include "ChartableMatrixInterface.h"
+#include "ChartableMatrixParcelInterface.h"
+#include "EventListenerInterface.h"
 
 namespace caret {
 
     class ChartMatrixDisplayProperties;
+    class CiftiParcelReorderingModel;
     class PaletteFile;
     
-    class CiftiConnectivityMatrixParcelFile : public CiftiMappableConnectivityMatrixDataFile, public ChartableMatrixInterface {
+    class CiftiConnectivityMatrixParcelFile :
+    public CiftiMappableConnectivityMatrixDataFile,
+    public ChartableMatrixParcelInterface,
+    public EventListenerInterface {
         
     public:
         CiftiConnectivityMatrixParcelFile();
@@ -43,13 +48,18 @@ namespace caret {
         CiftiConnectivityMatrixParcelFile& operator=(const CiftiConnectivityMatrixParcelFile&);
 
     public:
+        virtual void receiveEvent(Event* event);
+        
+        virtual void getMatrixDimensions(int32_t& numberOfRowsOut,
+                                         int32_t& numberOfColumnsOut) const;
+        
         virtual bool getMatrixDataRGBA(int32_t& numberOfRowsOut,
                                        int32_t& numberOfColumnsOut,
                                        std::vector<float>& rgbaOut) const;
         
         virtual bool getMatrixCellAttributes(const int32_t rowIndex,
                                              const int32_t columnIndex,
-                                             float& cellValueOut,
+                                             AString& cellValueOut,
                                              AString& rowNameOut,
                                              AString& columnNameOut) const;
         
@@ -74,17 +84,51 @@ namespace caret {
         
         virtual void setSelectedParcelColor(const CaretColorEnum::Enum color);
         
+        virtual void getSelectedParcelLabelFileAndMapForReordering(std::vector<CiftiParcelLabelFile*>& compatibleParcelLabelFilesOut,
+                                                                   CiftiParcelLabelFile* &selectedParcelLabelFileOut,
+                                                                   int32_t& selectedParcelLabelFileMapIndexOut,
+                                                                   bool& enabledStatusOut) const;
+        
+        virtual void setSelectedParcelLabelFileAndMapForReordering(CiftiParcelLabelFile* selectedParcelLabelFile,
+                                                                   const int32_t selectedParcelLabelFileMapIndex,
+                                                                   const bool enabledStatus);
+        
+        virtual bool createParcelReordering(const CiftiParcelLabelFile* parcelLabelFile,
+                                            const int32_t parcelLabelFileMapIndex,
+                                            AString& errorMessageOut);
+        
+        virtual const CiftiParcelReordering* getParcelReordering(const CiftiParcelLabelFile* parcelLabelFile,
+                                                                 const int32_t parcelLabelFileMapIndex) const;
+        
+        virtual bool isSupportsLoadingAttributes();
+        
+        virtual ChartMatrixLoadingDimensionEnum::Enum getMatrixLoadingDimension() const;
+        
+        virtual void setMatrixLoadingDimension(const ChartMatrixLoadingDimensionEnum::Enum matrixLoadingType);
+        
+        virtual YokingGroupEnum::Enum getYokingGroup() const;
+        
+        virtual void setYokingGroup(const YokingGroupEnum::Enum yokingType);
+        
+        
     public:
 
         // ADD_NEW_METHODS_HERE
 
+    protected:
+        virtual void saveSubClassDataToScene(const SceneAttributes* sceneAttributes,
+                                             SceneClass* sceneClass);
+        
+        virtual void restoreSubClassDataFromScene(const SceneAttributes* sceneAttributes,
+                                                  const SceneClass* sceneClass);
+        
+//        virtual void saveFileDataToScene(const SceneAttributes* sceneAttributes,
+//                                         SceneClass* sceneClass);
+//        
+//        virtual void restoreFileDataFromScene(const SceneAttributes* sceneAttributes,
+//                                              const SceneClass* sceneClass);
+        
     private:
-        virtual void saveFileDataToScene(const SceneAttributes* sceneAttributes,
-                                         SceneClass* sceneClass);
-        
-        virtual void restoreFileDataFromScene(const SceneAttributes* sceneAttributes,
-                                              const SceneClass* sceneClass);
-        
 
         // ADD_NEW_MEMBERS_HERE
 
@@ -97,6 +141,10 @@ namespace caret {
         CiftiParcelColoringModeEnum::Enum m_selectedParcelColoringMode;
         
         CaretColorEnum::Enum m_selectedParcelColor;
+        
+        CiftiParcelReorderingModel* m_parcelReorderingModel;
+        
+        YokingGroupEnum::Enum m_chartLoadingYokingGroup;
         
     };
     

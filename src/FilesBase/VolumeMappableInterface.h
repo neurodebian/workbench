@@ -79,22 +79,13 @@ namespace caret {
          */
         virtual void getDimensions(std::vector<int64_t>& dimsOut) const = 0;
 
-        /**
-         * Does this volume have these spatial dimensions?
-         *
-         * @param dim1
-         *     First dimension.
-         * @param dim2
-         *     Second dimension.
-         * @param dim3
-         *     Third dimension.
-         * @return
-         *     True if this volume's spatial dimensions match the
-         *     given dimensions, else false.
-         */
         bool matchesDimensions(const int64_t dim1,
                                const int64_t dim2,
                                const int64_t dim3) const;
+        
+        void limitIndicesToValidIndices(int64_t& index1,
+                                        int64_t& index2,
+                                        int64_t& index3) const;
         
         /**
          * @return The number of componenents per voxel.
@@ -284,14 +275,54 @@ namespace caret {
          * @param rgbaOut
          *    Output containing the rgba values (must have been allocated
          *    by caller to sufficient count of elements in the slice).
+         * @return
+         *    Number of voxels with alpha greater than zero
          */
-        virtual void getVoxelColorsForSliceInMap(const PaletteFile* paletteFile,
-                                                 const int32_t mapIndex,
-                                                 const VolumeSliceViewPlaneEnum::Enum slicePlane,
-                                                 const int64_t sliceIndex,
-                                                 const DisplayGroupEnum::Enum displayGroup,
-                                                 const int32_t tabIndex,
-                                                 uint8_t* rgbaOut) const = 0;
+        virtual int64_t getVoxelColorsForSliceInMap(const PaletteFile* paletteFile,
+                                                    const int32_t mapIndex,
+                                                    const VolumeSliceViewPlaneEnum::Enum slicePlane,
+                                                    const int64_t sliceIndex,
+                                                    const DisplayGroupEnum::Enum displayGroup,
+                                                    const int32_t tabIndex,
+                                                    uint8_t* rgbaOut) const = 0;
+        
+        /**
+         * Get the voxel colors for a sub slice in the map.
+         *
+         * @param paletteFile
+         *    The palette file.
+         * @param mapIndex
+         *    Index of the map.
+         * @param slicePlane
+         *    The slice plane.
+         * @param sliceIndex
+         *    Index of the slice.
+         * @param firstCornerVoxelIndex
+         *    Indices of voxel for first corner of sub-slice (inclusive).
+         * @param lastCornerVoxelIndex
+         *    Indices of voxel for last corner of sub-slice (inclusive).
+         * @param voxelCountIJK
+         *    Voxel counts for each axis.
+         * @param displayGroup
+         *    The selected display group.
+         * @param tabIndex
+         *    Index of selected tab.
+         * @param rgbaOut
+         *    Output containing the rgba values (must have been allocated
+         *    by caller to sufficient count of elements in the slice).
+         * @return
+         *    Number of voxels with alpha greater than zero
+         */
+        virtual int64_t getVoxelColorsForSubSliceInMap(const PaletteFile* paletteFile,
+                                                       const int32_t mapIndex,
+                                                       const VolumeSliceViewPlaneEnum::Enum slicePlane,
+                                                       const int64_t sliceIndex,
+                                                       const int64_t firstCornerVoxelIndex[3],
+                                                       const int64_t lastCornerVoxelIndex[3],
+                                                       const int64_t voxelCountIJK[3],
+                                                       const DisplayGroupEnum::Enum displayGroup,
+                                                       const int32_t tabIndex,
+                                                       uint8_t* rgbaOut) const = 0;
         
         /**
          * Get the voxel coloring for the voxel at the given indices.

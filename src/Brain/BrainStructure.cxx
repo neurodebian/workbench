@@ -21,16 +21,17 @@
 #include <algorithm>
 #include <limits>
 
-#include "CaretAssert.h"
-#include "CaretLogger.h"
 
 #define __BRAIN_STRUCTURE_DEFINE__
 #include "BrainStructure.h"
 #undef __BRAIN_STRUCTURE_DEFINE__
 #include "Brain.h"
 #include "BrainStructureNodeAttributes.h"
+#include "CaretAssert.h"
+#include "CaretLogger.h"
 #include "CaretPointLocator.h"
 #include "CaretPreferences.h"
+#include "DataFileException.h"
 #include "ElapsedTimer.h"
 #include "EventBrainStructureGetAll.h"
 #include "EventManager.h"
@@ -38,6 +39,7 @@
 #include "EventModelAdd.h"
 #include "EventModelDelete.h"
 #include "EventSurfacesGet.h"
+#include "EventSurfaceStructuresValidGet.h"
 #include "GroupAndNameHierarchyModel.h"
 #include "IdentificationManager.h"
 #include "SelectionManager.h"
@@ -49,6 +51,7 @@
 #include "OverlaySetArray.h"
 #include "RgbaFile.h"
 #include "SceneClass.h"
+#include "ScenePathName.h"
 #include "SessionManager.h"
 #include "Surface.h"
 
@@ -66,7 +69,7 @@ BrainStructure::BrainStructure(Brain* brain,
     m_brain = brain;
     m_structure = structure;
     m_nodeAttributes = new BrainStructureNodeAttributes();
-    m_volumeInteractionSurface = NULL;
+    m_primaryAnatomicalSurface = NULL;
     
     std::vector<StructureEnum::Enum> overlaySurfaceStructures;
     overlaySurfaceStructures.push_back(m_structure);
@@ -85,6 +88,8 @@ BrainStructure::BrainStructure(Brain* brain,
                                           EventTypeEnum::EVENT_IDENTIFICATION_SYMBOL_REMOVAL);
     EventManager::get()->addEventListener(this, 
                                           EventTypeEnum::EVENT_SURFACES_GET);
+    EventManager::get()->addEventListener(this,
+                                          EventTypeEnum::EVENT_SURFACE_STRUCTURES_VALID_GET);
 }
 
 /**
@@ -155,15 +160,14 @@ BrainStructure::getStructure() const
  */
 void 
 BrainStructure::addLabelFile(LabelFile* labelFile,
-                             const bool addFileToBrainStructure) throw (DataFileException)
+                             const bool addFileToBrainStructure)
 {
     CaretAssert(labelFile);
     
     int32_t numNodes = getNumberOfNodes();
     if (numNodes > 0) {
         if (labelFile->getNumberOfNodes() != numNodes) {
-            AString message = (labelFile->getFileNameNoPath()
-                               + " contains "
+            AString message = ("Label file contains "
                                + AString::number(labelFile->getNumberOfNodes())
                                + " vertices but the "
                                + StructureEnum::toGuiName(getStructure())
@@ -171,21 +175,21 @@ BrainStructure::addLabelFile(LabelFile* labelFile,
                                + AString::number(numNodes)
                                + " vertices.");
             
-            DataFileException e(message);
+            DataFileException e(labelFile->getFileName(),
+                                message);
             CaretLogThrowing(e);
             throw e;
         }
     }
         
     if (labelFile->getStructure() != getStructure()) {
-        AString message = ("Trying to add metric file named \""
-                           + labelFile->getFileNameNoPath()
-                           + "\" with structure \""
+        AString message = ("Trying to add label file with structure \""
                            + StructureEnum::toGuiName(labelFile->getStructure())
                            + " to BrainStructure for \""
                            + StructureEnum::toGuiName(getStructure())
                            + "\n");
-        DataFileException(e);
+        DataFileException e(labelFile->getFileName(),
+                            message);
         CaretLogThrowing(e);
         throw e;        
     }
@@ -209,15 +213,14 @@ BrainStructure::addLabelFile(LabelFile* labelFile,
  */
 void 
 BrainStructure::addMetricFile(MetricFile* metricFile,
-                              const bool addFileToBrainStructure) throw (DataFileException)
+                              const bool addFileToBrainStructure)
 {
     CaretAssert(metricFile);
     
     int32_t numNodes = getNumberOfNodes();
     if (numNodes > 0) {
         if (metricFile->getNumberOfNodes() != numNodes) {
-            AString message = (metricFile->getFileNameNoPath()
-                               + " contains "
+            AString message = ("Metric file contains "
                                + AString::number(metricFile->getNumberOfNodes())
                                + " vertices but the "
                                + StructureEnum::toGuiName(getStructure())
@@ -225,21 +228,21 @@ BrainStructure::addMetricFile(MetricFile* metricFile,
                                + AString::number(numNodes)
                                + " vertices.");
             
-            DataFileException e(message);
+            DataFileException e(metricFile->getFileName(),
+                                message);
             CaretLogThrowing(e);
             throw e;
         }
     }
     
     if (metricFile->getStructure() != getStructure()) {
-        AString message = ("Trying to add metric file named \""
-                           + metricFile->getFileNameNoPath()
-                           + "\" with structure \""
+        AString message = ("Trying to add metric file with structure \""
                            + StructureEnum::toGuiName(metricFile->getStructure())
                            + " to BrainStructure for \""
                            + StructureEnum::toGuiName(getStructure())
                            + "\n");
-        DataFileException(e);
+        DataFileException e(metricFile->getFileName(),
+                            message);
         CaretLogThrowing(e);
         throw e;        
     }
@@ -263,15 +266,14 @@ BrainStructure::addMetricFile(MetricFile* metricFile,
  */
 void 
 BrainStructure::addRgbaFile(RgbaFile* rgbaFile,
-                            const bool addFileToBrainStructure) throw (DataFileException)
+                            const bool addFileToBrainStructure)
 {
     CaretAssert(rgbaFile);
     
     int32_t numNodes = getNumberOfNodes();
     if (numNodes > 0) {
         if (rgbaFile->getNumberOfNodes() != numNodes) {
-            AString message = (rgbaFile->getFileNameNoPath()
-                               + " contains "
+            AString message = ("RGBA File contains "
                                + AString::number(rgbaFile->getNumberOfNodes())
                                + " vertices but the "
                                + StructureEnum::toGuiName(getStructure())
@@ -279,7 +281,8 @@ BrainStructure::addRgbaFile(RgbaFile* rgbaFile,
                                + AString::number(numNodes)
                                + " vertices.");
             
-            DataFileException e(message);
+            DataFileException e(rgbaFile->getFileName(),
+                                message);
             CaretLogThrowing(e);
             throw e;
         }
@@ -287,14 +290,13 @@ BrainStructure::addRgbaFile(RgbaFile* rgbaFile,
     
     
     if (rgbaFile->getStructure() != getStructure()) {
-        AString message = ("Trying to add metric file named \""
-                           + rgbaFile->getFileNameNoPath()
-                           + "\" with structure \""
+        AString message = ("Trying to add metric file with structure \""
                            + StructureEnum::toGuiName(rgbaFile->getStructure())
                            + " to BrainStructure for \""
                            + StructureEnum::toGuiName(getStructure())
                            + "\n");
-        DataFileException(e);
+        DataFileException e(rgbaFile->getFileName(),
+                            message);
         CaretLogThrowing(e);
         throw e;        
     }
@@ -319,15 +321,14 @@ BrainStructure::addRgbaFile(RgbaFile* rgbaFile,
 void 
 BrainStructure::addSurface(Surface* surface,
                            const bool addFileToBrainStructure,
-                           const bool initilizeOverlaysFlag) throw (DataFileException)
+                           const bool initilizeOverlaysFlag)
 {
     CaretAssert(surface);
     
     int32_t numNodes = getNumberOfNodes();
     if (numNodes > 0) {
         if (surface->getNumberOfNodes() != numNodes) {
-            AString message = (surface->getFileNameNoPath()
-                               + "  contains "
+            AString message = ("Surface file contains "
                                + AString::number(surface->getNumberOfNodes())
                                + " vertices but the "
                                + StructureEnum::toGuiName(getStructure())
@@ -335,21 +336,21 @@ BrainStructure::addSurface(Surface* surface,
                                + AString::number(numNodes)
                                + " vertices.");
             
-            DataFileException e(message);
+            DataFileException e(surface->getFileName(),
+                                message);
             CaretLogThrowing(e);
             throw e;
         }
     }
     
     if (surface->getStructure() != getStructure()) {
-        AString message = ("Trying to add metric file named \""
-                           + surface->getFileNameNoPath()
-                           + "\" with structure \""
+        AString message = ("Trying to add metric file with structure \""
                            + StructureEnum::toGuiName(surface->getStructure())
                            + " to BrainStructure for \""
                            + StructureEnum::toGuiName(getStructure())
                            + "\n");
-        DataFileException(e);
+        DataFileException e(surface->getFileName(),
+                            message);
         CaretLogThrowing(e);
         throw e;        
     }
@@ -518,43 +519,56 @@ BrainStructure::getSurfacesOfType(const SurfaceTypeEnum::Enum surfaceType,
 }
 
 /**
- * @return The surface used for volume interaction.
+ * Get all surfaces.
+ *
+ * @param surfaceOut
+ *    Output containing all surfaces.
+ */
+void
+BrainStructure::getSurfaces(std::vector<Surface*>& surfacesOut) const
+{
+    surfacesOut = m_surfaces;
+}
+
+/**
+ * @return The surface used for primary anatomical.
  * Returns NULL if no anatomical surfaces.
  */
 const Surface* 
-BrainStructure::getVolumeInteractionSurfacePrivate() const
+BrainStructure::getPrimaryAnatomicalSurfacePrivate() const
 {
     bool valid = false;
-    if (m_volumeInteractionSurface != NULL) {
+    if (m_primaryAnatomicalSurface != NULL) {
         const int32_t numSurfaces = getNumberOfSurfaces();
         for (int32_t i = 0; i < numSurfaces; i++) {
-            if (m_surfaces[i] == m_volumeInteractionSurface) {
+            if (m_surfaces[i] == m_primaryAnatomicalSurface) {
                 valid = true;
                 break;
             }
         }
     }
     if (valid) {
-        return m_volumeInteractionSurface;
+        return m_primaryAnatomicalSurface;
     }
-    m_volumeInteractionSurface = NULL;
+    m_primaryAnatomicalSurface = NULL;
     
     /*
      * Give preference to anatomical surfaces but if there are none
      * (perhaps the surface types are missing), use all surfaces.
      */
-    std::vector<Surface*> interactionSurfaces;
+    std::vector<Surface*> primaryAnatomicalSurfaces;
     getSurfacesOfType(SurfaceTypeEnum::ANATOMICAL, 
-                            interactionSurfaces);
-    if (interactionSurfaces.empty()) {
-        interactionSurfaces = m_surfaces;
+                            primaryAnatomicalSurfaces);
+    if (primaryAnatomicalSurfaces.empty()) {
+        primaryAnatomicalSurfaces = m_surfaces;
     }
     
-    if (interactionSurfaces.empty() == false) {
+    
+    if (primaryAnatomicalSurfaces.empty() == false) {
         /*
          * Default to first surface
          */
-        m_volumeInteractionSurface = interactionSurfaces[0];
+        m_primaryAnatomicalSurface = primaryAnatomicalSurfaces[0];
         
         /*
          * Now look for a surface with certain strings in their name
@@ -564,92 +578,133 @@ BrainStructure::getVolumeInteractionSurfacePrivate() const
         Surface* pialSurface         = NULL;
         Surface* anatomicalSurface   = NULL;
         Surface* fiducialSurface     = NULL;
-        const int32_t numSurfaces = static_cast<int32_t>(interactionSurfaces.size());
+        const int32_t numSurfaces = static_cast<int32_t>(primaryAnatomicalSurfaces.size());
+        
         for (int32_t i = 0; i < numSurfaces; i++) {
-            const AString name = interactionSurfaces[i]->getFileNameNoPath().toLower();
+            /*
+             * First, look for anatomical surfaces that are midthickness,
+             * gray/white, and pial.
+             */
+            if (primaryAnatomicalSurfaces[i]->getSurfaceType() == SurfaceTypeEnum::ANATOMICAL) {
+                const SecondarySurfaceTypeEnum::Enum secondType = primaryAnatomicalSurfaces[i]->getSecondaryType();
+                const AString name = primaryAnatomicalSurfaces[i]->getFileNameNoPath().toLower();
+                if (secondType == SecondarySurfaceTypeEnum::MIDTHICKNESS) {
+                    if (midThicknessSurface == NULL) {
+                        midThicknessSurface = primaryAnatomicalSurfaces[i];
+                    }
+                }
+                if (secondType == SecondarySurfaceTypeEnum::GRAY_WHITE) {
+                    if (whiteMatterSurface == NULL) {
+                        whiteMatterSurface = primaryAnatomicalSurfaces[i];
+                    }
+                }
+                if (secondType == SecondarySurfaceTypeEnum::PIAL) {
+                    if (pialSurface == NULL) {
+                        pialSurface = primaryAnatomicalSurfaces[i];
+                    }
+                }
+            }
+        }
+        
+        /*
+         * Since it is possible surfaces may not have valid types,
+         * perform an additional search using name substrings.
+         */
+        for (int32_t i = 0; i < numSurfaces; i++) {
+            const AString name = primaryAnatomicalSurfaces[i]->getFileNameNoPath().toLower();
             if (name.indexOf("midthick") >= 0) {
-                midThicknessSurface = interactionSurfaces[i];
+                if (midThicknessSurface == NULL) {
+                    midThicknessSurface = primaryAnatomicalSurfaces[i];
+                }
             }
             if (name.indexOf("white") >= 0) {
-                whiteMatterSurface = interactionSurfaces[i];
+                if (whiteMatterSurface == NULL) {
+                    whiteMatterSurface = primaryAnatomicalSurfaces[i];
+                }
             }
             if (name.indexOf("pial") >= 0) {
-                pialSurface = interactionSurfaces[i];
+                if (pialSurface == NULL) {
+                    pialSurface = primaryAnatomicalSurfaces[i];
+                }
             }
             if (name.indexOf("anatomical") >= 0) {
-                anatomicalSurface = interactionSurfaces[i];
+                if (anatomicalSurface == NULL) {
+                    anatomicalSurface = primaryAnatomicalSurfaces[i];
+                }
             }
             if (name.indexOf("fiducial") >= 0) {
-                fiducialSurface = interactionSurfaces[i];
+                if (fiducialSurface == NULL) {
+                    fiducialSurface = primaryAnatomicalSurfaces[i];
+                }
             }
         }
         
         if (midThicknessSurface != NULL) {
-            m_volumeInteractionSurface = midThicknessSurface;
+            m_primaryAnatomicalSurface = midThicknessSurface;
         }
         else if (whiteMatterSurface != NULL) {
-            m_volumeInteractionSurface = whiteMatterSurface;
+            m_primaryAnatomicalSurface = whiteMatterSurface;
         }
         else if (pialSurface != NULL) {
-            m_volumeInteractionSurface = pialSurface;
+            m_primaryAnatomicalSurface = pialSurface;
         }
         else if (anatomicalSurface != NULL) {
-            m_volumeInteractionSurface = anatomicalSurface;
+            m_primaryAnatomicalSurface = anatomicalSurface;
         }
         else if (fiducialSurface != NULL) {
-            m_volumeInteractionSurface = fiducialSurface;
+            m_primaryAnatomicalSurface = fiducialSurface;
         }
     }
     
-    if (m_volumeInteractionSurface != NULL) {
-        CaretLogFiner("Volume Interaction Surface for "
+    if (m_primaryAnatomicalSurface != NULL) {
+        CaretLogFiner("Primary Anatomical Surface for "
                       + StructureEnum::toGuiName(m_structure)
                       + ": " 
-                      + m_volumeInteractionSurface->getFileNameNoPath());
+                      + m_primaryAnatomicalSurface->getFileNameNoPath());
     }
     else {
-        CaretLogFiner("Volume Interaction Surface for "
+        CaretLogFiner("Primary Anatomical Surface for "
                       + StructureEnum::toGuiName(m_structure)
                       + " is invalid.");
     }
     
-    return m_volumeInteractionSurface;
+    return m_primaryAnatomicalSurface;
 }
 
 /**
- * @return The surface used for volume interaction.
+ * @return The surface used for primary anatomical.
  * Returns NULL if no anatomical surfaces.
  */
 const Surface* 
-BrainStructure::getVolumeInteractionSurface() const
+BrainStructure::getPrimaryAnatomicalSurface() const
 {
-    return getVolumeInteractionSurfacePrivate();
+    return getPrimaryAnatomicalSurfacePrivate();
 }
 
 /**
- * @return The surface used for volume interaction.
+ * @return The surface used for primary anatomical.
  * Returns NULL if no anatomical surfaces.
  */
 Surface* 
-BrainStructure::getVolumeInteractionSurface()
+BrainStructure::getPrimaryAnatomicalSurface()
 {
     /*
      * Kludge to avoid duplicated code and ease maintenance
      */
-    const Surface* constSurface = getVolumeInteractionSurfacePrivate();
+    const Surface* constSurface = getPrimaryAnatomicalSurfacePrivate();
     Surface* s = (Surface*)constSurface;
     return s;
 }
 
 /**
- * Set the volume interaction surface.
- * @param volumeInteractionSurface
- *    New volume interaction surface.
+ * Set the primary anatomical surface.
+ * @param primaryAnatomicalSurface
+ *    New primary anatomical surface.
  */
 void 
-BrainStructure::setVolumeInteractionSurface(Surface* volumeInteractionSurface)
+BrainStructure::setPrimaryAnatomicalSurface(Surface* primaryAnatomicalSurface)
 {
-    m_volumeInteractionSurface = volumeInteractionSurface;
+    m_primaryAnatomicalSurface = primaryAnatomicalSurface;
 }
 
 /**
@@ -1015,6 +1070,12 @@ BrainStructure::receiveEvent(Event* event)
         }
         getSurfacesEvent->setEventProcessed();
     }
+    else if (event->getEventType() == EventTypeEnum::EVENT_SURFACE_STRUCTURES_VALID_GET) {
+        EventSurfaceStructuresValidGet* structEvent = dynamic_cast<EventSurfaceStructuresValidGet*>(event);
+        CaretAssert(structEvent);
+
+        structEvent->addStructure(m_structure, getNumberOfNodes());
+    }
 }
 
 /**
@@ -1377,6 +1438,12 @@ BrainStructure::saveToScene(const SceneAttributes* sceneAttributes,
                                                          lf->getFileNameNoPath()));
     }
     
+    const Surface* primAnatSurface = getPrimaryAnatomicalSurface();
+    if (primAnatSurface != NULL) {
+        sceneClass->addPathName("primaryAnatomicalSurface",
+                                primAnatSurface->getFileName());
+    }
+    
     return sceneClass;
 }
 
@@ -1426,5 +1493,23 @@ BrainStructure::restoreFromScene(const SceneAttributes* sceneAttributes,
                                                                   labelClass);
         }
     }
+    
+    const ScenePathName* primAnatScenePathName = sceneClass->getPathName("primaryAnatomicalSurface");
+    if (primAnatScenePathName != NULL) {
+        const AString surfaceFileName = primAnatScenePathName->stringValue();
+        if ( ! surfaceFileName.isEmpty()) {
+            for (std::vector<Surface*>::iterator iter = m_surfaces.begin();
+                 iter != m_surfaces.end();
+                 iter++) {
+                Surface* surface = *iter;
+                CaretAssert(surface);
+                if (surface->getFileName() == surfaceFileName) {
+                    setPrimaryAnatomicalSurface(surface);
+                    break;
+                }
+            }
+        }
+    }
+    
 }
 

@@ -51,13 +51,11 @@ namespace caret {
         
         virtual ~UserInputModeFoci();
         
-        virtual UserInputMode getUserInputMode() const;
-        
         virtual void initialize();
         
         virtual void finish();
         
-        virtual QWidget* getWidgetForToolBar();
+        virtual void update();
         
         virtual CursorEnum::Enum getCursor() const;
         

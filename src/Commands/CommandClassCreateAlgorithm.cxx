@@ -24,6 +24,7 @@
 
 #include "CaretAssertion.h"
 #include "CommandClassCreateAlgorithm.h"
+#include "DataFileException.h"
 #include "FileInformation.h"
 #include "ProgramParameters.h"
 #include "TextFile.h"
@@ -85,8 +86,7 @@ CommandClassCreateAlgorithm::getHelpInformation(const AString& /*programName*/)
  *   If there is an error in the parameters.
  */
 void 
-CommandClassCreateAlgorithm::executeOperation(ProgramParameters& parameters) throw (CommandException,
-                                                               ProgramParametersException)
+CommandClassCreateAlgorithm::executeOperation(ProgramParameters& parameters)
 {
     const AString algorithmClassName = parameters.nextString("Algorithm Class Name");
     const AString commandLineSwitch  = parameters.nextString("Command Line Switch");

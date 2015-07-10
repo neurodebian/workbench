@@ -38,12 +38,18 @@ public:
     enum Enum {
         /** Invalid event */
         EVENT_INVALID,
+        /** Alert user about something */
+        EVENT_ALERT_USER,
+        /** Inform that Brain has been reset (new spec or scene loaded) */
+        EVENT_BRAIN_RESET,
         /** Get all brain structures */
         EVENT_BRAIN_STRUCTURE_GET_ALL,
         /** Delete a browser tab. */
         EVENT_BROWSER_TAB_DELETE,
         /** Get a browser tab by tab number */
         EVENT_BROWSER_TAB_GET,
+        /** Get indices of all valid browser tabs */
+        EVENT_BROWSER_TAB_INDICES_GET_ALL,
         /** Get ALL (both viewed and not viewed) browser tabs */
         EVENT_BROWSER_TAB_GET_ALL,
         /** Get ALL VIEWED browser tabs (tabs that are viewed in windows) */
@@ -56,12 +62,16 @@ public:
         EVENT_BROWSER_WINDOW_CREATE_TABS,
         /** Issued after a browser window's graphicshave been redrawn */
         EVENT_BROWSER_WINDOW_GRAPHICS_HAVE_BEEN_REDRAWN,
+        /** Issued when displayed browser window menu's may change */
+        EVENT_BROWSER_WINDOW_MENUS_UPDATE,
         /** Create a new browser window */
         EVENT_BROWSER_WINDOW_NEW,
         /** Get CaretMappable data files */
         EVENT_CARET_MAPPABLE_DATA_FILES_GET,
         /** Get CaretMappableDataFiles and their maps viewed as overlays */
         EVENT_CARET_MAPPABLE_DATA_FILE_MAPS_VIEWED_IN_OVERLAYS,
+        /** Event for yoking the loading of matrix chart rows/columns */
+        EVENT_CHART_MATRIX_YOKING_VALIDATION,
         /** Add a data file into the Brain*/
         EVENT_DATA_FILE_ADD,
         /** Delete a data file from the brain */
@@ -88,6 +98,12 @@ public:
         EVENT_IDENTIFICATION_SYMBOL_REMOVAL,
         /** Browser window image capture */
         EVENT_IMAGE_CAPTURE,
+        /** Update the Mac Dock Menu */
+        EVENT_MAC_DOCK_MENU_UPDATE,
+        /** Validate when adding a mapped file to mapped yoking */
+        EVENT_MAP_YOKING_SELECT_MAP,
+        /** Select a map for mapped yoked files */
+        EVENT_MAP_YOKING_VALIDATION,
         /** model - ADD */
         EVENT_MODEL_ADD,
         /** model  - DELETE */
@@ -100,8 +116,6 @@ public:
         EVENT_NODE_IDENTIFICATION_COLORS_GET_FROM_CHARTS,
         /** open file request from the operating system (Mac only) for now */
         EVENT_OPERATING_SYSTEM_REQUEST_OPEN_DATA_FILE,
-        /** Get all yoked overlays */
-        EVENT_OVERLAY_GET_YOKED,
         /** request display of overlay settings editor */
         EVENT_OVERLAY_SETTINGS_EDITOR_SHOW,
         /** Validate that overlay is valid (it exists). */
@@ -116,6 +130,8 @@ public:
         EVENT_SURFACE_COLORING_INVALIDATE,
         /** Get surfaces */
         EVENT_SURFACES_GET,
+        /** Get valid surface strucutures and their number of nodes */
+        EVENT_SURFACE_STRUCTURES_VALID_GET,
         /** Display/Hide the selection toolbox */
         EVENT_TOOLBOX_SELECTION_DISPLAY,
         /** Update the User-Interface */
@@ -126,8 +142,10 @@ public:
         EVENT_UPDATE_INFORMATION_WINDOWS,
         /** Event to update yoked windows (graphics and toolbar) */
         EVENT_UPDATE_YOKED_WINDOWS,
+        /** Update the volume editing toolbar */
+        EVENT_UPDATE_VOLUME_EDITING_TOOLBAR,
         /* THIS MUST ALWAYS BE LAST - NOT an event type but is number of event types */
-        EVENT_COUNT 
+        EVENT_COUNT
     };
 
 

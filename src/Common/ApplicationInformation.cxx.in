@@ -45,9 +45,9 @@ ApplicationInformation::ApplicationInformation()
 : CaretObject()
 { 
     this->name    = "Connectome Workbench";
-    this->version = "1.0";
-    this->commit = "commit: @COMMIT@";
-    this->commitDate = "commit date: @COMMIT_DATE@";
+    this->version = "1.1";
+    this->commit = "Commit: @COMMIT@";
+    this->commitDate = "Commit Date: @COMMIT_DATE@";
 
 #ifdef NDEBUG
     this->compiledWithDebugOn = "Compiled Debug: NO";
@@ -68,7 +68,6 @@ ApplicationInformation::ApplicationInformation()
 #ifdef CARET_OS_WINDOWS
     this->operatingSystemName = "Operating System: Windows";
 #endif // CARET_OS_MACOSX
-
 }
 
 /**
@@ -98,6 +97,15 @@ ApplicationInformation::getVersion() const
 }
 
 /**
+ * @return Commit info of application.
+ */
+AString 
+ApplicationInformation::getCommit() const
+{
+    return this->commit;
+}
+
+/**
  * @return Text indicating if Workbench was compiled with Debug on.
  */
 AString
@@ -119,6 +127,8 @@ ApplicationInformation::getAllInformation(std::vector<AString>& informationValue
     
     informationValues.push_back(this->name);
     
+    informationValues.push_back("Type: " + ApplicationTypeEnum::toGuiName(s_applicationType));
+
     informationValues.push_back("Version: " + this->version);
     
     informationValues.push_back("Qt Compiled Version: " + QString(QT_VERSION_STR));
@@ -166,5 +176,36 @@ ApplicationInformation::getAllInformationInString(const AString& separator) cons
     
     return infoOut;
 }
+
+AString
+ApplicationInformation::getSummaryInformationInString(const AString& separator) const
+{
+    AString infoOut = "Version: " + version + separator;
+    infoOut += commitDate + separator;
+    infoOut += operatingSystemName + separator;
+    return infoOut;
+}
+
+/**
+ * @return The type of application.
+ */
+ApplicationTypeEnum::Enum 
+ApplicationInformation::getApplicationType()
+{
+    return s_applicationType;
+}
+        
+/**
+ * Set the application type.
+ *
+ * @param applicationType
+ *    New value for application type.
+ */
+void 
+ApplicationInformation::setApplicationType(const ApplicationTypeEnum::Enum applicationType)
+{
+    s_applicationType = applicationType;
+}
+        
 
 

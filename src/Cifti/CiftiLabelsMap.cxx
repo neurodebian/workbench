@@ -79,15 +79,20 @@ void CiftiLabelsMap::setMapName(const int64_t& index, const QString& mapName) co
     m_maps[index].m_name = mapName;
 }
 
-bool CiftiLabelsMap::approximateMatch(const CiftiMappingType& rhs) const
+bool CiftiLabelsMap::approximateMatch(const CiftiMappingType& rhs, QString* explanation) const
 {
     switch (rhs.getType())
     {
         case SCALARS:
         case SERIES://maybe?
         case LABELS:
-            return getLength() == rhs.getLength();
+            if (getLength() != rhs.getLength())
+            {
+                if (explanation != NULL) *explanation = "mappings have different length";
+                return false;
+            } else return true;
         default:
+            if (explanation != NULL) *explanation = CiftiMappingType::mappingTypeToName(rhs.getType()) + " mapping never matches " + CiftiMappingType::mappingTypeToName(getType());
             return false;
     }
 }
@@ -118,7 +123,7 @@ void CiftiLabelsMap::readXML1(QXmlStreamReader& xml)
             {
                 if (xml.name() != "NamedMap")
                 {
-                    throw CaretException("unexpected element in labels mapping type: " + xml.name().toString());
+                    throw CaretException("unexpected element in labels map: " + xml.name().toString());
                 }
                 LabelMap tempMap;
                 tempMap.readXML1(xml);
@@ -143,7 +148,7 @@ void CiftiLabelsMap::readXML2(QXmlStreamReader& xml)
             {
                 if (xml.name() != "NamedMap")
                 {
-                    throw CaretException("unexpected element in labels mapping type: " + xml.name().toString());
+                    throw CaretException("unexpected element in labels map: " + xml.name().toString());
                 }
                 LabelMap tempMap;
                 tempMap.readXML2(xml);

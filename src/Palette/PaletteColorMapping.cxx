@@ -23,9 +23,13 @@
 
 #include "CaretOMP.h"
 #include "FastStatistics.h"
+#include "MathFunctions.h"
+#include "NumericTextFormatting.h"
 //because the ROY_BIG_BL palette name is a constant defined in Palette.h
 #include "Palette.h"
+#define __PALETTE_COLOR_MAPPING_DECLARE__
 #include "PaletteColorMapping.h"
+#undef __PALETTE_COLOR_MAPPING_DECLARE__
 #include "PaletteColorMappingSaxReader.h"
 #include "PaletteColorMappingXmlElements.h"
 #include "XmlSaxParser.h"
@@ -100,6 +104,8 @@ PaletteColorMapping::copyHelper(const PaletteColorMapping& pcm)
     this->autoScalePercentageNegativeMinimum = pcm.autoScalePercentageNegativeMinimum;
     this->autoScalePercentagePositiveMaximum = pcm.autoScalePercentagePositiveMaximum;
     this->autoScalePercentagePositiveMinimum = pcm.autoScalePercentagePositiveMinimum;
+    this->autoScaleAbsolutePercentageMaximum = pcm.autoScaleAbsolutePercentageMaximum;
+    this->autoScaleAbsolutePercentageMinimum = pcm.autoScaleAbsolutePercentageMinimum;
     this->displayNegativeDataFlag = pcm.displayNegativeDataFlag;
     this->displayPositiveDataFlag = pcm.displayPositiveDataFlag;
     this->displayZeroDataFlag     = pcm.displayZeroDataFlag;
@@ -121,6 +127,7 @@ PaletteColorMapping::copyHelper(const PaletteColorMapping& pcm)
     this->thresholdDataName = pcm.thresholdDataName;
     this->thresholdShowFailureInGreen = pcm.thresholdShowFailureInGreen;
     this->thresholdRangeMode = pcm.thresholdRangeMode;
+    this->thresholdNegMinPosMaxLinked = pcm.thresholdNegMinPosMaxLinked;
     
     this->clearModified();
 }
@@ -139,6 +146,8 @@ PaletteColorMapping::operator==(const PaletteColorMapping& pcm) const
         && (this->autoScalePercentageNegativeMinimum == pcm.autoScalePercentageNegativeMinimum)
         && (this->autoScalePercentagePositiveMaximum == pcm.autoScalePercentagePositiveMaximum)
         && (this->autoScalePercentagePositiveMinimum == pcm.autoScalePercentagePositiveMinimum)
+        && (this->autoScaleAbsolutePercentageMaximum == pcm.autoScaleAbsolutePercentageMaximum)
+        && (this->autoScaleAbsolutePercentageMinimum == pcm.autoScaleAbsolutePercentageMinimum)
         && (this->displayNegativeDataFlag == pcm.displayNegativeDataFlag)
         && (this->displayPositiveDataFlag == pcm.displayPositiveDataFlag)
         && (this->displayZeroDataFlag     == pcm.displayZeroDataFlag)
@@ -159,7 +168,8 @@ PaletteColorMapping::operator==(const PaletteColorMapping& pcm) const
         && (this->thresholdMappedAverageAreaMaximum == pcm.thresholdMappedAverageAreaMaximum)
         && (this->thresholdDataName == pcm.thresholdDataName)
         && (this->thresholdShowFailureInGreen == pcm.thresholdShowFailureInGreen)
-        && (this->thresholdRangeMode == pcm.thresholdRangeMode)) {
+        && (this->thresholdRangeMode == pcm.thresholdRangeMode)
+        && (this->thresholdNegMinPosMaxLinked == pcm.thresholdNegMinPosMaxLinked)) {
         return true;
     }
     
@@ -175,6 +185,8 @@ PaletteColorMapping::initializeMembersPaletteColorMapping()
     this->autoScalePercentageNegativeMinimum = 2.0f;
     this->autoScalePercentagePositiveMinimum = 2.0f;
     this->autoScalePercentagePositiveMaximum = 98.0f;
+    this->autoScaleAbsolutePercentageMaximum = 98.0f;
+    this->autoScaleAbsolutePercentageMinimum = 2.0f;
     this->userScaleNegativeMaximum = -100.0f;
     this->userScaleNegativeMinimum = 0.0f;
     this->userScalePositiveMinimum = 0.0f;
@@ -195,6 +207,7 @@ PaletteColorMapping::initializeMembersPaletteColorMapping()
     this->thresholdDataName = "";
     this->thresholdShowFailureInGreen = false;
     this->thresholdRangeMode = PaletteThresholdRangeModeEnum::PALETTE_THRESHOLD_RANGE_MODE_MAP;
+    this->thresholdNegMinPosMaxLinked = false;
     this->modifiedFlag = false;
 }
 
@@ -206,7 +219,7 @@ PaletteColorMapping::initializeMembersPaletteColorMapping()
  */
 void
 PaletteColorMapping::writeAsXML(XmlWriter& xmlWriter)
-                       throw (XmlException)
+                      
 {
     XmlAttributes attributes;
     attributes.addAttribute(
@@ -227,6 +240,15 @@ PaletteColorMapping::writeAsXML(XmlWriter& xmlWriter)
                                      PaletteColorMappingXmlElements::XML_TAG_AUTO_SCALE_PERCENTAGE_VALUES,
                                      autoScaleValues,
                                      4);
+    
+    float autoScaleAbsolutePercentageValues[2] = {
+        this->autoScaleAbsolutePercentageMinimum,
+        this->autoScaleAbsolutePercentageMaximum
+    };
+    xmlWriter.writeElementCharacters(PaletteColorMappingXmlElements::XML_TAG_AUTO_SCALE_ABSOLUTE_PERCENTAGE_VALUES,
+                                     autoScaleAbsolutePercentageValues,
+                                     2);
+    
     float userScaleValues[4] = {
         this->userScaleNegativeMaximum,
         this->userScaleNegativeMinimum,
@@ -295,6 +317,9 @@ PaletteColorMapping::writeAsXML(XmlWriter& xmlWriter)
     xmlWriter.writeElementCharacters(PaletteColorMappingXmlElements::XML_TAG_THRESHOLD_RANGE_MODE,
                                      PaletteThresholdRangeModeEnum::toName(this->thresholdRangeMode));
     
+    xmlWriter.writeElementCharacters(PaletteColorMappingXmlElements::XML_TAG_THRESHOLD_NEG_MIN_POS_MAX_LINKED,
+                                     this->thresholdNegMinPosMaxLinked);
+    
     xmlWriter.writeEndElement();
 }
 
@@ -307,7 +332,7 @@ PaletteColorMapping::writeAsXML(XmlWriter& xmlWriter)
  */
 AString
 PaletteColorMapping::encodeInXML()
-            throw (XmlException)
+           
 {
     std::ostringstream str;
     XmlWriter xmlWriter(str);
@@ -324,7 +349,7 @@ PaletteColorMapping::encodeInXML()
  */
 void
 PaletteColorMapping::decodeFromStringXML(const AString& xml)
-            throw (XmlException)
+           
 {
     PaletteColorMappingSaxReader saxReader(this);
     XmlSaxParser* parser = XmlSaxParser::createXmlParser();
@@ -447,6 +472,55 @@ PaletteColorMapping::setAutoScalePercentagePositiveMinimum(const float autoScale
 {
     if (this->autoScalePercentagePositiveMinimum != autoScalePercentagePositiveMinimum) {
         this->autoScalePercentagePositiveMinimum = autoScalePercentagePositiveMinimum;
+        this->setModified();
+    }
+}
+
+/**
+ * @return The auto scale absolute percentage minimum.
+ */
+float
+PaletteColorMapping::getAutoScaleAbsolutePercentageMinimum() const
+{
+    return this->autoScaleAbsolutePercentageMinimum;
+}
+
+/**
+ * Set the auto scale absolute percentage minimum.
+ *
+ * @param autoScaleAbsolutePercentageMinimum
+ *     New value for auto scale absolute percentage minimum.
+ */
+void
+PaletteColorMapping::setAutoScaleAbsolutePercentageMinimum(const float autoScaleAbsolutePercentageMinimum)
+{
+    
+    if (this->autoScaleAbsolutePercentageMinimum != autoScaleAbsolutePercentageMinimum) {
+        this->autoScaleAbsolutePercentageMinimum = autoScaleAbsolutePercentageMinimum;
+        this->setModified();
+    }
+}
+
+/**
+ * @return The auto scale absolute percentage maximum.
+ */
+float
+PaletteColorMapping::getAutoScaleAbsolutePercentageMaximum() const
+{
+    return this->autoScaleAbsolutePercentageMaximum;
+}
+
+/**
+ * Set the auto scale absolute percentage maximum.
+ *
+ * @param autoScaleAbsolutePercentageMaximum
+ *     New value for auto scale absolute percentage maximum.
+ */
+void
+PaletteColorMapping::setAutoScaleAbsolutePercentageMaximum(const float autoScaleAbsolutePercentageMaximum)
+{
+    if (this->autoScaleAbsolutePercentageMaximum != autoScaleAbsolutePercentageMaximum) {
+        this->autoScaleAbsolutePercentageMaximum = autoScaleAbsolutePercentageMaximum;
         this->setModified();
     }
 }
@@ -819,13 +893,16 @@ PaletteColorMapping::setThresholdMinimum(const PaletteThresholdTypeEnum::Enum th
         case PaletteThresholdTypeEnum::THRESHOLD_TYPE_OFF:
             break;
         case PaletteThresholdTypeEnum::THRESHOLD_TYPE_NORMAL:
-            this->thresholdNormalMinimum = thresholdMinimum;
+            setThresholdNormalMinimum(thresholdMinimum);
+            //this->thresholdNormalMinimum = thresholdMinimum;
             break;
         case PaletteThresholdTypeEnum::THRESHOLD_TYPE_MAPPED:
-            this->thresholdMappedMinimum = thresholdMinimum;
+            setThresholdMappedMinimum(thresholdMinimum);
+            //this->thresholdMappedMinimum = thresholdMinimum;
             break;
         case PaletteThresholdTypeEnum::THRESHOLD_TYPE_MAPPED_AVERAGE_AREA:
-            this->thresholdMappedAverageAreaMinimum = thresholdMinimum;
+            setThresholdMappedAverageAreaMinimum(thresholdMinimum);
+            //this->thresholdMappedAverageAreaMinimum = thresholdMinimum;
             break;            
     }
 }
@@ -846,13 +923,16 @@ PaletteColorMapping::setThresholdMaximum(const PaletteThresholdTypeEnum::Enum th
         case PaletteThresholdTypeEnum::THRESHOLD_TYPE_OFF:
             break;
         case PaletteThresholdTypeEnum::THRESHOLD_TYPE_NORMAL:
-            this->thresholdNormalMaximum = thresholdMaximum;
+            setThresholdNormalMaximum(thresholdMaximum);
+            //this->thresholdNormalMaximum = thresholdMaximum;
             break;
         case PaletteThresholdTypeEnum::THRESHOLD_TYPE_MAPPED:
-            this->thresholdMappedMaximum = thresholdMaximum;
+            setThresholdMappedMaximum(thresholdMaximum);
+            //this->thresholdMappedMaximum = thresholdMaximum;
             break;
         case PaletteThresholdTypeEnum::THRESHOLD_TYPE_MAPPED_AVERAGE_AREA:
-            this->thresholdMappedAverageAreaMaximum = thresholdMaximum;
+            setThresholdMappedAverageAreaMaximum(thresholdMaximum);
+            //this->thresholdMappedAverageAreaMaximum = thresholdMaximum;
             break;            
     }
 }
@@ -1139,7 +1219,10 @@ PaletteColorMapping::isShowThresholdFailureInGreen() const
 void
 PaletteColorMapping::setShowThresholdFailureInGreen(const bool showInGreenFlag)
 {
-    this->thresholdShowFailureInGreen = showInGreenFlag;
+    if (this->thresholdShowFailureInGreen != showInGreenFlag) {
+        this->thresholdShowFailureInGreen = showInGreenFlag;
+        setModified();
+    }
 }
 
 /**
@@ -1211,6 +1294,16 @@ PaletteColorMapping::mapDataToPaletteNormalizedValues(const FastStatistics* stat
         case PaletteScaleModeEnum::MODE_AUTO_SCALE:
             statistics->getNonzeroRanges(mappingMostNegative, mappingLeastNegative, mappingLeastPositive, mappingMostPositive);
             break;
+        case PaletteScaleModeEnum::MODE_AUTO_SCALE_ABSOLUTE_PERCENTAGE:
+        {
+            const float mostPercentage  = this->getAutoScaleAbsolutePercentageMaximum();
+            const float leastPercentage = this->getAutoScaleAbsolutePercentageMinimum();
+            mappingMostNegative  = -statistics->getApproxAbsolutePercentile(mostPercentage);
+            mappingLeastNegative = -statistics->getApproxAbsolutePercentile(leastPercentage);
+            mappingLeastPositive =  statistics->getApproxAbsolutePercentile(leastPercentage);
+            mappingMostPositive  =  statistics->getApproxAbsolutePercentile(mostPercentage);
+        }
+            break;
         case PaletteScaleModeEnum::MODE_AUTO_SCALE_PERCENTAGE:
         {
             const float mostNegativePercentage  = this->getAutoScalePercentageNegativeMaximum();
@@ -1230,11 +1323,11 @@ PaletteColorMapping::mapDataToPaletteNormalizedValues(const FastStatistics* stat
             mappingMostPositive  = this->getUserScalePositiveMaximum();
             break;
     }
-    float mappingPositiveDenominator = std::fabs(mappingMostPositive - mappingLeastPositive) * 0.99999f;//reserve [0, 0.00001] as "zero" range
+    float mappingPositiveDenominator = std::fabs(mappingMostPositive - mappingLeastPositive) * (1.0f - SMALL_POSITIVE);//if the "zero" color is extended to more than exact zeros, this correction prevents normalization from returning something greater than 1
     if (mappingPositiveDenominator == 0.0) {
         mappingPositiveDenominator = 1.0;
     }
-    float mappingNegativeDenominator = std::fabs(mappingMostNegative - mappingLeastNegative) * 0.99999f;
+    float mappingNegativeDenominator = std::fabs(mappingMostNegative - mappingLeastNegative) * (1.0f + SMALL_NEGATIVE);//ditto, but SMALL_NEGATIVE is negative
     if (mappingNegativeDenominator == 0.0) {
         mappingNegativeDenominator = 1.0;
     }
@@ -1252,10 +1345,10 @@ PaletteColorMapping::mapDataToPaletteNormalizedValues(const FastStatistics* stat
             }
             else if (scalar >= mappingLeastPositive) {
                 float numerator = scalar - mappingLeastPositive;
-                normalized = numerator / mappingPositiveDenominator + 0.00001f;//don't return less than 0.00001f if input is positive
+                normalized = numerator / mappingPositiveDenominator + SMALL_POSITIVE; // JWH 24 April 2015   0.00001f;//don't return less than 0.00001f if input is positive
             }
             else {
-                normalized = 0.00001f;
+                normalized = SMALL_POSITIVE;  // JWH 24 April 2015  0.00001f;
             }
         }
         else if (scalar < 0.0) {
@@ -1264,12 +1357,147 @@ PaletteColorMapping::mapDataToPaletteNormalizedValues(const FastStatistics* stat
             }
             else if (scalar <= mappingLeastNegative) {
                 float numerator = scalar - mappingLeastNegative;
-                normalized = numerator / mappingNegativeDenominator - 0.00001f;
+                normalized = numerator / mappingNegativeDenominator + SMALL_NEGATIVE;  // JWH 24 April 2015  - 0.00001f;
             }
             else {
-                normalized = -0.00001f;
+                normalized = SMALL_NEGATIVE;   // JWH 24 April 2015   -0.00001f;
             }
         }
         normalizedValuesOut[i] = normalized;
     }
 }
+
+/**
+ * Get the text characters for drawing the scale above the palette
+ * color bar.
+ *
+ * @param statistics
+ *     Statistics for the data.
+ * @param minimumValueTextOut
+ *     Text for the minimum value.
+ * @param zeroValueTextOut
+ *     Text for the zero value(s)
+ * @param maximumValueTextOut
+ *     Text for the maximum value.
+ *
+ */
+void
+PaletteColorMapping::getPaletteColorBarScaleText(const FastStatistics* statistics,
+                                                 AString& minimumValueTextOut,
+                                                 AString& zeroValueTextOut,
+                                                 AString& maximumValueTextOut) const
+{
+    minimumValueTextOut = "";
+    zeroValueTextOut    = "";
+    maximumValueTextOut = "";
+    
+    float minMax[4] = { -1.0, 0.0, 0.0, 1.0 };
+    switch (getScaleMode()) {
+        case PaletteScaleModeEnum::MODE_AUTO_SCALE:
+        {
+            float dummy;
+            statistics->getNonzeroRanges(minMax[0], dummy, dummy, minMax[3]);
+        }
+            break;
+        case PaletteScaleModeEnum::MODE_AUTO_SCALE_ABSOLUTE_PERCENTAGE:
+        {
+            const float maxPct = getAutoScaleAbsolutePercentageMaximum();
+            const float minPct = getAutoScaleAbsolutePercentageMinimum();
+            
+            minMax[0] = -statistics->getApproxAbsolutePercentile(maxPct);
+            minMax[1] = -statistics->getApproxAbsolutePercentile(minPct);
+            minMax[2] =  statistics->getApproxAbsolutePercentile(minPct);
+            minMax[3] =  statistics->getApproxAbsolutePercentile(maxPct);
+        }
+            break;
+        case PaletteScaleModeEnum::MODE_AUTO_SCALE_PERCENTAGE:
+        {
+            const float negMaxPct = getAutoScalePercentageNegativeMaximum();
+            const float negMinPct = getAutoScalePercentageNegativeMinimum();
+            const float posMinPct = getAutoScalePercentagePositiveMinimum();
+            const float posMaxPct = getAutoScalePercentagePositiveMaximum();
+            
+            minMax[0] = statistics->getApproxNegativePercentile(negMaxPct);
+            minMax[1] = statistics->getApproxNegativePercentile(negMinPct);
+            minMax[2] = statistics->getApproxPositivePercentile(posMinPct);
+            minMax[3] = statistics->getApproxPositivePercentile(posMaxPct);
+        }
+            break;
+        case PaletteScaleModeEnum::MODE_USER_SCALE:
+            minMax[0] = getUserScaleNegativeMaximum();
+            minMax[1] = getUserScaleNegativeMinimum();
+            minMax[2] = getUserScalePositiveMinimum();
+            minMax[3] = getUserScalePositiveMaximum();
+            break;
+    }
+    
+    AString minMaxValueText[4];
+//    NumericTextFormatting::formatValueRange(minMax,
+//                                            minMaxValueText,
+//                                            4);
+    
+    NumericTextFormatting::formatValueRangeNegativeAndPositive(minMax,
+                                                               minMaxValueText);
+    
+    /*
+     * Types of values for display
+     */
+    const bool isPositiveDisplayed = isDisplayPositiveDataFlag();
+    const bool isNegativeDisplayed = isDisplayNegativeDataFlag();
+    
+    minimumValueTextOut = minMaxValueText[0];
+    AString textCenterNeg = minMaxValueText[1];
+    AString textCenterPos = minMaxValueText[2];
+    AString textCenter = textCenterPos;
+    if (isNegativeDisplayed && isPositiveDisplayed) {
+        if (textCenterNeg != textCenterPos) {
+            zeroValueTextOut = textCenterNeg + "/" + textCenterPos;
+        }
+        else {
+            zeroValueTextOut = textCenterPos;
+        }
+    }
+    else if (isNegativeDisplayed) {
+        zeroValueTextOut = textCenterNeg;
+    }
+    else if (isPositiveDisplayed) {
+        zeroValueTextOut = textCenterPos;
+    }
+    maximumValueTextOut = minMaxValueText[3];
+}
+
+/**
+ * @return True if thresholding is linked meaning
+ * that the high threshold is restricted to a positive value
+ * the low threshold = -high.
+ *
+ * This is just a status and it is up to the user of this class
+ * to properly set the threshold values.
+ */
+bool
+PaletteColorMapping::isThresholdNegMinPosMaxLinked() const
+{
+    return this->thresholdNegMinPosMaxLinked;
+}
+
+/**
+ * Set thresholding is linked meaning
+ * that the high threshold is restricted to a positive value
+ * the low threshold = -high.
+ *
+ * This is just a status and it is up to the user of this class
+ * to properly set the threshold values.
+ *
+ * @param linked
+ *    New status of low/high linked thresholding.
+ */
+void
+PaletteColorMapping::setThresholdNegMinPosMaxLinked(const bool linked)
+{
+    if (this->thresholdNegMinPosMaxLinked != linked) {
+        this->thresholdNegMinPosMaxLinked = linked;
+        setModified();
+    }
+}
+
+

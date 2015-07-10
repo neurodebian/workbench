@@ -36,6 +36,7 @@
 #include "ChartAxis.h"
 #include "ChartAxisCartesian.h"
 #include "ChartModelDataSeries.h"
+#include "ChartModelFrequencySeries.h"
 #include "ChartModelTimeSeries.h"
 #include "ModelChart.h"
 #include "WuQWidgetObjectGroup.h"
@@ -281,12 +282,17 @@ BrainBrowserWindowToolBarChartAxes::getCartesianChart()
             switch (chartType) {
                 case ChartDataTypeEnum::CHART_DATA_TYPE_INVALID:
                     break;
-                case ChartDataTypeEnum::CHART_DATA_TYPE_MATRIX:
+                case ChartDataTypeEnum::CHART_DATA_TYPE_MATRIX_LAYER:
                     break;
-                case ChartDataTypeEnum::CHART_DATA_TYPE_DATA_SERIES:
+                case ChartDataTypeEnum::CHART_DATA_TYPE_MATRIX_SERIES:
+                    break;
+                case ChartDataTypeEnum::CHART_DATA_TYPE_LINE_DATA_SERIES:
                     cartesianChart = modelChart->getSelectedDataSeriesChartModel(tabIndex);  //dynamic_cast<ChartModelDataSeries*>(chart);
                     break;
-                case ChartDataTypeEnum::CHART_DATA_TYPE_TIME_SERIES:
+                case ChartDataTypeEnum::CHART_DATA_TYPE_LINE_FREQUENCY_SERIES:
+                    cartesianChart = modelChart->getSelectedFrequencySeriesChartModel(tabIndex);
+                    break;
+                case ChartDataTypeEnum::CHART_DATA_TYPE_LINE_TIME_SERIES:
                     cartesianChart = modelChart->getSelectedTimeSeriesChartModel(tabIndex);  //dynamic_cast<ChartModelDataSeries*>(chart);
                     break;
             }

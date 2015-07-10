@@ -30,14 +30,18 @@ namespace caret {
     class SelectionItem;
     class SelectionItemBorderSurface;
     class SelectionItemChartDataSeries;
+    class SelectionItemChartFrequencySeries;
     class SelectionItemChartMatrix;
     class SelectionItemChartTimeSeries;
+    class SelectionItemCiftiConnectivityMatrixRowColumn;
     class SelectionItemFocusSurface;
     class SelectionItemFocusVolume;
     class SelectionItemSurfaceNode;
     class SelectionItemSurfaceNodeIdentificationSymbol;
     class SelectionItemSurfaceTriangle;
     class SelectionItemVoxel;
+    class SelectionItemVoxelEditing;
+    class SelectionItemVoxelIdentificationSymbol;
     class IdentificationTextGenerator;
     class Surface;
     
@@ -80,9 +84,21 @@ namespace caret {
         
         SelectionItemVoxel* getVoxelIdentification();
         
+        SelectionItemVoxelIdentificationSymbol* getVoxelIdentificationSymbol();
+        
+        const SelectionItemVoxelIdentificationSymbol* getVoxelIdentificationSymbol() const;
+        
+        SelectionItemVoxelEditing* getVoxelEditingIdentification();
+        
+        const SelectionItemVoxelEditing* getVoxelEditingIdentification() const;
+        
         SelectionItemChartDataSeries* getChartDataSeriesIdentification();
         
         const SelectionItemChartDataSeries* getChartDataSeriesIdentification() const;
+        
+        SelectionItemChartFrequencySeries* getChartFrequencySeriesIdentification();
+        
+        const SelectionItemChartFrequencySeries* getChartFrequencySeriesIdentification() const;
         
         SelectionItemChartMatrix* getChartMatrixIdentification();
         
@@ -91,6 +107,10 @@ namespace caret {
         SelectionItemChartTimeSeries* getChartTimeSeriesIdentification();
         
         const SelectionItemChartTimeSeries* getChartTimeSeriesIdentification() const;
+        
+        SelectionItemCiftiConnectivityMatrixRowColumn* getCiftiConnectivityMatrixRowColumnIdentification();
+        
+        const SelectionItemCiftiConnectivityMatrixRowColumn* getCiftiConnectivityMatrixRowColumnIdentification() const;
         
         AString getIdentificationText(const Brain* brain) const;
         
@@ -103,6 +123,8 @@ namespace caret {
         const SelectionItem* getLastSelectedItem() const;
         
         void setLastSelectedItem(const SelectionItem* lastItem);
+        
+        void setAllSelectionsEnabled(const bool status);
         
     private:
         SelectionManager(const SelectionManager&);
@@ -131,9 +153,13 @@ namespace caret {
         
         SelectionItemChartDataSeries* m_chartDataSeriesIdentification;
         
+        SelectionItemChartFrequencySeries* m_chartDataFrequencyIdentification;
+        
         SelectionItemChartMatrix* m_chartMatrixIdentification;
         
         SelectionItemChartTimeSeries* m_chartTimeSeriesIdentification;
+        
+        SelectionItemCiftiConnectivityMatrixRowColumn* m_ciftiConnectivityMatrixRowColumnIdentfication;
         
         SelectionItemFocusSurface* m_surfaceFocusIdentification;
         
@@ -148,6 +174,10 @@ namespace caret {
         IdentificationTextGenerator* m_idTextGenerator;
         
         SelectionItemVoxel* m_voxelIdentification;
+        
+        SelectionItemVoxelIdentificationSymbol* m_voxelIdentificationSymbol;
+        
+        SelectionItemVoxelEditing* m_voxelEditingIdentification;
         
         /** Last selected item DOES NOT GET PUT IN m_allSelectionItems */
         SelectionItem* m_lastSelectedItem;

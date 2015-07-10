@@ -23,8 +23,10 @@
 #include "VtkFileExporter.h"
 #undef __VTK_FILE_EXPORTER_DECLARE__
 
+#include "AString.h"
 #include "ByteOrderEnum.h"
 #include "CaretAssert.h"
+#include "DataFileException.h"
 #include "FileAdapter.h"
 #include "SurfaceFile.h"
 #include "XmlWriter.h"
@@ -56,12 +58,13 @@ using namespace caret;
 void
 VtkFileExporter::writeSurfaces(const std::vector<SurfaceFile*>& surfaceFiles,
                                const std::vector<const float*>& surfaceFilesColoring,
-                               const AString& vtkFileName) throw (DataFileException)
+                               const AString& vtkFileName)
 {
     try {
         const int32_t numberOfSurfaceFiles = static_cast<int32_t>(surfaceFiles.size());
         if (numberOfSurfaceFiles <= 0) {
-            throw DataFileException("No surfaces provided for export to VTK.");
+            throw DataFileException(vtkFileName,
+                                    "No surfaces provided for export to VTK.");
         }
         
         CaretAssert(surfaceFiles.size() == surfaceFilesColoring.size());
@@ -90,10 +93,12 @@ VtkFileExporter::writeSurfaces(const std::vector<SurfaceFile*>& surfaceFiles,
         }
         
         if (totalNodes <= 0) {
-            throw DataFileException("Surfaces contain no nodes");
+            throw DataFileException(vtkFileName,
+                                    "Surfaces contain no nodes");
         }
         if (totalNodes <= 0) {
-            throw DataFileException("Surfaces contain no triangles");
+            throw DataFileException(vtkFileName,
+                                    "Surfaces contain no triangles");
         }
         
         /*
@@ -104,7 +109,8 @@ VtkFileExporter::writeSurfaces(const std::vector<SurfaceFile*>& surfaceFiles,
         QTextStream* textStream = fileAdapter.openQTextStreamForWritingFile(vtkFileName,
                                                                             errorMessage);
         if (textStream == NULL) {
-            throw DataFileException(errorMessage);
+            throw DataFileException(vtkFileName,
+                                    errorMessage);
         }
         
         /*
@@ -409,6 +415,7 @@ VtkFileExporter::writeSurfaces(const std::vector<SurfaceFile*>& surfaceFiles,
         fileAdapter.close();
     }
     catch (const XmlException& e) {
-        throw DataFileException(e);
+        throw DataFileException(vtkFileName,
+                                e.whatString());
     }
 }

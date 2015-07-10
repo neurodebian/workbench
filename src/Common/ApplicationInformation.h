@@ -21,7 +21,7 @@
  */
 /*LICENSE_END*/
 
-
+#include "ApplicationTypeEnum.h"
 #include "CaretObject.h"
 
 namespace caret {
@@ -37,11 +37,19 @@ namespace caret {
         
         AString getVersion() const;
         
+        AString getCommit() const;
+        
         void getAllInformation(std::vector<AString>& informationValues) const;
         
         AString getAllInformationInString(const AString& separator) const;
         
+        AString getSummaryInformationInString(const AString& separator) const;
+        
         AString getCompiledWithDebugStatus() const;
+        
+        static ApplicationTypeEnum::Enum getApplicationType();
+        
+        static void setApplicationType(const ApplicationTypeEnum::Enum applicationType);
         
     private:
         ApplicationInformation(const ApplicationInformation&);
@@ -59,10 +67,12 @@ namespace caret {
         AString compiledWithDebugOn;
         
         AString operatingSystemName;
+        
+        static ApplicationTypeEnum::Enum s_applicationType;
     };
     
 #ifdef __APPLICATION_INFORMATION_DECLARE__
-    // <PLACE DECLARATIONS OF STATIC MEMBERS HERE>
+    ApplicationTypeEnum::Enum ApplicationInformation::s_applicationType = ApplicationTypeEnum::APPLICATION_TYPE_INVALID;
 #endif // __APPLICATION_INFORMATION_DECLARE__
 
 } // namespace

@@ -1,5 +1,6 @@
 <!DOCTYPE RCC><RCC version="1.0">
 <qresource>
+<file>./About/hcp-logo.png</file>
 <file>./Cursor/pen_eraser.png</file>
 <file>./FtglFonts/VeraBd.ttf</file>
 <file>./FtglFonts/VeraSe.ttf</file>
@@ -176,6 +177,7 @@
 <file>./LayersPanel/colorbar.png</file>
 <file>./LayersPanel/construction.png</file>
 <file>./LayersPanel/wrench.png</file>
+<file>./PaletteSettings/chain_link_icon.png</file>
 <file>./resources.qrc</file>
 <file>./SpecFileDialog/delete_icon.png</file>
 <file>./SpecFileDialog/load_icon.png</file>
@@ -187,6 +189,7 @@
 <file>./ToolBar/clapboard.png</file>
 <file>./ToolBar/features_toolbox.png</file>
 <file>./ToolBar/help.png</file>
+<file>./ToolBar/identify.png</file>
 <file>./ToolBar/info.png</file>
 <file>./ToolBar/overlay_toolbox.png</file>
 <file>./ToolBar/toolbar.png</file>

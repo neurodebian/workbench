@@ -61,14 +61,14 @@ namespace caret {
         
     public:
         void writeAsXML(XmlWriter& xmlWriter)
-        throw (XmlException);
+       ;
         
         AString encodeInXML()
-        throw (XmlException);
+       ;
         
         
         void decodeFromStringXML(const AString& xml)
-        throw (XmlException);
+       ;
         
         float getAutoScalePercentageNegativeMaximum() const;
         
@@ -85,6 +85,14 @@ namespace caret {
         float getAutoScalePercentagePositiveMinimum() const;
         
         void setAutoScalePercentagePositiveMinimum(const float autoScalePercentagePositiveMinimum);
+        
+        float getAutoScaleAbsolutePercentageMinimum() const;
+        
+        void setAutoScaleAbsolutePercentageMinimum(const float autoScaleAbsolutePercentageMinimum);
+        
+        float getAutoScaleAbsolutePercentageMaximum() const;
+        
+        void setAutoScaleAbsolutePercentageMaximum(const float autoScaleAbsolutePercentageMaximum);
         
         bool isDisplayNegativeDataFlag() const;
         
@@ -188,6 +196,10 @@ namespace caret {
         
         void setShowThresholdFailureInGreen(const bool showInGreenFlag);
         
+        bool isThresholdNegMinPosMaxLinked() const;
+        
+        void setThresholdNegMinPosMaxLinked(const bool linked);
+        
         void setModified();
         
         void clearModified();
@@ -199,6 +211,17 @@ namespace caret {
                                               float* normalizedValuesOut,
                                               const int64_t numberOfData) const;
         
+        void getPaletteColorBarScaleText(const FastStatistics* statistics,
+                                         AString& minimumValueTextOut,
+                                         AString& zeroValueTextOut,
+                                         AString& maximumValueTextOut) const;
+        
+        /** A positive value near zero - may be zero! */
+        static const float SMALL_POSITIVE;
+        
+        /** A negative value near zero - may be zero! */
+        static const float SMALL_NEGATIVE;
+        
     private:
         PaletteScaleModeEnum::Enum scaleMode;
         
@@ -209,6 +232,10 @@ namespace caret {
         float autoScalePercentagePositiveMinimum;
         
         float autoScalePercentagePositiveMaximum;
+        
+        float autoScaleAbsolutePercentageMinimum;
+        
+        float autoScaleAbsolutePercentageMaximum;
         
         float userScaleNegativeMaximum;
         
@@ -250,10 +277,17 @@ namespace caret {
         
         bool thresholdShowFailureInGreen;
         
+        bool thresholdNegMinPosMaxLinked;
+        
         /**Tracks modification, DO NOT copy */
         bool modifiedFlag;
         
     };
+
+#ifdef __PALETTE_COLOR_MAPPING_DECLARE__
+    const float PaletteColorMapping::SMALL_POSITIVE = 0.0;  // JWH 24 April 2015  0.00001;
+    const float PaletteColorMapping::SMALL_NEGATIVE = 0.0;  // JWH 24 April 2015 -0.00001;
+#endif // __PALETTE_COLOR_MAPPING_DECLARE__
     
 } // namespace
 

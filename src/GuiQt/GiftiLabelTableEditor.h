@@ -21,14 +21,19 @@
  */
 /*LICENSE_END*/
 
+#include <map>
 
+#include "CaretPointer.h"
 #include "WuQDialogModal.h"
 
 class QAction;
+class QComboBox;
+class QLabel;
 class QLineEdit;
 class QListWidget;
 class QListWidgetItem;
 class QPushButton;
+class QToolButton;
 
 namespace caret {
 
@@ -58,13 +63,18 @@ namespace caret {
              * Add an apply button so that the graphics windows can be
              * updated without having to close the dialog.
              */
-            OPTION_ADD_APPLY_BUTTON = 2
+            OPTION_ADD_APPLY_BUTTON = 2,
+            /** 
+             * Add GUI components that allow the user to edit the
+             * key assigned to the selected label.
+             */
+            OPTION_ADD_KEY_EDITING = 4
         };
         
-        GiftiLabelTableEditor(GiftiLabelTable* giftiLableTable,
-                              const AString& dialogTitle,
-                              const uint32_t options,
-                              QWidget* parent);
+//        GiftiLabelTableEditor(GiftiLabelTable* giftiLableTable,
+//                              const AString& dialogTitle,
+//                              const uint32_t options,
+//                              QWidget* parent);
         
         GiftiLabelTableEditor(CaretMappableDataFile* caretMappableDataFile,
                               const int32_t mapIndex,
@@ -99,14 +109,17 @@ namespace caret {
         void newButtonClicked();
         void deleteButtonClicked();
         void undoButtonClicked();
+        void changeLabelKeyLockButtonClicked();
         
-        void listWidgetLabelSelected(int row);
+//        void listWidgetLabelSelected(int row);
         
-        void listWidgetLabelSelected(QListWidgetItem* item);
+        void listWidgetLabelSelected();
         
         void colorEditorColorChanged(const float*);
         
         void labelNameLineEditTextEdited(const QString&);
+        
+        void sortingLabelsActivated();
         
     protected:
         virtual void okButtonClicked();
@@ -128,6 +141,8 @@ namespace caret {
         
         void processApplyButton();
         
+        void allowLabelDataEditing(const bool allowEditingFlag);
+        
         QListWidget* m_labelSelectionListWidget;
         
         BorderFile* m_borderFile;
@@ -144,6 +159,10 @@ namespace caret {
         
         QLineEdit* m_labelNameLineEdit;
         
+        QLineEdit* m_keyValueLineEdit;
+        
+        QToolButton* m_changeKeyValueToolButton;
+        
         AString m_lastSelectedLabelName;
         
         GiftiLabel* m_undoGiftiLabel;
@@ -153,10 +172,51 @@ namespace caret {
         WuQWidgetObjectGroup* m_editingGroup;
         
         QPushButton* m_applyPushButton;
+        
+        QComboBox* m_sortLabelsByComboBox;
+        
+        struct PreviousSelections {
+            AString m_sortingName;
+            AString m_selectedLabelName;
+        };
+        
+        static std::map<GiftiLabelTable*, PreviousSelections> s_previousSelections;
+        
+        static const AString s_SORT_COMBO_BOX_NAME_BY_KEY;
+        
+        static const AString s_SORT_COMBO_BOX_NAME_BY_NAME;
+        
+        static bool s_displayKeyEditingWarningFlag;
+        
+        
+    };
+    
+    class ChangeLabelKeyDialog : public WuQDialogModal {
+        Q_OBJECT
+        
+    public:
+        ChangeLabelKeyDialog(GiftiLabelTable* giftiLabelTable,
+                             const GiftiLabel* giftiLabel,
+                             QWidget* parent);
+        
+        ~ChangeLabelKeyDialog();
+        
+//        int32_t getNewKeyValue() const;
+        
+    protected:
+        virtual void okButtonClicked();
+        
+    private:
+        GiftiLabelTable*  m_giftiLabelTable;
+        const GiftiLabel* m_giftiLabel;
+        QLineEdit* m_labelKeyLineEdit;
     };
     
 #ifdef __GIFTI_LABEL_TABLE_EDITOR_DECLARE__
-    // <PLACE DECLARATIONS OF STATIC MEMBERS HERE>
+    std::map<GiftiLabelTable*, GiftiLabelTableEditor::PreviousSelections> GiftiLabelTableEditor::s_previousSelections;
+    const AString GiftiLabelTableEditor::s_SORT_COMBO_BOX_NAME_BY_KEY  = "Key";
+    const AString GiftiLabelTableEditor::s_SORT_COMBO_BOX_NAME_BY_NAME = "Name";
+    bool GiftiLabelTableEditor::s_displayKeyEditingWarningFlag = true;
 #endif // __GIFTI_LABEL_TABLE_EDITOR_DECLARE__
 
 } // namespace

@@ -24,6 +24,7 @@
 #include <QThread>
 
 #include "BoundingBox.h"
+#include "DataFileException.h"
 #include "DataFileTypeEnum.h"
 #include "SurfaceFile.h"
 #include "CaretAssert.h"
@@ -53,6 +54,8 @@ using namespace caret;
 SurfaceFile::SurfaceFile()
 : GiftiTypeFile(DataFileTypeEnum::SURFACE)
 {
+    m_skipSanityCheck = false;//NOTE: this is NOT in the initializeMembersSurfaceFile method, because that method gets used at the top of the validate function,
+                              //which is used by setNumberOfNodesAndTriangles, which temporarily puts it the triangles into an invalid state, which is why this flag exists
     this->initializeMembersSurfaceFile();
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_SURFACE_COLORING_INVALIDATE);
 }
@@ -66,6 +69,7 @@ SurfaceFile::SurfaceFile()
 SurfaceFile::SurfaceFile(const SurfaceFile& sf)
 : GiftiTypeFile(sf), EventListenerInterface()
 {
+    m_skipSanityCheck = false;//see above
     this->initializeMembersSurfaceFile();
     this->copyHelperSurfaceFile(sf);
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_SURFACE_COLORING_INVALIDATE);
@@ -157,13 +161,14 @@ public:
  * data arrays and proper data types/dimensions.
  */
 void 
-SurfaceFile::validateDataArraysAfterReading() throw (DataFileException)
+SurfaceFile::validateDataArraysAfterReading()
 {
     this->initializeMembersSurfaceFile();
     
     int numDataArrays = this->giftiFile->getNumberOfDataArrays();
     if (numDataArrays != 2) {
-        throw DataFileException("Number of data arrays MUST be two in a SurfaceFile.");
+        throw DataFileException(getFileName(),
+                                "Number of data arrays MUST be two in a SurfaceFile.");
     }
     
     /*
@@ -200,8 +205,6 @@ SurfaceFile::validateDataArraysAfterReading() throw (DataFileException)
     
     AString errorMessage;
     if (this->coordinateDataArray == NULL) {
-        if (errorMessage.isEmpty() == false) {
-        }
         errorMessage += "Unable to find coordinate data array which "
             " contains data type FLOAT32, Intent POINTSET, and two "
             " dimensions with the second dimension set to three.  ";
@@ -211,19 +214,44 @@ SurfaceFile::validateDataArraysAfterReading() throw (DataFileException)
         " contains data type INT32, Intent TRIANGLE, and two "
         " dimensions with the second dimension set to three.";
     }
-    if (errorMessage.isEmpty() == false) {
-        throw DataFileException(errorMessage);
+    const int32_t numNodes = this->getNumberOfNodes();
+    if (!m_skipSanityCheck)
+    {
+        const int numTris = getNumberOfTriangles();//sanity check the triangle data array
+        for (int i = 0; i < numTris; ++i)
+        {
+            const int32_t* thisTri = getTriangle(i);
+            for (int j = 0; j < 3; ++j)
+            {
+                if (thisTri[j] < 0 || thisTri[j] >= numNodes)
+                {
+                    errorMessage += "Invalid vertex in triangle array: triangle " + AString::number(i) + ", vertex " + AString::number(thisTri[j]);
+                    break;
+                }
+                for (int k = j + 1; k < 3; ++k)
+                {
+                    if (thisTri[j] == thisTri[k])
+                    {
+                        errorMessage += "Vertex used twice in one triangle: triangle " + AString::number(i) + ", vertex " + AString::number(thisTri[j]);
+                        break;
+                    }
+                }
+            }
+        }
+        if (errorMessage.isEmpty() == false) {
+            throw DataFileException(getFileName(),
+                                    errorMessage);
+        }
     }
     
     this->computeNormals();
 
-    const int64_t numNodes = this->getNumberOfNodes();
     const uint64_t numColorComponents = numNodes * 4;
     
     if (numColorComponents != this->nodeColoring.size()) {
         this->nodeColoring.resize(numColorComponents);
         
-        for (int64_t i = 0; i < numNodes; i++) {
+        for (int32_t i = 0; i < numNodes; i++) {
             const int64_t i4 = i * 4;
             this->nodeColoring[i4]   = 0.75f;
             this->nodeColoring[i4+1] = 0.75f;
@@ -304,7 +332,9 @@ void SurfaceFile::setNumberOfNodesAndTriangles(const int32_t& nodes, const int32
     giftiFile->addDataArray(new GiftiDataArray(NiftiIntentEnum::NIFTI_INTENT_POINTSET, NiftiDataTypeEnum::NIFTI_TYPE_FLOAT32, dims, GiftiEncodingEnum::GZIP_BASE64_BINARY));
     dims[0] = triangles;
     giftiFile->addDataArray(new GiftiDataArray(NiftiIntentEnum::NIFTI_INTENT_TRIANGLE, NiftiDataTypeEnum::NIFTI_TYPE_INT32, dims, GiftiEncodingEnum::GZIP_BASE64_BINARY));
+    m_skipSanityCheck = true;
     validateDataArraysAfterReading();
+    m_skipSanityCheck = false;
     setModified();
 }
 

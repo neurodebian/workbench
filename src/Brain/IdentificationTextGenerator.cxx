@@ -45,7 +45,9 @@
 #include "OverlaySet.h"
 #include "SelectionItemBorderSurface.h"
 #include "SelectionItemChartDataSeries.h"
+#include "SelectionItemChartFrequencySeries.h"
 #include "SelectionItemChartMatrix.h"
+#include "SelectionItemCiftiConnectivityMatrixRowColumn.h"
 #include "SelectionItemChartTimeSeries.h"
 #include "SelectionItemFocusSurface.h"
 #include "SelectionItemFocusVolume.h"
@@ -127,11 +129,17 @@ IdentificationTextGenerator::createIdentificationText(const SelectionManager* id
     this->generateChartDataSeriesIdentificationText(idText,
                                                     idManager->getChartDataSeriesIdentification());
     
+    this->generateChartFrequencySeriesIdentificationText(idText,
+                                                         idManager->getChartFrequencySeriesIdentification());
+    
     this->generateChartTimeSeriesIdentificationText(idText,
                                                     idManager->getChartTimeSeriesIdentification());
     
     this->generateChartMatrixIdentificationText(idText,
                                                 idManager->getChartMatrixIdentification());
+    
+    this->generateCiftiConnectivityMatrixIdentificationText(idText,
+                                                            idManager->getCiftiConnectivityMatrixRowColumnIdentification());
     
     return idText.toString();
 }
@@ -279,13 +287,80 @@ IdentificationTextGenerator::generateVolumeIdentificationText(IdentificationStri
                         }
                         
                         /*
-                         * Limit dense scalar and data series to maps selected in the overlay.
+                         * Limit dense scalar and data series to maps selected in the overlays
+                         * from all tabs.
                          */
-                        if ((ciftiFile->getDataFileType() == DataFileTypeEnum::CONNECTIVITY_DENSE_SCALAR)
-                            || (ciftiFile->getDataFileType() == DataFileTypeEnum::CONNECTIVITY_DENSE_TIME_SERIES)) {
+                        bool limitMapIndicesFlag = false;
+                        switch (ciftiFile->getDataFileType()) {
+                            case DataFileTypeEnum::BORDER:
+                                break;
+                            case DataFileTypeEnum::CONNECTIVITY_DENSE:
+                                break;
+                            case DataFileTypeEnum::CONNECTIVITY_DENSE_LABEL:
+                                break;
+                            case DataFileTypeEnum::CONNECTIVITY_DENSE_PARCEL:
+                                break;
+                            case DataFileTypeEnum::CONNECTIVITY_DENSE_SCALAR:
+                                limitMapIndicesFlag = true;
+                                break;
+                            case DataFileTypeEnum::CONNECTIVITY_DENSE_TIME_SERIES:
+                                limitMapIndicesFlag = true;
+                                break;
+                            case DataFileTypeEnum::CONNECTIVITY_FIBER_ORIENTATIONS_TEMPORARY:
+                                break;
+                            case DataFileTypeEnum::CONNECTIVITY_FIBER_TRAJECTORY_TEMPORARY:
+                                break;
+                            case DataFileTypeEnum::CONNECTIVITY_PARCEL:
+                                break;
+                            case DataFileTypeEnum::CONNECTIVITY_PARCEL_DENSE:
+                                break;
+                            case DataFileTypeEnum::CONNECTIVITY_PARCEL_LABEL:
+                                limitMapIndicesFlag = true;
+                                break;
+                            case DataFileTypeEnum::CONNECTIVITY_PARCEL_SCALAR:
+                                limitMapIndicesFlag = true;
+                                break;
+                            case DataFileTypeEnum::CONNECTIVITY_PARCEL_SERIES:
+                                limitMapIndicesFlag = true;
+                                break;
+                            case DataFileTypeEnum::CONNECTIVITY_SCALAR_DATA_SERIES:
+                                break;
+                            case DataFileTypeEnum::FOCI:
+                                break;
+                            case DataFileTypeEnum::IMAGE:
+                                break;
+                            case DataFileTypeEnum::LABEL:
+                                break;
+                            case DataFileTypeEnum::METRIC:
+                                break;
+                            case DataFileTypeEnum::PALETTE:
+                                break;
+                            case DataFileTypeEnum::RGBA:
+                                break;
+                            case DataFileTypeEnum::SCENE:
+                                break;
+                            case DataFileTypeEnum::SPECIFICATION:
+                                break;
+                            case DataFileTypeEnum::SURFACE:
+                                break;
+                            case DataFileTypeEnum::UNKNOWN:
+                                CaretAssert(0);
+                                break;
+                            case DataFileTypeEnum::VOLUME:
+                                break;
+                        }
+                        if (limitMapIndicesFlag) {
                             getMapIndicesOfFileUsedInOverlays(ciftiFile,
                                                               mapIndices);
                         }
+//                        /*
+//                         * Limit dense scalar and data series to maps selected in the overlay.
+//                         */
+//                        if ((ciftiFile->getDataFileType() == DataFileTypeEnum::CONNECTIVITY_DENSE_SCALAR)
+//                            || (ciftiFile->getDataFileType() == DataFileTypeEnum::CONNECTIVITY_DENSE_TIME_SERIES)) {
+//                            getMapIndicesOfFileUsedInOverlays(ciftiFile,
+//                                                              mapIndices);
+//                        }
                         
                         AString textValue;
                         int64_t voxelIJK[3];
@@ -413,13 +488,20 @@ IdentificationTextGenerator::generateSurfaceIdentificationText(IdentificationStr
                     break;
                 case DataFileTypeEnum::CONNECTIVITY_PARCEL_DENSE:
                     break;
+                case DataFileTypeEnum::CONNECTIVITY_PARCEL_LABEL:
+                    limitMapIndicesFlag = true;
+                    break;
                 case DataFileTypeEnum::CONNECTIVITY_PARCEL_SCALAR:
                     limitMapIndicesFlag = true;
                     break;
                 case DataFileTypeEnum::CONNECTIVITY_PARCEL_SERIES:
                     limitMapIndicesFlag = true;
                     break;
+                case DataFileTypeEnum::CONNECTIVITY_SCALAR_DATA_SERIES:
+                    break;
                 case DataFileTypeEnum::FOCI:
+                    break;
+                case DataFileTypeEnum::IMAGE:
                     break;
                 case DataFileTypeEnum::LABEL:
                     break;
@@ -547,7 +629,7 @@ IdentificationTextGenerator::getMapIndicesOfFileUsedInOverlays(const CaretMappab
         if (overlaySet != NULL) {
             std::vector<int32_t> mapIndices;
             overlaySet->getSelectedMapIndicesForFile(caretMappableDataFile,
-                                                     false,
+                                                     false,  // true => enabled overlays
                                                      mapIndices);
             mapIndicesOut.insert(mapIndicesOut.end(),
                                  mapIndices.begin(),
@@ -591,6 +673,27 @@ IdentificationTextGenerator::generateChartDataSeriesIdentificationText(Identific
 }
 
 /**
+ * Generate identification text for a data series chart.
+ * @param idText
+ *     String builder for identification text.
+ * @param idChartDataSeries
+ *     Information for chart id.
+ */
+void
+IdentificationTextGenerator::generateChartFrequencySeriesIdentificationText(IdentificationStringBuilder& idText,
+                                                                       const SelectionItemChartFrequencySeries* idChartFrequencySeries) const
+{
+    if (idChartFrequencySeries->isValid()) {
+        const ChartDataCartesian* chartDataCartesian = idChartFrequencySeries->getChartDataCartesian();
+        
+        const ChartDataSource* chartDataSource = chartDataCartesian->getChartDataSource();
+        generateChartDataSourceText(idText,
+                                    "FREQUENCY SERIES CHART",
+                                    chartDataSource);
+    }
+}
+
+/**
  * Generate identification text for a matrix chart.
  * @param idText
  *     String builder for identification text.
@@ -609,7 +712,7 @@ IdentificationTextGenerator::generateChartMatrixIdentificationText(Identificatio
         const int32_t columnIndex = idChartMatrix->getMatrixColumnIndex();
         AString rowName;
         AString columnName;
-        float cellValue;
+        AString cellValue;
         const bool validData = chartMatrixInterface->getMatrixCellAttributes(rowIndex,
                                                                              columnIndex,
                                                                              cellValue,
@@ -623,13 +726,52 @@ IdentificationTextGenerator::generateChartMatrixIdentificationText(Identificatio
         
         if (validData) {
             idText.addLine(true,
-                           ("Row " + AString::number(rowIndex)),
+                           ("Row " + AString::number(rowIndex + 1)),
                            rowName);
             idText.addLine(true,
-                           ("Column " + AString::number(columnIndex)),
+                           ("Column " + AString::number(columnIndex + 1)),
                            columnName);
             idText.addLine(true, "Value",
-                           AString::number(cellValue, 'f', 6));
+                           cellValue);
+        }
+    }
+}
+
+/**
+ * Generate identification text for a CIFTI Connectivity Matrix Row/Column
+ * @param idText
+ *     String builder for identification text.
+ * @param idCiftiConnMatrix
+ *     Information for CIFTI Connectivity Matrix Row/Column.
+ */
+void
+IdentificationTextGenerator::generateCiftiConnectivityMatrixIdentificationText(IdentificationStringBuilder& idText,
+                                                                               const SelectionItemCiftiConnectivityMatrixRowColumn* idCiftiConnMatrix) const
+{
+    if (idCiftiConnMatrix->isValid()) {
+        const CiftiMappableConnectivityMatrixDataFile* connMatrixFile = idCiftiConnMatrix->getCiftiConnectivityMatrixFile();
+        const int32_t rowIndex = idCiftiConnMatrix->getMatrixRowIndex();
+        const int32_t colIndex = idCiftiConnMatrix->getMatrixColumnIndex();
+        
+        AString boldText("MATRIX ROW/COLUMN");
+        idText.addLine(false,
+                       boldText,
+                       connMatrixFile->getFileNameNoPath());
+        
+        AString rowName = "";
+        AString colName = "";
+        bool validData = true;
+        if (validData) {
+            if (rowIndex >= 0) {
+                idText.addLine(true,
+                               ("Row " + AString::number(rowIndex + 1)),
+                               rowName);
+            }
+            if (colIndex >= 0) {
+                idText.addLine(true,
+                               ("Column " + AString::number(colIndex + 1)),
+                               colName);
+            }
         }
     }
 }
@@ -658,6 +800,20 @@ IdentificationTextGenerator::generateChartDataSourceText(IdentificationStringBui
                    chartDataSource->getChartableFileName());
     switch (chartDataSource->getDataSourceMode()) {
         case ChartDataSourceModeEnum::CHART_DATA_SOURCE_MODE_INVALID:
+            break;
+        case ChartDataSourceModeEnum::CHART_DATA_SOURCE_MODE_FILE_ROW:
+        {
+            AString fileName;
+            int32_t rowIndex;
+            chartDataSource->getFileRow(fileName,
+                                        rowIndex);
+            idText.addLine(true,
+                           "File",
+                           fileName);
+            idText.addLine(true,
+                           "Row",
+                           AString::number(rowIndex + 1));
+        }
             break;
         case ChartDataSourceModeEnum::CHART_DATA_SOURCE_MODE_SURFACE_NODE_INDEX:
         {

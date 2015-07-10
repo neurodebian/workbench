@@ -75,6 +75,12 @@ namespace caret {
         
         const ChartData* getChartDataAtIndex(const int32_t chartDataIndex) const;
         
+        void moveChartDataAtIndexToOneLowerIndex(const int32_t chartDataIndex);
+        
+        void moveChartDataAtIndexToOneHigherIndex(const int32_t chartDataIndex);
+        
+        void removeChartAtIndex(const int32_t chartDataIndex);
+        
         /**
          * @return Is an average of data supported?
          */
@@ -119,7 +125,8 @@ namespace caret {
         virtual void restoreFromScene(const SceneAttributes* sceneAttributes,
                                       const SceneClass* sceneClass);
 
-        void restoreChartDataFromScene(std::vector<QSharedPointer<ChartData> >& restoredChartData);
+        void restoreChartDataFromScene(const SceneAttributes* sceneAttributes,
+                                       std::vector<QSharedPointer<ChartData> >& restoredChartData);
         
         // ADD_NEW_METHODS_HERE
 

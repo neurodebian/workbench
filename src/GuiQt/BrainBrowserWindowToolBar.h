@@ -216,6 +216,9 @@ namespace caret {
         int updateCounter;
         
         void removeAndReturnAllTabs(std::vector<BrowserTabContent*>& allTabContent);
+        
+        void getAllTabContent(std::vector<BrowserTabContent*>& allTabContent) const;
+        
         void removeTabWithContent(BrowserTabContent* browserTabContent);
         
     public slots:
@@ -361,6 +364,7 @@ namespace caret {
         QAction* modeInputModeBordersAction;
         QAction* modeInputModeFociAction;
         QAction* modeInputModeViewAction;
+        QAction* modeInputVolumeEditAction;
         
     private:
         QAction* toolBarToolButtonAction;

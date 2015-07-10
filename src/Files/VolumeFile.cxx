@@ -39,6 +39,7 @@
 #include "Palette.h"
 #include "SceneClass.h"
 #include "VolumeFile.h"
+#include "VolumeFileEditorDelegate.h"
 #include "VolumeFileVoxelColorizer.h"
 #include "VolumeSpline.h"
 
@@ -74,53 +75,44 @@ VolumeFile::setVoxelColoringEnabled(const bool enabled)
 VolumeFile::VolumeFile()
 : VolumeBase(), CaretMappableDataFile(DataFileTypeEnum::VOLUME)
 {
-    m_classNameHierarchy = NULL;
+    m_fileFastStatistics.grabNew(NULL);
+    m_fileHistogram.grabNew(NULL);
+    m_fileHistorgramLimitedValues.grabNew(NULL);
     m_forceUpdateOfGroupAndNameHierarchy = true;
-    m_voxelColorizer = NULL;
     for (int32_t i = 0; i < BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_TABS; i++) {
         m_chartingEnabledForTab[i] = false;
     }
+    m_volumeFileEditorDelegate.grabNew(NULL);
     validateMembers();
-}
-
-VolumeFile::VolumeFile(const vector<uint64_t>& dimensionsIn, const vector<vector<float> >& indexToSpace, const uint64_t numComponents, SubvolumeAttributes::VolumeType whatType)
-: VolumeBase(dimensionsIn, indexToSpace, numComponents), CaretMappableDataFile(DataFileTypeEnum::VOLUME)
-{
-    m_classNameHierarchy = NULL;
-    m_forceUpdateOfGroupAndNameHierarchy = true;
-    m_voxelColorizer = NULL;
-    for (int32_t i = 0; i < BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_TABS; i++) {
-        m_chartingEnabledForTab[i] = false;
-    }
-    validateMembers();
-    setType(whatType);
 }
 
 VolumeFile::VolumeFile(const vector<int64_t>& dimensionsIn, const vector<vector<float> >& indexToSpace, const int64_t numComponents, SubvolumeAttributes::VolumeType whatType)
 : VolumeBase(dimensionsIn, indexToSpace, numComponents), CaretMappableDataFile(DataFileTypeEnum::VOLUME)
 {
-    m_classNameHierarchy = NULL;
+    m_fileFastStatistics.grabNew(NULL);
+    m_fileHistogram.grabNew(NULL);
+    m_fileHistorgramLimitedValues.grabNew(NULL);
     m_forceUpdateOfGroupAndNameHierarchy = true;
-    m_voxelColorizer = NULL;
     for (int32_t i = 0; i < BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_TABS; i++) {
         m_chartingEnabledForTab[i] = false;
     }
+    m_volumeFileEditorDelegate.grabNew(NULL);
     validateMembers();
     setType(whatType);
 }
 
 void VolumeFile::reinitialize(const vector<int64_t>& dimensionsIn, const vector<vector<float> >& indexToSpace, const int64_t numComponents, SubvolumeAttributes::VolumeType whatType)
 {
+    clear();
     VolumeBase::reinitialize(dimensionsIn, indexToSpace, numComponents);
     validateMembers();
     setType(whatType);
 }
 
-void VolumeFile::reinitialize(const vector<uint64_t>& dimensionsIn, const vector<vector<float> >& indexToSpace, const uint64_t numComponents, SubvolumeAttributes::VolumeType whatType)
+void VolumeFile::addSubvolumes(const int64_t& numToAdd)
 {
-    VolumeBase::reinitialize(dimensionsIn, indexToSpace, numComponents);
+    VolumeBase::addSubvolumes(numToAdd);
     validateMembers();
-    setType(whatType);
 }
 
 SubvolumeAttributes::VolumeType VolumeFile::getType() const
@@ -169,17 +161,12 @@ void
 VolumeFile::clear()
 {
     CaretMappableDataFile::clear();
-    
-    if (m_voxelColorizer != NULL) {
-        delete m_voxelColorizer;
-        m_voxelColorizer = NULL;
-    }
-    
-    if (m_classNameHierarchy != NULL) {
-        delete m_classNameHierarchy;
-        m_classNameHierarchy = NULL;
-    }
+    m_voxelColorizer.grabNew(NULL);
+    m_classNameHierarchy.grabNew(NULL);
     m_forceUpdateOfGroupAndNameHierarchy = true;
+    m_fileFastStatistics.grabNew(NULL);
+    m_fileHistogram.grabNew(NULL);
+    m_fileHistorgramLimitedValues.grabNew(NULL);
     
     m_caretVolExt.clear();
     m_brickAttributes.clear();
@@ -190,23 +177,26 @@ VolumeFile::clear()
     
     m_dataRangeValid = false;
     VolumeBase::clear();
+    
+    m_volumeFileEditorDelegate->clear();
 }
 
-void VolumeFile::readFile(const AString& filename) throw (DataFileException)
+void VolumeFile::readFile(const AString& filename)
 {
     ElapsedTimer timer;
     timer.start();
     
     clear();
-    AString fileToRead;
-    try {
+    
+    {
         /*
          * CaretTemporaryFile must be outside of the "if" statment block of code.
          * Otherwise, at the end of the "if" statement block, the 
          * CaretTemporaryFile object will go out of scope and the temporary
          * file will be deleted so there will be no file to read.
          */
-        CaretTemporaryFile tempFile; 
+        AString fileToRead;
+        CaretTemporaryFile tempFile;
         if (DataFile::isFileOnNetwork(filename)) {
             tempFile.readFile(filename);
             fileToRead = tempFile.getFileName();
@@ -230,6 +220,7 @@ void VolumeFile::readFile(const AString& filename) throw (DataFileException)
         }
         while (myDims.size() < 3) myDims.push_back(1);//pretend we have 3 dimensions in header, always, things that use getOriginalDimensions assume this (because "VolumeFile")
         reinitialize(myDims, inHeader.getSForm(), numComponents);
+        setFileName(filename);  // must be donw after reinitialize() since it calls clear() which clears the name of the file
         int64_t frameSize = myDims[0] * myDims[1] * myDims[2];
         if (numComponents != 1)
         {
@@ -258,20 +249,12 @@ void VolumeFile::readFile(const AString& filename) throw (DataFileException)
         CaretLogFine("Time to read volume data is "
                      + AString::number(timer.getElapsedTimeSeconds(), 'f', 3)
                      + " seconds.");
-        m_header.grabNew(new NiftiHeader(inHeader));
-        for (int64_t i = 0; i < (int64_t)inHeader.m_extensions.size(); ++i)
-        {
-            m_extensions.push_back(inHeader.m_extensions[i]);
-        }//end nifti-specific code
+        m_header.grabNew(new NiftiHeader(inHeader));//end nifti-specific code
         parseExtensions();
         clearModified();
-    } catch (const CaretException& e) {
-        clear();
-        throw DataFileException(e);
-    } catch (...) {
-        clear();
-        throw DataFileException("unknown error while trying to open volume file " + filename);
     }
+    
+    m_volumeFileEditorDelegate->updateIfVolumeFileChangedNumberOfMaps();
     
     /*
      * This will update the map name/label hierarchy
@@ -295,52 +278,44 @@ void VolumeFile::readFile(const AString& filename) throw (DataFileException)
  *    If the file was not successfully written.
  */
 void 
-VolumeFile::writeFile(const AString& filename) throw (DataFileException)
+VolumeFile::writeFile(const AString& filename)
 {
     checkFileWritability(filename);
     
-    try {
-        if (getNumberOfComponents() != 1)
-        {
-            throw DataFileException("writing multi-component volumes is not currently supported");//its a hassle, and uncommon, and there is only one 3-component type, restricted to 0-255
-        }
-        updateCaretExtension();
-        NiftiHeader outHeader;//begin nifti-specific code
-        if (m_header != NULL && (m_header->getType() == AbstractHeader::NIFTI))
-        {
-            outHeader = *((NiftiHeader*)m_header.getPointer());
-        }
-        outHeader.clearDataScaling();
-        outHeader.setSForm(m_volSpace.getSform());
-        outHeader.setDimensions(m_origDims);
-        outHeader.setDataType(NIFTI_TYPE_FLOAT32);
-        outHeader.m_extensions.clear();
-        for (int64_t i = 0; i < (int64_t)m_extensions.size(); ++i)
-        {
-            if (m_extensions[i]->getType() == AbstractVolumeExtension::NIFTI)
-            {//ugliness due to smart pointer operator= not allowing you to go from base to derived - could use dynamic_cast internally, but might allow more stupid mistakes past the compiler
-                outHeader.m_extensions.push_back(CaretPointer<NiftiExtension>(new NiftiExtension(*((NiftiExtension*)m_extensions[i].getPointer()))));
-            }
-        }
-        NiftiIO myIO;
-        int outVersion = 1;
-        if (!outHeader.canWriteVersion(1)) outVersion = 2;
-        myIO.writeNew(filename, outHeader, outVersion);
-        const vector<int64_t>& origDims = getOriginalDimensions();
-        vector<int64_t> extraDims;//non-spatial dims
-        if (origDims.size() > 3)
-        {
-            extraDims = vector<int64_t>(origDims.begin() + 3, origDims.end());
-        }
-        for (MultiDimIterator<int64_t> myiter(extraDims); !myiter.atEnd(); ++myiter)
-        {
-            myIO.writeData(getFrame(getBrickIndexFromNonSpatialIndexes(*myiter)), 3, *myiter);//NOTE: does not deal with multi-component volumes
-        }
-        m_header.grabNew(new NiftiHeader(outHeader));//update header to last written version, end nifti-specific code
+    if (getNumberOfComponents() != 1)
+    {
+        throw DataFileException(filename,
+                                "writing multi-component volumes is not currently supported");//its a hassle, and uncommon, and there is only one 3-component type, restricted to 0-255
     }
-    catch (const CaretException& e) {
-        throw DataFileException(e);
+    updateCaretExtension();
+    
+    NiftiHeader outHeader;//begin nifti-specific code
+    if (m_header != NULL && (m_header->getType() == AbstractHeader::NIFTI))
+    {
+        outHeader = *((NiftiHeader*)m_header.getPointer());//also shallow copies extensions
     }
+    outHeader.clearDataScaling();
+    outHeader.setSForm(getVolumeSpace().getSform());
+    outHeader.setDimensions(getOriginalDimensions());
+    outHeader.setDataType(NIFTI_TYPE_FLOAT32);
+    NiftiIO myIO;
+    int outVersion = 1;
+    if (!outHeader.canWriteVersion(1)) outVersion = 2;
+    myIO.writeNew(filename, outHeader, outVersion);
+    const vector<int64_t>& origDims = getOriginalDimensions();
+    vector<int64_t> extraDims;//non-spatial dims
+    if (origDims.size() > 3)
+    {
+        extraDims = vector<int64_t>(origDims.begin() + 3, origDims.end());
+    }
+    for (MultiDimIterator<int64_t> myiter(extraDims); !myiter.atEnd(); ++myiter)
+    {
+        myIO.writeData(getFrame(getBrickIndexFromNonSpatialIndexes(*myiter)), 3, *myiter);//NOTE: does not deal with multi-component volumes
+    }
+    m_header.grabNew(new NiftiHeader(outHeader));//update header to last written version, end nifti-specific code
+    
+    m_volumeFileEditorDelegate->clear();
+    m_volumeFileEditorDelegate->updateIfVolumeFileChangedNumberOfMaps();
 }
 
 float VolumeFile::interpolateValue(const float* coordIn, InterpType interp, bool* validOut, const int64_t brickIndex, const int64_t component) const
@@ -350,6 +325,7 @@ float VolumeFile::interpolateValue(const float* coordIn, InterpType interp, bool
 
 float VolumeFile::interpolateValue(const float coordIn1, const float coordIn2, const float coordIn3, InterpType interp, bool* validOut, const int64_t brickIndex, const int64_t component) const
 {
+    const int64_t* dimensions = getDimensionsPtr();
     switch (interp)
     {
         case CUBIC:
@@ -367,7 +343,7 @@ float VolumeFile::interpolateValue(const float coordIn1, const float coordIn2, c
                 if (validOut != NULL) *validOut = false;
                 return INVALID_INTERP_VALUE;//check for valid coord before deconvolving the frame
             }
-            int64_t whichFrame = component * m_dimensions[3] + brickIndex;
+            int64_t whichFrame = component * dimensions[3] + brickIndex;
             validateSpline(brickIndex, component);
             if (validOut != NULL) *validOut = true;
             return m_frameSplines[whichFrame].sample(indexSpace);
@@ -427,9 +403,10 @@ float VolumeFile::interpolateValue(const float coordIn1, const float coordIn2, c
 
 void VolumeFile::validateSpline(const int64_t brickIndex, const int64_t component) const
 {
-    CaretAssert(brickIndex >= 0 && brickIndex < m_dimensions[3]);//function is public, so check inputs
-    CaretAssert(component >= 0 && component < m_dimensions[4]);
-    int64_t numFrames = m_dimensions[3] * m_dimensions[4], whichFrame = component * m_dimensions[3] + brickIndex;
+    const int64_t* dimensions = getDimensionsPtr();
+    CaretAssert(brickIndex >= 0 && brickIndex < dimensions[3]);//function is public, so check inputs
+    CaretAssert(component >= 0 && component < dimensions[4]);
+    int64_t numFrames = dimensions[3] * dimensions[4], whichFrame = component * dimensions[3] + brickIndex;
     if (!m_splinesValid)
     {
         CaretMutexLocker locked(&m_splineMutex);//prevent concurrent modify access to spline state
@@ -447,7 +424,7 @@ void VolumeFile::validateSpline(const int64_t brickIndex, const int64_t componen
         CaretMutexLocker locked(&m_splineMutex);//prevent concurrent modify access to spline state
         if (!m_frameSplineValid[whichFrame])//double check
         {
-            m_frameSplines[whichFrame] = VolumeSpline(getFrame(brickIndex, component), m_dimensions);
+            m_frameSplines[whichFrame] = VolumeSpline(getFrame(brickIndex, component), dimensions);
             if (m_frameSplines[whichFrame].ignoredNonNumeric())
             {
                 CaretLogWarning("ignored non-numeric input value when calculating cubic splines in volume '" + getFileName() + "', frame #" + AString::number(brickIndex + 1));
@@ -459,9 +436,10 @@ void VolumeFile::validateSpline(const int64_t brickIndex, const int64_t componen
 
 void VolumeFile::freeSpline(const int64_t brickIndex, const int64_t component) const
 {
-    CaretAssert(brickIndex >= 0 && brickIndex < m_dimensions[3]);//function is public, so check inputs
-    CaretAssert(component >= 0 && component < m_dimensions[4]);
-    int64_t numFrames = m_dimensions[3] * m_dimensions[4], whichFrame = component * m_dimensions[3] + brickIndex;
+    const int64_t* dimensions = getDimensionsPtr();
+    CaretAssert(brickIndex >= 0 && brickIndex < dimensions[3]);//function is public, so check inputs
+    CaretAssert(component >= 0 && component < dimensions[4]);
+    int64_t numFrames = dimensions[3] * dimensions[4], whichFrame = component * dimensions[3] + brickIndex;
     if (!m_splinesValid)
     {
         CaretMutexLocker locked(&m_splineMutex);//prevent concurrent modify access to spline state
@@ -488,63 +466,58 @@ void VolumeFile::freeSpline(const int64_t brickIndex, const int64_t component) c
 
 bool VolumeFile::matchesVolumeSpace(const VolumeFile* right) const
 {
-    return m_volSpace.matches(right->m_volSpace);
+    return getVolumeSpace().matches(right->getVolumeSpace());
 }
 
 bool VolumeFile::matchesVolumeSpace(const VolumeSpace& otherSpace) const
 {
-    return m_volSpace.matches(otherSpace);
+    return getVolumeSpace().matches(otherSpace);
 }
 
 bool VolumeFile::matchesVolumeSpace(const int64_t dims[3], const vector<vector<float> >& sform) const
 {
-    return m_volSpace.matches(VolumeSpace(dims, sform));
+    return getVolumeSpace().matches(VolumeSpace(dims, sform));
 }
 
 void VolumeFile::parseExtensions()
 {
     const int NIFTI_ECODE_CARET = 30;//this should probably go in nifti1.h
-    int numExtensions = (int)m_extensions.size();
-    int whichExt = -1, whichType = -1;//type will track caret's preference in which extension to read, the greater the type, the more it prefers it
-    for (int i = 0; i < numExtensions; ++i)
+    if (m_header != NULL && m_header->getType() == AbstractHeader::NIFTI)
     {
-        switch (m_extensions[i]->getType())
+        const NiftiHeader& myHeader = *((NiftiHeader*)m_header.getPointer());
+        int numExtensions = (int)myHeader.m_extensions.size();
+        int whichExt = -1, whichType = -1;//type will track caret's preference in which extension to read, the greater the type, the more it prefers it
+        for (int i = 0; i < numExtensions; ++i)
         {
-            case AbstractVolumeExtension::NIFTI:
+            const NiftiExtension& myNiftiExtension = *(myHeader.m_extensions[i]);
+            switch (myNiftiExtension.m_ecode)
             {
-                NiftiExtension* myNiftiExtension = (NiftiExtension*)m_extensions[i].getPointer();
-                switch (myNiftiExtension->m_ecode)
-                {
-                    case NIFTI_ECODE_CARET:
-                        if (100 > whichType)//mostly to make it use the first caret extension it finds in the list of extensions
-                        {
-                            whichExt = i;
-                            whichType = 100;//caret extension gets maximum priority
-                        }
-                        break;
-                    default:
-                        break;
-                }
-                break;
+                case NIFTI_ECODE_CARET:
+                    if (100 > whichType)//mostly to make it use the first caret extension it finds in the list of extensions
+                    {
+                        whichExt = i;
+                        whichType = 100;//caret extension gets maximum priority
+                    }
+                    break;
+                default:
+                    break;
             }
-            default:
-                break;
+            break;
         }
-    }
-    if (whichExt != -1)
-    {
-        switch (whichType)
+        if (whichExt != -1)
         {
-            case 100://caret extension
+            switch (whichType)
+            {
+                case 100://caret extension
                 {
-                    QByteArray myByteArray(m_extensions[whichExt]->m_bytes.data(), m_extensions[whichExt]->m_bytes.size());
-                    myByteArray.append('\0');//give it a null byte to ensure it stops
+                    QByteArray myByteArray(myHeader.m_extensions[whichExt]->m_bytes.data(), myHeader.m_extensions[whichExt]->m_bytes.size());
                     AString myString(myByteArray);
                     m_caretVolExt.readFromXmlString(myString);
+                    break;
                 }
-                break;
-            default:
-                break;
+                default:
+                    break;
+            }
         }
     }
     validateMembers();
@@ -553,51 +526,51 @@ void VolumeFile::parseExtensions()
 void VolumeFile::updateCaretExtension()
 {
     const int NIFTI_ECODE_CARET = 30;//this should probably go in nifti1.h
-    int numExtensions = (int)m_extensions.size();
-    for (int i = 0; i < numExtensions; ++i)
-    {
-        switch (m_extensions[i]->getType())
-        {
-            case AbstractVolumeExtension::NIFTI:
-                {
-                    NiftiExtension* myNiftiExtension = (NiftiExtension*)m_extensions[i].getPointer();
-                    if (myNiftiExtension->m_ecode == NIFTI_ECODE_CARET)
-                    {
-                        m_extensions.erase(m_extensions.begin() + i);
-                        --i;
-                        --numExtensions;
-                    }
-                }
-                break;
-            default:
-                break;
-        }
-    }
     stringstream mystream;
     XmlWriter myWriter(mystream);
     m_caretVolExt.writeAsXML(myWriter);
-    NiftiExtension* newExt = new NiftiExtension();//use default nifti version from this constructor
-    newExt->m_ecode = NIFTI_ECODE_CARET;
     string myStr = mystream.str();
-    int length = myStr.length();
-    newExt->m_bytes.resize(length + 1);//add a null byte for safety
-    for (int i = 0; i < length; ++i)
+    if (m_header == NULL) m_header.grabNew(new NiftiHeader());
+    switch (m_header->getType())
     {
-        newExt->m_bytes[i] = myStr[i];
+        case AbstractHeader::NIFTI:
+        {
+            NiftiHeader& myHeader = *((NiftiHeader*)m_header.getPointer());
+            int numExtensions = (int)myHeader.m_extensions.size();
+            for (int i = 0; i < numExtensions; ++i)//erase all existing caret extensions
+            {
+                NiftiExtension* myNiftiExtension = myHeader.m_extensions[i];
+                if (myNiftiExtension->m_ecode == NIFTI_ECODE_CARET)
+                {
+                    myHeader.m_extensions.erase(myHeader.m_extensions.begin() + i);
+                    --i;
+                    --numExtensions;
+                }
+            }
+            CaretPointer<NiftiExtension> newExt(new NiftiExtension());
+            newExt->m_ecode = NIFTI_ECODE_CARET;
+            int length = myStr.length();
+            newExt->m_bytes.resize(length + 1);//allocate a null byte for safety
+            for (int i = 0; i < length; ++i)
+            {
+                newExt->m_bytes[i] = myStr[i];
+            }
+            newExt->m_bytes[length] = '\0';
+            myHeader.m_extensions.push_back(newExt);
+            break;
+        }
     }
-    newExt->m_bytes[length] = 0;
-    m_extensions.push_back(CaretPointer<AbstractVolumeExtension>(newExt));//doesn't matter whether this CaretPointer is the base type or inherited type, operator= will have it stored as base type inside the vector
 }
 
 void VolumeFile::validateMembers()
 {
     m_dataRangeValid = false;
-    m_frameSplineValid = vector<bool>(m_dimensions[3] * m_dimensions[4], false);
-    m_frameSplines = vector<VolumeSpline>(m_dimensions[3] * m_dimensions[4]);//release any previous spline memory
+    const int64_t* dimensions = getDimensionsPtr();
+    m_frameSplineValid = vector<bool>(dimensions[3] * dimensions[4], false);
+    m_frameSplines = vector<VolumeSpline>(dimensions[3] * dimensions[4]);//release any previous spline memory
     m_splinesValid = true;//this now indicates only if they need to all be recalculated - the frame vectors will always have the correct length
     int numMaps = getNumberOfMaps();
-    m_brickAttributes.clear();//invalidate brick attributes first
-    m_brickAttributes.resize(numMaps);//before resizing
+    m_brickAttributes.resize(numMaps);//only resize, if this was called from reinitialize, it has called clear() beforehand
     m_brickStatisticsValid = true;
     int curAttribNum = (int)m_caretVolExt.m_attributes.size();
     if (curAttribNum != numMaps)
@@ -646,20 +619,25 @@ void VolumeFile::validateMembers()
         }
     }
     
+    setPaletteNormalizationMode(PaletteNormalizationModeEnum::NORMALIZATION_SELECTED_MAP_DATA);
+    
     /*
      * Will handle colorization of voxel data.
      */
     if (m_voxelColorizer != NULL) {
-        delete m_voxelColorizer;
+        m_voxelColorizer.grabNew(NULL);
     }
     if (s_voxelColoringEnabled) {
-        m_voxelColorizer = new VolumeFileVoxelColorizer(this);
+        m_voxelColorizer.grabNew(new VolumeFileVoxelColorizer(this));
     }
     if (m_classNameHierarchy == NULL) {
-        m_classNameHierarchy = new GroupAndNameHierarchyModel();
+        m_classNameHierarchy.grabNew(new GroupAndNameHierarchyModel());
     }
     m_classNameHierarchy->clear();
     m_forceUpdateOfGroupAndNameHierarchy = true;
+    
+    m_volumeFileEditorDelegate.grabNew(new VolumeFileEditorDelegate(this));
+    m_volumeFileEditorDelegate->updateIfVolumeFileChangedNumberOfMaps();
 }
 
 /**
@@ -668,10 +646,13 @@ void VolumeFile::validateMembers()
 void
 VolumeFile::setModified()
 {
-    DataFile::setModified();//do we need to do both of these?
+    DataFile::setModified();
     VolumeBase::setModified();
     m_brickStatisticsValid = false;
     m_splinesValid = false;
+    m_fileFastStatistics.grabNew(NULL);
+    m_fileHistogram.grabNew(NULL);
+    m_fileHistorgramLimitedValues.grabNew(NULL);
 }
 
 /**
@@ -681,7 +662,7 @@ void
 VolumeFile::clearModified()
 {
     CaretMappableDataFile::clearModified();
-    VolumeBase::clearModified();
+    clearModifiedVolumeBase();
 
     const int32_t numMaps = getNumberOfMaps();
     if (isMappedWithPalette())
@@ -709,7 +690,7 @@ VolumeFile::isModifiedExcludingPaletteColorMapping() const
     if (CaretMappableDataFile::isModifiedExcludingPaletteColorMapping()) {
         return true;
     }
-    if (VolumeBase::isModified()) {
+    if (isModifiedVolumeBase()) {
         return true;
     }
     
@@ -820,9 +801,10 @@ const FastStatistics* VolumeFile::getMapFastStatistics(const int32_t mapIndex)
 {
     CaretAssertVectorIndex(m_brickAttributes, mapIndex);
     checkStatisticsValid();
+    const int64_t* dimensions = getDimensionsPtr();
     if (m_brickAttributes[mapIndex].m_fastStatistics == NULL)
     {
-        m_brickAttributes[mapIndex].m_fastStatistics.grabNew(new FastStatistics(getFrame(mapIndex), m_dimensions[0] * m_dimensions[1] * m_dimensions[2]));
+        m_brickAttributes[mapIndex].m_fastStatistics.grabNew(new FastStatistics(getFrame(mapIndex), dimensions[0] * dimensions[1] * dimensions[2]));
     }
     return m_brickAttributes[mapIndex].m_fastStatistics;
 }
@@ -831,14 +813,32 @@ const Histogram* VolumeFile::getMapHistogram(const int32_t mapIndex)
 {
     CaretAssertVectorIndex(m_brickAttributes, mapIndex);
     checkStatisticsValid();
+    const int64_t* dimensions = getDimensionsPtr();
     if (m_brickAttributes[mapIndex].m_histogram == NULL)
     {
-        m_brickAttributes[mapIndex].m_histogram.grabNew(new Histogram(100, getFrame(mapIndex), m_dimensions[0] * m_dimensions[1] * m_dimensions[2]));
+        m_brickAttributes[mapIndex].m_histogram.grabNew(new Histogram(100, getFrame(mapIndex), dimensions[0] * dimensions[1] * dimensions[2]));
     }
     return m_brickAttributes[mapIndex].m_histogram;
 }
 
-const Histogram* VolumeFile::getMapHistogram(const int32_t mapIndex,
+/**
+ * Update the Histogram for limited values.
+ *
+ * @param data
+ *     Data for histogram.
+ * @param mostPositiveValueInclusive
+ *    Values more positive than this value are excluded.
+ * @param leastPositiveValueInclusive
+ *    Values less positive than this value are excluded.
+ * @param leastNegativeValueInclusive
+ *    Values less negative than this value are excluded.
+ * @param mostNegativeValueInclusive
+ *    Values more negative than this value are excluded.
+ * @param includeZeroValues
+ *    If true zero values (very near zero) are included.
+ */
+const Histogram*
+VolumeFile::getMapHistogram(const int32_t mapIndex,
                                              const float mostPositiveValueInclusive,
                                              const float leastPositiveValueInclusive,
                                              const float leastNegativeValueInclusive,
@@ -847,18 +847,212 @@ const Histogram* VolumeFile::getMapHistogram(const int32_t mapIndex,
 {
     CaretAssertVectorIndex(m_brickAttributes, mapIndex);
     checkStatisticsValid();
+    const int64_t* dimensions = getDimensionsPtr();
+    
+    bool updateHistogramFlag = false;
+    
     if (m_brickAttributes[mapIndex].m_histogramLimitedValues == NULL)
     {
         m_brickAttributes[mapIndex].m_histogramLimitedValues.grabNew(new Histogram(100));
+        updateHistogramFlag = true;
     }
-    m_brickAttributes[mapIndex].m_histogramLimitedValues->update(getFrame(mapIndex), 
-                                                    m_dimensions[0] * m_dimensions[1] * m_dimensions[2],
-                                                    mostPositiveValueInclusive,
-                                                    leastPositiveValueInclusive,
-                                                    leastNegativeValueInclusive,
-                                                    mostNegativeValueInclusive,
-                                                    includeZeroValues);
+    else if ((mostPositiveValueInclusive != m_brickAttributes[mapIndex].m_histogramLimitedValuesMostPositiveValueInclusive)
+             || (leastPositiveValueInclusive != m_brickAttributes[mapIndex].m_histogramLimitedValuesLeastPositiveValueInclusive)
+             || (leastNegativeValueInclusive != m_brickAttributes[mapIndex].m_histogramLimitedValuesLeastNegativeValueInclusive)
+             || (mostNegativeValueInclusive != m_brickAttributes[mapIndex].m_histogramLimitedValuesMostNegativeValueInclusive)
+             || (includeZeroValues != m_brickAttributes[mapIndex].m_histogramLimitedValuesIncludeZeroValues)) {
+        updateHistogramFlag = true;
+    }
+    
+    if (updateHistogramFlag) {
+        m_brickAttributes[mapIndex].m_histogramLimitedValues->update(getFrame(mapIndex),
+                                                                     dimensions[0] * dimensions[1] * dimensions[2],
+                                                                     mostPositiveValueInclusive,
+                                                                     leastPositiveValueInclusive,
+                                                                     leastNegativeValueInclusive,
+                                                                     mostNegativeValueInclusive,
+                                                                     includeZeroValues);
+        m_brickAttributes[mapIndex].m_histogramLimitedValuesMostPositiveValueInclusive = mostPositiveValueInclusive;
+        m_brickAttributes[mapIndex].m_histogramLimitedValuesLeastPositiveValueInclusive = leastPositiveValueInclusive;
+        m_brickAttributes[mapIndex].m_histogramLimitedValuesLeastNegativeValueInclusive = leastNegativeValueInclusive;
+        m_brickAttributes[mapIndex].m_histogramLimitedValuesMostNegativeValueInclusive = mostNegativeValueInclusive;
+        m_brickAttributes[mapIndex].m_histogramLimitedValuesIncludeZeroValues = includeZeroValues;
+    }
+    
     return m_brickAttributes[mapIndex].m_histogramLimitedValues;
+}
+
+/**
+ * @return The estimated size of data after it is uncompressed
+ * and loaded into RAM.  A negative value indicates that the
+ * file size cannot be computed.
+ */
+int64_t
+VolumeFile::getDataSizeUncompressedInBytes() const
+{
+    int64_t dimI, dimJ, dimK, dimTime, dimComp;
+    getDimensions(dimI, dimJ, dimK, dimTime, dimComp);
+    
+    const int64_t numBytes = (dimI
+                              * dimJ
+                              * dimK
+                              * dimTime
+                              * dimComp
+                              * sizeof(float));
+
+    return numBytes;
+}
+
+/**
+ * Get statistics describing the distribution of data
+ * mapped with a color palette for all data within the file.
+ *
+ * @return
+ *    Fast statistics for data (will be NULL for data
+ *    not mapped using a palette).
+ */
+const FastStatistics*
+VolumeFile::getFileFastStatistics()
+{
+    if (m_fileFastStatistics == NULL) {
+        std::vector<float> fileData;
+        getFileData(fileData);
+        if ( ! fileData.empty()) {
+            m_fileFastStatistics.grabNew(new FastStatistics());
+            m_fileFastStatistics->update(&fileData[0],
+                                         fileData.size());
+        }
+    }
+    
+    return m_fileFastStatistics;
+}
+
+/**
+ * Get histogram describing the distribution of data
+ * mapped with a color palette for all data within
+ * the file.
+ *
+ * @return
+ *    Histogram for data (will be NULL for data
+ *    not mapped using a palette).
+ */
+const Histogram*
+VolumeFile::getFileHistogram()
+{
+    if (m_fileHistogram == NULL) {
+        std::vector<float> fileData;
+        getFileData(fileData);
+        if ( ! fileData.empty()) {
+            m_fileHistogram.grabNew(new Histogram());
+            m_fileHistogram->update(&fileData[0],
+                                    fileData.size());
+        }
+    }
+    return m_fileHistogram;
+}
+
+/**
+ * Get histogram describing the distribution of data
+ * mapped with a color palette for all data in the file
+ * within the given range of values.
+ *
+ * @param mostPositiveValueInclusive
+ *    Values more positive than this value are excluded.
+ * @param leastPositiveValueInclusive
+ *    Values less positive than this value are excluded.
+ * @param leastNegativeValueInclusive
+ *    Values less negative than this value are excluded.
+ * @param mostNegativeValueInclusive
+ *    Values more negative than this value are excluded.
+ * @param includeZeroValues
+ *    If true zero values (very near zero) are included.
+ * @return
+ *    Descriptive statistics for data (will be NULL for data
+ *    not mapped using a palette).
+ */
+const Histogram*
+VolumeFile::getFileHistogram(const float mostPositiveValueInclusive,
+                                           const float leastPositiveValueInclusive,
+                                           const float leastNegativeValueInclusive,
+                                           const float mostNegativeValueInclusive,
+                                           const bool includeZeroValues)
+{
+    bool updateHistogramFlag = false;
+    if (m_fileHistorgramLimitedValues != NULL) {
+        if ((mostPositiveValueInclusive != m_fileHistogramLimitedValuesMostPositiveValueInclusive)
+            || (leastPositiveValueInclusive != m_fileHistogramLimitedValuesLeastPositiveValueInclusive)
+            || (leastNegativeValueInclusive != m_fileHistogramLimitedValuesLeastNegativeValueInclusive)
+            || (mostNegativeValueInclusive != m_fileHistogramLimitedValuesMostNegativeValueInclusive)
+            || (includeZeroValues != m_fileHistogramLimitedValuesIncludeZeroValues)) {
+            updateHistogramFlag = true;
+        }
+    }
+    else {
+        updateHistogramFlag = true;
+    }
+    
+    if (updateHistogramFlag) {
+        std::vector<float> fileData;
+        getFileData(fileData);
+        if ( ! fileData.empty()) {
+            if (m_fileHistorgramLimitedValues == NULL) {
+                m_fileHistorgramLimitedValues.grabNew(new Histogram());
+            }
+            m_fileHistorgramLimitedValues->update(&fileData[0],
+                                                  fileData.size(),
+                                                  mostPositiveValueInclusive,
+                                                  leastPositiveValueInclusive,
+                                                  leastNegativeValueInclusive,
+                                                  mostNegativeValueInclusive,
+                                                  includeZeroValues);
+            
+            m_fileHistogramLimitedValuesMostPositiveValueInclusive  = mostPositiveValueInclusive;
+            m_fileHistogramLimitedValuesLeastPositiveValueInclusive = leastPositiveValueInclusive;
+            m_fileHistogramLimitedValuesLeastNegativeValueInclusive = leastNegativeValueInclusive;
+            m_fileHistogramLimitedValuesMostNegativeValueInclusive  = mostNegativeValueInclusive;
+            m_fileHistogramLimitedValuesIncludeZeroValues           = includeZeroValues;
+        }
+    }
+    
+    return m_fileHistorgramLimitedValues;
+}
+
+/**
+ * Get all data for a volume file.  If the file is very
+ * large this method may take a large amount of time!
+ *
+ * @param dataOut
+ *    Output with all data for a file.  Empty if no data in file
+ *    or data is not float.
+ */
+void
+VolumeFile::getFileData(std::vector<float>& dataOut) const
+{
+    int64_t dimI, dimJ, dimK, dimTime, dimComp;
+    getDimensions(dimI, dimJ, dimK, dimTime, dimComp);
+    const int64_t mapSize     = dimI * dimJ * dimK * dimComp;
+    const int64_t numMaps     = dimTime;
+    const int64_t dataSize    = mapSize * numMaps;
+    
+    if (dataSize <= 0) {
+        dataOut.clear();
+        return;
+    }
+    
+    dataOut.resize(dataSize);
+    int64_t dataOffset = 0;
+    
+    for (int iMap = 0; iMap < numMaps; iMap++) {
+        const float* mapData = getFrame(iMap);
+        
+        for (int64_t i = 0; i < mapSize; i++) {
+            CaretAssertVectorIndex(dataOut, dataOffset);
+            dataOut[dataOffset] = mapData[i];
+            ++dataOffset;
+        }
+    }
+    
+    CaretAssert(dataOffset == static_cast<int64_t>(dataOut.size()));
 }
 
 /**
@@ -871,6 +1065,24 @@ VolumeFile::isMappedWithPalette() const
     CaretAssertVectorIndex(m_caretVolExt.m_attributes, 0);
     CaretAssert(m_caretVolExt.m_attributes[0] != NULL);
     return (m_caretVolExt.m_attributes[0]->m_type != SubvolumeAttributes::LABEL);
+}
+
+/**
+ * Get the palette normalization modes that are supported by the file.
+ *
+ * @param modesSupportedOut
+ *     Palette normalization modes supported by a file.  Will be
+ *     empty for files that are not mapped with a palette.  If there
+ *     is more than one suppported mode, the first mode in the
+ *     vector is assumed to be the default mode.
+ */
+void
+VolumeFile::getPaletteNormalizationModesSupported(std::vector<PaletteNormalizationModeEnum::Enum>& modesSupportedOut)
+{
+    modesSupportedOut.clear();
+    
+    modesSupportedOut.push_back(PaletteNormalizationModeEnum::NORMALIZATION_SELECTED_MAP_DATA);
+    modesSupportedOut.push_back(PaletteNormalizationModeEnum::NORMALIZATION_ALL_MAP_DATA);
 }
 
 /**
@@ -985,13 +1197,14 @@ VolumeFile::getVoxelSpaceBoundingBox(BoundingBox& boundingBoxOut) const
     boundingBoxOut.resetForUpdate();
     
     float coordinates[3];
+    const int64_t* dimensions = getDimensionsPtr();
     for (int i = 0; i < 2; ++i)//if the volume isn't plumb, we need to test all corners, so just always test all corners
     {
         for (int j = 0; j < 2; ++j)
         {
             for (int k = 0; k < 2; ++k)
             {
-                this->indexToSpace(i * m_dimensions[0] - 0.5f, j * m_dimensions[1] - 0.5f, k * m_dimensions[2] - 0.5f, coordinates);//accounts for extra half voxel on each side of each center
+                this->indexToSpace(i * dimensions[0] - 0.5f, j * dimensions[1] - 0.5f, k * dimensions[2] - 0.5f, coordinates);//accounts for extra half voxel on each side of each center
                 boundingBoxOut.update(coordinates);
             }
         }
@@ -1063,8 +1276,10 @@ VolumeFile::updateScalarColoringForMap(const int32_t mapIndex,
  *    Index of selected tab.
  * @param rgbaOut
  *    Contains colors upon exit.
+ * @return
+ *    Number of voxels with alpha greater than zero
  */
-void
+int64_t
 VolumeFile::getVoxelColorsForSliceInMap(const PaletteFile* /*paletteFile*/,
                                         const int32_t mapIndex,
                                  const VolumeSliceViewPlaneEnum::Enum slicePlane,
@@ -1074,18 +1289,75 @@ VolumeFile::getVoxelColorsForSliceInMap(const PaletteFile* /*paletteFile*/,
                                  uint8_t* rgbaOut) const
 {
     if (s_voxelColoringEnabled == false) {
-        return;
+        return 0;
     }
     
     CaretAssert(m_voxelColorizer);
     
-    m_voxelColorizer->getVoxelColorsForSliceInMap(mapIndex,
+    return m_voxelColorizer->getVoxelColorsForSliceInMap(mapIndex,
                                                   slicePlane,
                                                   sliceIndex,
                                                   displayGroup,
                                                   tabIndex,
                                                   rgbaOut);
 }
+
+/**
+  * Get the voxel colors for a sub slice in the map.
+  *
+  * @param paletteFile
+  *    The palette file.
+  * @param mapIndex
+  *    Index of the map.
+  * @param slicePlane
+  *    The slice plane.
+  * @param sliceIndex
+  *    Index of the slice.
+  * @param firstCornerVoxelIndex
+  *    Indices of voxel for first corner of sub-slice (inclusive).
+  * @param lastCornerVoxelIndex
+  *    Indices of voxel for last corner of sub-slice (inclusive).
+  * @param voxelCountIJK
+  *    Voxel counts for each axis.
+  * @param displayGroup
+  *    The selected display group.
+  * @param tabIndex
+  *    Index of selected tab.
+  * @param rgbaOut
+  *    Output containing the rgba values (must have been allocated
+  *    by caller to sufficient count of elements in the slice).
+ * @return
+ *    Number of voxels with alpha greater than zero
+  */
+int64_t
+VolumeFile::getVoxelColorsForSubSliceInMap(const PaletteFile* /*paletteFile*/,
+                                           const int32_t mapIndex,
+                                           const VolumeSliceViewPlaneEnum::Enum slicePlane,
+                                           const int64_t sliceIndex,
+                                           const int64_t firstCornerVoxelIndex[3],
+                                           const int64_t lastCornerVoxelIndex[3],
+                                           const int64_t voxelCountIJK[3],
+                                           const DisplayGroupEnum::Enum displayGroup,
+                                           const int32_t tabIndex,
+                                           uint8_t* rgbaOut) const
+{
+    if (s_voxelColoringEnabled == false) {
+        return 0;
+    }
+    
+    CaretAssert(m_voxelColorizer);
+    
+    return m_voxelColorizer->getVoxelColorsForSubSliceInMap(mapIndex,
+                                                     slicePlane,
+                                                     sliceIndex,
+                                                     firstCornerVoxelIndex,
+                                                     lastCornerVoxelIndex,
+                                                     voxelCountIJK,
+                                                     displayGroup,
+                                                     tabIndex,
+                                                     rgbaOut);
+}
+
 
 /**
  * Get the voxel values for a slice in a map.
@@ -1221,38 +1493,11 @@ VolumeFile::clearVoxelColoringForMap(const int64_t mapIndex)
     CaretAssert(m_voxelColorizer);
     
     m_voxelColorizer->clearVoxelColoringForMap(mapIndex);
+    
+    if (isMappedWithLabelTable()) {
+        m_forceUpdateOfGroupAndNameHierarchy = true;
+    }
 }
-
-/**
- * Set the RGBA coloring for a voxel in a map.
- * Does nothing if coloring is not enabled.
- *
- * @param i
- *    Parasaggital index
- * @param j
- *    Coronal index
- * @param k
- *    Axial index
- * @param mapIndex
- *    Index of map.
- * @param rgba
- *    RGBA color components for voxel.
- */
-//void
-//VolumeFile::setVoxelColorInMap(const int64_t i,
-//                         const int64_t j,
-//                         const int64_t k,
-//                         const int64_t mapIndex,
-//                         const float rgba[4])
-//
-//{
-//    if (s_voxelColoringEnabled == false) {
-//        return;
-//    }
-//    CaretAssert(m_voxelColorizer);
-//    
-//    m_voxelColorizer->setVoxelColorInMap(i, j, k, mapIndex, rgba);
-//}
 
 /**
  * Get the minimum and maximum values from ALL maps in this file.
@@ -1275,7 +1520,7 @@ VolumeFile::getDataRangeFromAllMaps(float& dataRangeMinimumOut,
     /*
      * No data?
      */
-    if (m_dataSize <= 0) {
+    if (isEmpty()) {
         dataRangeMaximumOut = std::numeric_limits<float>::max();
         dataRangeMinimumOut = -dataRangeMaximumOut;
         return false;
@@ -1296,12 +1541,15 @@ VolumeFile::getDataRangeFromAllMaps(float& dataRangeMinimumOut,
     m_dataRangeMaximum = -std::numeric_limits<float>::max();
     m_dataRangeMinimum = std::numeric_limits<float>::max();
     
+    const int64_t* dimensions = getDimensionsPtr();
+    int64_t m_dataSize = dimensions[0] * dimensions[1] * dimensions[2] * dimensions[3] * dimensions[4];
+    const float* data = getFrame();//HACK: use first frame knowing all data is contiguous after it
     for (int64_t i = 0; i < m_dataSize; i++) {
-        if (m_data[i] > m_dataRangeMaximum) {
-            m_dataRangeMaximum = m_data[i];
+        if (data[i] > m_dataRangeMaximum) {
+            m_dataRangeMaximum = data[i];
         }
-        if (m_data[i] < m_dataRangeMinimum) {
-            m_dataRangeMinimum = m_data[i];
+        if (data[i] < m_dataRangeMinimum) {
+            m_dataRangeMinimum = data[i];
         }
     }
     
@@ -1410,6 +1658,17 @@ VolumeFile::getGroupAndNameHierarchyModel() const
 }
 
 /**
+ * @return The volume file editor delegate used for interactive
+ * editing of a volume's voxels.
+ */
+VolumeFileEditorDelegate*
+VolumeFile::getVolumeFileEditorDelegate()
+{
+    CaretAssert(m_volumeFileEditorDelegate);
+    return m_volumeFileEditorDelegate;
+}
+
+/**
  * Save file data from the scene.  For subclasses that need to
  * save to a scene, this method should be overriden.  sceneClass
  * will be valid and any scene data should be added to it.
@@ -1504,33 +1763,15 @@ VolumeFile::addToDataFileContentInformation(DataFileContentInformation& dataFile
         {
             CaretLogWarning("found invalid NIFTI datatype code while adding file information");
         }
-        vector<int64_t> dims = myHeader.getDimensions();
-        const int32_t numDims = static_cast<int32_t>(dims.size());
-        dataFileInformation.addNameAndValue(("Dim[0]"),
-                                            AString::number(numDims));
-        for (int32_t i = 0; i < numDims; i++) {
-            dataFileInformation.addNameAndValue(("Dim["
-                                                 + AString::number(i + 1)
-                                                 + "]"),
-                                                AString::number(dims[i]));
-        }//*/
     }
-    else {
-        int64_t dimI, dimJ, dimK, dimMaps, dimComponents;
-        getDimensions(dimI, dimJ, dimK, dimMaps, dimComponents);
-        
-        dataFileInformation.addNameAndValue("Dim I",
-                                            AString::number(dimI));
-        dataFileInformation.addNameAndValue("Dim J",
-                                            AString::number(dimJ));
-        dataFileInformation.addNameAndValue("Dim K",
-                                            AString::number(dimK));
-        dataFileInformation.addNameAndValue("Dim Maps",
-                                            AString::number(dimMaps));
-        dataFileInformation.addNameAndValue("Dim Components",
-                                            AString::number(dimComponents));
+    AString dimString;
+    vector<int64_t> dims = getOriginalDimensions();
+    for (int i = 0; i < (int)dims.size(); ++i)
+    {
+        if (i != 0) dimString += ", ";
+        dimString += AString::number(dims[i]);
     }
-
+    dataFileInformation.addNameAndValue("Dimensions", dimString);
     const int64_t zero64 = 0;
     if (indexValid(zero64, zero64, zero64)) {
         float x, y, z;
@@ -1598,7 +1839,7 @@ VolumeFile::addToDataFileContentInformation(DataFileContentInformation& dataFile
  * @return Is charting enabled for this file?
  */
 bool
-VolumeFile::isBrainordinateChartingEnabled(const int32_t tabIndex) const
+VolumeFile::isLineSeriesChartingEnabled(const int32_t tabIndex) const
 {
     CaretAssertArrayIndex(m_chartingEnabledForTab,
                           BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_TABS,
@@ -1612,7 +1853,7 @@ VolumeFile::isBrainordinateChartingEnabled(const int32_t tabIndex) const
  * is chartable if it contains more than one map.
  */
 bool
-VolumeFile::isBrainordinateChartingSupported() const
+VolumeFile::isLineSeriesChartingSupported() const
 {
     if (getNumberOfMaps() > 1) {
         return true;
@@ -1628,7 +1869,7 @@ VolumeFile::isBrainordinateChartingSupported() const
  *    New status for charting enabled.
  */
 void
-VolumeFile::setBrainordinateChartingEnabled(const int32_t tabIndex,
+VolumeFile::setLineSeriesChartingEnabled(const int32_t tabIndex,
                                const bool enabled)
 {
     CaretAssertArrayIndex(m_chartingEnabledForTab,
@@ -1644,9 +1885,9 @@ VolumeFile::setBrainordinateChartingEnabled(const int32_t tabIndex,
  *    Chart types supported by this file.
  */
 void
-VolumeFile::getSupportedBrainordinateChartDataTypes(std::vector<ChartDataTypeEnum::Enum>& chartDataTypesOut) const
+VolumeFile::getSupportedLineSeriesChartDataTypes(std::vector<ChartDataTypeEnum::Enum>& chartDataTypesOut) const
 {
-    helpGetSupportedBrainordinateChartDataTypes(chartDataTypesOut);
+    helpGetSupportedLineSeriesChartDataTypes(chartDataTypesOut);
 }
 
 /**
@@ -1662,8 +1903,8 @@ VolumeFile::getSupportedBrainordinateChartDataTypes(std::vector<ChartDataTypeEnu
  *     of the pointer and must delete it when no longer needed.
  */
 ChartDataCartesian*
-VolumeFile::loadBrainordinateChartDataForSurfaceNode(const StructureEnum::Enum /*structure*/,
-                                        const int32_t /*nodeIndex*/) throw (DataFileException)
+VolumeFile::loadLineSeriesChartDataForSurfaceNode(const StructureEnum::Enum /*structure*/,
+                                        const int32_t /*nodeIndex*/)
 {
     ChartDataCartesian* chartData = NULL;
     return chartData;
@@ -1682,8 +1923,8 @@ VolumeFile::loadBrainordinateChartDataForSurfaceNode(const StructureEnum::Enum /
  *     of the pointer and must delete it when no longer needed.
  */
 ChartDataCartesian*
-VolumeFile::loadAverageBrainordinateChartDataForSurfaceNodes(const StructureEnum::Enum /*structure*/,
-                                                const std::vector<int32_t>& /*nodeIndices*/) throw (DataFileException)
+VolumeFile::loadAverageLineSeriesChartDataForSurfaceNodes(const StructureEnum::Enum /*structure*/,
+                                                const std::vector<int32_t>& /*nodeIndices*/)
 {
     ChartDataCartesian* chartData = NULL;
     return chartData;
@@ -1700,7 +1941,7 @@ VolumeFile::loadAverageBrainordinateChartDataForSurfaceNodes(const StructureEnum
  *     of the pointer and must delete it when no longer needed.
  */
 ChartDataCartesian*
-VolumeFile::loadBrainordinateChartDataForVoxelAtCoordinate(const float xyz[3]) throw (DataFileException)
+VolumeFile::loadLineSeriesChartDataForVoxelAtCoordinate(const float xyz[3])
 {
     ChartDataCartesian* chartData = NULL;
 

@@ -27,6 +27,7 @@
 #include "CiftiFile.h"
 #include "CiftiMappableDataFile.h"
 #include "CaretLogger.h"
+#include "DataFileException.h"
 #include "Fiber.h"
 #include "FiberOrientation.h"
 #include "GiftiMetaData.h"
@@ -415,7 +416,7 @@ CiftiFiberOrientationFile::getCiftiXML() const
  *    If the file was not successfully read.
  */
 void
-CiftiFiberOrientationFile::readFile(const AString& filename) throw (DataFileException)
+CiftiFiberOrientationFile::readFile(const AString& filename)
 {
     clear();
     
@@ -446,7 +447,8 @@ CiftiFiberOrientationFile::readFile(const AString& filename) throw (DataFileExce
         const int64_t expectedNumberOfColumns =
         (numberOfFibers * Fiber::NUMBER_OF_ELEMENTS_PER_FIBER_IN_FILE) + FiberOrientation::NUMBER_OF_ELEMENTS_IN_FILE;
         if (expectedNumberOfColumns != numCols) {
-            throw DataFileException("Validation of column count failed: expected "
+            throw DataFileException(filename,
+                                    "Validation of column count failed: expected "
                                     + AString::number(expectedNumberOfColumns)
                                     + " but have "
                                     + AString::number(numCols)
@@ -523,9 +525,10 @@ CiftiFiberOrientationFile::addToDataFileContentInformation(DataFileContentInform
  *    If the file was not successfully written.
  */
 void
-CiftiFiberOrientationFile::writeFile(const AString& /*filename*/) throw (DataFileException)
+CiftiFiberOrientationFile::writeFile(const AString& filename)
 {
-    throw DataFileException("Writing of Cifti Orientation Files not supported.");
+    throw DataFileException(filename,
+                            "Writing of Cifti Orientation Files not supported.");
 }
 
 /**

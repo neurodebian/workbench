@@ -79,6 +79,20 @@ bool CiftiXML::operator==(const CiftiXML& rhs) const
     return true;
 }
 
+bool CiftiXML::approximateMatch(const CiftiXML& rhs) const
+{
+    int numDims = getNumberOfDimensions();
+    if (rhs.getNumberOfDimensions() != numDims) return false;
+    for (int i = 0; i < numDims; ++i)
+    {
+        const CiftiMappingType* left = getMap(i), *right = rhs.getMap(i);
+        if (left == NULL && right == NULL) continue;
+        if (left == NULL || right == NULL) return false;//only one NULL, due to above test
+        if (!left->approximateMatch(*right)) return false;//finally can dereference them
+    }
+    return true;
+}
+
 const CiftiMappingType* CiftiXML::getMap(const int& direction) const
 {
     CaretAssertVectorIndex(m_indexMaps, direction);
@@ -328,7 +342,7 @@ void CiftiXML::readXML(QXmlStreamReader& xml)
                     }
                     haveCifti = true;
                 } else {
-                    throw CaretException("unknown element in Cifti XML: " + name.toString());
+                    throw CaretException("unexpected root element in Cifti XML: " + name.toString());
                 }
             }
         }
@@ -374,7 +388,7 @@ void CiftiXML::parseCIFTI1(QXmlStreamReader& xml)
                 if (xml.hasError()) return;
                 haveMatrix = true;
             } else {
-                throw CaretException("unknown element in CIFTI: " + name.toString());
+                throw CaretException("unexpected element in CIFTI: " + name.toString());
             }
         } else if (xml.isEndElement()) {
             break;
@@ -408,7 +422,7 @@ void CiftiXML::parseCIFTI2(QXmlStreamReader& xml)//yes, these will often have la
                 if (xml.hasError()) return;
                 haveMatrix = true;
             } else {
-                throw CaretException("unknown element in CIFTI: " + name.toString());
+                throw CaretException("unexpected element in CIFTI: " + name.toString());
             }
         } else if (xml.isEndElement()) {
             break;
@@ -456,7 +470,7 @@ void CiftiXML::parseMatrix1(QXmlStreamReader& xml)
                 CaretLogFiner("skipping unused LabelTable element in Matrix in CIFTI-1");
                 xml.readElementText(QXmlStreamReader::SkipChildElements);
             } else {
-                throw CaretException("unknown element in Matrix: " + name.toString());
+                throw CaretException("unexpected element in Matrix: " + name.toString());
             }
         } else if (xml.isEndElement()) {
             break;
@@ -530,7 +544,7 @@ void CiftiXML::parseMatrix2(QXmlStreamReader& xml)
                 parseMatrixIndicesMap2(xml);
                 if (xml.hasError()) return;
             } else {
-                throw CaretException("unknown element in Matrix: " + name.toString());
+                throw CaretException("unexpected element in Matrix: " + name.toString());
             }
         } else if (xml.isEndElement()) {
             break;
@@ -672,7 +686,9 @@ QByteArray CiftiXML::writeXMLToQByteArray(const CiftiVersion& writingVersion) co
     QByteArray ret;
     QXmlStreamWriter xml(&ret);
     xml.setAutoFormatting(true);
+    xml.writeStartDocument();
     writeXML(xml, writingVersion);
+    xml.writeEndDocument();
     return ret;
 }
 
@@ -681,7 +697,9 @@ QString CiftiXML::writeXMLToString(const CiftiVersion& writingVersion) const
     QString ret;
     QXmlStreamWriter xml(&ret);
     xml.setAutoFormatting(true);
+    xml.writeStartDocument();
     writeXML(xml, writingVersion);
+    xml.writeEndDocument();
     return ret;
 }
 
@@ -699,7 +717,7 @@ void CiftiXML::writeXML(QXmlStreamWriter& xml, const CiftiVersion& writingVersio
     } else if (writingVersion == CiftiVersion(2, 0)) {
         writeMatrix2(xml);
     } else {
-        throw CaretException("unknown Cifti Version: '" + writingVersion.toString());
+        throw CaretException("unknown Cifti writing version: '" + writingVersion.toString() + "'");
     }
     xml.writeEndElement();
 }

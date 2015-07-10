@@ -58,32 +58,10 @@ CiftiParcelSeriesFile::~CiftiParcelSeriesFile()
 }
 
 /**
- * Update coloring for all maps.
- *
- * Note: Overridden since Data-Series files have one palette that is
- * applied to ALL maps.  For data-series, just invalidate the coloring
- * for all maps (data points).
- *
- * @param paletteFile
- *    Palette file containing palettes.
- */
-void
-CiftiParcelSeriesFile::updateScalarColoringForAllMaps(const PaletteFile* /*paletteFile*/)
-{
-    /*
-     * Just need to invalidate coloring.
-     * Updating coloring for all maps would take time.
-     * Coloring update is triggered by code that colors nodes/voxels
-     * when drawing.
-     */
-    invalidateColoringInAllMaps();
-}
-
-/**
  * @return Is charting enabled for this file?
  */
 bool
-CiftiParcelSeriesFile::isBrainordinateChartingEnabled(const int32_t tabIndex) const
+CiftiParcelSeriesFile::isLineSeriesChartingEnabled(const int32_t tabIndex) const
 {
     CaretAssertArrayIndex(m_chartingEnabledForTab,
                           BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_TABS,
@@ -97,7 +75,7 @@ CiftiParcelSeriesFile::isBrainordinateChartingEnabled(const int32_t tabIndex) co
  * is chartable if it contains more than one map.
  */
 bool
-CiftiParcelSeriesFile::isBrainordinateChartingSupported() const
+CiftiParcelSeriesFile::isLineSeriesChartingSupported() const
 {
     if (getNumberOfMaps() > 1) {
         return true;
@@ -113,7 +91,7 @@ CiftiParcelSeriesFile::isBrainordinateChartingSupported() const
  *    New status for charting enabled.
  */
 void
-CiftiParcelSeriesFile::setBrainordinateChartingEnabled(const int32_t tabIndex,
+CiftiParcelSeriesFile::setLineSeriesChartingEnabled(const int32_t tabIndex,
                                           const bool enabled)
 {
     CaretAssertArrayIndex(m_chartingEnabledForTab,
@@ -129,9 +107,9 @@ CiftiParcelSeriesFile::setBrainordinateChartingEnabled(const int32_t tabIndex,
  *    Chart types supported by this file.
  */
 void
-CiftiParcelSeriesFile::getSupportedBrainordinateChartDataTypes(std::vector<ChartDataTypeEnum::Enum>& chartDataTypesOut) const
+CiftiParcelSeriesFile::getSupportedLineSeriesChartDataTypes(std::vector<ChartDataTypeEnum::Enum>& chartDataTypesOut) const
 {
-    helpGetSupportedBrainordinateChartDataTypes(chartDataTypesOut);
+    helpGetSupportedLineSeriesChartDataTypes(chartDataTypesOut);
 }
 
 /**
@@ -147,8 +125,8 @@ CiftiParcelSeriesFile::getSupportedBrainordinateChartDataTypes(std::vector<Chart
  *     of the pointer and must delete it when no longer needed.
  */
 ChartDataCartesian*
-CiftiParcelSeriesFile::loadBrainordinateChartDataForSurfaceNode(const StructureEnum::Enum structure,
-                                                               const int32_t nodeIndex) throw (DataFileException)
+CiftiParcelSeriesFile::loadLineSeriesChartDataForSurfaceNode(const StructureEnum::Enum structure,
+                                                               const int32_t nodeIndex)
 {
     ChartDataCartesian* chartData = helpLoadChartDataForSurfaceNode(structure,
                                                            nodeIndex);
@@ -189,12 +167,12 @@ CiftiParcelSeriesFile::loadBrainordinateChartDataForSurfaceNode(const StructureE
 //            }
 //            
 //            if (dataSeriesFlag) {
-//                chartData = new ChartDataCartesian(ChartDataTypeEnum::CHART_DATA_TYPE_DATA_SERIES,
+//                chartData = new ChartDataCartesian(ChartDataTypeEnum::CHART_DATA_TYPE_LINE_DATA_SERIES,
 //                                                   ChartAxisUnitsEnum::CHART_AXIS_UNITS_NONE,
 //                                                   ChartAxisUnitsEnum::CHART_AXIS_UNITS_NONE);
 //            }
 //            else if (timeSeriesFlag) {
-//                chartData = new ChartDataCartesian(ChartDataTypeEnum::CHART_DATA_TYPE_TIME_SERIES,
+//                chartData = new ChartDataCartesian(ChartDataTypeEnum::CHART_DATA_TYPE_LINE_TIME_SERIES,
 //                                                   ChartAxisUnitsEnum::CHART_AXIS_UNITS_TIME_SECONDS,
 //                                                   ChartAxisUnitsEnum::CHART_AXIS_UNITS_NONE);
 //            }
@@ -259,8 +237,8 @@ CiftiParcelSeriesFile::loadBrainordinateChartDataForSurfaceNode(const StructureE
  *     of the pointer and must delete it when no longer needed.
  */
 ChartDataCartesian*
-CiftiParcelSeriesFile::loadAverageBrainordinateChartDataForSurfaceNodes(const StructureEnum::Enum structure,
-                                                                      const std::vector<int32_t>& nodeIndices) throw (DataFileException)
+CiftiParcelSeriesFile::loadAverageLineSeriesChartDataForSurfaceNodes(const StructureEnum::Enum structure,
+                                                                      const std::vector<int32_t>& nodeIndices)
 {
     ChartDataCartesian* chartData = helpLoadChartDataForSurfaceNodeAverage(structure,
                                                                   nodeIndices);
@@ -278,7 +256,7 @@ CiftiParcelSeriesFile::loadAverageBrainordinateChartDataForSurfaceNodes(const St
  *     of the pointer and must delete it when no longer needed.
  */
 ChartDataCartesian*
-CiftiParcelSeriesFile::loadBrainordinateChartDataForVoxelAtCoordinate(const float xyz[3]) throw (DataFileException)
+CiftiParcelSeriesFile::loadLineSeriesChartDataForVoxelAtCoordinate(const float xyz[3])
 {
     ChartDataCartesian* chartData = helpLoadChartDataForVoxelAtCoordinate(xyz);
     return chartData;

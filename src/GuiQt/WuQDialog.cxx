@@ -583,12 +583,16 @@ WuQDialog::showEvent(QShowEvent* event)
         const QSize maxSize = WuQtUtilities::getMinimumScreenSize();
         const int32_t margin = 100;
         const int32_t maximumDialogWidth = maxSize.width() - margin;
-        const int32_t maximumDialogHeight = (maxSize.height() / 2) - margin;
+        const int32_t maximumDialogHeight = maxSize.height() - (margin * 2); // allow space top/bottom
+        //const int32_t maximumDialogHeight = (maxSize.height() / 2) - margin;
         
         bool putCentralWidgetIntoScrollAreaFlag = false;
         bool testCentralWidgetForTooBig = false;
         switch (m_placeCentralWidgetInScrollAreaStatus) {
             case SCROLL_AREA_ALWAYS:
+                putCentralWidgetIntoScrollAreaFlag = true;
+                break;
+            case SCROLL_AREA_AS_NEEDED_VERT_NO_HORIZ:
                 putCentralWidgetIntoScrollAreaFlag = true;
                 break;
             case SCROLL_AREA_AS_NEEDED:
@@ -623,6 +627,10 @@ WuQDialog::showEvent(QShowEvent* event)
             QScrollArea* scrollArea = new QScrollArea();
             scrollArea->setWidgetResizable(true);
             scrollArea->setWidget(m_centralWidget);
+            if (m_placeCentralWidgetInScrollAreaStatus == SCROLL_AREA_AS_NEEDED_VERT_NO_HORIZ) {
+                scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+                scrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+            }
             userWidgetLayout->insertWidget(m_centralWidgetLayoutIndex,
                                            scrollArea);
             
@@ -669,6 +677,23 @@ WuQDialog::sizeHint () const
     }
     
     return sh;
+}
+
+/**
+ * Set the size of the dialog for next time it is displayed.
+ * This must be called BEFORE displayng the dialog.
+ */
+void
+WuQDialog::setSizeOfDialogWhenDisplayed(const QSize& size)
+{
+    const int32_t w = size.width();
+    const int32_t h = size.height();
+    
+    if ((w > 0)
+        && (h > 0)) {
+        m_sizeHintWidth  = w;
+        m_sizeHintHeight = h;
+    }
 }
 
 /**

@@ -556,6 +556,75 @@ CiftiFiberTrajectoryFile::getMapHistogram(const int32_t /*mapIndex*/,
 }
 
 /**
+ * @return The estimated size of data after it is uncompressed
+ * and loaded into RAM.  A negative value indicates that the
+ * file size cannot be computed.
+ */
+int64_t
+CiftiFiberTrajectoryFile::getDataSizeUncompressedInBytes() const
+{
+    return -1;
+}
+
+/**
+ * Get statistics describing the distribution of data
+ * mapped with a color palette for all data within the file.
+ *
+ * @return
+ *    Fast statistics for data (will be NULL for data
+ *    not mapped using a palette).
+ */
+const FastStatistics*
+CiftiFiberTrajectoryFile::getFileFastStatistics()
+{
+    return NULL;
+}
+
+/**
+ * Get histogram describing the distribution of data
+ * mapped with a color palette for all data within
+ * the file.
+ *
+ * @return
+ *    Histogram for data (will be NULL for data
+ *    not mapped using a palette).
+ */
+const Histogram*
+CiftiFiberTrajectoryFile::getFileHistogram()
+{
+    return NULL;
+}
+
+/**
+ * Get histogram describing the distribution of data
+ * mapped with a color palette for all data in the file
+ * within the given range of values.
+ *
+ * @param mostPositiveValueInclusive
+ *    Values more positive than this value are excluded.
+ * @param leastPositiveValueInclusive
+ *    Values less positive than this value are excluded.
+ * @param leastNegativeValueInclusive
+ *    Values less negative than this value are excluded.
+ * @param mostNegativeValueInclusive
+ *    Values more negative than this value are excluded.
+ * @param includeZeroValues
+ *    If true zero values (very near zero) are included.
+ * @return
+ *    Descriptive statistics for data (will be NULL for data
+ *    not mapped using a palette).
+ */
+const Histogram*
+CiftiFiberTrajectoryFile::getFileHistogram(const float /*mostPositiveValueInclusive*/,
+                                          const float /*leastPositiveValueInclusive*/,
+                                          const float /*leastNegativeValueInclusive*/,
+                                          const float /*mostNegativeValueInclusive*/,
+                                          const bool /*includeZeroValues*/)
+{
+    return NULL;
+}
+
+/**
  * Get the palette color mapping for the map at the given index.
  *
  * @param mapIndex
@@ -626,6 +695,21 @@ CiftiFiberTrajectoryFile::getMapLabelTable(const int32_t /*mapIndex*/) const
 }
 
 /**
+ * Get the palette normalization modes that are supported by the file.
+ *
+ * @param modesSupportedOut
+ *     Palette normalization modes supported by a file.  Will be
+ *     empty for files that are not mapped with a palette.  If there
+ *     is more than one suppported mode, the first mode in the
+ *     vector is assumed to be the default mode.
+ */
+void
+CiftiFiberTrajectoryFile::getPaletteNormalizationModesSupported(std::vector<PaletteNormalizationModeEnum::Enum>& modesSupportedOut)
+{
+    modesSupportedOut.clear();
+}
+
+/**
  * Update scalar coloring for a map.
  *
  * Note that some CIFTI files can be slow to color due to the need to
@@ -670,7 +754,7 @@ CiftiFiberTrajectoryFile::getFiberTrajectoryMapProperties() const
  *    If the file was not successfully read.
  */
 void
-CiftiFiberTrajectoryFile::readFile(const AString& filename) throw (DataFileException)
+CiftiFiberTrajectoryFile::readFile(const AString& filename)
 {
     clear();
 
@@ -704,11 +788,12 @@ CiftiFiberTrajectoryFile::readFile(const AString& filename) throw (DataFileExcep
  *    If the file was not successfully written.
  */
 void
-CiftiFiberTrajectoryFile::writeFile(const AString& filename) throw (DataFileException)
+CiftiFiberTrajectoryFile::writeFile(const AString& filename)
 {
     switch (m_fiberTrajectoryFileType) {
         case FIBER_TRAJECTORY_LOAD_BY_BRAINORDINATE:
-            throw DataFileException("Writing of Cifti Trajectory Files that load by brainordinate is not supported.");
+            throw DataFileException(filename,
+                                    "Writing of Cifti Trajectory Files that load by brainordinate is not supported.");
             break;
         case FIBER_TRAJECTORY_LOAD_SINGLE_ROW:
             writeLoadedDataToFile(filename);
@@ -807,7 +892,7 @@ CiftiFiberTrajectoryFile::newFiberTrajectoryFileFromLoadedRowData(AString& error
  *    If an error occurs.
  */
 void
-CiftiFiberTrajectoryFile::writeLoadedDataToFile(const AString& filename) const throw (DataFileException)
+CiftiFiberTrajectoryFile::writeLoadedDataToFile(const AString& filename) const
 {
     CiftiXML xml = m_sparseFile->getCiftiXML();
     
@@ -913,20 +998,21 @@ CiftiFiberTrajectoryFile::clearLoadedFiberOrientations()
  *    If fiber orientation file is NULL or incompatible.
  */
 void
-CiftiFiberTrajectoryFile::validateAssignedMatchingFiberOrientationFile() throw (DataFileException)
+CiftiFiberTrajectoryFile::validateAssignedMatchingFiberOrientationFile()
 {
     if (m_sparseFile == NULL) {
-        throw DataFileException("No data has been loaded.");
+        throw DataFileException(getFileName(),
+                                "No data has been loaded.");
     }
     if (m_matchingFiberOrientationFile == NULL) {
-        throw DataFileException("No fiber orientation file is assigned.");
+        throw DataFileException(getFileName(),
+                                "No fiber orientation file is assigned.");
     }
     
     const CiftiXML& trajXML = m_sparseFile->getCiftiXML();
     const CiftiXML* orientXML = m_matchingFiberOrientationFile->getCiftiXML();
     if (*(trajXML.getMap(CiftiXML::ALONG_ROW)) != *(orientXML->getMap(CiftiXML::ALONG_COLUMN))) {
-        QString msg = (getFileNameNoPath()
-                       + " rows="
+        QString msg = ("Row to Columns do not match: rows="
                        + QString::number(trajXML.getDimensionLength(CiftiXML::ALONG_COLUMN))
                        + " cols="
                        + QString::number(trajXML.getDimensionLength(CiftiXML::ALONG_ROW))
@@ -936,8 +1022,90 @@ CiftiFiberTrajectoryFile::validateAssignedMatchingFiberOrientationFile() throw (
                        + QString::number(orientXML->getDimensionLength(CiftiXML::ALONG_COLUMN))
                        + " cols="
                        + QString::number(orientXML->getDimensionLength(CiftiXML::ALONG_ROW)));
-        throw DataFileException("Row to Columns do not match: "
-                                + msg);
+        throw DataFileException(getFileName(),
+                                msg);
+    }
+}
+
+/**
+ * Get the brainordinate from the given row.
+ *
+ * @param rowIndex
+ *     Index of the row.
+ * @param surfaceStructureOut
+ *     Will contain structure of surface if row is a surface node.
+ * @param surfaceNodeIndexOut
+ *     Will contain index of surface node if row is a surface node.
+ * @param surfaceNumberOfNodesOut
+ *     Will contain surfaces number of nodes if row is a surface node.
+ * @param surfaceNodeValidOut
+ *     Will be true upon exit if the row corresponded to a surface node.
+ * @param voxelIJKOut
+ *     Will contain the voxel's IJK indices if row is a surface node.
+ * @param voxelXYZOut
+ *     Will contain the voxel's XYZ coordinate if row is a surface node.
+ * @param voxelValidOut
+ *     Will be true upon exit if the row corresponded to a surface node.
+ * @throw DataFileException
+ *     If the rows are not for brainordinates or the row index is invalid.
+ */
+void
+CiftiFiberTrajectoryFile::getBrainordinateFromRowIndex(const int64_t rowIndex,
+                                                    StructureEnum::Enum& surfaceStructureOut,
+                                                    int32_t& surfaceNodeIndexOut,
+                                                    int32_t& surfaceNumberOfNodesOut,
+                                                    bool& surfaceNodeValidOut,
+                                                    int64_t voxelIJKOut[3],
+                                                    float voxelXYZOut[3],
+                                                    bool& voxelValidOut) const
+{
+    surfaceNodeValidOut = false;
+    voxelValidOut       = false;
+    
+    if (m_sparseFile == NULL) {
+        return;
+    }
+    
+    const CiftiXML& ciftiXML = m_sparseFile->getCiftiXML();
+    
+    if (ciftiXML.getMappingType(CiftiXML::ALONG_COLUMN) != CiftiMappingType::BRAIN_MODELS) {
+        throw DataFileException(getFileName(),
+                                "File does not have brainordinate data for rows.");
+        return;
+    }
+    
+    const CiftiBrainModelsMap& brainMap = ciftiXML.getBrainModelsMap(CiftiXML::ALONG_COLUMN);
+
+    const int numRows = ciftiXML.getDimensionLength(CiftiXML::ALONG_COLUMN);
+
+    if ((rowIndex < 0)
+        || (rowIndex >= numRows)) {
+        throw DataFileException(getFileName(),
+                                "Row index "
+                                + AString::number(rowIndex)
+                                + " is invalid.  Number of rows is "
+                                + AString::number(numRows));
+    }
+    
+    const CiftiBrainModelsMap::IndexInfo indexInfo = brainMap.getInfoForIndex(rowIndex);
+    
+    switch (indexInfo.m_type) {
+        case CiftiBrainModelsMap::SURFACE:
+            surfaceStructureOut     = indexInfo.m_structure;
+            surfaceNodeIndexOut     = indexInfo.m_surfaceNode;
+            surfaceNumberOfNodesOut = brainMap.getSurfaceNumberOfNodes(surfaceStructureOut);
+            surfaceNodeValidOut     = true;
+            break;
+        case CiftiBrainModelsMap::VOXELS:
+        {
+            const VolumeSpace& colSpace = brainMap.getVolumeSpace();
+            voxelIJKOut[0] = indexInfo.m_ijk[0];
+            voxelIJKOut[1] = indexInfo.m_ijk[1];
+            voxelIJKOut[2] = indexInfo.m_ijk[2];
+            colSpace.indexToSpace(voxelIJKOut, voxelXYZOut);
+            voxelValidOut = true;
+        }
+            break;
     }
 }
 
@@ -955,7 +1123,7 @@ CiftiFiberTrajectoryFile::validateAssignedMatchingFiberOrientationFile() throw (
 int64_t
 CiftiFiberTrajectoryFile::loadDataForSurfaceNode(const StructureEnum::Enum structure,
                                                  const int32_t surfaceNumberOfNodes,
-                                                 const int32_t nodeIndex) throw (DataFileException)
+                                                 const int32_t nodeIndex)
 {
     switch (m_fiberTrajectoryFileType) {
         case FIBER_TRAJECTORY_LOAD_BY_BRAINORDINATE:
@@ -1051,7 +1219,8 @@ CiftiFiberTrajectoryFile::loadDataForSurfaceNode(const StructureEnum::Enum struc
         m_connectivityDataLoaded->setSurfaceNodeLoading(structure,
                                                         surfaceNumberOfNodes,
                                                         nodeIndex,
-                                                        rowIndex);
+                                                        rowIndex,
+                                                        -1);
     }
     else {
         m_connectivityDataLoaded->reset();
@@ -1085,7 +1254,7 @@ CiftiFiberTrajectoryFile::finishFiberOrientationTrajectoriesAveraging()
 void
 CiftiFiberTrajectoryFile::loadDataAverageForSurfaceNodes(const StructureEnum::Enum structure,
                                                          const int32_t surfaceNumberOfNodes,
-                                                         const std::vector<int32_t>& nodeIndices) throw (DataFileException)
+                                                         const std::vector<int32_t>& nodeIndices)
 {
     switch (m_fiberTrajectoryFileType) {
         case FIBER_TRAJECTORY_LOAD_BY_BRAINORDINATE:
@@ -1166,7 +1335,7 @@ CiftiFiberTrajectoryFile::loadDataAverageForSurfaceNodes(const StructureEnum::En
  *    DataFileException if there is an error.
  */
 bool
-CiftiFiberTrajectoryFile::loadRowsForAveraging(const std::vector<int64_t>& rowIndices) throw (DataFileException)
+CiftiFiberTrajectoryFile::loadRowsForAveraging(const std::vector<int64_t>& rowIndices)
 {
     
     const CiftiXML& trajXML = m_sparseFile->getCiftiXML();
@@ -1242,7 +1411,7 @@ CiftiFiberTrajectoryFile::loadRowsForAveraging(const std::vector<int64_t>& rowIn
  *    DataFileException if there is an error.
  */
 int64_t
-CiftiFiberTrajectoryFile::loadMapDataForVoxelAtCoordinate(const float xyz[3]) throw (DataFileException)
+CiftiFiberTrajectoryFile::loadMapDataForVoxelAtCoordinate(const float xyz[3])
 {
     m_connectivityDataLoaded->reset();
     
@@ -1315,7 +1484,8 @@ CiftiFiberTrajectoryFile::loadMapDataForVoxelAtCoordinate(const float xyz[3]) th
         m_loadedDataDescriptionForFileCopy = ("Row_"
                                               + AString::number(rowIndex));
         m_connectivityDataLoaded->setVolumeXYZLoading(xyz,
-                                                      rowIndex);
+                                                      rowIndex,
+                                                      -1);
     }
     else {
         return -1;
@@ -1336,7 +1506,7 @@ CiftiFiberTrajectoryFile::loadMapDataForVoxelAtCoordinate(const float xyz[3]) th
  */
 void
 CiftiFiberTrajectoryFile::loadMapAverageDataForVoxelIndices(const int64_t volumeDimensionIJK[3],
-                                                            const std::vector<VoxelIJK>& voxelIndices) throw (DataFileException)
+                                                            const std::vector<VoxelIJK>& voxelIndices)
 {
     switch (m_fiberTrajectoryFileType) {
         case FIBER_TRAJECTORY_LOAD_BY_BRAINORDINATE:
@@ -1393,7 +1563,7 @@ CiftiFiberTrajectoryFile::loadMapAverageDataForVoxelIndices(const int64_t volume
  *    If an error occurs.
  */
 void
-CiftiFiberTrajectoryFile::loadDataForRowIndex(const int64_t rowIndex) throw (DataFileException)
+CiftiFiberTrajectoryFile::loadDataForRowIndex(const int64_t rowIndex)
 {
     clearLoadedFiberOrientations();
     
@@ -1433,10 +1603,12 @@ CiftiFiberTrajectoryFile::loadDataForRowIndex(const int64_t rowIndex) throw (Dat
         m_loadedDataDescriptionForFileCopy = ("Row_"
                                               + AString::number(rowIndex));
         
-        m_connectivityDataLoaded->setRowLoading(rowIndex);
+        m_connectivityDataLoaded->setRowColumnLoading(rowIndex,
+                                                      -1);
     }
     else {
-        throw DataFileException("Row "
+        throw DataFileException(getFileName(),
+                                "Row "
                                 + AString::number(rowIndex)
                                 + " is invalid or contains no data.");
     }
@@ -1451,7 +1623,7 @@ CiftiFiberTrajectoryFile::loadDataForRowIndex(const int64_t rowIndex) throw (Dat
  *    If there was an error restoring the data.
  */
 void
-CiftiFiberTrajectoryFile::finishRestorationOfScene() throw (DataFileException)
+CiftiFiberTrajectoryFile::finishRestorationOfScene()
 {
     /*
      * Loading of data may be disabled in the scene
@@ -1467,8 +1639,19 @@ CiftiFiberTrajectoryFile::finishRestorationOfScene() throw (DataFileException)
         case ConnectivityDataLoaded::MODE_ROW:
         {
             int64_t rowIndex;
-            m_connectivityDataLoaded->getRowLoading(rowIndex);
+            int64_t columnIndex;
+            m_connectivityDataLoaded->getRowColumnLoading(rowIndex,
+                                                          columnIndex);
             loadDataForRowIndex(rowIndex);
+        }
+            break;
+        case ConnectivityDataLoaded::MODE_COLUMN:
+        {
+            /*
+             * Never load by column !!!
+             */
+            CaretAssertMessage(0,
+                               "Fiber Trajectory never loads by column.");
         }
             break;
         case ConnectivityDataLoaded::MODE_SURFACE_NODE:
@@ -1477,10 +1660,12 @@ CiftiFiberTrajectoryFile::finishRestorationOfScene() throw (DataFileException)
             int32_t surfaceNumberOfNodes;
             int32_t surfaceNodeIndex;
             int64_t rowIndex;
+            int64_t columnIndex;
             m_connectivityDataLoaded->getSurfaceNodeLoading(structure,
                                                             surfaceNumberOfNodes,
                                                             surfaceNodeIndex,
-                                                            rowIndex);
+                                                            rowIndex,
+                                                            columnIndex);
             loadDataForSurfaceNode(structure,
                                    surfaceNumberOfNodes,
                                    surfaceNodeIndex);
@@ -1503,9 +1688,11 @@ CiftiFiberTrajectoryFile::finishRestorationOfScene() throw (DataFileException)
         {
             float volumeXYZ[3];
             int64_t rowIndex;
+            int64_t columnIndex;
             m_connectivityDataLoaded->getVolumeXYZLoading(volumeXYZ,
-                                                          rowIndex);
-            CaretAssert(0); // NEED TO IMPLEMENT
+                                                          rowIndex,
+                                                          columnIndex);
+            loadMapDataForVoxelAtCoordinate(volumeXYZ);
         }
             break;
         case ConnectivityDataLoaded::MODE_VOXEL_IJK_AVERAGE:
@@ -1514,7 +1701,8 @@ CiftiFiberTrajectoryFile::finishRestorationOfScene() throw (DataFileException)
             std::vector<VoxelIJK> voxelIndicesIJK;
             m_connectivityDataLoaded->getVolumeAverageVoxelLoading(volumeDimensionsIJK,
                                                                    voxelIndicesIJK);
-            CaretAssert(0); // NEED TO IMPLEMENT
+            loadMapAverageDataForVoxelIndices(volumeDimensionsIJK,
+                                              voxelIndicesIJK);
         }
             break;
     }

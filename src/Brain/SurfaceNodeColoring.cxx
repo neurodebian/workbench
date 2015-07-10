@@ -24,16 +24,19 @@
 #undef __SURFACE_NODE_COLORING_DECLARE__
 
 #include "Brain.h"
+#include "BrainordinateRegionOfInterest.h"
 #include "BrainStructure.h"
 #include "BrowserTabContent.h"
 #include "EventBrowserTabGet.h"
 #include "CaretAssert.h"
 #include "CaretLogger.h"
+#include "CaretPreferences.h"
 #include "CiftiBrainordinateDataSeriesFile.h"
 #include "CiftiBrainordinateLabelFile.h"
 #include "CiftiBrainordinateScalarFile.h"
 #include "CiftiConnectivityMatrixParcelFile.h"
 #include "CiftiMappableConnectivityMatrixDataFile.h"
+#include "CiftiParcelLabelFile.h"
 #include "CiftiParcelScalarFile.h"
 #include "CiftiParcelSeriesFile.h"
 #include "DisplayPropertiesSurface.h"
@@ -45,6 +48,7 @@
 #include "GiftiLabelTable.h"
 #include "GroupAndNameHierarchyGroup.h"
 #include "LabelFile.h"
+#include "LabelDrawingProperties.h"
 #include "MetricFile.h"
 #include "ModelSurface.h"
 #include "ModelSurfaceMontage.h"
@@ -58,6 +62,7 @@
 #include "PaletteFile.h"
 #include "PaletteScalarAndColor.h"
 #include "RgbaFile.h"
+#include "SessionManager.h"
 #include "Surface.h"
 #include "TopologyHelper.h"
 
@@ -228,6 +233,57 @@ SurfaceNodeColoring::colorSurfaceNodes(Model* model,
 }
 
 /**
+ * Show brainordinate region of interest highlighting on the surface.
+ *
+ * @param brain
+ *     The brain.
+ * @param surface
+ *     Surface on which highlighting is displayed.
+ * @param rgbaNodeColors
+ *     Node coloring that is updated with highlighting.
+ */
+void
+SurfaceNodeColoring::showBrainordinateHighlightRegionOfInterest(const Brain* brain,
+                                                                const Surface* surface,
+                                                                float* rgbaNodeColors)
+{
+    CaretPreferences* prefs = SessionManager::get()->getCaretPreferences();
+    uint8_t foregroundColorByte[4];
+    prefs->getColorForegroundSurfaceView(foregroundColorByte);
+    const float foregroundColor[4] = {
+        foregroundColorByte[0],
+        foregroundColorByte[1],
+        foregroundColorByte[2],
+        1.0
+    };
+    
+    const BrainordinateRegionOfInterest* roi = brain->getBrainordinateHighlightRegionOfInterest();
+    CaretAssert(roi);
+    
+    if (roi->isBrainordinateHighlightingEnabled()) {
+        const StructureEnum::Enum structure = surface->getStructure();
+        const int64_t surfaceNumberOfNodes = surface->getNumberOfNodes();
+        
+        if (roi->hasNodesForSurfaceStructure(structure, surfaceNumberOfNodes)) {
+            const std::vector<int64_t>& nodeIndices = roi->getNodesForSurfaceStructure(structure,
+                                                                                       surfaceNumberOfNodes);
+            for (std::vector<int64_t>::const_iterator nodeIter = nodeIndices.begin();
+                 nodeIter != nodeIndices.end();
+                 nodeIter++) {
+                const int64_t nodeIndex = *nodeIter;
+                const int64_t rgbaIndex = nodeIndex * 4;
+                CaretAssertArrayIndex(rgbaNodeColors, surfaceNumberOfNodes*4 , rgbaIndex + 3);
+                
+                rgbaNodeColors[rgbaIndex]   = foregroundColor[0];
+                rgbaNodeColors[rgbaIndex+1] = foregroundColor[1];
+                rgbaNodeColors[rgbaIndex+2] = foregroundColor[2];
+                rgbaNodeColors[rgbaIndex+3] = foregroundColor[3];
+            }
+        }
+    }
+}
+
+/**
  * Assign color components to surface nodes. 
  *
  * @param surface
@@ -271,12 +327,10 @@ SurfaceNodeColoring::colorSurfaceNodes(const DisplayPropertiesLabels* displayPro
         if (overlay->isEnabled()) {            
             std::vector<CaretMappableDataFile*> mapFiles;
             CaretMappableDataFile* selectedMapFile;
-            //AString selectedMapUniqueID;
             int32_t selectedMapIndex;
             
             overlay->getSelectionData(mapFiles,
                                       selectedMapFile,
-                                      //selectedMapUniqueID,
                                       selectedMapIndex);
             
             DataFileTypeEnum::Enum mapDataFileType = DataFileTypeEnum::UNKNOWN;
@@ -294,18 +348,17 @@ SurfaceNodeColoring::colorSurfaceNodes(const DisplayPropertiesLabels* displayPro
                     isColoringValid = assignCiftiMappableConnectivityMatrixColoring(brainStructure,
                                                                                     cmf,
                                                                                     selectedMapIndex,
-                                                                                    //selectedMapUniqueID,
                                                                                     numNodes,
                                                                                     overlayRGBV);
                 }
                     break;
                 case DataFileTypeEnum::CONNECTIVITY_DENSE_LABEL:
-                    isColoringValid = this->assignCiftiLabelColoring(displayPropertiesLabels,
+                    isColoringValid = this->assignCiftiDenseLabelColoring(displayPropertiesLabels,
                                                                      browserTabIndex,
                                                                      brainStructure,
+                                                                          surface,
                                                                       dynamic_cast<CiftiBrainordinateLabelFile*>(selectedMapFile),
                                                                      selectedMapIndex,
-                                                                     //selectedMapUniqueID,
                                                                       numNodes,
                                                                       overlayRGBV);
                     break;
@@ -315,7 +368,6 @@ SurfaceNodeColoring::colorSurfaceNodes(const DisplayPropertiesLabels* displayPro
                     isColoringValid = assignCiftiMappableConnectivityMatrixColoring(brainStructure,
                                                                             cmf,
                                                                                     selectedMapIndex,
-                                                                                    //selectedMapUniqueID,
                                                                             numNodes,
                                                                             overlayRGBV);
                 }
@@ -324,7 +376,6 @@ SurfaceNodeColoring::colorSurfaceNodes(const DisplayPropertiesLabels* displayPro
                     isColoringValid = this->assignCiftiScalarColoring(brainStructure,
                                                                  dynamic_cast<CiftiBrainordinateScalarFile*>(selectedMapFile),
                                                                       selectedMapIndex,
-                                                                      //selectedMapUniqueID,
                                                                  numNodes,
                                                                  overlayRGBV);
                     break;
@@ -332,7 +383,6 @@ SurfaceNodeColoring::colorSurfaceNodes(const DisplayPropertiesLabels* displayPro
                     isColoringValid = this->assignCiftiDataSeriesColoring(brainStructure,
                                                                       dynamic_cast<CiftiBrainordinateDataSeriesFile*>(selectedMapFile),
                                                                           selectedMapIndex,
-                                                                          //selectedMapUniqueID,
                                                                       numNodes,
                                                                       overlayRGBV);
                     break;
@@ -346,7 +396,6 @@ SurfaceNodeColoring::colorSurfaceNodes(const DisplayPropertiesLabels* displayPro
                     isColoringValid = assignCiftiMappableConnectivityMatrixColoring(brainStructure,
                                                                             cmf,
                                                                                     selectedMapIndex,
-                                                                                    //selectedMapUniqueID,
                                                                             numNodes,
                                                                             overlayRGBV);
                 }
@@ -357,16 +406,27 @@ SurfaceNodeColoring::colorSurfaceNodes(const DisplayPropertiesLabels* displayPro
                     isColoringValid = assignCiftiMappableConnectivityMatrixColoring(brainStructure,
                                                                             cmf,
                                                                                     selectedMapIndex,
-                                                                                    //selectedMapUniqueID,
                                                                             numNodes,
                                                                             overlayRGBV);
+                }
+                    break;
+                case DataFileTypeEnum::CONNECTIVITY_PARCEL_LABEL:
+                {
+                    CiftiParcelLabelFile* cplf = dynamic_cast<CiftiParcelLabelFile*>(selectedMapFile);
+                    isColoringValid = assignCiftiParcelLabelColoring(displayPropertiesLabels,
+                                                   browserTabIndex,
+                                                   brainStructure,
+                                                                     surface,
+                                                   cplf,
+                                                   selectedMapIndex,
+                                                   numNodes,
+                                                   overlayRGBV);
                 }
                     break;
                 case DataFileTypeEnum::CONNECTIVITY_PARCEL_SCALAR:
                     isColoringValid = this->assignCiftiParcelScalarColoring(brainStructure,
                                                                             dynamic_cast<CiftiParcelScalarFile*>(selectedMapFile),
                                                                             selectedMapIndex,
-                                                                            //selectedMapUniqueID,
                                                                             numNodes,
                                                                             overlayRGBV);
                     break;
@@ -374,11 +434,14 @@ SurfaceNodeColoring::colorSurfaceNodes(const DisplayPropertiesLabels* displayPro
                     isColoringValid = this->assignCiftiParcelSeriesColoring(brainStructure,
                                                                             dynamic_cast<CiftiParcelSeriesFile*>(selectedMapFile),
                                                                             selectedMapIndex,
-                                                                            //selectedMapUniqueID,
                                                                             numNodes,
                                                                             overlayRGBV);
                     break;
+                case DataFileTypeEnum::CONNECTIVITY_SCALAR_DATA_SERIES:
+                    break;
                 case DataFileTypeEnum::FOCI:
+                    break;
+                case DataFileTypeEnum::IMAGE:
                     break;
                 case DataFileTypeEnum::LABEL:
                     isColoringValid = this->assignLabelColoring(displayPropertiesLabels,
@@ -387,7 +450,6 @@ SurfaceNodeColoring::colorSurfaceNodes(const DisplayPropertiesLabels* displayPro
                                                                 surface,
                                                                 dynamic_cast<LabelFile*>(selectedMapFile),
                                                                 selectedMapIndex,
-                                                                //selectedMapUniqueID,
                                                                 numNodes, 
                                                                 overlayRGBV);
                     break;
@@ -395,7 +457,6 @@ SurfaceNodeColoring::colorSurfaceNodes(const DisplayPropertiesLabels* displayPro
                     isColoringValid = this->assignMetricColoring(brainStructure, 
                                                                  dynamic_cast<MetricFile*>(selectedMapFile),
                                                                  selectedMapIndex,
-                                                                 //selectedMapUniqueID,
                                                                  numNodes, 
                                                                  overlayRGBV);
                     break;
@@ -405,7 +466,6 @@ SurfaceNodeColoring::colorSurfaceNodes(const DisplayPropertiesLabels* displayPro
                     isColoringValid = this->assignRgbaColoring(brainStructure, 
                                                                dynamic_cast<RgbaFile*>(selectedMapFile),
                                                                selectedMapIndex,
-                                                               //selectedMapUniqueID,
                                                                numNodes, 
                                                                overlayRGBV);
                     break;
@@ -431,14 +491,6 @@ SurfaceNodeColoring::colorSurfaceNodes(const DisplayPropertiesLabels* displayPro
                     if (valid > 0.0 ) {
                         if (opacity < 1.0) {
                             if (firstOverlayFlag) {
-//                                /*
-//                                 * Just replace coloring
-//                                 * First overlay opacity is used for overall
-//                                 * surface opacity.
-//                                 */
-//                                rgbaNodeColors[i4] = overlayRGBV[i4];
-//                                rgbaNodeColors[i4+1] = overlayRGBV[i4+1];
-//                                rgbaNodeColors[i4+2] = overlayRGBV[i4+2];
                                 /*
                                  * When first overlay, there is nothing to 
                                  * blend with
@@ -487,6 +539,10 @@ SurfaceNodeColoring::colorSurfaceNodes(const DisplayPropertiesLabels* displayPro
         }
     }
     
+    showBrainordinateHighlightRegionOfInterest(brain,
+                                               surface,
+                                               rgbaNodeColors);
+    
     delete[] overlayRGBV;
 }
 
@@ -511,11 +567,10 @@ SurfaceNodeColoring::colorSurfaceNodes(const DisplayPropertiesLabels* displayPro
 bool 
 SurfaceNodeColoring::assignLabelColoring(const DisplayPropertiesLabels* displayPropertiesLabels,
                                          const int32_t browserTabIndex,
-                                         const BrainStructure* brainStructure,
+                                         const BrainStructure* /*brainStructure*/,
                                          const Surface* surface,
                                          const LabelFile* labelFile,
                                          const int32_t displayColumn,
-                                         //const AString& labelMapUniqueID,
                                          const int32_t numberOfNodes,
                                          float* rgbv)
 {
@@ -528,35 +583,11 @@ SurfaceNodeColoring::assignLabelColoring(const DisplayPropertiesLabels* displayP
         return false;
     }
     
-//    std::vector<LabelFile*> allLabelFiles;
-//    brainStructure->getLabelFiles(allLabelFiles);
-//    
-//    int32_t displayColumn = -1;
-//    for (std::vector<LabelFile*>::iterator iter = allLabelFiles.begin();
-//         iter != allLabelFiles.end();
-//         iter++) {
-//        LabelFile* lf = *iter;
-//        if (lf == labelFile) {
-//            displayColumn = lf->getMapIndexFromUniqueID(labelMapUniqueID);
-//            if (displayColumn >= 0) {
-//                break;
-//            }
-//        }
-//    }
+    const LabelDrawingProperties* props = labelFile->getLabelDrawingProperties();
+    LabelDrawingTypeEnum::Enum labelDrawingType = props->getDrawingType();
+    CaretColorEnum::Enum outlineColor = props->getOutlineColor();
     
-    const DisplayPropertiesLabels* dpl = brainStructure->getBrain()->getDisplayPropertiesLabels();
-    
-    DisplayGroupEnum::Enum displayGroup = dpl->getDisplayGroupForTab(browserTabIndex);
-    LabelDrawingTypeEnum::Enum labelDrawingType = LabelDrawingTypeEnum::DRAW_FILLED;
-    CaretColorEnum::Enum outlineColor = CaretColorEnum::BLACK;
-    if (displayPropertiesLabels != NULL) {
-        displayGroup = displayPropertiesLabels->getDisplayGroupForTab(browserTabIndex);
-        labelDrawingType = displayPropertiesLabels->getDrawingType(displayGroup,
-                                           browserTabIndex);
-        outlineColor = displayPropertiesLabels->getOutlineColor(displayGroup,
-                                                                browserTabIndex);
-    }
-    
+    const DisplayGroupEnum::Enum displayGroup = displayPropertiesLabels->getDisplayGroupForTab(browserTabIndex);
     
     const GroupAndNameHierarchyModel* classNameModel = labelFile->getGroupAndNameHierarchyModel();
     if (classNameModel->isSelected(displayGroup, browserTabIndex) == false) {
@@ -575,6 +606,7 @@ SurfaceNodeColoring::assignLabelColoring(const DisplayPropertiesLabels* displayP
     
     const GiftiLabelTable* labelTable = labelFile->getLabelTable();
     
+    CaretAssert(surface);
     CaretPointer<TopologyHelper> topologyHelper = surface->getTopologyHelper();
     
     /*
@@ -584,6 +616,8 @@ SurfaceNodeColoring::assignLabelColoring(const DisplayPropertiesLabels* displayP
     for (int32_t i = 0; i < numberOfNodes; i++) {
         labelKeys.push_back(labelFile->getLabelKey(i, displayColumn));
     }
+    
+    const bool drawMedialWallFilledFlag = props->isDrawMedialWallFilled();
     assignLabelTableColors(labelTable,
                            labelDrawingType,
                            outlineColor,
@@ -591,97 +625,8 @@ SurfaceNodeColoring::assignLabelColoring(const DisplayPropertiesLabels* displayP
                            displayGroup,
                            browserTabIndex,
                            labelKeys,
+                           drawMedialWallFilledFlag,
                            rgbv);
-    
-    
-    
-//    float fillRGBA[4];
-//    float outlineRGBA[4];
-//    for (int32_t i = 0; i < numberOfNodes; i++) {
-//        const int32_t labelKey= labelFile->getLabelKey(i, displayColumn);
-//        const GiftiLabel* label = labelTable->getLabel(labelKey);
-//        if (label == NULL) {
-//            continue;
-//        }
-//        
-//        const GroupAndNameHierarchyItem* nameItem = label->getGroupNameSelectionItem();
-//        if (nameItem != NULL) {
-//            if (nameItem->isSelected(displayGroup, browserTabIndex) == false) {
-//                continue;
-//            }
-//        }
-//        
-//        label->getColor(fillRGBA);
-//        label->getColor(outlineRGBA);
-//        fillRGBA[3]    = 1.0;
-//        outlineRGBA[3] = 1.0;
-//        
-//        switch (labelDrawingType) {
-//            case LabelDrawingTypeEnum::DRAW_FILLED_LABEL_COLOR:
-//                break;
-//            case LabelDrawingTypeEnum::DRAW_FILLED_BLACK_OUTLINE:
-//                outlineRGBA[0] = 0.0;
-//                outlineRGBA[1] = 0.0;
-//                outlineRGBA[2] = 0.0;
-//                break;
-//            case LabelDrawingTypeEnum::DRAW_FILLED_WHITE_OUTLINE:
-//                outlineRGBA[0] = 1.0;
-//                outlineRGBA[1] = 1.0;
-//                outlineRGBA[2] = 1.0;
-//                break;
-//            case LabelDrawingTypeEnum::DRAW_OUTLINE_LABEL_COLOR:
-//                fillRGBA[3] = 0.0;
-//                break;
-//            case LabelDrawingTypeEnum::DRAW_OUTLINE_BLACK:
-//                fillRGBA[3] = 0.0;
-//                outlineRGBA[0] = 0.0;
-//                outlineRGBA[1] = 0.0;
-//                outlineRGBA[2] = 0.0;
-//                break;
-//            case LabelDrawingTypeEnum::DRAW_OUTLINE_WHITE:
-//                fillRGBA[3] = 0.0;
-//                outlineRGBA[0] = 1.0;
-//                outlineRGBA[1] = 1.0;
-//                outlineRGBA[2] = 1.0;
-//                break;
-//        }
-//        
-//        
-//        
-//        /*
-//         * If a node is the same color as all of its neighbors,
-//         * use the fill color.  Otherwise, use the outline color.
-//         */
-//        bool useOutlineColor = false;
-//        int32_t numNeighbors = 0;
-//        const int32_t* allNeighbors = topologyHelper->getNodeNeighbors(i, numNeighbors);
-//        for (int32_t n = 0; n < numNeighbors; n++) {
-//            const int32_t neighbor = allNeighbors[n];
-//            if (labelKey != labelFile->getLabelKey(neighbor, displayColumn)) {
-//                useOutlineColor = true;
-//                break;
-//            }
-//        }
-//        
-//        if (useOutlineColor) {
-//            if (outlineRGBA[3] > 0.0) {
-//                const int32_t i4 = i * 4;
-//                rgbv[i4]   = outlineRGBA[0];
-//                rgbv[i4+1] = outlineRGBA[1];
-//                rgbv[i4+2] = outlineRGBA[2];
-//                rgbv[i4+3] = 1.0;
-//            }
-//        }
-//        else {
-//            if (fillRGBA[3] > 0.0) {
-//                const int32_t i4 = i * 4;
-//                rgbv[i4]   = fillRGBA[0];
-//                rgbv[i4+1] = fillRGBA[1];
-//                rgbv[i4+2] = fillRGBA[2];
-//                rgbv[i4+3] = 1.0;
-//            }
-//        }
-//    }
 
     return true;
 }
@@ -703,6 +648,10 @@ SurfaceNodeColoring::assignLabelColoring(const DisplayPropertiesLabels* displayP
  *    Index of browser tab.
  * @param labelIndices
  *    Indices of labels for each node.
+ * @param medialWallLabelKey
+ *    Index of the medial wall label key
+ * @param drawMedialWallFilledFlag
+ *    True if medial wall is always filled
  * @param rgbv
  *    RGB coloring. (4 per node).
  *
@@ -715,6 +664,7 @@ SurfaceNodeColoring::assignLabelTableColors(const GiftiLabelTable* labelTable,
                                             const DisplayGroupEnum::Enum displayGroup,
                                             const int32_t browserTabIndex,
                                             const std::vector<float>& labelIndices,
+                                            const bool drawMedialWallFilledFlag,
                                             float* rgbv)
 {
     const int32_t numberOfIndices = static_cast<int32_t>(labelIndices.size());
@@ -775,33 +725,46 @@ SurfaceNodeColoring::assignLabelTableColors(const GiftiLabelTable* labelTable,
             }
         }
         
-        switch (labelDrawingType) {
-            case LabelDrawingTypeEnum::DRAW_FILLED:
-                break;
-            case LabelDrawingTypeEnum::DRAW_FILLED_WITH_OUTLINE_COLOR:
-                if (isLabelBoundaryNode) {
-                    nodeRGBA[0] = outlineRGBA[0];
-                    nodeRGBA[1] = outlineRGBA[1];
-                    nodeRGBA[2] = outlineRGBA[2];
-                    nodeRGBA[3] = outlineRGBA[3];
-                }
-                break;
-            case LabelDrawingTypeEnum::DRAW_OUTLINE_COLOR:
-                if (isLabelBoundaryNode) {
-                    nodeRGBA[0] = outlineRGBA[0];
-                    nodeRGBA[1] = outlineRGBA[1];
-                    nodeRGBA[2] = outlineRGBA[2];
-                    nodeRGBA[3] = outlineRGBA[3];
-                }
-                else {
-                    nodeRGBA[3] = 0.0;
-                }
-                break;
-            case LabelDrawingTypeEnum::DRAW_OUTLINE_LABEL_COLOR:
-                if ( ! isLabelBoundaryNode) {
-                    nodeRGBA[3] = 0.0;
-                }
-                break;
+        /*
+         * User may request that medial wall is always filled
+         * and never receives outlining
+         */
+        bool doOutlineFlag = true;
+        if (drawMedialWallFilledFlag) {
+            if (label->isMedialWallName()) {
+                doOutlineFlag = false;
+            }
+        }
+        
+        if (doOutlineFlag) {
+            switch (labelDrawingType) {
+                case LabelDrawingTypeEnum::DRAW_FILLED:
+                    break;
+                case LabelDrawingTypeEnum::DRAW_FILLED_WITH_OUTLINE_COLOR:
+                    if (isLabelBoundaryNode) {
+                        nodeRGBA[0] = outlineRGBA[0];
+                        nodeRGBA[1] = outlineRGBA[1];
+                        nodeRGBA[2] = outlineRGBA[2];
+                        nodeRGBA[3] = outlineRGBA[3];
+                    }
+                    break;
+                case LabelDrawingTypeEnum::DRAW_OUTLINE_COLOR:
+                    if (isLabelBoundaryNode) {
+                        nodeRGBA[0] = outlineRGBA[0];
+                        nodeRGBA[1] = outlineRGBA[1];
+                        nodeRGBA[2] = outlineRGBA[2];
+                        nodeRGBA[3] = outlineRGBA[3];
+                    }
+                    else {
+                        nodeRGBA[3] = 0.0;
+                    }
+                    break;
+                case LabelDrawingTypeEnum::DRAW_OUTLINE_LABEL_COLOR:
+                    if ( ! isLabelBoundaryNode) {
+                        nodeRGBA[3] = 0.0;
+                    }
+                    break;
+            }
         }
         
         const int32_t i4 = i * 4;
@@ -834,26 +797,9 @@ bool
 SurfaceNodeColoring::assignMetricColoring(const BrainStructure* brainStructure,
                                           MetricFile* metricFile,
                                           const int32_t displayColumn,
-                                          //const AString& metricMapUniqueID,
                                           const int32_t numberOfNodes,
                                           float* rgbv)
 {
-//    std::vector<MetricFile*> allMetricFiles;
-//    brainStructure->getMetricFiles(allMetricFiles);
-//    
-//    int32_t displayColumn = -1;
-//    for (std::vector<MetricFile*>::iterator iter = allMetricFiles.begin();
-//         iter != allMetricFiles.end();
-//         iter++) {
-//        MetricFile* mf = *iter;
-//        if (mf == metricFile) {
-//            displayColumn = mf->getMapIndexFromUniqueID(metricMapUniqueID);
-//            if (displayColumn >= 0) {
-//                break;
-//            }
-//        }
-//    }
-    
     if (displayColumn < 0) {
         return false;
     }
@@ -880,18 +826,26 @@ SurfaceNodeColoring::assignMetricColoring(const BrainStructure* brainStructure,
     const float* metricDisplayData = metricFile->getValuePointerForColumn(displayColumn);
     const float* metricThresholdData = metricFile->getValuePointerForColumn(thresholdColumn);
     
-    const FastStatistics* fastStatistics = metricFile->getMapFastStatistics(displayColumn);
+    
+    FastStatistics* statistics = NULL;
+    switch (metricFile->getPaletteNormalizationMode()) {
+        case PaletteNormalizationModeEnum::NORMALIZATION_ALL_MAP_DATA:
+            statistics = const_cast<FastStatistics*>(metricFile->getFileFastStatistics());
+            break;
+        case PaletteNormalizationModeEnum::NORMALIZATION_SELECTED_MAP_DATA:
+            statistics = const_cast<FastStatistics*>(metricFile->getMapFastStatistics(displayColumn));
+            break;
+    }
+    CaretAssert(statistics);
+    
+    //const FastStatistics* statistics = metricFile->getMapFastStatistics(displayColumn);
     
     const Brain* brain = brainStructure->getBrain();
     const AString paletteName = paletteColorMapping->getSelectedPaletteName();
     const Palette* palette = brain->getPaletteFile()->getPaletteByName(paletteName);
-    if ((fastStatistics != NULL)
+    if ((statistics != NULL)
         && (palette != NULL)) {
-        
-        //std::vector<float> rgbaColorsVector(numberOfNodes * 4);
-        //float* rgbaColors = &rgbaColorsVector[0];
-        
-        NodeAndVoxelColoring::colorScalarsWithPalette(fastStatistics, 
+        NodeAndVoxelColoring::colorScalarsWithPalette(statistics, 
                                                       paletteColorMapping, 
                                                       palette, 
                                                       metricDisplayData, 
@@ -927,13 +881,11 @@ bool
 SurfaceNodeColoring::assignCiftiMappableConnectivityMatrixColoring(const BrainStructure* brainStructure,
                                                            CiftiMappableConnectivityMatrixDataFile* ciftiConnectivityMatrixFile,
                                                                    const int32_t mapIndex,
-                                                                   //const AString& selectedMapUniqueID,
                                                            const int32_t numberOfNodes,
                                                            float* rgbv)
 {
     CaretAssert(ciftiConnectivityMatrixFile);
     
-//    const int32_t mapIndex = ciftiConnectivityMatrixFile->getMapIndexFromUniqueID(selectedMapUniqueID);
     if (mapIndex < 0) {
         return false;
     }
@@ -945,13 +897,11 @@ SurfaceNodeColoring::assignCiftiMappableConnectivityMatrixColoring(const BrainSt
         rgbv[i*4+3] = 0.0;
     }
     
-    //    const PaletteColorMapping* paletteColorMapping = ciftiConnectivityMatrixFile->getMapPaletteColorMapping(mapIndex);
-    //    const AString paletteName = paletteColorMapping->getSelectedPaletteName();
-    //    const Palette* palette = brain->getPaletteFile()->getPaletteByName(paletteName);
-    
     const StructureEnum::Enum structure = brainStructure->getStructure();
     std::vector<float> dataValues(numberOfNodes);
-    ciftiConnectivityMatrixFile->getMapSurfaceNodeColoring(mapIndex,
+    
+    ciftiConnectivityMatrixFile->getMapSurfaceNodeColoring(brainStructure->getBrain()->getPaletteFile(),
+                                                           mapIndex,
                                                            structure,
                                                            rgbv,
                                                            &dataValues[0],
@@ -961,14 +911,8 @@ SurfaceNodeColoring::assignCiftiMappableConnectivityMatrixColoring(const BrainSt
 	
 	CiftiConnectivityMatrixParcelFile* parcelFile = dynamic_cast<CiftiConnectivityMatrixParcelFile*>(ciftiConnectivityMatrixFile);
     if (parcelFile != NULL) {
-        const Surface* surface = ((brainStructure->getNumberOfSurfaces() > 0)
-                                  ? brainStructure->getSurface(0)
-                                  : NULL);
-        CaretPointer<TopologyHelper> topologyHelper;
-        if (surface != NULL) {
-            topologyHelper = surface->getTopologyHelper();
-        }
-        
+        const Surface* surface = brainStructure->getPrimaryAnatomicalSurface();
+        CaretPointer<TopologyHelper> topologyHelper = surface->getTopologyHelper();
         
         std::set<int64_t> nodeSet;
         bool selectedParcelValid = false;
@@ -1045,7 +989,7 @@ SurfaceNodeColoring::assignCiftiMappableConnectivityMatrixColoring(const BrainSt
 }
 
 /**
- * Assign cifti label coloring to nodes
+ * Assign cifti dense label coloring to nodes
  * @param brainStructure
  *    The brain structure that contains the data files.
  * @param ciftiLabelFile
@@ -1063,12 +1007,12 @@ SurfaceNodeColoring::assignCiftiMappableConnectivityMatrixColoring(const BrainSt
  *    True if coloring is valid, else false.
  */
 bool
-SurfaceNodeColoring::assignCiftiLabelColoring(const DisplayPropertiesLabels* displayPropertiesLabels,
+SurfaceNodeColoring::assignCiftiDenseLabelColoring(const DisplayPropertiesLabels* displayPropertiesLabels,
                                               const int32_t browserTabIndex,
                                               const BrainStructure* brainStructure,
+                                                   const Surface* surface,
                                           CiftiBrainordinateLabelFile* ciftiLabelFile,
                                               const int32_t mapIndex,
-                                              //const AString& ciftiMapUniqueID,
                                           const int32_t numberOfNodes,
                                           float* rgbv)
 {
@@ -1081,28 +1025,14 @@ SurfaceNodeColoring::assignCiftiLabelColoring(const DisplayPropertiesLabels* dis
     std::vector<CiftiBrainordinateLabelFile*> allCiftiBrainordinateLabelFiles;
     brain->getConnectivityDenseLabelFiles(allCiftiBrainordinateLabelFiles);
     
-//    int32_t mapIndex = -1;
-//    for (std::vector<CiftiBrainordinateLabelFile*>::iterator iter = allCiftiBrainordinateLabelFiles.begin();
-//         iter != allCiftiBrainordinateLabelFiles.end();
-//         iter++) {
-//        CiftiBrainordinateLabelFile* csf = *iter;
-//        if (csf == ciftiLabelFile) {
-//            mapIndex = csf->getMapIndexFromUniqueID(ciftiMapUniqueID);
-//            if (mapIndex >= 0) {
-//                break;
-//            }
-//        }
-//    }
-    
     if (mapIndex < 0) {
         return false;
     }
     
     const DisplayGroupEnum::Enum displayGroup = displayPropertiesLabels->getDisplayGroupForTab(browserTabIndex);
-    const LabelDrawingTypeEnum::Enum labelDrawingType = displayPropertiesLabels->getDrawingType(displayGroup,
-                                                               browserTabIndex);
-    const CaretColorEnum::Enum outlineColor = displayPropertiesLabels->getOutlineColor(displayGroup,
-                                                                                       browserTabIndex);
+    const LabelDrawingProperties* props = ciftiLabelFile->getLabelDrawingProperties();
+    LabelDrawingTypeEnum::Enum labelDrawingType = props->getDrawingType();
+    CaretColorEnum::Enum outlineColor = props->getOutlineColor();
     
     /*
      * Invalidate all coloring.
@@ -1125,19 +1055,15 @@ SurfaceNodeColoring::assignCiftiLabelColoring(const DisplayPropertiesLabels* dis
      * Assigns colors for all nodes.
      */
     const StructureEnum::Enum structure = brainStructure->getStructure();
-    ciftiLabelFile->getMapSurfaceNodeColoring(mapIndex,
+    ciftiLabelFile->getMapSurfaceNodeColoring(brainStructure->getBrain()->getPaletteFile(),
+                                              mapIndex,
                                               structure,
                                               rgbv,
                                               &dataValues[0],
                                               numberOfNodes);
     
-    const Surface* surface = ((brainStructure->getNumberOfSurfaces() > 0)
-                              ? brainStructure->getSurface(0)
-                              : NULL);
-    CaretPointer<TopologyHelper> topologyHelper;
-    if (surface != NULL) {
-        topologyHelper = surface->getTopologyHelper();
-    }
+    CaretAssert(surface);
+    CaretPointer<TopologyHelper> topologyHelper = surface->getTopologyHelper();
 
     /*
      * All nodes are colored.  Remove coloring for nodes whose
@@ -1146,6 +1072,7 @@ SurfaceNodeColoring::assignCiftiLabelColoring(const DisplayPropertiesLabels* dis
     GiftiLabelTable* labelTable = ciftiLabelFile->getMapLabelTable(mapIndex);
     CaretAssert(labelTable);
     
+    const bool drawMedialWallFilledFlag = props->isDrawMedialWallFilled();
     assignLabelTableColors(labelTable,
                            labelDrawingType,
                            outlineColor,
@@ -1153,53 +1080,106 @@ SurfaceNodeColoring::assignCiftiLabelColoring(const DisplayPropertiesLabels* dis
                            displayGroup,
                            browserTabIndex,
                            dataValues,
+                           drawMedialWallFilledFlag,
                            rgbv);
     
-//    for (int32_t iNode = 0; iNode < numberOfNodes; iNode++) {
-//        const int32_t indexAlpha = (iNode * 4) + 3;
-//        if (rgbv[indexAlpha] > 0.0) {
-//            bool disableIt = false;
-//            
-//            const int32_t labelKey = static_cast<int32_t>(dataValues[iNode]);
-//            GiftiLabel* label = labelTable->getLabel(labelKey);
-//            if (label != NULL) {
-//                const GroupAndNameHierarchyItem* item = label->getGroupNameSelectionItem();
-//                if (item->isSelected(displayGroup,
-//                                     browserTabIndex) == false) {
-//                    disableIt = true;
-//                }
-//            }
-//            
-//            if (disableIt) {
-//                rgbv[indexAlpha] = 0.0;
-//            }
-//            else if (isOutlineMode) {
-//                /*
-//                 * In outline mode, only those nodes that are on the 'outside'
-//                 * are drawn so that the labels appear as outlines.
-//                 */
-//                if (topologyHelper != NULL) {
-//                    int32_t numberOfNeighbors = 0;
-//                    const int32_t* neighbors = topologyHelper->getNodeNeighbors(iNode,
-//                                                                                numberOfNeighbors);
-//                    bool insideFlag = true;
-//                    for (int32_t iNeigh = 0; iNeigh < numberOfNeighbors; iNeigh++) {
-//                        const int32_t ni = neighbors[iNeigh];
-//                        const int32_t neighborLabelKey = static_cast<int32_t>(dataValues[ni]);
-//                        if (labelKey != neighborLabelKey) {
-//                            insideFlag = false;
-//                            break;
-//                        }
-//                    }
-//                    
-//                    if (insideFlag) {
-//                        rgbv[indexAlpha] = 0.0;
-//                    }
-//                }
-//            }
-//        }
-//    }
+    return true;
+}
+
+/**
+ * Assign cifti parcel label coloring to nodes
+ * @param brainStructure
+ *    The brain structure that contains the data files.
+ * @param ciftiParcelLabelFile
+ *    Cifti Parcel Label file that is selected.
+ * @param mapIndex
+ *    Index of selected map.
+ * @param numberOfNodes
+ *    Number of nodes in surface.
+ * @param rgbv
+ *    Color components set by this method.
+ *    Red, green, blue, valid.  If the valid component is
+ *    zero, it indicates that the overlay did not assign
+ *    any coloring to the node.
+ * @return
+ *    True if coloring is valid, else false.
+ */
+bool
+SurfaceNodeColoring::assignCiftiParcelLabelColoring(const DisplayPropertiesLabels* displayPropertiesLabels,
+                                                   const int32_t browserTabIndex,
+                                                   const BrainStructure* brainStructure,
+                                                    const Surface* surface,
+                                                   CiftiParcelLabelFile* ciftiParcelLabelFile,
+                                                   const int32_t mapIndex,
+                                                   const int32_t numberOfNodes,
+                                                   float* rgbv)
+{
+    CaretAssert(displayPropertiesLabels);
+    CaretAssert(brainStructure);
+    CaretAssert(ciftiParcelLabelFile);
+    CaretAssert(rgbv);
     
+    Brain* brain = (Brain*)(brainStructure->getBrain());
+    std::vector<CiftiBrainordinateLabelFile*> allCiftiBrainordinateLabelFiles;
+    brain->getConnectivityDenseLabelFiles(allCiftiBrainordinateLabelFiles);
+    
+    if (mapIndex < 0) {
+        return false;
+    }
+    
+    const DisplayGroupEnum::Enum displayGroup = displayPropertiesLabels->getDisplayGroupForTab(browserTabIndex);
+    const LabelDrawingProperties* props = ciftiParcelLabelFile->getLabelDrawingProperties();
+    LabelDrawingTypeEnum::Enum labelDrawingType = props->getDrawingType();
+    CaretColorEnum::Enum outlineColor = props->getOutlineColor();
+    
+    /*
+     * Invalidate all coloring.
+     */
+    for (int32_t i = 0; i < numberOfNodes; i++) {
+        rgbv[i*4+3] = 0.0;
+    }
+    
+    /*
+     * Update coloring
+     */
+    if (ciftiParcelLabelFile->isMapColoringValid(mapIndex) == false) {
+        ciftiParcelLabelFile->updateScalarColoringForMap(mapIndex,
+                                                   brain->getPaletteFile());
+    }
+    
+    std::vector<float> dataValues(numberOfNodes);
+    
+    /*
+     * Assigns colors for all nodes.
+     */
+    const StructureEnum::Enum structure = brainStructure->getStructure();
+    ciftiParcelLabelFile->getMapSurfaceNodeColoring(brainStructure->getBrain()->getPaletteFile(),
+                                                    mapIndex,
+                                              structure,
+                                              rgbv,
+                                              &dataValues[0],
+                                              numberOfNodes);
+    
+    CaretAssert(surface);
+    CaretPointer<TopologyHelper> topologyHelper = surface->getTopologyHelper();
+    
+    /*
+     * All nodes are colored.  Remove coloring for nodes whose
+     * label is not selected.
+     */
+    GiftiLabelTable* labelTable = ciftiParcelLabelFile->getMapLabelTable(mapIndex);
+    CaretAssert(labelTable);
+    
+    const bool drawMedialWallFilledFlag = props->isDrawMedialWallFilled();
+    assignLabelTableColors(labelTable,
+                           labelDrawingType,
+                           outlineColor,
+                           topologyHelper,
+                           displayGroup,
+                           browserTabIndex,
+                           dataValues,
+                           drawMedialWallFilledFlag,
+                           rgbv);
     return true;
 }
 
@@ -1225,26 +1205,12 @@ bool
 SurfaceNodeColoring::assignCiftiScalarColoring(const BrainStructure* brainStructure,
                                                CiftiBrainordinateScalarFile* ciftiScalarFile,
                                                const int32_t mapIndex,
-                                               //const AString& ciftiMapUniqueID,
                                                const int32_t numberOfNodes,
                                                float* rgbv)
 {
     Brain* brain = (Brain*)(brainStructure->getBrain());
     std::vector<CiftiBrainordinateScalarFile*> allCiftiBrainordinateScalarFiles;
     brain->getConnectivityDenseScalarFiles(allCiftiBrainordinateScalarFiles);
-    
-//    int32_t mapIndex = -1;
-//    for (std::vector<CiftiBrainordinateScalarFile*>::iterator iter = allCiftiBrainordinateScalarFiles.begin();
-//         iter != allCiftiBrainordinateScalarFiles.end();
-//         iter++) {
-//        CiftiBrainordinateScalarFile* csf = *iter;
-//        if (csf == ciftiScalarFile) {
-//            mapIndex = csf->getMapIndexFromUniqueID(ciftiMapUniqueID);
-//            if (mapIndex >= 0) {
-//                break;
-//            }
-//        }
-//    }
     
     if (mapIndex < 0) {
         return false;
@@ -1267,7 +1233,8 @@ SurfaceNodeColoring::assignCiftiScalarColoring(const BrainStructure* brainStruct
     
     std::vector<float> dataValues(numberOfNodes);
     const StructureEnum::Enum structure = brainStructure->getStructure();
-    ciftiScalarFile->getMapSurfaceNodeColoring(mapIndex,
+    ciftiScalarFile->getMapSurfaceNodeColoring(brainStructure->getBrain()->getPaletteFile(),
+                                               mapIndex,
                                                structure,
                                                rgbv,
                                                &dataValues[0],
@@ -1297,26 +1264,12 @@ bool
 SurfaceNodeColoring::assignCiftiParcelScalarColoring(const BrainStructure* brainStructure,
                                                CiftiParcelScalarFile* ciftiParcelScalarFile,
                                                      const int32_t mapIndex,
-                                                     //const AString& ciftiMapUniqueID,
                                                const int32_t numberOfNodes,
                                                float* rgbv)
 {
     Brain* brain = (Brain*)(brainStructure->getBrain());
     std::vector<CiftiParcelScalarFile*> allCiftiParcelScalarFiles;
     brain->getConnectivityParcelScalarFiles(allCiftiParcelScalarFiles);
-    
-//    int32_t mapIndex = -1;
-//    for (std::vector<CiftiParcelScalarFile*>::iterator iter = allCiftiParcelScalarFiles.begin();
-//         iter != allCiftiParcelScalarFiles.end();
-//         iter++) {
-//        CiftiParcelScalarFile* csf = *iter;
-//        if (csf == ciftiParcelScalarFile) {
-//            mapIndex = csf->getMapIndexFromUniqueID(ciftiMapUniqueID);
-//            if (mapIndex >= 0) {
-//                break;
-//            }
-//        }
-//    }
     
     if (mapIndex < 0) {
         return false;
@@ -1339,7 +1292,8 @@ SurfaceNodeColoring::assignCiftiParcelScalarColoring(const BrainStructure* brain
     
     std::vector<float> dataValues(numberOfNodes);
     const StructureEnum::Enum structure = brainStructure->getStructure();
-    ciftiParcelScalarFile->getMapSurfaceNodeColoring(mapIndex,
+    ciftiParcelScalarFile->getMapSurfaceNodeColoring(brainStructure->getBrain()->getPaletteFile(),
+                                                     mapIndex,
                                                structure,
                                                rgbv,
                                                &dataValues[0],
@@ -1369,26 +1323,12 @@ bool
 SurfaceNodeColoring::assignCiftiDataSeriesColoring(const BrainStructure* brainStructure,
                                                CiftiBrainordinateDataSeriesFile* ciftiDataSeriesFile,
                                                    const int32_t mapIndex,
-                                                   //const AString& ciftiMapUniqueID,
                                                const int32_t numberOfNodes,
                                                float* rgbv)
 {
     Brain* brain = (Brain*)(brainStructure->getBrain());
     std::vector<CiftiBrainordinateDataSeriesFile*> allCiftiDataSeriesFiles;
     brain->getConnectivityDataSeriesFiles(allCiftiDataSeriesFiles);
-    
-//    int32_t mapIndex = -1;
-//    for (std::vector<CiftiBrainordinateDataSeriesFile*>::iterator iter = allCiftiDataSeriesFiles.begin();
-//         iter != allCiftiDataSeriesFiles.end();
-//         iter++) {
-//        CiftiBrainordinateDataSeriesFile* cdsf = *iter;
-//        if (cdsf == ciftiDataSeriesFile) {
-//            mapIndex = cdsf->getMapIndexFromUniqueID(ciftiMapUniqueID);
-//            if (mapIndex >= 0) {
-//                break;
-//            }
-//        }
-//    }
     
     if (mapIndex < 0) {
         return false;
@@ -1414,7 +1354,8 @@ SurfaceNodeColoring::assignCiftiDataSeriesColoring(const BrainStructure* brainSt
      */
     std::vector<float> dataValues(numberOfNodes);
     const StructureEnum::Enum structure = brainStructure->getStructure();
-    ciftiDataSeriesFile->getMapSurfaceNodeColoring(mapIndex,
+    ciftiDataSeriesFile->getMapSurfaceNodeColoring(brainStructure->getBrain()->getPaletteFile(),
+                                                   mapIndex,
                                                structure,
                                                rgbv,
                                                &dataValues[0],
@@ -1444,26 +1385,12 @@ bool
 SurfaceNodeColoring::assignCiftiParcelSeriesColoring(const BrainStructure* brainStructure,
                                                    CiftiParcelSeriesFile* ciftiParcelSeriesFile,
                                                      const int32_t mapIndex,
-                                                     //const AString& ciftiMapUniqueID,
                                                    const int32_t numberOfNodes,
                                                    float* rgbv)
 {
     Brain* brain = (Brain*)(brainStructure->getBrain());
     std::vector<CiftiParcelSeriesFile*> allCiftiParcelSeriesFiles;
     brain->getConnectivityParcelSeriesFiles(allCiftiParcelSeriesFiles);
-    
-//    int32_t mapIndex = -1;
-//    for (std::vector<CiftiParcelSeriesFile*>::iterator iter = allCiftiParcelSeriesFiles.begin();
-//         iter != allCiftiParcelSeriesFiles.end();
-//         iter++) {
-//        CiftiParcelSeriesFile* cdsf = *iter;
-//        if (cdsf == ciftiParcelSeriesFile) {
-//            mapIndex = cdsf->getMapIndexFromUniqueID(ciftiMapUniqueID);
-//            if (mapIndex >= 0) {
-//                break;
-//            }
-//        }
-//    }
     
     if (mapIndex < 0) {
         return false;
@@ -1489,7 +1416,8 @@ SurfaceNodeColoring::assignCiftiParcelSeriesColoring(const BrainStructure* brain
      */
     std::vector<float> dataValues(numberOfNodes);
     const StructureEnum::Enum structure = brainStructure->getStructure();
-    ciftiParcelSeriesFile->getMapSurfaceNodeColoring(mapIndex,
+    ciftiParcelSeriesFile->getMapSurfaceNodeColoring(brainStructure->getBrain()->getPaletteFile(),
+                                                     mapIndex,
                                                    structure,
                                                    rgbv,
                                                    &dataValues[0],
@@ -1519,7 +1447,6 @@ bool
 SurfaceNodeColoring::assignRgbaColoring(const BrainStructure* /*brainStructure*/, 
                                         const RgbaFile* /*rgbaFile*/,
                                         const int32_t /*mapIndex*/,
-                                        //const AString& /*rgbaMapUniqueID*/,
                                         const int32_t numberOfNodes,
                                         float* rgbv)
 {

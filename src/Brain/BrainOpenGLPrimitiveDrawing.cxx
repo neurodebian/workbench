@@ -253,8 +253,6 @@ BrainOpenGLPrimitiveDrawing::drawQuadsVertexArrays(const std::vector<float>& coo
                                                    const int64_t coordinateOffset,
                                                    const int64_t coordinateCount)
 {
-    const uint64_t numCoords  = coordinates.size() / 3;
-    
     glEnableClientState(GL_VERTEX_ARRAY);
     glEnableClientState(GL_COLOR_ARRAY);
     glEnableClientState(GL_NORMAL_ARRAY);
@@ -324,8 +322,6 @@ BrainOpenGLPrimitiveDrawing::drawQuadsVertexBuffers(const std::vector<float>& co
                                                     const int64_t coordinateOffset,
                                                     const int64_t coordinateCount)
 {
-    const uint64_t numCoords  = coordinates.size() / 3;
-    
 #ifdef BRAIN_OPENGL_INFO_SUPPORTS_VERTEX_BUFFERS
         /*
          * Put vertices (coordinates) into its buffer.
@@ -421,8 +417,8 @@ BrainOpenGLPrimitiveDrawing::drawQuadsVertexBuffers(const std::vector<float>& co
          * Draw the triangle strips.
          */
         glDrawArrays(GL_QUADS,
-                     0,
-                     numCoords);
+                     coordinateOffset,
+                     coordinateCount);
         //        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,
         //                     quadsBufferID);
         //        glDrawElements(GL_TRIANGLE_STRIP,
@@ -446,4 +442,151 @@ BrainOpenGLPrimitiveDrawing::drawQuadsVertexBuffers(const std::vector<float>& co
         glDeleteBuffers(1, &colorBufferID);
 #endif // BRAIN_OPENGL_INFO_SUPPORTS_VERTEX_BUFFERS
 }
+
+/**
+ * Draw quads strips
+ *
+ * @param coordinates
+ *    Coordinates of the quads.
+ * @param normals
+ *    Normal vectors for the quads.
+ * @param rgbaColors
+ *    RGBA colors for the quads.
+ * @param quadStripIndices
+ *    Indices into the quad strip coordinates.
+ */
+void
+BrainOpenGLPrimitiveDrawing::drawQuadStrips(const std::vector<float>& coordinates,
+                           const std::vector<float>& normals,
+                                            const std::vector<uint8_t>& rgbaColors,
+                                            const std::vector<uint32_t>& quadStripIndices)
+{
+    drawQuadStripsVertexArrays(coordinates,
+                               normals,
+                               rgbaColors,
+                               quadStripIndices);
+}
+
+/**
+ * Draw quads strips
+ *
+ * @param coordinates
+ *    Coordinates of the quads.
+ * @param normals
+ *    Normal vectors for the quads.
+ * @param rgbaColors
+ *    RGBA colors for the quads.
+ * @param quadStripIndices
+ *    Indices into the quad strip coordinates.
+ */
+void
+BrainOpenGLPrimitiveDrawing::drawQuadStripsVertexArrays(const std::vector<float>& coordinates,
+                                       const std::vector<float>& normals,
+                                                        const std::vector<uint8_t>& rgbaColors,
+                                                        const std::vector<uint32_t>& quadStripIndices)
+{
+    if (quadStripIndices.empty()) {
+        return;
+    }
+    
+    glVertexPointer(3,
+                    GL_FLOAT,
+                    0,
+                    reinterpret_cast<const GLvoid*>(&coordinates[0]));
+    glColorPointer(4,
+                   GL_UNSIGNED_BYTE,
+                   0,
+                   reinterpret_cast<const GLvoid*>(&rgbaColors[0]));
+    glNormalPointer(GL_FLOAT,
+                    0,
+                    reinterpret_cast<const GLvoid*>(&normals[0]));
+    
+    glEnableClientState(GL_VERTEX_ARRAY);
+    glEnableClientState(GL_COLOR_ARRAY);
+    glEnableClientState(GL_NORMAL_ARRAY);
+    
+    
+    glDrawElements(GL_QUAD_STRIP,
+                   quadStripIndices.size(),
+                   GL_UNSIGNED_INT,
+                   &quadStripIndices[0]);
+    glDisableClientState(GL_VERTEX_ARRAY);
+    glDisableClientState(GL_COLOR_ARRAY);
+    glDisableClientState(GL_NORMAL_ARRAY);
+}
+
+
+/**
+ * Draw quad with indices
+ *
+ * @param coordinates
+ *    Coordinates of the quads.
+ * @param normals
+ *    Normal vectors for the quads.
+ * @param rgbaColors
+ *    RGBA colors for the quads.
+ * @param quadIndices
+ *    Indices of the quads (4 per quad).
+ */
+void
+BrainOpenGLPrimitiveDrawing::drawQuadIndices(const std::vector<float>& coordinates,
+                                             const std::vector<float>& normals,
+                                             const std::vector<uint8_t>& rgbaColors,
+                                             const std::vector<uint32_t>& quadIndices)
+{
+    drawQuadIndicesVertexArrays(coordinates,
+                                normals,
+                                rgbaColors,
+                                quadIndices);
+}
+
+/**
+ * Draw quad with indices
+ *
+ * @param coordinates
+ *    Coordinates of the quads.
+ * @param normals
+ *    Normal vectors for the quads.
+ * @param rgbaColors
+ *    RGBA colors for the quads.
+ * @param quadIndices
+ *    Indices of the quads (4 per quad).
+ */
+void
+BrainOpenGLPrimitiveDrawing::drawQuadIndicesVertexArrays(const std::vector<float>& coordinates,
+                                                         const std::vector<float>& normals,
+                                                         const std::vector<uint8_t>& rgbaColors,
+                                                         const std::vector<uint32_t>& quadIndices)
+{
+    const int64_t numQuadIndices = static_cast<int64_t>(quadIndices.size());
+    if (numQuadIndices <= 0) {
+        return;
+    }
+    
+    glVertexPointer(3,
+                    GL_FLOAT,
+                    0,
+                    reinterpret_cast<const GLvoid*>(&coordinates[0]));
+    glColorPointer(4,
+                   GL_UNSIGNED_BYTE,
+                   0,
+                   reinterpret_cast<const GLvoid*>(&rgbaColors[0]));
+    glNormalPointer(GL_FLOAT,
+                    0,
+                    reinterpret_cast<const GLvoid*>(&normals[0]));
+    
+    glEnableClientState(GL_VERTEX_ARRAY);
+    glEnableClientState(GL_COLOR_ARRAY);
+    glEnableClientState(GL_NORMAL_ARRAY);
+    
+
+    glDrawElements(GL_QUADS,
+                   quadIndices.size(),
+                   GL_UNSIGNED_INT,
+                   &quadIndices[0]);
+    glDisableClientState(GL_VERTEX_ARRAY);
+    glDisableClientState(GL_COLOR_ARRAY);
+    glDisableClientState(GL_NORMAL_ARRAY);
+}
+
 

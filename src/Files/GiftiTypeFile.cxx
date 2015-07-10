@@ -20,6 +20,7 @@
 
 #include "CaretLogger.h"
 #include "DataFileContentInformation.h"
+#include "DataFileException.h"
 #include "FastStatistics.h"
 #include "GiftiDataArray.h"
 #include "GiftiFile.h"
@@ -140,7 +141,7 @@ GiftiTypeFile::isEmpty() const
  *    If there is an error reading the file.
  */
 void 
-GiftiTypeFile::readFile(const AString& filename) throw (DataFileException)
+GiftiTypeFile::readFile(const AString& filename)
 {
     clear();
     
@@ -162,7 +163,7 @@ GiftiTypeFile::readFile(const AString& filename) throw (DataFileException)
  *    If there is an error writing the file.
  */
 void 
-GiftiTypeFile::writeFile(const AString& filename) throw (DataFileException)
+GiftiTypeFile::writeFile(const AString& filename)
 {
     checkFileWritability(filename);
     this->giftiFile->writeFile(filename);
@@ -265,11 +266,10 @@ GiftiTypeFile::setStructure(const StructureEnum::Enum structure)
  */
 void 
 GiftiTypeFile::addMaps(const int32_t /*numberOfNodes*/,
-                       const int32_t /*numberOfMaps*/) throw (DataFileException)
+                       const int32_t /*numberOfMaps*/)
 {
-    throw DataFileException("This file, "
-                            + this->getFileNameNoPath()
-                            + " does not support adding additional maps");
+    throw DataFileException(getFileName(),
+                            "This file does not support adding additional maps");
 }
 
 /**
@@ -297,7 +297,7 @@ GiftiTypeFile::getFileMetaData() const
  */
 void 
 GiftiTypeFile::verifyDataArraysHaveSameNumberOfRows(const int32_t minimumSecondDimension,
-                                                    const int32_t maximumSecondDimension) const throw (DataFileException)
+                                                    const int32_t maximumSecondDimension) const
 {
     const int32_t numberOfArrays = this->giftiFile->getNumberOfDataArrays();
     if (numberOfArrays > 1) {
@@ -311,7 +311,8 @@ GiftiTypeFile::verifyDataArraysHaveSameNumberOfRows(const int32_t minimumSecondD
                 AString message = "All data arrays (columns) in the file must have the same number of rows.";
                 message += "  The first array (column) contains " + AString::number(numberOfRows) + " rows.";
                 message += "  Array " + AString::number(i + 1) + " contains " + AString::number(arrayNumberOfRows) + " rows.";
-                DataFileException e(message);
+                DataFileException e(getFileName(),
+                                    message);
                 CaretLogThrowing(e);
                 throw e;                                     
             }
@@ -324,7 +325,8 @@ GiftiTypeFile::verifyDataArraysHaveSameNumberOfRows(const int32_t minimumSecondD
             const GiftiDataArray* gda = this->giftiFile->getDataArray(i);
             const int32_t numberOfDimensions = gda->getNumberOfDimensions();
             if (numberOfDimensions > 2) {
-                DataFileException e("Data array "
+                DataFileException e(getFileName(),
+                                    "Data array "
                                     + AString::number(i + 1)
                                     + " contains "
                                     + AString::number(numberOfDimensions)
@@ -343,7 +345,8 @@ GiftiTypeFile::verifyDataArraysHaveSameNumberOfRows(const int32_t minimumSecondD
             
             if ((secondDimension < minimumSecondDimension) 
                 || (secondDimension > maximumSecondDimension)) {
-                DataFileException e("Data array "
+                DataFileException e(getFileName(),
+                                    "Data array "
                                     + AString::number(i + 1)
                                     + " second dimension is "
                                     + AString::number(numberOfDimensions)
@@ -531,6 +534,194 @@ const Histogram* GiftiTypeFile::getMapHistogram(const int32_t mapIndex,
 }
 
 /**
+ * @return The estimated size of data after it is uncompressed
+ * and loaded into RAM.  A negative value indicates that the
+ * file size cannot be computed.
+ */
+int64_t
+GiftiTypeFile::getDataSizeUncompressedInBytes() const
+{
+    const int32_t numDataArrays = getNumberOfMaps();
+    
+    int64_t dataSizeInBytes = 0;
+    
+    for (int32_t iMap = 0; iMap < numDataArrays; iMap++) {
+        const GiftiDataArray* gda = this->giftiFile->getDataArray(iMap);
+        dataSizeInBytes += gda->getDataSizeInBytes();
+    }
+    
+    return dataSizeInBytes;
+}
+
+/**
+ * Get all data for a file that contains floats.  If the file is very
+ * large this method may take a large amount of time!
+ *
+ * @param dataOut
+ *    Output with all data for a float file.  Empty if no data in file
+ *    or data is not float.
+ */
+void
+GiftiTypeFile::getFileDataFloat(std::vector<float>& dataOut) const
+{
+    int64_t dataSize = 0;
+    
+    /*
+     * Get the size of the data
+     */
+    const int64_t numberOfDataArrays = this->giftiFile->getNumberOfDataArrays();
+    for (int64_t i = 0; i < numberOfDataArrays; i++) {
+        const GiftiDataArray* gda = this->giftiFile->getDataArray(i);
+        if (gda->getDataType() == NiftiDataTypeEnum::NIFTI_TYPE_FLOAT32) {
+            dataSize += gda->getTotalNumberOfElements();
+        }
+        else {
+            dataOut.clear();
+            return;
+        }
+    }
+    
+    if (dataSize <= 0) {
+        dataOut.clear();
+        return;
+    }
+    
+    dataOut.resize(dataSize);
+    int64_t dataOffset = 0;
+    
+    /*
+     * Copy the data.
+     */
+    for (int64_t i = 0; i < numberOfDataArrays; i++) {
+        const GiftiDataArray* gda = this->giftiFile->getDataArray(i);
+        const int64_t arraySize = gda->getTotalNumberOfElements();
+        const float* arrayPointer = gda->getDataPointerFloat();
+        
+        for (int64_t j = 0; j < arraySize; j++) {
+            CaretAssertVectorIndex(dataOut, dataOffset);
+            dataOut[dataOffset] = arrayPointer[j];
+            ++dataOffset;
+        }
+    }
+    
+    CaretAssert(dataOffset == static_cast<int64_t>(dataOut.size()));
+}
+
+/**
+ * Get statistics describing the distribution of data
+ * mapped with a color palette for all data within the file.
+ *
+ * @return
+ *    Fast statistics for data (will be NULL for data
+ *    not mapped using a palette).
+ */
+const FastStatistics*
+GiftiTypeFile::getFileFastStatistics()
+{
+    if (m_fileFastStatistics == NULL) {
+        std::vector<float> fileData;
+        getFileDataFloat(fileData);
+        if ( ! fileData.empty()) {
+            m_fileFastStatistics.grabNew(new FastStatistics());
+            m_fileFastStatistics->update(&fileData[0],
+                                         fileData.size());
+        }
+    }
+    
+    return m_fileFastStatistics;
+}
+
+/**
+ * Get histogram describing the distribution of data
+ * mapped with a color palette for all data within
+ * the file.
+ *
+ * @return
+ *    Histogram for data (will be NULL for data
+ *    not mapped using a palette).
+ */
+const Histogram*
+GiftiTypeFile::getFileHistogram()
+{
+    if (m_fileHistogram == NULL) {
+        std::vector<float> fileData;
+        getFileDataFloat(fileData);
+        if ( ! fileData.empty()) {
+            m_fileHistogram.grabNew(new Histogram());
+            m_fileHistogram->update(&fileData[0],
+                                    fileData.size());
+        }
+    }
+    return m_fileHistogram;
+}
+
+/**
+ * Get histogram describing the distribution of data
+ * mapped with a color palette for all data in the file
+ * within the given range of values.
+ *
+ * @param mostPositiveValueInclusive
+ *    Values more positive than this value are excluded.
+ * @param leastPositiveValueInclusive
+ *    Values less positive than this value are excluded.
+ * @param leastNegativeValueInclusive
+ *    Values less negative than this value are excluded.
+ * @param mostNegativeValueInclusive
+ *    Values more negative than this value are excluded.
+ * @param includeZeroValues
+ *    If true zero values (very near zero) are included.
+ * @return
+ *    Descriptive statistics for data (will be NULL for data
+ *    not mapped using a palette).
+ */
+const Histogram*
+GiftiTypeFile::getFileHistogram(const float mostPositiveValueInclusive,
+                                           const float leastPositiveValueInclusive,
+                                           const float leastNegativeValueInclusive,
+                                           const float mostNegativeValueInclusive,
+                                           const bool includeZeroValues)
+{
+    bool updateHistogramFlag = false;
+    if (m_fileHistorgramLimitedValues != NULL) {
+        if ((mostPositiveValueInclusive != m_fileHistogramLimitedValuesMostPositiveValueInclusive)
+            || (leastPositiveValueInclusive != m_fileHistogramLimitedValuesLeastPositiveValueInclusive)
+            || (leastNegativeValueInclusive != m_fileHistogramLimitedValuesLeastNegativeValueInclusive)
+            || (mostNegativeValueInclusive != m_fileHistogramLimitedValuesMostNegativeValueInclusive)
+            || (includeZeroValues != m_fileHistogramLimitedValuesIncludeZeroValues)) {
+            updateHistogramFlag = true;
+        }
+    }
+    else {
+        updateHistogramFlag = true;
+    }
+    
+    if (updateHistogramFlag) {
+        std::vector<float> fileData;
+        getFileDataFloat(fileData);
+        if ( ! fileData.empty()) {
+            if (m_fileHistorgramLimitedValues == NULL) {
+                m_fileHistorgramLimitedValues.grabNew(new Histogram());
+            }
+            m_fileHistorgramLimitedValues->update(&fileData[0],
+                                                  fileData.size(),
+                                                  mostPositiveValueInclusive,
+                                                  leastPositiveValueInclusive,
+                                                  leastNegativeValueInclusive,
+                                                  mostNegativeValueInclusive,
+                                                  includeZeroValues);
+            
+            m_fileHistogramLimitedValuesMostPositiveValueInclusive  = mostPositiveValueInclusive;
+            m_fileHistogramLimitedValuesLeastPositiveValueInclusive = leastPositiveValueInclusive;
+            m_fileHistogramLimitedValuesLeastNegativeValueInclusive = leastNegativeValueInclusive;
+            m_fileHistogramLimitedValuesMostNegativeValueInclusive  = mostNegativeValueInclusive;
+            m_fileHistogramLimitedValuesIncludeZeroValues           = includeZeroValues;
+        }
+    }
+    
+    return m_fileHistorgramLimitedValues;
+}
+
+/**
  * @return Is the data in the file mapped to colors using
  * a palette.
  */
@@ -541,6 +732,26 @@ GiftiTypeFile::isMappedWithPalette() const
         return true;
     }
     return false;
+}
+
+/**
+ * Get the palette normalization modes that are supported by the file.
+ *
+ * @param modesSupportedOut
+ *     Palette normalization modes supported by a file.  Will be
+ *     empty for files that are not mapped with a palette.  If there
+ *     is more than one suppported mode, the first mode in the
+ *     vector is assumed to be the default mode.
+ */
+void
+GiftiTypeFile::getPaletteNormalizationModesSupported(std::vector<PaletteNormalizationModeEnum::Enum>& modesSupportedOut)
+{
+    modesSupportedOut.clear();
+    
+    if (getDataFileType() == DataFileTypeEnum::METRIC) {
+        modesSupportedOut.push_back(PaletteNormalizationModeEnum::NORMALIZATION_SELECTED_MAP_DATA);
+        modesSupportedOut.push_back(PaletteNormalizationModeEnum::NORMALIZATION_ALL_MAP_DATA);
+    }
 }
 
 /**

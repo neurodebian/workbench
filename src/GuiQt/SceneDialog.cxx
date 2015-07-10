@@ -50,6 +50,7 @@
 #include "CaretMappableDataFile.h"
 #include "CursorDisplayScoped.h"
 #include "CaretPreferences.h"
+#include "DataFileException.h"
 #include "ElapsedTimer.h"
 #include "EventBrowserTabGetAll.h"
 #include "EventDataFileAdd.h"
@@ -594,7 +595,6 @@ SceneDialog::checkForModifiedFiles()
      *   Spec Files
      */
     std::vector<DataFileTypeEnum::Enum> dataFileTypesToExclude;
-    DataFileTypeEnum::getAllConnectivityEnums(dataFileTypesToExclude);
     dataFileTypesToExclude.push_back(DataFileTypeEnum::SCENE);
     dataFileTypesToExclude.push_back(DataFileTypeEnum::SPECIFICATION);
     
@@ -1109,6 +1109,7 @@ SceneDialog::displayScenePrivate(SceneFile* sceneFile,
      * Setup scene attributes
      */
     SceneAttributes* sceneAttributes = scene->getAttributes();
+    sceneAttributes->clearErrorMessage();
     sceneAttributes->setSceneFileName(sceneFileName);
     sceneAttributes->setSceneName(scene->getName());
     sceneAttributes->setWindowRestoreBehaviorInSceneDisplay(SceneAttributes::RESTORE_WINDOW_POSITION_RELATIVE_TO_FIRST_AND_USE_SIZES);

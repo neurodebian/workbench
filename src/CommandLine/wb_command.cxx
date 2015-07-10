@@ -41,7 +41,7 @@ using namespace std;
 static int runCommand(int argc, char* argv[]) {
     
     ProgramParameters parameters(argc, argv);
-    caret_global_commandLine = AString(argv[0]) + " " + parameters.getAllParametersInString();
+    caret_global_commandLine_init(parameters);
     /*
      * Log the command parameters.
      */
@@ -54,11 +54,11 @@ static int runCommand(int argc, char* argv[]) {
         
         commandManager->runCommand(parameters);
         
-    } catch (CommandException& e) {
-        cerr << "While running '" << caret_global_commandLine << "':\nERROR: " << e.whatString().toStdString() << endl;
+    } catch (CaretException& e) {
+        cerr << "\nWhile running:\n" << caret_global_commandLine << "\n\nERROR: " << e.whatString().toStdString() << endl << endl;
         ret = -1;
-    } catch (bad_alloc& e) {//in case we stop using a handler for new
-        cerr << "While running '" << caret_global_commandLine << "':\nERROR: " << e.what() << endl;
+    } catch (bad_alloc& e) {//if we stop using a handler for new
+        cerr << "\nWhile running:\n" << caret_global_commandLine << "\n\nERROR: " << e.what() << endl;
         cerr << endl
         << "OUT OF MEMORY" << endl
         << endl
@@ -71,10 +71,13 @@ static int runCommand(int argc, char* argv[]) {
         << endl;
         ret = -1;
     } catch (exception& e) {
-        cerr << "While running '" << caret_global_commandLine << "':\nERROR: " << e.what() << endl;
+        cerr << "\nWhile running:\n" << caret_global_commandLine << "\n\nERROR: " << e.what() << endl << endl;
         ret = -1;
     } catch (...) {
-        cerr << "While running '" << caret_global_commandLine << "':\nERROR: caught unknown exception type" << endl;
+        cerr << "\nWhile running:\n" << caret_global_commandLine << "\n\nERROR: caught unknown exception type, rethrowing..." << endl << endl;
+        if (commandManager != NULL) {
+            CommandOperationManager::deleteCommandOperationManager();
+        }
         throw;//rethrow, the runtime might print the type
     }
     
@@ -91,12 +94,12 @@ int main(int argc, char* argv[]) {
         /*
          * Handle uncaught exceptions
          */
-        SystemUtilities::setHandlersForUnexpected();
+        SystemUtilities::setUnexpectedHandler();
         
         /*
          * Create the session manager.
          */
-        SessionManager::createSessionManager();
+        SessionManager::createSessionManager(ApplicationTypeEnum::APPLICATION_TYPE_COMMAND_LINE);
         
         /*
          * Disable volume voxel coloring since it can be a little slow

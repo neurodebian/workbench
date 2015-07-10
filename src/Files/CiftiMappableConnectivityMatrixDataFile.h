@@ -24,6 +24,7 @@
 #include <set>
 
 #include "BrainConstants.h"
+#include "ChartMatrixLoadingDimensionEnum.h"
 #include "CiftiMappableDataFile.h"
 #include "VoxelIJK.h"
 
@@ -46,24 +47,30 @@ namespace caret {
         void setMapDataLoadingEnabled(const int32_t mapIndex,
                                       const bool enabled);
         
-        virtual int64_t loadMapDataForSurfaceNode(const int32_t mapIndex,
+        virtual void loadMapDataForSurfaceNode(const int32_t mapIndex,
                                                   const int32_t surfaceNumberOfNodes,
                                                   const StructureEnum::Enum structure,
-                                                  const int32_t nodeIndex) throw (DataFileException);
+                                                  const int32_t nodeIndex,
+                                                  int64_t& rowIndexOut,
+                                                  int64_t& columnIndexOut);
         
         virtual void loadMapAverageDataForSurfaceNodes(const int32_t mapIndex,
                                                        const int32_t surfaceNumberOfNodes,
                                                        const StructureEnum::Enum structure,
-                                                       const std::vector<int32_t>& nodeIndices) throw (DataFileException);
+                                                       const std::vector<int32_t>& nodeIndices);
         
-        virtual int64_t loadMapDataForVoxelAtCoordinate(const int32_t mapIndex,
-                                                        const float xyz[3]) throw (DataFileException);
+        virtual void loadMapDataForVoxelAtCoordinate(const int32_t mapIndex,
+                                                     const float xyz[3],
+                                                     int64_t& rowIndexOut,
+                                                     int64_t& columnIndexOut);
 
         virtual bool loadMapAverageDataForVoxelIndices(const int32_t mapIndex,
                                                        const int64_t volumeDimensionIJK[3],
-                                                       const std::vector<VoxelIJK>& voxelIndices) throw (DataFileException);
+                                                       const std::vector<VoxelIJK>& voxelIndices);
 
-        void loadDataForRowIndex(const int64_t rowIndex) throw (DataFileException);
+        void loadDataForRowIndex(const int64_t rowIndex);
+        
+        void loadDataForColumnIndex(const int64_t rowIndex);
                 
         virtual void clear();
         
@@ -81,12 +88,14 @@ namespace caret {
 
         virtual void getMapData(const int32_t mapIndex, std::vector<float>& dataOut) const;
 
-        bool loadMapData(const int32_t rowIndex) throw (DataFileException);
+//        bool loadMapData(const int32_t rowIndex);
         
         const ConnectivityDataLoaded* getConnectivityDataLoaded() const;
         
         bool getParcelNodesElementForSelectedParcel(std::set<int64_t> &parcelNodesOut,
                                                     const StructureEnum::Enum &structure) const;
+        
+        ChartMatrixLoadingDimensionEnum::Enum getChartMatrixLoadingDimension() const;
         
     private:
         CiftiMappableConnectivityMatrixDataFile(const CiftiMappableConnectivityMatrixDataFile&);
@@ -104,19 +113,44 @@ namespace caret {
         virtual void restoreFileDataFromScene(const SceneAttributes* sceneAttributes,
                                               const SceneClass* sceneClass);
         
-    private:
-        void clearPrivate();
+        virtual void saveSubClassDataToScene(const SceneAttributes* sceneAttributes,
+                                             SceneClass* sceneClass);
         
+        virtual void restoreSubClassDataFromScene(const SceneAttributes* sceneAttributes,
+                                                  const SceneClass* sceneClass);
+
+        void resetLoadedRowDataToEmpty();
+        
+        void setChartMatrixLoadingDimension(const ChartMatrixLoadingDimensionEnum::Enum matrixLoadingType);
+        
+    private:
         void setLoadedRowDataToAllZeros();
         
-        int64_t getRowIndexForNodeWhenLoading(const StructureEnum::Enum structure,
-                                              const int64_t surfaceNumberOfNodes,
-                                              const int64_t nodeIndex);
+        void clearPrivate();
         
-        int64_t getRowIndexForVoxelAtCoordinateWhenLoading(const float xyz[3]);
+//        int64_t getRowIndexForNodeWhenLoading(const StructureEnum::Enum structure,
+//                                              const int64_t surfaceNumberOfNodes,
+//                                              const int64_t nodeIndex);
         
-        int64_t getRowIndexForVoxelIndexWhenLoading(const int64_t ijk[3]);
+        void getRowColumnIndexForNodeWhenLoading(const StructureEnum::Enum structure,
+                                                 const int64_t surfaceNumberOfNodes,
+                                                 const int64_t nodeIndex,
+                                                 int64_t& rowIndexOut,
+                                                 int64_t& columnIndexOut);
         
+        void getRowColumnIndexForVoxelAtCoordinateWhenLoading(const float xyz[3],
+                                                                 int64_t& rowIndexOut,
+                                                                 int64_t& columnIndexOut);
+        
+        void getRowColumnIndexForVoxelIndexWhenLoading(const int64_t ijk[3],
+                                                          int64_t& rowIndexOut,
+                                                          int64_t& columnIndexOut);
+        
+//        int64_t getRowIndexForVoxelAtCoordinateWhenLoading(const float xyz[3]);
+//        
+//        int64_t getRowIndexForVoxelIndexWhenLoading(const int64_t ijk[3]);
+        
+        int32_t getCifitDirectionForLoadingRowOrColumn();
         
         // ADD_NEW_MEMBERS_HERE
         
@@ -131,6 +165,14 @@ namespace caret {
         AString m_rowLoadedText;
         
         ConnectivityDataLoaded* m_connectivityDataLoaded;
+        
+        /*
+         * This is really a member of parcel file since it the parcel
+         * file is the only file that can load by row or column.
+         * However, because of scenes, the chart loading dimension needs
+         * to be restored in this class.
+         */
+        ChartMatrixLoadingDimensionEnum::Enum m_chartLoadingDimension;
         
         friend class CiftiBrainordinateScalarFile;
 

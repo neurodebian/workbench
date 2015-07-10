@@ -26,6 +26,9 @@ OperationBorderMerge.h
 OperationCiftiChangeTimestep.h
 OperationCiftiConvert.h
 OperationCiftiConvertToScalar.h
+OperationCiftiCopyMapping.h
+OperationCiftiCreateDenseFromTemplate.h
+OperationCiftiCreateScalarSeries.h
 OperationCiftiEstimateFWHM.h
 OperationCiftiExportDenseMapping.h
 OperationCiftiLabelExportTable.h
@@ -36,6 +39,8 @@ OperationCiftiPalette.h
 OperationCiftiResampleDconnMemory.h
 OperationCiftiROIAverage.h
 OperationCiftiSeparateAll.h
+OperationCiftiStats.h
+OperationCiftiWeightedStats.h
 OperationConvertAffine.h
 OperationConvertFiberOrientations.h
 OperationConvertMatrix4ToMatrix2.h
@@ -58,7 +63,9 @@ OperationMetricMask.h
 OperationMetricMath.h
 OperationMetricMerge.h
 OperationMetricPalette.h
+OperationMetricStats.h
 OperationMetricVertexSum.h
+OperationMetricWeightedStats.h
 OperationNiftiInformation.h
 OperationProbtrackXDotConvert.h
 OperationSetMapName.h
@@ -73,6 +80,7 @@ OperationSurfaceFlipNormals.h
 OperationSurfaceGeodesicDistance.h
 OperationSurfaceGeodesicROIs.h
 OperationSurfaceInformation.h
+OperationSurfaceNormals.h
 OperationSurfaceVertexAreas.h
 OperationVolumeCapturePlane.h
 OperationVolumeCopyExtensions.h
@@ -84,6 +92,8 @@ OperationVolumeMerge.h
 OperationVolumePalette.h
 OperationVolumeReorient.h
 OperationVolumeSetSpace.h
+OperationVolumeStats.h
+OperationVolumeWeightedStats.h
 OperationWbsparseMergeDense.h
 OperationZipSceneFile.h
 OperationZipSpecFile.h
@@ -97,6 +107,9 @@ OperationBorderMerge.cxx
 OperationCiftiChangeTimestep.cxx
 OperationCiftiConvert.cxx
 OperationCiftiConvertToScalar.cxx
+OperationCiftiCopyMapping.cxx
+OperationCiftiCreateDenseFromTemplate.cxx
+OperationCiftiCreateScalarSeries.cxx
 OperationCiftiEstimateFWHM.cxx
 OperationCiftiExportDenseMapping.cxx
 OperationCiftiLabelExportTable.cxx
@@ -107,6 +120,8 @@ OperationCiftiPalette.cxx
 OperationCiftiResampleDconnMemory.cxx
 OperationCiftiROIAverage.cxx
 OperationCiftiSeparateAll.cxx
+OperationCiftiStats.cxx
+OperationCiftiWeightedStats.cxx
 OperationConvertAffine.cxx
 OperationConvertFiberOrientations.cxx
 OperationConvertMatrix4ToMatrix2.cxx
@@ -129,7 +144,9 @@ OperationMetricMask.cxx
 OperationMetricMath.cxx
 OperationMetricMerge.cxx
 OperationMetricPalette.cxx
+OperationMetricStats.cxx
 OperationMetricVertexSum.cxx
+OperationMetricWeightedStats.cxx
 OperationNiftiInformation.cxx
 OperationProbtrackXDotConvert.cxx
 OperationSetMapName.cxx
@@ -144,6 +161,7 @@ OperationSurfaceFlipNormals.cxx
 OperationSurfaceGeodesicDistance.cxx
 OperationSurfaceGeodesicROIs.cxx
 OperationSurfaceInformation.cxx
+OperationSurfaceNormals.cxx
 OperationSurfaceVertexAreas.cxx
 OperationVolumeCapturePlane.cxx
 OperationVolumeCopyExtensions.cxx
@@ -155,6 +173,8 @@ OperationVolumeMerge.cxx
 OperationVolumePalette.cxx
 OperationVolumeReorient.cxx
 OperationVolumeSetSpace.cxx
+OperationVolumeStats.cxx
+OperationVolumeWeightedStats.cxx
 OperationWbsparseMergeDense.cxx
 OperationZipSceneFile.cxx
 OperationZipSpecFile.cxx

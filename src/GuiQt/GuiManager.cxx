@@ -26,6 +26,7 @@
 #include <QAction>
 #include <QApplication>
 #include <QDesktopWidget>
+#include <QMenu>
 #include <QPushButton>
 
 #define __GUI_MANAGER_DEFINE__
@@ -45,18 +46,23 @@
 #include "CiftiConnectivityMatrixDataFileManager.h"
 #include "CiftiFiberTrajectoryManager.h"
 #include "CiftiConnectivityMatrixParcelFile.h"
+#include "CiftiScalarDataSeriesFile.h"
 #include "ClippingPlanesDialog.h"
 #include "CursorDisplayScoped.h"
 #include "CursorManager.h"
 #include "CustomViewDialog.h"
+#include "DataFileException.h"
 #include "ElapsedTimer.h"
+#include "EventAlertUser.h"
 #include "EventBrowserTabGetAll.h"
 #include "EventBrowserWindowNew.h"
 #include "EventGraphicsUpdateAllWindows.h"
 #include "EventGraphicsUpdateOneWindow.h"
 #include "EventHelpViewerDisplay.h"
 #include "EventIdentificationHighlightLocation.h"
+#include "EventMacDockMenuUpdate.h"
 #include "EventManager.h"
+#include "EventMapYokingSelectMap.h"
 #include "EventModelGetAll.h"
 #include "EventOperatingSystemRequestOpenDataFile.h"
 #include "EventOverlaySettingsEditorDialogRequest.h"
@@ -68,12 +74,15 @@
 #include "FociPropertiesEditorDialog.h"
 #include "HelpViewerDialog.h"
 #include "IdentifiedItemNode.h"
+#include "IdentifiedItemVoxel.h"
 #include "IdentificationManager.h"
 #include "IdentificationStringBuilder.h"
+#include "IdentifyBrainordinateDialog.h"
 #include "ImageFile.h"
 #include "ImageCaptureDialog.h"
 #include "InformationDisplayDialog.h"
 #include "OverlaySettingsEditorDialog.h"
+#include "MacDockMenu.h"
 #include "MovieDialog.h"
 #include "PaletteColorMappingEditorDialog.h"
 #include "PreferencesDialog.h"
@@ -84,10 +93,13 @@
 #include "SceneWindowGeometry.h"
 #include "SelectionManager.h"
 #include "SelectionItemChartMatrix.h"
+#include "SelectionItemCiftiConnectivityMatrixRowColumn.h"
 #include "SelectionItemSurfaceNode.h"
 #include "SelectionItemSurfaceNodeIdentificationSymbol.h"
 #include "SelectionItemVoxel.h"
+#include "SelectionItemVoxelIdentificationSymbol.h"
 #include "SessionManager.h"
+#include "SpecFile.h"
 #include "SpecFileManagementDialog.h"
 #include "SurfacePropertiesEditorDialog.h"
 #include "Surface.h"
@@ -99,6 +111,7 @@
 #include "CaretAssert.h"
 
 using namespace caret;
+
 /**
  * \defgroup GuiQt
  */
@@ -126,6 +139,7 @@ GuiManager::GuiManager(QObject* parent)
     this->imageCaptureDialog = NULL;
     this->movieDialog = NULL;
     m_informationDisplayDialog = NULL;
+    m_identifyBrainordinateDialog = NULL;
     this->preferencesDialog = NULL;  
     this->connectomeDatabaseWebView = NULL;
     m_helpViewerDialog = NULL;
@@ -151,7 +165,7 @@ GuiManager::GuiManager(QObject* parent)
                                 "when new information is available",
                                 this,
                                 this,
-                                SLOT(showHideInfoWindowSelected(bool))); 
+                                SLOT(showHideInfoWindowSelected(bool)));
     if (infoDisplayIconValid) {
         m_informationDisplayDialogEnabledAction->setIcon(infoDisplayIcon);
         m_informationDisplayDialogEnabledAction->setIconVisibleInMenu(false);
@@ -166,6 +180,32 @@ GuiManager::GuiManager(QObject* parent)
     this->showHideInfoWindowSelected(m_informationDisplayDialogEnabledAction->isChecked());
     m_informationDisplayDialogEnabledAction->setIconText("Info"); 
     m_informationDisplayDialogEnabledAction->blockSignals(false);
+    
+    /*
+     * Identify brainordinate window
+     */
+    QIcon identifyDisplayIcon;
+    const bool identifyDisplayIconValid =
+    WuQtUtilities::loadIcon(":/ToolBar/identify.png",
+                            identifyDisplayIcon);
+    m_identifyBrainordinateDialogEnabledAction =
+    WuQtUtilities::createAction("Identify...",
+                                "Enables display of the Identify Brainordinate Window",
+                                this,
+                                this,
+                                SLOT(showIdentifyBrainordinateDialogActionToggled(bool)));
+    if (identifyDisplayIconValid) {
+        m_identifyBrainordinateDialogEnabledAction->setIcon(identifyDisplayIcon);
+        m_identifyBrainordinateDialogEnabledAction->setIconVisibleInMenu(false);
+    }
+    else {
+        m_identifyBrainordinateDialogEnabledAction->setIconText("ID");
+    }
+    
+    m_identifyBrainordinateDialogEnabledAction->blockSignals(true);
+    m_identifyBrainordinateDialogEnabledAction->setCheckable(true);
+    m_identifyBrainordinateDialogEnabledAction->setChecked(false);
+    m_identifyBrainordinateDialogEnabledAction->blockSignals(false);
     
     /*
      * Scene dialog action
@@ -214,9 +254,10 @@ GuiManager::GuiManager(QObject* parent)
     m_helpViewerDialogDisplayAction->setChecked(false);
     m_helpViewerDialogDisplayAction->blockSignals(false);
     
-    
+    EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_ALERT_USER);
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_BROWSER_WINDOW_NEW);
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_HELP_VIEWER_DISPLAY);
+    EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_MAC_DOCK_MENU_UPDATE);
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_OVERLAY_SETTINGS_EDITOR_SHOW);
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_OPERATING_SYSTEM_REQUEST_OPEN_DATA_FILE);
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_PALETTE_COLOR_MAPPING_EDITOR_SHOW);
@@ -375,6 +416,8 @@ GuiManager::allowBrainBrowserWindowToClose(BrainBrowserWindow* brainBrowserWindo
                 this->reparentNonModalDialogs(brainBrowserWindow);
             }
         }
+        
+        EventManager::get()->sendEvent(EventMacDockMenuUpdate().getPointer());
     }
     
     return isBrowserWindowAllowedToClose;
@@ -442,7 +485,8 @@ GuiManager::getActiveBrowserWindow() const
                 return bbw;
             }
         }
-    }    
+    }
+    
     return firstWindowFound;
 }
 
@@ -658,18 +702,6 @@ GuiManager::exitProgram(QWidget* parent)
         else {
             CaretAssert(0);
         }
-
-//        const AString msg = ("<html>"
-//                             "Closing this window will exit the application.<p>"
-//                             "Did you create or update a scene file for the analyses "
-//                             "you were just working on? Scenes can reduce setup time "
-//                             "when returning to this dataset for further analysis. They "
-//                             "are especially useful during manuscript preparation "
-//                             "because each scene can regenerate exactly what is displayed "
-//                             "in the current version of a figure."
-//                             "</html>");
-//        okToExit = WuQMessageBox::warningOkCancel(parent,
-//                                                  msg);
     }
     
     if (okToExit) {
@@ -769,7 +801,6 @@ GuiManager::getBrowserTabContentForBrowserWindow(const int32_t browserWindowInde
     CaretAssert(browserWindow);
     
     BrowserTabContent* tabContent = browserWindow->getBrowserTabContent();
-    //CaretAssert(tabContent);
     return tabContent;
 }
 
@@ -916,7 +947,16 @@ GuiManager::applicationName() const
 void 
 GuiManager::receiveEvent(Event* event)
 {
-    if (event->getEventType() == EventTypeEnum::EVENT_BROWSER_WINDOW_NEW) {
+    if (event->getEventType() == EventTypeEnum::EVENT_ALERT_USER) {
+        EventAlertUser* alertUserEvent = dynamic_cast<EventAlertUser*>(event);
+        const AString message = alertUserEvent->getMessage();
+        
+        BrainBrowserWindow* bbw = getActiveBrowserWindow();
+        CaretAssert(bbw);
+        
+        WuQMessageBox::errorOk(bbw, message);
+    }
+    else if (event->getEventType() == EventTypeEnum::EVENT_BROWSER_WINDOW_NEW) {
         EventBrowserWindowNew* eventNewBrowser =
             dynamic_cast<EventBrowserWindowNew*>(event);
         CaretAssert(eventNewBrowser);
@@ -943,6 +983,16 @@ GuiManager::receiveEvent(Event* event)
         const int h = std::min(bbw->height(), 
                                preferredMaxHeight);
         bbw->resize(w, h);
+        
+        EventManager::get()->sendEvent(EventMacDockMenuUpdate().getPointer());
+    }
+    else if (event->getEventType() == EventTypeEnum::EVENT_MAC_DOCK_MENU_UPDATE) {
+        EventMacDockMenuUpdate* macDockMenuEvent = dynamic_cast<EventMacDockMenuUpdate*>(event);
+        CaretAssert(event);
+        
+        MacDockMenu::createUpdateMacDockMenu();
+        
+        macDockMenuEvent->setEventProcessed();
     }
     else if (event->getEventType() == EventTypeEnum::EVENT_UPDATE_INFORMATION_WINDOWS) {
         EventUpdateInformationWindows* infoEvent =
@@ -962,44 +1012,79 @@ GuiManager::receiveEvent(Event* event)
         dynamic_cast<EventOverlaySettingsEditorDialogRequest*>(event);
         CaretAssert(mapEditEvent);
         
+        const EventOverlaySettingsEditorDialogRequest::Mode mode = mapEditEvent->getMode();
         const int browserWindowIndex = mapEditEvent->getBrowserWindowIndex();
         CaretAssertVectorIndex(m_brainBrowserWindows, browserWindowIndex);
         BrainBrowserWindow* browserWindow = m_brainBrowserWindows[browserWindowIndex];
         CaretAssert(browserWindow);
-        
         Overlay* overlay = mapEditEvent->getOverlay();
         
-        OverlaySettingsEditorDialog* overlayEditor = NULL;
-        for (std::set<OverlaySettingsEditorDialog*>::iterator overlayEditorIter = m_overlaySettingsEditors.begin();
-             overlayEditorIter != m_overlaySettingsEditors.end();
-             overlayEditorIter++) {
-            OverlaySettingsEditorDialog* med = *overlayEditorIter;
-            if (med->isDoNotReplaceSelected() == false) {
-                overlayEditor = med;
+        switch (mode) {
+            case EventOverlaySettingsEditorDialogRequest::MODE_OVERLAY_MAP_CHANGED:
+            {
+                for (std::set<OverlaySettingsEditorDialog*>::iterator overlayEditorIter = m_overlaySettingsEditors.begin();
+                     overlayEditorIter != m_overlaySettingsEditors.end();
+                     overlayEditorIter++) {
+                    OverlaySettingsEditorDialog* med = *overlayEditorIter;
+                    med->updateIfThisOverlayIsInDialog(overlay);
+                }
+            }
                 break;
+            case EventOverlaySettingsEditorDialogRequest::MODE_SHOW_EDITOR:
+            {
+                OverlaySettingsEditorDialog* overlayEditor = NULL;
+                for (std::set<OverlaySettingsEditorDialog*>::iterator overlayEditorIter = m_overlaySettingsEditors.begin();
+                     overlayEditorIter != m_overlaySettingsEditors.end();
+                     overlayEditorIter++) {
+                    OverlaySettingsEditorDialog* med = *overlayEditorIter;
+                    if (med->isDoNotReplaceSelected() == false) {
+                        overlayEditor = med;
+                        break;
+                    }
+                }
+                
+                bool placeInDefaultLocation = false;
+                if (overlayEditor == NULL) {
+                    overlayEditor = new OverlaySettingsEditorDialog(browserWindow);
+                    m_overlaySettingsEditors.insert(overlayEditor);
+                    this->addNonModalDialog(overlayEditor);
+                    placeInDefaultLocation = true;
+                }
+                else {
+                    if (overlayEditor->isHidden()) {
+                        placeInDefaultLocation = true;
+                    }
+                    
+                    /*
+                     * Is the overlay editor requested for a window
+                     * that is not the parent of this overlay editor?
+                     */
+                    if (browserWindow != overlayEditor->parent()) {
+                        /*
+                         * Switch the parent of the overlay editor.
+                         * On Linux, this will cause the overlay editor 
+                         * to be "brought to the front" only when its
+                         * parent is "brought to the front".
+                         * 
+                         * The position must be preserved.
+                         */
+                        const QPoint globalPos = overlayEditor->pos();
+                        overlayEditor->setParent(browserWindow,
+                                                 overlayEditor->windowFlags());
+                        overlayEditor->move(globalPos);
+                    }
+                }
+                
+                overlayEditor->updateDialogContent(overlay);
+                overlayEditor->show();
+                overlayEditor->raise();
+                overlayEditor->activateWindow();
+                if (placeInDefaultLocation) {
+                    WuQtUtilities::moveWindowToSideOfParent(browserWindow,
+                                                            overlayEditor);
+                }
             }
-        }
-        
-        bool placeInDefaultLocation = false;
-        if (overlayEditor == NULL) {
-            overlayEditor = new OverlaySettingsEditorDialog(browserWindow);
-            m_overlaySettingsEditors.insert(overlayEditor);
-            this->addNonModalDialog(overlayEditor);
-            placeInDefaultLocation = true;
-        }
-        else {
-            if (overlayEditor->isHidden()) {
-                placeInDefaultLocation = true;
-            }
-        }
-        
-        overlayEditor->updateDialogContent(overlay);
-        overlayEditor->show();
-        overlayEditor->raise();
-        overlayEditor->activateWindow();
-        if (placeInDefaultLocation) {
-            WuQtUtilities::moveWindowToSideOfParent(browserWindow,
-                                                    overlayEditor);
+                break;
         }
         mapEditEvent->setEventProcessed();
     }
@@ -1026,8 +1111,6 @@ GuiManager::receiveEvent(Event* event)
              * After it is created, the file will be opened.
              */
             m_nameOfDataFileToOpenAfterStartup = openFileEvent->getDataFileName();
-            //CaretLogSevere("No browser window open for loading file from operating system.");
-            //CaretAssert(0);
         }
     }
     else if (event->getEventType() == EventTypeEnum::EVENT_PALETTE_COLOR_MAPPING_EDITOR_SHOW) {
@@ -1481,40 +1564,6 @@ GuiManager::showHelpDialogActionToggled(bool status)
     showHideHelpDialog(status, NULL);
 }
 
-///**
-// * Show the Help Viewer Dialog.
-// *
-// * @param browserWindow
-// *    Parent of dialog if it needs to be created.
-// * @param helpPageName
-// *    Name of help page for display.
-// */
-//void
-//GuiManager::processShowHelpViewerDialog(BrainBrowserWindow* browserWindow,
-//                                        const AString& helpPageName)
-//{
-//    CaretAssert(browserWindow);
-//    
-//    if (m_helpViewerDialog == NULL) {
-//        BrainBrowserWindow* bbw = browserWindow;
-//        if (bbw == NULL) {
-//            bbw = getActiveBrowserWindow();
-//        }
-//        m_helpViewerDialog = new HelpViewerDialog(bbw);
-//        this->addNonModalDialog(m_helpViewerDialog);
-//    }
-//    
-//    m_helpViewerDialog->updateDialog();
-//
-//    if ( ! helpPageName.isEmpty()) {
-//        m_helpViewerDialog->showHelpPageWithName(helpPageName);
-//    }
-//    
-//    m_helpViewerDialog->setVisible(true);
-//    m_helpViewerDialog->show();
-//    m_helpViewerDialog->activateWindow();
-//}
-
 /**
  * @return The action that indicates the enabled status
  * for display of the information window.
@@ -1524,6 +1573,17 @@ GuiManager::getInformationDisplayDialogEnabledAction()
 {
     return m_informationDisplayDialogEnabledAction;
 }
+
+/**
+ * @return The action that indicates the enabled status
+ * for display of the identify brainordinate dialog.
+ */
+QAction*
+GuiManager::getIdentifyBrainordinateDialogDisplayAction()
+{
+    return m_identifyBrainordinateDialogEnabledAction;
+}
+
 
 /**
  * Show the information window.
@@ -1589,6 +1649,94 @@ GuiManager::processShowInformationDisplayDialog(const bool forceDisplayOfDialog)
             m_informationDisplayDialog->activateWindow();
         }
     }
+}
+
+/**
+ * Show/hide the identify dialog.
+ *
+ * @param status
+ *     Status (true/false) to display dialog.
+ */
+void
+GuiManager::showIdentifyBrainordinateDialogActionToggled(bool status)
+{
+    showHideIdentfyBrainordinateDialog(status,
+                          NULL);
+}
+
+/**
+ * Show or hide the identify brainordinate dialog.
+ *
+ * @param status
+ *     True means show, false means hide.
+ * @param parentBrainBrowserWindow
+ *     If this is not NULL, and the help dialog needs to be created,
+ *     use this window as the parent and place the dialog next to this
+ *     window.
+ */
+void
+GuiManager::showHideIdentfyBrainordinateDialog(const bool status,
+                                  BrainBrowserWindow* parentBrainBrowserWindow)
+{
+    bool dialogWasCreated = false;
+    
+    QWidget* moveWindowParent = parentBrainBrowserWindow;
+    
+    if (status) {
+        if (m_identifyBrainordinateDialog == NULL) {
+            BrainBrowserWindow* idDialogParent = parentBrainBrowserWindow;
+            if (idDialogParent == NULL) {
+                idDialogParent = getActiveBrowserWindow();
+            }
+            
+            m_identifyBrainordinateDialog = new IdentifyBrainordinateDialog(idDialogParent);
+            //m_identifyBrainordinateDialog->setSaveWindowPositionForNextTime(true);
+            this->addNonModalDialog(m_identifyBrainordinateDialog);
+            QObject::connect(m_identifyBrainordinateDialog, SIGNAL(dialogWasClosed()),
+                             this, SLOT(identifyBrainordinateDialogWasClosed()));
+            
+            dialogWasCreated = true;
+            
+            /*
+             * If there was no parent dialog for placement of the help
+             * dialog and there is only one browser window, use the browser
+             * for placement of the help dialog.
+             */
+            if (moveWindowParent == NULL) {
+                if (getAllOpenBrainBrowserWindows().size() == 1) {
+                    moveWindowParent = idDialogParent;
+                }
+            }
+        }
+        
+        m_identifyBrainordinateDialog->show();
+        m_identifyBrainordinateDialog->activateWindow();
+    }
+    else {
+        m_identifyBrainordinateDialog->close();
+    }
+    
+    if (dialogWasCreated) {
+        if (moveWindowParent != NULL) {
+            WuQtUtilities::moveWindowToSideOfParent(moveWindowParent,
+                                                    m_identifyBrainordinateDialog);
+        }
+    }
+    
+    m_identifyBrainordinateDialogEnabledAction->blockSignals(true);
+    m_identifyBrainordinateDialogEnabledAction->setChecked(status);
+    m_identifyBrainordinateDialogEnabledAction->blockSignals(false);
+}
+
+/**
+ * Gets called when the identify dialog is closed.
+ */
+void
+GuiManager::identifyBrainordinateDialogWasClosed()
+{
+    m_identifyBrainordinateDialogEnabledAction->blockSignals(true);
+    m_identifyBrainordinateDialogEnabledAction->setChecked(false);
+    m_identifyBrainordinateDialogEnabledAction->blockSignals(false);
 }
 
 /**
@@ -1764,7 +1912,6 @@ GuiManager::processShowConnectomeDataBaseWebView(BrainBrowserWindow* /*browserWi
         this->addNonModalDialog(this->connectomeDatabaseWebView);
     }
     this->connectomeDatabaseWebView->show();
-//    this->connectomeDatabaseWebView->activateWindow();
 }
 
 /**
@@ -1892,13 +2039,6 @@ GuiManager::restoreFromScene(const SceneAttributes* sceneAttributes,
      */
     SceneWindowGeometry::setFirstBrowserWindowCoordinatesInvalid();
         
-//    /*
-//     * Reset the brain
-//     */
-//    Brain* brain = GuiManager::get()->getBrain();
-//    brain->resetBrainKeepSceneFiles();
-//    EventManager::get()->sendEvent(EventUserInterfaceUpdate().getPointer());    
-
     /*
      * Close all but one window and remove its tabs
      */
@@ -1915,9 +2055,23 @@ GuiManager::restoreFromScene(const SceneAttributes* sceneAttributes,
     }
     
     /*
+     * Close Overlay and palette editor windows since the files
+     * displayed in them may become invalid
+     */
+    for (std::set<OverlaySettingsEditorDialog*>::iterator overlayEditorIter = m_overlaySettingsEditors.begin();
+         overlayEditorIter != m_overlaySettingsEditors.end();
+         overlayEditorIter++) {
+        OverlaySettingsEditorDialog* med = *overlayEditorIter;
+        med->close();
+    }
+    if (m_paletteColorMappingEditor != NULL) {
+        m_paletteColorMappingEditor->close();
+    }
+    
+    /*
      * Update the windows
      */
-    EventManager::get()->sendEvent(EventUserInterfaceUpdate().getPointer());    
+    EventManager::get()->sendEvent(EventUserInterfaceUpdate().getPointer());
     EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());    
     
     /*
@@ -1991,20 +2145,10 @@ GuiManager::restoreFromScene(const SceneAttributes* sceneAttributes,
             }
         }
         
-        CaretLogInfo("Time to restore browser windows was "
+        CaretLogFine("Time to restore browser windows was "
                      + QString::number(timer.getElapsedTimeSeconds(), 'f', 3)
                      + " seconds");
         timer.reset();
-        
-        /*
-         * Close windows not needed
-         */
-        //    for (std::list<BrainBrowserWindow*>::iterator iter = availableWindows.begin();
-        //         iter != availableWindows.end();
-        //         iter++) {
-        //        BrainBrowserWindow* bbw = *iter;
-        //        bbw->close();
-        //    }
         
         /*
          * Restore information window
@@ -2049,7 +2193,7 @@ GuiManager::restoreFromScene(const SceneAttributes* sceneAttributes,
                                                               surfPropClass);
         }
         
-        CaretLogInfo("Time to restore information/property windows was "
+        CaretLogFine("Time to restore information/property windows was "
                      + QString::number(timer.getElapsedTimeSeconds(), 'f', 3)
                      + " seconds");
         timer.reset();
@@ -2077,14 +2221,14 @@ GuiManager::restoreFromScene(const SceneAttributes* sceneAttributes,
     EventManager::get()->sendEvent(progressEvent.getPointer());
     EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
 
-    CaretLogInfo("Time to update graphics in all windows was "
+    CaretLogFine("Time to update graphics in all windows was "
                  + QString::number(timer.getElapsedTimeSeconds(), 'f', 3)
                  + " seconds");
     timer.reset();
 
     const int64_t totalNumberOfEvents = (EventManager::get()->getEventIssuedCounter()
                                          - eventCountAtStart);
-    CaretLogInfo("Time to restore scene was "
+    CaretLogFine("Time to restore scene was "
                  + QString::number(sceneRestoreTimer.getElapsedTimeSeconds(), 'f', 3)
                  + " seconds with "
                  + AString::number(totalNumberOfEvents)
@@ -2134,17 +2278,26 @@ GuiManager::processIdentification(const int32_t tabIndex,
     std::vector<AString> ciftiLoadingInfo;
     
     const QString breakAndIndent("<br>&nbsp;&nbsp;&nbsp;&nbsp;");
-    SelectionItemSurfaceNodeIdentificationSymbol* idSymbol = selectionManager->getSurfaceNodeIdentificationSymbol();
-    if ((idSymbol->getSurface() != NULL)
-        && (idSymbol->getNodeNumber() >= 0)) {
-        const Surface* surface = idSymbol->getSurface();
+    SelectionItemSurfaceNodeIdentificationSymbol* nodeIdSymbol = selectionManager->getSurfaceNodeIdentificationSymbol();
+    SelectionItemVoxelIdentificationSymbol*  voxelIdSymbol = selectionManager->getVoxelIdentificationSymbol();
+    if ((nodeIdSymbol->getSurface() != NULL)
+        && (nodeIdSymbol->getNodeNumber() >= 0)) {
+        const Surface* surface = nodeIdSymbol->getSurface();
         const int32_t surfaceNumberOfNodes = surface->getNumberOfNodes();
-        const int32_t nodeIndex = idSymbol->getNodeNumber();
+        const int32_t nodeIndex = nodeIdSymbol->getNodeNumber();
         const StructureEnum::Enum structure = surface->getStructure();
         
         identificationManager->removeIdentifiedNodeItem(structure,
                                                         surfaceNumberOfNodes,
                                                         nodeIndex);
+        updateGraphicsFlag = true;
+        updateInformationFlag = true;
+    }
+    else if (voxelIdSymbol->isValid()) {
+        float voxelXYZ[3];
+        voxelIdSymbol->getVoxelXYZ(voxelXYZ);
+        identificationManager->removeIdentifiedVoxelItem(voxelXYZ);
+
         updateGraphicsFlag = true;
         updateInformationFlag = true;
     }
@@ -2168,7 +2321,7 @@ GuiManager::processIdentification(const int32_t tabIndex,
                     doubleXYZ[1],
                     doubleXYZ[2]
                 };
-                Surface* surface = brain->getVolumeInteractionSurfaceNearestCoordinate(voxelXYZ,
+                Surface* surface = brain->getPrimaryAnatomicalSurfaceNearestCoordinate(voxelXYZ,
                                                                                        3.0);
                 if (surface != NULL) {
                     const int nodeIndex = surface->closestNode(voxelXYZ);
@@ -2272,22 +2425,71 @@ GuiManager::processIdentification(const int32_t tabIndex,
             if (chartMatrixInterface != NULL) {
                 CiftiConnectivityMatrixParcelFile* ciftiParcelFile = dynamic_cast<CiftiConnectivityMatrixParcelFile*>(chartMatrixInterface);
                 if (ciftiParcelFile != NULL) {
+                    if (ciftiParcelFile->isMapDataLoadingEnabled(0)) {
+                        const int32_t rowIndex = idChartMatrix->getMatrixRowIndex();
+                        const int32_t columnIndex = idChartMatrix->getMatrixColumnIndex();
+                        if ((rowIndex >= 0)
+                            && (columnIndex >= 0)) {
+                            try {
+                                ciftiConnectivityManager->loadRowOrColumnFromParcelFile(brain,
+                                                                                        ciftiParcelFile,
+                                                                                        rowIndex,
+                                                                                        columnIndex,
+                                                                                        ciftiLoadingInfo);
+                                
+                            }
+                            catch (const DataFileException& e) {
+                                cursor.restoreCursor();
+                                QMessageBox::critical(parentWidget, "", e.whatString());
+                                cursor.showWaitCursor();
+                            }
+                            updateGraphicsFlag = true;
+                        }
+                    }
+                }
+                
+                CiftiScalarDataSeriesFile* scalarDataSeriesFile = dynamic_cast<CiftiScalarDataSeriesFile*>(chartMatrixInterface);
+                if (scalarDataSeriesFile != NULL) {
                     const int32_t rowIndex = idChartMatrix->getMatrixRowIndex();
                     if (rowIndex >= 0) {
-                        try {
-                            ciftiConnectivityManager->loadRowFromParcelFile(brain,
-                                                                            ciftiParcelFile,
-                                                                            rowIndex,
-                                                                            ciftiLoadingInfo);
-                            
+                        scalarDataSeriesFile->setSelectedMapIndex(tabIndex,
+                                                                  rowIndex);
+                        
+                        const MapYokingGroupEnum::Enum mapYoking = scalarDataSeriesFile->getMatrixRowColumnMapYokingGroup(tabIndex);
+                        
+                        if (mapYoking != MapYokingGroupEnum::MAP_YOKING_GROUP_OFF) {
+                            EventMapYokingSelectMap selectMapEvent(mapYoking,
+                                                                   scalarDataSeriesFile,
+                                                                   rowIndex,
+                                                                   true);
+                            EventManager::get()->sendEvent(selectMapEvent.getPointer());
                         }
-                        catch (const DataFileException& e) {
-                            cursor.restoreCursor();
-                            QMessageBox::critical(parentWidget, "", e.whatString());
-                            cursor.showWaitCursor();
+                        else {
+                            chartingDataManager->loadChartForCiftiMappableFileRow(scalarDataSeriesFile,
+                                                                                  rowIndex);
                         }
+                        
                         updateGraphicsFlag = true;
                     }
+                }
+            }
+        }
+        
+        SelectionItemCiftiConnectivityMatrixRowColumn* idCiftiConnMatrix = selectionManager->getCiftiConnectivityMatrixRowColumnIdentification();
+        if (idCiftiConnMatrix != NULL) {
+            CiftiMappableConnectivityMatrixDataFile* matrixFile = idCiftiConnMatrix->getCiftiConnectivityMatrixFile();
+            if (matrixFile != NULL) {
+                const int32_t rowIndex = idCiftiConnMatrix->getMatrixRowIndex();
+                const int32_t columnIndex = idCiftiConnMatrix->getMatrixColumnIndex();
+                if ((rowIndex >= 0)
+                    || (columnIndex >= 0)) {
+                    ciftiConnectivityManager->loadRowOrColumnFromConnectivityMatrixFile(brain,
+                                                                                        matrixFile,
+                                                                                        rowIndex,
+                                                                                        columnIndex,
+                                                                                        ciftiLoadingInfo);
+                    updateGraphicsFlag = true;
+                
                 }
             }
         }
@@ -2312,13 +2514,13 @@ GuiManager::processIdentification(const int32_t tabIndex,
             CaretAssert(brainStructure);
             
             float xyz[3];
-            const Surface* volumeInteractionSurface = brainStructure->getVolumeInteractionSurface();
-            if (volumeInteractionSurface != NULL) {
-                volumeInteractionSurface->getCoordinate(nodeIndex,
+            const Surface* primaryAnatomicalSurface = brainStructure->getPrimaryAnatomicalSurface();
+            if (primaryAnatomicalSurface != NULL) {
+                primaryAnatomicalSurface->getCoordinate(nodeIndex,
                                                         xyz);
             }
             else {
-                CaretLogWarning("No surface/volume interaction surface for "
+                CaretLogWarning("No surface/primary anatomical surface for "
                                 + StructureEnum::toGuiName(brainStructure->getStructure()));
                 xyz[0] = -10000000.0;
                 xyz[1] = -10000000.0;
@@ -2353,6 +2555,11 @@ GuiManager::processIdentification(const int32_t tabIndex,
                 float xyz[3];
                 volumeFile->indexToSpace(voxelIJK, xyz);
                 
+                if (identifiedItem == NULL) {
+                    identifiedItem = new IdentifiedItemVoxel(identificationMessage,
+                                                             xyz);
+                }
+                
                 if (issuedIdentificationLocationEvent == false) {
                     EventIdentificationHighlightLocation idLocation(tabIndex,
                                                                     xyz,
@@ -2377,7 +2584,7 @@ GuiManager::processIdentification(const int32_t tabIndex,
         AString ciftiInfo;
         if (ciftiLoadingInfo.empty() == false) {
             IdentificationStringBuilder ciftiIdStringBuilder;
-            ciftiIdStringBuilder.addLine(false, "CIFTI Rows loaded", " ");
+            ciftiIdStringBuilder.addLine(false, "CIFTI data loaded", " ");
             for (std::vector<AString>::iterator iter = ciftiLoadingInfo.begin();
                  iter != ciftiLoadingInfo.end();
                  iter++) {
@@ -2410,7 +2617,7 @@ GuiManager::processIdentification(const int32_t tabIndex,
         EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
         EventManager::get()->sendEvent(EventUserInterfaceUpdate().addToolBar().addToolBox().getPointer());
     }
-}
+} // tabIndex
 
 
 

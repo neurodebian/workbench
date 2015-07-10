@@ -28,6 +28,8 @@
 #include "CiftiXML.h"
 #include "MultiDimIterator.h"
 
+#include <iostream>
+
 using namespace caret;
 using namespace std;
 
@@ -62,7 +64,7 @@ OperationParameters* OperationCiftiMath::getParameters()
     
     ret->createOptionalParameter(5, "-override-mapping-check", "don't check the mappings for compatibility, only check length");
     
-    AString myText = AString("This command evaluates <expression> at each (row, column) location independently.  ") +
+    AString myText = AString("This command evaluates <expression> at each matrix element independently.  ") +
                              "There must be at least one -var option (to get the output layout from), even if the <name> specified in it isn't used in <expression>.\n\n" +
                              "To select a single column from a 2D file (most cifti files are 2D), use -select 1 <index>, where <index> is 1-based.  " +
                              "To select a single row from a 2D file, use -select 2 <index>.  " +
@@ -80,7 +82,8 @@ void OperationCiftiMath::useParameters(OperationParameters* myParams, ProgressOb
     LevelProgress myProgress(myProgObj);
     AString expression = myParams->getString(1);
     CaretMathExpression myExpr(expression);
-    const vector<AString>& myVarNames = myExpr.getVarNames();
+    cout << "parsed '" + expression + "' as '" + myExpr.toString() + "'" << endl;
+    vector<AString> myVarNames = myExpr.getVarNames();
     CiftiFile* myCiftiOut = myParams->getOutputCifti(2);
     const vector<ParameterComponent*>& myVarOpts = *(myParams->getRepeatableParameterInstances(3));
     OptionalParameter* fixNanOpt = myParams->getOptionalParameter(4);
@@ -95,7 +98,7 @@ void OperationCiftiMath::useParameters(OperationParameters* myParams, ProgressOb
     int numInputs = myVarOpts.size();
     int numVars = myVarNames.size();
     vector<CiftiFile*> varCiftiFiles(numVars, (CiftiFile*)NULL);
-    if (numInputs == 0) throw OperationException("you must specify at least one input file (-var), even if the expression doesn't use a variable");
+    if (numInputs == 0 && numVars == 0) throw OperationException("you must specify at least one input file (-var), even if the expression doesn't use a variable");
     CiftiXML outXML;
     QString xmlText;
     vector<int64_t> outDims;//don't even assume 2 dimensions, in case someone makes a 1-d cifti
@@ -186,9 +189,11 @@ void OperationCiftiMath::useParameters(OperationParameters* myParams, ProgressOb
                         {
                             outXML.setMap(j, *(tempXML.getMap(j)));
                         } else {//test mapping types for compatibility since -select wasn't used
-                            if (!overrideMapCheck && !outXML.getMap(j)->approximateMatch(*(tempXML.getMap(j))))
+                            AString explanation;
+                            if (!overrideMapCheck && !outXML.getMap(j)->approximateMatch(*(tempXML.getMap(j)), &explanation))
                             {
-                                throw OperationException("mismatch in spatial output mapping for variable '" + varName + "', dimension " + AString::number(j + 1));
+                                throw OperationException("variable " + varName + "'s " + CiftiMappingType::mappingTypeToName(tempXML.getMap(j)->getType()) +
+                                                         " mapping on dimension " + AString::number(j + 1) + " doesn't match mappings from earlier -var options: '" + explanation + "'");
                             }
                         }
                     } else {

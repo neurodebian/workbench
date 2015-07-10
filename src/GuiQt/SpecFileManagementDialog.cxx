@@ -49,6 +49,7 @@
 #include "CaretMappableDataFile.h"
 #include "CaretPreferences.h"
 #include "CursorDisplayScoped.h"
+#include "DataFileException.h"
 #include "EventDataFileRead.h"
 #include "EventDataFileReload.h"
 #include "EventGetDisplayedDataFiles.h"
@@ -520,6 +521,23 @@ SpecFileManagementDialog::getDataFileContentFromSpecFile()
         for (int iFile = 0; iFile < numFiles; iFile++) {
             SpecFileDataFile* sfdf = group->getFileInformation(iFile);
             
+            /*
+             * If the spec file entry is not a member of the spec file,
+             * AND if it does not match a loaded file
+             * AND the file does not exist
+             * THEN the file likely was a duplicate (more than one copy
+             * of a specific file was loaded with the same name) and 
+             * the user had removed it from Workbench.
+             *
+             * So, hide the file from view.
+             */
+            if ( ! sfdf->isSpecFileMember()) {
+                if (sfdf->getCaretDataFile() == NULL) {
+                    if (! sfdf->exists()) {
+                        continue;
+                    }
+                }
+            }
             SpecFileManagementDialogRowContent* rowContent = new SpecFileManagementDialogRowContent(group,
                                                                               sfdf);
             m_tableRowDataFileContent.push_back(rowContent);
@@ -1731,6 +1749,8 @@ SpecFileManagementDialog::okButtonClickedManageAndSaveFiles()
             break;
     }
     
+    EventManager::get()->sendEvent(EventUserInterfaceUpdate().getPointer());
+    
     return allowDialogToClose;
 }
 
@@ -1789,6 +1809,7 @@ SpecFileManagementDialog::fileRemoveActionSelected(int rowIndex)
             }
         }
         EventManager::get()->sendEvent(EventDataFileDelete(caretDataFile).getPointer());
+        getDataFileContentFromSpecFile();
         loadSpecFileContentIntoDialog();
         updateGraphicWindowsAndUserInterface();
     }
@@ -1951,7 +1972,7 @@ SpecFileManagementDialog::fileOptionsActionSelected(int rowIndex)
     m_filesTableWidget->setRangeSelected(QTableWidgetSelectionRange(rowIndex, m_COLUMN_OPTIONS_TOOLBUTTON,
                                                                     rowIndex, m_COLUMN_OPTIONS_TOOLBUTTON), false);
     
-    const AString copyPathText("Copy Path and Filename to Clipboard");
+    const AString copyPathText("Copy Path and File Name to Clipboard");
     
     if (rowIndex == m_specFileTableRowIndex) {
         QMenu menu;

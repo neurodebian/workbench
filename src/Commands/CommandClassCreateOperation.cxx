@@ -24,6 +24,7 @@
 
 #include "CaretAssertion.h"
 #include "CommandClassCreateOperation.h"
+#include "DataFileException.h"
 #include "FileInformation.h"
 #include "ProgramParameters.h"
 #include "TextFile.h"
@@ -86,8 +87,7 @@ CommandClassCreateOperation::getHelpInformation(const AString& /*programName*/)
  *   If there is an error in the parameters.
  */
 void 
-CommandClassCreateOperation::executeOperation(ProgramParameters& parameters) throw (CommandException,
-                                                               ProgramParametersException)
+CommandClassCreateOperation::executeOperation(ProgramParameters& parameters)
 {
     const AString operationClassName = parameters.nextString("Operation Class Name");
     const AString commandLineSwitch  = parameters.nextString("Command Line Switch");

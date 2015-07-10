@@ -27,27 +27,13 @@
 
 #include "EventListenerInterface.h"
 
-class QButtonGroup;
-class QCheckBox;
-class QGridLayout;
-class QLabel;
-class QLineEdit;
-class QRadioButton;
-class QSignalMapper;
 class QStackedWidget;
 
 namespace caret {
+    class ChartLinesSelectionViewController;
+    class ChartMatrixParcelSelectionViewController;
+    class ChartMatrixSeriesSelectionViewController;
 
-    class Brain;
-    class CaretDataFile;
-    class CaretDataFileSelectionComboBox;
-    class ChartableBrainordinateInterface;
-    class ChartMatrixDisplayProperties;
-    class ChartableMatrixInterface;
-    class ChartModel;
-    class EnumComboBoxTemplate;
-    class ModelChart;
-    
     class ChartSelectionViewController : public QWidget, public EventListenerInterface {
         
         Q_OBJECT
@@ -58,19 +44,6 @@ namespace caret {
                                      QWidget* parent);
         
         virtual ~ChartSelectionViewController();
-        
-    private slots:
-        void brainordinateSelectionCheckBoxClicked(int);
-        
-        void matrixFileSelected(CaretDataFile* caretDataFile);
-        
-        void matrixFileLoadingButtonClicked();
-
-        void matrixYokingGroupEnumComboBoxActivated();
-        
-        void matrixColorBarActionTriggered(bool status);
-        
-        void matrixSettingsActionTriggered();
         
     private:
         ChartSelectionViewController(const ChartSelectionViewController&);
@@ -87,71 +60,29 @@ namespace caret {
         enum Mode {
             MODE_INVALID,
             MODE_BRAINORDINATE,
-            MODE_MATRIX
+            MODE_MATRIX_LAYER,
+            MODE_MATRIX_SERIES
         };
         
         // ADD_NEW_MEMBERS_HERE
 
-        QWidget* createBrainordinateChartWidget();
-        
-        QWidget* createMatrixChartWidget();
         
         void updateSelectionViewController();
         
-        void updateBrainordinateChartWidget(Brain* brain,
-                                            ModelChart* modelChart,
-                                            const int32_t browserTabIndex);
-        
-        void updateMatrixChartWidget(Brain* brain,
-                                     ModelChart* modelChart,
-                                     const int32_t browserTabIndex);
-        
-        ChartableBrainordinateInterface* getBrainordinateFileAtIndex(const int32_t indx);
-        
-//        ChartableMatrixInterface* getMatrixFileAtIndex(const int32_t indx);
-        
-//        ChartModel* getSelectedChartModel();
-        
-        ChartMatrixDisplayProperties* getChartMatrixDisplayProperties();
-        
         QStackedWidget* m_stackedWidget;
         
-        QWidget* m_brainordinateChartWidget;
+        ChartLinesSelectionViewController* m_brainordinateChartWidget;
         
-        QWidget* m_matrixChartWidget;
+        ChartMatrixParcelSelectionViewController* m_matrixParcelChartWidget;
+        
+        ChartMatrixSeriesSelectionViewController* m_matrixSeriesChartWidget;
         
         Mode m_mode;
         
         const int32_t m_browserWindowIndex;
-        
-        std::vector<QCheckBox*> m_brainordinateFileEnableCheckBoxes;
-        
-        std::vector<QLineEdit*> m_brainordinateFileNameLineEdits;
-        
-        QGridLayout* m_brainordinateGridLayout;
-        
-        QSignalMapper* m_signalMapperBrainordinateFileEnableCheckBox;
-        
-        CaretDataFileSelectionComboBox* m_matrixFileSelectionComboBox;
-        
-        QRadioButton* m_matrixLoadByColumnRadioButton;
-        
-        QRadioButton* m_matrixLoadByRowRadioButton;
-                
-        EnumComboBoxTemplate* m_matrixYokingGroupComboBox;
-
-        QAction* m_matrixColorBarAction;
-        
-        QAction* m_matrixSettingsAction;
-        
-        static const int COLUMN_CHECKBOX;
-        static const int COLUMN_LINE_EDIT;
-        
     };
     
 #ifdef __CHART_SELECTION_VIEW_CONTROLLER_DECLARE__
-    const int ChartSelectionViewController::COLUMN_CHECKBOX    = 0;
-    const int ChartSelectionViewController::COLUMN_LINE_EDIT   = 1;
 #endif // __CHART_SELECTION_VIEW_CONTROLLER_DECLARE__
 
 } // namespace

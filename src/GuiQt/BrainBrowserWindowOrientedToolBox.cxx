@@ -35,7 +35,7 @@
 #include "CaretAssert.h"
 #include "CaretDataFile.h"
 #include "CaretPreferences.h"
-#include "ChartableBrainordinateInterface.h"
+#include "ChartableLineSeriesBrainordinateInterface.h"
 #include "ChartableMatrixInterface.h"
 #include "ChartToolBoxViewController.h"
 #include "CiftiConnectivityMatrixViewController.h"
@@ -45,6 +45,7 @@
 #include "FiberOrientationSelectionViewController.h"
 #include "FociSelectionViewController.h"
 #include "GuiManager.h"
+#include "ImageSelectionViewController.h"
 #include "LabelSelectionViewController.h"
 #include "OverlaySetViewController.h"
 #include "SceneClass.h"
@@ -116,6 +117,7 @@ BrainBrowserWindowOrientedToolBox::BrainBrowserWindowOrientedToolBox(const int32
     m_connectivityMatrixViewController = NULL;
     m_fiberOrientationViewController = NULL;
     m_fociSelectionViewController = NULL;
+    m_imageSelectionViewController = NULL;
     m_labelSelectionViewController = NULL;
     m_overlaySetViewController = NULL;
     m_volumeSurfaceOutlineSetViewController = NULL;
@@ -127,6 +129,7 @@ BrainBrowserWindowOrientedToolBox::BrainBrowserWindowOrientedToolBox(const int32
     m_connectivityTabIndex = -1;
     m_fiberOrientationTabIndex = -1;
     m_fociTabIndex = -1;
+    m_imageTabIndex = -1;
     m_labelTabIndex = -1;
     m_overlayTabIndex = -1;
     m_volumeSurfaceOutlineTabIndex = -1;
@@ -170,6 +173,13 @@ BrainBrowserWindowOrientedToolBox::BrainBrowserWindowOrientedToolBox(const int32
                                                                                 this);
         m_fociTabIndex = addToTabWidget(m_fociSelectionViewController,
                              "Foci");
+    }
+    
+    if (isFeaturesToolBox) {
+        m_imageSelectionViewController = new ImageSelectionViewController(browserWindowIndex,
+                                                                          this);
+        m_imageTabIndex = addToTabWidget(m_imageSelectionViewController,
+                                         "Images");
     }
     
     if (isFeaturesToolBox) {
@@ -332,6 +342,10 @@ BrainBrowserWindowOrientedToolBox::saveToScene(const SceneAttributes* sceneAttri
         sceneClass->addClass(m_fociSelectionViewController->saveToScene(sceneAttributes,
                                                      "m_fociSelectionViewController"));
     }
+    if (m_imageSelectionViewController != NULL) {
+        sceneClass->addClass(m_imageSelectionViewController->saveToScene(sceneAttributes,
+                                                                         "m_imageSelectionViewController"));
+    }
     if (m_labelSelectionViewController != NULL) {
         sceneClass->addClass(m_labelSelectionViewController->saveToScene(sceneAttributes,
                                                      "m_labelSelectionViewController"));
@@ -398,6 +412,10 @@ BrainBrowserWindowOrientedToolBox::restoreFromScene(const SceneAttributes* scene
     if (m_fociSelectionViewController != NULL) {
         m_fociSelectionViewController->restoreFromScene(sceneAttributes,
                                                           sceneClass->getClass("m_fociSelectionViewController"));
+    }
+    if (m_imageSelectionViewController != NULL) {
+        m_imageSelectionViewController->restoreFromScene(sceneAttributes,
+                                                         sceneClass->getClass("m_imageSelectionViewController"));
     }
     if (m_labelSelectionViewController != NULL) {
         m_labelSelectionViewController->restoreFromScene(sceneAttributes,
@@ -490,6 +508,7 @@ BrainBrowserWindowOrientedToolBox::receiveEvent(Event* event)
         bool haveConnFiles  = false;
         bool haveFibers     = false;
         bool haveFoci       = false;
+        bool haveImages     = false;
         bool haveLabels     = false;
         bool haveSurfaces   = false;
         bool haveVolumes    = false;
@@ -531,12 +550,20 @@ BrainBrowserWindowOrientedToolBox::receiveEvent(Event* event)
                 case DataFileTypeEnum::CONNECTIVITY_PARCEL_DENSE:
                     haveConnFiles = true;
                     break;
+                case DataFileTypeEnum::CONNECTIVITY_PARCEL_LABEL:
+                    haveLabels = true;
+                    break;
                 case DataFileTypeEnum::CONNECTIVITY_PARCEL_SCALAR:
                     break;
                 case DataFileTypeEnum::CONNECTIVITY_PARCEL_SERIES:
                     break;
+                case DataFileTypeEnum::CONNECTIVITY_SCALAR_DATA_SERIES:
+                    break;
                 case DataFileTypeEnum::FOCI:
                     haveFoci = true;
+                    break;
+                case DataFileTypeEnum::IMAGE:
+                    haveImages = true;
                     break;
                 case DataFileTypeEnum::LABEL:
                     haveLabels = true;
@@ -635,6 +662,7 @@ BrainBrowserWindowOrientedToolBox::receiveEvent(Event* event)
         if (m_borderTabIndex >= 0) m_tabWidget->setTabEnabled(m_borderTabIndex, haveBorders);
         if (m_fiberOrientationTabIndex >= 0) m_tabWidget->setTabEnabled(m_fiberOrientationTabIndex, haveFibers);
         if (m_fociTabIndex >= 0) m_tabWidget->setTabEnabled(m_fociTabIndex, haveFoci);
+        if (m_imageTabIndex >= 0) m_tabWidget->setTabEnabled(m_imageTabIndex, haveImages);
         if (m_labelTabIndex >= 0) m_tabWidget->setTabEnabled(m_labelTabIndex, haveLabels);
         
         if (m_overlayTabIndex >= 0) m_tabWidget->setTabEnabled(m_overlayTabIndex, enableLayers);

@@ -59,11 +59,15 @@ CaretDataFileHelper::~CaretDataFileHelper()
 #include "CiftiConnectivityMatrixDenseParcelFile.h"
 #include "CiftiConnectivityMatrixParcelDenseFile.h"
 #include "CiftiConnectivityMatrixParcelFile.h"
+#include "CiftiParcelLabelFile.h"
 #include "CiftiParcelScalarFile.h"
 #include "CiftiParcelSeriesFile.h"
 #include "CiftiFiberOrientationFile.h"
 #include "CiftiFiberTrajectoryFile.h"
+#include "CiftiScalarDataSeriesFile.h"
+#include "FileInformation.h"
 #include "FociFile.h"
+#include "ImageFile.h"
 #include "LabelFile.h"
 #include "MetricFile.h"
 #include "PaletteFile.h"
@@ -84,7 +88,7 @@ CaretDataFileHelper::~CaretDataFileHelper()
  *    DataFileException if unable to read the file for any reason.
  */
 CaretDataFile*
-CaretDataFileHelper::readAnyCaretDataFile(const AString& filename, const bool& preferOnDisk) throw (DataFileException)
+CaretDataFileHelper::readAnyCaretDataFile(const AString& filename, const bool& preferOnDisk)
 {
     bool isValid = false;
     const DataFileTypeEnum::Enum dataFileType = DataFileTypeEnum::fromFileExtension(filename,
@@ -92,7 +96,8 @@ CaretDataFileHelper::readAnyCaretDataFile(const AString& filename, const bool& p
     
     if (( ! isValid)
         || (dataFileType == DataFileTypeEnum::UNKNOWN)) {
-        throw DataFileException("Filename extension does not match any supported data file.");
+        throw DataFileException(filename,
+                                "Filename extension does not match any supported data file.");
     }
     
     CaretDataFile* caretDataFile = NULL;
@@ -128,14 +133,23 @@ CaretDataFileHelper::readAnyCaretDataFile(const AString& filename, const bool& p
         case DataFileTypeEnum::CONNECTIVITY_PARCEL_DENSE:
             caretDataFile = new CiftiConnectivityMatrixParcelDenseFile();
             break;
+        case DataFileTypeEnum::CONNECTIVITY_PARCEL_LABEL:
+            caretDataFile = new CiftiParcelLabelFile();
+            break;
         case DataFileTypeEnum::CONNECTIVITY_PARCEL_SCALAR:
             caretDataFile = new CiftiParcelScalarFile();
             break;
         case DataFileTypeEnum::CONNECTIVITY_PARCEL_SERIES:
             caretDataFile = new CiftiParcelSeriesFile();
             break;
+        case DataFileTypeEnum::CONNECTIVITY_SCALAR_DATA_SERIES:
+            caretDataFile = new CiftiScalarDataSeriesFile();
+            break;
         case DataFileTypeEnum::FOCI:
             caretDataFile = new FociFile();
+            break;
+        case DataFileTypeEnum::IMAGE:
+            caretDataFile = new ImageFile();
             break;
         case DataFileTypeEnum::LABEL:
             caretDataFile = new LabelFile();
@@ -170,7 +184,18 @@ CaretDataFileHelper::readAnyCaretDataFile(const AString& filename, const bool& p
     
     try {
         if (preferOnDisk) caretDataFile->setPreferOnDiskReading(true);//NOTE: because Dense Connectivity also pays attention to this, never change default behaviors away from on disk
-        caretDataFile->readFile(filename);
+        try {
+            caretDataFile->readFile(filename);
+        }
+        catch (const std::bad_alloc& badAlloc) {
+            /*
+             * This DataFileException will be caught
+             * in the outer try/catch and it will
+             * clean up to avoid memory leaks.
+             */
+            throw DataFileException(filename,
+                                    createBadAllocExceptionMessage(filename));
+        }
     }
     catch (const DataFileException& dfe) {
         delete caretDataFile;
@@ -179,6 +204,42 @@ CaretDataFileHelper::readAnyCaretDataFile(const AString& filename, const bool& p
     }
     
     return caretDataFile;
+}
+
+/**
+ * Creates a useful error message when a std::bad_alloc exception occurs.
+ *
+ * @param filename
+ *     Name of file that caused the std::bad_alloc exception.
+ * @return
+ *     Message with info about the file.
+ */
+AString
+CaretDataFileHelper::createBadAllocExceptionMessage(const AString& filename)
+{
+    FileInformation fileInfo(filename);
+    
+    AString message("Unable to allocate memory for reading the file.");
+    if (fileInfo.exists()) {
+//        float bytes = (float)fileInfo.size();
+//        short index = 0;
+//        static const char *labels[9] = {" Bytes", " Kilobytes", " Megabytes", " Gigabytes", " Terabytes", " Petabytes", " Exabytes", " Zettabytes", " Yottabytes"};
+//        while (index < 8 && bytes > 1000.0f)
+//        {
+//            ++index;
+//            bytes = bytes / 1000.0f;//using 1024 would make it Kibibytes, etc
+//        }
+//        AString sizeString = AString::number(bytes, 'f', 2) + labels[index];//2 digits after decimal point
+        
+        const AString sizeString = FileInformation::fileSizeToStandardUnits(fileInfo.size());
+        message.appendWithNewLine("File Size: " + sizeString);
+        message.appendWithNewLine("");
+        message.appendWithNewLine("Note: The amount of memory required to read a data file may be "
+                                  "substantially larger than the size of the file due to the way the "
+                                  "file's data is organized in memory or compression of data within the file.");
+    }
+    
+    return message;
 }
 
 

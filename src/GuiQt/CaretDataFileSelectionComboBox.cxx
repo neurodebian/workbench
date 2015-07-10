@@ -29,6 +29,7 @@
 #include "CaretDataFile.h"
 #include "CaretDataFileSelectionModel.h"
 #include "FilePathNamePrefixCompactor.h"
+#include "WuQEventBlockingFilter.h"
 
 using namespace caret;
 
@@ -42,14 +43,20 @@ using namespace caret;
 
 /**
  * Constructor.
+ *
+ * @param parent
+ *    Parent of combo box.
  */
 CaretDataFileSelectionComboBox::CaretDataFileSelectionComboBox(QObject* parent)
 : WuQWidget(parent)
 {
     m_selectionModel = NULL;
     m_comboBox = new QComboBox();
+    m_comboBox->setSizeAdjustPolicy(QComboBox::AdjustToContents);
     QObject::connect(m_comboBox, SIGNAL(activated(int)),
                      this, SLOT(slotFileIndexSelected(int)));
+
+    WuQEventBlockingFilter::blockMouseWheelEventInMacComboBox(m_comboBox);
 }
 
 /**

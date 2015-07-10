@@ -20,6 +20,7 @@
 /*LICENSE_END*/
 
 #include <QAction>
+#include <QCheckBox>
 #include <QDoubleSpinBox>
 #include <QGridLayout>
 #include <QLabel>
@@ -35,8 +36,11 @@
 #include "CaretDataFile.h"
 #include "CaretDataFileSelectionModel.h"
 #include "EnumComboBoxTemplate.h"
+#include "CaretMappableDataFile.h"
+#include "CaretMappableDataFileAndMapSelectionModel.h"
 #include "ChartMatrixDisplayProperties.h"
 #include "ChartModelDataSeries.h"
+#include "ChartModelFrequencySeries.h"
 #include "ChartModelTimeSeries.h"
 #include "ChartableMatrixInterface.h"
 #include "EventBrowserWindowGraphicsRedrawn.h"
@@ -134,12 +138,17 @@ BrainBrowserWindowToolBarChartAttributes::getCartesianChart()
             switch (chartType) {
                 case ChartDataTypeEnum::CHART_DATA_TYPE_INVALID:
                     break;
-                case ChartDataTypeEnum::CHART_DATA_TYPE_MATRIX:
+                case ChartDataTypeEnum::CHART_DATA_TYPE_MATRIX_LAYER:
                     break;
-                case ChartDataTypeEnum::CHART_DATA_TYPE_DATA_SERIES:
+                case ChartDataTypeEnum::CHART_DATA_TYPE_MATRIX_SERIES:
+                    break;
+                case ChartDataTypeEnum::CHART_DATA_TYPE_LINE_DATA_SERIES:
                     cartesianChart = modelChart->getSelectedDataSeriesChartModel(tabIndex);  //dynamic_cast<ChartModelDataSeries*>(chart);
                     break;
-                case ChartDataTypeEnum::CHART_DATA_TYPE_TIME_SERIES:
+                case ChartDataTypeEnum::CHART_DATA_TYPE_LINE_FREQUENCY_SERIES:
+                    cartesianChart = modelChart->getSelectedFrequencySeriesChartModel(tabIndex);
+                    break;
+                case ChartDataTypeEnum::CHART_DATA_TYPE_LINE_TIME_SERIES:
                     cartesianChart = modelChart->getSelectedTimeSeriesChartModel(tabIndex);  //dynamic_cast<ChartModelDataSeries*>(chart);
                     break;
             }
@@ -169,17 +178,31 @@ BrainBrowserWindowToolBarChartAttributes::getChartableMatrixDisplayProperties()
             switch (chartType) {
                 case ChartDataTypeEnum::CHART_DATA_TYPE_INVALID:
                     break;
-                case ChartDataTypeEnum::CHART_DATA_TYPE_MATRIX:
+                case ChartDataTypeEnum::CHART_DATA_TYPE_MATRIX_LAYER:
                 {
-                    ChartableMatrixInterface* matrixInterface = modelChart->getChartableMatrixFileSelectionModel(tabIndex)->getSelectedFileOfType<ChartableMatrixInterface>();
+                    ChartableMatrixInterface* matrixInterface = modelChart->getChartableMatrixParcelFileSelectionModel(tabIndex)->getSelectedFileOfType<ChartableMatrixInterface>();
                     if (matrixInterface != NULL) {
                         matrixDisplayProperties = matrixInterface->getChartMatrixDisplayProperties(tabIndex);
                     }
                 }
                     break;
-                case ChartDataTypeEnum::CHART_DATA_TYPE_DATA_SERIES:
+                case ChartDataTypeEnum::CHART_DATA_TYPE_MATRIX_SERIES:
+                {
+                    CaretDataFileSelectionModel* fileModel = modelChart->getChartableMatrixSeriesFileSelectionModel(tabIndex);
+                    CaretDataFile* caretFile = fileModel->getSelectedFile();
+                    if (caretFile != NULL) {
+                        ChartableMatrixInterface* matrixInterface = dynamic_cast<ChartableMatrixInterface*>(caretFile);
+                        if (matrixInterface != NULL) {
+                            matrixDisplayProperties = matrixInterface->getChartMatrixDisplayProperties(tabIndex);
+                        }
+                    }
+                }
                     break;
-                case ChartDataTypeEnum::CHART_DATA_TYPE_TIME_SERIES:
+                case ChartDataTypeEnum::CHART_DATA_TYPE_LINE_DATA_SERIES:
+                    break;
+                case ChartDataTypeEnum::CHART_DATA_TYPE_LINE_FREQUENCY_SERIES:
+                    break;
+                case ChartDataTypeEnum::CHART_DATA_TYPE_LINE_TIME_SERIES:
                     break;
             }
         }
@@ -219,7 +242,7 @@ CartesianChartAttributesWidget::CartesianChartAttributesWidget(BrainBrowserWindo
 : QWidget(brainBrowserWindowToolBarChartAttributes)
 {
     m_brainBrowserWindowToolBarChartAttributes = brainBrowserWindowToolBarChartAttributes;
-
+    
     QLabel* cartesianLineWidthLabel = new QLabel("Line width ");
     m_cartesianLineWidthDoubleSpinBox = WuQFactory::newDoubleSpinBoxWithMinMaxStepDecimalsSignalDouble(0.0,
                                                                                                        10000.0,
@@ -229,18 +252,14 @@ CartesianChartAttributesWidget::CartesianChartAttributesWidget(BrainBrowserWindo
                                                                                                        SLOT(cartesianLineWidthValueChanged(double)));
     m_cartesianLineWidthDoubleSpinBox->setFixedWidth(65);
     
-    QWidget* gridWidget = new QWidget();
-    QGridLayout* gridLayout = new QGridLayout(gridWidget);
+    QGridLayout* gridLayout = new QGridLayout(this);
     WuQtUtilities::setLayoutSpacingAndMargins(gridLayout, 0, 0);
     gridLayout->setColumnStretch(0, 0);
     gridLayout->setColumnStretch(0, 100);
     gridLayout->addWidget(cartesianLineWidthLabel, 0, 0);
     gridLayout->addWidget(m_cartesianLineWidthDoubleSpinBox, 0, 1);
     
-    gridWidget->setFixedSize(gridWidget->sizeHint());
-    QVBoxLayout* layout = new QVBoxLayout(this);
-    layout->addWidget(gridWidget);
-    layout->addStretch();
+    this->setFixedSize(this->sizeHint());
 }
 
 /**
@@ -315,14 +334,14 @@ EventListenerInterface()
                                                                                         this,
                                                                                         SLOT(cellWidthSpinBoxValueChanged(double)));
     m_cellWidthSpinBox->setKeyboardTracking(true);
-
+    
     QLabel* cellHeightLabel = new QLabel("Cell Height");
     m_cellHeightSpinBox = WuQFactory::newDoubleSpinBoxWithMinMaxStepDecimalsSignalDouble(1.0,
-                                                                                        1000.0,
-                                                                                        0.1,
-                                                                                        2,
-                                                                                        this,
-                                                                                        SLOT(cellHeightSpinBoxValueChanged(double)));
+                                                                                         1000.0,
+                                                                                         0.1,
+                                                                                         2,
+                                                                                         this,
+                                                                                         SLOT(cellHeightSpinBoxValueChanged(double)));
     m_cellHeightSpinBox->setKeyboardTracking(true);
     
     QAction* resetButtonAction = WuQtUtilities::createAction("Reset",
@@ -336,16 +355,24 @@ EventListenerInterface()
     WuQtUtilities::matchWidgetWidths(m_cellHeightSpinBox,
                                      m_cellWidthSpinBox);
     
+    m_highlightSelectionCheckBox = new QCheckBox("Highlight Selection");
+    QObject::connect(m_highlightSelectionCheckBox, SIGNAL(clicked(bool)),
+                     this, SLOT(highlightSelectionCheckBoxClicked(bool)));
+    
+    m_displayGridLinesCheckBox = new QCheckBox("Show Grid Outline");
+    QObject::connect(m_displayGridLinesCheckBox, SIGNAL(clicked(bool)),
+                     this, SLOT(displayGridLinesCheckBoxClicked(bool)));
+    
     m_manualWidgetsGroup = new WuQWidgetObjectGroup(this);
     m_manualWidgetsGroup->add(m_cellWidthSpinBox);
     m_manualWidgetsGroup->add(m_cellHeightSpinBox);
+    m_manualWidgetsGroup->add(m_displayGridLinesCheckBox);
     m_manualWidgetsGroup->add(resetToolButton);
     
     const int32_t COLUMN_LABEL = 0;
     const int32_t COLUMN_WIDGET = 1;
     
-    QWidget* gridWidget = new QWidget();
-    QGridLayout* gridLayout = new QGridLayout(gridWidget);
+    QGridLayout* gridLayout = new QGridLayout(this);
     WuQtUtilities::setLayoutSpacingAndMargins(gridLayout, 2, 2);
     int32_t rowIndex = gridLayout->rowCount();
     gridLayout->addWidget(cellWidthLabel, rowIndex, COLUMN_LABEL);
@@ -356,11 +383,12 @@ EventListenerInterface()
     rowIndex++;
     gridLayout->addWidget(resetToolButton, rowIndex, COLUMN_LABEL, 1, 2, Qt::AlignHCenter);
     rowIndex++;
+    gridLayout->addWidget(m_highlightSelectionCheckBox, rowIndex, COLUMN_LABEL, 1, 2, Qt::AlignLeft);
+    rowIndex++;
+    gridLayout->addWidget(m_displayGridLinesCheckBox, rowIndex, COLUMN_LABEL, 1, 2, Qt::AlignLeft);
+    rowIndex++;
     
-    gridWidget->setFixedSize(gridWidget->sizeHint());
-    QVBoxLayout* layout = new QVBoxLayout(this);
-    layout->addWidget(gridWidget);
-    layout->addStretch();
+    this->setFixedSize(this->sizeHint());
     
     EventManager::get()->addEventListener(this,
                                           EventTypeEnum::EVENT_BROWSER_WINDOW_GRAPHICS_HAVE_BEEN_REDRAWN);
@@ -417,6 +445,14 @@ MatrixChartAttributesWidget::updateContent()
         m_cellHeightSpinBox->blockSignals(true);
         m_cellHeightSpinBox->setValue(matrixDisplayProperties->getCellHeight());
         m_cellHeightSpinBox->blockSignals(false);
+        
+        m_highlightSelectionCheckBox->blockSignals(true);
+        m_highlightSelectionCheckBox->setChecked(matrixDisplayProperties->isSelectedRowColumnHighlighted());
+        m_highlightSelectionCheckBox->blockSignals(false);
+        
+        m_displayGridLinesCheckBox->blockSignals(true);
+        m_displayGridLinesCheckBox->setChecked(matrixDisplayProperties->isGridLinesDisplayed());
+        m_displayGridLinesCheckBox->blockSignals(false);
     }
 }
 
@@ -468,5 +504,36 @@ MatrixChartAttributesWidget::resetButtonClicked()
     }
 }
 
+/**
+ * Called when the show selection check box is checked.
+ *
+ * @param checked
+ *    New checked status.
+ */
+void
+MatrixChartAttributesWidget::highlightSelectionCheckBoxClicked(bool checked)
+{
+    ChartMatrixDisplayProperties* matrixDisplayProperties = m_brainBrowserWindowToolBarChartAttributes->getChartableMatrixDisplayProperties();
+    if (matrixDisplayProperties != NULL) {
+        matrixDisplayProperties->setSelectedRowColumnHighlighted(checked);
+        m_brainBrowserWindowToolBarChartAttributes->updateGraphics();
+    }
+}
+
+/**
+ * Called when the display grid lines check box is checked.
+ *
+ * @param checked
+ *    New checked status.
+ */
+void
+MatrixChartAttributesWidget::displayGridLinesCheckBoxClicked(bool checked)
+{
+    ChartMatrixDisplayProperties* matrixDisplayProperties = m_brainBrowserWindowToolBarChartAttributes->getChartableMatrixDisplayProperties();
+    if (matrixDisplayProperties != NULL) {
+        matrixDisplayProperties->setGridLinesDisplayed(checked);
+        m_brainBrowserWindowToolBarChartAttributes->updateGraphics();
+    }
+}
 
 

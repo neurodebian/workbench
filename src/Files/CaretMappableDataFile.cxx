@@ -30,8 +30,10 @@
 #include "CiftiMappableConnectivityMatrixDataFile.h"
 #include "DataFileContentInformation.h"
 #include "FastStatistics.h"
+#include "FileInformation.h"
 #include "GiftiLabelTable.h"
 #include "Histogram.h"
+#include "LabelDrawingProperties.h"
 #include "PaletteColorMapping.h"
 #include "SceneClass.h"
 #include "SceneClassArray.h"
@@ -48,7 +50,9 @@ using namespace caret;
 CaretMappableDataFile::CaretMappableDataFile(const DataFileTypeEnum::Enum dataFileType)
 : CaretDataFile(dataFileType)
 {
+    m_labelDrawingProperties.grabNew(new LabelDrawingProperties());
     
+    m_paletteNormalizationMode = PaletteNormalizationModeEnum::NORMALIZATION_SELECTED_MAP_DATA;
 }
 
 /**
@@ -91,9 +95,9 @@ CaretMappableDataFile::operator=(const CaretMappableDataFile& cmdf)
  * Assists with copying instances of this class.
  */
 void 
-CaretMappableDataFile::copyCaretMappableDataFile(const CaretMappableDataFile&)
+CaretMappableDataFile::copyCaretMappableDataFile(const CaretMappableDataFile& cmdf)
 {
-    
+    m_paletteNormalizationMode = cmdf.m_paletteNormalizationMode;
 }
 
 // note: method is documented in header file
@@ -187,6 +191,51 @@ CaretMappableDataFile::updateScalarColoringForAllMaps(const PaletteFile* palette
     }
 }
 
+/**
+ * @return True if this file is mapped using a palette and all palettes
+ * are equal, otherwise false.
+ */
+bool
+CaretMappableDataFile::isPaletteColorMappingEqualForAllMaps() const
+{
+    if ( ! isMappedWithPalette()) {
+        return false;
+    }
+    
+    const int32_t numMaps = getNumberOfMaps();
+    if (numMaps <= 0) {
+        return false;
+    }
+    
+    /*
+     * Some files use one palette color mapping for all maps
+     * and this can be detected if the pointer to palette
+     * color mapping is the same for all maps.
+     */
+    bool pointerTheSameFlag = true;
+    const PaletteColorMapping* firstPCM = getMapPaletteColorMapping(0);
+    for (int32_t iMap = 1; iMap < numMaps; iMap++) {
+        if (firstPCM != getMapPaletteColorMapping(iMap)) {
+            pointerTheSameFlag = false;
+            break;
+        }
+    }
+    if (pointerTheSameFlag) {
+        return true;
+    }
+    
+    /*
+     * Compare each palette color mapping to the first palette color mapping
+     */
+    for (int32_t iMap = 1; iMap < numMaps; iMap++) {
+        if (*firstPCM != *getMapPaletteColorMapping(iMap)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 // note: method is documented in header file
 NiftiTimeUnitsEnum::Enum
 CaretMappableDataFile::getMapIntervalUnits() const
@@ -247,7 +296,14 @@ CaretMappableDataFile::saveFileDataToScene(const SceneAttributes* sceneAttribute
     CaretDataFile::saveFileDataToScene(sceneAttributes,
                                                sceneClass);
     
+
+    sceneClass->addClass(m_labelDrawingProperties->saveToScene(sceneAttributes,
+                                                               "m_labelDrawingProperties"));
+    
     if (isMappedWithPalette()) {
+        sceneClass->addEnumeratedType<PaletteNormalizationModeEnum, PaletteNormalizationModeEnum::Enum>("m_paletteNormalizationMode",
+                                                                                                        m_paletteNormalizationMode);
+        
         if (sceneAttributes->isModifiedPaletteSettingsSavedToScene()) {
             std::vector<SceneClass*> pcmClassVector;
             
@@ -315,7 +371,18 @@ CaretMappableDataFile::restoreFileDataFromScene(const SceneAttributes* sceneAttr
     CaretDataFile::restoreFileDataFromScene(sceneAttributes,
                                                     sceneClass);
     
+    m_labelDrawingProperties->restoreFromScene(sceneAttributes,
+                                               sceneClass->getClass("m_labelDrawingProperties"));
+    
     if (isMappedWithPalette()) {
+        std::vector<PaletteNormalizationModeEnum::Enum> paletteNormalizationModes;
+        getPaletteNormalizationModesSupported(paletteNormalizationModes);
+        if ( ! paletteNormalizationModes.empty()) {
+            const PaletteNormalizationModeEnum::Enum defValue = paletteNormalizationModes[0];
+            m_paletteNormalizationMode = sceneClass->getEnumeratedTypeValue<PaletteNormalizationModeEnum, PaletteNormalizationModeEnum::Enum>("m_paletteNormalizationMode",
+                                                                                                                                              defValue);
+        }
+        
         const int32_t numMaps = getNumberOfMaps();
         const SceneClassArray* pcmArray = sceneClass->getClassArray("savedPaletteColorMappingArray");
         if (pcmArray != NULL) {
@@ -434,6 +501,12 @@ CaretMappableDataFile::addToDataFileContentInformation(DataFileContentInformatio
 {
     CaretDataFile::addToDataFileContentInformation(dataFileInformation);
     
+    const int64_t dataSizeInBytes = getDataSizeUncompressedInBytes();
+    if (dataSizeInBytes >= 0) {
+        dataFileInformation.addNameAndValue("Data Size",
+                                            FileInformation::fileSizeToStandardUnits(dataSizeInBytes));
+    }
+    
     dataFileInformation.addNameAndValue("Maps to Surface",
                                         isSurfaceMappable());
     dataFileInformation.addNameAndValue("Maps to Volume",
@@ -444,6 +517,9 @@ CaretMappableDataFile::addToDataFileContentInformation(DataFileContentInformatio
                                         isMappedWithPalette());
     
     if (isMappedWithPalette()) {
+        dataFileInformation.addNameAndValue("All Map Palettes Equal",
+                                            isPaletteColorMappingEqualForAllMaps());
+        
         NiftiTimeUnitsEnum::Enum timeUnits = getMapIntervalUnits();
         switch (timeUnits) {
             case NiftiTimeUnitsEnum::NIFTI_UNITS_HZ:
@@ -468,9 +544,8 @@ CaretMappableDataFile::addToDataFileContentInformation(DataFileContentInformatio
         }
     }
     
-    bool showMapFlag = ((isMappedWithLabelTable() || isMappedWithPalette())
-                              && (isSurfaceMappable() || isVolumeMappable()));
-    
+    bool showMapFlag = (isMappedWithLabelTable() || isMappedWithPalette());
+   
     /*
      * Do not show maps on CIFTI connectivity matrix data because
      * they do not have maps, they have a matrix.
@@ -490,10 +565,8 @@ CaretMappableDataFile::addToDataFileContentInformation(DataFileContentInformatio
     
     if (showMapFlag) {
         const int32_t numMaps = getNumberOfMaps();
-        if (isSurfaceMappable()) {
-            dataFileInformation.addNameAndValue("Number of Maps",
+        dataFileInformation.addNameAndValue("Number of Maps",
                                                 numMaps);
-        }
         
         if (numMaps > 0) {
             int columnCount = 0;
@@ -724,7 +797,7 @@ CaretMappableDataFile::isModified() const
  *     Pointer to the ChartDataCartesian instance.
  */
 ChartDataCartesian*
-CaretMappableDataFile::helpCreateCartesianChartData(const std::vector<float>& data) throw (DataFileException)
+CaretMappableDataFile::helpCreateCartesianChartData(const std::vector<float>& data)
 {
     const int64_t numData = static_cast<int64_t>(data.size());
     
@@ -758,12 +831,12 @@ CaretMappableDataFile::helpCreateCartesianChartData(const std::vector<float>& da
     ChartDataCartesian* chartData = NULL;
     
     if (timeSeriesFlag) {
-        chartData = new ChartDataCartesian(ChartDataTypeEnum::CHART_DATA_TYPE_TIME_SERIES,
+        chartData = new ChartDataCartesian(ChartDataTypeEnum::CHART_DATA_TYPE_LINE_TIME_SERIES,
                                            ChartAxisUnitsEnum::CHART_AXIS_UNITS_TIME_SECONDS,
                                            ChartAxisUnitsEnum::CHART_AXIS_UNITS_NONE);
     }
     else {
-        chartData = new ChartDataCartesian(ChartDataTypeEnum::CHART_DATA_TYPE_DATA_SERIES,
+        chartData = new ChartDataCartesian(ChartDataTypeEnum::CHART_DATA_TYPE_LINE_DATA_SERIES,
                                            ChartAxisUnitsEnum::CHART_AXIS_UNITS_NONE,
                                            ChartAxisUnitsEnum::CHART_AXIS_UNITS_NONE);
     }
@@ -813,32 +886,74 @@ CaretMappableDataFile::helpCreateCartesianChartData(const std::vector<float>& da
  *    Chart types supported by this file.
  */
 void
-CaretMappableDataFile::helpGetSupportedBrainordinateChartDataTypes(std::vector<ChartDataTypeEnum::Enum>& chartDataTypesOut) const
+CaretMappableDataFile::helpGetSupportedLineSeriesChartDataTypes(std::vector<ChartDataTypeEnum::Enum>& chartDataTypesOut) const
 {
     chartDataTypesOut.clear();
     
     switch (getMapIntervalUnits()) {
         case NiftiTimeUnitsEnum::NIFTI_UNITS_HZ:
-            CaretLogSevere("Units - HZ not supported");
-            CaretAssertMessage(0, "Units - HZ not supported");
+            chartDataTypesOut.push_back(ChartDataTypeEnum::CHART_DATA_TYPE_LINE_FREQUENCY_SERIES);
             break;
         case NiftiTimeUnitsEnum::NIFTI_UNITS_MSEC:
-            chartDataTypesOut.push_back(ChartDataTypeEnum::CHART_DATA_TYPE_TIME_SERIES);
+            chartDataTypesOut.push_back(ChartDataTypeEnum::CHART_DATA_TYPE_LINE_TIME_SERIES);
             break;
         case NiftiTimeUnitsEnum::NIFTI_UNITS_PPM:
             CaretLogSevere("Units - PPM not supported");
             CaretAssertMessage(0, "Units - PPM not supported");
             break;
         case NiftiTimeUnitsEnum::NIFTI_UNITS_SEC:
-            chartDataTypesOut.push_back(ChartDataTypeEnum::CHART_DATA_TYPE_TIME_SERIES);
+            chartDataTypesOut.push_back(ChartDataTypeEnum::CHART_DATA_TYPE_LINE_TIME_SERIES);
             break;
         case NiftiTimeUnitsEnum::NIFTI_UNITS_UNKNOWN:
-            chartDataTypesOut.push_back(ChartDataTypeEnum::CHART_DATA_TYPE_DATA_SERIES);
+            chartDataTypesOut.push_back(ChartDataTypeEnum::CHART_DATA_TYPE_LINE_DATA_SERIES);
             break;
         case NiftiTimeUnitsEnum::NIFTI_UNITS_USEC:
-            chartDataTypesOut.push_back(ChartDataTypeEnum::CHART_DATA_TYPE_TIME_SERIES);
+            chartDataTypesOut.push_back(ChartDataTypeEnum::CHART_DATA_TYPE_LINE_TIME_SERIES);
             break;
     }
 }
+
+/**
+ * @return The label drawing properties for this file.  A valid pointer
+ * will always be returned even if the file does not provide label data.
+ */
+LabelDrawingProperties*
+CaretMappableDataFile::getLabelDrawingProperties()
+{
+    return m_labelDrawingProperties;
+}
+
+/**
+ * @return The label drawing properties for this file.  A valid pointer
+ * will always be returned even if the file does not provide label data.
+ */
+const LabelDrawingProperties*
+CaretMappableDataFile::getLabelDrawingProperties() const
+{
+    return m_labelDrawingProperties;
+}
+
+/**
+ * @return The palette normalization mode for the file.
+ * The default is NORMALIZATION_SELECTED_MAP_DATA.
+ */
+PaletteNormalizationModeEnum::Enum
+CaretMappableDataFile::getPaletteNormalizationMode() const
+{
+    return m_paletteNormalizationMode;
+}
+
+/**
+ * Set the palette normalization mode for the file.
+ *
+ * @param mode
+ *     New value for palette normalization mode.
+ */
+void
+CaretMappableDataFile::setPaletteNormalizationMode(const PaletteNormalizationModeEnum::Enum mode)
+{
+    m_paletteNormalizationMode = mode;
+}
+
 
 

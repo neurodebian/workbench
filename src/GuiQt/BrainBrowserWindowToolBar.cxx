@@ -100,7 +100,7 @@
 #include "SurfaceSelectionModel.h"
 #include "SurfaceSelectionViewController.h"
 #include "StructureSurfaceSelectionControl.h"
-#include "UserInputReceiverInterface.h"
+#include "UserInputModeAbstract.h"
 #include "VolumeFile.h"
 #include "VolumeSliceViewPlaneEnum.h"
 #include "VolumeSurfaceOutlineSetModel.h"
@@ -216,9 +216,11 @@ BrainBrowserWindowToolBar::BrainBrowserWindowToolBar(const int32_t browserWindow
     QToolButton* informationDialogToolButton = new QToolButton();
     informationDialogToolButton->setDefaultAction(GuiManager::get()->getInformationDisplayDialogEnabledAction());
     
+    QToolButton* identifyDialogToolButton = new QToolButton();
+    identifyDialogToolButton->setDefaultAction(GuiManager::get()->getIdentifyBrainordinateDialogDisplayAction());
+    
     QToolButton* helpDialogToolButton = new QToolButton();
     helpDialogToolButton->setDefaultAction(GuiManager::get()->getHelpViewerDialogDisplayAction());
-    helpDialogToolButton->setFixedSize(informationDialogToolButton->sizeHint()); // same size buttons
     
     QToolButton* sceneDialogToolButton = new QToolButton();
     sceneDialogToolButton->setDefaultAction(GuiManager::get()->getSceneDialogDisplayAction());
@@ -260,6 +262,17 @@ BrainBrowserWindowToolBar::BrainBrowserWindowToolBar(const int32_t browserWindow
     layersToolBoxToolButton->setDefaultAction(layersToolBoxAction);
     
     /*
+     * Make all tool buttons the same height
+     */
+    WuQtUtilities::matchWidgetHeights(helpDialogToolButton,
+                                      informationDialogToolButton,
+                                      identifyDialogToolButton,
+                                      sceneDialogToolButton,
+                                      toolBarToolButton,
+                                      overlayToolBoxToolButton,
+                                      layersToolBoxToolButton);
+    
+    /*
      * Tab bar and controls at far right side of toolbar
      */
     this->tabBarWidget = new QWidget();
@@ -268,6 +281,7 @@ BrainBrowserWindowToolBar::BrainBrowserWindowToolBar(const int32_t browserWindow
     tabBarLayout->addWidget(this->tabBar, 100);
     tabBarLayout->addWidget(helpDialogToolButton);
     tabBarLayout->addWidget(informationDialogToolButton);
+    tabBarLayout->addWidget(identifyDialogToolButton);
     tabBarLayout->addWidget(sceneDialogToolButton);
     tabBarLayout->addWidget(toolBarToolButton);
     tabBarLayout->addWidget(overlayToolBoxToolButton);
@@ -1009,6 +1023,28 @@ BrainBrowserWindowToolBar::removeAndReturnAllTabs(std::vector<BrowserTabContent*
 }
 
 /**
+ * Get content of all tabs
+ *
+ * @param allTabContent
+ *    Will contain the content from the tabs upon return.
+ */
+void
+BrainBrowserWindowToolBar::getAllTabContent(std::vector<BrowserTabContent*>& allTabContent) const
+{
+    allTabContent.clear();
+    
+    int32_t numTabs = this->tabBar->count();
+    for (int32_t i = 0; i < numTabs; i++) {
+        void* p = this->tabBar->tabData(i).value<void*>();
+        BrowserTabContent* btc = (BrowserTabContent*)p;
+        if (btc != NULL) {
+            allTabContent.push_back(btc);
+        }
+    }
+}
+
+
+/**
  * Remove the tab that contains the given tab content.
  * Note: The tab content is NOT deleted and the caller must
  * either delete it or move it into a window.
@@ -1308,14 +1344,21 @@ BrainBrowserWindowToolBar::updateToolBar()
                 switch (modelChart->getSelectedChartDataType(browserTabContent->getTabNumber())) {
                     case ChartDataTypeEnum::CHART_DATA_TYPE_INVALID:
                         break;
-                    case ChartDataTypeEnum::CHART_DATA_TYPE_TIME_SERIES:
+                    case ChartDataTypeEnum::CHART_DATA_TYPE_MATRIX_LAYER:
+                        showChartAttributesWidget = true;
+                        break;
+                    case ChartDataTypeEnum::CHART_DATA_TYPE_MATRIX_SERIES:
+                        showChartAttributesWidget = true;
+                        break;
+                    case ChartDataTypeEnum::CHART_DATA_TYPE_LINE_TIME_SERIES:
                         showChartAxesWidget = true;
                         showChartAttributesWidget = true;
                         break;
-                    case ChartDataTypeEnum::CHART_DATA_TYPE_MATRIX:
+                    case ChartDataTypeEnum::CHART_DATA_TYPE_LINE_FREQUENCY_SERIES:
+                        showChartAxesWidget = true;
                         showChartAttributesWidget = true;
                         break;
-                    case ChartDataTypeEnum::CHART_DATA_TYPE_DATA_SERIES:
+                    case ChartDataTypeEnum::CHART_DATA_TYPE_LINE_DATA_SERIES:
                         showChartAxesWidget = true;
                         showChartAttributesWidget = true;
                         break;
@@ -2157,6 +2200,16 @@ BrainBrowserWindowToolBar::createModeWidget()
     inputModeFociToolButton->setDefaultAction(this->modeInputModeFociAction);
     
     /*
+     * Volume Edit
+     */
+    this->modeInputVolumeEditAction = WuQtUtilities::createAction("Volume",
+                                                                  "Edit volume voxels",
+                                                                  this);
+    this->modeInputVolumeEditAction->setCheckable(true);
+    QToolButton* inputModeVolumeEditButton = new QToolButton();
+    inputModeVolumeEditButton->setDefaultAction(this->modeInputVolumeEditAction);
+    
+    /*
      * View Mode
      */
     this->modeInputModeViewAction = WuQtUtilities::createAction("View",
@@ -2177,7 +2230,8 @@ BrainBrowserWindowToolBar::createModeWidget()
     
     WuQtUtilities::matchWidgetWidths(inputModeBordersToolButton,
                                      inputModeFociToolButton,
-                                     inputModeViewToolButton);
+                                     inputModeViewToolButton,
+                                     inputModeVolumeEditButton);
     /*
      * Layout for input modes
      */
@@ -2187,11 +2241,13 @@ BrainBrowserWindowToolBar::createModeWidget()
     inputModeLayout->addWidget(inputModeBordersToolButton, 0, Qt::AlignHCenter);
     inputModeLayout->addWidget(inputModeFociToolButton, 0, Qt::AlignHCenter);
     inputModeLayout->addWidget(inputModeViewToolButton, 0, Qt::AlignHCenter);
+    inputModeLayout->addWidget(inputModeVolumeEditButton, 0, Qt::AlignHCenter);
     
     this->modeInputModeActionGroup = new QActionGroup(this);
     this->modeInputModeActionGroup->addAction(this->modeInputModeBordersAction);
     this->modeInputModeActionGroup->addAction(this->modeInputModeFociAction);
     this->modeInputModeActionGroup->addAction(this->modeInputModeViewAction);
+    this->modeInputModeActionGroup->addAction(this->modeInputVolumeEditAction);
     QObject::connect(this->modeInputModeActionGroup, SIGNAL(triggered(QAction*)),
                      this, SLOT(modeInputModeActionTriggered(QAction*)));
     this->modeInputModeActionGroup->setExclusive(true);
@@ -2226,10 +2282,10 @@ BrainBrowserWindowToolBar::modeInputModeActionTriggered(QAction* action)
         return;
     }
 
-    UserInputReceiverInterface::UserInputMode inputMode = UserInputReceiverInterface::INVALID;
+    UserInputModeAbstract::UserInputMode inputMode = UserInputModeAbstract::INVALID;
     
     if (action == this->modeInputModeBordersAction) {
-        inputMode = UserInputReceiverInterface::BORDERS;
+        inputMode = UserInputModeAbstract::BORDERS;
         
         /*
          * If borders are not displayed, display them
@@ -2247,10 +2303,13 @@ BrainBrowserWindowToolBar::modeInputModeActionTriggered(QAction* action)
         }
     }
     else if (action == this->modeInputModeFociAction) {
-        inputMode = UserInputReceiverInterface::FOCI;
+        inputMode = UserInputModeAbstract::FOCI;
+    }
+    else if (action == this->modeInputVolumeEditAction) {
+        inputMode = UserInputModeAbstract::VOLUME_EDIT;
     }
     else if (action == this->modeInputModeViewAction) {
-        inputMode = UserInputReceiverInterface::VIEW;
+        inputMode = UserInputModeAbstract::VIEW;
     }
     else {
         CaretAssertMessage(0, "Tools input mode action is invalid, new action added???");
@@ -2283,16 +2342,19 @@ BrainBrowserWindowToolBar::updateModeWidget(BrowserTabContent* /*browserTabConte
     EventManager::get()->sendEvent(getInputModeEvent.getPointer());
 
     switch (getInputModeEvent.getUserInputMode()) {
-        case UserInputReceiverInterface::INVALID:
+        case UserInputModeAbstract::INVALID:
             /* may get here when program is exiting and widgets are being destroyed */
             break;
-        case UserInputReceiverInterface::BORDERS:
+        case UserInputModeAbstract::BORDERS:
             this->modeInputModeBordersAction->setChecked(true);
             break;
-        case UserInputReceiverInterface::FOCI:
+        case UserInputModeAbstract::FOCI:
             this->modeInputModeFociAction->setChecked(true);
             break;
-        case UserInputReceiverInterface::VIEW:
+        case UserInputModeAbstract::VOLUME_EDIT:
+            this->modeInputVolumeEditAction->setChecked(true);
+            break;
+        case UserInputModeAbstract::VIEW:
             this->modeInputModeViewAction->setChecked(true);
             break;
     }
@@ -2310,7 +2372,7 @@ BrainBrowserWindowToolBar::updateDisplayedModeUserInputWidget()
     EventGetOrSetUserInputModeProcessor getInputModeEvent(this->browserWindowIndex);
     EventManager::get()->sendEvent(getInputModeEvent.getPointer());
     
-    UserInputReceiverInterface* userInputProcessor = getInputModeEvent.getUserInputProcessor();
+    UserInputModeAbstract* userInputProcessor = getInputModeEvent.getUserInputProcessor();
     QWidget* userInputWidget = userInputProcessor->getWidgetForToolBar();
     
     /*
@@ -2319,8 +2381,31 @@ BrainBrowserWindowToolBar::updateDisplayedModeUserInputWidget()
      */
     if (this->userInputControlsWidgetActiveInputWidget != NULL) {
         if (userInputWidget != this->userInputControlsWidgetActiveInputWidget) {
+            /*
+             * Remove the current input widget:
+             * (1) Set its visibility to false
+             * (2) Remove the widget from the toolbar's layout
+             * (3) Set its parent to NULL.
+             *
+             * Why is the parent set to NULL?
+             * 
+             * When a widget is put into a layout, the widget is put into
+             * a QWidgetItem (subclass of QLayoutItem).  
+             *
+             * QLayout::removeWidget() will delete the QWidgetItem but
+             * it does not reset the parent for the widget that was in
+             * QWidgetItem.  So the user will need to delete the widget
+             * unless it is placed into a layout.
+             *
+             * After removing the widget, set the widget's parent to NULL.
+             * As a result, when the input receiver (owner of the widget) 
+             * is deleted, it can examine the parent, and, if the parent
+             * is NULL, it can delete the widget preventing a memory link
+             * and a possible crash.
+             */
             this->userInputControlsWidgetActiveInputWidget->setVisible(false);
             this->userInputControlsWidgetLayout->removeWidget(this->userInputControlsWidgetActiveInputWidget);
+            this->userInputControlsWidgetActiveInputWidget->setParent(NULL);
             this->userInputControlsWidgetActiveInputWidget = NULL;
         }
     }

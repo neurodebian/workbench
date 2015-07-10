@@ -36,7 +36,7 @@ class QToolButton;
 
 namespace caret {
 
-    class EnumComboBoxTemplate;
+    class MapYokingGroupComboBox;
     class Overlay;
     class WuQGridLayoutGroup;
     
@@ -95,6 +95,14 @@ namespace caret {
         
         void menuMoveOverlayUpTriggered();        
         
+        void menuReloadFileTriggered();
+        
+        void menuCopyFileNameToClipBoard();
+        
+        void menuCopyMapNameToClipBoard();
+        
+        void menuConstructionAboutToShow();
+        
     private:
         OverlayViewController(const OverlayViewController&);
 
@@ -102,13 +110,15 @@ namespace caret {
 
         void updateUserInterfaceAndGraphicsWindow();
         
-        void updateUserInterfaceIfYoked();
+        void updateUserInterface();
         
         void updateGraphicsWindow();
         
         QMenu* createConstructionMenu(QWidget* parent);
         
         void validateYokingSelection();
+        
+        void updateOverlaySettingsEditor();
         
         const int32_t browserWindowIndex;
         
@@ -126,13 +136,17 @@ namespace caret {
         
         QDoubleSpinBox* opacityDoubleSpinBox;
         
+        QToolButton* m_constructionToolButton;
+        
         QAction* constructionAction;
 
         QAction* colorBarAction;
         
         QAction* settingsAction;
         
-        EnumComboBoxTemplate* m_yokingGroupComboBox;
+        MapYokingGroupComboBox* m_mapYokingGroupComboBox;
+        
+        QAction* m_constructionReloadFileAction;
         
         WuQGridLayoutGroup* gridLayoutGroup;
         

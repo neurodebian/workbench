@@ -26,6 +26,11 @@
 #include "CaretLogger.h"
 #include "ChartMatrixDisplayProperties.h"
 #include "CiftiFile.h"
+#include "CiftiParcelReordering.h"
+#include "CiftiParcelReorderingModel.h"
+#include "ConnectivityDataLoaded.h"
+#include "EventChartMatrixParcelYokingValidation.h"
+#include "EventManager.h"
 #include "FastStatistics.h"
 #include "NodeAndVoxelColoring.h"
 #include "Palette.h"
@@ -62,12 +67,24 @@ CiftiConnectivityMatrixParcelFile::CiftiConnectivityMatrixParcelFile()
     
     m_selectedParcelColoringMode = CiftiParcelColoringModeEnum::CIFTI_PARCEL_COLORING_OUTLINE;
     m_selectedParcelColor = CaretColorEnum::WHITE;
+
+    m_parcelReorderingModel = new CiftiParcelReorderingModel(this);
+
+    m_chartLoadingYokingGroup = YokingGroupEnum::YOKING_GROUP_OFF;
     
+
     m_sceneAssistant = new SceneClassAssistant();
     m_sceneAssistant->add<CiftiParcelColoringModeEnum, CiftiParcelColoringModeEnum::Enum>("m_selectedParcelColoringMode",
                                                                                           &m_selectedParcelColoringMode);
     m_sceneAssistant->add<CaretColorEnum, CaretColorEnum::Enum>("m_selectedParcelColor",
                                                                 &m_selectedParcelColor);
+    m_sceneAssistant->add("m_parcelReorderingModel",
+                          "CiftiParcelReorderingModel",
+                          m_parcelReorderingModel);
+    m_sceneAssistant->add<YokingGroupEnum, YokingGroupEnum::Enum>("m_chartLoadingYokingGroup",
+                                                                                        &m_chartLoadingYokingGroup);
+    
+    EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_CHART_MATRIX_YOKING_VALIDATION);
 }
 
 /**
@@ -75,11 +92,98 @@ CiftiConnectivityMatrixParcelFile::CiftiConnectivityMatrixParcelFile()
  */
 CiftiConnectivityMatrixParcelFile::~CiftiConnectivityMatrixParcelFile()
 {
+    EventManager::get()->removeAllEventsFromListener(this);
+    
     for (int32_t i = 0; i < BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_TABS; i++) {
         delete m_chartMatrixDisplayProperties[i];
     }
     
+    delete m_parcelReorderingModel;
     delete m_sceneAssistant;
+}
+
+/**
+ * Receive an event.
+ *
+ * @param event
+ *     The event that the receive can respond to.
+ */
+void
+CiftiConnectivityMatrixParcelFile::receiveEvent(Event* event)
+{
+    if (event->getEventType() == EventTypeEnum::EVENT_CHART_MATRIX_YOKING_VALIDATION) {
+        EventChartMatrixParcelYokingValidation* yokeEvent = dynamic_cast<EventChartMatrixParcelYokingValidation*>(event);
+        CaretAssert(yokeEvent);
+        
+        if (yokeEvent->getChartableMatrixParcelInterface() != this) {
+            switch (yokeEvent->getMode()) {
+                case EventChartMatrixParcelYokingValidation::MODE_APPLY_YOKING:
+                {
+//                    YokingGroupEnum::Enum yokingGroup = YokingGroupEnum::YOKING_GROUP_OFF;
+//                    int32_t rowOrColumnIndex = -1;
+//                    yokeEvent->getApplyYokingSelections(yokingGroup,
+//                                                        rowOrColumnIndex);
+//                    if ((yokingGroup != YokingGroupEnum::YOKING_GROUP_OFF)
+//                        && (rowOrColumnIndex >= 0)) {
+//                        int32_t numRows = -1;
+//                        int32_t numCols = -1;
+//                        getMatrixDimensions(numRows,
+//                                            numCols);
+//                        switch (getMatrixLoadingDimension()) {
+//                            case ChartMatrixLoadingDimensionEnum::CHART_MATRIX_LOADING_BY_COLUMN:
+//                                if (rowOrColumnIndex < numCols) {
+//                                    loadDataForColumnIndex(rowOrColumnIndex);
+//                                }
+//                                else {
+//                                }
+//                                break;
+//                            case ChartMatrixLoadingDimensionEnum::CHART_MATRIX_LOADING_BY_ROW:
+//                                if (rowOrColumnIndex < numRows) {
+//                                    loadDataForRowIndex(rowOrColumnIndex);
+//                                }
+//                                break;
+//                        }
+//                    }
+                }
+                    break;
+                case EventChartMatrixParcelYokingValidation::MODE_VALIDATE_YOKING:
+                {
+                    const ConnectivityDataLoaded* connData = getConnectivityDataLoaded();
+                    int64_t rowIndex    = -1;
+                    int64_t columnIndex = -1;
+                    connData->getRowColumnLoading(rowIndex, columnIndex);
+                    
+                    int64_t selectedRowColumnIndex = -1;
+                    if (rowIndex >= 0) {
+                        selectedRowColumnIndex = rowIndex;
+                    }
+                    else if (columnIndex >= 0) {
+                        selectedRowColumnIndex = columnIndex;
+                    }
+                    
+                    yokeEvent->addValidateYokingChartableInterface(this,
+                                                                   selectedRowColumnIndex);
+                }
+                    break;
+            }
+        }
+    }
+}
+
+/**
+ * Get the matrix dimensions.
+ *
+ * @param numberOfRowsOut
+ *    Number of rows in the matrix.
+ * @param numberOfColumnsOut
+ *    Number of columns in the matrix.
+ */
+void
+CiftiConnectivityMatrixParcelFile::getMatrixDimensions(int32_t& numberOfRowsOut,
+                                                       int32_t& numberOfColumnsOut) const
+{
+   helpMapFileGetMatrixDimensions(numberOfRowsOut,
+                                  numberOfColumnsOut);
 }
 
 /**
@@ -100,10 +204,29 @@ CiftiConnectivityMatrixParcelFile::getMatrixDataRGBA(int32_t& numberOfRowsOut,
                                                     int32_t& numberOfColumnsOut,
                                                     std::vector<float>& rgbaOut) const
 {
-    return helpLoadChartDataMatrixForMap(0,
-                                         numberOfRowsOut,
-                                         numberOfColumnsOut,
-                                         rgbaOut);
+    CiftiParcelLabelFile* parcelLabelFile = NULL;
+    int32_t parcelLabelFileMapIndex = -1;
+    bool enabled = false;
+    
+    std::vector<CiftiParcelLabelFile*> parcelLabelFiles;
+    getSelectedParcelLabelFileAndMapForReordering(parcelLabelFiles,
+                                                  parcelLabelFile,
+                                                  parcelLabelFileMapIndex,
+                                                  enabled);
+    
+    std::vector<int32_t> rowIndices;
+    if (enabled) {
+        const CiftiParcelReordering* parcelReordering = getParcelReordering(parcelLabelFile,
+                                                                            parcelLabelFileMapIndex);
+        if (parcelReordering != NULL) {
+            rowIndices = parcelReordering->getReorderedParcelIndices();
+        }
+    }
+    
+    return helpMatrixFileLoadChartDataMatrixRGBA(numberOfRowsOut,
+                                                 numberOfColumnsOut,
+                                                 rowIndices,
+                                                 rgbaOut);
 }
 
 /**
@@ -125,7 +248,7 @@ CiftiConnectivityMatrixParcelFile::getMatrixDataRGBA(int32_t& numberOfRowsOut,
 bool
 CiftiConnectivityMatrixParcelFile::getMatrixCellAttributes(const int32_t rowIndex,
                                                            const int32_t columnIndex,
-                                                           float& cellValueOut,
+                                                           AString& cellValueOut,
                                                            AString& rowNameOut,
                                                            AString& columnNameOut) const
 {
@@ -148,7 +271,7 @@ CiftiConnectivityMatrixParcelFile::getMatrixCellAttributes(const int32_t rowInde
         m_ciftiFile->getRow(&rowData[0],
                                  rowIndex);
         CaretAssertVectorIndex(rowData, columnIndex);
-        cellValueOut = rowData[columnIndex];
+        cellValueOut = AString::number(rowData[columnIndex], 'f', 6);
         
         return true;
     }
@@ -205,7 +328,7 @@ void
 CiftiConnectivityMatrixParcelFile::getSupportedMatrixChartDataTypes(std::vector<ChartDataTypeEnum::Enum>& chartDataTypesOut) const
 {
     chartDataTypesOut.clear();
-    chartDataTypesOut.push_back(ChartDataTypeEnum::CHART_DATA_TYPE_MATRIX);
+    chartDataTypesOut.push_back(ChartDataTypeEnum::CHART_DATA_TYPE_MATRIX_LAYER);
 }
 
 /**
@@ -228,11 +351,8 @@ CiftiConnectivityMatrixParcelFile::getChartMatrixDisplayProperties(const int32_t
     return m_chartMatrixDisplayProperties[tabIndex];
 }
 
-
 /**
- * Save file data from the scene.  For subclasses that need to
- * save to a scene, this method should be overriden.  sceneClass
- * will be valid and any scene data should be added to it.
+ * Save subclass data to the scene.
  *
  * @param sceneAttributes
  *    Attributes for the scene.  Scenes may be of different types
@@ -240,22 +360,20 @@ CiftiConnectivityMatrixParcelFile::getChartMatrixDisplayProperties(const int32_t
  *    restoring the scene.
  *
  * @param sceneClass
- *     sceneClass to which data members should be added.
+ *     sceneClass to which data members should be added.  Will always
+ *     be valid (non-NULL).
  */
 void
-CiftiConnectivityMatrixParcelFile::saveFileDataToScene(const SceneAttributes* sceneAttributes,
-                                                  SceneClass* sceneClass)
+CiftiConnectivityMatrixParcelFile::saveSubClassDataToScene(const SceneAttributes* sceneAttributes,
+                              SceneClass* sceneClass)
 {
-    CiftiMappableConnectivityMatrixDataFile::saveFileDataToScene(sceneAttributes,
-                                               sceneClass);
-    
     m_sceneAssistant->saveMembers(sceneAttributes,
                                   sceneClass);
     
     sceneClass->addBooleanArray("m_chartingEnabledForTab",
                                 m_chartingEnabledForTab,
                                 BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_TABS);
-
+    
     /*
      * Save chart matrix properties
      */
@@ -275,9 +393,7 @@ CiftiConnectivityMatrixParcelFile::saveFileDataToScene(const SceneAttributes* sc
 }
 
 /**
- * Restore file data from the scene.  For subclasses that need to
- * restore from a scene, this method should be overridden. The scene class
- * will be valid and any scene data may be obtained from it.
+ * Restore file data from the scene.
  *
  * @param sceneAttributes
  *    Attributes for the scene.  Scenes may be of different types
@@ -289,14 +405,14 @@ CiftiConnectivityMatrixParcelFile::saveFileDataToScene(const SceneAttributes* sc
  *     this interface.  Will NEVER be NULL.
  */
 void
-CiftiConnectivityMatrixParcelFile::restoreFileDataFromScene(const SceneAttributes* sceneAttributes,
-                                                       const SceneClass* sceneClass)
+CiftiConnectivityMatrixParcelFile::restoreSubClassDataFromScene(const SceneAttributes* sceneAttributes,
+                                   const SceneClass* sceneClass)
 {
-    CiftiMappableConnectivityMatrixDataFile::restoreFileDataFromScene(sceneAttributes,
-                                                    sceneClass);
-    
     m_sceneAssistant->restoreMembers(sceneAttributes,
                                      sceneClass);
+    
+    //    CiftiMappableConnectivityMatrixDataFile::restoreFileDataFromScene(sceneAttributes,
+    //                                                                      sceneClass);
     
     for (int32_t i = 0; i < BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_TABS; i++) {
         m_chartingEnabledForTab[i] = false;
@@ -334,8 +450,134 @@ CiftiConnectivityMatrixParcelFile::restoreFileDataFromScene(const SceneAttribute
                                                                        sceneClass);
         }
     }
-    
 }
+
+///**
+// * Save file data from the scene.  For subclasses that need to
+// * save to a scene, this method should be overriden.  sceneClass
+// * will be valid and any scene data should be added to it.
+// *
+// * @param sceneAttributes
+// *    Attributes for the scene.  Scenes may be of different types
+// *    (full, generic, etc) and the attributes should be checked when
+// *    restoring the scene.
+// *
+// * @param sceneClass
+// *     sceneClass to which data members should be added.
+// */
+//void
+//CiftiConnectivityMatrixParcelFile::saveFileDataToScene(const SceneAttributes* sceneAttributes,
+//                                                  SceneClass* sceneClass)
+//{
+//    CiftiMappableConnectivityMatrixDataFile::saveFileDataToScene(sceneAttributes,
+//                                               sceneClass);
+//    
+//    m_sceneAssistant->saveMembers(sceneAttributes,
+//                                  sceneClass);
+//    
+//    sceneClass->addBooleanArray("m_chartingEnabledForTab",
+//                                m_chartingEnabledForTab,
+//                                BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_TABS);
+//
+//    /*
+//     * Save chart matrix properties
+//     */
+//    SceneObjectMapIntegerKey* chartMatrixPropertiesMap = new SceneObjectMapIntegerKey("m_chartMatrixDisplayPropertiesMap",
+//                                                                                      SceneObjectDataTypeEnum::SCENE_CLASS);
+//    const std::vector<int32_t> tabIndices = sceneAttributes->getIndicesOfTabsForSavingToScene();
+//    for (std::vector<int32_t>::const_iterator tabIter = tabIndices.begin();
+//         tabIter != tabIndices.end();
+//         tabIter++) {
+//        const int32_t tabIndex = *tabIter;
+//        
+//        chartMatrixPropertiesMap->addClass(tabIndex,
+//                                           m_chartMatrixDisplayProperties[tabIndex]->saveToScene(sceneAttributes,
+//                                                                                                 "m_chartMatrixDisplayProperties"));
+//    }
+//    sceneClass->addChild(chartMatrixPropertiesMap);
+//}
+//
+///**
+// * Restore file data from the scene.  For subclasses that need to
+// * restore from a scene, this method should be overridden. The scene class
+// * will be valid and any scene data may be obtained from it.
+// *
+// * @param sceneAttributes
+// *    Attributes for the scene.  Scenes may be of different types
+// *    (full, generic, etc) and the attributes should be checked when
+// *    restoring the scene.
+// *
+// * @param sceneClass
+// *     sceneClass for the instance of a class that implements
+// *     this interface.  Will NEVER be NULL.
+// */
+//void
+//CiftiConnectivityMatrixParcelFile::restoreFileDataFromScene(const SceneAttributes* sceneAttributes,
+//                                                       const SceneClass* sceneClass)
+//{
+//    CiftiMappableConnectivityMatrixDataFile::restoreFileDataFromScene(sceneAttributes,
+//                                                    sceneClass);
+//    
+//    m_sceneAssistant->restoreMembers(sceneAttributes,
+//                                     sceneClass);
+//   
+//    /*
+//     * The chart loading type is restored by the scene assistant.
+//     * Swap its value so that calling setMatrixLoadingDimension requires
+//     * the value to change for it to have any affect including
+//     * setting size of data.
+//     */
+//    switch (m_chartLoadingType) {
+//        case ChartMatrixLoadingDimensionEnum::CHART_MATRIX_LOADING_BY_COLUMN:
+//            m_chartLoadingType = ChartMatrixLoadingDimensionEnum::CHART_MATRIX_LOADING_BY_ROW;
+//            break;
+//        case ChartMatrixLoadingDimensionEnum::CHART_MATRIX_LOADING_BY_ROW:
+//            m_chartLoadingType = ChartMatrixLoadingDimensionEnum::CHART_MATRIX_LOADING_BY_COLUMN;
+//            break;
+//    }
+//    setMatrixLoadingDimension(m_chartLoadingType);
+//    
+////    CiftiMappableConnectivityMatrixDataFile::restoreFileDataFromScene(sceneAttributes,
+////                                                                      sceneClass);
+//    
+//    for (int32_t i = 0; i < BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_TABS; i++) {
+//        m_chartingEnabledForTab[i] = false;
+//    }
+//    
+//    const ScenePrimitiveArray* tabArray = sceneClass->getPrimitiveArray("m_chartingEnabledForTab");
+//    if (tabArray != NULL) {
+//        sceneClass->getBooleanArrayValue("m_chartingEnabledForTab",
+//                                         m_chartingEnabledForTab,
+//                                         BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_TABS);
+//    }
+//    else {
+//        /*
+//         * Obsolete value when charting was not 'per tab'
+//         */
+//        const bool chartingEnabled = sceneClass->getBooleanValue("m_chartingEnabled",
+//                                                                 false);
+//        for (int32_t i = 0; i < BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_TABS; i++) {
+//            m_chartingEnabledForTab[i] = chartingEnabled;
+//        }
+//    }
+//    
+//    /*
+//     * Restore chart matrix properties
+//     */
+//    const SceneObjectMapIntegerKey* chartMatrixPropertiesMap = sceneClass->getMapIntegerKey("m_chartMatrixDisplayPropertiesMap");
+//    if (chartMatrixPropertiesMap != NULL) {
+//        const std::vector<int32_t> tabIndices = chartMatrixPropertiesMap->getKeys();
+//        for (std::vector<int32_t>::const_iterator tabIter = tabIndices.begin();
+//             tabIter != tabIndices.end();
+//             tabIter++) {
+//            const int32_t tabIndex = *tabIter;
+//            const SceneClass* sceneClass = chartMatrixPropertiesMap->classValue(tabIndex);
+//            m_chartMatrixDisplayProperties[tabIndex]->restoreFromScene(sceneAttributes,
+//                                                                       sceneClass);
+//        }
+//    }
+//    
+//}
 
 /**
  * @return Coloring mode for selected parcel.
@@ -379,4 +621,159 @@ CiftiConnectivityMatrixParcelFile::setSelectedParcelColor(const CaretColorEnum::
     m_selectedParcelColor = color;
 }
 
+/**
+ * Get the selected parcel label file used for reordering of parcels.
+ *
+ * @param compatibleParcelLabelFilesOut
+ *    All Parcel Label files that are compatible with file implementing
+ *    this interface
+ * @param selectedParcelLabelFileOut
+ *    The selected parcel label file used for reordering the parcels.
+ *    May be NULL!
+ * @param selectedParcelLabelFileMapIndexOut
+ *    Map index in the selected parcel label file.
+ * @param enabledStatusOut
+ *    Enabled status of reordering.
+ */
+void
+CiftiConnectivityMatrixParcelFile::getSelectedParcelLabelFileAndMapForReordering(std::vector<CiftiParcelLabelFile*>& compatibleParcelLabelFilesOut,
+                                                                                 CiftiParcelLabelFile* &selectedParcelLabelFileOut,
+                                                                                 int32_t& selectedParcelLabelFileMapIndexOut,
+                                                                                 bool& enabledStatusOut) const
+{
+    m_parcelReorderingModel->getSelectedParcelLabelFileAndMapForReordering(compatibleParcelLabelFilesOut,
+                                                                           selectedParcelLabelFileOut,
+                                                                           selectedParcelLabelFileMapIndexOut,
+                                                                           enabledStatusOut);
+}
+
+/**
+ * Set the selected parcel label file used for reordering of parcels.
+ *
+ * @param selectedParcelLabelFile
+ *    The selected parcel label file used for reordering the parcels.
+ *    May be NULL!
+ * @param selectedParcelLabelFileMapIndex
+ *    Map index in the selected parcel label file.
+ * @param enabledStatus
+ *    Enabled status of reordering.
+ */
+void
+CiftiConnectivityMatrixParcelFile::setSelectedParcelLabelFileAndMapForReordering(CiftiParcelLabelFile* selectedParcelLabelFile,
+                                                                                 const int32_t selectedParcelLabelFileMapIndex,
+                                                                                 const bool enabledStatus)
+{
+    m_parcelReorderingModel->setSelectedParcelLabelFileAndMapForReordering(selectedParcelLabelFile,
+                                                                           selectedParcelLabelFileMapIndex,
+                                                                           enabledStatus);
+}
+
+/**
+ * Get the parcel reordering for the given map index that was created using
+ * the given parcel label file and its map index.
+ *
+ * @param parcelLabelFile
+ *    The selected parcel label file used for reordering the parcels.
+ * @param parcelLabelFileMapIndex
+ *    Map index in the selected parcel label file.
+ * @return
+ *    Pointer to parcel reordering or NULL if not found.
+ */
+const CiftiParcelReordering*
+CiftiConnectivityMatrixParcelFile::getParcelReordering(const CiftiParcelLabelFile* parcelLabelFile,
+                                                const int32_t parcelLabelFileMapIndex) const
+{
+    return m_parcelReorderingModel->getParcelReordering(parcelLabelFile,
+                                                        parcelLabelFileMapIndex);
+}
+
+/**
+ * Create the parcel reordering for the given map index using
+ * the given parcel label file and its map index.
+ *
+ * @param parcelLabelFile
+ *    The selected parcel label file used for reordering the parcels.
+ * @param parcelLabelFileMapIndex
+ *    Map index in the selected parcel label file.
+ * @param ciftiParcelsMap
+ *    The CIFTI parcels map that will or has been reordered.
+ * @param errorMessageOut
+ *    Error message output.  Will only be non-empty if NULL is returned.
+ * @return
+ *    Pointer to parcel reordering or NULL if not found.
+ */
+bool
+CiftiConnectivityMatrixParcelFile::createParcelReordering(const CiftiParcelLabelFile* parcelLabelFile,
+                                                   const int32_t parcelLabelFileMapIndex,
+                                                   AString& errorMessageOut)
+{
+    return m_parcelReorderingModel->createParcelReordering(parcelLabelFile,
+                                                           parcelLabelFileMapIndex,
+                                                           errorMessageOut);
+}
+
+/**
+ * @return True if loading attributes (column/row, yoking) are
+ * supported by this file type.
+ */
+bool
+CiftiConnectivityMatrixParcelFile::isSupportsLoadingAttributes()
+{
+    return true;
+}
+
+/**
+ * @return The matrix loading type (by row/column).
+ */
+ChartMatrixLoadingDimensionEnum::Enum
+CiftiConnectivityMatrixParcelFile::getMatrixLoadingDimension() const
+{
+    return getChartMatrixLoadingDimension();
+}
+
+/**
+ * Set the matrix loading type (by row/column).
+ *
+ * @param matrixLoadingType
+ *    New value for matrix loading type.
+ */
+void
+CiftiConnectivityMatrixParcelFile::setMatrixLoadingDimension(const ChartMatrixLoadingDimensionEnum::Enum matrixLoadingType)
+{
+    /*
+     * Ignore when the loading dimension does not change
+     */
+    if (matrixLoadingType != getMatrixLoadingDimension()) {
+        setChartMatrixLoadingDimension(matrixLoadingType);
+    }
+}
+
+/**
+ * @return Selected yoking group.
+ */
+YokingGroupEnum::Enum
+CiftiConnectivityMatrixParcelFile::getYokingGroup() const
+{
+    return m_chartLoadingYokingGroup;
+}
+
+/**
+ * Set the selected yoking group.
+ *
+ * @param yokingGroup
+ *    New value for yoking group.
+ */
+void
+CiftiConnectivityMatrixParcelFile::setYokingGroup(const YokingGroupEnum::Enum yokingGroup)
+{
+    m_chartLoadingYokingGroup = yokingGroup;
+    
+    if (m_chartLoadingYokingGroup == YokingGroupEnum::YOKING_GROUP_OFF) {
+        return;
+    }
+    
+    /* 
+     * Updated selected row/column to match yoking.
+     */
+}
 
