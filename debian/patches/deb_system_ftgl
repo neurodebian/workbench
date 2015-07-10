@@ -1,6 +1,6 @@
 --- a/src/CMakeLists.txt
 +++ b/src/CMakeLists.txt
-@@ -241,7 +241,7 @@ SET(FTGL_FONT_MODULE_FOR_LINKING "")
+@@ -296,7 +296,7 @@ SET(FTGL_FONT_MODULE_FOR_LINKING "")
  
  FIND_PACKAGE(Freetype)
  IF (FREETYPE_FOUND)
@@ -9,7 +9,7 @@
      MESSAGE("FreeType library found")
      MESSAGE("   INCLUDES ${FREETYPE_INCLUDE_DIRS}")
      MESSAGE("   INCLUDES_FT2_BUILD ${FREETYPE_INCLUDE_DIR_ft2build}")
-@@ -323,7 +323,8 @@ ADD_SUBDIRECTORY ( Xml )
+@@ -396,7 +396,8 @@ ADD_SUBDIRECTORY ( Xml )
  ADD_SUBDIRECTORY ( Scenes )
  ADD_SUBDIRECTORY ( OSMesaDummy )
  IF (FREETYPE_FOUND)
@@ -21,7 +21,7 @@
  ADD_SUBDIRECTORY ( Palette )
 --- a/src/Brain/CMakeLists.txt
 +++ b/src/Brain/CMakeLists.txt
-@@ -299,8 +299,10 @@ ${CMAKE_SOURCE_DIR}/Common
+@@ -307,8 +307,10 @@ ${CMAKE_SOURCE_DIR}/Common
  
  IF (FREETYPE_FOUND)
  INCLUDE_DIRECTORIES(
