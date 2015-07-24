@@ -1,9 +1,9 @@
-#ifndef __ALGORITHM_SURFACE_CREATE_SPHERE_H__
-#define __ALGORITHM_SURFACE_CREATE_SPHERE_H__
+#ifndef __ALGORITHM_METRIC_TO_VOLUME_MAPPING_H__
+#define __ALGORITHM_METRIC_TO_VOLUME_MAPPING_H__
 
 /*LICENSE_START*/
 /*
- *  Copyright (C) 2014  Washington University School of Medicine
+ *  Copyright (C) 2015  Washington University School of Medicine
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -23,32 +23,31 @@
 
 #include "AbstractAlgorithm.h"
 
-#include <vector>
-
 namespace caret {
     
-    class AlgorithmSurfaceCreateSphere : public AbstractAlgorithm
+    class VolumeSpace;
+    
+    class AlgorithmMetricToVolumeMapping : public AbstractAlgorithm
     {
-        AlgorithmSurfaceCreateSphere();
-        void interp3(const float coord1[3], const float coord2[3], const float coord3[3], const int& row, const int& col, float out[3]);
-        void getEdge(int node1, int node2, int* out);
-        int m_numDivisions, m_curNodes, m_curTiles;
-        SurfaceFile* m_surface;
-        std::vector<std::vector<std::vector<int> > > m_edgenodes;
-        static void getNumberOfNodesAndTrianglesFromDivisions(const int& divisions, int& numNodesOut, int& numTrianglesOut);
+        AlgorithmMetricToVolumeMapping();
     protected:
         static float getSubAlgorithmWeight();
         static float getAlgorithmInternalWeight();
     public:
-        AlgorithmSurfaceCreateSphere(ProgressObject* myProgObj, const int& numVertices, SurfaceFile* mySurfOut);
+        ///nearest vertex
+        AlgorithmMetricToVolumeMapping(ProgressObject* myProgObj, const MetricFile* myMetric, const SurfaceFile* mySurf, const VolumeSpace& myVolSpace,
+                                       VolumeFile* myVolOut, const float& nearDist);
+        ///ribbon constrained
+        AlgorithmMetricToVolumeMapping(ProgressObject* myProgObj, const MetricFile* myMetric, const SurfaceFile* mySurf, const VolumeSpace& myVolSpace,
+                                       VolumeFile* myVolOut, const SurfaceFile* innerSurf, const SurfaceFile* outerSurf, const int& subDivs = 3);
         static OperationParameters* getParameters();
         static void useParameters(OperationParameters* myParams, ProgressObject* myProgObj);
         static AString getCommandSwitch();
         static AString getShortDescription();
     };
 
-    typedef TemplateAutoOperation<AlgorithmSurfaceCreateSphere> AutoAlgorithmSurfaceCreateSphere;
+    typedef TemplateAutoOperation<AlgorithmMetricToVolumeMapping> AutoAlgorithmMetricToVolumeMapping;
 
 }
 
-#endif //__ALGORITHM_SURFACE_CREATE_SPHERE_H__
+#endif //__ALGORITHM_METRIC_TO_VOLUME_MAPPING_H__

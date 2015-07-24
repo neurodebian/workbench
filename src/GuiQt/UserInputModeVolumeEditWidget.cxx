@@ -284,14 +284,14 @@ UserInputModeVolumeEditWidget::createSelectionToolBar()
     
     m_yBrushSizeSpinBox = new WuQSpinBoxOddValue(this);
     m_yBrushSizeSpinBox->setRange(MIN_BRUSH_SIZE, MAX_BRUSH_SIZE);
-    QObject::connect(m_xBrushSizeSpinBox, SIGNAL(valueChanged(int)),
+    QObject::connect(m_yBrushSizeSpinBox, SIGNAL(valueChanged(int)),
                      this, SLOT(yBrushSizeValueChanged(int)));
     m_yBrushSizeSpinBox->getWidget()->setToolTip("Coronal brush size (voxels).\n"
                                                  "Must be an odd value.");
     
     m_zBrushSizeSpinBox = new WuQSpinBoxOddValue(this);
     m_zBrushSizeSpinBox->setRange(MIN_BRUSH_SIZE, MAX_BRUSH_SIZE);
-    QObject::connect(m_xBrushSizeSpinBox, SIGNAL(valueChanged(int)),
+    QObject::connect(m_zBrushSizeSpinBox, SIGNAL(valueChanged(int)),
                      this, SLOT(zBrushSizeValueChanged(int)));
     m_zBrushSizeSpinBox->getWidget()->setToolTip("Axial brush size (voxels).\n"
                                                  "Must be an odd value.");

@@ -120,7 +120,7 @@ Brain::Brain()
     m_fiberOrientationSamplesLoader = new FiberOrientationSamplesLoader();
     
     m_paletteFile = new PaletteFile();
-    m_paletteFile->setFileName(updateFileNameForWriting(m_paletteFile->getFileName()));
+    m_paletteFile->setFileName(convertFilePathNameToAbsolutePathName(m_paletteFile->getFileName()));
     m_paletteFile->clearModified();
     
     m_specFile = new SpecFile();
@@ -568,7 +568,7 @@ Brain::resetBrain(const ResetBrainKeepSceneFiles keepSceneFiles,
         delete m_paletteFile;
     }
     m_paletteFile = new PaletteFile();
-    m_paletteFile->setFileName(updateFileNameForWriting(m_paletteFile->getFileName()));
+    m_paletteFile->setFileName(convertFilePathNameToAbsolutePathName(m_paletteFile->getFileName()));
     m_paletteFile->clearModified();
     
     m_fiberOrientationSamplesLoader->reset();
@@ -3912,7 +3912,7 @@ Brain::addDataFile(CaretDataFile* caretDataFile)
 {
     CaretAssert(caretDataFile);
     
-    caretDataFile->setFileName(updateFileNameForWriting(caretDataFile->getFileName()));
+    caretDataFile->setFileName(convertFilePathNameToAbsolutePathName(caretDataFile->getFileName()));
     
     const StructureEnum::Enum structure = caretDataFile->getStructure();
     
@@ -4939,7 +4939,7 @@ Brain::readDataFile(const DataFileTypeEnum::Enum dataFileType,
     /*
      * If possible, update path so that is absolute
      */
-    dataFileName = updateFileNameForReading(dataFileName);
+    dataFileName = convertFilePathNameToAbsolutePathName(dataFileName);
     
     /*
      * Since file is being read, it must exist
@@ -5096,7 +5096,7 @@ Brain::loadFilesSelectedInSpecFile(EventSpecFileReadDataFiles* readSpecFileDataF
     if (errorMessage.isEmpty() == false) {
         readSpecFileDataFilesEvent->setErrorMessage(errorMessage);
     }
-    m_paletteFile->setFileName(updateFileNameForWriting(m_paletteFile->getFileNameNoPath()));
+    m_paletteFile->setFileName(convertFilePathNameToAbsolutePathName(m_paletteFile->getFileNameNoPath()));
     m_paletteFile->clearModified();
     
     /*
@@ -5355,7 +5355,7 @@ Brain::loadSpecFileFromScene(const SceneAttributes* sceneAttributes,
         delete m_paletteFile;
     }
     m_paletteFile = new PaletteFile();
-    m_paletteFile->setFileName(updateFileNameForWriting(m_paletteFile->getFileNameNoPath()));
+    m_paletteFile->setFileName(convertFilePathNameToAbsolutePathName(m_paletteFile->getFileNameNoPath()));
     m_paletteFile->clearModified();
     
     progressEvent.setProgressMessage("Initializing Overlays");
@@ -5390,66 +5390,52 @@ Brain::loadSpecFileFromScene(const SceneAttributes* sceneAttributes,
     }
 }
 
-
 /**
- * Update the filename for writing so that it is an absolute path.
- * 
- * @param filename
- *    Name of file.
- * @return
- *    Name prepended with path, if availble, and if 
- *    the input filename was a relative path.
+ * If the file is NOT an absolute path, the name of the file path is updated
+ * to include the current directory.
+ *
+ * @param caretDataFile
+ *     File that may have its name updated.
  */
-AString 
-Brain::updateFileNameForReading(const AString& filename)
+void
+Brain::convertDataFilePathNameToAbsolutePathName(CaretDataFile* caretDataFile) const
 {
-    /*
-     * If file is on network, leave it unchanged
-     */
-    if (DataFile::isFileOnNetwork(filename)) {
-        return filename;
-    }
+    CaretAssert(caretDataFile);
     
-    FileInformation fileInfo(filename);
-    if (fileInfo.isAbsolute()) {
-        return filename;
-    }
-
-    if (m_currentDirectory.isEmpty()) {
-        return filename;
-    }
-    
-    FileInformation pathFileInfo(m_currentDirectory, filename);
-    AString fullPathName = pathFileInfo.getAbsoluteFilePath();
-    
-    return fullPathName;
+    const AString newFileName = convertFilePathNameToAbsolutePathName(caretDataFile->getFileName());
+    caretDataFile->setFileName(newFileName);
 }
 
 /**
- * Update the filename for writing so that it is an absolute path.
+ * Exampine the file path name to determine if it is an
+ * absolute or relative path.  If it is a relative
+ * path, convert it to an absolute path.
+ *
+ * If the file is on the network (starts with "http:"), that is considered
+ * an absolute path and the file name is not changed.
  * 
  * @param filename
  *    Name of file.
  * @return
- *    Name prepended with path, if availble, and if 
- *    the input filename was a relative path.
+ *    If input filename was absolute path, it is returned with
+ *    no changes.  Otherwise, the name is returned after 
+ *    updating it to an absolute path.
  */
 AString 
-Brain::updateFileNameForWriting(const AString& filename)
+Brain::convertFilePathNameToAbsolutePathName(const AString& filename) const
 {
     /*
-     * If file is on network, leave it unchanged
+     * If file is on network, is is considered an absolute path
      */
     if (DataFile::isFileOnNetwork(filename)) {
-        throw DataFileException(filename,
-                                "Cannot write file on network.");
+        return filename;
     }
     
     FileInformation fileInfo(filename);
     if (fileInfo.isAbsolute()) {
         return filename;
     }
-    
+
     if (m_currentDirectory.isEmpty()) {
         return filename;
     }
@@ -6046,11 +6032,24 @@ Brain::getAllModifiedFiles(const std::vector<DataFileTypeEnum::Enum>& excludeThe
 void 
 Brain::writeDataFile(CaretDataFile* caretDataFile)
 {
+    AString dataFileName = caretDataFile->getFileName();
+    
+    /*
+     * If file is on network, it cannot be written !
+     */
+    if (DataFile::isFileOnNetwork(dataFileName)) {
+        throw DataFileException(dataFileName,
+                                "Cannot write a file with a network path.  "
+                                "To write the file, its name must be changed to "
+                                "a path on your computer.  This can be done using "
+                                "the \"More\" icon on the Manage Files Dialog "
+                                "(File Menu->Save/Manage Files).");
+    }
+    
     /*
      * If file is relative path, update path using current directory
      */
-    AString dataFileName = caretDataFile->getFileName();
-    dataFileName = updateFileNameForWriting(dataFileName);
+    dataFileName = convertFilePathNameToAbsolutePathName(dataFileName);
     caretDataFile->setFileName(dataFileName);
 
     caretDataFile->writeFile(caretDataFile->getFileName());
@@ -6458,7 +6457,7 @@ Brain::saveToScene(const SceneAttributes* sceneAttributes,
          iter != allCaretDataFiles.end();
          iter++) {
         CaretDataFile* cdf = *iter;
-        const AString caretDataFileName = cdf->getFileNameNoPath();
+        const AString caretDataFileName = cdf->getFileName();  // use full path 7/16/2015 cdf->getFileNameNoPath();
         SceneClass* caretDataFileSceneClass = cdf->saveToScene(sceneAttributes,
                                                       caretDataFileName);
         if (caretDataFileSceneClass != NULL) {
@@ -6618,15 +6617,35 @@ Brain::restoreFromScene(const SceneAttributes* sceneAttributes,
              iter != allCaretDataFiles.end();
              iter++) {
             CaretDataFile* caretDataFile = *iter;
-            const AString caretDataFileName = caretDataFile->getFileNameNoPath();
+            CaretAssert(caretDataFile);
+            const AString caretDataFileNameNoPath   = caretDataFile->getFileNameNoPath();
+            const AString caretDataFileNameFullPath = caretDataFile->getFileName();
+            
+            SceneClass* bestMatchingSceneClass = NULL;
+            int64_t bestMatchingCount = 0;
             
             const int32_t numCaretDataFileScenes = caretDataFileSceneArray->getNumberOfArrayElements();
             for (int32_t i = 0; i < numCaretDataFileScenes; i++) {
                 const SceneClass* fileSceneClass = caretDataFileSceneArray->getClassAtIndex(i);
-                if (caretDataFileName == fileSceneClass->getName()) {
-                    caretDataFile->restoreFromScene(sceneAttributes,
-                                                    fileSceneClass);
+                const AString fileNameFullPath = fileSceneClass->getName();
+                const FileInformation fileInfo(fileNameFullPath);
+                const AString fileNameNoPath = fileInfo.getFileName();
+                
+                if (caretDataFileNameNoPath == fileNameNoPath) {
+                    const int64_t matchCount = caretDataFileNameFullPath.countMatchingCharactersFromEnd(fileNameFullPath);
+                    if (matchCount > bestMatchingCount) {
+                        bestMatchingSceneClass = const_cast<SceneClass*>(fileSceneClass);
+                        bestMatchingCount      = matchCount;
+                    }
+//                    caretDataFile->restoreFromScene(sceneAttributes,
+//                                                    fileSceneClass);
                 }
+            }
+            
+            if (bestMatchingCount > 0) {
+                CaretAssert(bestMatchingSceneClass);
+                caretDataFile->restoreFromScene(sceneAttributes,
+                                                bestMatchingSceneClass);
             }
         }
     }
@@ -6716,8 +6735,21 @@ Brain::restoreFromScene(const SceneAttributes* sceneAttributes,
          borderIter != m_borderFiles.end();
          borderIter++) {
         BorderFile* bf = *borderIter;
-        bf->getGroupAndNameHierarchyModel()->restoreFromScene(sceneAttributes,
-                                                              sceneClass->getClass(bf->getFileNameNoPath()));
+        const SceneClass* borderScene = sceneClass->getClass(bf->getFileNameNoPath());
+        if (borderScene != NULL) {
+            /*
+             * WB-533 Default State of Borders in Scenes
+             *
+             * When there is scene information for a border file, disable the display
+             * of all classes and names prior to restoring the class/name hierarchy.  
+             * The purpose of this is to prevent the display of borders that have been
+             * added to the border file AFTER the scene was created.
+             */
+            GroupAndNameHierarchyModel* groupAndNameModel = bf->getGroupAndNameHierarchyModel();
+            groupAndNameModel->setAllSelected(false);
+            bf->getGroupAndNameHierarchyModel()->restoreFromScene(sceneAttributes,
+                                                                  borderScene);
+        }
     }
     for (std::vector<FociFile*>::iterator fociIter = m_fociFiles.begin();
          fociIter != m_fociFiles.end();
