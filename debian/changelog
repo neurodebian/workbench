@@ -1,3 +1,11 @@
+connectome-workbench (1.1.1-1) unstable; urgency=medium
+
+  * Fresh upstream release
+    - debian/copyright was updated (upstream, thanks Timothy!) to new
+      locations of 3rd-party modules
+
+ -- Yaroslav Halchenko <debian@onerussian.com>  Fri, 24 Jul 2015 17:54:00 -0400
+
 connectome-workbench (1.1-1) unstable; urgency=medium
 
   * Fresh upstream release
