@@ -4,6 +4,8 @@ connectome-workbench (1.2.0-1) unstable; urgency=medium
   * debian/copyright
     - updated to include new bundled fonts
     - boosted policy to 3.9.8
+  * debian/patches/deb_* to build without git and against system ftgl dropped.
+    Contributions from NeuroFedora team upstream made them unnecessary
 
  -- Yaroslav Halchenko <debian@onerussian.com>  Thu, 19 May 2016 22:44:50 -0400
 
