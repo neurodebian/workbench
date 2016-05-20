@@ -49,6 +49,9 @@ ViewingTransformations::ViewingTransformations()
     m_translation[1] = 0.0;
     m_translation[2] = 0.0;
     m_scaling = 1.0;
+    m_rightCortexFlatMapOffset[0] = 0.0;
+    m_rightCortexFlatMapOffset[1] = 0.0;
+    m_rightCortexFlatMapZoomFactor = 1.0;
     
     m_sceneAssistant->addArray("m_translation",
                                m_translation,
@@ -56,6 +59,12 @@ ViewingTransformations::ViewingTransformations()
                                0.0);
     m_sceneAssistant->add("m_scaling",
                           &m_scaling);
+    m_sceneAssistant->addArray("m_rightCortexFlatMapOffset",
+                               m_rightCortexFlatMapOffset,
+                               2,
+                               0.0);
+    m_sceneAssistant->add("m_rightCortexFlatMapZoomFactor",
+                          &m_rightCortexFlatMapZoomFactor);
 }
 
 /**
@@ -108,6 +117,9 @@ ViewingTransformations::copyHelperViewingTransformations(const ViewingTransforma
     m_translation[1]  = obj.m_translation[1];
     m_translation[2]  = obj.m_translation[2];
     m_scaling         = obj.m_scaling;
+    m_rightCortexFlatMapOffset[0]  = obj.m_rightCortexFlatMapOffset[0];
+    m_rightCortexFlatMapOffset[1]  = obj.m_rightCortexFlatMapOffset[1];
+    m_rightCortexFlatMapZoomFactor = obj.m_rightCortexFlatMapZoomFactor;
 }
 
 /**
@@ -209,6 +221,60 @@ ViewingTransformations::setRotationMatrix(const Matrix4x4& rotationMatrix)
 }
 
 /**
+ * Get the offset for the right cortex flat map.
+ *
+ * @param rightCortexFlatMapOffsetX
+ *    Output with X offset.
+ * @param rightCortexFlatMapOffsetY
+ *    Output with Y offset.
+ */
+void
+ViewingTransformations::getRightCortexFlatMapOffset(float& rightCortexFlatMapOffsetX,
+                                                    float& rightCortexFlatMapOffsetY) const
+{
+    rightCortexFlatMapOffsetX = m_rightCortexFlatMapOffset[0];
+    rightCortexFlatMapOffsetY = m_rightCortexFlatMapOffset[1];
+}
+
+/**
+ * Set the offset for the right cortex flat map.
+ *
+ * @param rightCortexFlatMapOffsetX
+ *    New X offset.
+ * @param rightCortexFlatMapOffsetY
+ *    New Y offset.
+ */
+void
+ViewingTransformations::setRightCortexFlatMapOffset(const float rightCortexFlatMapOffsetX,
+                                                    const float rightCortexFlatMapOffsetY)
+{
+    m_rightCortexFlatMapOffset[0] = rightCortexFlatMapOffsetX;
+    m_rightCortexFlatMapOffset[1] = rightCortexFlatMapOffsetY;
+}
+
+/**
+ * @return The right flat cortex flat map offset.
+ */
+float
+ViewingTransformations::getRightCortexFlatMapZoomFactor() const
+{
+    return m_rightCortexFlatMapZoomFactor;
+}
+
+/**
+ * Set the right flat cortex flat map offset.
+ *
+ * @param rightCortexFlatMapZoomFactor
+ *     The right flat cortex flat map offset.
+ */
+void
+ViewingTransformations::setRightCortexFlatMapZoomFactor(const float rightCortexFlatMapZoomFactor)
+{
+    m_rightCortexFlatMapZoomFactor = rightCortexFlatMapZoomFactor;
+}
+
+
+/**
  * Reset the view to the default view for a SURFACE
  */
 void
@@ -217,6 +283,8 @@ ViewingTransformations::resetView()
     setTranslation(0.0, 0.0, 0.0);
     m_rotationMatrix->identity();
     setScaling(1.0);
+    setRightCortexFlatMapOffset(0.0, 0.0);
+    setRightCortexFlatMapZoomFactor(1.0);
     leftView();
 }
 

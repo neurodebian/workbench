@@ -27,6 +27,7 @@
 #include "SpecFile.h"
 #include "SpecFileSaxReader.h"
 #include "GiftiMetaDataSaxReader.h"
+#include "FileInformation.h"
 
 #include "XmlAttributes.h"
 #include "XmlException.h"
@@ -180,9 +181,29 @@ SpecFileSaxReader::endElement(const AString& namespaceURI,
        {
            try {
                const AString filename = this->elementText.trimmed();
+               AString fileNameForAdd;
+               if (DataFile::isFileOnNetwork(filename))//keep on-network names as-is
+               {
+                   fileNameForAdd = filename;
+               } else {//otherwise, resolve relative to spec file
+                    if (DataFile::isFileOnNetwork(specFile->getFileName())) {
+                        const int32_t lastSlashIndex = specFile->getFileName().lastIndexOf("/");
+                        if (lastSlashIndex >= 0) {
+                            fileNameForAdd = (specFile->getFileName().left(lastSlashIndex)
+                                            + "/"
+                                            + filename);
+                        }
+                        else {
+                            CaretAssert(0);
+                        }
+                    } else {
+                        FileInformation resolvePath(FileInformation(specFile->getFileName()).getAbsolutePath(), filename);
+                        fileNameForAdd = resolvePath.getAbsoluteFilePath();
+                    }
+               }
                this->specFile->addDataFile(this->fileAttributeTypeName, 
                                            this->fileAttributeStructureName, 
-                                           filename,
+                                           fileNameForAdd,
                                            this->fileAttributeSelectionStatus,
                                            false, // not selected for saving
                                            true); // is a member of spec file since read from spec file

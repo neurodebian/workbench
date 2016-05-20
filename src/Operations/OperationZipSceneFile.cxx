@@ -101,7 +101,7 @@ void OperationZipSceneFile::useParameters(OperationParameters* myParams, Progres
         CaretLogWarning("You have specified that the zip file should extract to an absolute path, this is generally frowned on.  "
                         "The <extract-folder> parameter should generally be a string without '/' or '\\' in it.");
     } else {
-        if (outputSubDirectory.indexOfAnyChar("/\\"))//assume backslashes work too
+        if (outputSubDirectory.indexOfAnyChar("/\\") != -1)//assume backslashes work too
         {
             CaretLogWarning("You have specified that the zipfile should create multiple levels of otherwise empty directories "
                             "before the file paths starting from the base directory, this is probably going to be inconvenient.  "
@@ -143,7 +143,7 @@ void OperationZipSceneFile::useParameters(OperationParameters* myParams, Progres
             }
             SpecFile tempSpec;
             tempSpec.restoreFromScene(myAttrs, specClass);
-            vector<AString> tempNames = tempSpec.getAllDataFileNames();
+            vector<AString> tempNames = tempSpec.getAllDataFileNamesSelectedForLoading();
             int numNames = (int)tempNames.size();
             for (int k = 0; k < numNames; ++k)
             {

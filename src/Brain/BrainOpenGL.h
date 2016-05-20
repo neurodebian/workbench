@@ -60,8 +60,11 @@
 namespace caret {
     
     class Border;
+    class Brain;
     class BrainOpenGLTextRenderInterface;
+    class BrainOpenGLTextureManager;
     class BrainOpenGLViewportContent;
+    class Model;
     class SurfaceProjectedItem;
     
     /**
@@ -92,17 +95,26 @@ namespace caret {
          */
         virtual void initializeOpenGL();
         
+        BrainOpenGLTextRenderInterface* getTextRenderer();
+        
+        void setTextRenderer(BrainOpenGLTextRenderInterface* textRenderer);
+        
         /**
          * Draw models in their respective viewports.
          *
+         * @param brain
+         *    The brain (must be valid!)
          * @param viewportContents
          *    Viewport info for drawing.
          */
-        virtual void drawModels(std::vector<BrainOpenGLViewportContent*>& viewportContents) = 0;
+        virtual void drawModels(Brain* brain,
+                                std::vector<BrainOpenGLViewportContent*>& viewportContents) = 0;
         
         /**
          * Selection on a model.
          *
+         * @param brain
+         *    The brain (must be valid!)
          * @param viewportContent
          *    Viewport content in which mouse was clicked
          * @param mouseX
@@ -117,7 +129,8 @@ namespace caret {
          *    selected.  If this parameter is false, the node will be
          *    selected.
          */
-        virtual void selectModel(BrainOpenGLViewportContent* viewportContent,
+        virtual void selectModel(Brain* brain,
+                                 BrainOpenGLViewportContent* viewportContent,
                                  const int32_t mouseX,
                                  const int32_t mouseY,
                                  const bool applySelectionBackgroundFiltering) = 0;
@@ -128,6 +141,8 @@ namespace caret {
          * coordinate in 'projectionOut' will be valid.  In addition,
          * the barycentric coordinate may also be valid in 'projectionOut'.
          *
+         * @param brain
+         *    The brain (must be valid!)
          * @param viewportContent
          *    Viewport content in which mouse was clicked
          * @param mouseX
@@ -135,10 +150,13 @@ namespace caret {
          * @param mouseY
          *    Y position of mouse click
          */
-        virtual void projectToModel(BrainOpenGLViewportContent* viewportContent,
+        virtual void projectToModel(Brain* brain,
+                                    BrainOpenGLViewportContent* viewportContent,
                                     const int32_t mouseX,
                                     const int32_t mouseY,
                                     SurfaceProjectedItem& projectionOut) = 0;
+        
+        virtual BrainOpenGLTextureManager* getTextureManager() = 0;
         
         /**
          * @return Half-size of the model window height.
@@ -158,6 +176,13 @@ namespace caret {
         static void getMinMaxLineWidth(float& minLineWidthOut, float& maxLineWidthOut);
         
         static bool testForVersionOfOpenGLSupported(const AString& versionOfOpenGL);
+        
+        static void testForOpenGLError(const AString& message);
+        
+        static void testForOpenGLError(const AString& message,
+                                       const Model* model,
+                                       const int32_t windowIndex,
+                                       const int32_t tabIndex);
         
         static QString getBestDrawingModeName();
         
@@ -208,9 +233,6 @@ namespace caret {
                                      const GLenum enumValue,
                                      const int32_t numberOfValues) const;
         
-        /** Optional text rendering (if not null) */
-        BrainOpenGLTextRenderInterface* textRenderer;
-        
         Border* borderBeingDrawn;
         
         bool m_drawHighlightedEndPoints;
@@ -253,7 +275,10 @@ namespace caret {
         
         static bool s_supportsVertexBuffers;
         
-        AString m_openGLInformation;
+        /** Optional text rendering (if not null) */
+        BrainOpenGLTextRenderInterface* m_textRenderer;
+        
+        AString m_openGLExtensionsInformation;
     };
 
 #ifdef __BRAIN_OPENGL_DEFINE_H

@@ -29,7 +29,9 @@
 class QCheckBox;
 class QComboBox;
 class QLabel;
+class QLineEdit;
 class QPushButton;
+class QScrollArea;
 class QVBoxLayout;
 
 namespace caret {
@@ -55,6 +57,8 @@ namespace caret {
         bool displayScene(SceneFile* sceneFile,
                           Scene* scene);
         
+        static bool isInformUserAboutScenesOnExit();
+
     private:
         SceneDialog(const SceneDialog&);
 
@@ -71,6 +75,10 @@ namespace caret {
         
         void insertSceneButtonClicked();
         
+        void moveSceneUpButtonClicked();
+        
+        void moveSceneDownButtonClicked();
+        
         void replaceSceneButtonClicked();
         
         void showSceneButtonClicked();
@@ -79,11 +87,13 @@ namespace caret {
         
         void validateContentOfCreateSceneDialog(WuQDataEntryDialog*);
         
-        void sceneWasDropped();
-        
         void sceneHighlighted(const int32_t sceneIndex);
         
         void sceneActivated(const int32_t sceneIndex);
+        
+        void useSceneColorsCheckBoxClicked(bool checked);
+        
+        void editFileBalsaStudyIDButtonClicked();
         
     public:
 
@@ -106,11 +116,17 @@ namespace caret {
         
         QWidget* createMainPage();
         
+        QWidget* createShowOptionsWidget();
+        
         bool displayScenePrivate(SceneFile* sceneFile,
                                  Scene* scene,
                                  const bool showWaitCursor);
         
-        bool checkForModifiedFiles();
+        bool checkForModifiedFiles(const bool creatingSceneFlag);
+        
+        void enableSceneMoveUpAndDownButtons();
+        
+        void loadSceneFileBalsaStudyIDLineEdit();
         
         // ADD_NEW_MEMBERS_HERE
 
@@ -122,11 +138,19 @@ namespace caret {
         
         QPushButton* m_deleteScenePushButton;
         
+        QPushButton* m_moveSceneUpPushButton;
+        
+        QPushButton* m_moveSceneDownPushButton;
+        
         QPushButton* m_replaceScenePushButton;
         
         QPushButton* m_showScenePushButton;
         
         QPushButton* m_showSceneImagePreviewPushButton;
+        
+        QCheckBox* m_useSceneColorsCheckBox;
+        
+        QScrollArea* m_sceneSelectionScrollArea;
         
         QWidget* m_sceneSelectionWidget;
         
@@ -136,7 +160,13 @@ namespace caret {
         
         int32_t m_selectedSceneClassInfoIndex;
         
+        QPushButton* m_fileBalsaStudyIDPushButton;
+        
+        QLineEdit* m_fileBalsaStudyIDLineEdit;
+        
         static const AString PREFERRED_IMAGE_FORMAT;
+        
+        static bool s_informUserAboutScenesOnExitFlag;
     };
     
     class SceneClassInfoWidget : public QGroupBox {
@@ -160,7 +190,9 @@ namespace caret {
         
         static void getFormattedTextForSceneNameAndDescription(const SceneInfo* sceneInfo,
                                                                AString& nameTextOut,
-                                                               AString& descriptionTextOut);
+                                                               AString& sceneIdTextOut,
+                                                               AString& descriptionTextOut,
+                                                               const int32_t maximumLinesInDescription);
         
     signals:
         /**
@@ -179,6 +211,9 @@ namespace caret {
         virtual void mouseDoubleClickEvent(QMouseEvent* event);
         
     private:
+        static void limitToNumberOfLines(AString& textLines,
+                                         const int32_t maximumNumberOfLines);
+        
         QWidget* m_leftSideWidget;
         
         QWidget* m_rightSideWidget;
@@ -186,6 +221,8 @@ namespace caret {
         QLabel* m_previewImageLabel;
         
         QLabel* m_nameLabel;
+        
+        QLabel* m_sceneIdLabel;
         
         QLabel* m_descriptionLabel;
         
@@ -196,11 +233,13 @@ namespace caret {
         bool m_previewImageValid;
         
         bool m_defaultAutoFillBackgroundStatus;
+        
         QPalette::ColorRole m_defaultBackgroundRole;
         
     };
 #ifdef __SCENE_DIALOG_DECLARE__
     const AString SceneDialog::PREFERRED_IMAGE_FORMAT = "jpg";
+    bool SceneDialog::s_informUserAboutScenesOnExitFlag = true;
 #endif // __SCENE_DIALOG_DECLARE__
 
 } // namespace

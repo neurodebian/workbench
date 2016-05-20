@@ -26,6 +26,8 @@
 
 namespace caret {
 
+    class BrainOpenGLFixedPipeline;
+    
     class OperationShowScene : public AbstractOperation {
 
     public:
@@ -41,11 +43,24 @@ namespace caret {
         static bool isShowSceneCommandAvailable();
         
     private:
+        static BrainOpenGLFixedPipeline* createBrainOpenGL(const int32_t windowIndex);
+        
         static void writeImage(const AString& imageFileName,
                                   const int32_t imageIndex,
                                   const unsigned char* imageContent,
                                   const int32_t imageWidth,
                                   const int32_t imageHeight);
+        
+        static void estimateGraphicsSize(const SceneClass* windowSceneClass,
+                                         float& estimatedWidthOut,
+                                         float& estimatedHeightOut);
+        
+        static bool getToolBoxSize(const SceneClass* toolBoxClass,
+                                   const SceneClass* activeToolBoxClass,
+                                   float& overlayToolBoxWidthOut,
+                                   float& overlayToolBoxHeightOut,
+                                   QString& overlayToolBoxOrientationOut);
+
     };
 
     typedef TemplateAutoOperation<OperationShowScene> AutoOperationShowScene;

@@ -30,6 +30,7 @@
 #include <QMessageBox>
 #include <QTabBar>
 #include <QUrl>
+#include <QUuid>
 
 #define __BRAIN_BROWSER_WINDOW_DECLARE__
 #include "BrainBrowserWindow.h"
@@ -37,11 +38,14 @@
 
 #include "AboutWorkbenchDialog.h"
 #include "ApplicationInformation.h"
+#include "BalsaDatabaseDialog.h"
 #include "BorderFile.h"
 #include "BorderFileSplitDialog.h"
 #include "Brain.h"
+#include "BrainBrowserWindowEditMenuItemEnum.h"
 #include "BrainBrowserWindowToolBar.h"
 #include "BrainBrowserWindowOrientedToolBox.h"
+#include "BrainOpenGLViewportContent.h"
 #include "BrainOpenGLWidget.h"
 #include "BrainStructure.h"
 #include "BrowserTabContent.h"
@@ -56,6 +60,7 @@
 #include "EventBrowserWindowNew.h"
 #include "CaretLogger.h"
 #include "ElapsedTimer.h"
+#include "EventGetViewportSize.h"
 #include "EventBrowserWindowCreateTabs.h"
 #include "EventDataFileRead.h"
 #include "EventMacDockMenuUpdate.h"
@@ -65,6 +70,7 @@
 #include "EventGraphicsUpdateOneWindow.h"
 #include "EventSpecFileReadDataFiles.h"
 #include "EventSurfaceColoringInvalidate.h"
+#include "EventGetOrSetUserInputModeProcessor.h"
 #include "EventUserInterfaceUpdate.h"
 #include "FileInformation.h"
 #include "FociProjectionDialog.h"
@@ -122,6 +128,8 @@ BrainBrowserWindow::BrainBrowserWindow(const int browserWindowIndex,
         BrainBrowserWindow::s_firstWindowFlag = false;
     }
     m_viewTileTabsSelected = false;
+    
+    m_aspectRatio = 1.0;
     
     m_sceneTileTabsConfigurationText = "From Scene: ";
     m_sceneTileTabsConfiguration = new TileTabsConfiguration();
@@ -202,9 +210,11 @@ BrainBrowserWindow::BrainBrowserWindow(const int browserWindowIndex,
     m_featuresToolBoxAction->blockSignals(false);
     
     m_toolbar = new BrainBrowserWindowToolBar(m_browserWindowIndex,
-                                                  browserTabContent,
-                                                  m_overlayToolBoxAction,
-                                                  m_featuresToolBoxAction,
+                                              browserTabContent,
+                                              m_overlayToolBoxAction,
+                                              m_featuresToolBoxAction,
+                                              m_windowAspectRatioLockedAction,
+                                              m_tabAspectRatioLockedAction,
                                                   this);
     m_showToolBarAction = m_toolbar->toolBarToolButtonAction;
     addToolBar(m_toolbar);
@@ -225,13 +235,19 @@ BrainBrowserWindow::BrainBrowserWindow(const int browserWindowIndex,
     }
     
     m_sceneAssistant = new SceneClassAssistant();
+    m_sceneAssistant->add("m_aspectRatio",
+                          &m_aspectRatio);
     
     m_defaultWindowComponentStatus.isFeaturesToolBoxDisplayed = m_featuresToolBoxAction->isChecked();
     m_defaultWindowComponentStatus.isOverlayToolBoxDisplayed  = m_overlayToolBoxAction->isChecked();
     m_defaultWindowComponentStatus.isToolBarDisplayed = m_showToolBarAction->isChecked();
     
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_BROWSER_WINDOW_MENUS_UPDATE);
+    EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_GET_VIEWPORT_SIZE);
+    EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_GRAPHICS_UPDATE_ALL_WINDOWS);
+    EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_GRAPHICS_UPDATE_ONE_WINDOW);
 }
+
 /**
  * Destructor.
  */
@@ -260,6 +276,295 @@ BrainBrowserWindow::receiveEvent(Event* event)
             event->setEventProcessed();
         }
     }
+    else if (event->getEventType() == EventTypeEnum::EVENT_GET_VIEWPORT_SIZE) {
+        EventGetViewportSize* viewportSizeEvent = dynamic_cast<EventGetViewportSize*>(event);
+        CaretAssert(viewportSizeEvent);
+        
+        std::vector<const BrainOpenGLViewportContent*> allViewportContent = m_openGLWidget->getViewportContent();
+        
+        int32_t viewport[4] = { 0, 0, 0, 0 };
+        bool viewportValid = false;
+        
+        int32_t notBestViewport[4] = { 0, 0, 0, 0 };
+        bool notBestViewportValid = false;
+        
+        switch (viewportSizeEvent->getMode()) {
+            case EventGetViewportSize::MODE_SURFACE_MONTAGE:
+                if (viewportSizeEvent->getIndex() == m_browserWindowIndex) {
+                    /*
+                     * Find a surface montage in this window
+                     */
+                    for (std::vector<const BrainOpenGLViewportContent*>::iterator vpIter = allViewportContent.begin();
+                         vpIter != allViewportContent.end();
+                         vpIter++) {
+                        const BrainOpenGLViewportContent* vpContent = *vpIter;
+                        if (vpContent != NULL) {
+                            BrowserTabContent* btc = vpContent->getBrowserTabContent();
+                            if (btc != NULL) {
+                                const Model* model = btc->getModelForDisplay();
+                                if (model->getModelType() == ModelTypeEnum::MODEL_TYPE_SURFACE_MONTAGE) {
+                                    vpContent->getTabViewportBeforeApplyingMargins(viewport);
+                                    viewportValid = true;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+                break;
+            case EventGetViewportSize::MODE_TAB_BEFORE_MARGINS_INDEX:
+                for (std::vector<const BrainOpenGLViewportContent*>::iterator vpIter = allViewportContent.begin();
+                     vpIter != allViewportContent.end();
+                     vpIter++) {
+                    const BrainOpenGLViewportContent* vpContent = *vpIter;
+                    if (vpContent != NULL) {
+                        BrowserTabContent* btc = vpContent->getBrowserTabContent();
+                        if (btc->getTabNumber() == viewportSizeEvent->getIndex()) {
+                            for (std::vector<const BrainOpenGLViewportContent*>::const_iterator vpIter = allViewportContent.begin();
+                                 vpIter != allViewportContent.end();
+                                 vpIter++) {
+                                const BrainOpenGLViewportContent* vpContent = *vpIter;
+                                if (vpContent->getTabIndex() == viewportSizeEvent->getIndex()) {
+                                    vpContent->getTabViewportBeforeApplyingMargins(viewport);
+                                    viewportValid = true;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+                break;
+            case EventGetViewportSize::MODE_TAB_AFTER_MARGINS_INDEX:
+                for (std::vector<const BrainOpenGLViewportContent*>::iterator vpIter = allViewportContent.begin();
+                     vpIter != allViewportContent.end();
+                     vpIter++) {
+                    const BrainOpenGLViewportContent* vpContent = *vpIter;
+                    if (vpContent != NULL) {
+                        BrowserTabContent* btc = vpContent->getBrowserTabContent();
+                        if (btc->getTabNumber() == viewportSizeEvent->getIndex()) {
+                            for (std::vector<const BrainOpenGLViewportContent*>::const_iterator vpIter = allViewportContent.begin();
+                                 vpIter != allViewportContent.end();
+                                 vpIter++) {
+                                const BrainOpenGLViewportContent* vpContent = *vpIter;
+                                if (vpContent->getTabIndex() == viewportSizeEvent->getIndex()) {
+                                    vpContent->getModelViewport(viewport);
+                                    viewportValid = true;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+                break;
+            case EventGetViewportSize::MODE_VOLUME_MONTAGE:
+                if (viewportSizeEvent->getIndex() == m_browserWindowIndex) {
+                    /*
+                     * Find the viewport content containing the specified tab by index
+                     */
+                    for (std::vector<const BrainOpenGLViewportContent*>::iterator vpIter = allViewportContent.begin();
+                         vpIter != allViewportContent.end();
+                         vpIter++) {
+                        const BrainOpenGLViewportContent* vpContent = *vpIter;
+                        if (vpContent != NULL) {
+                            BrowserTabContent* btc = vpContent->getBrowserTabContent();
+                            if (btc != NULL) {
+                                const Model* model = btc->getModelForDisplay();
+                                if (model->getModelType() == ModelTypeEnum::MODEL_TYPE_VOLUME_SLICES) {
+                                    if (btc->getSliceDrawingType() == VolumeSliceDrawingTypeEnum::VOLUME_SLICE_DRAW_MONTAGE) {
+                                        vpContent->getTabViewportBeforeApplyingMargins(viewport);
+                                        viewportValid = true;
+                                        break;
+                                    }
+                                    else {
+                                        vpContent->getTabViewportBeforeApplyingMargins(notBestViewport);
+                                        notBestViewportValid = true;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                break;
+            case EventGetViewportSize::MODE_WINDOW_INDEX:
+                if (m_browserWindowIndex == viewportSizeEvent->getIndex()) {
+                    for (std::vector<const BrainOpenGLViewportContent*>::iterator vpIter = allViewportContent.begin();
+                         vpIter != allViewportContent.end();
+                         vpIter++) {
+                        const BrainOpenGLViewportContent* vpContent = *vpIter;
+                        if (vpContent != NULL) {
+                            vpContent->getWindowViewport(viewport);
+                            viewportValid = true;
+                        }
+                    }
+                }
+                break;
+        }
+
+        if ( ! viewportValid) {
+            if (notBestViewportValid) {
+                viewport[0] = notBestViewport[0];
+                viewport[1] = notBestViewport[1];
+                viewport[2] = notBestViewport[2];
+                viewport[3] = notBestViewport[3];
+                viewportValid = true;
+            }
+            else {
+                /*
+                 * Tab is in this window but not the active tab.
+                 * So, use the active tab's viewport
+                 */
+                if ( ! allViewportContent.empty()) {
+                    CaretAssertVectorIndex(allViewportContent, 0);
+                    allViewportContent[0]->getTabViewportBeforeApplyingMargins(viewport);
+                    viewportValid = true;
+                }
+            }
+        }
+        
+        if (viewportValid) {
+            viewportSizeEvent->setViewportSize(viewport);
+        }
+    }
+//    else if (event->getEventType() == EventTypeEnum::EVENT_BROWSER_TAB_GET_VIEWPORT_SIZE) {
+//        EventBrowserTabGetViewportSize* viewportSizeEvent = dynamic_cast<EventBrowserTabGetViewportSize*>(event);
+//        CaretAssert(viewportSizeEvent);
+//        
+//        std::vector<BrowserTabContent*> allTabContent;
+//        m_toolbar->getAllTabContent(allTabContent);
+//        
+//        const std::vector<const BrainOpenGLViewportContent*> allViewportContent = m_openGLWidget->getViewportContent();
+//        
+//        int32_t tabViewport[4] = { 0, 0, 0, 0 };
+//        bool tabViewportValid = false;
+//        
+//        int32_t notBestTabViewport[4] = { 0, 0, 0, 0 };
+//        bool notBestTabViewportValid = false;
+//        
+//        /*
+//         * Find the viewport content containing the specified tab by index
+//         */
+//        for (std::vector<BrowserTabContent*>::iterator tabIter = allTabContent.begin();
+//             tabIter != allTabContent.end();
+//             tabIter++) {
+//            const BrowserTabContent* btc = *tabIter;
+//            CaretAssert(btc);
+//            
+//            switch (viewportSizeEvent->getMode()) {
+//                case EventBrowserTabGetViewportSize::MODE_SURFACE_MONTAGE:
+//                {
+//                    const Model* model = btc->getModelForDisplay();
+//                    if (model->getModelType() == ModelTypeEnum::MODEL_TYPE_SURFACE_MONTAGE) {
+//                        for (std::vector<const BrainOpenGLViewportContent*>::const_iterator vpIter = allViewportContent.begin();
+//                             vpIter != allViewportContent.end();
+//                             vpIter++) {
+//                            const BrainOpenGLViewportContent* vpContent = *vpIter;
+//                            if (vpContent->getTabIndex() == btc->getTabNumber()) {
+//                                vpContent->getTabViewportBeforeApplyingMargins(tabViewport);
+//                                tabViewportValid = true;
+//                                break;
+//                            }
+//                        }
+//                    }
+//                }
+//                    break;
+//                case EventBrowserTabGetViewportSize::MODE_TAB_INDEX:
+//                    if (btc->getTabNumber() == viewportSizeEvent->getIndex()) {
+//                        for (std::vector<const BrainOpenGLViewportContent*>::const_iterator vpIter = allViewportContent.begin();
+//                             vpIter != allViewportContent.end();
+//                             vpIter++) {
+//                            const BrainOpenGLViewportContent* vpContent = *vpIter;
+//                            if (vpContent->getTabIndex() == viewportSizeEvent->getIndex()) {
+//                                vpContent->getTabViewportBeforeApplyingMargins(tabViewport);
+//                                tabViewportValid = true;
+//                                break;
+//                            }
+//                        }
+//                    }
+//                    break;
+//                case EventBrowserTabGetViewportSize::MODE_VOLUME_MONTAGE:
+//                {
+//                    const Model* model = btc->getModelForDisplay();
+//                    if (model->getModelType() == ModelTypeEnum::MODEL_TYPE_VOLUME_SLICES) {
+//                        for (std::vector<const BrainOpenGLViewportContent*>::const_iterator vpIter = allViewportContent.begin();
+//                             vpIter != allViewportContent.end();
+//                             vpIter++) {
+//                            const BrainOpenGLViewportContent* vpContent = *vpIter;
+//                            if (vpContent->getTabIndex() == btc->getTabNumber()) {
+//                                if (btc->getSliceDrawingType() == VolumeSliceDrawingTypeEnum::VOLUME_SLICE_DRAW_MONTAGE) {
+//                                    vpContent->getTabViewportBeforeApplyingMargins(tabViewport);
+//                                    tabViewportValid = true;
+//                                    break;
+//                                }
+//                                else {
+//                                    vpContent->getTabViewportBeforeApplyingMargins(notBestTabViewport);
+//                                    notBestTabViewportValid = true;
+//                                }
+//                            }
+//                        }
+//                    }
+//                }
+//                    break;
+//                case EventBrowserTabGetViewportSize::MODE_WINDOW_INDEX:
+//                    if (m_browserWindowIndex == viewportSizeEvent->getIndex()) {
+//                        for (std::vector<const BrainOpenGLViewportContent*>::const_iterator vpIter = allViewportContent.begin();
+//                             vpIter != allViewportContent.end();
+//                             vpIter++) {
+//                            const BrainOpenGLViewportContent* vpContent = *vpIter;
+//                            if (vpContent->getTabIndex() == viewportSizeEvent->getIndex()) {
+//                                vpContent->getTabViewportBeforeApplyingMargins(tabViewport);
+//                                tabViewportValid = true;
+//                                break;
+//                            }
+//                        }
+//                    }
+//                    break;
+//            }
+//            
+//            if (tabViewportValid) {
+//                break;
+//            }
+//        }
+//        
+//        if ( ! tabViewportValid) {
+//            if (notBestTabViewportValid) {
+//                tabViewport[0] = notBestTabViewport[0];
+//                tabViewport[1] = notBestTabViewport[1];
+//                tabViewport[2] = notBestTabViewport[2];
+//                tabViewport[3] = notBestTabViewport[3];
+//                tabViewportValid = true;
+//            }
+//            else {
+//                /*
+//                 * Tab is in this window but not the active tab.
+//                 * So, use the active tab's viewport
+//                 */
+//                if ( ! allViewportContent.empty()) {
+//                    CaretAssertVectorIndex(allViewportContent, 0);
+//                    allViewportContent[0]->getTabViewportBeforeApplyingMargins(tabViewport);
+//                    tabViewportValid = true;
+//                }
+//            }
+//        }
+//        
+//        if (tabViewportValid) {
+//            viewportSizeEvent->setViewportSize(tabViewport);
+//        }
+//    }
+    else if ((event->getEventType() == EventTypeEnum::EVENT_GRAPHICS_UPDATE_ONE_WINDOW)
+             || (event->getEventType() == EventTypeEnum::EVENT_GRAPHICS_UPDATE_ALL_WINDOWS)) {
+        /*
+         * When in annotations mode, items on the Edit Menu are enabled/disabled
+         * based upon the selected annotations.  While we can update the menu items
+         * when the menu is about to show, that is sufficient.   The menu items
+         * have shortcut keys so it is possible for the selected annotations to change
+         * and the user to use a short cut key but the item on the edit menu
+         * may still be disabled.  Since a change in the selected annotations is
+         * followed by a graphics update event, update the enabled/disabled status
+         * of items in the Edit menu when the graphics are updated so that the 
+         * shortcut keys will function.
+         */
+        processEditMenuAboutToShow();
+    }
 }
 
 /**
@@ -283,12 +588,105 @@ BrainBrowserWindow::setGraphicsWidgetFixedSize(const int32_t width,
                                  height);
 }
 
+/**
+ * Get the graphics widget size.
+ *
+ * @param xOut
+ *     X-coord of graphics region (may be non-zero when lock aspect applied)
+ * @param yOut
+ *     Y-coord of graphics region (may be non-zero when lock aspect applied)
+ * @param widthOut
+ *     Width of the graphics widget.
+ * @param heightOut
+ *     Height of the graphics widget.
+ * @param graphicsWidthOut
+ *     True width of graphics region as if no aspect ratio was applied.
+ * @param graphicsHeightOut
+ *     True height of graphics region as if no aspect ratio was applied.
+ * @param applyLockedAspectRatiosFlag
+ *     True if locked tab or window aspect ratio should be applied for
+ *     graphics region size.
+ */
 void
-BrainBrowserWindow::getGraphicsWidgetSize(int32_t& widthOut,
-                                          int32_t& heightOut) const
+BrainBrowserWindow::getGraphicsWidgetSize(int32_t& xOut,
+                                          int32_t& yOut,
+                                          int32_t& widthOut,
+                                          int32_t& heightOut,
+                                          int32_t& graphicsWidthOut,
+                                          int32_t& graphicsHeightOut,
+                                          const bool applyLockedAspectRatiosFlag) const
 {
+    xOut = 0;
+    yOut = 0;
+    graphicsWidthOut  = m_openGLWidget->width();
+    graphicsHeightOut = m_openGLWidget->height();
     widthOut  = m_openGLWidget->width();
     heightOut = m_openGLWidget->height();
+    
+    int aspectViewport[4] = {
+        0,
+        0,
+        widthOut,
+        heightOut
+    };
+    
+    if (isTileTabsSelected()) {
+        if (isAspectRatioLocked()) {
+            BrainOpenGLViewportContent::adjustViewportForAspectRatio(aspectViewport,
+                                                                     getAspectRatio());
+        }
+    }
+    else {
+        const BrowserTabContent* btc = getBrowserTabContent();
+        if (btc != NULL) {
+            if (btc->isAspectRatioLocked()) {
+                BrainOpenGLViewportContent::adjustViewportForAspectRatio(aspectViewport,
+                                                                         btc->getAspectRatio());
+            }
+            else if (isAspectRatioLocked()) {
+                BrainOpenGLViewportContent::adjustViewportForAspectRatio(aspectViewport,
+                                                                         getAspectRatio());
+            }
+        }
+    }
+    
+    if (applyLockedAspectRatiosFlag) {
+        const std::vector<const BrainOpenGLViewportContent*> allViewportContent = m_openGLWidget->getViewportContent();
+        if ( ! allViewportContent.empty()) {
+            CaretAssertVectorIndex(allViewportContent, 0);
+            int windowViewport[4];
+            allViewportContent[0]->getWindowViewport(windowViewport);
+            
+            const float windowWidth  = windowViewport[2];
+            const float windowHeight = windowViewport[3];
+            
+            if ((windowWidth > 0)
+                && (windowHeight > 0)) {
+                if ((windowWidth != widthOut)
+                    || (windowHeight != heightOut)) {
+                    xOut      = windowViewport[0];
+                    yOut      = windowViewport[1];
+                    widthOut  = windowWidth;
+                    heightOut = windowHeight;
+                }
+            }
+        }
+        
+//        float aspectLockedWidth  = aspectViewport[2];
+//        float aspectLockedHeight = aspectViewport[3];
+//        if ((aspectLockedWidth > 0)
+//            && (aspectLockedHeight > 0)) {
+//            if ((widthOut != aspectLockedWidth)
+//                || (heightOut != aspectLockedHeight)) {
+//                
+//                std::cout << "Viewport adjusted from << " << AString::number(widthOut) << ", " << AString::number(heightOut)
+//                << " to " << aspectLockedWidth << ", " << aspectLockedHeight << std::endl;
+//                
+//                widthOut  = aspectLockedWidth;
+//                heightOut = aspectLockedHeight;
+//            }
+//        }
+    }
 }
 
 
@@ -306,7 +704,7 @@ BrainBrowserWindow::isTileTabsSelected() const
  * @return the index of this browser window.
  */
 int32_t 
-BrainBrowserWindow::getBrowserWindowIndex() const 
+BrainBrowserWindow::getBrowserWindowIndex() const
 { 
     return m_browserWindowIndex; 
 }
@@ -425,7 +823,234 @@ BrainBrowserWindow::createActionsUsedByToolBar()
     }
     else {
         m_featuresToolBoxAction->setIconText("LT");
-    }    
+    }
+    
+    m_windowAspectRatioLockedAction = new QAction(this);
+    m_windowAspectRatioLockedAction->setCheckable(true);
+    m_windowAspectRatioLockedAction->setChecked(false);
+    m_windowAspectRatioLockedAction->setText("Lock Window Aspect");
+    m_windowAspectRatioLockedAction->setToolTip("Lock aspect ratio of window");
+    m_windowAspectRatioLockedAction->setShortcut(Qt::SHIFT + Qt::CTRL+Qt::Key_K);
+    QObject::connect(m_windowAspectRatioLockedAction, SIGNAL(toggled(bool)),
+                     this, SLOT(processWindowAspectRatioLockedToggled(bool)));
+    
+    m_tabAspectRatioLockedAction = new QAction(this);
+    m_tabAspectRatioLockedAction->setCheckable(true);
+    m_tabAspectRatioLockedAction->setText("Lock Tab Aspect");
+    m_tabAspectRatioLockedAction->setToolTip("Lock aspect ratio of selected tab");
+    m_tabAspectRatioLockedAction->setShortcut(Qt::CTRL+Qt::Key_K);
+    QObject::connect(m_tabAspectRatioLockedAction, SIGNAL(toggled(bool)),
+                     this, SLOT(processTabAspectRatioLockedToggled(bool)));
+
+    m_lockAllTabsAspectRatioAction = new QAction(this);
+    m_lockAllTabsAspectRatioAction->setText("Lock Aspect Ratio for All Tabs");
+    m_lockAllTabsAspectRatioAction->setToolTip("Lock aspect ratio of all tabs in this window");
+    QObject::connect(m_lockAllTabsAspectRatioAction, SIGNAL(triggered(bool)),
+                     this, SLOT(processLockAllTabsAspectRatioTriggered()));
+    
+    m_unlockAllTabsAspectRatioAction = new QAction(this);
+    m_unlockAllTabsAspectRatioAction->setText("Unlock Aspect Ratio for All Tabs");
+    m_unlockAllTabsAspectRatioAction->setToolTip("Unlock aspect ratio of all tabs in this window");
+    QObject::connect(m_unlockAllTabsAspectRatioAction, SIGNAL(triggered(bool)),
+                     this, SLOT(processUnlockAllTabsAspectRatioTriggered()));
+}
+
+/**
+ * Called when Lock Aspect Ratio for All Tabs is selected.
+ */
+void
+BrainBrowserWindow::processLockAllTabsAspectRatioTriggered()
+{
+    
+    std::vector<const BrainOpenGLViewportContent*> vpContent = m_openGLWidget->getViewportContent();
+
+    if (isTileTabsSelected()) {
+        /*
+         * When tile tabs is on, set the aspect ratio for each tab that does not
+         * already have its aspect ratio locked
+         */
+        for (std::vector<const BrainOpenGLViewportContent*>::iterator vpIter = vpContent.begin();
+             vpIter != vpContent.end();
+             vpIter++) {
+            const BrainOpenGLViewportContent* vp = *vpIter;
+            CaretAssert(vp);
+            
+            BrowserTabContent* tabContent = vp->getBrowserTabContent();
+            if (tabContent != NULL) {
+                if ( ! tabContent->isAspectRatioLocked()) {
+                    int32_t tabViewport[4];
+                    vp->getTabViewportBeforeApplyingMargins(tabViewport);
+                    
+                    const float width = tabViewport[2];
+                    if (width > 0.0) {
+                        const float aspectRatio = tabViewport[3] / width;
+                        
+                        tabContent->setAspectRatioLocked(true);
+                        tabContent->setAspectRatio(aspectRatio);
+                    }
+                }
+            }
+        }
+    }
+    else {
+        /*
+         * Set the aspect ratio for each tab that does not already have its 
+         * aspect ratio locked.  Since only one tab is displayed, use the 
+         * size of the graphics region for the aspect ratio.
+         */
+        
+        if ( ! vpContent.empty()) {
+            CaretAssertVectorIndex(vpContent, 0);
+            const BrainOpenGLViewportContent* vp = vpContent[0];
+            
+            int32_t tabViewport[4];
+            vp->getTabViewportBeforeApplyingMargins(tabViewport);
+            
+            const float width = tabViewport[2];
+            if (width > 0.0) {
+                const float aspectRatio = tabViewport[3] / width;
+                
+                std::vector<BrowserTabContent*> allTabContent;
+                getAllTabContent(allTabContent);
+                
+                for (std::vector<BrowserTabContent*>::iterator iter = allTabContent.begin();
+                     iter != allTabContent.end();
+                     iter++) {
+                    BrowserTabContent* tabContent = *iter;
+                    CaretAssert(tabContent);
+                    if ( ! tabContent->isAspectRatioLocked()) {
+                        tabContent->setAspectRatioLocked(true);
+                        tabContent->setAspectRatio(aspectRatio);
+                    }
+                }
+            }
+        }
+    }
+
+    EventManager::get()->sendEvent(EventGraphicsUpdateOneWindow(getBrowserWindowIndex()).getPointer());
+    m_toolbar->updateToolBar();
+}
+
+/**
+ * Called when Unlock Aspect Ratio for All Tabs is selected.
+ */
+void
+BrainBrowserWindow::processUnlockAllTabsAspectRatioTriggered()
+{
+    std::vector<BrowserTabContent*> allTabContent;
+    getAllTabContent(allTabContent);
+    
+    for (std::vector<BrowserTabContent*>::iterator iter = allTabContent.begin();
+         iter != allTabContent.end();
+         iter++) {
+        BrowserTabContent* tabContent = *iter;
+        CaretAssert(tabContent);
+        tabContent->setAspectRatioLocked(false);
+    }
+
+    EventManager::get()->sendEvent(EventGraphicsUpdateOneWindow(getBrowserWindowIndex()).getPointer());
+    m_toolbar->updateToolBar();
+}
+
+/**
+ * Called when the Tab aspect ratio action it toggled.
+ *
+ * @param new tab locked status
+ */
+void
+BrainBrowserWindow::processTabAspectRatioLockedToggled(bool checked)
+{
+    BrowserTabContent* selectedTab = m_toolbar->getTabContentFromSelectedTab();
+    if (selectedTab != NULL) {
+        std::vector<const BrainOpenGLViewportContent*> vpContent = m_openGLWidget->getViewportContent();
+        for (std::vector<const BrainOpenGLViewportContent*>::iterator vpIter = vpContent.begin();
+             vpIter != vpContent.end();
+             vpIter++) {
+            const BrainOpenGLViewportContent* vp = *vpIter;
+            CaretAssert(vp);
+            
+            BrowserTabContent* tabContent = vp->getBrowserTabContent();
+            if (selectedTab == tabContent) {
+                int32_t tabViewport[4];
+                vp->getTabViewportBeforeApplyingMargins(tabViewport);
+                
+                const float width = tabViewport[2];
+                if (width > 0.0) {
+                    const float aspectRatio = tabViewport[3] / width;
+                    
+                    tabContent->setAspectRatioLocked(checked);
+                    if (checked) {
+                        tabContent->setAspectRatio(aspectRatio);
+                    }
+                }
+            }
+        }
+    }
+    
+    EventManager::get()->sendEvent(EventGraphicsUpdateOneWindow(getBrowserWindowIndex()).getPointer());
+}
+
+/**
+ * Called when the Window aspect ratio action it toggled.
+ *
+ * @param new tab locked status
+ */
+void
+BrainBrowserWindow::processWindowAspectRatioLockedToggled(bool checked)
+{
+    setAspectRatioLocked(checked);
+    if (checked) {
+        const float aspectRatio = getOpenGLWidgetAspectRatio();
+        if (aspectRatio > 0) {
+            setAspectRatio(aspectRatio);
+        }
+    }
+    
+    EventManager::get()->sendEvent(EventGraphicsUpdateOneWindow(getBrowserWindowIndex()).getPointer());
+}
+
+/**
+ * @return Is the aspect ratio locked?
+ */
+bool
+BrainBrowserWindow::isAspectRatioLocked() const
+{
+    return m_windowAspectRatioLockedAction->isChecked();
+}
+
+/**
+ * Set the aspect ratio locked status.
+ *
+ * @param locked
+ *     New status.
+ */
+void
+BrainBrowserWindow::setAspectRatioLocked(const bool locked)
+{
+    m_windowAspectRatioLockedAction->blockSignals(true);
+    m_windowAspectRatioLockedAction->setChecked(locked);
+    m_windowAspectRatioLockedAction->blockSignals(false);
+}
+
+/**
+ * @return The aspect ratio.
+ */
+float
+BrainBrowserWindow::getAspectRatio() const
+{
+    return m_aspectRatio;
+}
+
+/**
+ * Set the aspect ratio.
+ *
+ * @param aspectRatio
+ *     New value for aspect ratio.
+ */
+void
+BrainBrowserWindow::setAspectRatio(const float aspectRatio)
+{
+    m_aspectRatio = aspectRatio;
 }
 
 /**
@@ -594,6 +1219,13 @@ BrainBrowserWindow::createActions()
                                                                 "Create, Delete, and Edit Tile Tabs Configurations",
                                                                 Qt::CTRL + Qt::SHIFT + Qt::Key_M,
                                                                 this);
+
+    m_gapsAndMarginsAction =
+    WuQtUtilities::createAction("Gaps and Margins...",
+                                "Adjust the gaps and margins",
+                                this,
+                                this,
+                                SLOT(processGapsAndMargins()));
     
     m_nextTabAction =
     WuQtUtilities::createAction("Next Tab",
@@ -718,7 +1350,11 @@ BrainBrowserWindow::createMenus()
      */
     QMenuBar* menubar = menuBar();
     menubar->addMenu(createMenuFile());
+    
+    menubar->addMenu(createMenuEdit());
+    
     menubar->addMenu(createMenuView());
+    
     QMenu* dataMenu = createMenuData();
     if (dataMenu != NULL) {
         menubar->addMenu(dataMenu);
@@ -739,6 +1375,7 @@ BrainBrowserWindow::createMenus()
     m_developMenuAction->setVisible(prefs->isDevelopMenuEnabled());
     
     menubar->addMenu(createMenuWindow());
+    
     menubar->addMenu(createMenuHelp());
 }
 
@@ -785,6 +1422,10 @@ BrainBrowserWindow::createMenuDevelop()
             m_developerFlagsActionGroup->addAction(action);
         }
     }
+    
+    menu->addAction("BALSA Database...",
+                    this,
+                    SLOT(showBalsaDatabaseDialog()));
     
     return menu;
 }
@@ -881,6 +1522,13 @@ BrainBrowserWindow::createMenuFile()
                      this, SLOT(processRecentSpecFileMenuAboutToBeDisplayed()));
     QObject::connect(m_recentSpecFileMenu, SIGNAL(triggered(QAction*)),
                      this, SLOT(processRecentSpecFileMenuSelection(QAction*)));
+    
+    m_recentSceneFileMenu = menu->addMenu("Open Recent Scene File");
+    QObject::connect(m_recentSceneFileMenu, SIGNAL(aboutToShow()),
+                     this, SLOT(processRecentSceneFileMenuAboutToBeDisplayed()));
+    QObject::connect(m_recentSceneFileMenu, SIGNAL(triggered(QAction*)),
+                     this, SLOT(processRecentSceneFileMenuSelection(QAction*)));
+    
     //menu->addAction(m_openFileViaSpecFileAction);
     menu->addAction(m_manageFilesAction);
     menu->addAction(m_closeSpecFileAction);
@@ -897,6 +1545,235 @@ BrainBrowserWindow::createMenuFile()
     menu->addAction(m_exitProgramAction);
     
     return menu;
+}
+
+
+/**
+ * Create an item for the edit menu.
+ *
+ * @param editMenu
+ *     The menu.
+ * @param editMenuItem
+ *     Enumerated by that is inserted into the edit menu.
+ * @return
+ *     Action that is created by adding item to menu.
+ */
+static QAction*
+addItemToEditMenu(QMenu* editMenu,
+                  const BrainBrowserWindowEditMenuItemEnum::Enum editMenuItem)
+{
+    QAction* action = editMenu->addAction(BrainBrowserWindowEditMenuItemEnum::toGuiName(editMenuItem));
+    action->setData(static_cast<int32_t>(BrainBrowserWindowEditMenuItemEnum::toIntegerCode(editMenuItem)));
+    action->setShortcut(BrainBrowserWindowEditMenuItemEnum::toShortcut(editMenuItem));
+    return action;
+}
+
+/**
+ * @return A new instance of the edit menu.
+ */
+QMenu*
+BrainBrowserWindow::createMenuEdit()
+{
+    /*
+     * Why is there a space after 'Edit'.
+     * If there is not a space, the Mac will see 'Edit' and add
+     * two additional menu items "Start Dictation" and 
+     * "Emoji and Symbols".  Use of these menu items 
+     * will sometimes cause a crash in the FTGL font code.
+     */
+    m_editMenu = new QMenu("Edit ");
+
+    m_editMenuUndoAction = addItemToEditMenu(m_editMenu,
+                                             BrainBrowserWindowEditMenuItemEnum::UNDO);
+    m_editMenuRedoAction = addItemToEditMenu(m_editMenu,
+                                             BrainBrowserWindowEditMenuItemEnum::REDO);
+    
+    QAction* cutAction = addItemToEditMenu(m_editMenu,
+                                           BrainBrowserWindowEditMenuItemEnum::CUT);
+    addItemToEditMenu(m_editMenu,
+                      BrainBrowserWindowEditMenuItemEnum::COPY);
+    addItemToEditMenu(m_editMenu,
+                      BrainBrowserWindowEditMenuItemEnum::PASTE);
+    addItemToEditMenu(m_editMenu,
+                      BrainBrowserWindowEditMenuItemEnum::PASTE_SPECIAL);
+    QKeySequence noKeySequence;
+    addItemToEditMenu(m_editMenu,
+                      BrainBrowserWindowEditMenuItemEnum::DELETER);
+    
+    
+    QAction* selectAllAction = NULL;
+    const bool addSelectAllFlag = false;
+    if (addSelectAllFlag) {
+        selectAllAction = addItemToEditMenu(m_editMenu,
+                                            BrainBrowserWindowEditMenuItemEnum::SELECT_ALL);
+    }
+    
+    m_editMenu->insertSeparator(cutAction);
+    if (selectAllAction != NULL) {
+        m_editMenu->insertSeparator(selectAllAction);
+    }
+    
+    QObject::connect(m_editMenu, SIGNAL(aboutToShow()),
+                     this, SLOT(processEditMenuAboutToShow()));
+    QObject::connect(m_editMenu, SIGNAL(triggered(QAction*)),
+                     this, SLOT(processEditMenuItemTriggered(QAction*)));
+    
+    return m_editMenu;
+}
+
+/**
+ * Gets called when an item is selected from the edit menu.
+ *
+ * @param action
+ *     Action (menu items) that was selected.
+ */
+void
+BrainBrowserWindow::processEditMenuItemTriggered(QAction* action)
+{
+    EventGetOrSetUserInputModeProcessor inputEvent(m_browserWindowIndex);
+    EventManager::get()->sendEvent(inputEvent.getPointer());
+    
+    UserInputModeAbstract* inputProcessor = inputEvent.getUserInputProcessor();
+    if (inputProcessor != NULL) {
+        const int actionDataInt = action->data().toInt();
+        
+        bool validActionDataIntFlag = false;
+        const BrainBrowserWindowEditMenuItemEnum::Enum item = BrainBrowserWindowEditMenuItemEnum::fromIntegerCode(actionDataInt,
+                                                                                                                  &validActionDataIntFlag);
+        if (validActionDataIntFlag) {
+            inputProcessor->processEditMenuItemSelection(item);
+        }
+        else {
+            CaretLogSevere("Invalid conversion of integer code "
+                           + AString::number(actionDataInt)
+                           + " to BrainBrowserWindowEditMenuItemEnum::Enum");
+        }
+    }
+    
+    /*
+     * If Cut or Copy is selected and successful,
+     * the menu needs to be updated so that 
+     * paste will be enabled for selection 
+     * via a shortcut key.
+     */
+    processEditMenuAboutToShow();
+}
+
+/**
+ * Gets called when the edit menu is about to show.
+ */
+void
+BrainBrowserWindow::processEditMenuAboutToShow()
+{
+    EventGetOrSetUserInputModeProcessor inputEvent(m_browserWindowIndex);
+    EventManager::get()->sendEvent(inputEvent.getPointer());
+    
+    /*
+     * Get edit menu items that are enabled by the input processor
+     */
+    std::vector<BrainBrowserWindowEditMenuItemEnum::Enum> editMenuItemsEnabled;
+    UserInputModeAbstract* inputProcessor = inputEvent.getUserInputProcessor();
+    AString redoMenuItemSuffix;
+    AString undoMenuItemSuffix;
+    AString pasteText;
+    AString pasteSpecialText;
+    if (inputProcessor != NULL) {
+        inputProcessor->getEnabledEditMenuItems(editMenuItemsEnabled,
+                                                redoMenuItemSuffix,
+                                                undoMenuItemSuffix,
+                                                pasteText,
+                                                pasteSpecialText);
+    }
+    
+    /*
+     * Enable/Disable each of the edit menu's actions
+     */
+    QList<QAction*> menuActions = m_editMenu->actions();
+    QListIterator<QAction*> menuActionsIterator(menuActions);
+    while (menuActionsIterator.hasNext()) {
+        QAction* action = menuActionsIterator.next();
+        if ( ! action->isSeparator()) {
+            const int actionDataInt = action->data().toInt();
+            
+            bool validActionDataIntFlag = false;
+            const BrainBrowserWindowEditMenuItemEnum::Enum editMenuItem = BrainBrowserWindowEditMenuItemEnum::fromIntegerCode(actionDataInt,
+                                                                                                                              &validActionDataIntFlag);
+            action->setEnabled(false);
+            if ( ! editMenuItemsEnabled.empty()) {
+                if (validActionDataIntFlag) {
+                    if (std::find(editMenuItemsEnabled.begin(),
+                                  editMenuItemsEnabled.end(),
+                                  editMenuItem) != editMenuItemsEnabled.end()) {
+                        action->setEnabled(true);
+                        
+                        switch (editMenuItem) {
+                            case BrainBrowserWindowEditMenuItemEnum::COPY:
+                                break;
+                            case BrainBrowserWindowEditMenuItemEnum::CUT:
+                                break;
+                            case BrainBrowserWindowEditMenuItemEnum::DELETER:
+                                break;
+                            case BrainBrowserWindowEditMenuItemEnum::PASTE:
+                                if (pasteText.isEmpty()) {
+                                    action->setText(BrainBrowserWindowEditMenuItemEnum::toGuiName(editMenuItem));
+                                }
+                                else {
+                                    action->setText(pasteText);
+                                }
+                                break;
+                            case BrainBrowserWindowEditMenuItemEnum::PASTE_SPECIAL:
+                                if (pasteSpecialText.isEmpty()) {
+                                    action->setText(BrainBrowserWindowEditMenuItemEnum::toGuiName(editMenuItem));
+                                }
+                                else {
+                                    action->setText(pasteSpecialText);
+                                }
+                                break;
+                            case BrainBrowserWindowEditMenuItemEnum::REDO:
+                                break;
+                            case BrainBrowserWindowEditMenuItemEnum::SELECT_ALL:
+                                break;
+                            case BrainBrowserWindowEditMenuItemEnum::UNDO:
+                                break;
+                        }
+                    }
+                }
+                else {
+                    CaretLogSevere("Invalid conversion of integer code "
+                                   + AString::number(actionDataInt)
+                                   + " to BrainBrowserWindowEditMenuItemEnum::Enum");
+                }
+            }
+        }
+    }
+    
+    /*
+     * Redo menu may have a suffix
+     */
+    AString redoMenuItemText("Redo");
+    if (std::find(editMenuItemsEnabled.begin(),
+                  editMenuItemsEnabled.end(),
+                  BrainBrowserWindowEditMenuItemEnum::REDO) != editMenuItemsEnabled.end()) {
+        if ( ! redoMenuItemSuffix.isEmpty()) {
+            redoMenuItemText.append(" "
+                                    + redoMenuItemSuffix);
+        }
+    }
+    m_editMenuRedoAction->setText(redoMenuItemText);
+    
+    /*
+     * Undo menu may have a suffix
+     */
+    AString undoMenuItemText("Undo");
+    if (std::find(editMenuItemsEnabled.begin(),
+                  editMenuItemsEnabled.end(),
+                  BrainBrowserWindowEditMenuItemEnum::UNDO) != editMenuItemsEnabled.end()) {
+        if ( ! undoMenuItemSuffix.isEmpty()) {
+            undoMenuItemText.append(" "
+                                    + undoMenuItemSuffix);
+        }
+    }
+    m_editMenuUndoAction->setText(undoMenuItemText);
 }
 
 /**
@@ -1129,6 +2006,113 @@ BrainBrowserWindow::processRecentSpecFileMenuSelection(QAction* itemAction)
     }
 }
 
+
+
+/**
+ * Called when Open Recent Scene File Menu is about to be displayed
+ * and creates the content of the menu.
+ */
+void
+BrainBrowserWindow::processRecentSceneFileMenuAboutToBeDisplayed()
+{
+    m_recentSceneFileMenu->clear();
+    
+    const int32_t numRecentSceneFiles = BrainBrowserWindow::loadRecentSceneFileMenu(m_recentSceneFileMenu);
+    
+    if (numRecentSceneFiles > 0) {
+        m_recentSceneFileMenu->addSeparator();
+        QAction* action = new QAction("Clear Menu",
+                                      m_recentSceneFileMenu);
+        action->setData("CLEAR_CLEAR");
+        m_recentSceneFileMenu->addAction(action);
+    }
+}
+
+/**
+ * Load a menu with recent scene files.  This method only ADDS
+ * items to the menu, nothing is removed or cleared.
+ *
+ * @param recentSceneFileMenu
+ *    Menu to which recent scene files are added.
+ * @return
+ *    Returns the number of recent scene files added to the menu.
+ */
+int32_t
+BrainBrowserWindow::loadRecentSceneFileMenu(QMenu* recentSceneFileMenu)
+{
+    CaretPreferences* prefs = SessionManager::get()->getCaretPreferences();
+    std::vector<AString> recentSceneFiles;
+    prefs->getPreviousSceneFiles(recentSceneFiles);
+    
+    const int32_t numRecentSceneFiles = static_cast<int>(recentSceneFiles.size());
+    for (int32_t i = 0; i < numRecentSceneFiles; i++) {
+        AString actionName;
+        AString actionFullPath;
+        if (DataFile::isFileOnNetwork(recentSceneFiles[i])) {
+            actionName     = recentSceneFiles[i];
+            actionFullPath = recentSceneFiles[i];
+        }
+        else {
+            FileInformation fileInfo(recentSceneFiles[i]);
+            QString path = fileInfo.getPathName();
+            QString name = fileInfo.getFileName();
+            if (path.isEmpty() == false) {
+                name += (" (" + path + ")");
+            }
+            actionName = name;
+            actionFullPath = fileInfo.getAbsoluteFilePath();
+        }
+        
+        QAction* action = new QAction(actionName,
+                                      recentSceneFileMenu);
+        /*
+         * If this "setData()" action changes you will need to update:
+         * (1) BrainBrowserWindow::processRecentSceneFileMenuSelection
+         * (2) MacDockMenu::menuActionTriggered
+         */
+        action->setData(actionFullPath);
+        recentSceneFileMenu->addAction(action);
+    }
+    
+    return numRecentSceneFiles;
+}
+
+/**
+ * Called when an item is selected from the recent scene file
+ * menu.
+ * @param itemAction
+ *    Action of the menu item that was selected.
+ */
+void
+BrainBrowserWindow::processRecentSceneFileMenuSelection(QAction* itemAction)
+{
+    //AString errorMessages;
+    
+    const AString sceneFileName = itemAction->data().toString();
+    if (sceneFileName == "CLEAR_CLEAR") {
+        CaretPreferences* prefs = SessionManager::get()->getCaretPreferences();
+        prefs->clearPreviousSceneFiles();
+        return;
+    }
+    
+    if ( ! sceneFileName.isEmpty()) {
+        std::vector<AString> filenamesVector;
+        filenamesVector.push_back(sceneFileName);
+        std::vector<DataFileTypeEnum::Enum> dataFileTypes;
+        dataFileTypes.push_back(DataFileTypeEnum::SCENE);
+        loadFiles(this,
+                  filenamesVector,
+                  dataFileTypes,
+                  LOAD_SPEC_FILE_CONTENTS_VIA_COMMAND_LINE,
+                  "",
+                  "");
+        
+        EventManager::get()->sendEvent(EventSurfaceColoringInvalidate().getPointer());
+        EventManager::get()->sendEvent(EventUserInterfaceUpdate().getPointer());
+        EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+    }
+}
+
 /**
  * Called when view menu is about to show.
  */
@@ -1184,6 +2168,7 @@ BrainBrowserWindow::createMenuView()
     menu->addAction(m_viewFullScreenAction);
     menu->addAction(m_viewTileTabsAction);
     menu->addSeparator();
+    menu->addAction(m_gapsAndMarginsAction);
     menu->addMenu(m_tileTabsMenu);
     
     return menu;
@@ -1305,7 +2290,6 @@ BrainBrowserWindow::processTileTabsMenuSelection(QAction* action)
         processViewTileTabsConfigurationDialog();
     }
     else {
-        //CaretPreferences* preferences = SessionManager::get()->getCaretPreferences();
         m_selectedTileTabsConfigurationUniqueIdentifier = action->data().toString();
         
         if (isTileTabsSelected()) {
@@ -1382,6 +2366,7 @@ BrainBrowserWindow::createMenuConnect()
     if (m_connectToAllenDatabaseAction->isEnabled()) {
         menu->addAction(m_connectToAllenDatabaseAction);
     }
+    
     if (m_connectToConnectomeDatabaseAction->isEnabled()) {
         menu->addAction(m_connectToConnectomeDatabaseAction);
     }
@@ -1571,6 +2556,12 @@ BrainBrowserWindow::createMenuWindow()
     
     QMenu* menu = new QMenu("Window", this);
     
+    menu->addAction(m_windowAspectRatioLockedAction);
+    menu->addAction(m_tabAspectRatioLockedAction);
+    menu->addAction(m_lockAllTabsAspectRatioAction);
+    menu->addAction(m_unlockAllTabsAspectRatioAction);
+    menu->addSeparator();
+    
     menu->addAction(m_nextTabAction);
     menu->addAction(m_previousTabAction);
     menu->addAction(m_renameSelectedTabAction);
@@ -1655,13 +2646,6 @@ BrainBrowserWindow::processShowIdentifyBrainordinateDialog()
      */
     GuiManager::get()->showHideIdentfyBrainordinateDialog(true,
                                                           this);
-//    QAction* identifyAction = GuiManager::get()->getIdentifyBrainordinateDialogDisplayAction();
-//    if (identifyAction->isChecked()) {
-//        identifyAction->blockSignals(true);
-//        identifyAction->setChecked(false);
-//        identifyAction->blockSignals(false);
-//    }
-//    identifyAction->trigger();
 }
 
 /**
@@ -1789,7 +2773,17 @@ BrainBrowserWindow::processSplitBorderFiles()
 void 
 BrainBrowserWindow::processCaptureImage()
 {
+    std::cout << "Toolbar height " << m_toolbar->height() << std::endl;
     GuiManager::get()->processShowImageCaptureDialog(this);
+}
+
+/**
+ * Called when capture image is selected.
+ */
+void
+BrainBrowserWindow::processGapsAndMargins()
+{
+    GuiManager::get()->processShowGapsAndMarginsDialog(this);
 }
 
 /**
@@ -1816,7 +2810,7 @@ BrainBrowserWindow::processEditPreferences()
 void 
 BrainBrowserWindow::processInformationDialog()
 {
-    GuiManager::get()->processShowInformationDisplayDialog(this);
+    GuiManager::get()->processShowInformationDisplayDialog(true);
 }
 
 /**
@@ -1830,6 +2824,9 @@ BrainBrowserWindow::processCloseAllFiles()
 
     Brain* brain = GuiManager::get()->getBrain();
     brain->resetBrain();
+    
+    CaretPreferences* prefs = SessionManager::get()->getCaretPreferences();
+    prefs->setBackgroundAndForegroundColorsMode(BackgroundAndForegroundColorsModeEnum::USER_PREFERENCES);
     
     EventManager::get()->sendEvent(EventUserInterfaceUpdate().getPointer());
     EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
@@ -1981,8 +2978,6 @@ BrainBrowserWindow::loadFilesFromNetwork(QWidget* parentForDialogs,
                                          const AString& username,
                                          const AString& password)
 {    
-//    this->loadFilesFromCommandLine(filenames,
-//                                            BrainBrowserWindow::LOAD_SPEC_FILE_WITH_DIALOG_VIA_COMMAND_LINE);
     const bool successFlag = loadFiles(parentForDialogs,
                                        filenames,
                                        dataFileTypes,
@@ -2273,10 +3268,6 @@ BrainBrowserWindow::loadFiles(QWidget* parentForDialogs,
             {
                 if (GuiManager::get()->processShowOpenSpecFileDialog(&specFile,
                                                                      this)) {
-//                    Brain* brain = GuiManager::get()->getBrain();
-//                if (SpecFileManagementDialog::runOpenSpecFileDialog(brain,
-//                                                                    &specFile,
-//                                                                    this)) {
                     m_toolbar->addDefaultTabsAfterLoadingSpecFile();
                     createDefaultTabsFlag = true;
                 }
@@ -2435,9 +3426,6 @@ void
 BrainBrowserWindow::processManageSaveLoadedFiles()
 {
     GuiManager::get()->processShowSaveManageFilesDialog(this);
-//    Brain* brain = GuiManager::get()->getBrain();
-//    SpecFileManagementDialog::runManageFilesDialog(brain,
-//                                                   this);
 }
 
 /**
@@ -2957,12 +3945,47 @@ BrainBrowserWindow::getBrowserTabContent(int tabIndex)
 }
 
 /**
+ * Get content of all tabs
+ *
+ * @param allTabContent
+ *    Will contain the tabs in window upon return
+ */
+void
+BrainBrowserWindow::getAllTabContent(std::vector<BrowserTabContent*>& allTabContent) const
+{
+    m_toolbar->getAllTabContent(allTabContent);
+}
+
+/**
+ * Get indices of all tabs in window
+ *
+ * @param allTabContentIndices
+ *    Will contain the indices from all tabs in window upon return.
+ */
+void
+BrainBrowserWindow::getAllTabContentIndices(std::vector<int32_t>& allTabContentIndices) const
+{
+    allTabContentIndices.clear();
+    
+    std::vector<BrowserTabContent*> allTabContent;
+    getAllTabContent(allTabContent);
+    
+    for (std::vector<BrowserTabContent*>::iterator iter = allTabContent.begin();
+         iter != allTabContent.end();
+         iter++) {
+        const BrowserTabContent* btc = *iter;
+        CaretAssert(btc);
+        allTabContentIndices.push_back(btc->getTabNumber());
+    }
+}
+
+
+/**
  * Returns a popup menu for the main window.
  * Overrides that in QMainWindow and prevents the 
  * default context menu from appearing.
  *
- * @return Context menu for display or NULL if
- * nothing available.
+"O * nothing available.
  */
 QMenu* 
 BrainBrowserWindow::createPopupMenu()
@@ -2986,6 +4009,22 @@ void
 BrainBrowserWindow::processConnectToConnectomeDataBase()
 {
     GuiManager::get()->processShowConnectomeDataBaseWebView(this);
+}
+
+/**
+ * Show the BALSA database dialog
+ */
+void
+BrainBrowserWindow::showBalsaDatabaseDialog()
+{
+    static BalsaDatabaseDialog* balsaDialog = NULL;
+    if (balsaDialog == NULL) {
+        balsaDialog = new BalsaDatabaseDialog(this);
+    }
+    
+    balsaDialog->setVisible(true);
+    balsaDialog->show();
+    balsaDialog->activateWindow();
 }
 
 /**
@@ -3019,6 +4058,19 @@ BrainBrowserWindow::processHcpFeatureRequestWebsiteInBrowser()
 }
 
 /**
+ * @rerturn Aspect ratio of the OpenGL widget.
+ */
+float
+BrainBrowserWindow::getOpenGLWidgetAspectRatio() const
+{
+    const float w = this->m_openGLWidget->width();
+    const float h = this->m_openGLWidget->height();
+    
+    const float aspectRatio = ((w != 0.0) ? (h / w) : 1.0);
+    return aspectRatio;
+}
+
+/**
  * Create a scene for an instance of a class.
  *
  * @param sceneAttributes
@@ -3041,6 +4093,10 @@ BrainBrowserWindow::saveToScene(const SceneAttributes* sceneAttributes,
     m_sceneAssistant->saveMembers(sceneAttributes, 
                                   sceneClass);
 
+    sceneClass->addInteger("m_browserWindowIndex",
+                           m_browserWindowIndex);
+    sceneClass->addBoolean("m_windowAspectRatioLockedAction",
+                           m_windowAspectRatioLockedAction->isChecked());
 
     /*
      * Save the selected tile tabs configuration as the scene configuration
@@ -3053,12 +4109,15 @@ BrainBrowserWindow::saveToScene(const SceneAttributes* sceneAttributes,
          */
         const TileTabsConfiguration* tileTabs = getSelectedTileTabsConfiguration();
         if (tileTabs != NULL) {
+            TileTabsConfiguration writeConfig(*tileTabs);
+            writeConfig.setName(QUuid::createUuid().toString());
             sceneClass->addString("m_sceneTileTabsConfiguration",
-                                  tileTabs->encodeInXML());
+                                  writeConfig.encodeInXML());
+            
+//            sceneClass->addString("m_sceneTileTabsConfiguration",
+//                                  tileTabs->encodeInXML());
         }
     }
-    //sceneClass->addString("m_selectedTileTabsConfigurationUniqueIdentifier",
-    //                      m_selectedTileTabsConfigurationUniqueIdentifier);
     
     /*
      * Save toolbar
@@ -3129,6 +4188,13 @@ BrainBrowserWindow::saveToScene(const SceneAttributes* sceneAttributes,
                            isMaximized());
     sceneClass->addBoolean("m_viewTileTabsAction",
                            m_viewTileTabsSelected);
+    
+    /*
+     * Graphics position and size
+     */
+    SceneWindowGeometry openGLGeometry(m_openGLWidget);
+    sceneClass->addClass(openGLGeometry.saveToScene(sceneAttributes,
+                                                    "openGLWidgetGeometry"));
     return sceneClass;
 }
 
@@ -3164,6 +4230,11 @@ BrainBrowserWindow::restoreFromScene(const SceneAttributes* sceneAttributes,
     m_sceneAssistant->restoreMembers(sceneAttributes,
                                      sceneClass);
     
+    const bool aspectRatioLocked = sceneClass->getBooleanValue("m_windowAspectRatioLockedAction",
+                                                               false);
+    m_windowAspectRatioLockedAction->blockSignals(true);
+    m_windowAspectRatioLockedAction->setChecked(aspectRatioLocked);
+    m_windowAspectRatioLockedAction->blockSignals(false);
     
     /*
      * Restore Unique ID of selected tile tabs configuration.
@@ -3270,7 +4341,6 @@ BrainBrowserWindow::restoreFromScene(const SceneAttributes* sceneAttributes,
             m_featuresToolBoxAction->setChecked(! toolBoxVisible);
             m_featuresToolBoxAction->blockSignals(false);
             m_featuresToolBoxAction->trigger();
-            //processShowFeaturesToolBox(toolBoxVisible);
             m_featuresToolBox->restoreFromScene(sceneAttributes,
                                                 sceneClass->getClass("m_featuresToolBox"));
         }
@@ -3315,19 +4385,19 @@ BrainBrowserWindow::restoreFromScene(const SceneAttributes* sceneAttributes,
     }
 }
 
-/**
- * Get the viewport size for the window.
- *
- * @param w
- *    Output width.
- * @param h
- *    Output height.
- */
-void
-BrainBrowserWindow::getViewportSize(int &w, int &h)
-{
-    m_openGLWidget->getViewPortSize(w,h);
-}
+///**
+// * Get the viewport size for the window.
+// *
+// * @param w
+// *    Output width.
+// * @param h
+// *    Output height.
+// */
+//void
+//BrainBrowserWindow::getViewportSize(int &w, int &h)
+//{
+//    m_openGLWidget->getViewPortSize(w,h);
+//}
 
 /**
  * @return A string describing the object's content.

@@ -34,6 +34,7 @@ namespace caret {
     class CaretPreferences;
     class CiftiConnectivityMatrixDataFileManager;
     class CiftiFiberTrajectoryManager;
+    class ImageCaptureSettings;
     class Model;
     
     /// Manages a Caret session which contains 'global' brain data.
@@ -52,7 +53,7 @@ namespace caret {
         
         int32_t getNumberOfBrains() const;
         
-        Brain* getBrain(const int32_t brainIndex);
+        Brain* getBrain(const int32_t brainIndex) const;
         
         CaretPreferences* getCaretPreferences();
         
@@ -63,6 +64,10 @@ namespace caret {
         CiftiFiberTrajectoryManager* getCiftiFiberTrajectoryManager();
         
         const CiftiFiberTrajectoryManager* getCiftiFiberTrajectoryManager() const;
+        
+        ImageCaptureSettings* getImageCaptureDialogSettings();
+        
+        const ImageCaptureSettings* getImageCaptureDialogSettings() const;
         
         virtual SceneClass* saveToScene(const SceneAttributes* sceneAttributes,
                                         const AString& instanceName);
@@ -106,6 +111,9 @@ namespace caret {
         
         /** Loads fiber trajectory data */
         CiftiFiberTrajectoryManager* m_ciftiFiberTrajectoryManager;
+        
+        /** Settings for image capture dialog */
+        ImageCaptureSettings* m_imageCaptureDialogSettings;
         
     };
     

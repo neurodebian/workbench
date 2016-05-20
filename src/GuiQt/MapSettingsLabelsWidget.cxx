@@ -72,6 +72,10 @@ MapSettingsLabelsWidget::MapSettingsLabelsWidget(QWidget* parent)
     m_drawMedialWallFilledCheckBox = new QCheckBox("Draw Surface Medial Wall Filled");
     QObject::connect(m_drawMedialWallFilledCheckBox, SIGNAL(clicked(bool)),
                      this, SLOT(applySelections()));
+    m_drawMedialWallFilledCheckBox->setToolTip(WuQtUtilities::createWordWrappedToolTipText("When an outline type drawing is selected and if the "
+                                                                                           "selected map contains vertices identified as the "
+                                                                                           "'medial wall', checking this option will fill the medial "
+                                                                                           "wall vertices."));
     
     QPushButton* editLabelsPushButton = new QPushButton("Edit Map's Labels");
     QObject::connect(editLabelsPushButton, SIGNAL(clicked()),
@@ -129,6 +133,8 @@ MapSettingsLabelsWidget::updateContent(Overlay* overlay)
                 m_drawingTypeComboBox->setSelectedItem<LabelDrawingTypeEnum, LabelDrawingTypeEnum::Enum>(labelProps->getDrawingType());
                 m_outlineColorComboBox->setSelectedColor(labelProps->getOutlineColor());
                 m_drawMedialWallFilledCheckBox->setChecked(labelProps->isDrawMedialWallFilled());
+                m_drawMedialWallFilledCheckBox->setEnabled(mapFile->isMedialWallLabelInMapLabelTable(mapIndex));
+                
                 enableWidget = true;
             }
         }

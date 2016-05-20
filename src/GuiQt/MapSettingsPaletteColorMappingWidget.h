@@ -33,6 +33,7 @@ class QLabel;
 class QLayout;
 class QPushButton;
 class QRadioButton;
+class QSpinBox;
 class QwtPlot;
 
 
@@ -74,6 +75,18 @@ namespace caret {
         void thresholdRangeModeChanged();
         void thresholdLinkCheckBoxToggled(bool);
         
+        void scaleAutoPercentageNegativeMaximumValueChanged(double value);
+        void scaleAutoPercentageNegativeMinimumValueChanged(double value);
+        void scaleAutoPercentagePositiveMinimumValueChanged(double value);
+        void scaleAutoPercentagePositiveMaximumValueChanged(double value);
+        
+        void scaleAutoAbsolutePercentageMinimumValueChanged(double value);
+        void scaleAutoAbsolutePercentageMaximumValueChanged(double value);
+        
+        void scaleFixedNegativeMaximumValueChanged(double value);
+        void scaleFixedNegativeMinimumValueChanged(double value);
+        void scaleFixedPositiveMinimumValueChanged(double value);
+        void scaleFixedPositiveMaximumValueChanged(double value);
         
         void histogramControlChanged();
         void histogramResetViewButtonClicked();
@@ -193,6 +206,8 @@ namespace caret {
         
         WuQWidgetObjectGroup* paletteWidgetGroup;
         WuQWidgetObjectGroup* thresholdWidgetGroup;
+        
+        
     };
     
 #ifdef __MAP_SETTINGS_PALETTE_COLOR_MAPPING_WIDGET_DECLARE__

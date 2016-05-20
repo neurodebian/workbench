@@ -398,15 +398,46 @@ AString::toNumbers(const AString& s,
     AString copy = s;
     QTextStream stream(&copy);
     
-    AString numberString;
-    bool valid = false;
+    float floatValue;
     while (stream.atEnd() == false) {
-        stream >> numberString;
-        const float floatValue = numberString.toFloat(&valid);
-        if (valid) {
+        /*
+         * Try to read a float value from the current position
+         */
+        stream >> floatValue;
+        
+        /*
+         * If the text stream could not create a float from
+         * the current text position, the corrupt data flag
+         * will be set.
+         */
+        if (stream.status() == QTextStream::ReadCorruptData) {
+            /*
+             * Reset the status of the string (to OK) and
+             * then read one character to remove the character
+             * from the stream since it was not the start
+             * of a number.
+             */
+            stream.resetStatus();
+            QChar oneChar;
+            stream >> oneChar;
+        }
+        else {
             numbersOut.push_back(floatValue);
         }
     }
+
+//    AString copy = s;
+//    QTextStream stream(&copy);
+//    
+//    AString numberString;
+//    bool valid = false;
+//    while (stream.atEnd() == false) {
+//        stream >> numberString;
+//        const float floatValue = numberString.toFloat(&valid);
+//        if (valid) {
+//            numbersOut.push_back(floatValue);
+//        }
+//    }
 }
 
 /**
@@ -777,9 +808,7 @@ AString::indexNotOf(const QChar& ch) const
  */
 char* 
 AString::toCharArray() const 
-{ 
-    bool haveNonAsciiCharacters = false;
-    
+{
     /*
      * Convert to a byte array
      */
@@ -791,26 +820,19 @@ AString::toCharArray() const
         int32_t lastAsciiChar = -1;
         for (int32_t i = 0; i < numBytes; i++) {
             char c = byteArray.at(i);
-            if ((c >= 32) && (c <= 126)) {
+            if ((c == 10) || ((c >= 32) && (c <= 126))) {
                 charOut[i] = c;
                 lastAsciiChar = i;
             }
-            else if((c == 0 || c == 10) && i == (numBytes-1)) {
+            else if((c == 0) && i == (numBytes-1)) {
                 charOut[i] = c;
             }
             else
             {
                 charOut[i] = '_';
-                haveNonAsciiCharacters = true;
             }
         }
         charOut[lastAsciiChar + 1] = '\0';
-        
-        if (haveNonAsciiCharacters) {
-            CaretLogWarning("Non-ASCII characters were removed, result is \""
-                            + AString(charOut)
-                            + "\"");
-        }
         
         return charOut;
     }

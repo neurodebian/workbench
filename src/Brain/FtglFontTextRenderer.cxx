@@ -18,6 +18,10 @@
  *  51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 /*LICENSE_END*/
+
+/**
+ * Qt licence is included since some of its GLWidget API is copied.
+ */
 /****************************************************************************
  **
  ** Copyright (C) 2012 Digia Plc and/or its subsidiary(-ies).
@@ -63,41 +67,68 @@
 #include "FtglFontTextRenderer.h"
 #undef __FTGL_FONT_TEXT_RENDERER_DECLARE__
 
-#include <QFile>
+#include <cmath>
+#include <iostream>
+#include <limits>
 
+#include <QFile>
+#include <QStringList>
+
+#include "AnnotationPointSizeText.h"
+#include "BrainOpenGLPrimitiveDrawing.h"
 #include "CaretAssert.h"
 #include "CaretLogger.h"
 #include "CaretOpenGLInclude.h"
+#include "MathFunctions.h"
+#include "Matrix4x4.h"
 
 #ifdef HAVE_FREETYPE
-#include <FtglConfig.h>
 #include <FTGL/ftgl.h>
 using namespace FTGL;
 #endif // HAVE_FREETYPE
 
 using namespace caret;
 
+static const bool debugPrintFlag =  false;
+static const bool drawCrosshairsAtFontStartingCoordinate = false;
 
-    
+
 /**
- * \class caret::FtglFontTextRenderer 
- * \brief Text rendering using QGLWidget.
+ * \class caret::FtglFontTextRenderer
+ * \brief Text rendering using FTGL
+ * \ingroup Brain
  *
- * Draws text using methods in QGLWidget.
- * 
- * @param glWidget
- *   QGLWidget that does the text rendering.
+ * Draws text using the FTGL library.
+ *
+ * FTGL's Texture font is used for drawing text.
+ * The texture font is positioned using the current OpenGL
+ * model view matrix which allows rotation and scaling.
+ *
+ * There are other font types such as Pixmap font.  The
+ * pixmap font was used, but it cannot be rotated nor
+ * scaled.  In addition, the pixmmap font drawing
+ * requires a raster position and if the raster position
+ * is slightly outside the viewport all text is clipped.
  */
+
 /**
  * Constructor.
  */
 FtglFontTextRenderer::FtglFontTextRenderer()
 : BrainOpenGLTextRenderInterface()
 {
+    m_defaultFont = NULL;
 #ifdef HAVE_FREETYPE
-    m_boldFont.initialize(":/FtglFonts/VeraBd.ttf");
-    m_normalFont.initialize(":/FtglFonts/VeraSe.ttf");
+    AnnotationPointSizeText defaultAnnotationText(AnnotationAttributesDefaultTypeEnum::NORMAL);
+    defaultAnnotationText.setFontPointSize(AnnotationTextFontPointSizeEnum::SIZE14);
+    defaultAnnotationText.setFont(AnnotationTextFontNameEnum::VERA);
+    defaultAnnotationText.setItalicStyleEnabled(false);
+    defaultAnnotationText.setBoldStyleEnabled(false);
+    defaultAnnotationText.setUnderlineStyleEnabled(false);
+    m_defaultFont = getFont(defaultAnnotationText,
+                            true);
 #endif // HAVE_FREETYPE
+    m_depthTestingStatus = DEPTH_TEST_NO;
 }
 
 /**
@@ -106,6 +137,18 @@ FtglFontTextRenderer::FtglFontTextRenderer()
 FtglFontTextRenderer::~FtglFontTextRenderer()
 {
 #ifdef HAVE_FREETYPE
+    for (FONT_MAP_ITERATOR iter = m_fontNameToFontMap.begin();
+         iter != m_fontNameToFontMap.end();
+         iter++) {
+        delete iter->second;
+    }
+    m_fontNameToFontMap.clear();
+    
+    /*
+     * Do not delete "m_defaultFont" since it points to a font
+     * in m_fontNameToFontMap.  Doing so would cause
+     * a double delete.
+     */
 #endif // HAVE_FREETYPE
 }
 
@@ -115,110 +158,150 @@ FtglFontTextRenderer::~FtglFontTextRenderer()
 bool
 FtglFontTextRenderer::isValid() const
 {
-    return m_normalFont.m_valid;
+    return (m_defaultFont != NULL);
 }
 
 /*
- * Get the font with the given style and height.
- * Returned font not guaranteed to be desired size.
+ * Get the font with the given font attributes.
+ * If the font is not created, return the default font.
  *
- * @param textStyle
- *    Style of the text.
- * @param fontHeight
- *    Height of the font.
+ * @param annotationText
+ *   Annotation Text that is to be drawn.
+ * @param creatingDefaultFontFlag
+ *    True if creating the default font.
  * @return
- *    The font.  May be NULL due to 
+ *    The FTGL font.  If there are errors this value will
+ *    be NULL.
  */
-FTPixmapFont*
-FtglFontTextRenderer::getFont(const TextStyle textStyle,
-                              const int fontHeight)
+FTFont*
+FtglFontTextRenderer::getFont(const AnnotationText& annotationText,
+                              const bool creatingDefaultFontFlag)
 {
 #ifdef HAVE_FREETYPE
-    FTPixmapFont* pixmapFont = NULL;
-    switch (textStyle) {
-        case BrainOpenGLTextRenderInterface::BOLD:
-            if (m_boldFont.m_valid) {
-                pixmapFont = m_boldFont.m_pixmapFont;
-            }
-            break;
-        case BrainOpenGLTextRenderInterface::NORMAL:
-            if (m_normalFont.m_valid) {
-                pixmapFont = m_normalFont.m_pixmapFont;
-            }
-            break;
+    const AString fontName = annotationText.getFontRenderingEncodedName(m_viewportHeight);
+    
+    /*
+     * Has the font already has been created?
+     */
+    FONT_MAP_ITERATOR fontIter = m_fontNameToFontMap.find(fontName);
+    if (fontIter != m_fontNameToFontMap.end()) {
+        FontData* fontData = fontIter->second;
+        CaretAssert(fontData);
+        return fontData->m_font;
     }
     
-    if (pixmapFont != NULL) {
-        if ( ! pixmapFont->FaceSize(fontHeight)) {
-            QString msg("Failed to set requested font height="
-                        + AString::number(fontHeight)
-                        + ".");
-            if (pixmapFont->FaceSize(14)) {
-                msg += "  Defaulting to font height=14";
-            }
-            else {
-                msg += "  Defaulting to font height=14 also failed.";
-            }
-            CaretLogWarning(msg);
-        }
-        
-        return pixmapFont;
+    /*
+     * Create and save the font
+     */
+    FontData* fontData = new FontData(annotationText,
+                                      m_viewportHeight);
+    if (fontData->m_valid) {
+        /*
+         * Request font is valid.
+         */
+        m_fontNameToFontMap.insert(std::make_pair(fontName,
+                                                  fontData));
+        CaretLogFine("Created font with encoded name "
+                     + fontName);
+        return fontData->m_font;
     }
-
-    CaretLogSevere("Trying to use FTGL Font rendering but font is not valid.");
-    return NULL;
+    else {
+        /*
+         * Error creating font
+         */
+        delete fontData;
+        fontData = NULL;
+        
+        /*
+         * Issue a message about failure to create font but
+         * don't print same message more than once.
+         */
+        if (std::find(m_failedFontNames.begin(),
+                      m_failedFontNames.end(),
+                      fontName) == m_failedFontNames.end()) {
+            m_failedFontNames.insert(fontName);
+            CaretLogSevere("Failed to create font with encoded name "
+                           + fontName);
+        }
+    }
+    
+    /*
+     * Were we trying to create the default font?
+     */
+    if (creatingDefaultFontFlag) {
+        return NULL;
+    }
+    
+    /*
+     * Failed so use the default font.
+     */
+    return m_defaultFont;
+    
 #else  // HAVE_FREETYPE
+    CaretLogSevere("Trying to use FTGL Font rendering but FTGL is not valid.");
     return NULL;
 #endif // HAVE_FREETYPE
 }
 
+
+
+
 /**
- * Draw text at the given window coordinates.
+ * Draw the text piceces at their assigned viewport coordinates.
  *
- * @param viewport
- *   The current viewport.
- * @param windowX
- *   X-coordinate in the window of first text character
- *   using the 'alignment'
- * @param windowY
- *   Y-coordinate in the window at which bottom of text is placed.
- * @param text
- *   Text that is to be drawn.
- * @param alignment
- *   Alignment of text
- * @param textStyle
- *   Style of the text.
- * @param fontHeight
- *   Height of the text.
+ * @param annotationText
+ *     Annotation text and attributes.
+ * @param textMatrix
+ *     Text broken up into cells with viewport coordinates assigned.
+ *
  */
-void 
-FtglFontTextRenderer::drawTextAtWindowCoords(const int viewport[4],
-                                                      const int windowX,
-                                                      const int windowY,
-                                                      const QString& text,
-                                                      const TextAlignmentX alignmentX,
-                                                      const TextAlignmentY alignmentY,
-                                                      const TextStyle textStyle,
-                                                      const int fontHeight)
+void
+FtglFontTextRenderer::drawTextAtViewportCoordinatesInternal(const AnnotationText& annotationText,
+                                                            const TextStringGroup& textStringGroup)
 {
-    if (text.isEmpty()) {
+#ifdef HAVE_FREETYPE
+    FTFont* font = getFont(annotationText,
+                           false);
+    if (! font) {
         return;
     }
     
-#ifdef HAVE_FREETYPE
-    FTPixmapFont* pixmapFont = getFont(textStyle, fontHeight);
-    if (! pixmapFont) {
+    if (annotationText.getText().isEmpty()) {
         return;
     }
     
     saveStateOfOpenGL();
-
+    
+    BrainOpenGL::testForOpenGLError("At beginning of "
+                                    "FtglFontTextRenderer::drawTextAtViewportCoordinatesInternal "
+                                    "while drawing text: "
+                                    + annotationText.getText());
+    
     /*
-     * Disable depth testing so text not occluded
+     * Depth testing ?
      */
-    glDisable(GL_DEPTH_TEST);
+    switch (m_depthTestingStatus) {
+        case DEPTH_TEST_NO:
+            glDisable(GL_DEPTH_TEST);
+            break;
+        case DEPTH_TEST_YES:
+            glEnable(GL_DEPTH_TEST);
+            break;
+    }
     
+    /*
+     * Get the viewport
+     */
+    GLint viewport[4];
+    glGetIntegerv(GL_VIEWPORT,
+                  viewport);
     
+    /*
+     * Get depth range for orthographic projection.
+     */
+    GLdouble depthRange[2];
+    glGetDoublev(GL_DEPTH_RANGE,
+                 depthRange);
     
     /*
      * Set the orthographic projection so that its origin is in the bottom
@@ -234,8 +317,8 @@ FtglFontTextRenderer::drawTextAtWindowCoords(const int viewport[4],
             (viewport[2]),
             0,
             (viewport[3]),
-            -1,
-            1);
+            depthRange[0],
+            depthRange[1]);
     
     /*
      * Viewing projection is just the identity matrix since
@@ -244,131 +327,587 @@ FtglFontTextRenderer::drawTextAtWindowCoords(const int viewport[4],
     glMatrixMode(GL_MODELVIEW);
     glLoadIdentity();
     
-    const bool drawCrosshairsAtFontStartingCoordinate = false;
-    if (drawCrosshairsAtFontStartingCoordinate) {
+    if (debugPrintFlag
+        || drawCrosshairsAtFontStartingCoordinate) {
         GLfloat savedRGBA[4];
         glGetFloatv(GL_CURRENT_COLOR, savedRGBA);
-        glColor3f(0.0, 0.0, 0.0);
+        glColor3f(1.0, 0.0, 0.0);
         glLineWidth(1.0);
         glPushMatrix();
-        glTranslatef(windowX, windowY, 0.0);
+        glTranslatef(textStringGroup.m_viewportX, textStringGroup.m_viewportY, 0.0);
+        const float xy = 500.0;
         glBegin(GL_LINES);
-        glVertex2i(-20, 0);
-        glVertex2i( 20, 0);
-        glVertex2i(0, -20);
-        glVertex2i(0,  20);
+        glVertex2f(-xy, 0.0);
+        glVertex2f( xy, 0.0);
+        glVertex2f(0.0, -xy);
+        glVertex2f(0.0,  xy);
         glEnd();
         glPopMatrix();
         glColor3f(savedRGBA[0], savedRGBA[1], savedRGBA[2]);
     }
     
-    const FTBBox bbox = pixmapFont->BBox(text.toAscii().constData());
-    const FTPoint lower = bbox.Lower();
-    const FTPoint upper = bbox.Upper();
+    const double underlineOffsetY = (textStringGroup.m_underlineThickness / 2.0);
+    //const double outlineOffsetY   = (textStringGroup.m_outlineThickness / 2.0);
     
-    float textOffsetX = 0;
-    switch (alignmentX) {
-        case BrainOpenGLTextRenderInterface::X_CENTER:
-            textOffsetX = -((upper.X() - lower.X()) / 2.0);
-            break;
-        case BrainOpenGLTextRenderInterface::X_LEFT:
-            textOffsetX = -lower.X();
-            break;
-        case BrainOpenGLTextRenderInterface::X_RIGHT:
-            textOffsetX = -upper.X();
-            break;
+    double bottomLeft[3], bottomRight[3], topRight[3], topLeft[3], rotationPointXYZ[3];
+    textStringGroup.getViewportBounds(s_textMarginSize,
+                                      bottomLeft, bottomRight, topRight, topLeft, rotationPointXYZ);
+    rotationPointXYZ[2] = 0.0;
+    
+    glPushMatrix();
+    glLoadIdentity();
+    applyBackgroundColoring(textStringGroup);
+    applyTextColoring(annotationText);
+    
+    const float rotationAngle = annotationText.getRotationAngle();
+    glTranslated(rotationPointXYZ[0], rotationPointXYZ[1], rotationPointXYZ[2]);
+    glRotated(rotationAngle, 0.0, 0.0, -1.0);
+    
+    for (std::vector<TextString*>::const_iterator iter = textStringGroup.m_textStrings.begin();
+         iter != textStringGroup.m_textStrings.end();
+         iter++) {
+        const TextString* ts = *iter;
+        
+        double x = ts->m_viewportX;
+        double y = ts->m_viewportY;
+        double z = ts->m_viewportZ;
+        
+        applyTextColoring(annotationText);
+        
+        for (std::vector<TextCharacter*>::const_iterator charIter = ts->m_characters.begin();
+             charIter != ts->m_characters.end();
+             charIter++) {
+            const TextCharacter* tc = *charIter;
+            x += tc->m_offsetX;
+            y += tc->m_offsetY;
+            z += tc->m_offsetZ;
+            
+            const double offsetX = x - rotationPointXYZ[0];
+            const double offsetY = y - rotationPointXYZ[1];
+            const double offsetZ = z - rotationPointXYZ[2];
+            
+            glPushMatrix();
+            glTranslated(offsetX,
+                         offsetY,
+                         offsetZ);
+            font->Render(&tc->m_character,
+                         1);
+            glPopMatrix();
+        }
+        
+        if (ts->m_underlineThickness > 0.0) {
+            glPushMatrix();
+            glTranslated(ts->m_viewportX - rotationPointXYZ[0], ts->m_viewportY - rotationPointXYZ[1], 0.0);
+            
+            const double underlineY = ts->m_stringGlyphsMinY + underlineOffsetY;
+            uint8_t foregroundRgba[4];
+            annotationText.getTextColorRGBA(foregroundRgba);
+            drawUnderline(ts->m_stringGlyphsMinX,
+                          ts->m_stringGlyphsMaxX,
+                          underlineY,
+                          z, //0.0,  // Z
+                          textStringGroup.m_underlineThickness,
+                          foregroundRgba);
+            
+            glPopMatrix();
+        }
+        
+        if (ts->m_outlineThickness > 0.0) {
+            glPushMatrix();
+            glTranslated(ts->m_viewportX - rotationPointXYZ[0], ts->m_viewportY - rotationPointXYZ[1], 0.0);
+            
+//            const double outlineMinY = ts->m_stringGlyphsMinY + outlineOffsetY;
+//            const double outlineMaxY = ts->m_stringGlyphsMaxY - outlineOffsetY;
+            uint8_t foregroundRgba[4];
+            annotationText.getLineColorRGBA(foregroundRgba);
+            drawOutline(ts->m_stringGlyphsMinX,
+                        ts->m_stringGlyphsMaxX,
+                        ts->m_stringGlyphsMinY,
+                        ts->m_stringGlyphsMaxY,
+                        z, //0.0,  // Z
+                        textStringGroup.m_outlineThickness,
+                        foregroundRgba);
+            
+            glPopMatrix();
+        }
     }
     
-    float textOffsetY = 0;
-    switch (alignmentY) {
-        case BrainOpenGLTextRenderInterface::Y_BOTTOM:
-            textOffsetY = -lower.Y();
-            break;
-        case BrainOpenGLTextRenderInterface::Y_CENTER:
-            textOffsetY = -((upper.Y() - lower.Y()) / 2.0);
-            break;
-        case BrainOpenGLTextRenderInterface::Y_TOP:
-            textOffsetY = -upper.Y();
-            break;
-    }
+    glPopMatrix();
     
-    float textX = windowX + textOffsetX;
-    float textY = windowY + textOffsetY;
-    glRasterPos2f(textX,
-                  textY);
-
-    pixmapFont->Render(text.toAscii().constData());
+    BrainOpenGL::testForOpenGLError("At end of "
+                                    "FtglFontTextRenderer::drawTextAtViewportCoordinatesInternal "
+                                    "while drawing text: "
+                                    + annotationText.getText());
     
     restoreStateOfOpenGL();
+
 #else // HAVE_FREETYPE
     CaretLogSevere("Trying to use FTGL Font rendering but it cannot be used due to FreeType not found.");
 #endif // HAVE_FREETYPE
 }
 
 /**
- * Get the bounds of the text (in pixels) using the given text
- * attributes.
+ * Draw underline using the given coordinates.
  *
- * @param widthOut
- *   Output containing width of text characters.
- * @param heightOut
- *   Output containing height of text characters.
- * @param text
- *   Text that is to be drawn.
- * @param textStyle
- *   Style of the text.
- * @param fontHeight
- *   Height of the text.
+ * @param lineStartX
+ *     X start of underline
+ * @param lineEndX
+ *     X end of underline
+ * @param lineY
+ *     Y of underline
+ * @param lineZ
+ *     Z of underline
+ * @param underlineThickness
+ *     Thickness of underline
+ * @param foregroundRGBA
+ *     Color for drawing underline.
  */
 void
-FtglFontTextRenderer::getTextBoundsInPixels(int32_t& widthOut,
-                                            int32_t& heightOut,
-                                           const QString& text,
-                                           const TextStyle textStyle,
-                                           const int fontHeight)
+FtglFontTextRenderer::drawUnderline(const double lineStartX,
+                                    const double lineEndX,
+                                    const double lineY,
+                                    const double lineZ,
+                                    const double underlineThickness,
+                                    uint8_t foregroundRgba[4])
 {
-    widthOut  = 0;
-    heightOut = 0;
-#ifdef HAVE_FREETYPE
-    FTPixmapFont* pixmapFont = getFont(textStyle, fontHeight);
-    if (! pixmapFont) {
+    /*
+     * Need to enable anti-aliasing for smooth lines
+     */
+    glEnable(GL_LINE_SMOOTH);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glHint(GL_LINE_SMOOTH_HINT, GL_NICEST);
+    
+    std::vector<float> underlineCoords;
+    underlineCoords.insert(underlineCoords.end(), lineStartX);
+    underlineCoords.insert(underlineCoords.end(), lineY);
+    underlineCoords.insert(underlineCoords.end(), lineZ);
+    underlineCoords.insert(underlineCoords.end(), lineEndX);
+    underlineCoords.insert(underlineCoords.end(), lineY);
+    underlineCoords.insert(underlineCoords.end(), lineZ);
+    
+    BrainOpenGLPrimitiveDrawing::drawLines(underlineCoords,
+                                           foregroundRgba,
+                                           underlineThickness);
+    
+    glDisable(GL_LINE_SMOOTH);
+    glDisable(GL_BLEND);
+}
+
+/**
+ * Draw outline using the given coordinates.
+ *
+ * @param minX
+ *     X start of outline
+ * @param maxX
+ *     X end of outline
+ * @param minY
+ *     Y start of outline
+ * @param maxY
+ *     Y end of outline
+ * @param z
+ *     Z of outline
+ * @param outlineThickness
+ *     Thickness of outline
+ * @param foregroundRGBA
+ *     Color for drawing outline.
+ */
+void
+FtglFontTextRenderer::drawOutline(const double minX,
+                                  const double maxX,
+                                  const double minY,
+                                  const double maxY,
+                                  const double z,
+                                  const double outlineThickness,
+                                  uint8_t foregroundRgba[4])
+{
+    /*
+     * Need to enable anti-aliasing for smooth lines
+     */
+    glEnable(GL_LINE_SMOOTH);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glHint(GL_LINE_SMOOTH_HINT, GL_NICEST);
+    
+//    const float halfThickness = outlineThickness / 2.0;
+    float bottomLeft[3]  = { minX, minY, z };
+    float bottomRight[3] = { maxX, minY, z };
+    float topRight[3]    = { maxX, maxY, z };
+    float topLeft[3]     = { minX, maxY, z };
+    expandBox(bottomLeft, bottomRight, topRight, topLeft,
+              outlineThickness, outlineThickness);
+    
+    std::vector<float> underlineCoords;
+    underlineCoords.insert(underlineCoords.end(), bottomLeft, bottomLeft + 3);
+    underlineCoords.insert(underlineCoords.end(), bottomRight, bottomRight + 3);
+    underlineCoords.insert(underlineCoords.end(), topRight, topRight + 3);
+    underlineCoords.insert(underlineCoords.end(), topLeft, topLeft + 3);
+//    underlineCoords.insert(underlineCoords.end(), minX);
+//    underlineCoords.insert(underlineCoords.end(), minY);
+//    underlineCoords.insert(underlineCoords.end(), z);
+//    underlineCoords.insert(underlineCoords.end(), maxX);
+//    underlineCoords.insert(underlineCoords.end(), minY);
+//    underlineCoords.insert(underlineCoords.end(), z);
+//    underlineCoords.insert(underlineCoords.end(), maxX);
+//    underlineCoords.insert(underlineCoords.end(), maxY);
+//    underlineCoords.insert(underlineCoords.end(), z);
+//    underlineCoords.insert(underlineCoords.end(), minX);
+//    underlineCoords.insert(underlineCoords.end(), maxY);
+//    underlineCoords.insert(underlineCoords.end(), z);
+    
+    BrainOpenGLPrimitiveDrawing::drawLineLoop(underlineCoords,
+                                              foregroundRgba,
+                                              outlineThickness);
+    
+    glDisable(GL_LINE_SMOOTH);
+    glDisable(GL_BLEND);
+}
+
+/**
+ * Expand a box by given amounts in X and Y.
+ *
+ * @param bottomLeft
+ *     Bottom left corner of annotation.
+ * @param bottomRight
+ *     Bottom right corner of annotation.
+ * @param topRight
+ *     Top right corner of annotation.
+ * @param topLeft
+ *     Top left corner of annotation.
+ * @param extraSpaceX
+ *     Extra space to add in X.
+ * @param extraSpaceY
+ *     Extra space to add in Y.
+ */
+void
+FtglFontTextRenderer::expandBox(float bottomLeft[3],
+                                float bottomRight[3],
+                                float topRight[3],
+                                float topLeft[3],
+                                const float extraSpaceX,
+                                const float extraSpaceY)
+{
+    float widthVector[3];
+    MathFunctions::subtractVectors(topRight, topLeft, widthVector);
+    MathFunctions::normalizeVector(widthVector);
+    
+    float heightVector[3];
+    MathFunctions::subtractVectors(topLeft, bottomLeft, heightVector);
+    MathFunctions::normalizeVector(heightVector);
+    
+    const float widthSpacingX = extraSpaceX * widthVector[0];
+    const float widthSpacingY = extraSpaceY * widthVector[1];
+    
+    const float heightSpacingX = extraSpaceX * heightVector[0];
+    const float heightSpacingY = extraSpaceY * heightVector[1];
+    
+    
+    topLeft[0] += (-widthSpacingX + heightSpacingX);
+    topLeft[1] += (-widthSpacingY + heightSpacingY);
+    
+    topRight[0] += (widthSpacingX + heightSpacingX);
+    topRight[1] += (widthSpacingY + heightSpacingY);
+    
+    bottomLeft[0] += (-widthSpacingX - heightSpacingX);
+    bottomLeft[1] += (-widthSpacingY - heightSpacingY);
+    
+    bottomRight[0] += (widthSpacingX - heightSpacingX);
+    bottomRight[1] += (widthSpacingY - heightSpacingY);
+}
+
+/**
+ * Draw annnotation text at the given viewport coordinates using
+ * the the annotations attributes for the style of text.
+ *
+ * Depth testing is DISABLED when drawing text with this method.
+ *
+ * @param viewportX
+ *     Viewport X-coordinate.
+ * @param viewportY
+ *     Viewport Y-coordinate.
+ * @param annotationText
+ *     Annotation text and attributes.
+ */
+void
+FtglFontTextRenderer::drawTextAtViewportCoords(const double viewportX,
+                                               const double viewportY,
+                                               const AnnotationText& annotationText)
+{
+    setViewportHeight();
+    
+    drawTextAtViewportCoordsInternal(DEPTH_TEST_NO,
+                                     viewportX,
+                                     viewportY,
+                                     0.0,
+                                     annotationText);
+}
+
+/**
+ * Draw annnotation text at the given viewport coordinates using
+ * the the annotations attributes for the style of text.
+ *
+ * Depth testing is ENABLED when drawing text with this method.
+ *
+ * @param viewportX
+ *     Viewport X-coordinate.
+ * @param viewportY
+ *     Viewport Y-coordinate.
+ * @param viewportZ
+ *     Viewport Z-coordinate.
+ * @param annotationText
+ *     Annotation text and attributes.
+ */
+void
+FtglFontTextRenderer::drawTextAtViewportCoords(const double viewportX,
+                                               const double viewportY,
+                                               const double viewportZ,
+                                               const AnnotationText& annotationText)
+{
+    setViewportHeight();
+    
+    drawTextAtViewportCoordsInternal(DEPTH_TEST_YES,
+                                     viewportX,
+                                     viewportY,
+                                     viewportZ,
+                                     annotationText);
+}
+
+/**
+ * Draw annnotation text at the given viewport coordinates using
+ * the the annotations attributes for the style of text and the
+ * depth testing method.
+ *
+ * @param depthTesting
+ *     Type of depth testing when drawing text.
+ * @param viewportX
+ *     Viewport X-coordinate.
+ * @param viewportY
+ *     Viewport Y-coordinate.
+ * @param viewportZ
+ *     Viewport Z-coordinate.
+ * @param annotationText
+ *     Annotation text and attributes.
+ */
+void
+FtglFontTextRenderer::drawTextAtViewportCoordsInternal(const DepthTestEnum depthTesting,
+                                                       const double viewportX,
+                                                       const double viewportY,
+                                                       const double viewportZ,
+                                                       const AnnotationText& annotationText)
+{
+    if (annotationText.getText().isEmpty()) {
         return;
     }
-
-    const FTBBox bbox = pixmapFont->BBox(text.toAscii().constData());
-    const FTPoint lower = bbox.Lower();
-    const FTPoint upper = bbox.Upper();
     
-    widthOut = upper.X() - lower.X();
-    heightOut = upper.Y() - lower.Y();
-#endif // HAVE_FREETYPE
+    FTFont* font = getFont(annotationText, false);
+    if ( ! font) {
+        return;
+    }
+    
+    m_depthTestingStatus = depthTesting;
+    
+    TextStringGroup tsg(annotationText,
+                        font,
+                        viewportX,
+                        viewportY,
+                        viewportZ,
+                        annotationText.getRotationAngle());
+    //tsg.print();
+    drawTextAtViewportCoordinatesInternal(annotationText,
+                                          tsg);
 }
 
 
+
 /**
- * Draw text at the given model coordinates.
+ * Get the bounds of text (in pixels) using the given text
+ * attributes.  A margin is included around the text.
+ *
+ * See http://ftgl.sourceforge.net/docs/html/metrics.png
+ *
+ * @param annotationText
+ *   Text that is to be drawn.
+ * @param viewportX
+ *    Viewport X-coordinate.
+ * @param viewportY
+ *    Viewport Y-coordinate.
+ * @param viewportZ
+ *    Viewport Z-coordinate.
+ * @param viewportHeight
+ *    Height of the viewport needed for percentage height text.
+ * @param bottomLeftOut
+ *    The bottom left corner of the text bounds.
+ * @param bottomRightOut
+ *    The bottom right corner of the text bounds.
+ * @param topRightOut
+ *    The top right corner of the text bounds.
+ * @param topLeftOut
+ *    The top left corner of the text bounds.
+ */
+void
+FtglFontTextRenderer::getBoundsForTextAtViewportCoords(const AnnotationText& annotationText,
+                                                       const double viewportX,
+                                                       const double viewportY,
+                                                       const double viewportZ,
+                                                       const double viewportHeight,
+                                                       double bottomLeftOut[3],
+                                                       double bottomRightOut[3],
+                                                       double topRightOut[3],
+                                                       double topLeftOut[3])
+{
+    setViewportHeight();
+    m_viewportHeight = viewportHeight;
+    
+    FTFont* font = getFont(annotationText, false);
+    if ( ! font) {
+        return;
+    }
+    
+    TextStringGroup textStringGroup(annotationText,
+                                    font,
+                                    viewportX,
+                                    viewportY,
+                                    viewportZ,
+                                    annotationText.getRotationAngle());
+    
+    double rotationPointXYZ[3];
+    textStringGroup.getViewportBounds(s_textMarginSize,
+                                      bottomLeftOut,
+                                      bottomRightOut,
+                                      topRightOut,
+                                      topLeftOut,
+                                      rotationPointXYZ);
+}
+
+
+
+
+/**
+ * Apply the background coloring by drawing a rectangle in the background
+ * color that encloses the text.  If the background color is
+ * invalid (alpha => 0), no action is taken.
+ *
+ * @param annotationText
+ *   Annotation Text that is to be drawn.
+ * @param bottomLeftOut
+ *    The bottom left corner of the text bounds.
+ * @param bottomRightOut
+ *    The bottom right corner of the text bounds.
+ * @param topRightOut
+ *    The top right corner of the text bounds.
+ * @param topLeftOut
+ *    The top left corner of the text bounds.
+ */
+void
+FtglFontTextRenderer::applyBackgroundColoring(const TextStringGroup& textStringGroup)
+{
+    double bottomLeft[3], bottomRight[3], topRight[3], topLeft[3], rotationPointXYZ[3];
+    textStringGroup.getViewportBounds(s_textMarginSize, bottomLeft, bottomRight, topRight, topLeft, rotationPointXYZ);
+    
+    float backgroundColor[4];
+    textStringGroup.m_annotationText.getBackgroundColorRGBA(backgroundColor);
+    
+    if (backgroundColor[3] > 0.0) {
+        //        const AString bg("Background for \"" + annotationText.getText() + ": BL="
+        //                         + AString::fromNumbers(bottomLeftOut, 3, ",") + "  BR="
+        //                         + AString::fromNumbers(bottomRightOut, 3, ",") + "  TR="
+        //                         + AString::fromNumbers(topRightOut, 3, ",") + "  TL="
+        //                         + AString::fromNumbers(topLeftOut, 3, ","));
+        //        std::cout << qPrintable(bg) << std::endl;
+        glColor4fv(backgroundColor);
+        glBegin(GL_TRIANGLE_STRIP);
+        glVertex3dv(bottomLeft);
+        glVertex3dv(bottomRight);
+        glVertex3dv(topLeft);
+        glVertex3dv(topRight);
+        glEnd();
+    }
+}
+
+/**
+ * Apply the foreground color.
+ *
+ * @param annotationText
+ *   Annotation Text that is to be drawn.
+ */
+void
+FtglFontTextRenderer::applyTextColoring(const AnnotationText& annotationText)
+{
+    float textColor[4];
+    annotationText.getTextColorRGBA(textColor);
+    glColor4fv(textColor);
+}
+
+/**
+ * Set the height of the viewport.  This method must be called
+ * at the beginning of all public methods.
+ */
+void
+FtglFontTextRenderer::setViewportHeight()
+{
+    GLint viewport[4];
+    glGetIntegerv(GL_VIEWPORT,
+                  viewport);
+    
+    m_viewportHeight = viewport[3];
+}
+
+/**
+ * Get the estimated width and height of text (in pixels) using the given text
+ * attributes.
+ *
+ * See http://ftgl.sourceforge.net/docs/html/metrics.png
+ *
+ * @param annotationText
+ *   Text for width and height estimation.
+ * @param viewportHeight
+ *    Height of the viewport needed for percentage height text.
+ * @param widthOut
+ *    Estimated width of text.
+ * @param heightOut
+ *    Estimated height of text.
+ */
+void
+FtglFontTextRenderer::getTextWidthHeightInPixels(const AnnotationText& annotationText,
+                                                 const double viewportHeight,
+                                                 double& widthOut,
+                                                 double& heightOut)
+{
+    setViewportHeight();
+    m_viewportHeight = viewportHeight;
+    
+    double bottomLeft[3], bottomRight[3], topRight[3], topLeft[3];
+    getBoundsForTextAtViewportCoords(annotationText, 0.0, 0.0, 0.0, viewportHeight, bottomLeft, bottomRight, topRight, topLeft);
+    
+    widthOut  = MathFunctions::distance3D(bottomLeft, bottomRight);
+    heightOut = MathFunctions::distance3D(topLeft, bottomLeft);
+}
+
+/**
+ * Draw annnotation text at the given model coordinates using
+ * the the annotations attributes for the style of text.
+ *
+ * Depth testing is ENABLED when drawing text with this method.
  *
  * @param modelX
- *   X-coordinate in model space of first text character
+ *     Model X-coordinate.
  * @param modelY
- *   Y-coordinate in model space.
+ *     Model Y-coordinate.
  * @param modelZ
- *   Z-coordinate in model space.
- * @param text
- *   Text that is to be drawn.
- * @param textStyle
- *   Style of the text.
- * @param fontHeight
- *   Height of the text.
+ *     Model Z-coordinate.
+ * @param annotationText
+ *     Annotation text and attributes.
  */
-void 
+void
 FtglFontTextRenderer::drawTextAtModelCoords(const double modelX,
-                                                     const double modelY,
-                                                     const double modelZ,
-                                                     const QString& text,
-                                                     const TextStyle textStyle,
-                                                     const int fontHeight)
+                                            const double modelY,
+                                            const double modelZ,
+                                            const AnnotationText& annotationText)
 {
+    setViewportHeight();
+    
+    m_depthTestingStatus = DEPTH_TEST_YES;
+    
     GLdouble modelMatrix[16];
     GLdouble projectionMatrix[16];
     GLint viewport[4];
@@ -380,19 +919,34 @@ FtglFontTextRenderer::drawTextAtModelCoords(const double modelX,
     glGetIntegerv(GL_VIEWPORT,
                   viewport);
     
+    /*
+     * Project model coordinate to a window coordinate.
+     */
     GLdouble windowX, windowY, windowZ;
     if (gluProject(modelX, modelY, modelZ,
                    modelMatrix, projectionMatrix, viewport,
                    &windowX, &windowY, &windowZ) == GL_TRUE) {
         
-        drawTextAtWindowCoords(viewport,
-                               windowX,
-                               windowY,
-                               text,
-                               X_CENTER,
-                               Y_CENTER,
-                               textStyle,
-                               fontHeight);
+        /*
+         * From OpenGL Programming Guide 3rd Ed, p 133:
+         *
+         * If the near value is 1.0 and the far value is 3.0,
+         * objects must have z-coordinates between -1.0 and -3.0 in order to be visible.
+         * So, negative the Z-value to be negative.
+         */
+        windowZ = -windowZ;
+        
+        /*
+         * Convert window coordinate to viewport coordinatde
+         */
+        const double x = windowX - viewport[0];
+        const double y = windowY - viewport[1];
+        drawTextAtViewportCoordsInternal(DEPTH_TEST_YES,
+                                         x,
+                                         y,
+                                         windowZ,
+                                         annotationText);
+        
     }
     else {
         CaretLogSevere("gluProject() failed for drawing text at model coordinates.");
@@ -447,8 +1001,116 @@ FtglFontTextRenderer::restoreStateOfOpenGL()
  */
 FtglFontTextRenderer::FontData::FontData()
 {
-    m_valid = false;
-    m_pixmapFont = NULL;
+    m_valid    = false;
+    m_font     = NULL;
+}
+
+/**
+ * Constructs a font with the given attributes.
+ * Called should verify that this instance is valid (construction was successful).
+ *
+ * @param annotationText
+ *   Annotation Text that is to be drawn.
+ * @param viewportHeight
+ *    Height of the viewport in which text is drawn.
+ */
+FtglFontTextRenderer::FontData::FontData(const AnnotationText&  annotationText,
+                                         const int32_t viewportHeight)
+{
+    m_valid    = false;
+    m_font     = NULL;
+    
+#ifdef HAVE_FREETYPE
+    const AnnotationTextFontNameEnum::Enum fontName = annotationText.getFont();
+    
+    AString fontFileName = AnnotationTextFontNameEnum::getResourceFontFileName(fontName);
+    if (annotationText.isBoldStyleEnabled()
+        && annotationText.isItalicStyleEnabled()) {
+        fontFileName = AnnotationTextFontNameEnum::getResourceBoldItalicFontFileName(fontName);
+    }
+    else if (annotationText.isBoldStyleEnabled()) {
+        fontFileName = AnnotationTextFontNameEnum::getResourceBoldFontFileName(fontName);
+        
+    }
+    else if (annotationText.isItalicStyleEnabled()) {
+        fontFileName = AnnotationTextFontNameEnum::getResourceItalicFontFileName(fontName);
+    }
+    
+    CaretAssert( ! fontFileName.isEmpty());
+    
+    /*
+     * Open the font file in the Workbench resources
+     */
+    QFile file(fontFileName);
+    if (file.open(QFile::ReadOnly)) {
+        /*
+         * Read all data which MUST remain valid until the FTGL
+         * font is no longer used.
+         */
+        m_fontData = file.readAll();
+        const size_t numBytes = m_fontData.size();
+        if (numBytes > 0) {
+            /*
+             * Create the FTGL font.
+             */
+            m_font = new FTTextureFont((const unsigned char*)m_fontData.data(),
+                                       numBytes);
+            
+            CaretAssert(m_font);
+            
+            /*
+             * Font created successfully ?
+             */
+            if ( ! m_font->Error()) {
+                /*
+                 * Font size successful ?
+                 */
+                const int32_t fontSizePoints = annotationText.getFontSizeForDrawing(viewportHeight);
+                if (m_font->FaceSize(fontSizePoints)) {
+                    m_valid = true;
+                    
+                    CaretLogFine("Created font size="
+                                 + AString::number(fontSizePoints)
+                                 + " from font file "
+                                 + file.fileName());
+                }
+                else {
+                    CaretLogSevere("Error creating font size "
+                                   + AString::number(fontSizePoints)
+                                   + " from font file "
+                                   + file.fileName());
+                }
+            }
+            else {
+                CaretLogSevere("Error creating FTGL Font from "
+                               + file.fileName()
+                               + ".  Error code from FreeType is "
+                               + AString::number(m_font->Error()));
+            }
+        }
+        else {
+            CaretLogSevere("Error reading data for FTGL Font from "
+                           + file.fileName()
+                           + " error: "
+                           + file.errorString());
+        }
+    }
+    else {
+        CaretLogSevere("Unable to open FTGL Font File "
+                       + file.fileName()
+                       + " error: "
+                       + file.errorString());
+    }
+    
+    if ( ! m_valid) {
+        m_fontData.clear();
+        
+        if (m_font != NULL) {
+            delete m_font;
+            m_font = NULL;
+        }
+    }
+#endif // HAVE_FREETYPE
 }
 
 /**
@@ -456,57 +1118,11 @@ FtglFontTextRenderer::FontData::FontData()
  */
 FtglFontTextRenderer::FontData::~FontData()
 {
-    if (m_pixmapFont != NULL) {
-        delete m_pixmapFont;
-        m_pixmapFont = NULL;
-    }
-}
-
-/**
- * Initialize font data.    
- *
- * @param fontFileName
- *    Name of font file.
- */
-void
-FtglFontTextRenderer::FontData::initialize(const AString& fontFileName)
-{
 #ifdef HAVE_FREETYPE
-    QFile file(fontFileName);
-    if (file.open(QFile::ReadOnly)) {
-        m_fontData = file.readAll();
-        const size_t numBytes = m_fontData.size();
-        if (numBytes > 0) {
-            const unsigned char* data = (const unsigned char*)m_fontData.data();
-            m_pixmapFont = new FTPixmapFont(data,
-                                                 numBytes);
-            if (m_pixmapFont->Error()) {
-                delete m_pixmapFont;
-                m_pixmapFont = NULL;
-                CaretLogSevere("Unable to load font file " + file.fileName());
-                return;
-            }
-        }
-        else {
-            CaretLogSevere("Error reading data from "
-                           + file.fileName()
-                           + " error: "
-                           + file.errorString());
-            return;
-        }
+    if (m_font != NULL) {
+        delete m_font;
+        m_font = NULL;
     }
-    else {
-        CaretLogSevere("Unable to open "
-                       + file.fileName()
-                       + " error: "
-                       + file.errorString());
-        return;
-    }
-    
-    m_valid = true;
-#else // HAVE_FREETYPE
-    CaretLogWarning("Trying to initialize FTGL fonts but program was compiled without FreeType.\n"
-                    "Text labels may be missing in graphics windows.");
 #endif // HAVE_FREETYPE
 }
 
@@ -516,6 +1132,896 @@ FtglFontTextRenderer::FontData::initialize(const AString& fontFileName)
 AString
 FtglFontTextRenderer::getName() const
 {
-    return "FTGL Font";
+    return "FTGL Text Renderer";
 }
 
+
+
+
+
+
+/* ================================================================================== */
+
+/**
+ * Constructor.
+ *
+ * @param character
+ *    The character for this instance.
+ * @param horizontalAdvance
+ *    The advance used when drawing the string in a horizontal orientation.
+ * @param glyphMinX
+ *    Minimum X relative to the character's origin form FTGL/Freetype.
+ * @param glyphMaxX
+ *    Maximum X relative to the character's origin form FTGL/Freetype.
+ * @param glyphMinY
+ *    Minimum Y relative to the character's origin form FTGL/Freetype.
+ * @param glyphMaxY
+ *    Maximum Y relative to the character's origin form FTGL/Freetype.
+ */
+FtglFontTextRenderer::TextCharacter::TextCharacter(const wchar_t& character,
+                                                   const double horizontalAdvance,
+                                                   const double glyphMinX,
+                                                   const double glyphMaxX,
+                                                   const double glyphMinY,
+                                                   const double glyphMaxY)
+: m_character(character),
+m_horizontalAdvance(horizontalAdvance),
+m_glyphMinX(glyphMinX),
+m_glyphMaxX(glyphMaxX),
+m_glyphMinY(glyphMinY),
+m_glyphMaxY(glyphMaxY),
+m_offsetX(0.0),
+m_offsetY(0.0),
+m_offsetZ(0.0)
+{
+    
+}
+
+
+/**
+ * Destructor.
+ */
+FtglFontTextRenderer::TextCharacter::~TextCharacter()
+{
+    
+}
+
+/**
+ * Print information about this string using the given offset.
+ *
+ * @param offsetString
+ *     Offset prepended to each line that is printed.
+ */
+void
+FtglFontTextRenderer::TextCharacter::print(const AString& offsetString)
+{
+    const QString msg(offsetString
+                      + "Char: "
+                      + QString::fromWCharArray(&m_character,
+                                                1)
+                      + " horizAdvance="
+                      + AString::number(m_horizontalAdvance)
+                      + " minX="
+                      + AString::number(m_glyphMinX)
+                      + " maxX="
+                      + AString::number(m_glyphMaxX)
+                      + " minY="
+                      + AString::number(m_glyphMinY)
+                      + " maxY="
+                      + AString::number(m_glyphMaxY));
+    const QString msg2(offsetString
+                       + " Offset x="
+                       + AString::number(m_offsetX)
+                       + " y="
+                       + AString::number(m_offsetY)
+                       + " z="
+                       + AString::number(m_offsetZ));
+    
+    std::cout << qPrintable(msg) << std::endl;
+    std::cout << qPrintable(msg2) << std::endl;
+}
+
+
+/* ================================================================================== */
+
+/**
+ * Constructor
+ *
+ * @param textString
+ *     The text string.
+ * @parm orientation
+ *     Orientation of the text string.
+ * @param underlineThickness
+ *     Thickness of underline for the text.
+ * @param outlineThickness
+ *     Thickness of outline for the text.
+ * @param font
+ *     Font for drawing the text string.
+ */
+FtglFontTextRenderer::TextString::TextString(const QString& textString,
+                                             const AnnotationTextOrientationEnum::Enum orientation,
+                                             const double underlineThickness,
+                                             const double outlineThickness,
+                                             FTFont* font)
+: m_underlineThickness(underlineThickness),
+m_outlineThickness(outlineThickness),
+m_viewportX(0.0),
+m_viewportY(0.0),
+m_viewportZ(0.0),
+m_stringGlyphsMinX(0.0),
+m_stringGlyphsMaxX(0.0),
+m_stringGlyphsMinY(0.0),
+m_stringGlyphsMaxY(0.0)
+{
+#ifdef HAVE_FREETYPE
+    /*
+     * Split the string into individual characters.
+     */
+    const int32_t numChars = textString.length();
+    for (int32_t i = 0; i < numChars; i++) {
+        const std::wstring theWideCharStr = textString.mid(i, 2).toStdWString();
+        const wchar_t theWideChar = theWideCharStr.at(0);
+        FTBBox bbox = font->BBox(theWideCharStr.c_str(),
+                                 1);
+        
+        /*
+         * A space character has a valid horizontal advance.
+         * BUT, the bounds of the space character are all zero and since
+         * the bounds are used for stacked text vertical advance we need
+         * some value so use the bounds for a lowercase 'o'.
+         *
+         * The L indicates a wide character (wchar_t)
+         */
+        if ((theWideChar == L' ')
+            && (orientation == AnnotationTextOrientationEnum::STACKED)) {
+            bbox = font->BBox("o");
+        }
+        
+        double advanceValue = 0.0;
+        if (i < (numChars - 1)) {
+            /*
+             * We need to use both the currrent AND the next character 
+             * when calculating the advance for it to be correct.
+             * In some instances the bounding boxes of two adjacent 
+             * characters will overlap.  An example is the character
+             * sequence 'AV' especially with a 'serif' font that has 
+             * small horizontal lines attached to the bottom legs of 
+             * the 'A' and the top of the 'V'.
+             *
+             * See https://en.wikipedia.org/wiki/Kerning
+             * and https://en.wikipedia.org/wiki/Serif
+             */
+            advanceValue = font->Advance(theWideCharStr.c_str(), 1);
+//            const std::wstring nextWideCharStr = textString.mid(i + 1, 1).toStdWString();
+//            const wchar_t nextWideChar = nextWideCharStr.at(0);
+//            advanceValue = font->Advance(theWideChar,
+//                                         nextWideChar);
+        }
+        
+        TextCharacter* tc = new TextCharacter(theWideChar,
+                                              advanceValue,
+                                              bbox.Lower().Xf(),
+                                              bbox.Upper().Xf(),
+                                              bbox.Lower().Yf(),
+                                              bbox.Upper().Yf());
+        
+        m_characters.push_back(tc);
+    }
+    
+    /*
+     * Set the offset for each character in this text string
+     */
+    initializeTextCharacterOffsets(orientation);
+    
+    /*
+     * Set the bounds of the characters in this string.
+     */
+    setGlyphBounds();
+#endif // HAVE_FREETYPE
+}
+
+/**
+ * Destructor.
+ */
+FtglFontTextRenderer::TextString::~TextString()
+{
+    for (std::vector<TextCharacter*>::iterator iter = m_characters.begin();
+         iter != m_characters.end();
+         iter++) {
+        delete *iter;
+    }
+    m_characters.clear();
+}
+
+/**
+ * Initialize the offset of each character from
+ * its preceding character.
+ *
+ * @param orientation
+ *     Orientation of the text string.
+ */
+void
+FtglFontTextRenderer::TextString::initializeTextCharacterOffsets(const AnnotationTextOrientationEnum::Enum orientation)
+{
+    bool stackedTextFlag = false;
+    switch (orientation) {
+        case AnnotationTextOrientationEnum::HORIZONTAL:
+            break;
+        case AnnotationTextOrientationEnum::STACKED:
+            stackedTextFlag = true;
+            break;
+    }
+    
+    double stringMinX =  std::numeric_limits<float>::max();
+    double stringMaxX = -std::numeric_limits<float>::max();
+    
+    const float verticalSpacing = s_textMarginSize * 2.0;
+    
+    /*
+     * For each character, set its offset from the previous character
+     */
+    const int numChars = static_cast<int32_t>(m_characters.size());
+    for (int32_t iChar = 0; iChar < numChars; iChar++) {
+        CaretAssertVectorIndex(m_characters, iChar);
+        TextCharacter* tc = m_characters[iChar];
+        
+        double offsetX = 0.0;
+        double offsetY = 0.0;
+        double offsetZ = 0.0;
+        if (iChar > 0) {
+            CaretAssertVectorIndex(m_characters, iChar - 1);
+            const TextCharacter* prevChar = m_characters[iChar - 1];
+            
+            if (stackedTextFlag) {
+                double offsetY1 = prevChar->m_glyphMinY;
+                double offsetY2 = -verticalSpacing;
+                double offsetY3 = -tc->m_glyphMaxY;
+                
+                offsetY = (offsetY1 + offsetY2 + offsetY3);
+            }
+            else {
+                offsetX = prevChar->m_horizontalAdvance;
+            }
+        }
+        
+        tc->m_offsetX = offsetX;
+        tc->m_offsetY = offsetY;
+        tc->m_offsetZ = offsetZ;
+        
+        stringMinX = std::min(stringMinX,
+                              tc->m_glyphMinX);
+        stringMaxX = std::max(stringMaxX,
+                              tc->m_glyphMaxX);
+    }
+    
+    /*
+     * When drawing stacked text, the characters
+     * need their X offset adjusted so that they
+     * are horizontally aligned in the center of
+     * the "column" containing the text.
+     */
+    if (stackedTextFlag) {
+        /*
+         * X-coordinate of character in the vertical column
+         * so that the characters are centered horizontally
+         * in the column.
+         */
+        std::vector<double> characterColumnCoordX(numChars, 0.0);
+        
+        const double columnWidth = stringMaxX - stringMinX;
+        if (columnWidth > 0.0) {
+            for (int32_t iChar = 0; iChar < numChars; iChar++) {
+                CaretAssertVectorIndex(m_characters, iChar);
+                TextCharacter* tc = m_characters[iChar];
+                
+                const double characterWidth = tc->m_glyphMaxX - tc->m_glyphMinX;
+                if (characterWidth > 0.0) {
+                    const double leftAndRightPadding = columnWidth - characterWidth;
+                    const double leftPadding = leftAndRightPadding / 2.0;
+                    const double characterX = leftPadding - tc->m_glyphMinX;
+                    //                        std::cout << "Char " << qPrintable(tc->m_character
+                    //                                                           + ": "
+                    //                                                           + " CharMinX="
+                    //                                                           + QString::number(tc->m_glyphMinX)
+                    //                                                           + " CharMaxX="
+                    //                                                           + QString::number(tc->m_glyphMaxX)
+                    //                                                           + " CharWidth="
+                    //                                                           + QString::number(characterWidth)
+                    //                                                           + " Padding="
+                    //                                                           + QString::number(leftPadding)
+                    //                                                           + " CharacterX="
+                    //                                                           + QString::number(characterX)) << std::endl;
+                    if (leftPadding >= -0.01) {
+                        
+                        CaretAssertVectorIndex(characterColumnCoordX, iChar);
+                        characterColumnCoordX[iChar] = characterX;
+                    }
+                    else {
+                        CaretLogSevere("Text Character ("
+                                       + QString::fromWCharArray(&tc->m_character,
+                                                                 1)
+                                       + ") has invalid left padding="
+                                       + QString::number(leftPadding));
+                    }
+                }
+            }
+            
+            /*
+             * Set the character offsets.
+             * SECOND and additional characters are offset from
+             * the immediately previous character
+             */
+            for (int32_t iChar = 0; iChar < numChars; iChar++) {
+                CaretAssertVectorIndex(m_characters, iChar);
+                TextCharacter* tc = m_characters[iChar];
+                if (iChar >= 1) {
+                    CaretAssertVectorIndex(m_characters, iChar - 1);
+                    CaretAssertVectorIndex(m_characters, iChar);
+                    tc->m_offsetX = characterColumnCoordX[iChar] - characterColumnCoordX[iChar - 1];
+                }
+                else {
+                    CaretAssertVectorIndex(m_characters, iChar);
+                    tc->m_offsetX = characterColumnCoordX[iChar];
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Print information about this string using the given offset.
+ *
+ * @param offsetString
+ *     Offset prepended to each line that is printed.
+ */
+void
+FtglFontTextRenderer::TextString::print(const AString& offsetString)
+{
+    QString msg(offsetString
+                + "Text String Bounds: minx="
+                + QString::number(m_stringGlyphsMinX)
+                + " maxx=" + QString::number(m_stringGlyphsMaxX)
+                + " miny=" + QString::number(m_stringGlyphsMinY)
+                + " maxy=" + QString::number(m_stringGlyphsMaxY));
+    std::cout << qPrintable(msg) << std::endl;
+    
+    const QString doubleOffset(offsetString + offsetString);
+    
+    for (std::vector<TextCharacter*>::iterator iter = m_characters.begin();
+         iter != m_characters.end();
+         iter++) {
+        TextCharacter* tc = *iter;
+        tc->print(doubleOffset);
+    }
+}
+
+/**
+ * Set the bounds of the glyphs for the text string.
+ * The origin is at the first character.
+ */
+void
+FtglFontTextRenderer::TextString::setGlyphBounds()
+{
+    m_stringGlyphsMinX =  std::numeric_limits<float>::max();
+    m_stringGlyphsMaxX = -std::numeric_limits<float>::max();
+    m_stringGlyphsMinY =  std::numeric_limits<float>::max();
+    m_stringGlyphsMaxY = -std::numeric_limits<float>::max();
+    
+    double x = 0.0;
+    double y = 0.0;
+    
+    for (std::vector<TextCharacter*>::iterator iter = m_characters.begin();
+         iter != m_characters.end();
+         iter++) {
+        TextCharacter* tc = *iter;
+        x += tc->m_offsetX;
+        y += tc->m_offsetY;
+        
+        const double left   = x + tc->m_glyphMinX;
+        const double right  = x + tc->m_glyphMaxX;
+        const double bottom = y + tc->m_glyphMinY - m_underlineThickness;
+        const double top    = y + tc->m_glyphMaxY;
+        
+        m_stringGlyphsMinX = std::min(m_stringGlyphsMinX,
+                                      left);
+        m_stringGlyphsMaxX = std::max(m_stringGlyphsMaxX,
+                                      right);
+        m_stringGlyphsMinY = std::min(m_stringGlyphsMinY,
+                                      bottom);
+        m_stringGlyphsMaxY = std::max(m_stringGlyphsMaxY,
+                                      top);
+    }
+}
+
+/**
+ * Get the bounds of the text string in viewport coordinates.
+ *
+ * @param viewportMinX
+ *     Viewport minimum X.
+ * @param viewportMaxX
+ *     Viewport maximum X.
+ * @param viewportMinY
+ *     Viewport minimum Y.
+ * @param viewportMaxY
+ *     Viewport minimum Y.
+ */
+void
+FtglFontTextRenderer::TextString::getTextBoundsInViewportCoordinates(double& viewportMinX,
+                                                                     double& viewportMaxX,
+                                                                     double& viewportMinY,
+                                                                     double& viewportMaxY) const
+{
+    viewportMinX = m_viewportX + m_stringGlyphsMinX;
+    viewportMaxX = m_viewportX + m_stringGlyphsMaxX;
+    viewportMinY = m_viewportY + m_stringGlyphsMinY;
+    viewportMaxY = m_viewportY + m_stringGlyphsMaxY;
+}
+
+
+/* ================================================================================== */
+
+/**
+ * Constructor for a text string group.
+ *
+ * @param annotationText
+ *    The text annotation.
+ * @param font
+ *    Font used for drawing the annotation.
+ * @param viewportX
+ *    X-coordinate in the viewport.
+ * @param viewportY
+ *    Y-coordinate in the viewport.
+ * @param viewportZ
+ *    Z-coordinate in the viewport.
+ * @param rotationAngle
+ *    Rotation angle for the text.
+ */
+FtglFontTextRenderer::TextStringGroup::TextStringGroup(const AnnotationText& annotationText,
+                                                       FTFont* font,
+                                                       const double viewportX,
+                                                       const double viewportY,
+                                                       const double viewportZ,
+                                                       const double rotationAngle)
+: m_annotationText(annotationText),
+m_font(font),
+m_viewportX(viewportX),
+m_viewportY(viewportY),
+m_viewportZ(viewportZ),
+m_rotationAngle(rotationAngle),
+m_underlineThickness(0.0),
+m_outlineThickness(0.0),
+m_viewportBoundsMinX(0.0),
+m_viewportBoundsMaxX(0.0),
+m_viewportBoundsMinY(0.0),
+m_viewportBoundsMaxY(0.0)
+{
+#ifdef HAVE_FREETYPE
+    CaretAssert(font);
+    
+    /*
+     * The underline for text is scaled with the size of the font
+     * Underline is drawn anytime thickness is greater than zero
+     */
+    if (annotationText.isUnderlineStyleEnabled()) {
+        if (annotationText.getOrientation() == AnnotationTextOrientationEnum::HORIZONTAL) {
+            m_underlineThickness = std::max((font->FaceSize() / 14.0),
+                                        1.0);
+        }
+    }
+    
+    /*
+     * The outline for text is scaled with the size of the font
+     * Outline is drawn anytime thickness is greater than zero
+     * and is drawn using the foreground color
+     */
+    if (annotationText.getLineColor() != CaretColorEnum::NONE) {
+        if (annotationText.getOrientation() == AnnotationTextOrientationEnum::HORIZONTAL) {
+            m_outlineThickness = m_annotationText.getLineWidth();
+        }
+    }
+    
+    /*
+     * Each row (horizontal text) or column (vertical text) is
+     * separated by a newline character
+     */
+    QStringList textList = m_annotationText.getText().split('\n',
+                                                            QString::KeepEmptyParts);
+    const int32_t textListSize = textList.size();
+    
+    for (int32_t i = 0; i < textListSize; i++) {
+        TextString* ts = new TextString(textList.at(i),
+                                        annotationText.getOrientation(),
+                                        m_underlineThickness,
+                                        m_outlineThickness,
+                                        font);
+        m_textStrings.push_back(ts);
+    }
+    
+    initializeTextPositions();
+    
+    updateTextBounds();
+    
+    applyAlignmentsToTextStrings();
+    
+    /*
+     * Alignment moves text so bounds need to be updated
+     */
+    updateTextBounds();
+#endif // HAVE_FREETYPE
+}
+
+/**
+ * Destructor.
+ */
+FtglFontTextRenderer::TextStringGroup::~TextStringGroup()
+{
+    for (std::vector<TextString*>::iterator iter = m_textStrings.begin();
+         iter != m_textStrings.end();
+         iter++) {
+        delete *iter;
+    }
+    m_textStrings.clear();
+}
+
+/**
+ * Get the bounds of the all text that is drawn.  The
+ * bounds is used for selection and the background color.
+ *
+ * @param margin
+ *     Margin added around sides
+ * @param bottomLeftOut
+ *     Coordinate of bottom left.
+ * @param bottomRightOut
+ *     Coordinate of bottom right.
+ * @param topRightOut
+ *     Coordinate of top right.
+ * @param topLeftOut
+ *     Coordinate of top left.
+ * @param rotationPointXYZOut
+ *     Output containing rotation point for bounds.
+ */
+void
+FtglFontTextRenderer::TextStringGroup::getViewportBounds(const double margin,
+                                                         double bottomLeftOut[3],
+                                                         double bottomRightOut[3],
+                                                         double topRightOut[3],
+                                                         double topLeftOut[3],
+                                                         double rotationPointXYZOut[3]) const
+{
+    bottomLeftOut[0]  = m_viewportBoundsMinX;
+    bottomLeftOut[1]  = m_viewportBoundsMinY;
+    bottomLeftOut[2]  = m_viewportZ;
+    bottomRightOut[0] = m_viewportBoundsMaxX;
+    bottomRightOut[1] = m_viewportBoundsMinY;
+    bottomRightOut[2] = m_viewportZ;
+    topRightOut[0]    = m_viewportBoundsMaxX;
+    topRightOut[1]    = m_viewportBoundsMaxY;
+    topRightOut[2]    = m_viewportZ;
+    topLeftOut[0]     = m_viewportBoundsMinX;
+    topLeftOut[1]     = m_viewportBoundsMaxY;
+    topLeftOut[2]     = m_viewportZ;
+    
+    double rotationX = m_viewportBoundsMinX;
+    double rotationY = m_viewportBoundsMinY;
+    double rotationZ = m_viewportZ;
+    
+    switch (m_annotationText.getVerticalAlignment()) {
+        case AnnotationTextAlignVerticalEnum::BOTTOM:
+            switch (m_annotationText.getHorizontalAlignment()) {
+                case AnnotationTextAlignHorizontalEnum::CENTER:
+                    rotationX = (bottomLeftOut[0] + bottomRightOut[0]) / 2.0;
+                    rotationY = (bottomLeftOut[1] + bottomRightOut[1]) / 2.0;
+                    rotationZ = (bottomLeftOut[2] + bottomRightOut[2]) / 2.0;
+                    break;
+                case AnnotationTextAlignHorizontalEnum::LEFT:
+                    rotationX = bottomLeftOut[0];
+                    rotationY = bottomLeftOut[1];
+                    rotationZ = bottomLeftOut[2];
+                    break;
+                case AnnotationTextAlignHorizontalEnum::RIGHT:
+                    rotationX = bottomRightOut[0];
+                    rotationY = bottomRightOut[1];
+                    rotationZ = bottomRightOut[2];
+                    break;
+            }
+            break;
+        case AnnotationTextAlignVerticalEnum::MIDDLE:
+            switch (m_annotationText.getHorizontalAlignment()) {
+                case AnnotationTextAlignHorizontalEnum::CENTER:
+                    rotationX = (bottomLeftOut[0] + bottomRightOut[0] + topLeftOut[0] + topRightOut[0]) / 4.0;
+                    rotationY = (bottomLeftOut[1] + bottomRightOut[1] + topLeftOut[1] + topRightOut[1]) / 4.0;
+                    rotationZ = (bottomLeftOut[2] + bottomRightOut[2] + topLeftOut[2] + topRightOut[2]) / 4.0;
+                    break;
+                case AnnotationTextAlignHorizontalEnum::LEFT:
+                    rotationX = (bottomLeftOut[0] + topLeftOut[0]) / 2.0;
+                    rotationY = (bottomLeftOut[1] + topLeftOut[1]) / 2.0;
+                    rotationZ = (bottomLeftOut[2] + topLeftOut[2]) / 2.0;
+                    break;
+                case AnnotationTextAlignHorizontalEnum::RIGHT:
+                    rotationX = (topRightOut[0] + bottomRightOut[0]) / 2.0;
+                    rotationY = (topRightOut[1] + bottomRightOut[1]) / 2.0;
+                    rotationZ = (topRightOut[2] + bottomRightOut[2]) / 2.0;
+                    break;
+            }
+            break;
+        case AnnotationTextAlignVerticalEnum::TOP:
+            switch (m_annotationText.getHorizontalAlignment()) {
+                case AnnotationTextAlignHorizontalEnum::CENTER:
+                    rotationX = (topLeftOut[0] + topRightOut[0]) / 2.0;
+                    rotationY = (topLeftOut[1] + topRightOut[1]) / 2.0;
+                    rotationZ = (topLeftOut[2] + topRightOut[2]) / 2.0;
+                    break;
+                case AnnotationTextAlignHorizontalEnum::LEFT:
+                    rotationX = topLeftOut[0];
+                    rotationY = topLeftOut[1];
+                    rotationZ = topLeftOut[2];
+                    break;
+                case AnnotationTextAlignHorizontalEnum::RIGHT:
+                    rotationX = topRightOut[0];
+                    rotationY = topRightOut[1];
+                    rotationZ = topRightOut[2];
+                    break;
+            }
+            break;
+    }
+    
+    rotationPointXYZOut[0] = rotationX;
+    rotationPointXYZOut[1] = rotationY;
+    rotationPointXYZOut[2] = rotationZ;
+    
+    Matrix4x4 matrix;
+    matrix.translate(-rotationX, -rotationY, 0.0);
+    matrix.rotateZ(-m_rotationAngle);
+    matrix.translate(rotationX, rotationY, 0.0);
+    
+    /*
+     * Add margin to the viewport bounds.
+     * Margin is NOT included when rotation point is computed
+     * as it will move the rotation point to the wrong position.
+     */
+    bottomLeftOut[0]  -= margin;
+    bottomLeftOut[1]  -= margin;
+    bottomRightOut[0] += margin;
+    bottomRightOut[1] -= margin;
+    topRightOut[0]    += margin;
+    topRightOut[1]    += margin;
+    topLeftOut[0]     -= margin;
+    topLeftOut[1]     += margin;
+    
+    matrix.multiplyPoint3(bottomLeftOut);
+    matrix.multiplyPoint3(bottomRightOut);
+    matrix.multiplyPoint3(topRightOut);
+    matrix.multiplyPoint3(topLeftOut);
+}
+
+/**
+ * Begin to postion the text strings.
+ */
+void
+FtglFontTextRenderer::TextStringGroup::initializeTextPositions()
+{
+    double x = m_viewportX;
+    double y = m_viewportY;
+    double z = m_viewportZ;
+    
+    const int32_t numStrings = static_cast<int32_t>(m_textStrings.size());
+    for (int32_t iStr = 0; iStr < numStrings; iStr++) {
+        
+        CaretAssertVectorIndex(m_textStrings, iStr);
+        TextString* textString = m_textStrings[iStr];
+        
+        if (iStr >= 1) {
+            CaretAssertVectorIndex(m_textStrings, iStr - 1);
+            TextString* prevTextString = m_textStrings[iStr - 1];
+            
+            switch (m_annotationText.getOrientation()) {
+                case AnnotationTextOrientationEnum::HORIZONTAL:
+                {
+                    /*
+                     * Move coordinate DOWN for next ROW of text
+                     */
+                    const double offsetY1 = prevTextString->m_stringGlyphsMinY;
+                    const double offsetY2 = -(s_textMarginSize * 2.0);
+                    const double offsetY3 = -textString->m_stringGlyphsMaxY;
+                    const double offsetY4 = 0.0; //-m_underlineThickness;
+                    const double offsetY  = (offsetY1 + offsetY2 + offsetY3 + offsetY4);
+                    
+                    y += offsetY;
+                }
+                    break;
+                case AnnotationTextOrientationEnum::STACKED:
+                {
+                    /*
+                     * Move coordinate RIGHT for next COLUMN of text
+                     */
+                    const double offsetX1 = prevTextString->m_stringGlyphsMaxX;
+                    const double offsetX2 = s_textMarginSize;
+                    const double offsetX3 = -textString->m_stringGlyphsMinX;
+                    const double offsetX  = (offsetX1 + offsetX2 + offsetX3);
+                    
+                    x += offsetX;
+                }
+                    break;
+            }
+        }
+        
+        
+        textString->m_viewportX = x;
+        textString->m_viewportY = y;
+        textString->m_viewportZ = z;
+    }
+}
+
+/**
+ * Print info about the text.
+ */
+void
+FtglFontTextRenderer::TextStringGroup::print()
+{
+    QString msg("Text String Group: "
+                + m_annotationText.getText());
+    std::cout << qPrintable(msg) << std::endl;
+    
+    for (std::vector<TextString*>::iterator iter = m_textStrings.begin();
+         iter != m_textStrings.end();
+         iter++) {
+        TextString* ts = *iter;
+        ts->print("    ");
+    }
+    std::cout << std::endl;
+}
+
+/**
+ * Update the bounds (extent) of the text.
+ */
+void
+FtglFontTextRenderer::TextStringGroup::updateTextBounds()
+{
+    m_viewportBoundsMinX =  std::numeric_limits<float>::max();
+    m_viewportBoundsMaxX = -std::numeric_limits<float>::max();
+    m_viewportBoundsMinY =  std::numeric_limits<float>::max();
+    m_viewportBoundsMaxY = -std::numeric_limits<float>::max();
+    
+    double x = 0.0;
+    double y = 0.0;
+    
+    for (std::vector<TextString*>::iterator iter = m_textStrings.begin();
+         iter != m_textStrings.end();
+         iter++) {
+        TextString* ts = *iter;
+        
+        double stringMinX = 0.0;
+        double stringMaxX = 0.0;
+        double stringMinY = 0.0;
+        double stringMaxY = 0.0;
+        ts->getTextBoundsInViewportCoordinates(stringMinX,
+                                               stringMaxX,
+                                               stringMinY,
+                                               stringMaxY);
+        
+        const double left   = x + stringMinX;
+        const double right  = x + stringMaxX;
+        const double bottom = y + stringMinY;
+        const double top    = y + stringMaxY;
+        
+        m_viewportBoundsMinX = std::min(m_viewportBoundsMinX,
+                                        left);
+        m_viewportBoundsMaxX = std::max(m_viewportBoundsMaxX,
+                                        right);
+        m_viewportBoundsMinY = std::min(m_viewportBoundsMinY,
+                                        bottom);
+        m_viewportBoundsMaxY = std::max(m_viewportBoundsMaxY,
+                                        top);
+    }
+}
+
+/**
+ * Adjust the positions of the horizontal text strings so
+ * they are aligned properly for both horizontal and
+ * vertical alignment.
+ */
+void
+FtglFontTextRenderer::TextStringGroup::applyAlignmentsToHorizontalTextStrings()
+{
+    double dy = 0.0;
+    switch (m_annotationText.getVerticalAlignment()) {
+        case AnnotationTextAlignVerticalEnum::BOTTOM:
+            dy = m_viewportY - m_viewportBoundsMinY;
+            break;
+        case AnnotationTextAlignVerticalEnum::MIDDLE:
+            dy = m_viewportY - (m_viewportBoundsMinY + m_viewportBoundsMaxY) / 2.0;
+            break;
+        case AnnotationTextAlignVerticalEnum::TOP:
+            dy = m_viewportY - m_viewportBoundsMaxY;
+            break;
+    }
+    
+    for (std::vector<TextString*>::iterator iter = m_textStrings.begin();
+         iter != m_textStrings.end();
+         iter++) {
+        TextString* ts = *iter;
+        
+        double dx = 0.0;
+        switch (m_annotationText.getHorizontalAlignment()) {
+            case AnnotationTextAlignHorizontalEnum::CENTER:
+            {
+                const double centerX = (ts->m_stringGlyphsMinX + ts->m_stringGlyphsMaxX) / 2.0;
+                dx = -centerX;
+            }
+                break;
+            case AnnotationTextAlignHorizontalEnum::LEFT:
+                dx = -ts->m_stringGlyphsMinX;
+                break;
+            case AnnotationTextAlignHorizontalEnum::RIGHT:
+                dx = -ts->m_stringGlyphsMaxX;
+                break;
+        }
+        
+        ts->m_viewportX += dx;
+        ts->m_viewportY += dy;
+    }
+}
+
+/**
+ * Adjust the positions of the stacked text strings so
+ * they are aligned properly for both horizontal and
+ * vertical alignment.
+ */
+void
+FtglFontTextRenderer::TextStringGroup::applyAlignmentsToStackedTextStrings()
+{
+    double dx = 0.0;
+    switch (m_annotationText.getHorizontalAlignment()) {
+        case AnnotationTextAlignHorizontalEnum::CENTER:
+        {
+            const double centerX = (m_viewportBoundsMinX + m_viewportBoundsMaxX) / 2.0;
+            dx = m_viewportX - centerX;
+        }
+            break;
+        case AnnotationTextAlignHorizontalEnum::LEFT:
+            dx = m_viewportX - m_viewportBoundsMinX;
+            break;
+        case AnnotationTextAlignHorizontalEnum::RIGHT:
+            dx = m_viewportX - m_viewportBoundsMaxX;
+            break;
+    }
+    
+    for (std::vector<TextString*>::iterator iter = m_textStrings.begin();
+         iter != m_textStrings.end();
+         iter++) {
+        TextString* ts = *iter;
+        
+        double dy = 0.0;
+        switch (m_annotationText.getVerticalAlignment()) {
+            case AnnotationTextAlignVerticalEnum::BOTTOM:
+                dy = -ts->m_stringGlyphsMinY;
+                break;
+            case AnnotationTextAlignVerticalEnum::MIDDLE:
+                dy = - (ts->m_stringGlyphsMinY + ts->m_stringGlyphsMaxY) / 2.0;
+                break;
+            case AnnotationTextAlignVerticalEnum::TOP:
+                dy = -ts->m_stringGlyphsMaxY;
+                break;
+        }
+        
+        ts->m_viewportX += dx;
+        ts->m_viewportY += dy;
+    }
+}
+
+/**
+ * Adjust the positions of the text strings so
+ * they are aligned properly.
+ */
+void
+FtglFontTextRenderer::TextStringGroup::applyAlignmentsToTextStrings()
+{
+    switch (m_annotationText.getOrientation()) {
+        case AnnotationTextOrientationEnum::HORIZONTAL:
+            applyAlignmentsToHorizontalTextStrings();
+            break;
+        case AnnotationTextOrientationEnum::STACKED:
+            applyAlignmentsToStackedTextStrings();
+            break;
+    }
+}

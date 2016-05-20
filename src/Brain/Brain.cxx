@@ -25,6 +25,8 @@
 
 #include "CaretAssert.h"
 
+#include "AnnotationFile.h"
+#include "AnnotationManager.h"
 #include "Border.h"
 #include "BorderFile.h"
 #include "BorderPointFromSearch.h"
@@ -50,6 +52,7 @@
 #include "CiftiParcelSeriesFile.h"
 #include "CiftiParcelScalarFile.h"
 #include "CiftiScalarDataSeriesFile.h"
+#include "DisplayPropertiesAnnotation.h"
 #include "DisplayPropertiesBorders.h"
 #include "DisplayPropertiesFiberOrientation.h"
 #include "DisplayPropertiesFoci.h"
@@ -76,6 +79,7 @@
 #include "FiberOrientationSamplesLoader.h"
 #include "FileInformation.h"
 #include "FociFile.h"
+#include "GapsAndMargins.h"
 #include "GroupAndNameHierarchyModel.h"
 #include "IdentificationManager.h"
 #include "ImageFile.h"
@@ -116,6 +120,8 @@ using namespace caret;
  */
 Brain::Brain()
 {
+    m_annotationManager = new AnnotationManager(this);
+    
     m_chartingDataManager = new ChartingDataManager(this);
     m_fiberOrientationSamplesLoader = new FiberOrientationSamplesLoader();
     
@@ -127,10 +133,17 @@ Brain::Brain()
     m_specFile->setFileName("");
     m_specFile->clearModified();
     
+    m_sceneAnnotationFile = new AnnotationFile(AnnotationFile::ANNOTATION_FILE_SAVE_TO_SCENE);
+    m_sceneAnnotationFile->setFileName("Scene Annotations");
+    m_sceneAnnotationFile->clearModified();
+    
     m_modelChart = NULL;
     m_surfaceMontageModel = NULL;
     m_volumeSliceModel = NULL;
     m_wholeBrainModel = NULL;
+    
+    m_displayPropertiesAnnotation = new DisplayPropertiesAnnotation(this);
+    m_displayProperties.push_back(m_displayPropertiesAnnotation);
     
     m_displayPropertiesBorders = new DisplayPropertiesBorders();
     m_displayProperties.push_back(m_displayPropertiesBorders);
@@ -172,7 +185,17 @@ Brain::Brain()
     
     m_isSpecFileBeingRead = false;
     
+    m_gapsAndMargins = new GapsAndMargins();
+    
     m_sceneAssistant = new SceneClassAssistant();
+    
+    m_sceneAssistant->add("m_sceneAnnotationFile",
+                          "SceneAnnotationFile",
+                          m_sceneAnnotationFile);
+    
+    m_sceneAssistant->add("displayPropertiesAnnotation",
+                          "DisplayPropertiesAnnotation",
+                          m_displayPropertiesAnnotation);
     
     m_sceneAssistant->add("displayPropertiesBorders", 
                           "DisplayPropertiesBorders", 
@@ -201,6 +224,9 @@ Brain::Brain()
     m_sceneAssistant->add("displayPropertiesVolume",
                           "DisplayPropertiesVolume", 
                           m_displayPropertiesVolume);
+    m_sceneAssistant->add("m_gapsAndMargins",
+                          "GapsAndMargins",
+                          m_gapsAndMargins);
     
     m_selectionManager = new SelectionManager();
 
@@ -229,7 +255,9 @@ Brain::~Brain()
     
     resetBrain();
 
+    delete m_sceneAnnotationFile;
     delete m_specFile;
+    delete m_annotationManager;
     delete m_chartingDataManager;
     delete m_fiberOrientationSamplesLoader;
     delete m_paletteFile;
@@ -249,6 +277,7 @@ Brain::~Brain()
     delete m_selectionManager;
     delete m_identificationManager;
     delete m_brainordinateHighlightRegionOfInterest;
+    delete m_gapsAndMargins;
 }
 
 /**
@@ -434,6 +463,18 @@ Brain::resetBrain(const ResetBrainKeepSceneFiles keepSceneFiles,
     
     m_brainStructures.clear();
     
+    for (std::vector<AnnotationFile*>::iterator afi = m_annotationFiles.begin();
+         afi != m_annotationFiles.end();
+         afi++) {
+        AnnotationFile* af = *afi;
+        delete af;
+    }
+    m_annotationFiles.clear();
+    
+    m_sceneAnnotationFile->clear();
+    //m_sceneAnnotationFile->setFileName("Scene Annotations");
+    m_sceneAnnotationFile->clearModified();
+    
     for (std::vector<BorderFile*>::iterator bfi = m_borderFiles.begin();
          bfi != m_borderFiles.end();
          bfi++) {
@@ -607,11 +648,15 @@ Brain::resetBrain(const ResetBrainKeepSceneFiles keepSceneFiles,
     m_selectionManager->reset();
     m_selectionManager->setLastSelectedItem(NULL);
     
+    m_annotationManager->reset();
+    
     m_brainordinateHighlightRegionOfInterest->clear();
     
     if (m_modelChart != NULL) {
         m_modelChart->reset();
     }
+    
+    m_gapsAndMargins->reset();
     
     updateAfterFilesAddedOrRemoved();
     
@@ -656,6 +701,8 @@ Brain::resetBrainKeepSceneFiles()
         
         bool keepFileFlag = true;
         switch (dataFileType) {
+            case DataFileTypeEnum::ANNOTATION:
+                break;
             case DataFileTypeEnum::BORDER:
                 break;
             case DataFileTypeEnum::CONNECTIVITY_DENSE:
@@ -1458,6 +1505,86 @@ Brain::getVolumeFile(const int32_t volumeFileIndex) const
 {
     CaretAssertVectorIndex(m_volumeFiles, volumeFileIndex);
     return m_volumeFiles[volumeFileIndex];
+}
+
+/**
+ * Add, read, or reload an annotation file.
+ *
+ * @param fileMode
+ *    Mode for file adding, reading, or reloading.
+ * @param caretDataFile
+ *    File that is added or reloaded (MUST NOT BE NULL).  If NULL,
+ *    the mode must be READING.
+ * @param filename
+ *    Name of the file.
+ * @return
+ *    File that was read.
+ * @throws DataFileException
+ *    If reading failed.
+ */
+AnnotationFile*
+Brain::addReadOrReloadAnnotationFile(const FileModeAddReadReload fileMode,
+                                 CaretDataFile* caretDataFile,
+                                 const AString& filename)
+{
+    AnnotationFile* af = NULL;
+    if (caretDataFile != NULL) {
+        af = dynamic_cast<AnnotationFile*>(caretDataFile);
+        CaretAssert(af);
+    }
+    else {
+        af = new AnnotationFile();
+    }
+    
+    bool addFlag  = false;
+    bool readFlag = false;
+    switch (fileMode) {
+        case FILE_MODE_ADD:
+            addFlag = true;
+            break;
+        case FILE_MODE_READ:
+            addFlag = true;
+            readFlag = true;
+            break;
+        case FILE_MODE_RELOAD:
+            readFlag = true;
+            break;
+    }
+    
+    if (readFlag) {
+        try {
+            try {
+                af->readFile(filename);
+            }
+            catch (const std::bad_alloc&) {
+                /*
+                 * This DataFileException will be caught
+                 * in the outer try/catch and it will
+                 * clean up to avoid memory leaks.
+                 */
+                throw DataFileException(filename,
+                                        CaretDataFileHelper::createBadAllocExceptionMessage(filename));
+            }
+        }
+        catch (DataFileException& dfe) {
+            if (caretDataFile != NULL) {
+                removeAndDeleteDataFile(caretDataFile);
+            }
+            else {
+                delete af;
+            }
+            throw dfe;
+        }
+    }
+    
+    if (addFlag) {
+        updateDataFileNameIfDuplicate(m_annotationFiles,
+                                      af);
+        m_annotationFiles.push_back(af);
+    }
+    
+    
+    return af;
 }
 
 /**
@@ -3065,6 +3192,10 @@ Brain::addReadOrReloadSceneFile(const FileModeAddReadReload fileMode,
         m_sceneFiles.push_back(sf);
     }
     
+    
+//    CaretPreferences* prefs = SessionManager::get()->getCaretPreferences();
+//    prefs->addToPreviousSceneFiles(sf->getFileName());
+    
     return sf;
 }
 
@@ -3921,6 +4052,13 @@ Brain::addDataFile(CaretDataFile* caretDataFile)
     
     const DataFileTypeEnum::Enum dataFileType = caretDataFile->getDataFileType();
             switch (dataFileType) {
+                case DataFileTypeEnum::ANNOTATION:
+                {
+                    AnnotationFile* file = dynamic_cast<AnnotationFile*>(caretDataFile);
+                    CaretAssert(file);
+                    m_annotationFiles.push_back(file);
+                }
+                    break;
                 case DataFileTypeEnum::BORDER:
                 {
                     BorderFile* file = dynamic_cast<BorderFile*>(caretDataFile);
@@ -4135,11 +4273,55 @@ Brain::addDataFile(CaretDataFile* caretDataFile)
             m_specFile->addCaretDataFile(caretDataFile);
 }
 
+/**
+ * Get all annotation files INCLUDING the scene's annotation file.
+ *
+ * @param allAnnotationFilesOut
+ *    Will contain files on exit.
+ */
+void
+Brain::getAllAnnotationFilesIncludingSceneAnnotationFile(std::vector<AnnotationFile*>& annotationFilesOut) const
+{
+    annotationFilesOut = m_annotationFiles;
+    annotationFilesOut.push_back(m_sceneAnnotationFile);
+}
+
+/**
+ * Get all annotation files EXCLUDING the scene's annotation file
+ *
+ * @param allAnnotationFilesOut
+ *    Will contain files on exit.
+ */
+void
+Brain::getAllAnnotationFilesExcludingSceneAnnotationFile(std::vector<AnnotationFile*>& annotationFilesOut) const
+{
+    annotationFilesOut = m_annotationFiles;
+}
+
+/**
+ * @return The annotation file associated with the current scene.
+ */
+AnnotationFile*
+Brain::getSceneAnnotationFile()
+{
+    CaretAssert(m_sceneAnnotationFile);
+    return m_sceneAnnotationFile;
+}
+
+/**
+ * @return The annotation file associated with the current scene.
+ */
+const AnnotationFile*
+Brain::getSceneAnnotationFile() const
+{
+    CaretAssert(m_sceneAnnotationFile);
+    return m_sceneAnnotationFile;
+}
 
 /**
  * @return Number of border files.
  */
-int32_t 
+int32_t
 Brain::getNumberOfBorderFiles() const
 {
     return m_borderFiles.size();
@@ -4613,6 +4795,7 @@ Brain::processReloadDataFileEvent(EventDataFileReload* reloadDataFileEvent)
     updateAfterFilesAddedOrRemoved();
 }
 
+#include "CaretHttpManager.h"
 
 /**
  * Process a read data file event.
@@ -4622,8 +4805,10 @@ Brain::processReloadDataFileEvent(EventDataFileReload* reloadDataFileEvent)
 void 
 Brain::processReadDataFileEvent(EventDataFileRead* readDataFileEvent)
 {
-    CaretDataFile::setFileReadingUsernameAndPassword(readDataFileEvent->getUsername(),
-                                                     readDataFileEvent->getPassword());
+    const QString username = readDataFileEvent->getUsername();
+    const QString password = readDataFileEvent->getPassword();
+    CaretDataFile::setFileReadingUsernameAndPassword(username,
+                                                     password);
     
     const int32_t numberOfFilesToRead = readDataFileEvent->getNumberOfDataFilesToRead();
     EventProgressUpdate progressEvent(0,
@@ -4649,6 +4834,13 @@ Brain::processReadDataFileEvent(EventDataFileRead* readDataFileEvent)
         }
         
         try {
+            if (DataFile::isFileOnNetwork(filename)
+                && ( ! username.isEmpty())
+                && ( ! password.isEmpty())) {
+                CaretHttpManager::setAuthentication(filename,
+                                                    username,
+                                                    password);
+            }
             CaretDataFile* fileRead = readDataFile(dataFileType,
                          structure,
                          filename,
@@ -4727,6 +4919,11 @@ Brain::addReadOrReloadDataFile(const FileModeAddReadReload fileMode,
         et.start();
         
         switch (dataFileType) {
+            case DataFileTypeEnum::ANNOTATION:
+                caretDataFileRead = addReadOrReloadAnnotationFile(fileMode,
+                                                                  caretDataFile,
+                                                                  dataFileName);
+                break;
             case DataFileTypeEnum::BORDER:
                 caretDataFileRead  = addReadOrReloadBorderFile(fileMode,
                                                    caretDataFile,
@@ -4994,6 +5191,9 @@ Brain::loadFilesSelectedInSpecFile(EventSpecFileReadDataFiles* readSpecFileDataF
 
     resetBrain();
     
+    CaretPreferences* prefs = SessionManager::get()->getCaretPreferences();
+    prefs->setBackgroundAndForegroundColorsMode(BackgroundAndForegroundColorsModeEnum::USER_PREFERENCES);
+    
     try  {
         m_specFile->clear();
         *m_specFile = *sf;
@@ -5098,6 +5298,20 @@ Brain::loadFilesSelectedInSpecFile(EventSpecFileReadDataFiles* readSpecFileDataF
     }
     m_paletteFile->setFileName(convertFilePathNameToAbsolutePathName(m_paletteFile->getFileNameNoPath()));
     m_paletteFile->clearModified();
+    
+
+    
+    
+//    CaretLogSevere("Adding an annotation file for testing to the Brain."
+//                   "NOTE: THIS WILL CAUSE A PRINTOUT OF UNDELETED OBJECTS since this file is "
+//                   "added inside of resetBrain() which does all file deletion.");
+//    AnnotationFile* testingAnnFile = new AnnotationFile();
+//    testingAnnFile->setFileName("Testing." + DataFileTypeEnum::toFileExtension(DataFileTypeEnum::ANNOTATION));
+//    addDataFile(testingAnnFile);
+    
+    
+    
+    
     
     /*
      * Reset the primary anatomical surfaces since they can get set
@@ -5589,6 +5803,17 @@ Brain::receiveEvent(Event* event)
              iter++) {
             displayedFilesEvent->addDisplayedDataFile(*iter);
         }
+
+        /*
+         * Annotation files
+         */
+        std::vector<AnnotationFile*> annotationFiles;
+        m_annotationManager->getDisplayedAnnotationFiles(displayedFilesEvent,
+                                                         annotationFiles);
+        if ( ! annotationFiles.empty()) {
+            dataFilesDisplayedInTabs.insert(annotationFiles.begin(),
+                                            annotationFiles.end());
+        }
     }
     else if (event->getEventType() == EventTypeEnum::EVENT_PALETTE_GET_BY_NAME) {
         EventPaletteGetByName* paletteGetByName = dynamic_cast<EventPaletteGetByName*>(event);
@@ -5622,6 +5847,23 @@ Brain::getChartModel() const
     return m_modelChart;
 }
 
+/**
+ * @return The annotation manager.
+ */
+AnnotationManager*
+Brain::getAnnotationManager()
+{
+    return m_annotationManager;
+}
+
+/**
+ * @return The annotation manager.
+ */
+const AnnotationManager*
+Brain::getAnnotationManager() const
+{
+    return m_annotationManager;
+}
 
 /**
  * @return The charting data manager.
@@ -5834,6 +6076,10 @@ Brain::getAllDataFiles(std::vector<CaretDataFile*>& allDataFilesOut,
     for (int32_t i = 0; i < numBrainStructures; i++) {
         getBrainStructure(i)->getAllDataFiles(allDataFilesOut);
     }
+    
+    allDataFilesOut.insert(allDataFilesOut.end(),
+                           m_annotationFiles.begin(),
+                           m_annotationFiles.end());
     
     allDataFilesOut.insert(allDataFilesOut.end(),
                            m_borderFiles.begin(),
@@ -6052,8 +6298,78 @@ Brain::writeDataFile(CaretDataFile* caretDataFile)
     dataFileName = convertFilePathNameToAbsolutePathName(dataFileName);
     caretDataFile->setFileName(dataFileName);
 
+    /*
+     * Write the data file
+     */
     caretDataFile->writeFile(caretDataFile->getFileName());
     caretDataFile->clearModified();
+    
+    /*
+     * File has been successfully written.
+     * Perform any post-write actions.
+     */
+    const DataFileTypeEnum::Enum dataFileType = caretDataFile->getDataFileType();
+    switch (dataFileType) {
+        case DataFileTypeEnum::ANNOTATION:
+            break;
+        case DataFileTypeEnum::BORDER:
+            break;
+        case DataFileTypeEnum::CONNECTIVITY_DENSE:
+            break;
+        case DataFileTypeEnum::CONNECTIVITY_DENSE_LABEL:
+            break;
+        case DataFileTypeEnum::CONNECTIVITY_DENSE_PARCEL:
+            break;
+        case DataFileTypeEnum::CONNECTIVITY_DENSE_SCALAR:
+            break;
+        case DataFileTypeEnum::CONNECTIVITY_DENSE_TIME_SERIES:
+            break;
+        case DataFileTypeEnum::CONNECTIVITY_FIBER_ORIENTATIONS_TEMPORARY:
+            break;
+        case DataFileTypeEnum::CONNECTIVITY_FIBER_TRAJECTORY_TEMPORARY:
+            break;
+        case DataFileTypeEnum::CONNECTIVITY_PARCEL:
+            break;
+        case DataFileTypeEnum::CONNECTIVITY_PARCEL_DENSE:
+            break;
+        case DataFileTypeEnum::CONNECTIVITY_PARCEL_LABEL:
+            break;
+        case DataFileTypeEnum::CONNECTIVITY_PARCEL_SCALAR:
+            break;
+        case DataFileTypeEnum::CONNECTIVITY_PARCEL_SERIES:
+            break;
+        case DataFileTypeEnum::CONNECTIVITY_SCALAR_DATA_SERIES:
+            break;
+        case DataFileTypeEnum::FOCI:
+            break;
+        case DataFileTypeEnum::IMAGE:
+            break;
+        case DataFileTypeEnum::LABEL:
+            break;
+        case DataFileTypeEnum::METRIC:
+            break;
+        case DataFileTypeEnum::PALETTE:
+            break;
+        case DataFileTypeEnum::RGBA:
+            break;
+        case DataFileTypeEnum::SCENE:
+        {
+            /*
+             * Add to recent scene files
+             */
+            CaretPreferences* prefs = SessionManager::get()->getCaretPreferences();
+            prefs->addToPreviousSceneFiles(caretDataFile->getFileName());
+        }
+            break;
+        case DataFileTypeEnum::SPECIFICATION:
+            break;
+        case DataFileTypeEnum::SURFACE:
+            break;
+        case DataFileTypeEnum::UNKNOWN:
+            break;
+        case DataFileTypeEnum::VOLUME:
+            break;
+    }
 }
 
 /**
@@ -6108,6 +6424,14 @@ Brain::removeWithoutDeleteDataFilePrivate(const CaretDataFile* caretDataFile)
         if (getBrainStructure(i)->removeWithoutDeleteDataFile(caretDataFile)) {
             return true;
         }
+    }
+    
+    std::vector<AnnotationFile*>::iterator annotationIterator = std::find(m_annotationFiles.begin(),
+                                                                          m_annotationFiles.end(),
+                                                                          caretDataFile);
+    if (annotationIterator != m_annotationFiles.end()) {
+        m_annotationFiles.erase(annotationIterator);
+        return true;
     }
     
     std::vector<BorderFile*>::iterator borderIterator = std::find(m_borderFiles.begin(),
@@ -6285,6 +6609,24 @@ Brain::removeAndDeleteDataFile(CaretDataFile* caretDataFile)
     }
     
     return false;
+}
+
+/**
+ * @return The annotation display properties.
+ */
+DisplayPropertiesAnnotation*
+Brain::getDisplayPropertiesAnnotation()
+{
+    return m_displayPropertiesAnnotation;
+}
+
+/**
+ * @return The annotation display properties.
+ */
+const DisplayPropertiesAnnotation*
+Brain::getDisplayPropertiesAnnotation() const
+{
+    return m_displayPropertiesAnnotation;
 }
 
 /**
@@ -6488,6 +6830,11 @@ Brain::saveToScene(const SceneAttributes* sceneAttributes,
                                   sceneClass);
     
 
+    /*
+     * Clear modification status of scene annotations
+     */
+    m_sceneAnnotationFile->clearModified();
+    
     /*
      * Save all models
      */
@@ -6764,7 +7111,28 @@ Brain::restoreFromScene(const SceneAttributes* sceneAttributes,
     
     m_brainordinateHighlightRegionOfInterest->restoreFromScene(sceneAttributes,
                                                                sceneClass->getClass("m_brainordinateHighlightRegionOfInterest"));
+    
+    m_sceneAnnotationFile->clearModified();
 }
+
+/**
+ * @return The gaps and margins.
+ */
+GapsAndMargins*
+Brain::getGapsAndMargins()
+{
+    return m_gapsAndMargins;
+}
+
+/**
+ * @return the gaps and margins.
+ */
+const GapsAndMargins*
+Brain::getGapsAndMargins() const
+{
+    return m_gapsAndMargins;
+}
+
 
 /**
  * @return The selection manager.

@@ -26,7 +26,6 @@
 #include <QGridLayout>
 #include <QLabel>
 #include <QLayout>
-//#include <QTabWidget>
 #include <QToolButton>
 
 #define __BORDER_SELECTION_VIEW_CONTROLLER_DECLARE__
@@ -38,6 +37,7 @@
 #include "BrainOpenGL.h"
 #include "BrowserTabContent.h"
 #include "CaretAssert.h"
+#include "CaretColorEnumComboBox.h"
 #include "GroupAndNameHierarchyViewController.h"
 #include "DisplayGroupEnumComboBox.h"
 #include "DisplayPropertiesBorders.h"
@@ -99,10 +99,10 @@ BorderSelectionViewController::BorderSelectionViewController(const int32_t brows
     m_tabWidget->setCurrentWidget(attributesWidget);
     
     QVBoxLayout* layout = new QVBoxLayout(this);
-    WuQtUtilities::setLayoutSpacingAndMargins(layout, 2, 2);
-    layout->addLayout(groupLayout);
-    layout->addSpacing(10);
+    //WuQtUtilities::setLayoutSpacingAndMargins(layout, 2, 2);
     layout->addWidget(m_bordersDisplayCheckBox);
+    layout->addWidget(WuQtUtilities::createHorizontalLineWidget());
+    layout->addLayout(groupLayout);
     layout->addWidget(m_tabWidget->getWidget(), 0, Qt::AlignLeft);
     layout->addStretch();
     
@@ -163,6 +163,12 @@ BorderSelectionViewController::createAttributesWidget()
     QObject::connect(m_coloringTypeComboBox, SIGNAL(itemActivated()),
                      this, SLOT(processAttributesChanges()));
     
+    QLabel* standardColorLabel = new QLabel("Standard Color");
+    m_standardColorComboBox = new CaretColorEnumComboBox(this);
+    m_standardColorComboBox->getWidget()->setToolTip("Select the standard color");
+    QObject::connect(m_standardColorComboBox, SIGNAL(colorSelected(const CaretColorEnum::Enum)),
+                     this, SLOT(processAttributesChanges()));
+
     float minLineWidth = 0;
     float maxLineWidth = 1000;
     //BrainOpenGL::getMinMaxLineWidth(minLineWidth,
@@ -227,6 +233,9 @@ BorderSelectionViewController::createAttributesWidget()
     gridLayout->addWidget(coloringLabel, row, 0);
     gridLayout->addWidget(m_coloringTypeComboBox->getWidget(), row, 1);
     row++;
+    gridLayout->addWidget(standardColorLabel, row, 0);
+    gridLayout->addWidget(m_standardColorComboBox->getWidget(), row, 1);
+    row++;
     gridLayout->addWidget(lineWidthLabel, row, 0);
     gridLayout->addWidget(m_lineWidthSpinBox, row, 1);
     row++;
@@ -260,8 +269,9 @@ BorderSelectionViewController::processAttributesChanges()
     const int drawTypeInteger = m_drawTypeComboBox->itemData(selectedDrawTypeIndex).toInt();
     const BorderDrawingTypeEnum::Enum selectedDrawingType = static_cast<BorderDrawingTypeEnum::Enum>(drawTypeInteger);
     const FeatureColoringTypeEnum::Enum selectedColoringType = m_coloringTypeComboBox->getSelectedItem<FeatureColoringTypeEnum, FeatureColoringTypeEnum::Enum>();
-
-    BrowserTabContent* browserTabContent = 
+    const CaretColorEnum::Enum standardColorType = m_standardColorComboBox->getSelectedColor();
+    
+    BrowserTabContent* browserTabContent =
     GuiManager::get()->getBrowserTabContentForBrowserWindow(m_browserWindowIndex, true);
     if (browserTabContent == NULL) {
         return;
@@ -281,6 +291,9 @@ BorderSelectionViewController::processAttributesChanges()
     dpb->setColoringType(displayGroup,
                          browserTabIndex,
                          selectedColoringType);
+    dpb->setStandardColorType(displayGroup,
+                           browserTabIndex,
+                           standardColorType);
     dpb->setLineWidth(displayGroup,
                       browserTabIndex,
                       m_lineWidthSpinBox->value());
@@ -390,6 +403,8 @@ BorderSelectionViewController::updateBorderViewController()
     
     m_coloringTypeComboBox->setSelectedItem<FeatureColoringTypeEnum, FeatureColoringTypeEnum::Enum>(dpb->getColoringType(displayGroup,
                                                                                                                          browserTabIndex));
+    m_standardColorComboBox->setSelectedColor(dpb->getStandardColorType(displayGroup,
+                                                                        browserTabIndex));
     m_lineWidthSpinBox->blockSignals(true);
     m_lineWidthSpinBox->setValue(dpb->getLineWidth(displayGroup,
                                                    browserTabIndex));

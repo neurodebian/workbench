@@ -31,6 +31,7 @@
 #include "DataFileException.h"
 #include "FileInformation.h"
 #include "GiftiMetaData.h"
+#include "ImageCaptureSettings.h"
 #include "ImageFile.h"
 
 using namespace caret;
@@ -1011,6 +1012,21 @@ ImageFile::resizeToWidth(const int32_t width)
 }
 
 /**
+ * Resize the image to the given height while preserving the aspect ratio
+ * of the image.
+ *
+ * @param height
+ *     Height for image.
+ */
+void
+ImageFile::resizeToHeight(const int32_t height)
+{
+    CaretAssert(m_image);
+    *m_image = m_image->scaledToHeight(height,
+                                       Qt::SmoothTransformation);
+}
+
+/**
  * Resize the image so that its width is no larger than the given value.
  * If the image's current width is less than the given value, no
  * resizing takes place.
@@ -1147,6 +1163,103 @@ ImageFile::getImageBytesRGBA(const IMAGE_DATA_ORIGIN_LOCATION imageOrigin,
     }
     
     return false;
+}
+
+bool
+ImageFile::getImageResizedBytes(const IMAGE_DATA_ORIGIN_LOCATION imageOrigin,
+                                const int32_t resizeToWidth,
+                                const int32_t resizeToHeight,
+                                std::vector<uint8_t>& bytesRGBAOut) const
+{
+    bytesRGBAOut.clear();
+    
+    if (m_image == NULL) {
+        return false;
+    }
+    
+    const int32_t numBytes = resizeToWidth * resizeToHeight;
+    if (numBytes <= 0) {
+        return false;
+    }
+    
+    const int32_t colorComponentsPerByte = 4;
+    bytesRGBAOut.resize(numBytes * colorComponentsPerByte);
+    
+    QImage scaledImage = m_image->scaled(resizeToWidth,
+                                   resizeToHeight,
+                                   Qt::IgnoreAspectRatio,
+                                   Qt::SmoothTransformation);
+
+    /*
+     * QImage::scaled() failed.
+     */
+    if (scaledImage.isNull()) {
+        return false;
+    }
+    
+    bool isOriginAtTop = false;
+    switch (imageOrigin) {
+        case IMAGE_DATA_ORIGIN_AT_BOTTOM:
+            isOriginAtTop = false;
+            break;
+        case IMAGE_DATA_ORIGIN_AT_TOP:
+            isOriginAtTop = true;
+            break;
+    }
+    
+    /*
+     * Documentation for QImage states that setPixel may be very costly
+     * and recommends using the scanLine() method to access pixel data.
+     */
+    for (int y = 0; y < resizeToHeight; y++) {
+        const int scanLineIndex = (isOriginAtTop
+                                   ? y
+                                   : resizeToHeight -y - 1);
+        const uchar* scanLine = scaledImage.scanLine(scanLineIndex);
+        QRgb* rgbScanLine = (QRgb*)scanLine;
+        
+        for (int x = 0; x < resizeToWidth; x++) {
+            const int32_t contentOffset = (((y * resizeToWidth) * 4)
+                                           + (x * 4));
+            QRgb& rgb = rgbScanLine[x];
+            CaretAssertVectorIndex(bytesRGBAOut, contentOffset + 3);
+            bytesRGBAOut[contentOffset] = static_cast<uint8_t>(qRed(rgb));
+            bytesRGBAOut[contentOffset+1] = static_cast<uint8_t>(qGreen(rgb));
+            bytesRGBAOut[contentOffset+2] = static_cast<uint8_t>(qBlue(rgb));
+            bytesRGBAOut[contentOffset+3] = 255;
+        }
+    }
+    return true;
+}
+
+/**
+ * @return width of image (zero if image is invalid)
+ */
+int32_t
+ImageFile::getWidth() const
+{
+    int32_t w = 0;
+    
+    if (m_image != NULL) {
+        w = m_image->width();
+    }
+    
+    return w;
+}
+
+/**
+ * @return height of image (zero if image is invalid)
+ */
+int32_t
+ImageFile::getHeight() const
+{
+    int32_t h = 0;
+    
+    if (m_image != NULL) {
+        h = m_image->height();
+    }
+    
+    return h;
 }
 
 

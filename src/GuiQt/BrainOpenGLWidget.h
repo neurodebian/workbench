@@ -29,6 +29,7 @@
 
 #include <stdint.h>
 #include "BrainConstants.h"
+#include "CaretPointer.h"
 #include "EventListenerInterface.h"
 
 class QMouseEvent;
@@ -41,10 +42,12 @@ namespace caret {
     class BrainOpenGLViewportContent;
     class BrowserTabContent;
     class EventImageCapture;
+    class SelectionItemAnnotation;
     class SelectionManager;
     class Model;
     class MouseEvent;
     class SurfaceProjectedItem;
+    class UserInputModeAnnotations;
     class UserInputModeBorders;
     class UserInputModeFoci;
     class UserInputModeView;
@@ -61,13 +64,14 @@ namespace caret {
         
         ~BrainOpenGLWidget();
         
-        //Model* getDisplayedModelController();
-        
         void receiveEvent(Event* event);
         
         SelectionManager* performIdentification(const int x,
-                                                     const int y,
-                                                     const bool applySelectionBackgroundFiltering);
+                                                const int y,
+                                                const bool applySelectionBackgroundFiltering);
+        
+        SelectionItemAnnotation* performIdentificationAnnotations(const int x,
+                                                           const int y);
         
         SelectionManager* performIdentificationVoxelEditing(VolumeFile* editingVolumeFile,
                                                             const int x,
@@ -83,8 +87,10 @@ namespace caret {
         
         QString getOpenGLInformation();
 
-        void getViewPortSize(int &w, int &h);
+        void updateCursor();
         
+        std::vector<const BrainOpenGLViewportContent*> getViewportContent() const;
+
     protected:
         virtual void initializeGL();
         
@@ -96,6 +102,12 @@ namespace caret {
         
         virtual bool event(QEvent* event);
         
+        virtual void keyPressEvent(QKeyEvent* e);
+        
+        virtual void keyReleaseEvent(QKeyEvent* e);
+        
+        virtual void mouseDoubleClickEvent(QMouseEvent* e);
+        
         virtual void mouseMoveEvent(QMouseEvent* e);
         
         virtual void mousePressEvent(QMouseEvent* e);
@@ -104,7 +116,14 @@ namespace caret {
         
         virtual void wheelEvent(QWheelEvent* e);
         
+        virtual void enterEvent(QEvent* e);
+        
+        virtual void leaveEvent(QEvent* e);
+        
     private:
+        
+        BrainOpenGLTextRenderInterface* createTextRenderer();
+        
         void clearDrawingViewportContents();
         
         BrainOpenGLViewportContent* getViewportContentAtXY(const int x,
@@ -119,13 +138,10 @@ namespace caret {
         
         BrainOpenGL* openGL;
         
-        //BrowserTabContent* browserTabContent;
+        const int32_t windowIndex;
         
-        int32_t windowIndex;
-        
-        //int32_t windowTabIndex;
-        
-        //Model* modelController;
+        /** Do not own text renderer so DO NOT delete */
+        BrainOpenGLTextRenderInterface* m_textRenderer;
         
         std::vector<BrainOpenGLViewportContent*> drawingViewportContents;
         
@@ -149,9 +165,10 @@ namespace caret {
         
         int lastMouseY;
         
-        BrainOpenGLTextRenderInterface* textRenderer;
+        bool m_newKeyPressStartedFlag;
         
         UserInputModeAbstract* selectedUserInputProcessor;
+        UserInputModeAnnotations* userInputAnnotationsModeProcessor;
         UserInputModeView* userInputViewModeProcessor;
         UserInputModeBorders* userInputBordersModeProcessor;
         UserInputModeFoci* userInputFociModeProcessor;
@@ -159,13 +176,14 @@ namespace caret {
         
         Border* borderBeingDrawn;
         
-        static bool s_defaultGLFormatInitialized;
+        bool    m_mousePositionValid;
+        CaretPointer<MouseEvent> m_mousePositionEvent;
         
-        QString m_openGLVersionInformation;
+        static bool s_defaultGLFormatInitialized;
     };
     
 #ifdef __BRAIN_OPENGL_WIDGET_DEFINE__
-    const int32_t BrainOpenGLWidget::MOUSE_MOVEMENT_TOLERANCE = 10;
+    const int32_t BrainOpenGLWidget::MOUSE_MOVEMENT_TOLERANCE = 0; //10;
     bool BrainOpenGLWidget::s_defaultGLFormatInitialized = false;
 #endif // __BRAIN_OPENGL_WIDGET_DEFINE__
     

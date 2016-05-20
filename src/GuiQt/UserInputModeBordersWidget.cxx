@@ -347,7 +347,9 @@ UserInputModeBordersWidget::createDrawOperationWidget()
     /*
      * Optimize
      */
-    const AString optimizeToolTipText("It's very complicated.");
+    const AString optimizeToolTipText("A new border optimization process automatically repositions a manually drawn "
+                                      "border segment to follow the most probable path based on spatial gradients of "
+                                      "a set of user-selected feature maps (useful for cortical parcellation).");
     QAction* optimizeAction = WuQtUtilities::createAction("Optimize",
                                                           WuQtUtilities::createWordWrappedToolTipText(optimizeToolTipText),
                                                           this);
@@ -669,7 +671,7 @@ UserInputModeBordersWidget::drawFinishButtonClicked()
 //                                                                                  bordersFoundFromFile);
                         break;
                     case UserInputModeBorders::DRAW_OPERATION_OPTIMIZE:
-                        CaretAssertToDoFatal();
+                        CaretAssert(0);
                         break;
                     case UserInputModeBorders::DRAW_OPERATION_REPLACE:
                         borderFile->findAllBordersWithPointsNearBothSegmentEndPoints(displayGroup,

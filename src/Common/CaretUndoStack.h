@@ -92,26 +92,44 @@ namespace caret {
 
         int32_t count() const;
         
+        void deleteCommandAtIndex(const int32_t index);
+        
         int32_t index() const;
         
         const CaretUndoCommand* command(const int32_t index) const;
         
-        void push(CaretUndoCommand* cmd);
+        void push(CaretUndoCommand* newCommand);
         
-        void redo();
+        bool pushAndRedo(CaretUndoCommand* newCommand,
+                         const int32_t windowIndex,
+                         AString& errorMessageOut);
         
-        void undo();
+        bool redo(AString& errorMessageOut);
         
-        void undoAll();
+        bool redoInWindow(const int32_t windowIndex,
+                          AString& errorMessageOut);
+        
+        AString redoText();
+        
+        bool undo(AString& errorMessageOut);
+        
+        bool undoInWindow(const int32_t windowIndex,
+                          AString& errorMessageOut);
+        
+        bool undoAll(AString& errorMessageOut);
+        
+        AString undoText();
         
         void setUndoLimit(const int32_t undoLimit);
         
         // ADD_NEW_METHODS_HERE
 
     protected:
-        virtual void redoCommand(CaretUndoCommand* cmd);
+        virtual bool redoCommand(CaretUndoCommand* cmd,
+                                 AString& errorMessageOut);
         
-        virtual void undoCommand(CaretUndoCommand* cmd);
+        virtual bool undoCommand(CaretUndoCommand* cmd,
+                                 AString& errorMessageOut);
         
     private:
         CaretUndoStack(const CaretUndoStack&);

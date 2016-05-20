@@ -37,6 +37,7 @@
 #include "AlgorithmCiftiCreateLabel.h"
 #include "AlgorithmCiftiCrossCorrelation.h"
 #include "AlgorithmCiftiDilate.h"
+#include "AlgorithmCiftiErode.h"
 #include "AlgorithmCiftiExtrema.h"
 #include "AlgorithmCiftiFalseCorrelation.h"
 #include "AlgorithmCiftiFindClusters.h"
@@ -44,6 +45,7 @@
 #include "AlgorithmCiftiLabelAdjacency.h"
 #include "AlgorithmCiftiLabelToROI.h"
 #include "AlgorithmCiftiMergeDense.h"
+#include "AlgorithmCiftiMergeParcels.h"
 #include "AlgorithmCiftiPairwiseCorrelation.h"
 #include "AlgorithmCiftiParcellate.h"
 #include "AlgorithmCiftiParcelMappingToLabel.h"
@@ -63,10 +65,13 @@
 #include "AlgorithmGiftiLabelAddPrefix.h"
 #include "AlgorithmGiftiLabelToROI.h"
 #include "AlgorithmLabelDilate.h"
+#include "AlgorithmLabelErode.h"
 #include "AlgorithmLabelModifyKeys.h"
 #include "AlgorithmLabelResample.h"
 #include "AlgorithmLabelToBorder.h"
+#include "AlgorithmLabelToVolumeMapping.h"
 #include "AlgorithmMetricDilate.h"
+#include "AlgorithmMetricErode.h"
 #include "AlgorithmMetricEstimateFWHM.h"
 #include "AlgorithmMetricExtrema.h"
 #include "AlgorithmMetricFalseCorrelation.h"
@@ -92,6 +97,7 @@
 #include "AlgorithmSurfaceAverage.h"
 #include "AlgorithmSurfaceCortexLayer.h"
 #include "AlgorithmSurfaceCreateSphere.h"
+#include "AlgorithmSurfaceCurvature.h"
 #include "AlgorithmSurfaceDistortion.h"
 #include "AlgorithmSurfaceFlipLR.h"
 #include "AlgorithmSurfaceGenerateInflated.h"
@@ -106,6 +112,7 @@
 #include "AlgorithmVolumeAffineResample.h"
 #include "AlgorithmVolumeAllLabelsToROIs.h"
 #include "AlgorithmVolumeDilate.h"
+#include "AlgorithmVolumeErode.h"
 #include "AlgorithmVolumeEstimateFWHM.h"
 #include "AlgorithmVolumeExtrema.h"
 #include "AlgorithmVolumeFillHoles.h"
@@ -130,12 +137,14 @@
 #include "OperationBackendAverageROICorrelation.h"
 #include "OperationBorderExportColorTable.h"
 #include "OperationBorderFileExportToCaret5.h"
+#include "OperationBorderLength.h"
 #include "OperationBorderMerge.h"
 #include "OperationCiftiChangeTimestep.h"
 #include "OperationCiftiConvert.h"
 #include "OperationCiftiConvertToScalar.h"
 #include "OperationCiftiCopyMapping.h"
 #include "OperationCiftiCreateDenseFromTemplate.h"
+#include "OperationCiftiCreateParcellatedFromTemplate.h"
 #include "OperationCiftiCreateScalarSeries.h"
 #include "OperationCiftiEstimateFWHM.h"
 #include "OperationCiftiExportDenseMapping.h"
@@ -160,6 +169,7 @@
 #include "OperationFileInformation.h"
 #include "OperationFociGetProjectionVertex.h"
 #include "OperationFociListCoords.h"
+#include "OperationGiftiConvert.h"
 #include "OperationLabelExportTable.h"
 #include "OperationLabelMask.h"
 #include "OperationLabelMerge.h"
@@ -176,11 +186,13 @@
 #include "OperationMetricWeightedStats.h"
 #include "OperationNiftiInformation.h"
 #include "OperationProbtrackXDotConvert.h"
+#include "OperationSceneFileRelocate.h"
 #include "OperationSetMapName.h"
 #include "OperationSetMapNames.h"
 #include "OperationSetStructure.h"
 #include "OperationShowScene.h"
 #include "OperationSpecFileMerge.h"
+#include "OperationSpecFileRelocate.h"
 #include "OperationSurfaceClosestVertex.h"
 #include "OperationSurfaceCoordinatesToMetric.h"
 #include "OperationSurfaceCutResample.h"
@@ -217,7 +229,6 @@
 #include "CommandClassCreateEnum.h"
 #include "CommandClassCreateOperation.h"
 #include "CommandC11xTesting.h"
-#include "CommandGiftiConvert.h"
 #include "CommandUnitTest.h"
 #include "ProgramParameters.h"
 
@@ -274,6 +285,7 @@ CommandOperationManager::CommandOperationManager()
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmCiftiCreateLabel()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmCiftiCrossCorrelation()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmCiftiDilate()));
+    this->commandOperations.push_back(new CommandParser(new AutoAlgorithmCiftiErode()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmCiftiExtrema()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmCiftiFalseCorrelation()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmCiftiFindClusters()));
@@ -281,6 +293,7 @@ CommandOperationManager::CommandOperationManager()
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmCiftiLabelAdjacency()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmCiftiLabelToROI()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmCiftiMergeDense()));
+    this->commandOperations.push_back(new CommandParser(new AutoAlgorithmCiftiMergeParcels()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmCiftiPairwiseCorrelation()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmCiftiParcellate()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmCiftiParcelMappingToLabel()));
@@ -301,10 +314,13 @@ CommandOperationManager::CommandOperationManager()
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmGiftiLabelAddPrefix()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmGiftiLabelToROI()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmLabelDilate()));
+    this->commandOperations.push_back(new CommandParser(new AutoAlgorithmLabelErode()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmLabelModifyKeys()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmLabelResample()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmLabelToBorder()));
+    this->commandOperations.push_back(new CommandParser(new AutoAlgorithmLabelToVolumeMapping()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmMetricDilate()));
+    this->commandOperations.push_back(new CommandParser(new AutoAlgorithmMetricErode()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmMetricEstimateFWHM()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmMetricExtrema()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmMetricFalseCorrelation()));
@@ -330,6 +346,7 @@ CommandOperationManager::CommandOperationManager()
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmSurfaceAverage()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmSurfaceCortexLayer()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmSurfaceCreateSphere()));
+    this->commandOperations.push_back(new CommandParser(new AutoAlgorithmSurfaceCurvature()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmSurfaceDistortion()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmSurfaceFlipLR()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmSurfaceGenerateInflated()));
@@ -344,6 +361,7 @@ CommandOperationManager::CommandOperationManager()
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmVolumeAffineResample()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmVolumeAllLabelsToROIs()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmVolumeDilate()));
+    this->commandOperations.push_back(new CommandParser(new AutoAlgorithmVolumeErode()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmVolumeEstimateFWHM()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmVolumeExtrema()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmVolumeFillHoles()));
@@ -368,12 +386,14 @@ CommandOperationManager::CommandOperationManager()
     this->commandOperations.push_back(new CommandParser(new AutoOperationBackendAverageROICorrelation()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationBorderExportColorTable()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationBorderFileExportToCaret5()));
+    this->commandOperations.push_back(new CommandParser(new AutoOperationBorderLength()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationBorderMerge()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationCiftiChangeTimestep()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationCiftiConvert()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationCiftiConvertToScalar()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationCiftiCopyMapping()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationCiftiCreateDenseFromTemplate()));
+    this->commandOperations.push_back(new CommandParser(new AutoOperationCiftiCreateParcellatedFromTemplate()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationCiftiCreateScalarSeries()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationCiftiEstimateFWHM()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationCiftiExportDenseMapping()));
@@ -396,6 +416,7 @@ CommandOperationManager::CommandOperationManager()
     this->commandOperations.push_back(new CommandParser(new AutoOperationFileInformation()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationFociGetProjectionVertex()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationFociListCoords()));
+    this->commandOperations.push_back(new CommandParser(new AutoOperationGiftiConvert()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationLabelExportTable()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationLabelMask()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationLabelMerge()));
@@ -411,12 +432,14 @@ CommandOperationManager::CommandOperationManager()
     this->commandOperations.push_back(new CommandParser(new AutoOperationMetricWeightedStats()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationNiftiInformation()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationProbtrackXDotConvert()));
+    this->commandOperations.push_back(new CommandParser(new AutoOperationSceneFileRelocate()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationSetMapNames()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationSetStructure()));
     if (OperationShowScene::isShowSceneCommandAvailable()) {
         this->commandOperations.push_back(new CommandParser(new AutoOperationShowScene()));
     }
     this->commandOperations.push_back(new CommandParser(new AutoOperationSpecFileMerge()));
+    this->commandOperations.push_back(new CommandParser(new AutoOperationSpecFileRelocate()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationSurfaceClosestVertex()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationSurfaceCoordinatesToMetric()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationSurfaceCutResample()));
@@ -450,7 +473,6 @@ CommandOperationManager::CommandOperationManager()
 #ifdef WORKBENCH_HAVE_C11X
     this->commandOperations.push_back(new CommandC11xTesting());
 #endif // WORKBENCH_HAVE_C11X
-    this->commandOperations.push_back(new CommandGiftiConvert());
     this->commandOperations.push_back(new CommandUnitTest());
     
     this->deprecatedOperations.push_back(new CommandParser(new AutoOperationCiftiSeparateAll()));

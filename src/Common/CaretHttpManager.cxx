@@ -59,7 +59,117 @@ QNetworkAccessManager* CaretHttpManager::getQNetManager()
     return &(getHttpManager()->m_netMgr);
 }
 
+static QString
+caretHttpRequestToName(const CaretHttpRequest &caretHttpRequest)
+{
+    QString name("Unknown");
+    
+    switch (caretHttpRequest.m_method) {
+        case CaretHttpManager::GET:
+            name = "GET";
+            break;
+        case CaretHttpManager::HEAD:
+            name = "HEAD";
+            break;
+        case CaretHttpManager::POST:
+            name = "POST";
+            break;
+    }
+    return name;
+}
+
+static void
+logHeadersFromRequest(const QNetworkRequest& request,
+                      const CaretHttpRequest &caretHttpRequest)
+{
+    AString infoText;
+    infoText.appendWithNewLine("Request " + caretHttpRequestToName(caretHttpRequest) + ": " + request.url().toString());
+    infoText.appendWithNewLine("    Headers: ");
+
+    QList<QByteArray> readHeaderList = request.rawHeaderList();
+    const int numItems = readHeaderList.size();
+    if (numItems > 0) {
+        for (int32_t i = 0; i < numItems; i++) {
+            const QByteArray headerName = readHeaderList.at(i);
+            if ( ! headerName.isEmpty()) {
+                const QByteArray headerValue = request.rawHeader(headerName);
+                infoText.appendWithNewLine("        Name: " + QString(headerName));
+                infoText.appendWithNewLine("        Value: " + QString(headerValue));
+            }
+        }
+    }
+    else {
+        infoText.appendWithNewLine("        Contains no headers");
+    }
+    
+    CaretLogWarning(infoText);
+}
+
+static void
+logHeadersFromReply(const QNetworkReply& reply,
+                    const CaretHttpRequest &caretHttpRequest,
+                    const CaretHttpResponse &caretHttpResponse)
+{
+    AString infoText;
+    infoText.appendWithNewLine("Reply " + caretHttpRequestToName(caretHttpRequest) + " URL (" + QString::number(caretHttpResponse.m_responseCode) + ") Header: ");
+    if ( ! caretHttpResponse.m_responseCodeValid) {
+        infoText.appendWithNewLine("RESPONSE CODE IS NOT VALID.");
+    }
+    const QNetworkReply::NetworkError networkErrorCode = reply.error();
+    if (networkErrorCode != QNetworkReply::NoError) {
+        infoText.appendWithNewLine("Network Error Code (See QNetworkReply::NetworkError for description): "
+                                   + QString::number(static_cast<int>(networkErrorCode)));
+    }
+    QList<QByteArray> readHeaderList = reply.rawHeaderList();
+    const int numItems = readHeaderList.size();
+    if (numItems > 0) {
+        for (int32_t i = 0; i < numItems; i++) {
+            const QByteArray headerName = readHeaderList.at(i);
+            if ( ! headerName.isEmpty()) {
+                const QByteArray headerValue = reply.rawHeader(headerName);
+                infoText.appendWithNewLine("      Name: " + QString(headerName));
+                infoText.appendWithNewLine("      Value: " + QString(headerValue));
+            }
+        }
+    }
+    else {
+        infoText.appendWithNewLine("    Contains no headers");
+    }
+    
+    CaretLogWarning(infoText);
+}
+
 void CaretHttpManager::httpRequest(const CaretHttpRequest &request, CaretHttpResponse &response)
+{
+    /*
+     * Code for redirection is from the Qt HTTP example httpwindow.cpp. 
+     */
+    httpRequestPrivate(request,
+                       response);
+    if (response.m_responseCode == 302) {
+        if (response.m_redirectionUrlValid) {
+            CaretHttpRequest redirectedRequest = request;
+            redirectedRequest.m_url = response.m_redirectionUrl.toString();
+
+            CaretLogSevere("Received and processing redirection request from "
+                           + request.m_url
+                           + " to "
+                           + redirectedRequest.m_url);
+            
+            CaretHttpResponse redirectedResponse;
+            httpRequestPrivate(redirectedRequest,
+                               redirectedResponse);
+            response = redirectedResponse;
+            if (redirectedResponse.m_body.size() > 0) {
+                redirectedResponse.m_body.push_back(0);
+                QString str(&redirectedResponse.m_body[0]);
+                std::cout << "Redirected response content: " << qPrintable(str) << std::endl;
+            }
+        }
+    }
+}
+
+void CaretHttpManager::httpRequestPrivate(const CaretHttpRequest &request, CaretHttpResponse &response)
 {
     QEventLoop myLoop;
     QNetworkRequest myRequest;
@@ -94,21 +204,23 @@ void CaretHttpManager::httpRequest(const CaretHttpRequest &request, CaretHttpRes
     switch (request.m_method)
     {
     case POST:
-        for (int32_t i = 0; i < (int32_t)request.m_arguments.size(); ++i)
         {
-            if (!first) postData += "&";
-            if (request.m_arguments[i].second == "")
+            for (int32_t i = 0; i < (int32_t)request.m_arguments.size(); ++i)
             {
-                postData += request.m_arguments[i].first;
-            } else {
-                postData += request.m_arguments[i].first + "=" + request.m_arguments[i].second;
+                if (!first) postData += "&";
+                if (request.m_arguments[i].second == "")
+                {
+                    postData += request.m_arguments[i].first;
+                } else {
+                    postData += request.m_arguments[i].first + "=" + request.m_arguments[i].second;
+                }
+                first = false;
             }
-            first = false;
+            myRequest.setHeader(QNetworkRequest::ContentTypeHeader, "application/x-www-form-urlencoded");
+            myRequest.setUrl(myUrl);
+            myReply = myQNetMgr->post(myRequest, postData);
+            CaretLogInfo("POST URL: " + myUrl.toString());
         }
-        myRequest.setHeader(QNetworkRequest::ContentTypeHeader, "application/x-www-form-urlencoded");
-        myRequest.setUrl(myUrl);
-        CaretLogInfo("POST URL: " + myUrl.toString());
-        myReply = myQNetMgr->post(myRequest, postData);
         break;
     case GET:
         for (int32_t i = 0; i < (int32_t)request.m_arguments.size(); ++i)
@@ -141,12 +253,38 @@ void CaretHttpManager::httpRequest(const CaretHttpRequest &request, CaretHttpRes
     myLoop.exec();//so, they can only be delivered after myLoop.exec() starts
     response.m_method = request.m_method;
     response.m_ok = false;
+    response.m_redirectionUrlValid = false;
     response.m_responseCode = -1;
-    response.m_responseCode = myReply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+    response.m_responseCodeValid = false;
+    const QVariant responseCodeVariant = myReply->attribute(QNetworkRequest::HttpStatusCodeAttribute);
+    if ( ! responseCodeVariant.isNull()) {
+        response.m_responseCode = myReply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        response.m_responseCodeValid = true;
+    }
     if (response.m_responseCode == 200)
     {
         response.m_ok = true;
     }
+    else {
+        QVariant redirectionTarget = myReply->attribute(QNetworkRequest::RedirectionTargetAttribute);
+        if ( ! redirectionTarget.isNull()) {
+            response.m_redirectionUrl = myUrl.resolved(redirectionTarget.toUrl());
+            if (response.m_redirectionUrl.isValid()) {
+                response.m_redirectionUrlValid = true;
+            }
+        }
+    }
+    
+    const bool showHeaderValues = false;
+    if (showHeaderValues
+        || (response.m_responseCode != 200)) {
+        logHeadersFromRequest(myRequest,
+                              request);
+        logHeadersFromReply(*myReply,
+                            request,
+                            response);
+    }
+    
     QByteArray myBody = myReply->readAll();
     int64_t mySize = myBody.size();
     response.m_body.reserve(mySize + 1);//make room for the null terminator that will sometimes be added to the end

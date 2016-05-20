@@ -28,6 +28,8 @@
 #include <QWidget>
 
 #include "CaretAssert.h"
+#include "MouseEvent.h"
+
 using namespace caret;
 
 
@@ -49,9 +51,19 @@ using namespace caret;
 UserInputModeAbstract::UserInputModeAbstract(const UserInputMode inputMode)
 : CaretObject(),
 m_userInputMode(inputMode),
-m_widgetForToolBar(NULL)
+m_widgetForToolBar(NULL),
+m_mousePositionValid(false)
 {
-    
+    m_mousePositionEvent.grabNew(new MouseEvent(NULL,
+                                                NULL,
+                                                -1,
+                                                0,
+                                                0,
+                                                0,
+                                                0,
+                                                0,
+                                                0,
+                                                false));
 }
 
 /**
@@ -105,5 +117,86 @@ void
 UserInputModeAbstract::setWidgetForToolBar(QWidget* widgetForToolBar)
 {
     m_widgetForToolBar = widgetForToolBar;
+}
+
+/**
+ * Process a selection that was made from the browser window's edit menu.
+ * Intended for override by sub-classes.
+ *
+ * @param editMenuItem
+ *     Item that was selected from the edit menu.
+ */
+void
+UserInputModeAbstract::processEditMenuItemSelection(const BrainBrowserWindowEditMenuItemEnum::Enum /*editMenuItem*/)
+{
+    
+}
+
+/**
+ * Get the menu items that should be enabled for the current user input processor.
+ * Intended for override by sub-classes.
+ * Unless this method is overridden, all items on Edit menu are disabled.
+ *
+ * @param enabledEditMenuItemsOut
+ *     Upon exit contains edit menu items that should be enabled.
+ * @param redoMenuItemSuffixTextOut
+ *     If the redo menu is enabled, the contents of string becomes
+ *     the suffix for the 'Redo' menu item.
+ * @param undoMenuItemSuffixTextOut
+ *     If the undo menu is enabled, the contents of string becomes
+ *     the suffix for the 'Undo' menu item.
+ * @param pasteTextOut
+ *     If not empty, this text is shown for the PASTE menu item
+ * @param pasteSpecialTextOut
+ *     If not empty, this text is shown for the PASTE_SPECIAL menu item
+ */
+void
+UserInputModeAbstract::getEnabledEditMenuItems(std::vector<BrainBrowserWindowEditMenuItemEnum::Enum>& enabledEditMenuItemsOut,
+                                               AString& redoMenuItemSuffixTextOut,
+                                               AString& undoMenuItemSuffixTextOut,
+                                               AString& pasteTextOut,
+                                               AString& pasteSpecialTextOut)
+{
+    enabledEditMenuItemsOut.clear();
+    redoMenuItemSuffixTextOut = "";
+    undoMenuItemSuffixTextOut = "";
+    pasteTextOut              = "";
+    pasteSpecialTextOut       = "";
+}
+
+/**
+ * Get information about the current mouse location.
+ *
+ * @return Pointer to a MouseEvent or NULL if the 
+ * mouse location is invalid.
+ */
+const MouseEvent*
+UserInputModeAbstract::getMousePosition() const
+{
+    if (m_mousePositionValid) {
+        return m_mousePositionEvent;
+    }
+    
+    return NULL;
+}
+
+/**
+ * Set the position of the mouse.
+ *
+ * @param mouseEvent
+ *     Information about the current mouse location.
+ * @param valid
+ *     True if the mouse position is valid, else false.
+ */
+void
+UserInputModeAbstract::setMousePosition(const MouseEvent* mouseEvent,
+                                        const bool valid)
+{
+    m_mousePositionValid = valid;
+    
+    if (m_mousePositionValid) {
+        CaretAssert(mouseEvent);
+        *m_mousePositionEvent = *mouseEvent;
+    }
 }
 

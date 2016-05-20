@@ -37,28 +37,34 @@ namespace caret {
         
         bool isValid() const;
         
-        void drawTextAtWindowCoords(const int viewport[4],
-                                    const int windowX,
-                                    const int windowY,
-                                    const QString& text,
-                                    const TextAlignmentX alignmentX,
-                                    const TextAlignmentY alignmentY,
-                                    const TextStyle textStyle,
-                                    const int fontHeight);
+        virtual void drawTextAtViewportCoords(const double viewportX,
+                                              const double viewportY,
+                                              const double viewportZ,
+                                              const AnnotationText& annotationText);
         
-        void drawTextAtModelCoords(const double modelX,
-                                   const double modelY,
-                                   const double modelZ,
-                                   const QString& text,
-                                   const TextStyle textStyle,
-                                   const int fontHeight);
+        virtual void drawTextAtViewportCoords(const double viewportX,
+                                              const double viewportY,
+                                              const AnnotationText& annotationText);
         
-        void getTextBoundsInPixels(int32_t& widthOut,
-                                   int32_t& heightOut,
-                                   const QString& text,
-                                   const TextStyle textStyle,
-                                   const int fontHeight);
+        virtual void drawTextAtModelCoords(const double modelX,
+                                           const double modelY,
+                                           const double modelZ,
+                                           const AnnotationText& annotationText);
         
+        virtual void getTextWidthHeightInPixels(const AnnotationText& annotationText,
+                                                const double viewportHeight,
+                                                double& widthOut,
+                                                double& heightOut);
+        
+        virtual void getBoundsForTextAtViewportCoords(const AnnotationText& annotationText,
+                                                      const double viewportX,
+                                                      const double viewportY,
+                                                      const double viewportZ,
+                                                      const double viewportHeight,
+                                                      double bottomLeftOut[3],
+                                                      double bottomRightOut[3],
+                                                      double topRightOut[3],
+                                                      double topLeftOut[3]);
         virtual AString getName() const;
 
         // ADD_NEW_METHODS_HERE

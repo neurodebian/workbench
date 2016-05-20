@@ -169,7 +169,7 @@ SceneFloatArray::integerValue(const int32_t arrayIndex) const
         return std::numeric_limits<int32_t>::min();
     }
     
-    const float i = static_cast<int32_t>(f);
+    const int32_t i = static_cast<int32_t>(f);
     return i;
 }
 
@@ -185,5 +185,27 @@ SceneFloatArray::stringValue(const int32_t arrayIndex) const
     CaretAssertVectorIndex(m_values, arrayIndex);
     const AString s = AString::number(m_values[arrayIndex]);
     return s;
+}
+
+/**
+ * Get the values as an unsigned byte.
+ * @param arrayIndex
+ *    Index of element.
+ * @return The value.
+ */
+uint8_t
+SceneFloatArray::unsignedByteValue(const int32_t arrayIndex) const
+{
+    CaretAssertVectorIndex(m_values, arrayIndex);
+    const float f = m_values[arrayIndex];
+    if (f > std::numeric_limits<uint8_t>::max()) {
+        return std::numeric_limits<uint8_t>::max();
+    }
+    else if (f < std::numeric_limits<uint8_t>::min()) {
+        return std::numeric_limits<uint8_t>::min();
+    }
+    
+    const uint8_t b = static_cast<uint8_t>(f);
+    return b;
 }
 

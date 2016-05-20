@@ -29,6 +29,7 @@
 
 #include <QObject>
 
+#include "DataFileTypeEnum.h"
 #include "EventListenerInterface.h"
 #include "SceneableInterface.h"
 #include "WuQWebView.h"
@@ -47,6 +48,7 @@ namespace caret {
     class ClippingPlanesDialog;
     class CursorManager;
     class CustomViewDialog;
+    class GapsAndMarginsDialog;
     class HelpViewerDialog;
     class IdentifyBrainordinateDialog;
     class ImageFile;
@@ -78,15 +80,17 @@ namespace caret {
         
         static void deleteGuiManager();
         
-        void beep(const int32_t numTimesToBeep = 1);
+        static void beep();
         
-        Brain* getBrain();
+        Brain* getBrain() const;
         
         int32_t getNumberOfOpenBrainBrowserWindows() const;
         
         BrainBrowserWindow* getActiveBrowserWindow() const;
         
         std::vector<BrainBrowserWindow*> getAllOpenBrainBrowserWindows() const;
+        
+        std::vector<int32_t> getAllOpenBrainBrowserWindowIndices() const;
         
         BrainBrowserWindow* getBrowserWindowByWindowIndex(const int32_t browserWindowIndex);
         
@@ -130,6 +134,7 @@ namespace caret {
                                         const AString& openGLInformation);
         void processShowClippingPlanesDialog(BrainBrowserWindow* browserWindow);
         void processShowCustomViewDialog(BrainBrowserWindow* browserWindow);
+        void processShowGapsAndMarginsDialog(BrainBrowserWindow* browserWindow);
         void processShowImageCaptureDialog(BrainBrowserWindow* browserWindow);
         void processShowMovieDialog(BrainBrowserWindow* browserWindow);
         void processShowPreferencesDialog(BrainBrowserWindow* browserWindow);
@@ -163,6 +168,22 @@ namespace caret {
                                    SelectionManager* selectionManager,
                                    QWidget* parentWidget);
         
+        /*
+         * Mode used when testing for modified files
+         */
+        enum TestModifiedMode {
+            /** Testing when user is exiting Workbench */
+            TEST_FOR_MODIFIED_FILES_MODE_FOR_EXIT,
+            /** Testing when a scene is added */
+            TEST_FOR_MODIFIED_FILES_MODE_FOR_SCENE_ADD,
+            /** Testing when a scene is shown */
+            TEST_FOR_MODIFIED_FILES_MODE_FOR_SCENE_SHOW
+        };
+        
+        bool testForModifiedFiles(const TestModifiedMode testModifiedMode,
+                                  AString& textMesssageOut,
+                                  AString& modifiedFilesMessageOut) const;
+        
     public slots:
         void processBringAllWindowsToFront();
         void processShowInformationWindow();
@@ -189,6 +210,8 @@ namespace caret {
         
         GuiManager(const GuiManager&);
         GuiManager& operator=(const GuiManager&);
+        
+        void initializeGuiManager();
         
         BrainBrowserWindow* newBrainBrowserWindow(QWidget* parent,
                                                   BrowserTabContent* browserTabContent,
@@ -243,6 +266,8 @@ namespace caret {
         
         ImageCaptureDialog* imageCaptureDialog;
 
+        GapsAndMarginsDialog* m_gapsAndMarginsDialog;
+        
         MovieDialog* movieDialog;
         
         PreferencesDialog* preferencesDialog;       

@@ -54,6 +54,8 @@ namespace caret {
 
         void addScene(Scene* scene);
         
+        int32_t getIndexOfScene(const Scene* scene) const;
+        
         void insertScene(Scene* newScene,
                          const Scene* insertAboveThisScene);
         
@@ -62,9 +64,12 @@ namespace caret {
         
         int32_t getNumberOfScenes() const;
         
-        Scene* getSceneAtIndex(const int32_t indx);
+        Scene* getSceneAtIndex(const int32_t indx) const;
         
         Scene* getSceneWithName(const AString& sceneName);
+        
+        void moveScene(Scene* scene,
+                       const int32_t indexDelta);
         
         void removeScene(Scene* scene);
         
@@ -77,6 +82,10 @@ namespace caret {
         GiftiMetaData* getFileMetaData();
         
         const GiftiMetaData* getFileMetaData() const;
+        
+        AString getBalsaStudyID() const;
+        
+        void setBalsaStudyID(const AString& balsaStudyID);
         
         void reorderScenes(std::vector<Scene*>& orderedScenes);
 
@@ -104,6 +113,9 @@ namespace caret {
         /** the metadata */
         GiftiMetaData* m_metadata;
 
+        /** the BALSA Study ID */
+        AString m_balsaStudyID;
+        
         // ADD_NEW_MEMBERS_HERE
 
         /** Version of this SceneFile */

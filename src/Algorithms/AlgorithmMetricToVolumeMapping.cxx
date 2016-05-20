@@ -217,14 +217,8 @@ AlgorithmMetricToVolumeMapping::AlgorithmMetricToVolumeMapping(ProgressObject* m
     for (int i = 0; i < numNodes; ++i)
     {
         for (int v = 0; v < (int)forwardWeights[i].size(); ++v)
-        {
-            map<VoxelIJK, vector<pair<int, float> > >::iterator iter = reverseWeights.find(VoxelIJK(forwardWeights[i][v].ijk));
-            if (iter == reverseWeights.end())
-            {
-                reverseWeights[VoxelIJK(forwardWeights[i][v].ijk)] = vector<pair<int, float> >(1, pair<int, float>(i, forwardWeights[i][v].weight));
-            } else {
-                iter->second.push_back(pair<int, float>(i, forwardWeights[i][v].weight));
-            }
+        {//vectors initialize to empty
+            reverseWeights[VoxelIJK(forwardWeights[i][v].ijk)].push_back(pair<int, float>(i, forwardWeights[i][v].weight));
         }
     }
     const int64_t* dims = myVolSpace.getDims();

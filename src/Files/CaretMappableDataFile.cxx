@@ -39,6 +39,7 @@
 #include "SceneClassArray.h"
 #include "SceneAttributes.h"
 #include "StringTableModel.h"
+#include "VolumeFile.h"
 
 using namespace caret;
 
@@ -464,6 +465,22 @@ CaretMappableDataFile::restoreFileDataFromScene(const SceneAttributes* sceneAttr
                         PaletteColorMapping* pcmMap = getMapPaletteColorMapping(restoreMapIndex);
                         pcmMap->copy(pcm);
                         pcmMap->clearModified();
+                        
+                        /*
+                         * WB-522 When palette loaded from scene,
+                         * mark it as modified.
+                         */
+                        pcmMap->setModified();
+                        
+                        /*
+                         * Volume file needs it's map coloring updated since
+                         * palette has changed.
+                         */
+                        VolumeFile* volumeFile = dynamic_cast<VolumeFile*>(this);
+                        if (volumeFile != NULL) {
+                            volumeFile->updateScalarColoringForMap(restoreMapIndex,
+                                                                   NULL);
+                        }
                     }
                     catch (const XmlException& e) {
                         sceneAttributes->addToErrorMessage("Failed to decode palette color mapping for file: "
@@ -912,6 +929,32 @@ CaretMappableDataFile::helpGetSupportedLineSeriesChartDataTypes(std::vector<Char
             break;
     }
 }
+
+/**
+ * Is a medial wall label in the label table for the given map index?
+ *
+ * NOTE: This does not test to see if a data element in
+ *     the map is set to the key of the medial wall label.  So, it is
+ *     possible that true is returned but no vertices or voxels are
+ *     assigned to the medial wall.
+ *
+ * @param mapIndex
+ *     Index of the map.
+ * @return
+ *     True if map the map's label table contains a medial wall label,
+ *     else false.
+ */
+bool
+CaretMappableDataFile::isMedialWallLabelInMapLabelTable(const int32_t mapIndex) const
+{
+    if (isMappedWithLabelTable()) {
+        const GiftiLabelTable* labelTable = getMapLabelTable(mapIndex);
+        return labelTable->hasMedialWallLabel();
+    }
+    
+    return false;
+}
+
 
 /**
  * @return The label drawing properties for this file.  A valid pointer

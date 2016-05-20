@@ -25,12 +25,16 @@
 
 #include "CaretObject.h"
 
+#include "AnnotationColorBarNumericText.h"
+#include "NumericFormatModeEnum.h"
+#include "PaletteColorBarValuesModeEnum.h"
 #include "PaletteEnums.h"
 #include "PaletteThresholdRangeModeEnum.h"
 #include "XmlException.h"
 
 namespace caret {
 
+    class AnnotationColorBar;
     class FastStatistics;
     class XmlWriter;
     
@@ -60,15 +64,17 @@ namespace caret {
         void initializeMembersPaletteColorMapping();
         
     public:
-        void writeAsXML(XmlWriter& xmlWriter)
-       ;
+        void setupAnnotationColorBar(const FastStatistics* statistics,
+                                     AnnotationColorBar* colorBar);
+
+        void setupAnnotationColorBarNumericText(const FastStatistics* statistics,
+                                                AnnotationColorBar* colorBar);
         
-        AString encodeInXML()
-       ;
+        void writeAsXML(XmlWriter& xmlWriter);
         
+        AString encodeInXML();
         
-        void decodeFromStringXML(const AString& xml)
-       ;
+        void decodeFromStringXML(const AString& xml);
         
         float getAutoScalePercentageNegativeMaximum() const;
         
@@ -200,6 +206,26 @@ namespace caret {
         
         void setThresholdNegMinPosMaxLinked(const bool linked);
         
+        NumericFormatModeEnum::Enum getNumericFormatMode() const;
+        
+        int32_t getPrecisionDigits() const;
+        
+        int32_t getNumericSubdivisionCount() const;
+        
+        void setNumericFormatMode(const NumericFormatModeEnum::Enum numericFormatMode);
+        
+        void setPrecisionDigits(const int32_t precisionDigits);
+        
+        void setNumericSubdivisionCount(const int32_t numericSubdivisionCount);
+        
+        PaletteColorBarValuesModeEnum::Enum getColorBarValuesMode() const;
+        
+        void setColorBarValuesMode(const PaletteColorBarValuesModeEnum::Enum colorBarValuesMode);
+        
+        bool isShowTickMarksSelected() const;
+        
+        void setShowTickMarksSelected(const bool selected);
+        
         void setModified();
         
         void clearModified();
@@ -212,9 +238,10 @@ namespace caret {
                                               const int64_t numberOfData) const;
         
         void getPaletteColorBarScaleText(const FastStatistics* statistics,
-                                         AString& minimumValueTextOut,
-                                         AString& zeroValueTextOut,
-                                         AString& maximumValueTextOut) const;
+                                         std::vector<std::pair<float, AString> >& normalizedPositionAndTextOut) const;
+        
+        void getPaletteColorBarScaleText(const FastStatistics* statistics,
+                                         std::vector<AnnotationColorBarNumericText*>& colorBarNumericTextOut) const;
         
         /** A positive value near zero - may be zero! */
         static const float SMALL_POSITIVE;
@@ -278,6 +305,16 @@ namespace caret {
         bool thresholdShowFailureInGreen;
         
         bool thresholdNegMinPosMaxLinked;
+        
+        NumericFormatModeEnum::Enum numericFormatMode;
+        
+        int32_t precisionDigits;
+        
+        int32_t numericSubdivisionCount;
+        
+        PaletteColorBarValuesModeEnum::Enum colorBarValuesMode;
+    
+        bool showTickMarksSelected;
         
         /**Tracks modification, DO NOT copy */
         bool modifiedFlag;

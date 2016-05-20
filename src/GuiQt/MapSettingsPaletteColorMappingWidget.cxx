@@ -135,16 +135,20 @@ MapSettingsPaletteColorMappingWidget::MapSettingsPaletteColorMappingWidget(QWidg
     leftLayout->addWidget(paletteWidget);
     leftLayout->addStretch();
     
-    QVBoxLayout* optionsLayout = new QVBoxLayout();
-    optionsLayout->addWidget(normalizationWidget);
-    optionsLayout->addWidget(dataOptionsWidget);
-    optionsLayout->addStretch(100);
+    QVBoxLayout* dataLayout = new QVBoxLayout();
+    dataLayout->addWidget(normalizationWidget);
+    dataLayout->addWidget(dataOptionsWidget);
+    //dataLayout->addStretch();
+    
+    QHBoxLayout* histoColorBarLayout = new QHBoxLayout();
+    histoColorBarLayout->addWidget(histogramControlWidget);
+    histoColorBarLayout->addStretch();
     
     QWidget* bottomRightWidget = new QWidget();
     QHBoxLayout* bottomRightLayout = new QHBoxLayout(bottomRightWidget);
     this->setLayoutSpacingAndMargins(bottomRightLayout);
-    bottomRightLayout->addWidget(histogramControlWidget);   
-    bottomRightLayout->addLayout(optionsLayout);
+    bottomRightLayout->addLayout(histoColorBarLayout);
+    bottomRightLayout->addLayout(dataLayout);
     bottomRightWidget->setFixedSize(bottomRightWidget->sizeHint());
     
     QWidget* rightWidget = new QWidget();
@@ -775,9 +779,13 @@ MapSettingsPaletteColorMappingWidget::createHistogramControlSection()
      */
     const AString blankText("                ");
     this->statisticsMinimumValueLabel = new QLabel(blankText);
+    this->statisticsMinimumValueLabel->setAlignment(Qt::AlignRight);
     this->statisticsMaximumValueLabel = new QLabel(blankText);
+    this->statisticsMaximumValueLabel->setAlignment(Qt::AlignRight);
     this->statisticsMeanValueLabel = new QLabel(blankText);
+    this->statisticsMeanValueLabel->setAlignment(Qt::AlignRight);
     this->statisticsStandardDeviationLabel = new QLabel(blankText);
+    this->statisticsStandardDeviationLabel->setAlignment(Qt::AlignRight);
     
     QWidget* statisticsWidget = new QWidget();
     QGridLayout* statisticsLayout = new QGridLayout(statisticsWidget);
@@ -825,14 +833,14 @@ MapSettingsPaletteColorMappingWidget::createHistogramSection()
     /*
      * Allow zooming
      */
-    PlotMagnifier* magnifier = new PlotMagnifier(this->thresholdPlot->canvas());
+    PlotMagnifier* magnifier = new PlotMagnifier(qobject_cast<QwtPlotCanvas*>(this->thresholdPlot->canvas()));
     magnifier->setAxisEnabled(QwtPlot::yLeft, true);
     magnifier->setAxisEnabled(QwtPlot::yRight, true);
     
     /*
      * Allow panning
      */
-    (void)new PlotPanner(this->thresholdPlot->canvas());
+    (void)new PlotPanner(qobject_cast<QwtPlotCanvas*>(this->thresholdPlot->canvas()));
     
     /*
      * Auto scaling
@@ -934,11 +942,213 @@ MapSettingsPaletteColorMappingWidget::histogramResetViewButtonClicked()
 }
 
 /**
+ * Called when the auto percentage negative maximum value changes.
+ *
+ * @param value
+ *     The new value.
+ */
+void
+MapSettingsPaletteColorMappingWidget::scaleAutoPercentageNegativeMaximumValueChanged(double value)
+{
+    /*
+     * Ensure maximum >= minimum
+     */
+    if (value < this->scaleAutoPercentageNegativeMinimumSpinBox->value()) {
+        this->scaleAutoPercentageNegativeMinimumSpinBox->blockSignals(true);
+        this->scaleAutoPercentageNegativeMinimumSpinBox->setValue(value);
+        this->scaleAutoPercentageNegativeMinimumSpinBox->blockSignals(false);
+    }
+    applySelections();
+}
+
+/**
+ * Called when the auto percentage negative minimum value changes.
+ *
+ * @param value
+ *     The new value.
+ */
+void
+MapSettingsPaletteColorMappingWidget::scaleAutoPercentageNegativeMinimumValueChanged(double value)
+{
+    /*
+     * Ensure maximum >= minimum
+     */
+    if (value > this->scaleAutoPercentageNegativeMaximumSpinBox->value()) {
+        this->scaleAutoPercentageNegativeMaximumSpinBox->blockSignals(true);
+        this->scaleAutoPercentageNegativeMaximumSpinBox->setValue(value);
+        this->scaleAutoPercentageNegativeMaximumSpinBox->blockSignals(false);
+    }
+    applySelections();
+}
+
+
+/**
+ * Called when the auto percentage positive minimum value changes.
+ *
+ * @param value
+ *     The new value.
+ */
+void
+MapSettingsPaletteColorMappingWidget::scaleAutoPercentagePositiveMinimumValueChanged(double value)
+{
+    /*
+     * Ensure maximum >= minimum
+     */
+    if (value > this->scaleAutoPercentagePositiveMaximumSpinBox->value()) {
+        this->scaleAutoPercentagePositiveMaximumSpinBox->blockSignals(true);
+        this->scaleAutoPercentagePositiveMaximumSpinBox->setValue(value);
+        this->scaleAutoPercentagePositiveMaximumSpinBox->blockSignals(false);
+    }
+    applySelections();
+}
+
+
+/**
+ * Called when the auto percentage maximum value changes.
+ *
+ * @param value
+ *     The new value.
+ */
+void
+MapSettingsPaletteColorMappingWidget::scaleAutoPercentagePositiveMaximumValueChanged(double value)
+{
+    /*
+     * Ensure maximum >= minimum
+     */
+    if (value < this->scaleAutoPercentagePositiveMinimumSpinBox->value()) {
+        this->scaleAutoPercentagePositiveMinimumSpinBox->blockSignals(true);
+        this->scaleAutoPercentagePositiveMinimumSpinBox->setValue(value);
+        this->scaleAutoPercentagePositiveMinimumSpinBox->blockSignals(false);
+    }
+    applySelections();
+}
+
+/**
+ * Called when the auto absolute percentage minimum value changes.
+ *
+ * @param value
+ *     The new value.
+ */
+void
+MapSettingsPaletteColorMappingWidget::scaleAutoAbsolutePercentageMinimumValueChanged(double value)
+{
+    /*
+     * Ensure maximum >= minimum
+     */
+    if (value > this->scaleAutoAbsolutePercentageMaximumSpinBox->value()) {
+        this->scaleAutoAbsolutePercentageMaximumSpinBox->blockSignals(true);
+        this->scaleAutoAbsolutePercentageMaximumSpinBox->setValue(value);
+        this->scaleAutoAbsolutePercentageMaximumSpinBox->blockSignals(false);
+    }
+    applySelections();
+}
+
+/**
+ * Called when the auto absolute percentage maximum value changes.
+ *
+ * @param value
+ *     The new value.
+ */
+void
+MapSettingsPaletteColorMappingWidget::scaleAutoAbsolutePercentageMaximumValueChanged(double value)
+{
+    /*
+     * Ensure maximum >= minimum
+     */
+    if (value < this->scaleAutoAbsolutePercentageMinimumSpinBox->value()) {
+        this->scaleAutoAbsolutePercentageMinimumSpinBox->blockSignals(true);
+        this->scaleAutoAbsolutePercentageMinimumSpinBox->setValue(value);
+        this->scaleAutoAbsolutePercentageMinimumSpinBox->blockSignals(false);
+    }
+    applySelections();
+}
+
+/**
+ * Called when the fixed negative maximum value changes.
+ *
+ * @param value
+ *     The new value.
+ */
+void
+MapSettingsPaletteColorMappingWidget::scaleFixedNegativeMaximumValueChanged(double value)
+{
+    /*
+     * Ensure maximum >= minimum
+     */
+    if (value > this->scaleFixedNegativeMinimumSpinBox->value()) {
+        this->scaleFixedNegativeMinimumSpinBox->blockSignals(true);
+        this->scaleFixedNegativeMinimumSpinBox->setValue(value);
+        this->scaleFixedNegativeMinimumSpinBox->blockSignals(false);
+    }
+    applySelections();
+}
+
+/**
+ * Called when the fixed negative minimum value changes.
+ *
+ * @param value
+ *     The new value.
+ */
+void
+MapSettingsPaletteColorMappingWidget::scaleFixedNegativeMinimumValueChanged(double value)
+{
+    /*
+     * Ensure maximum >= minimum
+     */
+    if (value < this->scaleFixedNegativeMaximumSpinBox->value()) {
+        this->scaleFixedNegativeMaximumSpinBox->blockSignals(true);
+        this->scaleFixedNegativeMaximumSpinBox->setValue(value);
+        this->scaleFixedNegativeMaximumSpinBox->blockSignals(false);
+    }
+    applySelections();
+}
+
+/**
+ * Called when the fixed positive minimum value changes.
+ *
+ * @param value
+ *     The new value.
+ */
+void
+MapSettingsPaletteColorMappingWidget::scaleFixedPositiveMinimumValueChanged(double value)
+{
+    /*
+     * Ensure maximum >= minimum
+     */
+    if (value > this->scaleFixedPositiveMaximumSpinBox->value()) {
+        this->scaleFixedPositiveMaximumSpinBox->blockSignals(true);
+        this->scaleFixedPositiveMaximumSpinBox->setValue(value);
+        this->scaleFixedPositiveMaximumSpinBox->blockSignals(false);
+    }
+    applySelections();
+}
+
+/**
+ * Called when the fixed positive maximum value changes.
+ *
+ * @param value
+ *     The new value.
+ */
+void
+MapSettingsPaletteColorMappingWidget::scaleFixedPositiveMaximumValueChanged(double value)
+{
+    /*
+     * Ensure maximum >= minimum
+     */
+    if (value < this->scaleFixedPositiveMinimumSpinBox->value()) {
+        this->scaleFixedPositiveMinimumSpinBox->blockSignals(true);
+        this->scaleFixedPositiveMinimumSpinBox->setValue(value);
+        this->scaleFixedPositiveMinimumSpinBox->blockSignals(false);
+    }
+    applySelections();
+}
+
+/**
  * Create the palette section of the dialog.
  * @return
  *   The palette section.
  */
-QWidget* 
+QWidget*
 MapSettingsPaletteColorMappingWidget::createPaletteSection()
 {
     /*
@@ -1007,7 +1217,7 @@ MapSettingsPaletteColorMappingWidget::createPaletteSection()
                                                                    1.0,
                                                                    2,
                                                                    this,
-                                                                   SLOT(applySelections()));
+                                                                   SLOT(scaleAutoPercentageNegativeMaximumValueChanged(double)));
 
     WuQtUtilities::setToolTipAndStatusTip(this->scaleAutoPercentageNegativeMaximumSpinBox,
                                           "Map percentile (NOT percentage) most negative value to -1.0 in palette");
@@ -1020,7 +1230,7 @@ MapSettingsPaletteColorMappingWidget::createPaletteSection()
                                                                    1.0,
                                                                    2,
                                                                    this,
-                                                                   SLOT(applySelections()));
+                                                                   SLOT(scaleAutoPercentageNegativeMinimumValueChanged(double)));
 
     WuQtUtilities::setToolTipAndStatusTip(this->scaleAutoPercentageNegativeMinimumSpinBox,
                                           "Map percentile (NOT percentage) least negative value to 0.0 in palette");
@@ -1033,7 +1243,7 @@ MapSettingsPaletteColorMappingWidget::createPaletteSection()
                                                                    1.0,
                                                                    2,
                                                                    this,
-                                                                   SLOT(applySelections()));
+                                                                   SLOT(scaleAutoPercentagePositiveMinimumValueChanged(double)));
 
     WuQtUtilities::setToolTipAndStatusTip(this->scaleAutoPercentagePositiveMinimumSpinBox,
                                           "Map percentile (NOT percentage) least positive value to 0.0 in palette");
@@ -1046,7 +1256,7 @@ MapSettingsPaletteColorMappingWidget::createPaletteSection()
                                                                    1.0,
                                                                    2,
                                                                    this,
-                                                                   SLOT(applySelections()));
+                                                                   SLOT(scaleAutoPercentagePositiveMaximumValueChanged(double)));
 
     WuQtUtilities::setToolTipAndStatusTip(this->scaleAutoPercentagePositiveMaximumSpinBox,
                                           "Map percentile (NOT percentage) most positive value to 1.0 in palette");
@@ -1062,7 +1272,7 @@ MapSettingsPaletteColorMappingWidget::createPaletteSection()
                                                                    1.0,
                                                                    2,
                                                                    this,
-                                                                   SLOT(applySelections()));
+                                                                   SLOT(scaleAutoAbsolutePercentageMinimumValueChanged(double)));
     
     WuQtUtilities::setToolTipAndStatusTip(this->scaleAutoAbsolutePercentageMinimumSpinBox,
                                           "Map percentile (NOT percentage) least absolute value to 0.0 in palette");
@@ -1075,7 +1285,7 @@ MapSettingsPaletteColorMappingWidget::createPaletteSection()
                                                                    1.0,
                                                                    2,
                                                                    this,
-                                                                   SLOT(applySelections()));
+                                                                   SLOT(scaleAutoAbsolutePercentageMaximumValueChanged(double)));
     
     WuQtUtilities::setToolTipAndStatusTip(this->scaleAutoAbsolutePercentageMaximumSpinBox,
                                           "Map percentile (NOT percentage) most absolute value to 1.0 in palette");
@@ -1091,7 +1301,7 @@ MapSettingsPaletteColorMappingWidget::createPaletteSection()
                                                                    1.0,
                                                                    3,
                                                                    this,
-                                                                   SLOT(applySelections()));
+                                                                   SLOT(scaleFixedNegativeMaximumValueChanged(double)));
 
     WuQtUtilities::setToolTipAndStatusTip(this->scaleFixedNegativeMaximumSpinBox,
                                           "Map this value to -1.0 in palette");
@@ -1104,7 +1314,7 @@ MapSettingsPaletteColorMappingWidget::createPaletteSection()
                                                                    1.0,
                                                                    3,
                                                                    this,
-                                                                   SLOT(applySelections()));
+                                                                   SLOT(scaleFixedNegativeMinimumValueChanged(double)));
 
     WuQtUtilities::setToolTipAndStatusTip(this->scaleFixedNegativeMinimumSpinBox,
                                           "Map this value to 0.0 in palette");
@@ -1117,7 +1327,7 @@ MapSettingsPaletteColorMappingWidget::createPaletteSection()
                                                                    1.0,
                                                                    3,
                                                                    this,
-                                                                   SLOT(applySelections()));
+                                                                   SLOT(scaleFixedPositiveMinimumValueChanged(double)));
 
     WuQtUtilities::setToolTipAndStatusTip(this->scaleFixedPositiveMinimumSpinBox,
                                           "Map this value to 0.0 in palette");
@@ -1130,7 +1340,7 @@ MapSettingsPaletteColorMappingWidget::createPaletteSection()
                                                                    1.0,
                                                                    3,
                                                                    this,
-                                                                   SLOT(applySelections()));
+                                                                   SLOT(scaleFixedPositiveMaximumValueChanged(double)));
 
     WuQtUtilities::setToolTipAndStatusTip(this->scaleFixedPositiveMaximumSpinBox,
                                           "Map this value to 1.0 in palette");
@@ -1475,10 +1685,10 @@ MapSettingsPaletteColorMappingWidget::getHistogram(const FastStatistics* statist
                 mostNeg  = statisticsForAll->getMin();
                 break;
             case PaletteScaleModeEnum::MODE_AUTO_SCALE_ABSOLUTE_PERCENTAGE:
-                mostPos  = -statisticsForAll->getApproxAbsolutePercentile(this->scaleAutoAbsolutePercentageMaximumSpinBox->value());
-                leastPos = -statisticsForAll->getApproxAbsolutePercentile(this->scaleAutoAbsolutePercentageMinimumSpinBox->value());
-                leastNeg =  statisticsForAll->getApproxAbsolutePercentile(this->scaleAutoAbsolutePercentageMinimumSpinBox->value());
-                mostNeg  =  statisticsForAll->getApproxAbsolutePercentile(this->scaleAutoAbsolutePercentageMaximumSpinBox->value());
+                mostPos  =  statisticsForAll->getApproxAbsolutePercentile(this->scaleAutoAbsolutePercentageMaximumSpinBox->value());
+                leastPos =  statisticsForAll->getApproxAbsolutePercentile(this->scaleAutoAbsolutePercentageMinimumSpinBox->value());
+                leastNeg = -statisticsForAll->getApproxAbsolutePercentile(this->scaleAutoAbsolutePercentageMinimumSpinBox->value());
+                mostNeg  = -statisticsForAll->getApproxAbsolutePercentile(this->scaleAutoAbsolutePercentageMaximumSpinBox->value());
                 break;
             case PaletteScaleModeEnum::MODE_AUTO_SCALE_PERCENTAGE:
                 mostPos  = statisticsForAll->getApproxPositivePercentile(this->scaleAutoPercentagePositiveMaximumSpinBox->value());
@@ -1729,8 +1939,8 @@ MapSettingsPaletteColorMappingWidget::updateHistogramPlot()
             switch (this->paletteColorMapping->getThresholdTest()) {
                 case PaletteThresholdTestEnum::THRESHOLD_TEST_SHOW_INSIDE:
                 {
-                    const float plotMinValue = this->thresholdPlot->axisScaleDiv(QwtPlot::xBottom)->lowerBound();
-                    const float plotMaxValue = this->thresholdPlot->axisScaleDiv(QwtPlot::xBottom)->upperBound();
+                    const float plotMinValue = this->thresholdPlot->axisScaleDiv(QwtPlot::xBottom).lowerBound();
+                    const float plotMaxValue = this->thresholdPlot->axisScaleDiv(QwtPlot::xBottom).upperBound();
                     
                     /* 
                      * Draw shaded region to left of minimum threshold
@@ -1923,9 +2133,7 @@ void MapSettingsPaletteColorMappingWidget::applySelections()
         this->paletteColorMapping->setThresholdTest(PaletteThresholdTestEnum::THRESHOLD_TEST_SHOW_OUTSIDE);
     }
     
-    bool assignToAllMaps = false;
     if (this->applyAllMapsCheckBox->checkState() == Qt::Checked) {
-        assignToAllMaps = true;
         const int numMaps = this->caretMappableDataFile->getNumberOfMaps();
         for (int32_t i = 0; i < numMaps; i++) {
             PaletteColorMapping* pcm = this->caretMappableDataFile->getMapPaletteColorMapping(i);
@@ -1933,15 +2141,6 @@ void MapSettingsPaletteColorMappingWidget::applySelections()
                 pcm->copy(*this->paletteColorMapping);
             }
         }
-    }
-    
-    /*
-     * If no map attributes (one palette applies to all maps),
-     * update coloring for all maps since all of the maps will
-     * need their coloring updated.
-     */
-    if (this->caretMappableDataFile->hasMapAttributes() == false) {
-        assignToAllMaps = true;
     }
     
     this->updateHistogramPlot();

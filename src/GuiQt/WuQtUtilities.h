@@ -25,7 +25,10 @@
 #include <iosfwd>
 
 #include <QSize>
+#include <QSharedPointer>
 #include <QString>
+
+#include "CaretColorEnum.h"
 
 class QAction;
 class QBoxLayout;
@@ -79,6 +82,22 @@ namespace caret {
         
         static QWidget* createHorizontalLineWidget();
         
+        static QPixmap createCaretColorEnumPixmap(const QWidget* widgetForPixmap,
+                                                  const int32_t  pixmapWidth,
+                                                  const int32_t  pixmapHeight,
+                                                  const CaretColorEnum::Enum caretColor,
+                                                  const float    rgba[4],
+                                                  const bool     outlineFlag);
+        
+        static QSharedPointer<QPainter> createPixmapWidgetPainter(const QWidget* widget,
+                                                                  QPixmap& pixmap);
+        
+        static QSharedPointer<QPainter> createPixmapWidgetPainterOriginBottomLeft(const QWidget* widget,
+                                                                                  QPixmap& pixmap);
+                
+        static QSharedPointer<QPainter> createPixmapWidgetPainterOriginCenter100x100(const QWidget* widget,
+                                                                                     QPixmap& pixmap);
+        
         static void moveWindowToOffset(QWidget* parentWidget,
                                        QWidget* window,
                                        const int xOffset, 
@@ -113,6 +132,17 @@ namespace caret {
         static void resizeWindow(QWidget* window,
                                  const int32_t width,
                                  const int32_t height);
+        
+        static int getMaximumWidgetHeight(QWidget* w1,
+                                          QWidget* w2,
+                                          QWidget* w3 = 0,
+                                          QWidget* w4 = 0,
+                                          QWidget* w5 = 0,
+                                          QWidget* w6 = 0,
+                                          QWidget* w7 = 0,
+                                          QWidget* w8 = 0,
+                                          QWidget* w9 = 0,
+                                          QWidget* w10 = 0);
         
         static void matchWidgetHeights(QWidget* w1,
                                        QWidget* w2,

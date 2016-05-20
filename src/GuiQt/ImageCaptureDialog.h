@@ -36,7 +36,7 @@ namespace caret {
     
     class BrainBrowserWindow;
     class EnumComboBoxTemplate;
-    class ImageDimensionsModel;
+    class ImageCaptureSettings;
     class WuQWidgetObjectGroup;
     
     class ImageCaptureDialog : public WuQDialogNonModal, public EventListenerInterface {
@@ -69,6 +69,8 @@ namespace caret {
         
         void pixelHeightValueChanged(int);
         
+        void imageFileNameValueChanged();
+        
         void imageWidthValueChanged(double);
         
         void imageHeightValueChanged(double);
@@ -76,6 +78,14 @@ namespace caret {
         void imageResolutionValueChanged(double);
         
         void scaleProportionallyCheckBoxClicked(bool);
+        
+        void imageCroppingCheckBoxClicked(bool);
+        
+        void imageCroppingMarginValueChanged(int);
+        
+        void copyImageToClipboardCheckBoxClicked(bool);
+        
+        void saveImageToFileCheckBoxClicked(bool);
         
         void sizeRadioButtonClicked(QAbstractButton* button);
         
@@ -89,11 +99,23 @@ namespace caret {
         QWidget* createImageDimensionsSection();
         QWidget* createImageDestinationSection();
         
+        void updateDimensionsSection();
+        void updateImageOptionsSection();
+        void updateDestinationSection();
+        
+        bool getSelectedWindowCoordsWidthAndHeight(int32_t& xOut,
+                                                   int32_t& yOut,
+                                                   int32_t& widthOut,
+                                                   int32_t& heightOut,
+                                                   int32_t& graphicsWidthOut,
+                                                   int32_t& graphicsHeightOut,
+                                                   float& aspectRatioOut) const;
+        
         bool getSelectedWindowWidthAndHeight(int32_t& widthOut,
                                              int32_t& heightOut,
                                              float& aspectRatioOut) const;
         
-        void updateDialogWithImageDimensionsModel();
+        //void updateDialogWithImageDimensionsModel();
         
         void updateImageNumberOfBytesLabel();
         
@@ -120,12 +142,11 @@ namespace caret {
         QSpinBox*  m_imageAutoCropMarginSpinBox;
         
         QSpinBox* m_windowSelectionSpinBox;
+        QCheckBox* m_windowCropToLockAspectRegionCheckBox;
         
         QWidget* m_customDimensionsWidget;
         
         QWidget* m_imageDimensionsWidget;
-        
-        ImageDimensionsModel* m_imageDimensionsModel;
     };
     
 #ifdef __IMAGE_CAPTURE_DIALOG__H__DECLARE__

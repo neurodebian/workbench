@@ -33,6 +33,7 @@
 #include "GuiManager.h"
 #undef __GUI_MANAGER_DEFINE__
 
+#include "AnnotationFile.h"
 #include "Brain.h"
 #include "BrainBrowserWindow.h"
 #include "BrainOpenGL.h"
@@ -72,6 +73,7 @@
 #include "EventUpdateInformationWindows.h"
 #include "EventUserInterfaceUpdate.h"
 #include "FociPropertiesEditorDialog.h"
+#include "GapsAndMarginsDialog.h"
 #include "HelpViewerDialog.h"
 #include "IdentifiedItemNode.h"
 #include "IdentifiedItemVoxel.h"
@@ -129,6 +131,25 @@ using namespace caret;
 GuiManager::GuiManager(QObject* parent)
 : QObject(parent)
 {
+    /*
+     * This constructor should be called only once.
+     * When the first instance of GuiManager is created,
+     * singletonGuiManager will be NULL.
+     */
+    CaretAssertMessage((GuiManager::singletonGuiManager == NULL),
+                       "There should never be more than one instance of GuiManager.");
+}
+
+/**
+ * Initialize the GUI manager.
+ *
+ * NOTE: This method is NOT called from the constructor.
+ * If there are problems loading some of the images, there will
+ * be calls to GuiManager::get() which results in recursive calls.
+ */
+void
+GuiManager::initializeGuiManager()
+{
     this->nameOfApplication = "Connectome Workbench";
     //this->brainOpenGL = NULL;
     this->allowBrowserWindowsToCloseWithoutConfirmation = false;
@@ -136,6 +157,7 @@ GuiManager::GuiManager(QObject* parent)
     m_bugReportDialog = NULL;
     m_clippingPlanesDialog = NULL;
     m_customViewDialog = NULL;
+    m_gapsAndMarginsDialog = NULL;
     this->imageCaptureDialog = NULL;
     this->movieDialog = NULL;
     m_informationDisplayDialog = NULL;
@@ -295,10 +317,9 @@ GuiManager::~GuiManager()
 GuiManager* 
 GuiManager::get()
 {
-    if (GuiManager::singletonGuiManager == NULL) {
-        GuiManager::singletonGuiManager = new GuiManager();
-        WuQtUtilities::sendListOfResourcesToCaretLogger();
-    }
+    CaretAssertMessage((GuiManager::singletonGuiManager != NULL),
+                       "GuiManager::singletonGuiManager has not been created.  Must call GuiManager::createGuiManager()");
+
     return GuiManager::singletonGuiManager;
 }
 
@@ -312,6 +333,8 @@ GuiManager::createGuiManager()
                        "GUI manager has already been created.");
     
     GuiManager::singletonGuiManager = new GuiManager();
+    GuiManager::singletonGuiManager->initializeGuiManager();
+    WuQtUtilities::sendListOfResourcesToCaretLogger();
 }
 
 /*
@@ -331,19 +354,16 @@ GuiManager::deleteGuiManager()
  * Beep to alert the user.
  */
 void 
-GuiManager::beep(const int32_t numTimesToBeep)
+GuiManager::beep()
 {
-    for (int32_t i = 0; i < numTimesToBeep; i++) {
-        SystemUtilities::sleepSeconds(0.25);
-        QApplication::beep();
-    }
+    QApplication::beep();
 }
 
 /**
  * @return The brain.
  */
 Brain* 
-GuiManager::getBrain()
+GuiManager::getBrain() const
 {
     return SessionManager::get()->getBrain(0);
 }
@@ -463,6 +483,27 @@ GuiManager::getAllOpenBrainBrowserWindows() const
 }
 
 /**
+ * Get all of the brain browser window indices
+ *
+ * @return
+ *   Vector containing all open brain browser window indices.
+ */
+std::vector<int32_t>
+GuiManager::getAllOpenBrainBrowserWindowIndices() const
+{
+    std::vector<int32_t> windowIndices;
+    
+    int32_t numWindows = static_cast<int32_t>(m_brainBrowserWindows.size());
+    for (int32_t i = 0; i < numWindows; i++) {
+        if (m_brainBrowserWindows[i] != NULL) {
+            windowIndices.push_back(i);
+        }
+    }
+    
+    return windowIndices;
+}
+
+/**
  * @return Return the active browser window.  If no browser window is active,
  * the browser window with the lowest index is returned.  If no browser
  * window is open (which likely should never occur), NULL is returned.
@@ -573,6 +614,176 @@ GuiManager::newBrainBrowserWindow(QWidget* parent,
 }
 
 /**
+ * Test for modified data files.
+ *
+ * @param testModifiedMode
+ *    Mode of testing for modified files.
+ * @param textMessageOut
+ *    Message displayed at top of dialog.
+ * @param modifiedFilesMessageOut
+ *    If there are any modified files, this will contain information
+ *    about the modified files.
+ * @return
+ *    True if there are modified files and the warning message is valid,
+ *    else false.
+ */
+bool
+GuiManager::testForModifiedFiles(const TestModifiedMode testModifiedMode,
+                                 AString& textMessageOut,
+                                 AString& modifiedFilesMessageOut) const
+{
+    textMessageOut.clear();
+    modifiedFilesMessageOut.clear();
+    
+    /*
+     * Exclude all
+     *   Connectivity Files
+     */
+    std::vector<DataFileTypeEnum::Enum> dataFileTypesToExclude;
+    dataFileTypesToExclude.push_back(DataFileTypeEnum::CONNECTIVITY_DENSE);
+    dataFileTypesToExclude.push_back(DataFileTypeEnum::CONNECTIVITY_FIBER_ORIENTATIONS_TEMPORARY);
+    dataFileTypesToExclude.push_back(DataFileTypeEnum::CONNECTIVITY_FIBER_TRAJECTORY_TEMPORARY);
+    
+    switch (testModifiedMode) {
+        case TEST_FOR_MODIFIED_FILES_MODE_FOR_EXIT:
+            break;
+        case TEST_FOR_MODIFIED_FILES_MODE_FOR_SCENE_ADD:
+            dataFileTypesToExclude.push_back(DataFileTypeEnum::SCENE);
+            dataFileTypesToExclude.push_back(DataFileTypeEnum::SPECIFICATION);
+            break;
+        case TEST_FOR_MODIFIED_FILES_MODE_FOR_SCENE_SHOW:
+            dataFileTypesToExclude.push_back(DataFileTypeEnum::SCENE);
+            break;
+    }
+    
+    /*
+     * Are files modified?
+     */
+    std::vector<CaretDataFile*> allModifiedDataFiles;
+    getBrain()->getAllModifiedFiles(dataFileTypesToExclude,
+                                    allModifiedDataFiles);
+    
+    std::vector<CaretDataFile*> modifiedDataFiles;
+    std::vector<CaretDataFile*> paletteModifiedDataFiles;
+    
+    for (std::vector<CaretDataFile*>::iterator allModFilesIter = allModifiedDataFiles.begin();
+         allModFilesIter != allModifiedDataFiles.end();
+         allModFilesIter++) {
+        CaretDataFile* file = *allModFilesIter;
+        CaretAssert(file);
+        
+        switch (testModifiedMode) {
+            case TEST_FOR_MODIFIED_FILES_MODE_FOR_EXIT:
+                modifiedDataFiles.push_back(file);
+                break;
+            case TEST_FOR_MODIFIED_FILES_MODE_FOR_SCENE_ADD:
+            {
+                /*
+                 * Is modification just the palette color mapping?
+                 */
+                CaretMappableDataFile* mappableDataFile = dynamic_cast<CaretMappableDataFile*>(file);
+                bool paletteOnlyModFlag = false;
+                if (mappableDataFile != NULL) {
+                    if (mappableDataFile->isModifiedPaletteColorMapping()) {
+                        if ( ! mappableDataFile->isModifiedExcludingPaletteColorMapping()) {
+                            paletteOnlyModFlag = true;
+                        }
+                    }
+                }
+                if (paletteOnlyModFlag) {
+                    paletteModifiedDataFiles.push_back(file);
+                }
+                else {
+                    modifiedDataFiles.push_back(file);
+                }
+                
+            }
+                break;
+            case TEST_FOR_MODIFIED_FILES_MODE_FOR_SCENE_SHOW:
+                modifiedDataFiles.push_back(file);
+                break;
+        }
+    }
+    
+    const int32_t modFileCount = static_cast<int32_t>(modifiedDataFiles.size());
+    const int32_t paletteModFileCount = static_cast<int32_t>(paletteModifiedDataFiles.size());
+    
+    /*
+     * Are there scene annotations ?
+     */
+    const CaretDataFile* sceneAnnotationFile = getBrain()->getSceneAnnotationFile();
+    bool sceneAnnotationsModifiedFlag = sceneAnnotationFile->isModified();
+    switch (testModifiedMode) {
+        case TEST_FOR_MODIFIED_FILES_MODE_FOR_EXIT:
+            break;
+        case TEST_FOR_MODIFIED_FILES_MODE_FOR_SCENE_ADD:
+            /*
+             * Do not need to notify about modified scene annotations
+             * since scene annotations are saved to the scene
+             */
+            sceneAnnotationsModifiedFlag = false;
+            break;
+        case TEST_FOR_MODIFIED_FILES_MODE_FOR_SCENE_SHOW:
+            break;
+    }
+    
+    if ((modFileCount > 0)
+        || sceneAnnotationsModifiedFlag
+        || paletteModFileCount) {
+        /*
+         * Display dialog allowing user to save files (goes to Save/Manage
+         * Files dialog), exit without saving, or cancel.
+         */
+        switch (testModifiedMode) {
+            case TEST_FOR_MODIFIED_FILES_MODE_FOR_EXIT:
+                textMessageOut = "Do you want to save changes you made to these files?";
+                break;
+            case TEST_FOR_MODIFIED_FILES_MODE_FOR_SCENE_ADD:
+                textMessageOut = "Do you want to continue creating the scene?";
+                break;
+            case TEST_FOR_MODIFIED_FILES_MODE_FOR_SCENE_SHOW:
+                textMessageOut = "Do you want to continue showing the scene?";
+                break;
+        }
+        
+        AString infoTextMsg;
+        if (modFileCount > 0) {
+            infoTextMsg.appendWithNewLine("Changes to these files will be lost if you don't save them:\n");
+            for (std::vector<CaretDataFile*>::iterator iter = modifiedDataFiles.begin();
+                 iter != modifiedDataFiles.end();
+                 iter++) {
+                const CaretDataFile* cdf = *iter;
+                infoTextMsg.appendWithNewLine("   "
+                                              + cdf->getFileNameNoPath());
+            }
+            infoTextMsg.append("\n");
+        }
+        if (paletteModFileCount > 0) {
+            infoTextMsg.appendWithNewLine("These file(s) contain modified palette color mapping.  It is not "
+                                          "necessary to save these file(s) if the save palette color mapping "
+                                          "option is selected on the scene creation dialog:\n");
+            for (std::vector<CaretDataFile*>::iterator iter = paletteModifiedDataFiles.begin();
+                 iter != paletteModifiedDataFiles.end();
+                 iter++) {
+                const CaretDataFile* cdf = *iter;
+                infoTextMsg.appendWithNewLine("   "
+                                              + cdf->getFileNameNoPath());
+            }
+            infoTextMsg.append("\n");
+        }
+        
+        if (sceneAnnotationsModifiedFlag) {
+            infoTextMsg.appendWithNewLine("Scene annotations are modified.");
+        }
+        
+        modifiedFilesMessageOut = infoTextMsg;
+        return true;
+    }
+    
+    return false;
+}
+
+/**
  * Exit the program.
  * @param
  *    Parent over which dialogs are displayed for saving/verifying.
@@ -582,48 +793,21 @@ GuiManager::newBrainBrowserWindow(QWidget* parent,
 bool 
 GuiManager::exitProgram(QWidget* parent)
 {
-    /*
-     * Exclude all
-     *   Connectivity Files
-     */
-    std::vector<DataFileTypeEnum::Enum> dataFileTypesToExclude;
-    dataFileTypesToExclude.push_back(DataFileTypeEnum::CONNECTIVITY_DENSE);
-    dataFileTypesToExclude.push_back(DataFileTypeEnum::CONNECTIVITY_FIBER_ORIENTATIONS_TEMPORARY);
-    dataFileTypesToExclude.push_back(DataFileTypeEnum::CONNECTIVITY_FIBER_TRAJECTORY_TEMPORARY);
-
     bool okToExit = false;
     
-    /*
-     * Are files modified?
-     */
-    std::vector<CaretDataFile*> modifiedDataFiles;
-    getBrain()->getAllModifiedFiles(dataFileTypesToExclude,
-                                    modifiedDataFiles);
-    const int32_t modFileCount = static_cast<int32_t>(modifiedDataFiles.size());
-         
-    if (modFileCount > 0) {
-        /*
-         * Display dialog allowing user to save files (goes to Save/Manage
-         * Files dialog), exit without saving, or cancel.
-         */
-        const AString textMsg("Do you want to save changes you made to these files?");
-        
-        AString infoTextMsg("Changes to these files will be lost if you don't save them:\n");
-        for (std::vector<CaretDataFile*>::iterator iter = modifiedDataFiles.begin();
-             iter != modifiedDataFiles.end();
-             iter++) {
-            const CaretDataFile* cdf = *iter;
-            infoTextMsg.appendWithNewLine("   "
-                                  + cdf->getFileNameNoPath());
-        }
-        infoTextMsg.appendWithNewLine("");
+    AString textMessage;
+    AString modifiedFilesMessage;
+    if (testForModifiedFiles(TEST_FOR_MODIFIED_FILES_MODE_FOR_EXIT,
+                             textMessage,
+                             modifiedFilesMessage)) {
+        modifiedFilesMessage.appendWithNewLine("");
         
         QMessageBox quitDialog(QMessageBox::Warning,
                                "Exit Workbench",
-                               textMsg,
+                               textMessage,
                                QMessageBox::NoButton,
                                parent);
-        quitDialog.setInformativeText(infoTextMsg);
+        quitDialog.setInformativeText(modifiedFilesMessage);
         
         QPushButton* saveButton = quitDialog.addButton("Save...", QMessageBox::AcceptRole);
         saveButton->setToolTip("Display manage files window to save files");
@@ -656,31 +840,33 @@ GuiManager::exitProgram(QWidget* parent)
         }
     }
     else {
-        const AString textMsg("Exiting Workbench");
-        const AString infoTextMsg("<html>Would you like to save your Workbench windows in scene file "
-                                  "so you can easily pick up where you left off?"
-                                  "<p>"
-                                  "Click the <B>Show Details</B> button for "
-                                  "more information.</html>");
-        const AString detailTextMsg("Scenes allow one to regenerate exactly what is displayed in "
-                                    "Workbench.  This can be useful in these and other situations:"
-                                    "\n\n"
-                                    " * During manuscript preparation to restore Workbench to match "
-                                    "a previously generated figure (image capture)."
-                                    "\n\n"
-                                    " * When returning to this dataset for further analysis."
-                                    "\n\n"
-                                    " * When sharing data sets with others to provide a particular "
-                                    "view of a surface/volume with desired data (overlay and feature) "
-                                    "selections.");
+        const AString textMsg("Exit Workbench?");
 
         QMessageBox quitDialog(QMessageBox::Warning,
                                "Exit Workbench",
                                textMsg,
                                QMessageBox::NoButton,
                                parent);
-        quitDialog.setInformativeText(infoTextMsg);
-        quitDialog.setDetailedText(detailTextMsg);
+        if (SceneDialog::isInformUserAboutScenesOnExit()) {
+            const AString infoTextMsg("<html>Would you like to save your Workbench windows in scene file "
+                                      "so you can easily pick up where you left off?"
+                                      "<p>"
+                                      "Click the <B>Show Details</B> button for "
+                                      "more information.</html>");
+            const AString detailTextMsg("Scenes allow one to regenerate exactly what is displayed in "
+                                        "Workbench.  This can be useful in these and other situations:"
+                                        "\n\n"
+                                        " * During manuscript preparation to restore Workbench to match "
+                                        "a previously generated figure (image capture)."
+                                        "\n\n"
+                                        " * When returning to this dataset for further analysis."
+                                        "\n\n"
+                                        " * When sharing data sets with others to provide a particular "
+                                        "view of a surface/volume with desired data (overlay and feature) "
+                                        "selections.");
+            quitDialog.setInformativeText(infoTextMsg);
+            quitDialog.setDetailedText(detailTextMsg);
+        }
         
         QPushButton* exitButton = quitDialog.addButton("Exit",
                                                        QMessageBox::AcceptRole);
@@ -1120,6 +1306,12 @@ GuiManager::receiveEvent(Event* event)
 
         BrainBrowserWindow* browserWindow = m_brainBrowserWindows[paletteEditEvent->getBrowserWindowIndex()];
         CaretAssert(browserWindow);
+        
+        int32_t browserTabIndex = -1;
+        BrowserTabContent* tabContent = browserWindow->getBrowserTabContent();
+        if (tabContent != NULL) {
+            browserTabIndex = tabContent->getTabNumber();
+        }
 
         bool placeInDefaultLocation = false;
         if (m_paletteColorMappingEditor == NULL) {
@@ -1132,7 +1324,8 @@ GuiManager::receiveEvent(Event* event)
         }
         
         m_paletteColorMappingEditor->updateDialogContent(paletteEditEvent->getCaretMappableDataFile(),
-                                                         paletteEditEvent->getMapIndex());
+                                                         paletteEditEvent->getMapIndex(),
+                                                         browserTabIndex);
         m_paletteColorMappingEditor->show();
         m_paletteColorMappingEditor->raise();
         m_paletteColorMappingEditor->activateWindow();
@@ -1845,6 +2038,25 @@ GuiManager::processShowImageCaptureDialog(BrainBrowserWindow* browserWindow)
     this->imageCaptureDialog->setVisible(true);
     this->imageCaptureDialog->show();
     this->imageCaptureDialog->activateWindow();
+}
+
+/**
+ * Show the gaps and margins window.
+ * @param browserWindow
+ *    Window on which dialog was requested.
+ */
+void
+GuiManager::processShowGapsAndMarginsDialog(BrainBrowserWindow* browserWindow)
+{
+    if (m_gapsAndMarginsDialog == NULL) {
+        m_gapsAndMarginsDialog = new GapsAndMarginsDialog(browserWindow);
+        this->addNonModalDialog(m_gapsAndMarginsDialog);
+    }
+    m_gapsAndMarginsDialog->updateDialog();
+    //m_tabMarginsDialog->setBrowserWindowIndex(browserWindow->getBrowserWindowIndex());
+    m_gapsAndMarginsDialog->setVisible(true);
+    m_gapsAndMarginsDialog->show();
+    m_gapsAndMarginsDialog->activateWindow();
 }
 
 /**

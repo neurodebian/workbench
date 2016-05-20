@@ -45,6 +45,11 @@ namespace caret {
         
         void getObliqueRotation(float obliqueRotation[4][4]) const;
         
+        void getRightCortexFlatMapOffset(float& rightCortexFlatMapOffsetX,
+                                         float& rightCortexFlatMapOffsetY) const;
+        
+        float getRightCortexFlatMapZoomFactor() const;
+        
         float getScaling() const;
         
         void setName(const AString& name);
@@ -63,6 +68,11 @@ namespace caret {
         
         void setObliqueRotation(const float obliqueRotation[4][4]);
         
+        void setRightCortexFlatMapOffset(const float rightCortexFlatMapOffsetX,
+                                         const float rightCortexFlatMapOffsetY);
+        
+        void setRightCortexFlatMapZoomFactor(const float rightCortexFlatMapZoomFactor);
+        
         void setScaling(const float scaling);
         
         void setPanningRotationMatrixAndZoom(const float panX,
@@ -70,14 +80,20 @@ namespace caret {
                                              const float panZ,
                                              const float rotationMatrix[4][4],
                                              const float obliqueRotationMatrix[4][4],
-                                             const float zoom);
+                                             const float zoom,
+                                             const float rightCortexFlatMapOffsetX,
+                                             const float rightCortexFlatMapOffsetY,
+                                             const float rightCortexFlatMapZoomFactor);
         
         void getPanningRotationMatrixAndZoom(float& panX,
                                              float& panY,
                                              float& panZ,
                                              float rotationMatrix[4][4],
                                              float obliqueRotationMatrix[4][4],
-                                             float& zoom) const;
+                                             float& zoom,
+                                             float& rightCortexFlatMapOffsetX,
+                                             float& rightCortexFlatMapOffsetY,
+                                             float& rightCortexFlatMapZoomFactor) const;
         
         AString getAsString() const;
         
@@ -106,6 +122,10 @@ namespace caret {
         float obliqueRotation[4][4];
         
         float scaling;
+        
+        float rightCortexFlatMapOffsetXY[2];
+        
+        float rightCortexFlatMapZoomFactor;
         
         static const QString s_separatorInPreferences;
     };

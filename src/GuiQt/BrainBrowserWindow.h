@@ -69,6 +69,10 @@ namespace caret {
         
         QMenu* createPopupMenu();
         
+        void getAllTabContent(std::vector<BrowserTabContent*>& allTabContent) const;
+        
+        void getAllTabContentIndices(std::vector<int32_t>& allTabContentIndices) const;
+        
         void removeAndReturnAllTabs(std::vector<BrowserTabContent*>& allTabContent);
         
         int32_t getBrowserWindowIndex() const;
@@ -105,7 +109,7 @@ namespace caret {
         virtual void restoreFromScene(const SceneAttributes* sceneAttributes,
                                       const SceneClass* sceneClass);
 
-        void getViewportSize(int &w, int &h);
+//        void getViewportSize(int &w, int &h);
         
         TileTabsConfiguration* getSelectedTileTabsConfiguration();
         
@@ -116,14 +120,31 @@ namespace caret {
         void setGraphicsWidgetFixedSize(const int32_t width,
                                         const int32_t height);
         
-        void getGraphicsWidgetSize(int32_t& widthOut,
-                                   int32_t& heightOut) const;
+        void getGraphicsWidgetSize(int32_t& xOut,
+                                   int32_t& yOut,
+                                   int32_t& widthOut,
+                                   int32_t& heightOut,
+                                   int32_t& graphicsWidthOut,
+                                   int32_t& graphicsHeightOut,
+                                   const bool applyLockedAspectRatiosFlag) const;
         
         AString toString() const;
         
         virtual void getDescriptionOfContent(PlainTextStringBuilder& descriptionOut) const;
         
         static int32_t loadRecentSpecFileMenu(QMenu* recentSpecFileMenu);
+        
+        static int32_t loadRecentSceneFileMenu(QMenu* recentSpecFileMenu);
+        
+        float getOpenGLWidgetAspectRatio() const;
+        
+        bool isAspectRatioLocked() const;
+        
+        void setAspectRatioLocked(const bool locked);
+        
+        float getAspectRatio() const;
+        
+        void setAspectRatio(const float aspectRatio);
         
     protected:
         void closeEvent(QCloseEvent* event);
@@ -150,6 +171,7 @@ namespace caret {
         void processViewTileTabsConfigurationDialog();
         void processShowHelpInformation();
         void processShowIdentifyBrainordinateDialog();
+        void processGapsAndMargins();
         
         void processMoveOverlayToolBoxToLeft();
         void processMoveOverlayToolBoxToBottom();
@@ -162,6 +184,9 @@ namespace caret {
         
         void processMoveSelectedTabToWindowMenuAboutToBeDisplayed();
         void processMoveSelectedTabToWindowMenuSelection(QAction*);
+        
+        void processRecentSceneFileMenuAboutToBeDisplayed();
+        void processRecentSceneFileMenuSelection(QAction*);
         
         void processRecentSpecFileMenuAboutToBeDisplayed();
         void processRecentSpecFileMenuSelection(QAction*);
@@ -198,6 +223,15 @@ namespace caret {
         
         void processProjectFoci();
         void processSplitBorderFiles();
+        void processTabAspectRatioLockedToggled(bool checked);
+        void processWindowAspectRatioLockedToggled(bool checked);
+        void processLockAllTabsAspectRatioTriggered();
+        void processUnlockAllTabsAspectRatioTriggered();
+        
+        void processEditMenuItemTriggered(QAction* action);
+        void processEditMenuAboutToShow();
+        
+        void showBalsaDatabaseDialog();
         
     private:
         // Contains status of components such as enter/exit full screen
@@ -236,6 +270,7 @@ namespace caret {
         void createMenus();
         
         QMenu* createMenuDevelop();
+        QMenu* createMenuEdit();
         QMenu* createMenuFile();
         QMenu* createMenuView();
         QMenu* createMenuViewMoveOverlayToolBox();
@@ -312,6 +347,8 @@ namespace caret {
         QMenu* m_tileTabsMenu;
         QAction* m_createAndEditTileTabsAction;
         
+        QAction* m_gapsAndMarginsAction;
+        
         QAction* m_nextTabAction;
         
         QAction* m_previousTabAction;
@@ -341,6 +378,11 @@ namespace caret {
         
         QAction* m_overlayToolBoxAction;
         
+        QAction* m_lockAllTabsAspectRatioAction;
+        QAction* m_unlockAllTabsAspectRatioAction;
+        QAction* m_tabAspectRatioLockedAction;
+        QAction* m_windowAspectRatioLockedAction;
+        
         QAction* m_featuresToolBoxAction;
         
         QAction* m_dataFociProjectAction;
@@ -351,6 +393,12 @@ namespace caret {
         QMenu* m_recentSpecFileMenu;
         AString m_recentSpecFileMenuOpenConfirmTitle;
         AString m_recentSpecFileMenuLoadNoConfirmTitle;
+        
+        QMenu* m_recentSceneFileMenu;
+        
+        QMenu* m_editMenu;
+        QAction* m_editMenuRedoAction;
+        QAction* m_editMenuUndoAction;
         
         BrainBrowserWindowOrientedToolBox* m_overlayHorizontalToolBox;
         BrainBrowserWindowOrientedToolBox* m_overlayVerticalToolBox;
@@ -368,6 +416,8 @@ namespace caret {
         
         WindowComponentStatus m_defaultWindowComponentStatus;
         WindowComponentStatus m_normalWindowComponentStatus;
+        
+        float m_aspectRatio;
         
         static bool s_firstWindowFlag;
         

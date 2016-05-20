@@ -175,6 +175,8 @@ namespace caret {
         
         void updateSpecFileRowInTable();
         
+        void updateAnnotationSceneFileRowInTable();
+        
         void sortFileContent();
         
         void setTableColumnLabels();
@@ -188,6 +190,9 @@ namespace caret {
         void changeFileName(QWidget* parent,
                             SpecFileDataFile* specFileDataFile,
                             CaretDataFile* caretDataFile);
+        
+        void copyMoveFileContent(QWidget* parent,
+                                 CaretDataFile* caretDataFile);
         
         void updateTableDimensionsToFitFiles();
         
@@ -242,7 +247,9 @@ namespace caret {
         std::vector<SpecFileManagementDialogRowContent*> m_tableRowDataFileContent;
         
         int m_specFileTableRowIndex;
-                
+        
+        int m_sceneAnnotationFileRowIndex;
+        
         QSignalMapper* m_fileReloadOrOpenFileActionSignalMapper;
         
         QSignalMapper* m_fileCloseFileActionSignalMapper;

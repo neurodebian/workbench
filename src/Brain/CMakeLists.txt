@@ -14,6 +14,11 @@ SET(QT_DONT_USE_QTGUI)
 #SET(QT_USE_QTOPENGL TRUE)
 
 #
+# Need network
+#
+SET(QT_USE_QTNETWORK TRUE)
+
+#
 # Add QT for includes
 #
 INCLUDE (${QT_USE_FILE})
@@ -47,9 +52,13 @@ ENDIF (OPENGL_FOUND)
 # Create the brain library
 #
 ADD_LIBRARY(Brain
+AnnotationArrangerExecutor.h
+AnnotationArrangerInputs.h
+AnnotationManager.h
 BorderDrawingTypeEnum.h
 Brain.h
 BrainOpenGL.h
+BrainOpenGLAnnotationDrawingFixedPipeline.h
 BrainOpenGLChartDrawingInterface.h
 BrainOpenGLChartDrawingFixedPipeline.h
 BrainOpenGLFixedPipeline.h
@@ -59,8 +68,10 @@ BrainOpenGLShapeCone.h
 BrainOpenGLShapeCube.h
 BrainOpenGLShapeCylinder.h
 BrainOpenGLShapeRing.h
+BrainOpenGLShapeRingOutline.h
 BrainOpenGLShapeSphere.h
 BrainOpenGLTextRenderInterface.h
+BrainOpenGLTextureManager.h
 BrainOpenGLViewportContent.h
 BrainOpenGLVolumeObliqueSliceDrawing.h
 BrainOpenGLVolumeSliceDrawing.h
@@ -75,6 +86,7 @@ CiftiConnectivityMatrixDataFileManager.h
 CiftiFiberTrajectoryManager.h
 ClippingPlaneGroup.h
 DisplayProperties.h
+DisplayPropertiesAnnotation.h
 DisplayPropertiesBorders.h
 DisplayPropertiesFiberOrientation.h
 DisplayPropertiesFoci.h
@@ -83,6 +95,7 @@ DisplayPropertiesLabels.h
 DisplayPropertiesSurface.h
 DisplayPropertiesVolume.h
 DummyFontTextRenderer.h
+EventAnnotationColorBarGet.h
 EventBrainReset.h
 EventBrainStructureGetAll.h
 EventBrowserTabDelete.h
@@ -94,6 +107,7 @@ EventDataFileAdd.h
 EventDataFileDelete.h
 EventDataFileRead.h
 EventDataFileReload.h
+EventGetBrainOpenGLTextRenderer.h
 EventIdentificationHighlightLocation.h
 EventModelAdd.h
 EventModelDelete.h
@@ -110,6 +124,7 @@ FiberOrientationSamplesVector.h
 FiberOrientationSymbolTypeEnum.h
 FociDrawingTypeEnum.h
 FtglFontTextRenderer.h
+GapsAndMargins.h
 IdentificationManager.h
 IdentificationStringBuilder.h
 IdentificationTextGenerator.h
@@ -131,6 +146,7 @@ OverlaySetArray.h
 ProjectionViewTypeEnum.h
 SelectionItemDataTypeEnum.h
 SelectionItem.h
+SelectionItemAnnotation.h
 SelectionItemBorderSurface.h
 SelectionItemChartDataSeries.h
 SelectionItemChartFrequencySeries.h
@@ -169,9 +185,13 @@ VolumeSurfaceOutlineSetModel.h
 WholeBrainSurfaceSettings.h
 WholeBrainVoxelDrawingMode.h
 
+AnnotationArrangerExecutor.cxx
+AnnotationArrangerInputs.cxx
+AnnotationManager.cxx
 BorderDrawingTypeEnum.cxx
 Brain.cxx
 BrainOpenGL.cxx
+BrainOpenGLAnnotationDrawingFixedPipeline.cxx
 BrainOpenGLChartDrawingFixedPipeline.cxx
 BrainOpenGLFixedPipeline.cxx
 BrainOpenGLPrimitiveDrawing.cxx
@@ -180,7 +200,10 @@ BrainOpenGLShapeCone.cxx
 BrainOpenGLShapeCube.cxx
 BrainOpenGLShapeCylinder.cxx
 BrainOpenGLShapeRing.cxx
+BrainOpenGLShapeRingOutline.cxx
 BrainOpenGLShapeSphere.cxx
+BrainOpenGLTextRenderInterface.cxx
+BrainOpenGLTextureManager.cxx
 BrainOpenGLViewportContent.cxx
 BrainOpenGLVolumeObliqueSliceDrawing.cxx
 BrainOpenGLVolumeSliceDrawing.cxx
@@ -194,6 +217,7 @@ CiftiConnectivityMatrixDataFileManager.cxx
 CiftiFiberTrajectoryManager.cxx
 ClippingPlaneGroup.cxx
 DisplayProperties.cxx
+DisplayPropertiesAnnotation.cxx
 DisplayPropertiesBorders.cxx
 DisplayPropertiesFiberOrientation.cxx
 DisplayPropertiesFoci.cxx
@@ -202,6 +226,7 @@ DisplayPropertiesLabels.cxx
 DisplayPropertiesSurface.cxx
 DisplayPropertiesVolume.cxx
 DummyFontTextRenderer.cxx
+EventAnnotationColorBarGet.cxx
 EventBrainReset.cxx
 EventBrainStructureGetAll.cxx
 EventBrowserTabDelete.cxx
@@ -213,6 +238,7 @@ EventDataFileAdd.cxx
 EventDataFileDelete.cxx
 EventDataFileRead.cxx
 EventDataFileReload.cxx
+EventGetBrainOpenGLTextRenderer.cxx
 EventIdentificationHighlightLocation.cxx
 EventModelAdd.cxx
 EventModelDelete.cxx
@@ -228,6 +254,7 @@ FiberOrientationSamplesLoader.cxx
 FiberOrientationSymbolTypeEnum.cxx
 FociDrawingTypeEnum.cxx
 FtglFontTextRenderer.cxx
+GapsAndMargins.cxx
 IdentificationManager.cxx
 IdentificationStringBuilder.cxx
 IdentificationTextGenerator.cxx
@@ -249,6 +276,7 @@ OverlaySetArray.cxx
 ProjectionViewTypeEnum.cxx
 SelectionItemDataTypeEnum.cxx
 SelectionItem.cxx
+SelectionItemAnnotation.cxx
 SelectionItemBorderSurface.cxx
 SelectionItemChartDataSeries.cxx
 SelectionItemChartFrequencySeries.cxx
@@ -292,6 +320,7 @@ WholeBrainVoxelDrawingMode.cxx
 # Find Headers
 #
 INCLUDE_DIRECTORIES(
+${CMAKE_SOURCE_DIR}/Annotations
 ${CMAKE_SOURCE_DIR}/Brain
 ${CMAKE_SOURCE_DIR}/Charting
 ${CMAKE_SOURCE_DIR}/Cifti
@@ -307,8 +336,7 @@ ${CMAKE_SOURCE_DIR}/Common
 
 IF (FREETYPE_FOUND)
 INCLUDE_DIRECTORIES(
-   ${CMAKE_SOURCE_DIR}/FtglFont
-   ${CMAKE_SOURCE_DIR}/FtglFont/FTGL
+   ${FTGL_INCLUDE_DIRS}
    ${FREETYPE_INCLUDE_DIR_ft2build}
    ${FREETYPE_INCLUDE_DIR_freetype2}
 )

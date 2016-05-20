@@ -109,8 +109,6 @@ namespace caret {
         
         std::vector<float> computeAverageNormals();
                 
-        const float* getNodeColor(const int32_t nodeIndex) const;
-        
         void getTriangleNormalVector(const int32_t triangleIndex,
                                      float normalOut[3]) const;
         
@@ -139,6 +137,8 @@ namespace caret {
         void getSignedDistanceHelper(CaretPointer<SignedDistanceHelper>& helpOut) const;
         
         CaretPointer<const CaretPointLocator> getPointLocator() const;
+        
+        void clearCachedHelpers() const;
         
         const BoundingBox* getBoundingBox() const;
         
@@ -259,9 +259,6 @@ namespace caret {
         
         bool m_skipSanityCheck;
 
-        /** The node coloring. */
-        std::vector<float> nodeColoring;
-        
         ///topology base for surface
         mutable CaretPointer<TopologyHelperBase> m_topoBase;
         

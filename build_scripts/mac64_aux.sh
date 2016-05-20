@@ -62,8 +62,8 @@ git pull -u
 #CXX_COMPILER=/usr/local/clang-llvm/clang+llvm-3.2-x86_64-apple-darwin11/bin/clang++
 #CC_COMPILER=/usr/bin/gcc
 #CXX_COMPILER=/usr/bin/g++
-#CC_COMPILER=/usr/local/gcc-4.9.0/bin/gcc
-#CXX_COMPILER=/usr/local/gcc-4.9.0/bin/g++
+#CC_COMPILER=/usr/local/gcc-4.9.3/bin/gcc
+#CXX_COMPILER=/usr/local/gcc-4.9.3/bin/g++
 
 #
 # Clang compiler with OpenMP
@@ -81,7 +81,7 @@ export OPENMP_LIB_DIR
 echo "BUILDING SOURCE"
 mkdir -p ${BUILD_DIR}
 cd ${BUILD_DIR}
-cmake \
+/usr/local/cmake-3.3.1/bin/cmake \
    -DCMAKE_BUILD_TYPE=Release \
    -DCMAKE_C_COMPILER=${CC_COMPILER} \
    -DCMAKE_CXX_COMPILER=${CXX_COMPILER} \

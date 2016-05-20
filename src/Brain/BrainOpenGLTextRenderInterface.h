@@ -25,176 +25,203 @@
 #include "CaretObject.h"
 
 namespace caret {
+    class AnnotationText;
 
-    /// An interface for a system that renders text in OpenGL commands
     class BrainOpenGLTextRenderInterface : public CaretObject {
         
     protected:
-        /**
-         * Constructor.
-         */
-        BrainOpenGLTextRenderInterface() { }
+        BrainOpenGLTextRenderInterface();
         
     public:
-        /**
-         * Style of the text
-         */
-        enum TextStyle {
-            /** Bold text */
-            BOLD,
-            /** Normal text */
-            NORMAL
-        };
+        virtual ~BrainOpenGLTextRenderInterface();
         
         /**
-         * Alignment of the text in X
-         */
-        enum TextAlignmentX {
-            /** Text is centered at X-coordinate */
-            X_CENTER,
-            /** First character starts at X-coordinate */
-            X_LEFT,
-            /** Last character ends at X-coordinate */
-            X_RIGHT
-        };
-        
-        /**
-         * Alignment of the text in Y
-         */
-        enum TextAlignmentY {
-            /** Bottom of characters is at Y-coordinate */
-            Y_BOTTOM,
-            /** Text is centered at Y-coordinate */
-            Y_CENTER,
-            /** Top of characters is at Y-coordinate */
-            Y_TOP
-        };
-        
-        /**
-         * Destructor.
-         */
-        virtual ~BrainOpenGLTextRenderInterface() { }
-        
-        /**
-         * Draw text at the given window coordinates.
+         * Draw annnotation text at the given viewport coordinates using
+         * the the annotations attributes for the style of text.
          *
-         * @param viewport
-         *   The current viewport.
-         * @param windowX
-         *   X-coordinate in the window of first text character
-         *   using the 'alignment'
-         * @param windowY
-         *   Y-coordinate in the window at which bottom of text is placed.
-         * @param text
-         *   Text that is to be drawn.
-         * @param alignmentX
-         *   Alignment of text in X
-         * @param alignmentY
-         *   Alignment of text in Y
-         * @param textStyle
-         *   Style of the text.
-         * @param fontHeight
-         *   Height of the text.
+         * Depth testing is DISABLED when drawing text with this method.
+         *
+         * @param viewportX
+         *     Viewport X-coordinate.
+         * @param viewportY
+         *     Viewport Y-coordinate.
+         * @param annotationText
+         *     Annotation text and attributes.
          */
-        virtual void drawTextAtWindowCoords(const int viewport[4],
-                                            const int windowX,
-                                            const int windowY,
-                                            const QString& text,
-                                            const TextAlignmentX alignmentX,
-                                            const TextAlignmentY alignmentY,
-                                            const TextStyle textStyle = NORMAL,
-                                            const int fontHeight = 14) = 0;
+        virtual void drawTextAtViewportCoords(const double viewportX,
+                                              const double viewportY,
+                                              const AnnotationText& annotationText) = 0;
         
         /**
-         * Draw text at the given window coordinates.
+         * Draw annnotation text at the given viewport coordinates using
+         * the the annotations attributes for the style of text.
          *
-         * @param viewport
-         *   The current viewport.
-         * @param windowX
-         *   X-coordinate in the window of first text character
-         *   using the 'alignment'
-         * @param windowY
-         *   Y-coordinate in the window at which bottom of text is placed.
-         * @param text
-         *   Text that is to be drawn.
-         * @param alignmentX
-         *   Alignment of text in X
-         * @param alignmentY
-         *   Alignment of text in Y
-         * @param textStyle
-         *   Style of the text.
-         * @param fontHeight
-         *   Height of the text.
+         * Depth testing is ENABLED when drawing text with this method.
+         *
+         * @param viewportX
+         *     Viewport X-coordinate.
+         * @param viewportY
+         *     Viewport Y-coordinate.
+         * @param viewportZ
+         *     Viewport Z-coordinate.
+         * @param annotationText
+         *     Annotation text and attributes.
          */
-        virtual void drawVerticalTextAtWindowCoords(const int viewport[4],
-                                            const int windowX,
-                                            const int windowY,
-                                            const QString& text,
-                                            const TextAlignmentX alignmentX,
-                                            const TextAlignmentY alignmentY,
-                                            const TextStyle textStyle,
-                                            const int fontHeight)
-        {
-            const int32_t numChars = text.length();
-            int y = windowY + ((numChars * fontHeight) / 2.0);
-            
-            for (int32_t i = 0; i < text.length(); i++) {
-                drawTextAtWindowCoords(viewport,
-                                       windowX,
-                                       y,
-                                       text[i],
-                                       alignmentX,
-                                       alignmentY,
-                                       textStyle,
-                                       fontHeight);
-                y -= fontHeight;
-            }
-        }
+        virtual void drawTextAtViewportCoords(const double viewportX,
+                                              const double viewportY,
+                                              const double viewportZ,
+                                              const AnnotationText& annotationText) = 0;
         
-       /**
-         * Draw text at the given model coordinates.
+        /**
+         * Draw annnotation text at the given model coordinates using
+         * the the annotations attributes for the style of text.
+         *
+         * Depth testing is ENABLED when drawing text with this method.
          *
          * @param modelX
-         *   X-coordinate in model space of first text character
+         *     Model X-coordinate.
          * @param modelY
-         *   Y-coordinate in model space.
+         *     Model Y-coordinate.
          * @param modelZ
-         *   Z-coordinate in model space.
-         * @param text
-         *   Text that is to be drawn.
-         * @param textStyle
-         *   Style of the text.
-         * @param fontHeight
-         *   Height of the text.
+         *     Model Z-coordinate.
+         * @param annotationText
+         *     Annotation text and attributes.
          */
         virtual void drawTextAtModelCoords(const double modelX,
                                            const double modelY,
                                            const double modelZ,
-                                           const QString& text,
-                                           const TextStyle textStyle,
-                                           const int fontHeight) = 0;
-
+                                           const AnnotationText& annotationText) = 0;
+        
         /**
-         * Get the bounds of the text (in pixels) using the given text
+         * Draw annnotation text at the given model coordinates using
+         * the the annotations attributes for the style of text.
+         *
+         * Depth testing is ENABLED when drawing text with this method.
+         *
+         * @param modelXYZ
+         *     Model XYZ coordinate.
+         * @param annotationText
+         *     Annotation text and attributes.
+         */
+        void drawTextAtModelCoords(const double modelXYZ[3],
+                                   const AnnotationText& annotationText) {
+            drawTextAtModelCoords(modelXYZ[0], modelXYZ[1], modelXYZ[2], annotationText);
+        }
+        
+        /**
+         * Draw annnotation text at the given model coordinates using
+         * the the annotations attributes for the style of text.
+         *
+         * Depth testing is ENABLED when drawing text with this method.
+         *
+         * @param modelXYZ
+         *     Model XYZ coordinate.
+         * @param annotationText
+         *     Annotation text and attributes.
+         */
+        void drawTextAtModelCoords(const float modelXYZ[3],
+                                   const AnnotationText& annotationText) {
+            drawTextAtModelCoords(modelXYZ[0], modelXYZ[1], modelXYZ[2], annotationText);
+        }
+        
+        /**
+         * Get the estimated width and height of text (in pixels) using the given text
          * attributes.
          *
+         * See http://ftgl.sourceforge.net/docs/html/metrics.png
+         *
+         * @param annotationText
+         *   Text for width and height estimation.
+         * @param viewportHeight
+         *    Height of the viewport needed for percentage height text.
          * @param widthOut
-         *   Output containing width of text characters.
+         *    Estimated width of text.
          * @param heightOut
-         *   Output containing height of text characters.
-         * @param text
-         *   Text that is to be drawn.
-         * @param textStyle
-         *   Style of the text.
-         * @param fontHeight
-         *   Height of the text.
+         *    Estimated height of text.
          */
-        virtual void getTextBoundsInPixels(int32_t& widthOut,
-                                           int32_t& heightOut,
-                                           const QString& text,
-                                           const TextStyle textStyle,
-                                           const int fontHeight) = 0;
+        virtual void getTextWidthHeightInPixels(const AnnotationText& annotationText,
+                                                const double viewportHeight,
+                                                double& widthOut,
+                                                double& heightOut) = 0;
         
+        /**
+         * Get the bounds of text (in pixels) using the given text
+         * attributes.
+         *
+         * See http://ftgl.sourceforge.net/docs/html/metrics.png
+         *
+         * @param annotationText
+         *   Text that is to be drawn.
+         * @param viewportX
+         *    Viewport X-coordinate.
+         * @param viewportY
+         *    Viewport Y-coordinate.
+         * @param viewportZ
+         *    Viewport Z-coordinate.
+         * @param viewportHeight
+         *    Height of the viewport needed for percentage height text.
+         * @param bottomLeftOut
+         *    The bottom left corner of the text bounds.
+         * @param bottomRightOut
+         *    The bottom right corner of the text bounds.
+         * @param topRightOut
+         *    The top right corner of the text bounds.
+         * @param topLeftOut
+         *    The top left corner of the text bounds.
+         */
+        virtual void getBoundsForTextAtViewportCoords(const AnnotationText& annotationText,
+                                                      const double viewportX,
+                                                      const double viewportY,
+                                                      const double viewportZ,
+                                                      const double viewportHeight,
+                                                      double bottomLeftOut[3],
+                                                      double bottomRightOut[3],
+                                                      double topRightOut[3],
+                                                      double topLeftOut[3]) = 0;
+        
+        /**
+         * Get the bounds of text (in pixels) using the given text
+         * attributes.
+         *
+         * See http://ftgl.sourceforge.net/docs/html/metrics.png
+         *
+         * @param annotationText
+         *   Text that is to be drawn.
+         * @param viewportX
+         *    Viewport X-coordinate.
+         * @param viewportY
+         *    Viewport Y-coordinate.
+         * @param viewportZ
+         *    Viewport Z-coordinate.
+         * @param viewportHeight
+         *    Height of the viewport needed for percentage height text.
+         * @param bottomLeftOut
+         *    The bottom left corner of the text bounds.
+         * @param bottomRightOut
+         *    The bottom right corner of the text bounds.
+         * @param topRightOut
+         *    The top right corner of the text bounds.
+         * @param topLeftOut
+         *    The top left corner of the text bounds.
+         */
+        void getBoundsForTextAtViewportCoords(const AnnotationText& annotationText,
+                                              const float viewportX,
+                                              const float viewportY,
+                                              const float viewportZ,
+                                              const float viewportHeight,
+                                              float bottomLeftOut[3],
+                                              float bottomRightOut[3],
+                                              float topRightOut[3],
+                                              float topLeftOut[3]);
+        
+        static float pointSizeToPixels(const float pointSize);
+        
+        static float pixelsToPointSize(const float pixels);
+        
+        static float getPixelsPerInch();
+        
+        static void setPixelsPerInch(const float pixelsPerInch);
+
         /**
          * @return The font system is valid.
          */
@@ -211,10 +238,11 @@ namespace caret {
         BrainOpenGLTextRenderInterface& operator=(const BrainOpenGLTextRenderInterface&);
         
     private:
+        static float s_pixelsPerInch;
     };
     
 #ifdef __BRAIN_OPEN_G_L_TEXT_RENDER_INTERFACE_DECLARE__
-    // <PLACE DECLARATIONS OF STATIC MEMBERS HERE>
+    float BrainOpenGLTextRenderInterface::s_pixelsPerInch = 72.0;
 #endif // __BRAIN_OPEN_G_L_TEXT_RENDER_INTERFACE_DECLARE__
 
 } // namespace

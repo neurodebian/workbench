@@ -37,7 +37,8 @@
 #include "VolumeFile.h"
 
 namespace caret {
-    
+    class AnnotationFile;
+    class AnnotationManager;
     class Border;
     class BorderFile;
     class BorderPointFromSearch;
@@ -65,6 +66,7 @@ namespace caret {
     class CiftiParcelScalarFile;
     class CiftiScalarDataSeriesFile;
     class DisplayProperties;
+    class DisplayPropertiesAnnotation;
     class DisplayPropertiesBorders;
     class DisplayPropertiesFiberOrientation;
     class DisplayPropertiesFoci;
@@ -75,6 +77,7 @@ namespace caret {
     class EventDataFileRead;
     class EventDataFileReload;
     class EventSpecFileReadDataFiles;
+    class GapsAndMargins;
     class IdentificationManager;
     class ImageFile;
     class LabelFile;
@@ -122,6 +125,14 @@ namespace caret {
         BorderFile* getBorderFile(const int32_t indx);
         
         const BorderFile* getBorderFile(const int32_t indx) const;
+
+        void getAllAnnotationFilesIncludingSceneAnnotationFile(std::vector<AnnotationFile*>& annotationFilesOut) const;
+        
+        void getAllAnnotationFilesExcludingSceneAnnotationFile(std::vector<AnnotationFile*>& annotationFilesOut) const;
+        
+        AnnotationFile* getSceneAnnotationFile();
+        
+        const AnnotationFile* getSceneAnnotationFile() const;
         
         int32_t getNumberOfFociFiles() const;
         
@@ -174,6 +185,10 @@ namespace caret {
         void resetBrainKeepSceneFiles();
         
         void receiveEvent(Event* event);
+        
+        AnnotationManager* getAnnotationManager();
+        
+        const AnnotationManager* getAnnotationManager() const;
         
         ModelChart* getChartModel();
         
@@ -343,6 +358,10 @@ namespace caret {
         
         void writeDataFile(CaretDataFile* caretDataFile);
         
+        DisplayPropertiesAnnotation* getDisplayPropertiesAnnotation();
+        
+        const DisplayPropertiesAnnotation* getDisplayPropertiesAnnotation() const;
+        
         DisplayPropertiesBorders* getDisplayPropertiesBorders();
         
         const DisplayPropertiesBorders* getDisplayPropertiesBorders() const;
@@ -391,6 +410,10 @@ namespace caret {
         void getCiftiShapeMap(CiftiBrainordinateScalarFile* &ciftiScalarShapeFileOut,
                               int32_t& ciftiScalarhapeFileMapIndexOut,
                               std::vector<CiftiBrainordinateScalarFile*>& ciftiScalarNotShapeFilesOut) const;
+        
+        GapsAndMargins* getGapsAndMargins();
+        
+        const GapsAndMargins* getGapsAndMargins() const;
         
     private:
         /**
@@ -577,9 +600,13 @@ namespace caret {
                                    CaretDataFile* caretDataFile,
                                    const AString& filename);
                             
-        BorderFile* addReadOrReloadBorderFile(const FileModeAddReadReload fileMode,
+        AnnotationFile* addReadOrReloadAnnotationFile(const FileModeAddReadReload fileMode,
                                    CaretDataFile* caretDataFile,
                                    const AString& filename);
+        
+        BorderFile* addReadOrReloadBorderFile(const FileModeAddReadReload fileMode,
+                                              CaretDataFile* caretDataFile,
+                                              const AString& filename);
         
         CiftiConnectivityMatrixDenseFile* addReadOrReloadConnectivityDenseFile(const FileModeAddReadReload fileMode,
                                                                     CaretDataFile* caretDataFile,
@@ -669,6 +696,10 @@ namespace caret {
         
         std::vector<BrainStructure*> m_brainStructures;
         
+        std::vector<AnnotationFile*> m_annotationFiles;
+        
+        AnnotationFile* m_sceneAnnotationFile;
+        
         std::vector<BorderFile*> m_borderFiles;
         
         std::vector<FociFile*> m_fociFiles;
@@ -723,6 +754,8 @@ namespace caret {
         
         ChartingDataManager* m_chartingDataManager;
         
+        AnnotationManager* m_annotationManager;
+        
         /** contains all display properties */
         std::vector<DisplayProperties*> m_displayProperties;
         
@@ -749,6 +782,12 @@ namespace caret {
          * is also in the displayProperties std::vector.
          */
         DisplayPropertiesLabels* m_displayPropertiesLabels;
+        
+        /**
+         * Display properties for annotations - DO NOT delete since this
+         * is also in the displayProperties std::vector.
+         */
+        DisplayPropertiesAnnotation* m_displayPropertiesAnnotation;
         
         /**
          * Display properties for borders - DO NOT delete since this
@@ -786,6 +825,8 @@ namespace caret {
         BrainordinateRegionOfInterest* m_brainordinateHighlightRegionOfInterest;
         
         std::map<DataFileTypeEnum::Enum, int32_t> m_duplicateFileNameCounter;
+        
+        GapsAndMargins* m_gapsAndMargins;
     };
 
 } // namespace

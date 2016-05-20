@@ -29,6 +29,8 @@ ApplicationInformation.h
 ApplicationTypeEnum.h
 AString.h
 AStringNaturalComparison.h
+BackgroundAndForegroundColors.h
+BackgroundAndForegroundColorsModeEnum.h
 Base64.h
 BoundingBox.h
 BrainConstants.h
@@ -61,18 +63,26 @@ CubicSpline.h
 DataCompressZLib.h
 DataFile.h
 DataFileContentInformation.h
+DataFileContentCopyMoveInterface.h
 DataFileException.h
 DataFileInterface.h
 DataFileTypeEnum.h
 DescriptiveStatistics.h
 DeveloperFlagsEnum.h
+DisplayGroupAndTabItemInterface.h 
+DisplayGroupEnum.h
+DrawnWithOpenGLTextureInfo.h
+DrawnWithOpenGLTextureInterface.h
 ElapsedTimer.h
 Event.h
 EventAlertUser.h
 EventBrowserTabIndicesGetAll.h
+EventGetViewportSize.h
 EventListenerInterface.h
 EventManager.h
+EventPaletteGetByName.h
 EventProgressUpdate.h
+EventOpenGLTexture.h
 EventTypeEnum.h
 FastStatistics.h
 FileAdapter.h
@@ -94,6 +104,7 @@ ModelTransform.h
 MultiDimArray.h
 MultiDimIterator.h
 NetworkException.h
+NumericFormatModeEnum.h
 NumericTextFormatting.h
 OctTree.h
 OpenGLDrawingMethodEnum.h
@@ -113,6 +124,7 @@ StructureEnum.h
 SystemUtilities.h
 TileTabsConfiguration.h
 TracksModificationInterface.h
+TriStateSelectionStatusEnum.h
 Vector3D.h
 VectorOperation.h
 VoxelIJK.h
@@ -123,6 +135,8 @@ ${CMAKE_BINARY_DIR}/Common/ApplicationInformation.cxx
 ApplicationTypeEnum.cxx
 AString.cxx
 AStringNaturalComparison.cxx
+BackgroundAndForegroundColors.cxx
+BackgroundAndForegroundColorsModeEnum.cxx
 Base64.cxx
 BoundingBox.cxx
 BrainConstants.cxx
@@ -151,12 +165,18 @@ DataFileException.cxx
 DataFileTypeEnum.cxx
 DescriptiveStatistics.cxx
 DeveloperFlagsEnum.cxx
+DisplayGroupAndTabItemInterface.cxx
+DisplayGroupEnum.cxx
+DrawnWithOpenGLTextureInfo.cxx
 ElapsedTimer.cxx
 Event.cxx
 EventAlertUser.cxx
 EventBrowserTabIndicesGetAll.cxx
+EventGetViewportSize.cxx
 EventManager.cxx
+EventPaletteGetByName.cxx
 EventProgressUpdate.cxx
+EventOpenGLTexture.cxx
 EventTypeEnum.cxx
 FastStatistics.cxx
 FileAdapter.cxx
@@ -175,6 +195,7 @@ MathFunctionEnum.cxx
 MathFunctions.cxx
 ModelTransform.cxx
 NetworkException.cxx
+NumericFormatModeEnum.cxx
 NumericTextFormatting.cxx
 OpenGLDrawingMethodEnum.cxx
 PlainTextStringBuilder.cxx
@@ -191,6 +212,7 @@ StringTableModel.cxx
 StructureEnum.cxx
 SystemUtilities.cxx
 TileTabsConfiguration.cxx
+TriStateSelectionStatusEnum.cxx
 Vector3D.cxx
 VectorOperation.cxx
 YokingGroupEnum.cxx
@@ -205,13 +227,28 @@ ADD_DEFINITIONS(-DCOMPILER_VERSION="${CMAKE_CXX_COMPILER_VERSION}")
 INCLUDE_DIRECTORIES(
 ${CMAKE_SOURCE_DIR}/Common
 )
-ADD_CUSTOM_COMMAND(
-    OUTPUT ${CMAKE_BINARY_DIR}/Common/ApplicationInformation.cxx
-    COMMAND ${CMAKE_COMMAND}
-        -DINFILE="${CMAKE_SOURCE_DIR}/Common/ApplicationInformation.cxx.in"
-        -DOUTFILE="${CMAKE_BINARY_DIR}/Common/ApplicationInformation.cxx"
-        -P "${CMAKE_SOURCE_DIR}/CMakeScripts/git_commit_info.cmake.in"
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/..
-    DEPENDS ApplicationInformation.cxx.in ${CMAKE_SOURCE_DIR}/CMakeScripts/git_commit_info.cmake.in ${CMAKE_SOURCE_DIR}/../.git/HEAD ${CMAKE_SOURCE_DIR}/../.git/index
-    COMMENT "Setting commit info"
-)
+
+SET (GIT_REPOSITORY "${CMAKE_SOURCE_DIR}/../.git")
+IF (EXISTS ${GIT_REPOSITORY})
+    ADD_CUSTOM_COMMAND(
+        OUTPUT ${CMAKE_BINARY_DIR}/Common/ApplicationInformation.cxx
+        COMMAND ${CMAKE_COMMAND}
+            -DINFILE="${CMAKE_SOURCE_DIR}/Common/ApplicationInformation.cxx.in"
+            -DOUTFILE="${CMAKE_BINARY_DIR}/Common/ApplicationInformation.cxx"
+            -P "${CMAKE_SOURCE_DIR}/CMakeScripts/git_commit_info.cmake.in"
+        WORKING_DIRECTORY ${GIT_REPOSITORY}/..
+        DEPENDS ApplicationInformation.cxx.in ${CMAKE_SOURCE_DIR}/CMakeScripts/git_commit_info.cmake.in ${GIT_REPOSITORY}/HEAD ${GIT_REPOSITORY}/index
+        COMMENT "Setting commit info"
+    )
+ELSE(EXISTS ${GIT_REPOSITORY})
+    ADD_CUSTOM_COMMAND(
+        OUTPUT ${CMAKE_BINARY_DIR}/Common/ApplicationInformation.cxx
+        COMMAND ${CMAKE_COMMAND}
+            -DINFILE="${CMAKE_SOURCE_DIR}/Common/ApplicationInformation.cxx.in"
+            -DOUTFILE="${CMAKE_BINARY_DIR}/Common/ApplicationInformation.cxx"
+            -P "${CMAKE_SOURCE_DIR}/CMakeScripts/git_commit_info.cmake.in"
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/..
+        DEPENDS ApplicationInformation.cxx.in ${CMAKE_SOURCE_DIR}/CMakeScripts/git_commit_info.cmake.in
+        COMMENT "No repository found, setting commit info to 'unknown'.  Reconfigure to look for the repository again."
+    )
+ENDIF(EXISTS ${GIT_REPOSITORY})

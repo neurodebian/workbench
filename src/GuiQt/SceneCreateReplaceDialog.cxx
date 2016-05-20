@@ -26,6 +26,7 @@
 #undef __SCENE_CREATE_REPLACE_DIALOG_DECLARE__
 
 #include <QCheckBox>
+#include <QDateTime>
 #include <QGridLayout>
 #include <QGroupBox>
 #include <QLabel>
@@ -124,6 +125,10 @@ SceneCreateReplaceDialog::SceneCreateReplaceDialog(const AString& dialogTitle,
     QLabel* nameLabel = new QLabel("Name");
     m_nameLineEdit = new QLineEdit();
     
+    QLabel* sceneIDLabel = new QLabel("BALSA Scene ID");
+    m_balsaSceneIDLineEdit = new QLineEdit();
+    m_balsaSceneIDLineEdit->setToolTip("Scene ID is for use with BALSA Database");
+    
     QLabel* descriptionLabel = new QLabel("Description");
     m_descriptionTextEdit = new QPlainTextEdit();
     
@@ -144,6 +149,12 @@ SceneCreateReplaceDialog::SceneCreateReplaceDialog(const AString& dialogTitle,
                               rowCounter, labelColumn,
                               labelAlignment);
     infoGridLayout->addWidget(m_nameLineEdit,
+                              rowCounter, widgetColumn);
+    rowCounter++;
+    infoGridLayout->addWidget(sceneIDLabel,
+                              rowCounter, labelColumn,
+                              labelAlignment);
+    infoGridLayout->addWidget(m_balsaSceneIDLineEdit,
                               rowCounter, widgetColumn);
     rowCounter++;
     infoGridLayout->setRowStretch(rowCounter, 100);
@@ -176,7 +187,11 @@ SceneCreateReplaceDialog::SceneCreateReplaceDialog(const AString& dialogTitle,
     setCentralWidget(dialogWidget,
                      WuQDialog::SCROLL_AREA_NEVER);
 
+    QDateTime dateTime = QDateTime::currentDateTime();
+    const QString dateTimeText = dateTime.toString("dd MMM yyyy hh:mm:ss");
+
     PlainTextStringBuilder description;
+    description.addLine("Created " + dateTimeText);
     std::vector<BrainBrowserWindow*> windows = GuiManager::get()->getAllOpenBrainBrowserWindows();
     for (std::vector<BrainBrowserWindow*>::iterator iter = windows.begin();
          iter != windows.end();
@@ -195,6 +210,7 @@ SceneCreateReplaceDialog::SceneCreateReplaceDialog(const AString& dialogTitle,
             break;
         case MODE_REPLACE_SCENE:
             m_nameLineEdit->setText(sceneToInsertOrReplace->getName());
+            m_balsaSceneIDLineEdit->setText(sceneToInsertOrReplace->getBalsaSceneID());
             m_descriptionTextEdit->setPlainText(sceneToInsertOrReplace->getDescription());
             break;
     }
@@ -372,7 +388,14 @@ SceneCreateReplaceDialog::addImageToScene(Scene* scene)
                                                                       numImagesPerRow,
                                                                       backgroundColor);
             
-            compositeImageFile.resizeToMaximumWidth(512);
+            if (backgroundColorValid) {
+                const int marginSize = 5;
+                compositeImageFile.cropImageRemoveBackground(marginSize,
+                                                             backgroundColor);
+            }
+            
+            const int MAXIMUM_IMAGE_WIDTH = 1024;
+            compositeImageFile.resizeToMaximumWidth(MAXIMUM_IMAGE_WIDTH);
             
             const AString PREFERRED_IMAGE_FORMAT = "png";
             
@@ -495,6 +518,9 @@ SceneCreateReplaceDialog::okButtonClicked()
     Scene::setSceneBeingCreated(newScene);
     newScene->setName(newSceneName);
     newScene->setDescription(m_descriptionTextEdit->toPlainText());
+    newScene->setBalsaSceneID(m_balsaSceneIDLineEdit->text().trimmed());
+
+    const std::vector<int32_t> windowIndices = GuiManager::get()->getAllOpenBrainBrowserWindowIndices();
     
     /*
      * Get all browser tabs and only save transformations for tabs
@@ -517,7 +543,8 @@ SceneCreateReplaceDialog::okButtonClicked()
     SceneAttributes* sceneAttributes = newScene->getAttributes();
     sceneAttributes->setSceneFileName(m_sceneFile->getFileName());
     sceneAttributes->setSceneName(newSceneName);
-    sceneAttributes->setIndicesOfTabsForSavingToScene(tabIndices);
+    sceneAttributes->setIndicesOfTabsAndWindowsForSavingToScene(tabIndices,
+                                                                windowIndices);
     sceneAttributes->setSpecFileNameSavedToScene(m_addSpecFileNameToSceneCheckBox->isChecked());
     sceneAttributes->setAllLoadedFilesSavedToScene(m_addAllLoadedFilesCheckBox->isChecked());
     sceneAttributes->setModifiedPaletteSettingsSavedToScene(m_addModifiedPaletteSettingsCheckBox->isChecked());

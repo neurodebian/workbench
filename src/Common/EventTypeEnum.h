@@ -40,6 +40,18 @@ public:
         EVENT_INVALID,
         /** Alert user about something */
         EVENT_ALERT_USER,
+        /** Add annotation to or remove from a file */
+        EVENT_ANNOTATION_ADD_TO_REMOVE_FROM_FILE,
+        /** Get color bars from tab(s) */
+        EVENT_ANNOTATION_COLOR_BAR_GET,
+        /** Annotation create new of a particular type */
+        EVENT_ANNOTATION_CREATE_NEW_TYPE,
+        /** Get an annotation group */
+        EVENT_ANNOTATION_GROUP_GET_WITH_KEY,
+        /** Annotation grouping (group, regroup, ungroup) operation */
+        EVENT_ANNOTATION_GROUPING,
+        /** Annotation toolbar update */
+        EVENT_ANNOTATION_TOOLBAR_UPDATE,
         /** Inform that Brain has been reset (new spec or scene loaded) */
         EVENT_BRAIN_RESET,
         /** Get all brain structures */
@@ -86,6 +98,10 @@ public:
         EVENT_GET_NODE_DATA_FILES,
         /** get or set the user input mode */
         EVENT_GET_OR_SET_USER_INPUT_MODE,
+        /** Get the text renderer for a window */
+        EVENT_GET_TEXT_RENDERER_FOR_WINDOW,
+        /** Get the viewport size for model, tab, window */
+        EVENT_GET_VIEWPORT_SIZE,
         /** Update all graphics windows */
         EVENT_GRAPHICS_UPDATE_ALL_WINDOWS,
         /** Update graphics in a window */
@@ -94,6 +110,8 @@ public:
         EVENT_HELP_VIEWER_DISPLAY,
         /** Highlight location when an identification occurs */
         EVENT_IDENTIFICATION_HIGHLIGHT_LOCATION,
+        /** Perform an identification operation */
+        EVENT_IDENTIFICATION_REQUEST,
         /** Remove all identification symbols */
         EVENT_IDENTIFICATION_SYMBOL_REMOVAL,
         /** Browser window image capture */
@@ -114,6 +132,8 @@ public:
         EVENT_MODEL_SURFACE_GET,
         /** Get the color for a node's identification symbol from a chart that contains the node */
         EVENT_NODE_IDENTIFICATION_COLORS_GET_FROM_CHARTS,
+        /** OpenGL Texture related event */
+        EVENT_OPENGL_TEXTURE,
         /** open file request from the operating system (Mac only) for now */
         EVENT_OPERATING_SYSTEM_REQUEST_OPEN_DATA_FILE,
         /** request display of overlay settings editor */

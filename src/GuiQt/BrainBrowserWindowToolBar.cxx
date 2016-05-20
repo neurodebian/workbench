@@ -45,6 +45,7 @@
 #include <QTimer>
 #include <QToolButton>
 
+#include "AnnotationManager.h"
 #include "Brain.h"
 #include "BrainBrowserWindow.h"
 #include "BrainBrowserWindowToolBar.h"
@@ -121,8 +122,14 @@ using namespace caret;
  * @param initialBrowserTabContent
  *    Content of default tab (may be NULL in which cast
  *    new content is created).
- * @param toolBoxToolButtonAction
- *    Action for the Toolbox button in this toolbar.
+ * @param overlayToolBoxAction
+ *    Action to show overlay tool box.
+ * @param layersToolBoxAction
+ *    Action to show layers tool box.
+ * @param windowAspectRatioLockedAction
+ *    Action to lock window's aspect ratio.
+ * @param tabAspectRatioLockedAction
+ *    Action to lock tab's aspect ratio.
  * @param parent
  *    Parent for this toolbar.
  */
@@ -130,6 +137,8 @@ BrainBrowserWindowToolBar::BrainBrowserWindowToolBar(const int32_t browserWindow
                                                      BrowserTabContent* initialBrowserTabContent,
                                                      QAction* overlayToolBoxAction,
                                                      QAction* layersToolBoxAction,
+                                                     QAction* windowAspectRatioLockedAction,
+                                                     QAction* tabAspectRatioLockedAction,
                                                      BrainBrowserWindow* parentBrainBrowserWindow)
 : QToolBar(parentBrainBrowserWindow)
 {
@@ -194,7 +203,7 @@ BrainBrowserWindowToolBar::BrainBrowserWindowToolBar(const int32_t browserWindow
     QObject::connect(this->tabBar, SIGNAL(currentChanged(int)),
                      this, SLOT(selectedTabChanged(int)));
     QObject::connect(this->tabBar, SIGNAL(tabCloseRequested(int)),
-                     this, SLOT(tabClosed(int)));
+                     this, SLOT(tabCloseSelected(int)));
     QObject::connect(this->tabBar, SIGNAL(tabMoved(int,int)),
                      this, SLOT(tabMoved(int,int)));
     
@@ -298,7 +307,8 @@ BrainBrowserWindowToolBar::BrainBrowserWindowToolBar(const int32_t browserWindow
     this->wholeBrainSurfaceOptionsWidget = this->createWholeBrainSurfaceOptionsWidget();
     this->volumeIndicesWidget = this->createVolumeIndicesWidget();
     this->modeWidget = this->createModeWidget();
-    this->windowWidget = this->createTabOptionsWidget();
+    this->windowWidget = this->createTabOptionsWidget(windowAspectRatioLockedAction,
+                                                      tabAspectRatioLockedAction);
     this->singleSurfaceSelectionWidget = this->createSingleSurfaceOptionsWidget();
     this->surfaceMontageSelectionWidget = this->createSurfaceMontageOptionsWidget();
     m_clippingOptionsWidget = createClippingOptionsWidget();
@@ -1162,10 +1172,11 @@ BrainBrowserWindowToolBar::updateTabName(const int32_t tabIndex)
 void 
 BrainBrowserWindowToolBar::closeSelectedTab()
 {
-    const int tabIndex = this->tabBar->currentIndex();
-    if (this->tabBar->count() > 1) {
-        this->tabClosed(tabIndex);
-    }
+    tabCloseSelected(this->tabBar->currentIndex());
+//    const int tabIndex = this->tabBar->currentIndex();
+//    if (this->tabBar->count() > 1) {
+//        this->tabClosed(tabIndex);
+//    }
 }
 
 /**
@@ -1212,10 +1223,26 @@ BrainBrowserWindowToolBar::resetTabIndexForTileTabsHighlighting()
 }
 
 /**
- * Called when a tab has been closed.
+ * Gets called when user closes a tab by clicking the tab's 'X'.
  *
  * @param tabIndex
- *    Index of tab that was moved.
+ *     Index of the tab that was closed.
+ */
+void
+BrainBrowserWindowToolBar::tabCloseSelected(int tabIndex)
+{
+    if ((tabIndex >= 0)
+        && (tabIndex < this->tabBar->count())) {
+        tabClosed(tabIndex);
+    }
+    this->updateGraphicsWindow();
+}
+
+/**
+ * Close a tab.
+ *
+ * @param tabIndex
+ *    Index of tab that was closed.
  */
 void
 BrainBrowserWindowToolBar::tabClosed(int tabIndex)
@@ -1337,7 +1364,6 @@ BrainBrowserWindowToolBar::updateToolBar()
         {
             showChartTypeWidget = true;
             showClippingOptionsWidget = false;
-            showModeWidget = false;
             
             ModelChart* modelChart = browserTabContent->getDisplayedChartModel();
             if (modelChart != NULL) {
@@ -2180,13 +2206,23 @@ QWidget*
 BrainBrowserWindowToolBar::createModeWidget()
 {
     /*
+     * Annotations
+     */
+    this->modeInputModeAnnotationsAction = WuQtUtilities::createAction("Annotate",
+                                                                      "Perform annotate operations with mouse",
+                                                                      this);
+    this->modeInputModeAnnotationsAction->setCheckable(true);
+    QToolButton* inputModeAnnotationsToolButton = new QToolButton();
+    inputModeAnnotationsToolButton->setDefaultAction(this->modeInputModeAnnotationsAction);
+    
+    /*
      * Borders 
      */ 
     this->modeInputModeBordersAction = WuQtUtilities::createAction("Border",
                                                                     "Perform border operations with mouse",
                                                                     this);
-    QToolButton* inputModeBordersToolButton = new QToolButton();
     this->modeInputModeBordersAction->setCheckable(true);
+    QToolButton* inputModeBordersToolButton = new QToolButton();
     inputModeBordersToolButton->setDefaultAction(this->modeInputModeBordersAction);
     
     /*
@@ -2195,8 +2231,8 @@ BrainBrowserWindowToolBar::createModeWidget()
     this->modeInputModeFociAction = WuQtUtilities::createAction("Foci",
                                                                  "Perform foci operations with mouse",
                                                                  this);
-    QToolButton* inputModeFociToolButton = new QToolButton();
     this->modeInputModeFociAction->setCheckable(true);
+    QToolButton* inputModeFociToolButton = new QToolButton();
     inputModeFociToolButton->setDefaultAction(this->modeInputModeFociAction);
     
     /*
@@ -2215,7 +2251,12 @@ BrainBrowserWindowToolBar::createModeWidget()
     this->modeInputModeViewAction = WuQtUtilities::createAction("View",
                                                                  "Perform viewing operations with mouse\n"
                                                                  "\n"
-                                                                 "Identify: Click Left Mouse\n"
+                                                                 "Identify: Click left mouse button (might cause rotation)\n"
+#ifdef CARET_OS_MACOSX
+                                                                 "Identify: Click left mouse button while keyboard shift and apple keys are down (prevents rotation)\n"
+#else // CARET_OS_MACOSX
+                                                                 "Identify: Click left mouse button while keyboard shift and controls keys are down (prevents rotation)\n"
+#endif // CARET_OS_MACOSX
                                                                  "Pan:      Move mouse with left mouse button down and keyboard shift key down\n"
                                                                  "Rotate:   Move mouse with left mouse button down\n"
 #ifdef CARET_OS_MACOSX
@@ -2228,7 +2269,8 @@ BrainBrowserWindowToolBar::createModeWidget()
     QToolButton* inputModeViewToolButton = new QToolButton();
     inputModeViewToolButton->setDefaultAction(this->modeInputModeViewAction);
     
-    WuQtUtilities::matchWidgetWidths(inputModeBordersToolButton,
+    WuQtUtilities::matchWidgetWidths(inputModeAnnotationsToolButton,
+                                     inputModeBordersToolButton,
                                      inputModeFociToolButton,
                                      inputModeViewToolButton,
                                      inputModeVolumeEditButton);
@@ -2238,12 +2280,14 @@ BrainBrowserWindowToolBar::createModeWidget()
     QWidget* inputModeWidget = new QWidget();
     QVBoxLayout* inputModeLayout = new QVBoxLayout(inputModeWidget);
     WuQtUtilities::setLayoutSpacingAndMargins(inputModeLayout, 2, 2);
+    inputModeLayout->addWidget(inputModeAnnotationsToolButton, 0, Qt::AlignHCenter);
     inputModeLayout->addWidget(inputModeBordersToolButton, 0, Qt::AlignHCenter);
     inputModeLayout->addWidget(inputModeFociToolButton, 0, Qt::AlignHCenter);
     inputModeLayout->addWidget(inputModeViewToolButton, 0, Qt::AlignHCenter);
     inputModeLayout->addWidget(inputModeVolumeEditButton, 0, Qt::AlignHCenter);
     
     this->modeInputModeActionGroup = new QActionGroup(this);
+    this->modeInputModeActionGroup->addAction(this->modeInputModeAnnotationsAction);
     this->modeInputModeActionGroup->addAction(this->modeInputModeBordersAction);
     this->modeInputModeActionGroup->addAction(this->modeInputModeFociAction);
     this->modeInputModeActionGroup->addAction(this->modeInputModeViewAction);
@@ -2284,7 +2328,10 @@ BrainBrowserWindowToolBar::modeInputModeActionTriggered(QAction* action)
 
     UserInputModeAbstract::UserInputMode inputMode = UserInputModeAbstract::INVALID;
     
-    if (action == this->modeInputModeBordersAction) {
+    if (action == this->modeInputModeAnnotationsAction) {
+        inputMode = UserInputModeAbstract::ANNOTATIONS;
+    }
+    else if (action == this->modeInputModeBordersAction) {
         inputMode = UserInputModeAbstract::BORDERS;
         
         /*
@@ -2316,7 +2363,9 @@ BrainBrowserWindowToolBar::modeInputModeActionTriggered(QAction* action)
     }
     
     EventManager::get()->sendEvent(EventGetOrSetUserInputModeProcessor(this->browserWindowIndex,
-                                                                       inputMode).getPointer());    
+                                                                       inputMode).getPointer());
+    EventManager::get()->sendEvent(EventUserInterfaceUpdate().getPointer());
+    
     this->updateModeWidget(tabContent);
     this->updateDisplayedModeUserInputWidget();
 }
@@ -2344,6 +2393,9 @@ BrainBrowserWindowToolBar::updateModeWidget(BrowserTabContent* /*browserTabConte
     switch (getInputModeEvent.getUserInputMode()) {
         case UserInputModeAbstract::INVALID:
             /* may get here when program is exiting and widgets are being destroyed */
+            break;
+        case UserInputModeAbstract::ANNOTATIONS:
+            this->modeInputModeAnnotationsAction->setChecked(true);
             break;
         case UserInputModeAbstract::BORDERS:
             this->modeInputModeBordersAction->setChecked(true);
@@ -2421,17 +2473,33 @@ BrainBrowserWindowToolBar::updateDisplayedModeUserInputWidget()
             this->userInputControlsWidget->setVisible(false);
         }
     }
+    
+    if (userInputProcessor->getUserInputMode() != UserInputModeAbstract::ANNOTATIONS) {
+        /*
+         * Delete all selected annotations and update graphics and UI.
+         */
+        AnnotationManager* annotationManager = GuiManager::get()->getBrain()->getAnnotationManager();
+        annotationManager->deselectAllAnnotationsForEditing(this->browserWindowIndex);
+    }
 }
 
 /**
  * Create the tab options widget.
  *
+ * @param windowAspectRatioLockedAction
+ *    Action for locking the window's aspect ratio.
+ * @param tabAspectRatioLockedAction
+ *    Action for locking the tab's aspect ratio.
+ *
  * @return  The tab options widget.
  */
 QWidget* 
-BrainBrowserWindowToolBar::createTabOptionsWidget()
+BrainBrowserWindowToolBar::createTabOptionsWidget(QAction* windowAspectRatioLockedAction,
+                                                  QAction* tabAspectRatioLockedAction)
 {
     m_tabOptionsComponent = new BrainBrowserWindowToolBarTab(this->browserWindowIndex,
+                                                             windowAspectRatioLockedAction,
+                                                             tabAspectRatioLockedAction,
                                                              this);
     
     QWidget* w = this->createToolWidget("Tab",

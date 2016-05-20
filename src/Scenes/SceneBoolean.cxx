@@ -95,7 +95,7 @@ SceneBoolean::floatValue() const
 int32_t 
 SceneBoolean::integerValue() const
 {
-    const float i = (m_value ? 1 : 0);
+    const int32_t i = (m_value ? 1 : 0);
     return i;
 }
 
@@ -107,5 +107,14 @@ SceneBoolean::stringValue() const
 {
     const AString s = (m_value ? "true" : "false");
     return s;
+}
+
+/**
+ * @return The value as an unsigned byte data type.
+ */
+uint8_t
+SceneBoolean::unsignedByteValue() const
+{
+    return m_value;
 }
 

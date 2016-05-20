@@ -31,9 +31,7 @@ using namespace caret;
     
 /**
  * \class caret::ImageSpatialUnitsEnum 
- * \brief <REPLACE-WITH-ONE-LINE-DESCRIPTION>
- *
- * <REPLACE-WITH-THOROUGH DESCRIPTION>
+ * \brief Units of image resolution
  *
  * Using this enumerated type in the GUI with an EnumComboBoxTemplate
  * 

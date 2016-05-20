@@ -39,12 +39,26 @@ public:
         CURSOR_DEFAULT,
         /** Arrow (typically same as CURSOR_DEFAULT but overrides cursor provided by parent widget, Qt::ArrowCursor) */
         CURSOR_ARROW,
+        /** Closed Hand */
+        CURSOR_CLOSED_HAND,
         /** Cross (plus symbol) */
         CURSOR_CROSS,
         /** Drawing Pen */
         CURSOR_DRAWING_PEN,
+        /** Size All "four arrows", Qt::SizeAllCursor */
+        CURSOR_FOUR_ARROWS,
         /** Pointing hand, Qt::PointingHandCursor*/
         CURSOR_POINTING_HAND,
+        /** Resize arrows pointing bottom left and top right */
+        CURSOR_RESIZE_BOTTOM_LEFT_TOP_RIGHT,
+        /** Resize arrows pointing top left and bottom right */
+        CURSOR_RESIZE_BOTTOM_RIGHT_TOP_LEFT,
+        /** Resize Horizontal */
+        CURSOR_RESIZE_HORIZONTAL,
+        /** Resize Vertical */
+        CURSOR_RESIZE_VERTICAL,
+        /** Rotation Cursor */
+        CURSOR_ROTATION,
         /** Wait, Qt::WaitCursor*/
         CURSOR_WAIT,
         /** What's this? Arrow with question mark */
@@ -54,6 +68,8 @@ public:
 
     ~CursorEnum();
 
+    static Qt::CursorShape toQtCursorShape(Enum enumValue);
+    
     static AString toName(Enum enumValue);
     
     static Enum fromName(const AString& name, bool* isValidOut);
@@ -75,7 +91,8 @@ public:
 private:
     CursorEnum(const Enum enumValue, 
                  const AString& name,
-                 const AString& guiName);
+                 const AString& guiName,
+               const Qt::CursorShape qtCursorShape);
 
     static const CursorEnum* findData(const Enum enumValue);
 
@@ -102,6 +119,9 @@ private:
     
     /** A user-friendly name that is displayed in the GUI */
     AString guiName;
+    
+    /** The corresponding Qt Cursor Shape */
+    Qt::CursorShape qtCursorShape;
 };
 
 #ifdef __CURSOR_ENUM_DECLARE__

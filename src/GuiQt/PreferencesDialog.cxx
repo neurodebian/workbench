@@ -255,6 +255,8 @@ PreferencesDialog::createColorsWidget()
 void
 PreferencesDialog::updateColorWidget(CaretPreferences* prefs)
 {
+    const BackgroundAndForegroundColors colors = prefs->getUserBackgroundAndForegroundColors();
+    
     for (int32_t i = 0; i < NUMBER_OF_PREF_COLORS; i++) {
         const PREF_COLOR prefColor = (PREF_COLOR)i;
         
@@ -263,39 +265,39 @@ PreferencesDialog::updateColorWidget(CaretPreferences* prefs)
         
         switch (prefColor) {
             case PREF_COLOR_BACKGROUND_ALL:
-                prefs->getColorBackgroundAllView(rgb);
+                colors.getColorBackgroundAllView(rgb);
                 colorSwatchWidget = m_backgroundColorAllWidget;
                 break;
             case PREF_COLOR_BACKGROUND_CHART:
-                prefs->getColorBackgroundChartView(rgb);
+                colors.getColorBackgroundChartView(rgb);
                 colorSwatchWidget = m_backgroundColorChartWidget;
                 break;
             case PREF_COLOR_BACKGROUND_SURFACE:
-                prefs->getColorBackgroundSurfaceView(rgb);
+                colors.getColorBackgroundSurfaceView(rgb);
                 colorSwatchWidget = m_backgroundColorSurfaceWidget;
                 break;
             case PREF_COLOR_BACKGROUND_VOLUME:
-                prefs->getColorBackgroundVolumeView(rgb);
+                colors.getColorBackgroundVolumeView(rgb);
                 colorSwatchWidget = m_backgroundColorVolumeWidget;
                 break;
             case PREF_COLOR_FOREGROUND_ALL:
-                prefs->getColorForegroundAllView(rgb);
+                colors.getColorForegroundAllView(rgb);
                 colorSwatchWidget = m_foregroundColorAllWidget;
                 break;
             case PREF_COLOR_FOREGROUND_CHART:
-                prefs->getColorForegroundChartView(rgb);
+                colors.getColorForegroundChartView(rgb);
                 colorSwatchWidget = m_foregroundColorChartWidget;
                 break;
             case PREF_COLOR_FOREGROUND_SURFACE:
-                prefs->getColorForegroundSurfaceView(rgb);
+                colors.getColorForegroundSurfaceView(rgb);
                 colorSwatchWidget = m_foregroundColorSurfaceWidget;
                 break;
             case PREF_COLOR_FOREGROUND_VOLUME:
-                prefs->getColorForegroundVolumeView(rgb);
+                colors.getColorForegroundVolumeView(rgb);
                 colorSwatchWidget = m_foregroundColorVolumeWidget;
                 break;
             case PREF_COLOR_CHART_MATRIX_GRID_LINES:
-                prefs->getColorChartMatrixGridLines(rgb);
+                colors.getColorChartMatrixGridLines(rgb);
                 colorSwatchWidget = m_chartMatrixGridLinesColorWidget;
                 break;
             case NUMBER_OF_PREF_COLORS:
@@ -583,15 +585,15 @@ PreferencesDialog::createVolumeWidget()
                      this, SLOT(volumeAxesMontageCoordinatesComboBoxToggled(bool)));
     m_allWidgets->add(m_volumeAxesMontageCoordinatesComboBox);
     
-    /*
-     * Montage Slice Gap
-     */
-    m_volumeMontageGapSpinBox = WuQFactory::newSpinBoxWithMinMaxStepSignalInt(0,
-                                                                                  100000,
-                                                                                  1,
-                                                                                  this,
-                                                                                  SLOT(volumeMontageGapValueChanged(int)));
-    m_allWidgets->add(m_volumeMontageGapSpinBox);
+//    /*
+//     * Montage Slice Gap
+//     */
+//    m_volumeMontageGapSpinBox = WuQFactory::newSpinBoxWithMinMaxStepSignalInt(0,
+//                                                                                  100000,
+//                                                                                  1,
+//                                                                                  this,
+//                                                                                  SLOT(volumeMontageGapValueChanged(int)));
+//    m_allWidgets->add(m_volumeMontageGapSpinBox);
     
     /*
      * Montage Slice Coordinate Precision
@@ -606,7 +608,7 @@ PreferencesDialog::createVolumeWidget()
     m_allWidgets->add(m_volumeAxesCrosshairsComboBox);
     m_allWidgets->add(m_volumeAxesLabelsComboBox);
     m_allWidgets->add(m_volumeAxesMontageCoordinatesComboBox);
-    m_allWidgets->add(m_volumeMontageGapSpinBox);
+//    m_allWidgets->add(m_volumeMontageGapSpinBox);
     m_allWidgets->add(m_volumeMontageCoordinatePrecisionSpinBox);
     
     QGridLayout* gridLayout = new QGridLayout();
@@ -623,9 +625,9 @@ PreferencesDialog::createVolumeWidget()
     addWidgetToLayout(gridLayout,
                       "Volume Montage Slice Coord: ",
                       m_volumeAxesMontageCoordinatesComboBox->getWidget());
-    addWidgetToLayout(gridLayout,
-                      "Volume Montage Gap: ",
-                      m_volumeMontageGapSpinBox);
+//    addWidgetToLayout(gridLayout,
+//                      "Volume Montage Gap: ",
+//                      m_volumeMontageGapSpinBox);
     addWidgetToLayout(gridLayout,
                       "Volume Montage Precision: ",
                       m_volumeMontageCoordinatePrecisionSpinBox);
@@ -650,7 +652,7 @@ PreferencesDialog::updateVolumeWidget(CaretPreferences* prefs)
     m_volumeAxesLabelsComboBox->setStatus(prefs->isVolumeAxesLabelsDisplayed());
     m_volumeAxesMontageCoordinatesComboBox->setStatus(prefs->isVolumeMontageAxesCoordinatesDisplayed());
     m_volumeIdentificationComboBox->setStatus(prefs->isVolumeIdentificationDefaultedOn());
-    m_volumeMontageGapSpinBox->setValue(prefs->getVolumeMontageGap());
+//    m_volumeMontageGapSpinBox->setValue(prefs->getVolumeMontageGap());
     m_volumeMontageCoordinatePrecisionSpinBox->setValue(prefs->getVolumeMontageCoordinatePrecision());
 }
 
@@ -722,48 +724,56 @@ PreferencesDialog::updateDialog()
     m_allWidgets->blockAllSignals(false);
 }
 
+/**
+ * Update the colors in the dialog.
+ *
+ * @param prefColor
+ *     Color that will be updated.
+ */
 void
 PreferencesDialog::updateColorWithDialog(const PREF_COLOR prefColor)
 {
     CaretPreferences* prefs = SessionManager::get()->getCaretPreferences();
     
+    const BackgroundAndForegroundColors colors = prefs->getUserBackgroundAndForegroundColors();
+    
     uint8_t rgb[3];
     AString prefColorName;
     switch (prefColor) {
         case PREF_COLOR_BACKGROUND_ALL:
-            prefs->getColorBackgroundAllView(rgb);
+            colors.getColorBackgroundAllView(rgb);
             prefColorName = "Background - All";
             break;
         case PREF_COLOR_BACKGROUND_CHART:
-            prefs->getColorBackgroundChartView(rgb);
+            colors.getColorBackgroundChartView(rgb);
             prefColorName = "Background - Chart";
             break;
         case PREF_COLOR_BACKGROUND_SURFACE:
-            prefs->getColorBackgroundSurfaceView(rgb);
+            colors.getColorBackgroundSurfaceView(rgb);
             prefColorName = "Background - Surface";
             break;
         case PREF_COLOR_BACKGROUND_VOLUME:
-            prefs->getColorBackgroundVolumeView(rgb);
+            colors.getColorBackgroundVolumeView(rgb);
             prefColorName = "Background - Volume";
             break;
         case PREF_COLOR_FOREGROUND_ALL:
-            prefs->getColorForegroundAllView(rgb);
+            colors.getColorForegroundAllView(rgb);
             prefColorName = "Foreground - All";
             break;
         case PREF_COLOR_FOREGROUND_CHART:
-            prefs->getColorForegroundChartView(rgb);
+            colors.getColorForegroundChartView(rgb);
             prefColorName = "Foreground - Chart";
             break;
         case PREF_COLOR_FOREGROUND_SURFACE:
-            prefs->getColorForegroundSurfaceView(rgb);
+            colors.getColorForegroundSurfaceView(rgb);
             prefColorName = "Foreground - Surface";
             break;
         case PREF_COLOR_FOREGROUND_VOLUME:
-            prefs->getColorForegroundVolumeView(rgb);
+            colors.getColorForegroundVolumeView(rgb);
             prefColorName = "Foreground - Volume";
             break;
         case PREF_COLOR_CHART_MATRIX_GRID_LINES:
-            prefs->getColorChartMatrixGridLines(rgb);
+            colors.getColorChartMatrixGridLines(rgb);
             prefColorName = "Chart Matrix Grid Lines";
             break;
         case NUMBER_OF_PREF_COLORS:
@@ -786,38 +796,43 @@ PreferencesDialog::updateColorWithDialog(const PREF_COLOR prefColor)
         rgb[1] = newColor.green();
         rgb[2] = newColor.blue();
         
+        BackgroundAndForegroundColors colors = prefs->getUserBackgroundAndForegroundColors();
+        
         switch (prefColor) {
             case PREF_COLOR_BACKGROUND_ALL:
-                prefs->setColorBackgroundAllView(rgb);
+                colors.setColorBackgroundAllView(rgb);
                 break;
             case PREF_COLOR_BACKGROUND_CHART:
-                prefs->setColorBackgroundChartView(rgb);
+                colors.setColorBackgroundChartView(rgb);
                 break;
             case PREF_COLOR_BACKGROUND_SURFACE:
-                prefs->setColorBackgroundSurfaceView(rgb);
+                colors.setColorBackgroundSurfaceView(rgb);
                 break;
             case PREF_COLOR_BACKGROUND_VOLUME:
-                prefs->setColorBackgroundVolumeView(rgb);
+                colors.setColorBackgroundVolumeView(rgb);
                 break;
             case PREF_COLOR_FOREGROUND_ALL:
-                prefs->setColorForegroundAllView(rgb);
+                colors.setColorForegroundAllView(rgb);
                 break;
             case PREF_COLOR_FOREGROUND_CHART:
-                prefs->setColorForegroundChartView(rgb);
+                colors.setColorForegroundChartView(rgb);
                 break;
             case PREF_COLOR_FOREGROUND_SURFACE:
-                prefs->setColorForegroundSurfaceView(rgb);
+                colors.setColorForegroundSurfaceView(rgb);
                 break;
             case PREF_COLOR_FOREGROUND_VOLUME:
-                prefs->setColorForegroundVolumeView(rgb);
+                colors.setColorForegroundVolumeView(rgb);
                 break;
             case PREF_COLOR_CHART_MATRIX_GRID_LINES:
-                prefs->setColorChartMatrixGridLines(rgb);
+                colors.setColorChartMatrixGridLines(rgb);
                 break;
             case NUMBER_OF_PREF_COLORS:
                 CaretAssert(0);
                 break;
         }
+        
+        prefs->setUserBackgroundAndForegroundColors(colors);
+        prefs->setBackgroundAndForegroundColorsMode(BackgroundAndForegroundColorsModeEnum::USER_PREFERENCES);
         
         updateColorWidget(prefs);
         
@@ -921,16 +936,16 @@ PreferencesDialog::volumeAxesMontageCoordinatesComboBoxToggled(bool value)
     EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
 }
 
-/**
- * Called when volume montage gap value is changed.
- */
-void
-PreferencesDialog::volumeMontageGapValueChanged(int value)
-{
-    CaretPreferences* prefs = SessionManager::get()->getCaretPreferences();
-    prefs->setVolumeMontageGap(value);
-    EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
-}
+///**
+// * Called when volume montage gap value is changed.
+// */
+//void
+//PreferencesDialog::volumeMontageGapValueChanged(int value)
+//{
+//    CaretPreferences* prefs = SessionManager::get()->getCaretPreferences();
+//    prefs->setVolumeMontageGap(value);
+//    EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+//}
 
 /**
  * Called when volume montage coordinate precision value is changed.

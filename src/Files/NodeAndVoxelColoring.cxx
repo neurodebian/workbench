@@ -197,8 +197,8 @@ NodeAndVoxelColoring::colorScalarsWithPalettePrivate(const FastStatistics* stati
     /*
      * Color all scalars.
      */
-#pragma omp CARET_FOR
-	for (int64_t i = 0; i < numberOfScalars; i++) {
+#pragma omp CARET_PARFOR schedule(dynamic, 4096)
+        for (int64_t i = 0; i < numberOfScalars; i++) {
         const int64_t i4 = i * 4;
         
         /*

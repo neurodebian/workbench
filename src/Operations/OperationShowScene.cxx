@@ -101,6 +101,11 @@ OperationShowScene::getParameters()
 
     ret->addIntegerParameter(5, "image-height", "height of output image(s)");
     
+    const QString windowSizeSwitch("-use-window-size");
+    ret->createOptionalParameter(6, windowSizeSwitch, "Override image size with window size");
+    
+    ret->createOptionalParameter(7, "-no-scene-colors", "Do not use background and foreground colors in scene");
+    
     AString helpText("Render content of browser windows displayed in a scene "
                      "into image file(s).  The image file name should be "
                      "similar to \"capture.png\".  If there is only one image "
@@ -110,8 +115,8 @@ OperationShowScene::getParameters()
                      "etc.\n"
                      "\n"
                      "The image format is determined by the image file extension.\n"
+                     "The available image formats may vary by operating system.\n"
                      "Image formats available on this system are:\n");
-    
     std::vector<AString> imageFileExtensions;
     AString defaultExtension;
     ImageFile::getImageFileExtensions(imageFileExtensions,
@@ -125,7 +130,21 @@ OperationShowScene::getParameters()
                      + ext
                      + "\n");
     }
-    helpText += ("Note: Available image formats may vary by operating system.\n");
+    
+    helpText += ("\n"
+                 "The result of using the \"" + windowSizeSwitch + "\" option\n"
+                 "is dependent upon the version used to create the scene.\n"
+                 "    * Versions 1.2 and newer contain the width and \n"
+                 "      height of the graphics region.  The output image  \n"
+                 "      will be the width and height from the scene and\n"
+                 "      the image width and height specified on the command\n"
+                 "      line is ignored.\n"
+                 "    * If the scene does not contain the width and height\n"
+                 "      of the graphics region, the width and height specified\n"
+                 "      on the command line is used for the size of the \n"
+                 "      output image.\n"
+                 );
+    
     
     ret->setHelpText(helpText);
     
@@ -146,24 +165,35 @@ OperationShowScene::useParameters(OperationParameters* /*myParams*/,
 #else // HAVE_OSMESA
 void
 OperationShowScene::useParameters(OperationParameters* myParams,
-                                          ProgressObject* myProgObj)
+                                  ProgressObject* myProgObj)
 {
     LevelProgress myProgress(myProgObj);
     AString sceneFileName = FileInformation(myParams->getString(1)).getAbsoluteFilePath();
     AString sceneNameOrNumber = myParams->getString(2);
     AString imageFileName = FileInformation(myParams->getString(3)).getAbsoluteFilePath();
-    const int32_t imageWidth  = myParams->getInteger(4);
-    if (imageWidth < 0) {
-        throw OperationException("image width is invalid");
-    }
-    const int32_t imageHeight = myParams->getInteger(5);
-    if (imageHeight < 0) {
-        throw OperationException("image height is invalid");
+    const int32_t userImageWidth  = myParams->getInteger(4);
+    const int32_t userImageHeight = myParams->getInteger(5);
+    
+    OptionalParameter* useWindowSizeParam = myParams->getOptionalParameter(6);
+    const bool useWindowSizeForImageSizeFlag = useWindowSizeParam->m_present;
+    
+    const bool doNotUseSceneColorsFlag = myParams->getOptionalParameter(7)->m_present;
+    
+    if ( ! useWindowSizeForImageSizeFlag) {
+        if ((userImageWidth <= 0)
+            || (userImageHeight <= 0)) {
+            throw OperationException("Invalid image size width="
+                                     + QString::number(userImageWidth)
+                                     + " height="
+                                     + QString::number(userImageHeight));
+        }
     }
     
+    /*
+     * Read the scene file and load the scene
+     */
     SceneFile sceneFile;
     sceneFile.readFile(sceneFileName);
-    
     Scene* scene = sceneFile.getSceneWithName(sceneNameOrNumber);
     if (scene == NULL) {
         bool valid = false;
@@ -182,100 +212,40 @@ OperationShowScene::useParameters(OperationParameters* myParams,
             throw OperationException("Scene name is invalid");
         }
     }
-    
-    //
-    // Create the Mesa Context
-    //
-    const int depthBits = 16;
-    const int stencilBits = 0;
-    const int accumBits = 0;
-    OSMesaContext mesaContext = OSMesaCreateContextExt(OSMESA_RGBA,
-                                                       depthBits,
-                                                       stencilBits,
-                                                       accumBits,
-                                                       NULL);
-    if (mesaContext == 0) {
-        std::cout << "Creating Mesa Context failed." << std::endl;
-        exit(-1);
-    }
-    
-    //
-    // Allocate image buffer
-    //
-    unsigned char* imageBuffer = new unsigned char[imageWidth * imageHeight * 4 *
-                                                   sizeof(unsigned char)];
-    if (imageBuffer == 0) {
-        std::cout << "Allocating image buffer failed." << std::endl;
-        exit(-1);
-    }
-    
-    //
-    // Assign buffer to Mesa Context and make current
-    //
-    if (OSMesaMakeCurrent(mesaContext,
-                          imageBuffer,
-                          GL_UNSIGNED_BYTE,
-                          imageWidth,
-                          imageHeight) == 0) {
-        std::cout << "Assigning buffer to context and make current failed." << std::endl;
-        exit(-1);
-    }
-    
-    /*
-     * Set the viewport
-     */
-    const int viewport[4] = { 0, 0, imageWidth, imageHeight };
 
-    /**
+    /*
      * Enable voxel coloring since it is defaulted off for commands
      */
-    VolumeFile::setVoxelColoringEnabled(true);    
+    VolumeFile::setVoxelColoringEnabled(true);
     
     SceneAttributes sceneAttributes(SceneTypeEnum::SCENE_TYPE_FULL);
     
+    if (doNotUseSceneColorsFlag) {
+        sceneAttributes.setUseSceneForegroundAndBackgroundColors(false);
+    }
+    
+    /*
+     * Restore the scene
+     */
     const SceneClass* guiManagerClass = scene->getClassWithName("guiManager");
     if (guiManagerClass->getName() != "guiManager") {
         throw OperationException("Top level scene class should be guiManager but it is: "
-                               + guiManagerClass->getName());
+                                 + guiManagerClass->getName());
     }
     
     SessionManager* sessionManager = SessionManager::get();
     sessionManager->restoreFromScene(&sceneAttributes,
-                                            guiManagerClass->getClass("m_sessionManager"));
-
+                                     guiManagerClass->getClass("m_sessionManager"));
+    
     
     if (sessionManager->getNumberOfBrains() <= 0) {
         throw OperationException("Scene loading failure, SessionManager contains no Brains");
     }
     Brain* brain = SessionManager::get()->getBrain(0);
     
-    /*
-     * Renders text
-     */
-    BrainOpenGLTextRenderInterface* textRenderer = NULL;
-    if (textRenderer == NULL) {
-        textRenderer = new FtglFontTextRenderer();
-        if (! textRenderer->isValid()) {
-            delete textRenderer;
-            textRenderer = NULL;
-            CaretLogWarning("Unable to create FTGL Font Renderer.\n"
-                            "No text will be available in graphics window.");
-        }
-    }
+    const GapsAndMargins* gapsAndMargins = brain->getGapsAndMargins();
     
-    if (textRenderer == NULL) {
-        textRenderer = new DummyFontTextRenderer();
-    }
-    
-    /*
-     * Performs OpenGL Rendering
-     * Allocated dynamically so that it can be destroyed prior to OSMesa being
-     * destroyed.  Otherwise, if OpenGL is destroyed after OSMesa, errors
-     * will occur as the OpenGL context is invalid when things such as
-     * display lists or buffers are deleted.
-     */
-    BrainOpenGLFixedPipeline* brainOpenGL = new BrainOpenGLFixedPipeline(textRenderer);
-    brainOpenGL->initializeOpenGL();
+    bool missingWindowMessageHasBeenDisplayed = false;
     
     /*
      * Restore windows
@@ -288,11 +258,124 @@ OperationShowScene::useParameters(OperationParameters* myParams,
             
             const bool restoreToTabTiles = browserClass->getBooleanValue("m_viewTileTabsAction",
                                                                          false);
+            const int32_t windowIndex = browserClass->getIntegerValue("m_browserWindowIndex", 0);
+            
+            int32_t imageWidth  = userImageWidth;
+            int32_t imageHeight = userImageHeight;
+            
+            if (useWindowSizeForImageSizeFlag) {
+                /*
+                 * Requires version AFTER 1.2.0-pre1
+                 */
+                const SceneClass* graphicsGeometry = browserClass->getClass("openGLWidgetGeometry");
+                if (graphicsGeometry != NULL) {
+                    const int32_t windowGeometryWidth  = graphicsGeometry->getIntegerValue("geometryWidth", -1);
+                    const int32_t windowGeometryHeight = graphicsGeometry->getIntegerValue("geometryHeight", -1);
+                    
+                    if ((windowGeometryWidth > 0)
+                        && (windowGeometryHeight > 0)) {
+                        imageWidth  = windowGeometryWidth;
+                        imageHeight = windowGeometryHeight;
+                    }
+                }
+                else {
+                    if ((imageWidth <= 0)
+                        || (imageHeight <= 0)) {
+                        const QString msg("Option "
+                                          + useWindowSizeParam->m_optionSwitch
+                                          + " is used but window size not found in scene and width="
+                                          + QString::number(imageWidth)
+                                          + " height="
+                                          + QString::number(imageWidth)
+                                          + " on command line is invalid.");
+                        
+                        throw OperationException(msg);
+                    }
+                    
+                    if ( ! missingWindowMessageHasBeenDisplayed) {
+                        const QString msg("Option \""
+                                          + useWindowSizeParam->m_optionSwitch
+                                          + "\" is used but window size not found in scene.\n"
+                                          "   Scene was created prior to implementation of this option.\n"
+                                          "   Image size will be width="
+                                          + QString::number(imageWidth)
+                                          + " and height="
+                                          + QString::number(imageHeight)
+                                          + " as specified on command line.\n"
+                                          "   Recreating the scene will allow use of the option.\n");
+                        CaretLogWarning(msg);
+                        
+                        /*
+                         * Avoid message being displayed more than once when
+                         * there are more than one windows.
+                         */
+                        missingWindowMessageHasBeenDisplayed = true;
+                    }
+                }
+            }
+            
+            if ((imageWidth <= 0)
+                || (imageHeight <= 0)) {
+                throw OperationException("Invalid image size width="
+                                         + QString::number(imageWidth)
+                                         + " height="
+                                         + QString::number(imageHeight));
+            }
+            
+            int windowViewport[4] = { 0.0, 0.0, imageWidth, imageHeight };
+            
+            float aspectRatio = -1.0;
+            const bool windowAspectRatioLocked = browserClass->getBooleanValue("m_aspectRatioLockedStatus");
+            if (windowAspectRatioLocked) {
+                aspectRatio = browserClass->getFloatValue("m_aspectRatio", -1.0);
+            }
+            
+            const int windowWidth  = windowViewport[2];
+            const int windowHeight = windowViewport[3];
+            
+            //
+            // Create the Mesa Context
+            //
+            const int depthBits = 16;
+            const int stencilBits = 0;
+            const int accumBits = 0;
+            OSMesaContext mesaContext = OSMesaCreateContextExt(OSMESA_RGBA,
+                                                               depthBits,
+                                                               stencilBits,
+                                                               accumBits,
+                                                               NULL);
+            if (mesaContext == 0) {
+                throw ("Creating Mesa Context failed.");
+            }
+            
+            //
+            // Allocate image buffer
+            //
+            const int32_t imageBufferSize =imageWidth * imageHeight * 4 * sizeof(unsigned char);
+            unsigned char* imageBuffer = new unsigned char[imageBufferSize];
+            if (imageBuffer == 0) {
+                throw OperationException("Allocating image buffer size="
+                                         + QString::number(imageBufferSize)
+                                         + " failed.");
+            }
+            
+            //
+            // Assign buffer to Mesa Context and make current
+            //
+            if (OSMesaMakeCurrent(mesaContext,
+                                  imageBuffer,
+                                  GL_UNSIGNED_BYTE,
+                                  imageWidth,
+                                  imageHeight) == 0) {
+                throw OperationException("Assigning buffer to context and make current failed.");
+            }
             
             /*
              * If tile tabs was saved to the scene, restore it as the scenes tile tabs configuration
              */
             if (restoreToTabTiles) {
+                CaretPointer<BrainOpenGL> brainOpenGL(createBrainOpenGL(windowIndex));
+                
                 const AString tileTabsConfigString = browserClass->getStringValue("m_sceneTileTabsConfiguration");
                 if ( ! tileTabsConfigString.isEmpty()) {
                     TileTabsConfiguration tileTabsConfiguration;
@@ -320,7 +403,7 @@ OperationShowScene::useParameters(OperationParameters* myParams,
                                     throw OperationException("Failed to obtain tab number "
                                                              + AString::number(tabIndex + 1)
                                                              + " for window "
-                                                             + AString::number(i + 1));
+                                                             + AString::number(windowIndex + 1));
                                 }
                                 allTabContent.push_back(tabContent);
                             }
@@ -332,8 +415,8 @@ OperationShowScene::useParameters(OperationParameters* myParams,
                         }
                         std::vector<int32_t> rowHeights;
                         std::vector<int32_t> columnWidths;
-                        if ( ! tileTabsConfiguration.getRowHeightsAndColumnWidthsForWindowSize(imageWidth,
-                                                                                               imageHeight,
+                        if ( ! tileTabsConfiguration.getRowHeightsAndColumnWidthsForWindowSize(windowWidth,
+                                                                                               windowHeight,
                                                                                                numTabContent,
                                                                                                rowHeights,
                                                                                                columnWidths)) {
@@ -341,16 +424,17 @@ OperationShowScene::useParameters(OperationParameters* myParams,
                         }
                         
                         const int32_t tabIndexToHighlight = -1;
-                        std::vector<BrainOpenGLViewportContent*> viewports = BrainOpenGLViewportContent::createViewportContentForTileTabs(allTabContent,
-                                                                                                                                          brain,
-                                                                                                                                          imageWidth,
-                                                                                                                                          imageHeight,
-                                                                                                                                          rowHeights,
-                                                                                                                                          columnWidths,
-                                                                                                                                          tabIndexToHighlight);
+                        std::vector<BrainOpenGLViewportContent*> viewports =
+                            BrainOpenGLViewportContent::createViewportContentForTileTabs(allTabContent,
+                                                                                                     &tileTabsConfiguration,
+                                                                                                     gapsAndMargins,
+                                                                                                     windowIndex,
+                                                                                                     windowViewport,
+                                                                                                     tabIndexToHighlight);
                         
-                        brainOpenGL->drawModels(viewports);
-
+                        brainOpenGL->drawModels(brain,
+                                                viewports);
+                        
                         const int32_t outputImageIndex = ((numBrowserClasses > 1)
                                                           ? i
                                                           : -1);
@@ -374,6 +458,8 @@ OperationShowScene::useParameters(OperationParameters* myParams,
                 }
             }
             else {
+                CaretPointer<BrainOpenGL> brainOpenGL(createBrainOpenGL(windowIndex));
+                
                 /*
                  * Restore toolbar
                  */
@@ -394,15 +480,16 @@ OperationShowScene::useParameters(OperationParameters* myParams,
                                                  + AString::number(i + 1));
                     }
                     
-                    BrainOpenGLViewportContent content(viewport,
-                                                       viewport,
-                                                       false,
-                                                       brain,
-                                                       tabContent);
+                    CaretPointer<BrainOpenGLViewportContent> content(NULL);
+                    content.grabNew(BrainOpenGLViewportContent::createViewportForSingleTab(tabContent,
+                                                                                           gapsAndMargins,
+                                                                                           windowIndex,
+                                                                                           windowViewport));
                     std::vector<BrainOpenGLViewportContent*> viewportContents;
-                    viewportContents.push_back(&content);
+                    viewportContents.push_back(content);
                     
-                    brainOpenGL->drawModels(viewportContents);
+                    brainOpenGL->drawModels(brain,
+                                            viewportContents);
                     
                     const int32_t outputImageIndex = ((numBrowserClasses > 1)
                                                       ? i
@@ -413,23 +500,199 @@ OperationShowScene::useParameters(OperationParameters* myParams,
                                imageBuffer,
                                imageWidth,
                                imageHeight);
+                    
+                }
+            }
+            
+            /*
+             * Free image memory and Mesa context
+             */
+            delete[] imageBuffer;
+            OSMesaDestroyContext(mesaContext);
+        }
+    }
+}
+
+/**
+ * Estimate the size of the graphics region from scenes that lack
+ * an explicit entry for the graphics region size.  Scenes in version
+ * 1.2.0-pre1 did not contain graphics window size.
+ *
+ * @param windowSceneClass
+ *     Scene class for the window.
+ * @param estimatedWidthOut
+ *     Estimated width of graphics region (greater than zero if valid).
+ * @param estimatedHeightOut
+ *     Estimated height of graphics region (greater than zero if valid).
+ */
+void
+OperationShowScene::estimateGraphicsSize(const SceneClass* windowSceneClass,
+                                         float& estimatedWidthOut,
+                                         float& estimatedHeightOut)
+{
+    estimatedWidthOut  = 0;
+    estimatedHeightOut = 0;
+    
+    float winWidth  = -1.0;
+    float winHeight = -1.0;
+    const SceneClass* winGeometry = windowSceneClass->getClass("geometry");
+    if (winGeometry != NULL) {
+        winWidth  = winGeometry->getIntegerValue("geometryWidth", -1);
+        winHeight = winGeometry->getIntegerValue("geometryHeight", -1);
+    }
+    else {
+        return;
+    }
+    
+    float tbHeight = -1.0;
+    bool tbHeightValid = false;
+    const SceneClass* tb = windowSceneClass->getClass("m_toolbar");
+    if (tb != NULL) {
+        if (tb->getBooleanValue("toolBarVisible")) {
+            tbHeight = 165.0;
+            tbHeightValid = true;
+        }
+    }
+    if ( ! tbHeightValid) {
+        return;
+    }
+    
+    float overlayToolBoxWidth  = 0;
+    float overlayToolBoxHeight = 0;
+    QString overlayToolBoxOrientation;
+    bool overlayToolBoxValid = getToolBoxSize(windowSceneClass->getClass("overlayToolBox"),
+                                              windowSceneClass->getClass("m_overlayActiveToolBox"),
+                                              overlayToolBoxWidth,
+                                              overlayToolBoxHeight,
+                                              overlayToolBoxOrientation);
+    
+    
+    float featureToolBoxWidth  = 0;
+    float featureToolBoxHeight = 0;
+    QString featureToolBoxOrientation;
+    bool featureToolBoxValid = getToolBoxSize(windowSceneClass->getClass("featureToolBox"),
+                                              windowSceneClass->getClass("m_featuresToolBox"),
+                                              featureToolBoxWidth,
+                                              featureToolBoxHeight,
+                                              featureToolBoxOrientation);
+    
+    if (overlayToolBoxValid
+        && featureToolBoxValid) {
+        
+        estimatedWidthOut = winWidth - overlayToolBoxWidth - featureToolBoxWidth;
+        estimatedHeightOut = winHeight - tbHeight - overlayToolBoxHeight - featureToolBoxHeight;
+    }
+}
+
+/**
+ * Get the size of a toolbox.
+ * 
+ * @param toolBoxClass
+ *    The toolbox scene class.
+ * @param overlayToolBoxWidthOut
+ *    Output with width of toolbox.
+ * @param overlayToolBoxHeightOut
+ *    Output with height of toolbox.
+ * @param overlayToolBoxOrientationOut
+ *    Output with orientation of toolbox.
+ * @return
+ *    True if the toolbox outputs are valid, else false.
+ */
+bool
+OperationShowScene::getToolBoxSize(const SceneClass* toolBoxClass,
+                                   const SceneClass* activeToolBoxClass,
+               float& overlayToolBoxWidthOut,
+               float& overlayToolBoxHeightOut,
+               QString& overlayToolBoxOrientationOut)
+{
+    if (toolBoxClass == NULL) {
+        return false;
+    }
+    if (activeToolBoxClass == NULL) {
+        return false;
+    }
+    
+    overlayToolBoxWidthOut  = 0;
+    overlayToolBoxHeightOut = 0;
+    
+    bool overlayToolBoxValid = false;
+    if (toolBoxClass != NULL) {
+        overlayToolBoxValid = true;
+        if (toolBoxClass->getBooleanValue("visible")) {
+            overlayToolBoxValid = false;
+            if ( ! toolBoxClass->getBooleanValue("floating")) {
+                overlayToolBoxOrientationOut = toolBoxClass->getStringValue("orientation");
+                overlayToolBoxWidthOut  = activeToolBoxClass->getIntegerValue("toolboxWidth");
+                overlayToolBoxHeightOut = activeToolBoxClass->getIntegerValue("toolboxHeight");
+                if ((overlayToolBoxWidthOut > 0)
+                    && (overlayToolBoxHeightOut > 0)) {
+                    
+                    if (overlayToolBoxOrientationOut == "horizontal") {
+                        /*
+                         * Toolbar is on bottom so only need height
+                         */
+                        overlayToolBoxWidthOut = 0;
+                        overlayToolBoxValid = true;
+                    }
+                    else if (overlayToolBoxOrientationOut == "vertical") {
+                        /*
+                         * Toolbar is on left side so only need width
+                         */
+                        overlayToolBoxHeightOut = 0;
+                        overlayToolBoxValid = true;
+                    }
                 }
             }
         }
     }
     
-    if (textRenderer != NULL) {
-        delete textRenderer;
+    return overlayToolBoxValid;
+}
+
+/**
+ * Create OpenGL Rendering.
+ *
+ * @param windowIndex
+ *     Index of window.
+ * @return
+ *     BrainOpenGL.
+ */
+BrainOpenGLFixedPipeline*
+OperationShowScene::createBrainOpenGL(const int32_t windowIndex)
+{
+    /*
+     * The OpenGL rendering takes ownership of the text renderer
+     * and will delete the text renderer when OpenGL itself
+     * is deleted.
+     */
+    BrainOpenGLTextRenderInterface* textRenderer = NULL;
+    if (textRenderer == NULL) {
+        textRenderer = new FtglFontTextRenderer();
+        if (! textRenderer->isValid()) {
+            delete textRenderer;
+            textRenderer = NULL;
+            CaretLogWarning("Unable to create FTGL Font Renderer.\n"
+                            "No text will be available in graphics window.");
+        }
+    }
+    if (textRenderer == NULL) {
+        textRenderer = new DummyFontTextRenderer();
     }
     
-    delete brainOpenGL;
-    
     /*
-     * Free image memory and Mesa context
+     * Performs OpenGL Rendering
+     * Allocated dynamically so that it can be destroyed prior to OSMesa being
+     * destroyed.  Otherwise, if OpenGL is destroyed after OSMesa, errors
+     * will occur as the OpenGL context is invalid when things such as
+     * display lists or buffers are deleted.
      */
-    delete[] imageBuffer;
-    OSMesaDestroyContext(mesaContext);
+    BrainOpenGLFixedPipeline* brainOpenGL = new BrainOpenGLFixedPipeline(windowIndex,
+                                                                         textRenderer);
+    brainOpenGL->initializeOpenGL();
+    
+    return brainOpenGL;
 }
+
 #endif // HAVE_OSMESA
 
 /**

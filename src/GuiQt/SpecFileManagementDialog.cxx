@@ -42,14 +42,20 @@
 #include <QToolButton>
 #include <QVBoxLayout>
 
+#include "AnnotationFile.h"
 #include "Brain.h"
+#include "BrowserTabContent.h"
 #include "CaretAssert.h"
 #include "CaretDataFile.h"
 #include "CaretFileDialog.h"
+#include "CaretLogger.h"
 #include "CaretMappableDataFile.h"
 #include "CaretPreferences.h"
 #include "CursorDisplayScoped.h"
+#include "DataFileContentCopyMoveDialog.h"
+#include "DataFileContentCopyMoveInterface.h"
 #include "DataFileException.h"
+#include "EventBrowserTabGetAllViewed.h"
 #include "EventDataFileRead.h"
 #include "EventDataFileReload.h"
 #include "EventGetDisplayedDataFiles.h"
@@ -231,6 +237,7 @@ m_specFile(specFile)
     m_manageFilesLoadedNotLoadedActionGroup = NULL;
     m_specFileDataFileCounter = 0;
     m_specFileTableRowIndex = -1;
+    m_sceneAnnotationFileRowIndex = -1;
     m_fileSorting = SpecFileManagementDialogRowContent::SORTING_TYPE_STRUCTURE_NAME;
 
     /*
@@ -275,10 +282,11 @@ m_specFile(specFile)
     int tableRowCounter = 0;
     
     /*
-     * Is there a spec file?  If so, set its table row index
+     * Spec and scene annotations only when managing files
      */
     if (enableManageItems) {
         m_specFileTableRowIndex = tableRowCounter++;
+        m_sceneAnnotationFileRowIndex = tableRowCounter++;
     }
     
     bool testForDisplayedDataFiles = false;
@@ -303,7 +311,18 @@ m_specFile(specFile)
     }
     
     if (testForDisplayedDataFiles) {
-        EventGetDisplayedDataFiles displayedFilesEvent;
+        const std::vector<int32_t> windowIndices = GuiManager::get()->getAllOpenBrainBrowserWindowIndices();
+        
+        /*
+         * Get all browser tabs and only save transformations for tabs
+         * that are valid.
+         */
+        EventBrowserTabGetAllViewed getViewedTabs;
+        EventManager::get()->sendEvent(getViewedTabs.getPointer());
+        std::vector<int32_t> tabIndices = getViewedTabs.getViewdedBrowserTabIndices();
+        
+        EventGetDisplayedDataFiles displayedFilesEvent(windowIndices,
+                                                       tabIndices);
         EventManager::get()->sendEvent(displayedFilesEvent.getPointer());
         m_displayedDataFiles = displayedFilesEvent.getDisplayedDataFiles();
     }
@@ -319,7 +338,7 @@ m_specFile(specFile)
     m_COLUMN_DISPLAYED_LABEL             = -1;
     m_COLUMN_IN_SPEC_FILE_CHECKBOX       = -1;
     m_COLUMN_READ_BUTTON                 = -1;
-    m_COLUMN_CLOSE_BUTTON               = -1;
+    m_COLUMN_CLOSE_BUTTON                = -1;
     m_COLUMN_OPTIONS_TOOLBUTTON          = -1;
     m_COLUMN_DATA_FILE_TYPE_LABEL        = -1;
     m_COLUMN_STRUCTURE                   = -1;
@@ -574,7 +593,12 @@ SpecFileManagementDialog::filesTableWidgetCellChanged(int rowIndex, int columnIn
          * Is this the row containing the spec file?
          */
         if (rowIndex == m_specFileTableRowIndex) {
-            
+            /*
+             * Nothing to do for spec file
+             */
+        }
+        else if (rowIndex == m_sceneAnnotationFileRowIndex) {
+            /* Nothing to do for annotation scene file */
         }
         else {
             SpecFileManagementDialogRowContent* rowContent = getFileContentInRow(rowIndex);
@@ -594,7 +618,8 @@ SpecFileManagementDialog::filesTableWidgetCellChanged(int rowIndex, int columnIn
                 updateSpecFileRowInTable();
                 
                 /*
-                 * Check the Spec File SAVE checkbox
+                 * Check the Spec File SAVE checkbox since the user has changed the
+                 * "in spec" status for a data file
                  */
                 if (m_specFileTableRowIndex >= 0) {
                     QTableWidgetItem* saveItem = getTableWidgetItem(m_specFileTableRowIndex,
@@ -787,12 +812,17 @@ SpecFileManagementDialog::updateTableDimensionsToFitFiles()
      * If needed, add a row for the spec file
      */
     m_specFileTableRowIndex = -1;
+    m_sceneAnnotationFileRowIndex = -1;
     int numberOfRows = 0;
     switch (m_dialogMode) {
         case MODE_MANAGE_FILES:
         case MODE_SAVE_FILES_WHILE_QUITTING:
             m_specFileTableRowIndex = numberOfRows;
             numberOfRows++;
+//            if ( ! m_brain->getSceneAnnotationFile()->isEmpty()) {
+                m_sceneAnnotationFileRowIndex = numberOfRows;
+                numberOfRows++;
+//            }
             break;
         case MODE_OPEN_SPEC_FILE:
             break;
@@ -837,9 +867,30 @@ SpecFileManagementDialog::updateTableDimensionsToFitFiles()
      * Add new cells to the table widget
      */
     for (int32_t iRow = firstNewRowIndex; iRow < lastNewRowIndex; iRow++) {
-        const bool isDataFileRow = (m_specFileTableRowIndex != iRow);
+        bool hasCloseCheckBoxFlag  = true;
+        bool hasDisplayedLabelFlag = true;
+        bool hasInSpecCheckBoxFlag = true;
+        bool hasLoadCheckBoxFlag   = true;
+        bool hasOptionsButtonFlag  = true;
+        bool hasReadCheckBoxFlag   = true;
+        bool hasSaveCheckBoxFlag   = true;
+        bool hasStatusLabelFlag    = true;
+        if (iRow == m_specFileTableRowIndex) {
+            hasCloseCheckBoxFlag  = false;
+            hasDisplayedLabelFlag = false;
+            hasInSpecCheckBoxFlag = false;
+            hasLoadCheckBoxFlag   = false;
+            hasReadCheckBoxFlag   = false;
+        }
+        else if (iRow == m_sceneAnnotationFileRowIndex) {
+            hasDisplayedLabelFlag = false;
+            hasInSpecCheckBoxFlag = false;
+            hasLoadCheckBoxFlag   = false;
+            hasReadCheckBoxFlag   = false;
+            hasSaveCheckBoxFlag   = false;
+        }
         
-        if (isDataFileRow) {
+        if (hasLoadCheckBoxFlag) {
             if (m_COLUMN_LOAD_CHECKBOX >= 0) {
                 QTableWidgetItem* item = createCheckableItem();
                 item->setTextAlignment(Qt::AlignHCenter);
@@ -849,37 +900,44 @@ SpecFileManagementDialog::updateTableDimensionsToFitFiles()
             }
         }
 
-        if (m_COLUMN_SAVE_CHECKBOX >= 0) {
-            QTableWidgetItem* item = createCheckableItem();
-            item->setTextAlignment(Qt::AlignHCenter);
-            setTableWidgetItem(iRow,
-                               m_COLUMN_SAVE_CHECKBOX,
-                               item);
+        if (hasSaveCheckBoxFlag) {
+            if (m_COLUMN_SAVE_CHECKBOX >= 0) {
+                QTableWidgetItem* item = createCheckableItem();
+                item->setTextAlignment(Qt::AlignHCenter);
+                setTableWidgetItem(iRow,
+                                   m_COLUMN_SAVE_CHECKBOX,
+                                   item);
+            }
         }
         
-        if (m_COLUMN_STATUS_LABEL >= 0) {
-            QTableWidgetItem* item = createTextItem();
-            setTableWidgetItem(iRow,
-                               m_COLUMN_STATUS_LABEL,
-                               item);
-            
-            /*
-             * Text for modified cell is always red and centered
-             */
-            item->setTextAlignment(Qt::AlignCenter);
-            QBrush modifiedBrush = item->foreground();
-            modifiedBrush.setColor(Qt::red);
-            item->setForeground(modifiedBrush);
+        if (hasStatusLabelFlag) {
+            if (m_COLUMN_STATUS_LABEL >= 0) {
+                QTableWidgetItem* item = createTextItem();
+                setTableWidgetItem(iRow,
+                                   m_COLUMN_STATUS_LABEL,
+                                   item);
+                
+                /*
+                 * Text for modified cell is always red and centered
+                 */
+                item->setTextAlignment(Qt::AlignCenter);
+                QBrush modifiedBrush = item->foreground();
+                modifiedBrush.setColor(Qt::red);
+                item->setForeground(modifiedBrush);
+            }
         }
         
-        if (m_COLUMN_DISPLAYED_LABEL >= 0) {
-            QTableWidgetItem* item = createTextItem();
-            setTableWidgetItem(iRow,
-                               m_COLUMN_DISPLAYED_LABEL,
-                               item);
-            item->setTextAlignment(Qt::AlignCenter);
+        if (hasDisplayedLabelFlag) {
+            if (m_COLUMN_DISPLAYED_LABEL >= 0) {
+                QTableWidgetItem* item = createTextItem();
+                setTableWidgetItem(iRow,
+                                   m_COLUMN_DISPLAYED_LABEL,
+                                   item);
+                item->setTextAlignment(Qt::AlignCenter);
+            }
         }
-        if (isDataFileRow) {
+        
+        if (hasInSpecCheckBoxFlag) {
             if (m_COLUMN_IN_SPEC_FILE_CHECKBOX >= 0) {
                 QTableWidgetItem* item = createCheckableItem();
                 item->setTextAlignment(Qt::AlignHCenter);
@@ -887,9 +945,11 @@ SpecFileManagementDialog::updateTableDimensionsToFitFiles()
                                    m_COLUMN_IN_SPEC_FILE_CHECKBOX,
                                    item);
             }
+        }
+        if (hasReadCheckBoxFlag) {
             if (m_COLUMN_READ_BUTTON >= 0) {
                 WuQImageLabel* loadImageLabel = new WuQImageLabel(m_iconReloadFile,
-                                                                     "Reload");
+                                                                  "Reload");
                 QObject::connect(loadImageLabel, SIGNAL(clicked()),
                                  m_fileReloadOrOpenFileActionSignalMapper, SLOT(map()));
                 m_fileReloadOrOpenFileActionSignalMapper->setMapping(loadImageLabel, iRow);
@@ -897,10 +957,12 @@ SpecFileManagementDialog::updateTableDimensionsToFitFiles()
                                                   m_COLUMN_READ_BUTTON,
                                                   loadImageLabel);
             }
-            
+        }
+        
+        if (hasCloseCheckBoxFlag) {
             if (m_COLUMN_CLOSE_BUTTON >= 0) {
                 WuQImageLabel* closeImageLabel = new WuQImageLabel(m_iconCloseFile,
-                                                                     "Close");
+                                                                   "Close");
                 QObject::connect(closeImageLabel, SIGNAL(clicked()),
                                  m_fileCloseFileActionSignalMapper, SLOT(map()));
                 m_fileCloseFileActionSignalMapper->setMapping(closeImageLabel, iRow);
@@ -909,17 +971,20 @@ SpecFileManagementDialog::updateTableDimensionsToFitFiles()
                                                   closeImageLabel);
             }
         }
-        
-        if (m_COLUMN_OPTIONS_TOOLBUTTON >= 0) {
-            WuQImageLabel* optionsImageLabel = new WuQImageLabel(m_iconOptions,
-                                                                 "Options");
-            QObject::connect(optionsImageLabel, SIGNAL(clicked()),
-                             m_fileOptionsActionSignalMapper, SLOT(map()));
-            m_fileOptionsActionSignalMapper->setMapping(optionsImageLabel, iRow);
-            m_filesTableWidget->setCellWidget(iRow,
-                                              m_COLUMN_OPTIONS_TOOLBUTTON,
-                                              optionsImageLabel);
+    
+        if (hasOptionsButtonFlag) {
+            if (m_COLUMN_OPTIONS_TOOLBUTTON >= 0) {
+                WuQImageLabel* optionsImageLabel = new WuQImageLabel(m_iconOptions,
+                                                                     "Options");
+                QObject::connect(optionsImageLabel, SIGNAL(clicked()),
+                                 m_fileOptionsActionSignalMapper, SLOT(map()));
+                m_fileOptionsActionSignalMapper->setMapping(optionsImageLabel, iRow);
+                m_filesTableWidget->setCellWidget(iRow,
+                                                  m_COLUMN_OPTIONS_TOOLBUTTON,
+                                                  optionsImageLabel);
+            }
         }
+        
         if (m_COLUMN_DATA_FILE_TYPE_LABEL >= 0) {
             setTableWidgetItem(iRow,
                                         m_COLUMN_DATA_FILE_TYPE_LABEL,
@@ -964,12 +1029,6 @@ SpecFileManagementDialog::updateSpecFileRowInTable()
                                                             m_COLUMN_DATA_FILE_TYPE_LABEL);
             dataTypeItem->setText(getEditedDataFileTypeName(DataFileTypeEnum::SPECIFICATION));
             
-//            CaretAssert(m_COLUMN_SAVE_CHECKBOX >= 0);
-//            QTableWidgetItem* saveItem = getTableWidgetItem(m_specFileTableRowIndex,
-//                                                            m_COLUMN_SAVE_CHECKBOX);
-//            CaretAssert(saveItem);
-//            // saveItem->setCheckState(WuQtUtilities::boolToCheckState(m_specFile->is()));
-            
             CaretAssert(m_COLUMN_FILE_NAME_LABEL >= 0);
             QTableWidgetItem* nameItem = getTableWidgetItem(m_specFileTableRowIndex,
                                                             m_COLUMN_FILE_NAME_LABEL);
@@ -998,17 +1057,6 @@ SpecFileManagementDialog::updateSpecFileRowInTable()
                 statusItem->setText("");
             }
 
-//            /*
-//             * Hide in Spec Check Box
-//             */
-//            CaretAssert(m_COLUMN_IN_SPEC_FILE_CHECKBOX);
-//            QTableWidgetItem* inSpecItem = getTableWidgetItem(m_specFileTableRowIndex,
-//                                                              m_COLUMN_IN_SPEC_FILE_CHECKBOX);
-//            inSpecItem->setFlags(inSpecItem->flags()
-//                                 & (~Qt::ItemIsEnabled));
-//            inSpecItem->setFlags(inSpecItem->flags()
-//                                 & (~Qt::ItemIsUserCheckable));
-            
             /*
              * Get filtering selections
              */
@@ -1056,6 +1104,118 @@ SpecFileManagementDialog::updateSpecFileRowInTable()
         }
     }
 }
+
+/**
+ * Update the table row containing the annotation scene.
+ */
+void
+SpecFileManagementDialog::updateAnnotationSceneFileRowInTable()
+{
+    bool isUpdateRow = false;
+    switch (m_dialogMode) {
+        case MODE_MANAGE_FILES:
+        case MODE_SAVE_FILES_WHILE_QUITTING:
+            isUpdateRow = true;
+            break;
+        case MODE_OPEN_SPEC_FILE:
+            break;
+    }
+    
+    /*
+     * Update spec file data
+     */
+    if (isUpdateRow) {
+        if (m_sceneAnnotationFileRowIndex >= 0) {
+            const AnnotationFile* sceneAnnotationFile = m_brain->getSceneAnnotationFile();
+            
+            CaretAssert(m_COLUMN_DATA_FILE_TYPE_LABEL >= 0);
+            QTableWidgetItem* dataTypeItem = getTableWidgetItem(m_sceneAnnotationFileRowIndex,
+                                                                m_COLUMN_DATA_FILE_TYPE_LABEL);
+            dataTypeItem->setText("Scene Annotations");
+            
+            CaretAssert(m_COLUMN_FILE_NAME_LABEL >= 0);
+            QTableWidgetItem* nameItem = getTableWidgetItem(m_sceneAnnotationFileRowIndex,
+                                                            m_COLUMN_FILE_NAME_LABEL);
+            CaretAssert(nameItem);
+            nameItem->setText("");
+            nameItem->setToolTip("");
+            
+            CaretAssert(m_COLUMN_STATUS_LABEL >= 0);
+            QTableWidgetItem* statusItem = getTableWidgetItem(m_sceneAnnotationFileRowIndex,
+                                                              m_COLUMN_STATUS_LABEL);
+            
+            /*
+             * Scene annotation file is considered modified if 
+             * it is NOT empty.
+             */
+            const bool modifiedStatusFlag = sceneAnnotationFile->isModified();
+            CaretAssert(statusItem);
+            if (modifiedStatusFlag) {
+                statusItem->setText("YES");
+            }
+            else {
+                statusItem->setText("");
+            }
+            
+            const bool haveSceneAnnotationsFlag = ( ! sceneAnnotationFile->isEmpty());
+            QWidget* closeWidget = m_filesTableWidget->cellWidget(m_sceneAnnotationFileRowIndex,
+                                                                  m_COLUMN_CLOSE_BUTTON);
+            CaretAssert(closeWidget);
+            QWidget* optionsWidget = m_filesTableWidget->cellWidget(m_sceneAnnotationFileRowIndex,
+                                                               m_COLUMN_OPTIONS_TOOLBUTTON);
+            CaretAssert(optionsWidget);
+            
+            closeWidget->setEnabled(haveSceneAnnotationsFlag);
+            optionsWidget->setEnabled(haveSceneAnnotationsFlag);
+            
+            /*
+             * Get filtering selections
+             */
+            SpecFileDialogViewFilesTypeEnum::Enum viewFilesType;
+            DataFileTypeEnum::Enum filteredDataFileType;
+            StructureEnum::Enum filteredStructureType;
+            getFilterSelections(viewFilesType,
+                                filteredDataFileType,
+                                filteredStructureType);
+            
+            bool hideSceneAnnontationFileRow = false;
+            
+            if ((filteredStructureType != StructureEnum::ALL)
+                && (filteredStructureType != StructureEnum::OTHER)) {
+                hideSceneAnnontationFileRow = true;
+            }
+            
+            switch (viewFilesType) {
+                case SpecFileDialogViewFilesTypeEnum::VIEW_FILES_ALL:
+                    break;
+                case SpecFileDialogViewFilesTypeEnum::VIEW_FILES_LOADED:
+                    break;
+                case SpecFileDialogViewFilesTypeEnum::VIEW_FILES_LOADED_MODIFIED:
+                    if (! modifiedStatusFlag) {
+                        hideSceneAnnontationFileRow = true;
+                    }
+                    break;
+                case SpecFileDialogViewFilesTypeEnum::VIEW_FILES_LOADED_NOT_MODIFIED:
+                    if (modifiedStatusFlag) {
+                        hideSceneAnnontationFileRow = true;
+                    }
+                    break;
+                case SpecFileDialogViewFilesTypeEnum::VIEW_FILES_NOT_LOADED:
+                    hideSceneAnnontationFileRow = true;
+                    break;
+                    
+            }
+            
+            if (filteredDataFileType != DataFileTypeEnum::UNKNOWN) {
+                hideSceneAnnontationFileRow = true;
+            }
+            
+            m_filesTableWidget->setRowHidden(m_sceneAnnotationFileRowIndex,
+                                             hideSceneAnnontationFileRow);
+        }
+    }
+}
+
 
 /**
  * Gets called when a column header is selected.
@@ -1223,7 +1383,10 @@ SpecFileManagementDialog::sortFileContent()
      */
     int rowCounter = 0;
     if (m_specFileTableRowIndex >= 0) {
-        rowCounter = 1;
+        rowCounter++;
+    }
+    if (m_sceneAnnotationFileRowIndex >= 0) {
+        rowCounter++;
     }
     for (int32_t i = 0; i < numDataFiles; i++) {
         m_tableRowDataFileContent[i]->m_tableRowIndex= rowCounter;
@@ -1257,6 +1420,7 @@ SpecFileManagementDialog::loadSpecFileContentIntoDialog()
                         filteredStructureType);
     
     updateSpecFileRowInTable();
+    updateAnnotationSceneFileRowInTable();
     
     /*
      * Load all of the data file content.
@@ -1366,6 +1530,11 @@ SpecFileManagementDialog::loadSpecFileContentIntoDialog()
                 WuQImageLabel* readImageLabel = dynamic_cast<WuQImageLabel*>(readCellWidget);
                 CaretAssert(readImageLabel);
                 
+                QWidget* closeWidget = m_filesTableWidget->cellWidget(rowIndex,
+                                                                      m_COLUMN_CLOSE_BUTTON);
+                CaretAssert(closeWidget);
+                closeWidget->setEnabled(caretDataFile != NULL);
+                
                 if (caretDataFile != NULL) {
                     readImageLabel->updateIconText(m_iconReloadFile,
                                                    "Reload");
@@ -1421,9 +1590,19 @@ SpecFileManagementDialog::loadSpecFileContentIntoDialog()
                                                               m_COLUMN_FILE_NAME_LABEL);
         CaretAssert(nameItem);
         
-        FileInformation fileInfo(specFileDataFile->getFileName());
-        const AString path = fileInfo.getAbsolutePath();
-        const AString name = fileInfo.getFileName();
+        AString path;
+        AString name;
+        const QString fileName(specFileDataFile->getFileName());
+        if (fileName.isEmpty()) {
+            CaretLogSevere("While loading spec file dialog, file of type "
+                           + DataFileTypeEnum::toGuiName(dataFileType)
+                           + " has empty file name.");
+        }
+        else {
+            FileInformation fileInfo(specFileDataFile->getFileName());
+            path = fileInfo.getAbsolutePath();
+            name = fileInfo.getFileName();
+        }
         
         nameItem->setText(name);
         nameItem->setToolTip(path);
@@ -1615,6 +1794,11 @@ SpecFileManagementDialog::okButtonClicked ()
     if (allowDialogToClose) {
         WuQDialogModal::okButtonClicked();
     }
+    else {
+        getDataFileContentFromSpecFile();
+        loadSpecFileContentIntoDialog();
+        updateGraphicWindowsAndUserInterface();
+    }
 }
 
 /**
@@ -1793,22 +1977,58 @@ SpecFileManagementDialog::writeSpecFile(const bool writeOnlyIfModified)
 void
 SpecFileManagementDialog::fileRemoveActionSelected(int rowIndex)
 {
-    SpecFileManagementDialogRowContent* rowContent = getFileContentInRow(rowIndex);
-    SpecFileDataFile* specFileDataFile = rowContent->m_specFileDataFile;
-    
     QWidget* removeButtonWidget = m_filesTableWidget->cellWidget(rowIndex,
-                                                               m_COLUMN_CLOSE_BUTTON);
+                                                                 m_COLUMN_CLOSE_BUTTON);
     CaretAssert(removeButtonWidget);
-    CaretDataFile* caretDataFile = specFileDataFile->getCaretDataFile();
-    if (caretDataFile != NULL) {
-        if (caretDataFile->isModified()) {
-            const QString msg = (caretDataFile->getFileNameNoPath()
-                                 + " is modified.  Close without saving changes?");
-            if (WuQMessageBox::warningOkCancel(removeButtonWidget, msg) == false) {
+    
+    bool updateFlag = false;
+    
+    if (rowIndex == m_sceneAnnotationFileRowIndex) {
+        AnnotationFile* sceneAnnotationFile = m_brain->getSceneAnnotationFile();
+        CaretAssert(sceneAnnotationFile);
+        
+        if ( ! sceneAnnotationFile->isEmpty()) {
+            const QString msg = ("Remove all scene annotations?");
+            if ( ! WuQMessageBox::warningOkCancel(removeButtonWidget, msg)) {
                 return;
             }
+            
+            sceneAnnotationFile->clear();
+            updateFlag = true;
         }
-        EventManager::get()->sendEvent(EventDataFileDelete(caretDataFile).getPointer());
+    }
+    else {
+        SpecFileManagementDialogRowContent* rowContent = getFileContentInRow(rowIndex);
+        SpecFileDataFile* specFileDataFile = rowContent->m_specFileDataFile;
+        
+        CaretDataFile* caretDataFile = specFileDataFile->getCaretDataFile();
+        if (caretDataFile != NULL) {
+            if (caretDataFile->isModified()) {
+                const QString msg = (caretDataFile->getFileNameNoPath()
+                                     + " is modified.  Close without saving changes?");
+                if ( ! WuQMessageBox::warningOkCancel(removeButtonWidget, msg)) {
+                    return;
+                }
+            }
+            
+            
+            if (m_COLUMN_SAVE_CHECKBOX >= 0) {
+                /*
+                 * Turn of save check box in case file was modified to prevent 
+                 * crash if user hits save file button
+                 */
+                QTableWidgetItem* saveItem = getTableWidgetItem(rowIndex,
+                                                                m_COLUMN_SAVE_CHECKBOX);
+                CaretAssert(saveItem);
+                saveItem->setCheckState(WuQtUtilities::boolToCheckState(false));
+            }
+            
+            EventManager::get()->sendEvent(EventDataFileDelete(caretDataFile).getPointer());
+            updateFlag = true;
+        }
+    }
+
+    if (updateFlag) {
         getDataFileContentFromSpecFile();
         loadSpecFileContentIntoDialog();
         updateGraphicWindowsAndUserInterface();
@@ -2015,101 +2235,106 @@ SpecFileManagementDialog::fileOptionsActionSelected(int rowIndex)
         }
     }
     else {
-        SpecFileManagementDialogRowContent* rowContent = getFileContentInRow(rowIndex);
-        SpecFileDataFile* specFileDataFile = rowContent->m_specFileDataFile;
-        CaretDataFile* caretDataFile = specFileDataFile->getCaretDataFile();
-        CaretMappableDataFile* caretMappableDataFile = NULL;
-        if (caretDataFile != NULL) {
-            caretMappableDataFile = dynamic_cast<CaretMappableDataFile*>(caretDataFile);
+        const bool sceneAnnotationFileFlag = (rowIndex == m_sceneAnnotationFileRowIndex);
+        
+        SpecFileDataFile* specFileDataFile = NULL;
+        CaretDataFile* caretDataFile       = NULL;
+        if (sceneAnnotationFileFlag) {
+            caretDataFile = m_brain->getSceneAnnotationFile();
+            if (caretDataFile->isEmpty()) {
+                WuQMessageBox::informationOk(this,
+                                             "There are no scene annotations");
+                return;
+            }
+        }
+        else {
+            SpecFileManagementDialogRowContent* rowContent = getFileContentInRow(rowIndex);
+            specFileDataFile = rowContent->m_specFileDataFile;
+            caretDataFile    = specFileDataFile->getCaretDataFile();
         }
         QAction* copyFilePathToClipboardAction = NULL;
-        QAction* editMetaDataAction = NULL;
-        QAction* setFileNameAction = NULL;
-        QAction* setStructureAction = NULL;
-        //QAction* unloadFileAction = NULL;
-        QAction* unloadFileMapsAction = NULL;
-        QAction* viewMetaDataAction = NULL;
-                
+        QAction* copyMoveFileContentAction     = NULL;
+        QAction* editMetaDataAction            = NULL;
+        QAction* setFileNameAction             = NULL;
+        QAction* setStructureAction            = NULL;
+        QAction* unloadFileMapsAction          = NULL;
+        QAction* viewMetaDataAction            = NULL;
+        
         QMenu menu;
         switch (m_dialogMode) {
             case MODE_MANAGE_FILES:
             case MODE_SAVE_FILES_WHILE_QUITTING:
                 if (caretDataFile != NULL) {
-                    copyFilePathToClipboardAction = menu.addAction(copyPathText);
-                    editMetaDataAction = menu.addAction("Edit Metadata...");
-                    setFileNameAction = menu.addAction("Set File Name...");
-                    //                unloadFileAction = menu.addAction("Unload File");
-                    //if (caretMappableDataFile != NULL) {
-                    //    unloadFileMapsAction = menu.addAction("Unload Map(s) from File");
-                    //    unloadFileMapsAction->setEnabled(false);
-                    //}
+                    DataFileContentCopyMoveInterface* copyMoveInterface = dynamic_cast<DataFileContentCopyMoveInterface*>(caretDataFile);
+                    if (copyMoveInterface != NULL) {
+                        copyMoveFileContentAction = menu.addAction("Copy/Move Content...");
+                    }
+                    
+                    if ( ! sceneAnnotationFileFlag) {
+                        copyFilePathToClipboardAction = menu.addAction(copyPathText);
+                        editMetaDataAction = menu.addAction("Edit Metadata...");
+                        setFileNameAction = menu.addAction("Set File Name...");
+                    }
                 }
-                else {
+                else if ( ! sceneAnnotationFileFlag) {
                     copyFilePathToClipboardAction = menu.addAction(copyPathText);
-                    //viewMetaDataAction = menu.addAction("View Metadata...");
-                    //viewMetaDataAction->setEnabled(false);
                 }
                 break;
             case MODE_OPEN_SPEC_FILE:
-                copyFilePathToClipboardAction = menu.addAction(copyPathText);
-                //setStructureAction = menu.addAction("Set Structure...");
-                //setStructureAction->setEnabled(false);
-                //viewMetaDataAction = menu.addAction("View Metadata...");
-                //viewMetaDataAction->setEnabled(false);
+                if ( ! sceneAnnotationFileFlag) {
+                    copyFilePathToClipboardAction = menu.addAction(copyPathText);
+                }
                 break;
         }
         
-        QAction* selectedAction = menu.exec(QCursor::pos());
-        
-        if (selectedAction == NULL) {
-            /*
-             * If the selected action is NULL, it indicates that the user did
-             * not make a selection.  This test is needed as some of the actions
-             * (such as setFileNameAction) may be NULL and with out this test,
-             * those NULL actions would match.
-             */
-        }
-        else if (selectedAction == copyFilePathToClipboardAction) {
-            copyFilePathToClipboard(specFileDataFile,
-                                    caretDataFile);
-        }
-        else if (selectedAction == setFileNameAction) {
-            changeFileName(&menu,
-                           specFileDataFile,
-                           caretDataFile);
-        }
-        else if (selectedAction == setStructureAction) {
-            CaretAssert(0);
-        }
-        //    else if (selectedAction == unloadFileAction) {
-        //        CaretDataFile* cdf = specFileDataFile->getCaretDataFile();
-        //        GuiManager::get()->getBrain()->removeDataFile(cdf);
-        //        loadSpecFileContentIntoDialog();
-        //        updateGraphicWindowsAndUserInterface();
-        //    }
-        else if (selectedAction == unloadFileMapsAction) {
-//            if (caretDataFile->isModified()) {
-//                specFileDataFile->setSavingSelected(true);
-//            }
-        }
-        else if (selectedAction == editMetaDataAction) {
-            if (caretDataFile != NULL) {
-                MetaDataEditorDialog mded(caretDataFile,
-                                          &menu);
-                mded.exec();
-                
-                if (caretDataFile->isModified()) {
-                    specFileDataFile->setSavingSelected(true);
-                }
-                loadSpecFileContentIntoDialog();
-            }
-        }
-        else if (selectedAction == viewMetaDataAction) {
+        if ( ! menu.actions().isEmpty()) {
+            QAction* selectedAction = menu.exec(QCursor::pos());
             
-        }
-        else if (selectedAction != NULL) {
-            CaretAssertMessage(0,
-                               ("Unhandled Menu Action: " + selectedAction->text()));
+            if (selectedAction == NULL) {
+                /*
+                 * If the selected action is NULL, it indicates that the user did
+                 * not make a selection.  This test is needed as some of the actions
+                 * (such as setFileNameAction) may be NULL and with out this test,
+                 * those NULL actions would match.
+                 */
+            }
+            else if (selectedAction == copyMoveFileContentAction) {
+                copyMoveFileContent(&menu,
+                                    caretDataFile);
+            }
+            else if (selectedAction == copyFilePathToClipboardAction) {
+                copyFilePathToClipboard(specFileDataFile,
+                                        caretDataFile);
+            }
+            else if (selectedAction == setFileNameAction) {
+                changeFileName(&menu,
+                               specFileDataFile,
+                               caretDataFile);
+            }
+            else if (selectedAction == setStructureAction) {
+                CaretAssert(0);
+            }
+            else if (selectedAction == unloadFileMapsAction) {
+            }
+            else if (selectedAction == editMetaDataAction) {
+                if (caretDataFile != NULL) {
+                    MetaDataEditorDialog mded(caretDataFile,
+                                              &menu);
+                    mded.exec();
+                    
+                    if (caretDataFile->isModified()) {
+                        specFileDataFile->setSavingSelected(true);
+                    }
+                    loadSpecFileContentIntoDialog();
+                }
+            }
+            else if (selectedAction == viewMetaDataAction) {
+                
+            }
+            else if (selectedAction != NULL) {
+                CaretAssertMessage(0,
+                                   ("Unhandled Menu Action: " + selectedAction->text()));
+            }
         }
     }
 }
@@ -2136,6 +2361,78 @@ SpecFileManagementDialog::copyFilePathToClipboard(const SpecFileDataFile* specFi
         CaretAssert(0);
     }
 }
+
+/**
+ * Copy or move content of the data file to another data file of same type.
+ *
+ * @param parent
+ *   Widget on which copy/move dialog is displayed.
+ * @param caretDataFile
+ *   Caret Data File that is having is content copied or moved
+ */
+void
+SpecFileManagementDialog::copyMoveFileContent(QWidget* parent,
+                                              CaretDataFile* caretDataFile)
+{
+    CaretAssert(caretDataFile);
+    
+    DataFileContentCopyMoveInterface* copyMoveInterfaceFile = dynamic_cast<DataFileContentCopyMoveInterface*>(caretDataFile);
+    CaretAssert(copyMoveInterfaceFile);
+    
+    Brain* brain = GuiManager::get()->getBrain();
+    
+    std::vector<CaretDataFile*> copyMoveDataFiles;
+    
+    if (caretDataFile->getDataFileType() == DataFileTypeEnum::ANNOTATION) {
+        std::vector<AnnotationFile*> annotationFiles;
+        brain->getAllAnnotationFilesIncludingSceneAnnotationFile(annotationFiles);
+        
+        copyMoveDataFiles.insert(copyMoveDataFiles.end(),
+                                 annotationFiles.begin(),
+                                 annotationFiles.end());
+    }
+    else {
+        brain->getAllDataFilesWithDataFileType(caretDataFile->getDataFileType(),
+                                               copyMoveDataFiles);
+    }
+    
+    
+    std::vector<DataFileContentCopyMoveInterface*> copyMoveDestinationFiles;
+    for (std::vector<CaretDataFile*>::iterator fileIter = copyMoveDataFiles.begin();
+         fileIter != copyMoveDataFiles.end();
+         fileIter++) {
+        DataFileContentCopyMoveInterface* cmFile = dynamic_cast<DataFileContentCopyMoveInterface*>(*fileIter);
+        if (cmFile != NULL) {
+            copyMoveDestinationFiles.push_back(cmFile);
+        }
+    }
+    
+    DataFileContentCopyMoveDialog copyMoveDialog(copyMoveInterfaceFile,
+                                                 copyMoveDestinationFiles,
+                                                 parent);
+    copyMoveDialog.exec();
+
+    /*
+     * Spec file has changed
+     */
+    getDataFileContentFromSpecFile();
+    
+    /*
+     * Table may need to add/remove rows
+     */
+    updateTableDimensionsToFitFiles();
+    
+    /*
+     * Update the table rows with data
+     */
+    loadSpecFileContentIntoDialog();
+    
+    /*
+     * Files have changed
+     */
+    updateGraphicWindowsAndUserInterface();
+}
+
 
 /**
  * Change the name of a file.

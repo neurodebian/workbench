@@ -249,7 +249,7 @@ SurfaceNodeColoring::showBrainordinateHighlightRegionOfInterest(const Brain* bra
 {
     CaretPreferences* prefs = SessionManager::get()->getCaretPreferences();
     uint8_t foregroundColorByte[4];
-    prefs->getColorForegroundSurfaceView(foregroundColorByte);
+    prefs->getBackgroundAndForegroundColors()->getColorForegroundSurfaceView(foregroundColorByte);
     const float foregroundColor[4] = {
         foregroundColorByte[0],
         foregroundColorByte[1],
@@ -340,6 +340,8 @@ SurfaceNodeColoring::colorSurfaceNodes(const DisplayPropertiesLabels* displayPro
             
             bool isColoringValid = false;
             switch (mapDataFileType) {
+                case DataFileTypeEnum::ANNOTATION:
+                    break;
                 case DataFileTypeEnum::BORDER:
                     break;
                 case DataFileTypeEnum::CONNECTIVITY_DENSE:

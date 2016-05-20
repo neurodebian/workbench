@@ -19,9 +19,14 @@ INCLUDE (${QT_USE_FILE})
 #
 ADD_LIBRARY(Files
 AffineFile.h
+AnnotationFile.h
+AnnotationFileXmlFormatBase.h
+AnnotationFileXmlReader.h
+AnnotationFileXmlWriter.h
 Border.h
 BorderException.h
 BorderFile.h
+BorderLengthHelper.h
 BorderPointFromSearch.h
 BorderTracingHelper.h
 BrainordinateRegionOfInterest.h
@@ -60,7 +65,6 @@ EventChartMatrixParcelYokingValidation.h
 EventGetDisplayedDataFiles.h
 EventMapYokingSelectMap.h
 EventMapYokingValidation.h
-EventPaletteGetByName.h
 EventSurfaceColoringInvalidate.h
 EventSurfaceStructuresValidGet.h
 Fiber.h
@@ -81,9 +85,10 @@ GroupAndNameHierarchyGroup.h
 GroupAndNameHierarchyItem.h
 GroupAndNameHierarchyModel.h
 GroupAndNameHierarchyName.h
-ImageDimensionsModel.h
+ImageCaptureDimensionsModeEnum.h
+ImageCaptureSettings.h
 ImageFile.h
-ImagePixelsPerSpatialUnitsEnum.h
+ImageResolutionUnitsEnum.h
 ImageSpatialUnitsEnum.h
 LabelDrawingProperties.h
 LabelDrawingTypeEnum.h
@@ -130,11 +135,18 @@ VolumeSliceProjectionTypeEnum.h
 VolumeSpline.h
 VtkFileExporter.h
 WarpfieldFile.h
+XmlStreamReaderHelper.h
+XmlStreamWriterHelper.h
 
 AffineFile.cxx
+AnnotationFile.cxx
+AnnotationFileXmlFormatBase.cxx
+AnnotationFileXmlReader.cxx
+AnnotationFileXmlWriter.cxx
 Border.cxx
 BorderException.cxx
 BorderFile.cxx
+BorderLengthHelper.cxx
 BorderTracingHelper.cxx
 BrainordinateRegionOfInterest.cxx
 CaretDataFile.cxx
@@ -168,7 +180,6 @@ EventChartMatrixParcelYokingValidation.cxx
 EventGetDisplayedDataFiles.cxx
 EventMapYokingSelectMap.cxx
 EventMapYokingValidation.cxx
-EventPaletteGetByName.cxx
 EventSurfaceColoringInvalidate.cxx
 EventSurfaceStructuresValidGet.cxx
 Fiber.cxx
@@ -189,9 +200,10 @@ GroupAndNameHierarchyGroup.cxx
 GroupAndNameHierarchyItem.cxx
 GroupAndNameHierarchyModel.cxx
 GroupAndNameHierarchyName.cxx
-ImageDimensionsModel.cxx
+ImageCaptureDimensionsModeEnum.cxx
+ImageCaptureSettings.cxx
 ImageFile.cxx
-ImagePixelsPerSpatialUnitsEnum.cxx
+ImageResolutionUnitsEnum.cxx
 ImageSpatialUnitsEnum.cxx
 LabelDrawingProperties.cxx
 LabelDrawingTypeEnum.cxx
@@ -238,6 +250,8 @@ VolumeSliceProjectionTypeEnum.cxx
 VolumeSpline.cxx
 VtkFileExporter.cxx
 WarpfieldFile.cxx
+XmlStreamReaderHelper.cxx
+XmlStreamWriterHelper.cxx
 )
 
 
@@ -245,6 +259,7 @@ WarpfieldFile.cxx
 # Find Headers
 #
 INCLUDE_DIRECTORIES(
+${CMAKE_SOURCE_DIR}/Annotations
 ${CMAKE_SOURCE_DIR}/Charting
 ${CMAKE_SOURCE_DIR}/Files
 ${CMAKE_SOURCE_DIR}/FilesBase

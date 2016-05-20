@@ -31,6 +31,7 @@
 #include <QLabel>
 #include <QToolButton>
 
+#include "AnnotationColorBar.h"
 #include "Brain.h"
 #include "BrowserTabContent.h"
 #include "CaretAssert.h"
@@ -517,7 +518,7 @@ ChartMatrixParcelSelectionViewController::matrixParcelColorBarActionTriggered(bo
         return;
     }
     
-    chartMatrixDisplayProperties->setColorBarDisplayed(status);
+    chartMatrixDisplayProperties->getColorBar()->setDisplayed(status);
     EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
 }
 
@@ -971,7 +972,7 @@ ChartMatrixParcelSelectionViewController::updateMatrixParcelChartWidget(Brain* /
         const YokingGroupEnum::Enum yokingGroup = chartableMatrixParcelInterface->getYokingGroup();
         m_matrixParcelYokingGroupComboBox->setSelectedItem<YokingGroupEnum,YokingGroupEnum::Enum>(yokingGroup);
         m_matrixParcelColorBarAction->blockSignals(true);
-        m_matrixParcelColorBarAction->setChecked(chartMatrixDisplayProperties->isColorBarDisplayed());
+        m_matrixParcelColorBarAction->setChecked(chartMatrixDisplayProperties->getColorBar()->isDisplayed());
         m_matrixParcelColorBarAction->blockSignals(false);
         
         m_matrixParcelYokingGroupComboBox->getWidget()->setEnabled(chartableMatrixParcelInterface->isSupportsLoadingAttributes());
@@ -1001,6 +1002,15 @@ ChartMatrixParcelSelectionViewController::updateMatrixParcelChartWidget(Brain* /
         model->setSelectedFile(parcelLabelFile);
         model->setSelectedMapIndex(parcelLabelFileMapIndex);
         m_parcelLabelFileRemappingFileSelector->updateFileAndMapSelector(model);
+        
+        bool reorderCheckBoxEnabledFlag = false;
+        if (model->getSelectedFile() != NULL) {
+            if ((model->getSelectedMapIndex() >= 0)
+                && (model->getSelectedMapIndex() < model->getSelectedFile()->getNumberOfMaps())) {
+                reorderCheckBoxEnabledFlag = true;
+            }
+        }
+        m_parcelReorderingEnabledCheckBox->setEnabled(reorderCheckBoxEnabledFlag);
         
         m_matrixParcelColorBarAction->setEnabled(caretMappableDataFile->isMappedWithPalette());
         m_matrixParcelSettingsAction->setEnabled(caretMappableDataFile->isMappedWithPalette());

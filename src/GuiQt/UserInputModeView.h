@@ -46,6 +46,8 @@ namespace caret {
         
         virtual void mouseLeftClickWithShift(const MouseEvent& mouseEvent);
         
+        virtual void mouseLeftClickWithCtrlShift(const MouseEvent& mouseEvent);
+        
         virtual void mouseLeftDrag(const MouseEvent& mouseEvent);
         
         virtual void mouseLeftDragWithAlt(const MouseEvent& mouseEvent);
@@ -54,6 +56,10 @@ namespace caret {
         
         virtual void mouseLeftDragWithShift(const MouseEvent& mouseEvent);
 
+        virtual void showContextMenu(const MouseEvent& mouseEvent,
+                                     const QPoint& menuPosition,
+                                     BrainOpenGLWidget* openGLWidget);
+        
     protected:
         UserInputModeView(const UserInputMode inputMode);
         

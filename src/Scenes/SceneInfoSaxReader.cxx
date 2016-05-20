@@ -87,6 +87,8 @@ SceneInfoSaxReader::startElement(const AString& /* namespaceURI */,
                 throw e;
             }
             break;
+        case STATE_SCENE_INFO_BALSA_ID:
+            break;
         case STATE_SCENE_INFO:
             if (qName == SceneXmlElements::SCENE_INFO_NAME_TAG) {
                 m_state = STATE_SCENE_INFO_NAME;
@@ -99,12 +101,16 @@ SceneInfoSaxReader::startElement(const AString& /* namespaceURI */,
                 m_imageFormat    = attributes.getValue(SceneXmlElements::SCENE_INFO_IMAGE_FORMAT_ATTRIBUTE);
                 m_imageEncoding  = attributes.getValue(SceneXmlElements::SCENE_INFO_IMAGE_ENCODING_ATTRIBUTE);
             }
+            else if (qName == SceneXmlElements::SCENE_INFO_BALSA_SCENE_ID_TAG) {
+                m_state = STATE_SCENE_INFO_BALSA_ID;
+            }
             else {
                 const AString msg = XmlUtilities::createInvalidChildElementMessage(SceneXmlElements::SCENE_INFO_TAG,
                                                                                    qName);
                 XmlSaxParserException e(msg);
-                CaretLogThrowing(e);
-                throw e;
+                warning(e);
+//                CaretLogThrowing(e);
+//                throw e;
             }
             break;
         case STATE_SCENE_INFO_NAME:
@@ -138,6 +144,10 @@ SceneInfoSaxReader::endElement(const AString& /* namspaceURI */,
         case STATE_NONE:
             break;
         case STATE_SCENE_INFO:
+            break;
+        case STATE_SCENE_INFO_BALSA_ID:
+            CaretAssert(m_sceneInfo);
+            m_sceneInfo->setBalsaSceneID(stringValue);
             break;
         case STATE_SCENE_INFO_NAME:
             CaretAssert(m_sceneInfo);

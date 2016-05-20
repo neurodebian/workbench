@@ -23,6 +23,7 @@
 #include "ChartMatrixDisplayProperties.h"
 #undef __CHART_MATRIX_DISPLAY_PROPERTIES_DECLARE__
 
+#include "AnnotationColorBar.h"
 #include "CaretAssert.h"
 #include "SceneClass.h"
 #include "SceneClassAssistant.h"
@@ -46,9 +47,10 @@ ChartMatrixDisplayProperties::ChartMatrixDisplayProperties()
     m_scaleMode  = ChartMatrixScaleModeEnum::CHART_MATRIX_SCALE_AUTO;
     m_cellWidth  = 10.0;
     m_cellHeight = 10.0;
-    m_colorBarDisplayed = false;
     m_highlightSelectedRowColumn = true;
     m_displayGridLines = true;
+    m_colorBar = new AnnotationColorBar(AnnotationAttributesDefaultTypeEnum::NORMAL);
+
     resetPropertiesToDefault();
     
     m_sceneAssistant = new SceneClassAssistant();
@@ -56,9 +58,9 @@ ChartMatrixDisplayProperties::ChartMatrixDisplayProperties()
     m_sceneAssistant->add("m_cellHeight", &m_cellHeight);
     m_sceneAssistant->add("m_viewZooming", &m_viewZooming);
     m_sceneAssistant->addArray("m_viewPanning", m_viewPanning, 2, 0.0);
-    m_sceneAssistant->add("m_colorBarDisplayed", &m_colorBarDisplayed);
     m_sceneAssistant->add("m_highlightSelectedRowColumn", &m_highlightSelectedRowColumn);
     m_sceneAssistant->add("m_displayGridLines", &m_displayGridLines);
+    m_sceneAssistant->add("m_colorBar", "AnnotationColorBar", m_colorBar);
     
     m_sceneAssistant->add<ChartMatrixScaleModeEnum, ChartMatrixScaleModeEnum::Enum>("m_scaleMode",
                                                                                     &m_scaleMode);
@@ -70,6 +72,7 @@ ChartMatrixDisplayProperties::ChartMatrixDisplayProperties()
  */
 ChartMatrixDisplayProperties::~ChartMatrixDisplayProperties()
 {
+    delete m_colorBar;
     delete m_sceneAssistant;
 }
 
@@ -130,7 +133,7 @@ ChartMatrixDisplayProperties::copyHelperChartMatrixDisplayProperties(const Chart
     m_cellWidth      = obj.m_cellWidth;
     m_cellHeight     = obj.m_cellHeight;
     m_scaleMode      = obj.m_scaleMode;
-    m_colorBarDisplayed = obj.m_colorBarDisplayed;
+    *m_colorBar      = *obj.m_colorBar;
 }
 
 /**
@@ -150,7 +153,19 @@ ChartMatrixDisplayProperties::toString() const
 float
 ChartMatrixDisplayProperties::getCellWidth() const
 {
-    return m_cellWidth;
+    float cellWidth = m_cellWidth;
+    
+    switch (m_scaleMode) {
+        case ChartMatrixScaleModeEnum::CHART_MATRIX_SCALE_AUTO:
+            break;
+        case ChartMatrixScaleModeEnum::CHART_MATRIX_SCALE_MANUAL:
+            if (s_manualScaleModeWindowHeightScaling > 0.0) {
+                cellWidth *= s_manualScaleModeWindowWidthScaling;
+            }
+            break;
+    }
+    
+    return cellWidth;
 }
 
 /**
@@ -170,7 +185,19 @@ ChartMatrixDisplayProperties::setCellWidth(const float cellWidth)
 float
 ChartMatrixDisplayProperties::getCellHeight() const
 {
-    return m_cellHeight;
+    float cellHeight = m_cellHeight;
+    
+    switch (m_scaleMode) {
+        case ChartMatrixScaleModeEnum::CHART_MATRIX_SCALE_AUTO:
+            break;
+        case ChartMatrixScaleModeEnum::CHART_MATRIX_SCALE_MANUAL:
+            if (s_manualScaleModeWindowHeightScaling > 0.0) {
+                cellHeight *= s_manualScaleModeWindowHeightScaling;
+            }
+            break;
+    }
+    
+    return cellHeight;
 }
 
 /**
@@ -213,6 +240,20 @@ ChartMatrixDisplayProperties::getViewPanning(float viewPanningOut[2]) const
 {
     viewPanningOut[0] = m_viewPanning[0];
     viewPanningOut[1] = m_viewPanning[1];
+    
+    switch (m_scaleMode) {
+        case ChartMatrixScaleModeEnum::CHART_MATRIX_SCALE_AUTO:
+            break;
+        case ChartMatrixScaleModeEnum::CHART_MATRIX_SCALE_MANUAL:
+            if (s_manualScaleModeWindowWidthScaling > 0.0) {
+                viewPanningOut[0] *= s_manualScaleModeWindowWidthScaling;
+            }
+            if (s_manualScaleModeWindowHeightScaling > 0.0) {
+                viewPanningOut[1] *= s_manualScaleModeWindowHeightScaling;
+            }
+            break;
+    }
+    
 }
 
 /**
@@ -247,6 +288,24 @@ void
 ChartMatrixDisplayProperties::setScaleMode(const ChartMatrixScaleModeEnum::Enum scaleMode)
 {
     m_scaleMode = scaleMode;
+}
+
+/**
+ * @return The color bar displayed in graphics window.
+ */
+AnnotationColorBar*
+ChartMatrixDisplayProperties::getColorBar()
+{
+    return m_colorBar;
+}
+
+/**
+ * @return The color bar displayed in graphics window (const method).
+ */
+const AnnotationColorBar*
+ChartMatrixDisplayProperties::getColorBar() const
+{
+    return m_colorBar;
 }
 
 /**
@@ -299,34 +358,20 @@ ChartMatrixDisplayProperties::restoreFromScene(const SceneAttributes* sceneAttri
     m_sceneAssistant->restoreMembers(sceneAttributes,
                                      sceneClass);    
     
+    /*
+     * "m_paletteDisplayedFlag" controlled display of palette colorbar
+     * prior to the addition of AnnotationColorBar
+     */
+    const AString colorBarDisplayedFlagString = sceneClass->getStringValue("m_colorBarDisplayed");
+    if ( ! colorBarDisplayedFlagString.isEmpty()) {
+        m_colorBar->reset();
+        m_colorBar->setDisplayed(sceneClass->getBooleanValue("m_colorBarDisplayed"));
+    }
+    
     //Uncomment if sub-classes must restore from scene
     //restoreSubClassDataFromScene(sceneAttributes,
     //                             sceneClass);
     
-}
-
-/**
- * Is the colorbar displayed for the given tab?
- *
- * @return
- *     True if colorbar is displayed, else false.
- */
-bool
-ChartMatrixDisplayProperties::isColorBarDisplayed() const
-{
-    return m_colorBarDisplayed;
-}
-
-/**
- * Set the colorbar displayed for the given tab.
- *
- * @param displayed
- *     True if colorbar is displayed, else false.
- */
-void
-ChartMatrixDisplayProperties::setColorBarDisplayed(const bool displayed)
-{
-    m_colorBarDisplayed = displayed;
 }
 
 /**
@@ -369,6 +414,30 @@ void
 ChartMatrixDisplayProperties::setGridLinesDisplayed(const bool displayGridLines)
 {
     m_displayGridLines = displayGridLines;
+}
+
+/**
+ * Set scaling of the manual width and heights for matrix cells.
+ * When image capture is performed and the user is capturing the 
+ * image in a size different than the actual window size, the matrix
+ * cell width and heights need to be scaled so that they are the same
+ * percentage width and height of the window.
+ *
+ * If the scale mode is manual, these scaling values are used by
+ * the getCellWidth() and getCellHeight() to adjust the pixel width
+ * and height for matrix cell drawing.
+ *
+ * NOTE: THIS METHOD SHOULD BE CALLED JUST BEFORE IMAGE CAPTURE
+ * WHEN SCALING OF MATRIX CELL WIDTH AND HEIGHT IS NEEDED.  
+ * IMMEDIATELY AFTER IMAGE CAPTURE, THIS METHOD SHOULD BE CALLED
+ * WITH A VALUE OF ONE FOR BOTH THE WINDOW WIDTH AND HEIGHT SCALING.
+ */
+void
+ChartMatrixDisplayProperties::setManualScaleModeWindowWidthHeightScaling(const float windowWidthScaling,
+                                                                         const float windowHeightScaling)
+{
+    s_manualScaleModeWindowWidthScaling  = windowWidthScaling;
+    s_manualScaleModeWindowHeightScaling = windowHeightScaling;
 }
 
 

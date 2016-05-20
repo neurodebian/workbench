@@ -26,54 +26,134 @@
 
 namespace caret {
 
-    class Brain;
     class BrowserTabContent;
+    class GapsAndMargins;
+    class TileTabsConfiguration;
     
     class BrainOpenGLViewportContent : public CaretObject {
         
     public:
-        BrainOpenGLViewportContent(const int windowViewport[4],
-                                   const int modelViewport[4],
-                                   const bool highlightTabFlag,
-                                   Brain* brain,
-                                   BrowserTabContent* browserTabContent);
-        
         ~BrainOpenGLViewportContent();
         
-        void getModelViewport(int viewport[4]) const;
+        BrainOpenGLViewportContent(const BrainOpenGLViewportContent& obj);
         
-        const int* getModelViewport() const;
+        BrainOpenGLViewportContent& operator=(const BrainOpenGLViewportContent& obj);
         
-        const int* getWindowViewport() const;
+        void getModelViewport(int modelViewportOut[4]) const;
         
-        BrowserTabContent* getBrowserTabContent();
+        void getSurfaceMontageModelViewport(const int32_t montageX,
+                                            const int32_t montageY,
+                                            int subViewportOut[4]) const;
         
-        Brain* getBrain();
+        void getTabViewportBeforeApplyingMargins(int tabViewportOut[4]) const;
+        
+        void getWindowViewport(int windowViewportOut[4]) const;
+        
+        int getWindowIndex() const;
+        
+        BrowserTabContent* getBrowserTabContent() const;
+        
+        int32_t getTabIndex() const;
         
         bool isTabHighlighted() const;
         
+        static void adjustViewportForAspectRatio(int viewport[4],
+                                                 const float aspectRatio);
+        
+        static void adjustWidthHeightForAspectRatio(const float aspectRatio,
+                                                    int32_t& width,
+                                                    int32_t& height);
+        
         static std::vector<BrainOpenGLViewportContent*> createViewportContentForTileTabs(std::vector<BrowserTabContent*>& tabContents,
-                                                                                         Brain* brain,
-                                                                                         const int32_t windowWidth,
-                                                                                         const int32_t windowHeight,
-                                                                                         const std::vector<int32_t>& rowHeights,
-                                                                                         const std::vector<int32_t>& columnWidths,
+                                                                                         TileTabsConfiguration* tileTabsConfiguration,
+                                                                                         const GapsAndMargins* gapsAndMargins,
+                                                                                         const int32_t windowIndex,
+                                                                                         const int32_t windowViewport[4],
                                                                                          const int32_t highlightTabIndex);
         
-    private:
-        int m_modelViewport[4];
+        static BrainOpenGLViewportContent* createViewportForSingleTab(BrowserTabContent* browserTabContent,
+                                                                      const GapsAndMargins* gapsAndMargins,
+                                                                      const int32_t windowIndex,
+                                                                      const int32_t windowViewport[4]);
         
-        int m_windowViewport[4];
+    private:
+        /**
+         * Assists with creation of the tile tab viewports
+         */
+        class TileTabsViewportSizingInfo {
+        public:
+            TileTabsViewportSizingInfo(BrowserTabContent* browserTabContent,
+                                       const int32_t rowIndexFromTop,
+                                       const int32_t columnIndex,
+                                       const float initialWidth,
+                                       const float initialHeight);
+            
+            TileTabsViewportSizingInfo& operator=(const TileTabsViewportSizingInfo& obj);
+
+            void print(const int32_t x,
+                       const int32_t y);
+            
+            BrowserTabContent* m_browserTabContent;
+            int32_t m_rowIndexFromTop;
+            int32_t m_columnIndex;
+            
+            /** size with application of tile tabs configuration */
+            float m_initialWidth;
+            float m_initialHeight;
+            
+            /** size after application of lock aspect ratio */
+            int32_t m_width;
+            int32_t m_height;
+        };
+        
+        BrainOpenGLViewportContent(const int windowViewport[4],
+                                   const int tabViewport[4],
+                                   const int modelViewport[4],
+                                   const int windowIndex,
+                                   const bool highlightTabFlag,
+                                   BrowserTabContent* browserTabContent);
+        
+        void initializeMembersBrainOpenGLViewportContent();
+        
+        void copyHelperBrainOpenGLViewportContent(const BrainOpenGLViewportContent& obj);
+
+        static void createModelViewport(const int tabViewport[4],
+                                        const int32_t tabIndex,
+                                        const GapsAndMargins* gapsAndMargins,
+                                        int modelViewportOut[4]);
+        
+        const int m_windowIndex;
+        
+        const bool m_highlightTab;
+        
+        /** Tab viewport's X-coordinate */
+        int m_tabX;
+        /** Tab viewport's Y-coordinate */
+        int m_tabY;
+        /** Tab viewport's Width */
+        int m_tabWidth;
+        /** Tab viewport's Height */
+        int m_tabHeight;
+        
+        /** Model viewport's X-coordinate */
+        int m_modelX;
+        /** Model viewport's Y-coordinate */
+        int m_modelY;
+        /** Model viewport's Width */
+        int m_modelWidth;
+        /** Model viewport's Height */
+        int m_modelHeight;
+
+        /** Window viewport's X-coordinate */
+        int m_windowX;
+        /** Window viewport's Y-coordinate */
+        int m_windowY;
+        /** Window viewport's Width */
+        int m_windowWidth;
+        /** Window viewport's Height */
+        int m_windowHeight;
         
         BrowserTabContent* m_browserTabContent;
-        
-        Brain* m_brain;
-        
-        bool m_highlightTab;
-        
-        BrainOpenGLViewportContent(const BrainOpenGLViewportContent&);
-
-        BrainOpenGLViewportContent& operator=(const BrainOpenGLViewportContent&);
         
     public:
         virtual AString toString() const;

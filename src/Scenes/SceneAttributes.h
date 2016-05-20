@@ -42,11 +42,16 @@ namespace caret {
         
         SceneTypeEnum::Enum getSceneType() const;
         
-        void setIndicesOfTabsForSavingToScene(const std::vector<int32_t>& tabIndices);
+        void setIndicesOfTabsAndWindowsForSavingToScene(const std::vector<int32_t>& tabIndices,
+                                                        const std::vector<int32_t>& windowIndices);
         
         std::vector<int32_t> getIndicesOfTabsForSavingToScene() const;
         
+        std::vector<int32_t> getIndicesOfWindowsForSavingToScene() const;
+        
         bool isTabIndexSavedToScene(const int32_t tabIndex) const;
+        
+        bool isWindowIndexSavedToScene(const int32_t tabIndex) const;
         
         AString getSceneFileName() const;
         
@@ -78,6 +83,10 @@ namespace caret {
         
         void clearErrorMessage();
         
+        bool isUseSceneForegroundAndBackgroundColors() const;
+        
+        void setUseSceneForegroundAndBackgroundColors(const bool status);
+        
     private:
         SceneAttributes(const SceneAttributes&);
 
@@ -93,6 +102,8 @@ namespace caret {
         
         std::vector<int32_t> m_indicesOfTabsForSavingToScene;
         
+        std::vector<int32_t> m_indicesOfWindowsForSavingToScene;
+        
         AString m_sceneFileName;
         
         AString m_sceneName;
@@ -104,6 +115,8 @@ namespace caret {
         bool m_allLoadedFilesSavedToScene;
         
         bool m_modifiedPaletteSettingsSavedToScene;
+        
+        bool m_useSceneForgroundAndBackgroundColorsFlag;
         
         mutable AString m_errorMessage;
         

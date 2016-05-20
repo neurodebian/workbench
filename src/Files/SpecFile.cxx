@@ -487,34 +487,14 @@ SpecFile::addDataFilePrivate(const DataFileTypeEnum::Enum dataFileType,
     AString name = filename;
 
     const bool dataFileOnNetwork = DataFile::isFileOnNetwork(name);
-    const bool specFileOnNetwork = DataFile::isFileOnNetwork(getFileName());
 
-    if (dataFileOnNetwork) {
-        /* nothing */
-    }
-    else if (specFileOnNetwork) {
-        const int32_t lastSlashIndex = getFileName().lastIndexOf("/");
-        if (lastSlashIndex >= 0) {
-            const AString newName = (getFileName().left(lastSlashIndex)
-                                     + "/"
-                                     + name);
-            name = newName;
+    //NOTE: the spec file's location is completely irrelevant to this operation!
+    if (!dataFileOnNetwork) {
+        FileInformation fileInfo(name);
+        if (fileInfo.isRelative()) {
+            name = fileInfo.getAbsoluteFilePath();
         }
-        else {
-            CaretAssert(0);
-        }
-    }
-    else {
-        FileInformation specFileInfo(getFileName());
-        if (specFileInfo.isAbsolute()) {
-            FileInformation fileInfo(name);
-            if (fileInfo.isRelative()) {
-                FileInformation fileInfo(specFileInfo.getPathName(),
-                                         name);
-                name = fileInfo.getAbsoluteFilePath();
-            }
-        }
-    }
+    }//if it is on the network, don't modify it
     
 //    const AString message = ("After adding, " 
 //                             + filename
@@ -788,6 +768,32 @@ SpecFile::hasFilesWithRemotePathSelectedForLoading() const
     
     return false;
 }
+
+/**
+ * @return A vector containing all file names selected for loading.
+ */
+std::vector<AString>
+SpecFile::getAllDataFileNamesSelectedForLoading() const
+{
+    std::vector<AString> allFileNames;
+    
+    for (std::vector<SpecFileDataFileTypeGroup*>::const_iterator iter = dataFileTypeGroups.begin();
+         iter != dataFileTypeGroups.end();
+         iter++) {
+        SpecFileDataFileTypeGroup* dataFileTypeGroup = *iter;
+        
+        const int32_t numFiles = dataFileTypeGroup->getNumberOfFiles();
+        for (int32_t i = 0; i < numFiles; i++) {
+            if (dataFileTypeGroup->getFileInformation(i)->isLoadingSelected()) {
+                const AString filename = dataFileTypeGroup->getFileInformation(i)->getFileName();
+                allFileNames.push_back(filename);
+            }
+        }
+    }
+    
+    return allFileNames;
+}
+
 
 /**
  * @return A vector containing all file names.
@@ -1370,7 +1376,9 @@ SpecFile::saveToScene(const SceneAttributes* sceneAttributes,
     std::set<const CaretDataFile*> displayedDataFiles;
     if ( ! allLoadedFilesFlag) {
         const std::vector<int32_t> tabIndicesForScene = sceneAttributes->getIndicesOfTabsForSavingToScene();
-        EventGetDisplayedDataFiles displayedFilesEvent(tabIndicesForScene);
+        const std::vector<int32_t> windowIndicesForScene = sceneAttributes->getIndicesOfWindowsForSavingToScene();
+        EventGetDisplayedDataFiles displayedFilesEvent(windowIndicesForScene,
+                                                       tabIndicesForScene);
         EventManager::get()->sendEvent(displayedFilesEvent.getPointer());
         displayedDataFiles = displayedFilesEvent.getDisplayedDataFiles();        
     }

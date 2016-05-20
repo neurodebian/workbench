@@ -23,6 +23,8 @@
 
 #include <utility>
 
+#include "BackgroundAndForegroundColors.h"
+#include "BackgroundAndForegroundColorsModeEnum.h"
 #include "CaretObject.h"
 #include "LogLevelEnum.h"
 #include "ImageCaptureMethodEnum.h"
@@ -43,51 +45,30 @@ namespace caret {
         CaretPreferences();
         
         virtual ~CaretPreferences();
+
+        const BackgroundAndForegroundColors* getBackgroundAndForegroundColors() const;
         
-        void getColorForegroundAllView(uint8_t colorForeground[3]) const;
+        BackgroundAndForegroundColors getUserBackgroundAndForegroundColors();
         
-        void setColorForegroundAllView(const uint8_t colorForeground[3]);
+        void setUserBackgroundAndForegroundColors(const BackgroundAndForegroundColors& colors);
         
-        void getColorBackgroundAllView(uint8_t colorForeground[3]) const;
+        BackgroundAndForegroundColorsModeEnum::Enum getBackgroundAndForegroundColorsMode() const;
         
-        void setColorBackgroundAllView(const uint8_t colorForeground[3]);
+        void setSceneBackgroundAndForegroundColors(const BackgroundAndForegroundColors& colors);
         
-        
-        void getColorForegroundChartView(uint8_t colorForeground[3]) const;
-        
-        void setColorForegroundChartView(const uint8_t colorForeground[3]);
-        
-        void getColorBackgroundChartView(uint8_t colorForeground[3]) const;
-        
-        void setColorBackgroundChartView(const uint8_t colorForeground[3]);
-        
-        
-        void getColorForegroundSurfaceView(uint8_t colorForeground[3]) const;
-        
-        void setColorForegroundSurfaceView(const uint8_t colorForeground[3]);
-        
-        void getColorBackgroundSurfaceView(uint8_t colorForeground[3]) const;
-        
-        void setColorBackgroundSurfaceView(const uint8_t colorForeground[3]);
-        
-        
-        void getColorForegroundVolumeView(uint8_t colorForeground[3]) const;
-        
-        void setColorForegroundVolumeView(const uint8_t colorForeground[3]);
-        
-        void getColorBackgroundVolumeView(uint8_t colorForeground[3]) const;
-        
-        void setColorBackgroundVolumeView(const uint8_t colorForeground[3]);
-        
-        void getColorChartMatrixGridLines(uint8_t colorChartMatrixGridLines[3]) const;
-        
-        void setColorChartMatrixGridLines(const uint8_t colorChartMatrixGridLines[3]);
+        void setBackgroundAndForegroundColorsMode(const BackgroundAndForegroundColorsModeEnum::Enum colorsMode);
         
         void getPreviousSpecFiles(std::vector<AString>& previousSpecFiles) const;
         
         void addToPreviousSpecFiles(const AString& specFileName);
         
         void clearPreviousSpecFiles();
+        
+        void getPreviousSceneFiles(std::vector<AString>& previousSceneFiles) const;
+        
+        void addToPreviousSceneFiles(const AString& specFileName);
+        
+        void clearPreviousSceneFiles();
         
         void getPreviousOpenFileDirectories(std::vector<AString>& previousOpenFileDirectories) const;
         
@@ -249,25 +230,16 @@ namespace caret {
         
         mutable QSettings* qSettings;
         
-        uint8_t colorForegroundAll[3];
+        BackgroundAndForegroundColors userColors;
         
-        uint8_t colorBackgroundAll[3];
+        BackgroundAndForegroundColors sceneColors;
         
-        uint8_t colorForegroundChart[3];
-        
-        uint8_t colorBackgroundChart[3];
-        
-        uint8_t colorForegroundSurface[3];
-        
-        uint8_t colorBackgroundSurface[3];
-        
-        uint8_t colorForegroundVolume[3];
-        
-        uint8_t colorBackgroundVolume[3];
-        
-        uint8_t colorChartMatrixGridLines[3];
+        /** NOTE: colors mode is NOT saved to preferences */
+        BackgroundAndForegroundColorsModeEnum::Enum m_colorsMode;
         
         std::vector<AString> previousSpecFiles;
+        
+        std::vector<AString> previousSceneFiles;
         
         std::vector<AString> previousOpenFileDirectories;
         
@@ -333,6 +305,7 @@ namespace caret {
         static const AString NAME_LOGGING_LEVEL;
         static const AString NAME_MANAGE_FILES_VIEW_FILE_TYPE;
         static const AString NAME_OPENGL_DRAWING_METHOD;
+        static const AString NAME_PREVIOUS_SCENE_FILES;
         static const AString NAME_PREVIOUS_SPEC_FILES;
         static const AString NAME_PREVIOUS_OPEN_FILE_DIRECTORIES;
         static const AString NAME_SPLASH_SCREEN;
@@ -371,6 +344,7 @@ namespace caret {
     const AString CaretPreferences::NAME_LOGGING_LEVEL     = "loggingLevel";
     const AString CaretPreferences::NAME_MANAGE_FILES_VIEW_FILE_TYPE     = "manageFilesViewFileType";
     const AString CaretPreferences::NAME_OPENGL_DRAWING_METHOD     = "openGLDrawingMethod";
+    const AString CaretPreferences::NAME_PREVIOUS_SCENE_FILES     = "previousSceneFiles";
     const AString CaretPreferences::NAME_PREVIOUS_SPEC_FILES     = "previousSpecFiles";
     const AString CaretPreferences::NAME_PREVIOUS_OPEN_FILE_DIRECTORIES     = "previousOpenFileDirectories";
     const AString CaretPreferences::NAME_SPLASH_SCREEN = "splashScreen";

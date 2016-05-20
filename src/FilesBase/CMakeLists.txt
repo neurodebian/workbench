@@ -18,7 +18,6 @@ INCLUDE (${QT_USE_FILE})
 # Create the NIFTI library
 #
 ADD_LIBRARY(FilesBase
-DisplayGroupEnum.h
 GiftiException.h
 GiftiLabel.h
 GiftiLabelTable.h
@@ -33,7 +32,6 @@ VolumeMappableInterface.h
 VolumeSliceViewPlaneEnum.h
 VolumeSpace.h
 
-DisplayGroupEnum.cxx
 GiftiException.cxx
 GiftiLabel.cxx
 GiftiLabelTable.cxx
@@ -50,6 +48,7 @@ VolumeSpace.cxx
 # Find Headers
 #
 INCLUDE_DIRECTORIES(
+${CMAKE_SOURCE_DIR}/Annotations
 ${CMAKE_SOURCE_DIR}/FilesBase
 ${CMAKE_SOURCE_DIR}/Common
 ${CMAKE_SOURCE_DIR}/Palette

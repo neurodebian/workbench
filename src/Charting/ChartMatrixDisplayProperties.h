@@ -29,6 +29,8 @@
 
 
 namespace caret {
+    class AnnotationColorBar;
+
     class SceneClassAssistant;
 
     class ChartMatrixDisplayProperties : public CaretObject, public SceneableInterface {
@@ -41,10 +43,6 @@ namespace caret {
         ChartMatrixDisplayProperties(const ChartMatrixDisplayProperties& obj);
 
         ChartMatrixDisplayProperties& operator=(const ChartMatrixDisplayProperties& obj);
-        
-        bool isColorBarDisplayed() const;
-        
-        void setColorBarDisplayed(const bool displayed);
         
         float getCellWidth() const;
         
@@ -76,6 +74,10 @@ namespace caret {
         
         void setSelectedRowColumnHighlighted(const bool highlightStatus);
         
+        AnnotationColorBar* getColorBar();
+        
+        const AnnotationColorBar* getColorBar() const;
+        
         // ADD_NEW_METHODS_HERE
 
         virtual AString toString() const;
@@ -86,9 +88,11 @@ namespace caret {
         virtual void restoreFromScene(const SceneAttributes* sceneAttributes,
                                       const SceneClass* sceneClass);
 
-          
-          
-          
+        
+        static void setManualScaleModeWindowWidthHeightScaling(const float windowWidthScaling,
+                                                               const float windowHeightScaling);
+        
+        
           
           
 // If there will be sub-classes of this class that need to save
@@ -121,21 +125,26 @@ namespace caret {
         /** scale mode for view of matrix*/
         ChartMatrixScaleModeEnum::Enum m_scaleMode;
         
-        /** Display color bar */
-        bool m_colorBarDisplayed;
-        
         /** Highlight the selected row/column */
         bool m_highlightSelectedRowColumn;
         
         /** Display grid lines */
         bool m_displayGridLines;
         
+        /** The color bar displayed in the graphics window */
+        AnnotationColorBar* m_colorBar;
+        
+        static float s_manualScaleModeWindowWidthScaling;
+        
+        static float s_manualScaleModeWindowHeightScaling;
+        
         // ADD_NEW_MEMBERS_HERE
 
     };
     
 #ifdef __CHART_MATRIX_DISPLAY_PROPERTIES_DECLARE__
-    // <PLACE DECLARATIONS OF STATIC MEMBERS HERE>
+    float ChartMatrixDisplayProperties::s_manualScaleModeWindowWidthScaling  = 1.0;
+    float ChartMatrixDisplayProperties::s_manualScaleModeWindowHeightScaling = 1.0;
 #endif // __CHART_MATRIX_DISPLAY_PROPERTIES_DECLARE__
 
 } // namespace

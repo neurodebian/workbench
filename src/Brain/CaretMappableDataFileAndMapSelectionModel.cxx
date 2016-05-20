@@ -106,6 +106,9 @@ CaretMappableDataFileAndMapSelectionModel::performConstruction(Brain* brain,
         
         bool isMappableFile = false;
         switch (dataFileType) {
+            case DataFileTypeEnum::ANNOTATION:
+                CaretAssert(0);
+                break;
             case DataFileTypeEnum::BORDER:
                 break;
             case DataFileTypeEnum::CONNECTIVITY_DENSE:

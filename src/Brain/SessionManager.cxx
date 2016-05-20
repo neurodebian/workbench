@@ -26,6 +26,7 @@
 #undef __SESSION_MANAGER_DECLARE__
 
 #include "ApplicationInformation.h"
+#include "BackgroundAndForegroundColorsSceneHelper.h"
 #include "Brain.h"
 #include "BrowserTabContent.h"
 #include "CaretAssert.h"
@@ -44,6 +45,7 @@
 #include "EventModelDelete.h"
 #include "EventModelGetAll.h"
 #include "EventProgressUpdate.h"
+#include "ImageCaptureSettings.h"
 #include "LogManager.h"
 #include "MapYokingGroupEnum.h"
 #include "ModelWholeBrain.h"
@@ -65,6 +67,8 @@ SessionManager::SessionManager()
 {
     m_caretPreferences = new CaretPreferences();
     
+    m_imageCaptureDialogSettings = new ImageCaptureSettings();
+
     m_ciftiConnectivityMatrixDataFileManager = new CiftiConnectivityMatrixDataFileManager();
     m_ciftiFiberTrajectoryManager = new CiftiFiberTrajectoryManager();
     
@@ -113,6 +117,8 @@ SessionManager::~SessionManager()
     
     delete m_ciftiConnectivityMatrixDataFileManager;
     delete m_ciftiFiberTrajectoryManager;
+    
+    delete m_imageCaptureDialogSettings;
     
     delete m_caretPreferences;
 }
@@ -231,7 +237,7 @@ SessionManager::getNumberOfBrains() const
  *    Brain at specified index.
  */
 Brain* 
-SessionManager::getBrain(const int32_t brainIndex)
+SessionManager::getBrain(const int32_t brainIndex) const
 {
     CaretAssertVectorIndex(m_brains, brainIndex);
     
@@ -495,6 +501,20 @@ SessionManager::saveToScene(const SceneAttributes* sceneAttributes,
     sceneClass->addChild(new SceneClassArray("m_browserTabs",
                                              browserTabSceneClasses));
     
+    sceneClass->addChild(m_imageCaptureDialogSettings->saveToScene(sceneAttributes,
+                                                                   "m_imageCaptureDialogSettings"));
+
+    /*
+     * Save the background and foreground colors to the scene
+     */
+    const BackgroundAndForegroundColors* colorsPointer = m_caretPreferences->getBackgroundAndForegroundColors();
+    CaretAssert(colorsPointer);
+    BackgroundAndForegroundColors colors(*colorsPointer);
+    
+    BackgroundAndForegroundColorsSceneHelper colorHelper(colors);
+    sceneClass->addChild(colorHelper.saveToScene(sceneAttributes,
+                                                 "backgroundAndForegroundColors"));
+    
     return sceneClass;
 }
 
@@ -514,6 +534,11 @@ void
 SessionManager::restoreFromScene(const SceneAttributes* sceneAttributes,
                         const SceneClass* sceneClass)
 {
+    /*
+     * Default to user preferences for colors
+     */
+    m_caretPreferences->setBackgroundAndForegroundColorsMode(BackgroundAndForegroundColorsModeEnum::USER_PREFERENCES);
+
     if (sceneClass == NULL) {
         return;
     }
@@ -719,6 +744,26 @@ SessionManager::restoreFromScene(const SceneAttributes* sceneAttributes,
         m_browserTabs[tabIndex] = tab;
     }
     
+    /*
+     * Restore foreground and background colors to scene foreground and background colors
+     */
+    if (sceneAttributes->isUseSceneForegroundAndBackgroundColors()) {
+        BackgroundAndForegroundColors colors;
+        BackgroundAndForegroundColorsSceneHelper colorHelper(colors);
+        colorHelper.restoreFromScene(sceneAttributes,
+                                     sceneClass->getClass("backgroundAndForegroundColors"));
+        if (colorHelper.wasRestoredFromScene()) {
+            m_caretPreferences->setBackgroundAndForegroundColorsMode(BackgroundAndForegroundColorsModeEnum::SCENE);
+            m_caretPreferences->setSceneBackgroundAndForegroundColors(colors);
+        }
+        else {
+            m_caretPreferences->setBackgroundAndForegroundColorsMode(BackgroundAndForegroundColorsModeEnum::USER_PREFERENCES);
+        }
+    }
+    
+    m_imageCaptureDialogSettings->restoreFromScene(sceneAttributes,
+                                                   sceneClass->getClass("m_imageCaptureDialogSettings"));
+    
     CaretLogFine("Time to restore browser tab content was "
                  + QString::number(timer.getElapsedTimeSeconds(), 'f', 3)
                  + " seconds");
@@ -793,5 +838,22 @@ SessionManager::getCiftiFiberTrajectoryManager() const
     return m_ciftiFiberTrajectoryManager;
 }
 
+/**
+ * @return Image capture settings for image capture dialog.
+ */
+ImageCaptureSettings*
+SessionManager::getImageCaptureDialogSettings()
+{
+    return m_imageCaptureDialogSettings;
+}
+
+/**
+ * @return Image capture settings for image capture dialog (const method)
+ */
+const ImageCaptureSettings*
+SessionManager::getImageCaptureDialogSettings() const
+{
+    return m_imageCaptureDialogSettings;
+}
 
 

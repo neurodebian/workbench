@@ -87,6 +87,7 @@ OperationsBase
 GuiQt
 Brain
 Files
+Annotations
 Cifti
 Gifti
 Nifti
@@ -134,6 +135,7 @@ INCLUDE_DIRECTORIES(
 ${CMAKE_SOURCE_DIR}/Tests
 ${CMAKE_SOURCE_DIR}/Operations
 ${CMAKE_SOURCE_DIR}/Algorithms
+${CMAKE_SOURCE_DIR}/Annotations
 ${CMAKE_SOURCE_DIR}/OperationsBase
 ${CMAKE_SOURCE_DIR}/GuiQt
 ${CMAKE_SOURCE_DIR}/Brain

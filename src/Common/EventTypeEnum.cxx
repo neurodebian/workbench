@@ -69,6 +69,30 @@ EventTypeEnum::initialize()
                                      "EVENT_ALERT_USER",
                                      "Alert user about something (if gui, a pop is displayed, otherwise logged at severe level"));
     
+    enumData.push_back(EventTypeEnum(EVENT_ANNOTATION_ADD_TO_REMOVE_FROM_FILE,
+                                     "EVENT_ANNOTATION_ADD_TO_REMOVE_FROM_FILE",
+                                     "Event to add or remove an annotation from a file"));
+
+    enumData.push_back(EventTypeEnum(EVENT_ANNOTATION_COLOR_BAR_GET,
+                                     "EVENT_ANNOTATION_COLOR_BAR_GET",
+                                     "Event to get annotation color bars from tab(s)"));
+    
+    enumData.push_back(EventTypeEnum(EVENT_ANNOTATION_CREATE_NEW_TYPE,
+                                     "EVENT_ANNOTATION_CREATE_NEW_TYPE",
+                                     "Event to create a new annotation of a particular type"));
+    
+    enumData.push_back(EventTypeEnum(EVENT_ANNOTATION_GROUP_GET_WITH_KEY,
+                                     "EVENT_ANNOTATION_GROUP_GET_WITH_KEY",
+                                     "Event for getting an annotation group using its key"));
+    
+    enumData.push_back(EventTypeEnum(EVENT_ANNOTATION_GROUPING,
+                                     "EVENT_ANNOTATION_GROUPING",
+                                     "Event for annotation grouping"));
+    
+    enumData.push_back(EventTypeEnum(EVENT_ANNOTATION_TOOLBAR_UPDATE,
+                                     "EVENT_ANNOTATION_TOOLBAR_UPDATE",
+                                     "Event to update annotation toolbar"));
+    
     enumData.push_back(EventTypeEnum(EVENT_BRAIN_RESET,
                                      "EVENT_BRAIN_RESET",
                                      "Brain has been reset"));
@@ -161,7 +185,15 @@ EventTypeEnum::initialize()
                                      "EVENT_GET_OR_SET_USER_INPUT_MODE",
                                      "Get or set the user input mode"));
     
-    enumData.push_back(EventTypeEnum(EVENT_GRAPHICS_UPDATE_ALL_WINDOWS, 
+    enumData.push_back(EventTypeEnum(EVENT_GET_TEXT_RENDERER_FOR_WINDOW,
+                                     "EVENT_GET_TEXT_RENDERER_FOR_WINDOW",
+                                     "Get the text renderer for a window"));
+    
+    enumData.push_back(EventTypeEnum(EVENT_GET_VIEWPORT_SIZE,
+                                     "EVENT_GET_VIEWPORT_SIZE",
+                                     "Get the viewport size"));
+    
+    enumData.push_back(EventTypeEnum(EVENT_GRAPHICS_UPDATE_ALL_WINDOWS,
                                      "EVENT_GRAPHICS_UPDATE_ALL_WINDOWS", 
                                      "Update all graphics windows"));
     
@@ -176,6 +208,10 @@ EventTypeEnum::initialize()
     enumData.push_back(EventTypeEnum(EVENT_IDENTIFICATION_HIGHLIGHT_LOCATION,
                                      "EVENT_IDENTIFICATION_HIGHLIGHT_LOCATION",
                                      "Highlight the location when identification takes place"));
+    
+    enumData.push_back(EventTypeEnum(EVENT_IDENTIFICATION_REQUEST,
+                                     "EVENT_IDENTIFICATION_REQUEST",
+                                     "Request an identification operation"));
     
     enumData.push_back(EventTypeEnum(EVENT_IDENTIFICATION_SYMBOL_REMOVAL,
                                      "EVENT_IDENTIFICATION_SYMBOL_REMOVAL", 
@@ -216,6 +252,10 @@ EventTypeEnum::initialize()
     enumData.push_back(EventTypeEnum(EVENT_NODE_IDENTIFICATION_COLORS_GET_FROM_CHARTS,
                                      "EVENT_NODE_IDENTIFICATION_COLORS_GET_FROM_CHARTS",
                                      "Get the color for node identification symbols from all charts that contain nodes"));
+    
+    enumData.push_back(EventTypeEnum(EVENT_OPENGL_TEXTURE,
+                                     "EVENT_OPENGL_TEXTURE",
+                                     "OpenGL Texture Event"));
     
     enumData.push_back(EventTypeEnum(EVENT_OPERATING_SYSTEM_REQUEST_OPEN_DATA_FILE,
                                      "EVENT_OPERATING_SYSTEM_REQUEST_OPEN_DATA_FILE",

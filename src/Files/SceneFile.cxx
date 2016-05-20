@@ -38,6 +38,7 @@
 #include "Scene.h"
 #include "SceneFileSaxReader.h"
 #include "SceneInfo.h"
+#include "SceneXmlElements.h"
 #include "SceneWriterXml.h"
 #include "XmlSaxParser.h"
 #include "XmlWriter.h"
@@ -57,6 +58,7 @@ using namespace caret;
 SceneFile::SceneFile()
 : CaretDataFile(DataFileTypeEnum::SCENE)
 {
+    m_balsaStudyID = "";
     m_metadata = new GiftiMetaData();
 }
 
@@ -84,6 +86,8 @@ SceneFile::clear()
     CaretDataFile::clear();
     
     m_metadata->clear();
+    
+    m_balsaStudyID = "";
     
     for (std::vector<Scene*>::iterator iter = m_scenes.begin();
          iter != m_scenes.end();
@@ -203,10 +207,31 @@ SceneFile::getNumberOfScenes() const
  *     Scene at the given index.
  */
 Scene* 
-SceneFile::getSceneAtIndex(const int32_t indx)
+SceneFile::getSceneAtIndex(const int32_t indx) const
 {
     CaretAssertVectorIndex(m_scenes, indx);
     return m_scenes[indx];
+}
+
+/**
+ * Get the index of the given scene.
+ *
+ * @param scene
+ *     Scene for which index is requested.
+ * @return
+ *     Index of the scene or negative if scene not found.
+ */
+int32_t
+SceneFile::getIndexOfScene(const Scene* scene) const
+{
+    const int32_t numScenes = getNumberOfScenes();
+    for (int32_t i = 0; i < numScenes; i++) {
+        if (scene == getSceneAtIndex(i)) {
+            return i;
+        }
+    }
+
+    return -1;
 }
 
 /**
@@ -229,7 +254,6 @@ SceneFile::getSceneWithName(const AString& sceneName)
     }
     return NULL;
 }
-
 
 /**
  * Remove the given scene.
@@ -262,6 +286,62 @@ SceneFile::removeSceneAtIndex(const int32_t indx)
     CaretAssertVectorIndex(m_scenes, indx);
     Scene* scene = getSceneAtIndex(indx);
     removeScene(scene);
+}
+
+/**
+ * Move the scene in the file by the given change in index.
+ * 
+ * @param scene
+ *     Scene that is moved.
+ * @param indexDelta
+ *     Change of index of scene in the file.
+ */
+void
+SceneFile::moveScene(Scene* scene,
+                     const int32_t indexDelta)
+{
+    if (indexDelta == 0) {
+        return;
+    }
+    
+    const int32_t numberOfScenes = getNumberOfScenes();
+    if (numberOfScenes == 1) {
+        return;
+    }
+    
+    const int32_t sceneIndex = getIndexOfScene(scene);
+    
+    const int32_t newSceneIndex = sceneIndex + indexDelta;
+    
+    if ((sceneIndex >= 0)
+        && (sceneIndex < numberOfScenes)) {
+        if (newSceneIndex < sceneIndex) {
+            if (newSceneIndex >= 0) {
+                /*
+                 * Remove scene from its index
+                 * insert scene into its new index
+                 */
+                m_scenes.erase(m_scenes.begin() + sceneIndex);
+                m_scenes.insert(m_scenes.begin() + newSceneIndex,
+                                scene);
+                setModified();
+            }
+        }
+        else {
+            CaretAssert(newSceneIndex > sceneIndex);
+            
+            if (newSceneIndex < numberOfScenes) {
+                /*
+                 * Innsert scene into its new index
+                 * Remove scene from its index
+                 */
+                m_scenes.insert(m_scenes.begin() + newSceneIndex + 1,
+                                scene);
+                m_scenes.erase(m_scenes.begin() + sceneIndex);
+                setModified();
+            }
+        }
+    }
 }
 
 /**
@@ -340,6 +420,30 @@ const GiftiMetaData*
 SceneFile::getFileMetaData() const
 {
     return m_metadata;
+}
+
+/**
+ * @return The BALSA Study ID.
+ */
+AString
+SceneFile::getBalsaStudyID() const
+{
+    return m_balsaStudyID;
+}
+
+/**
+ * Set the BALSA Study ID.
+ *
+ * @param balsaStudyID
+ *     New value for BALSA Study ID.
+ */
+void
+SceneFile::setBalsaStudyID(const AString& balsaStudyID)
+{
+    if (balsaStudyID != m_balsaStudyID) {
+        m_balsaStudyID = balsaStudyID;
+        setModified();
+    }
 }
 
 /**
@@ -468,6 +572,8 @@ SceneFile::writeFile(const AString& filename)
          * Write the scene info directory
          */
         xmlWriter.writeStartElement(SceneFile::XML_TAG_SCENE_INFO_DIRECTORY_TAG);
+        xmlWriter.writeElementCData(SceneXmlElements::SCENE_INFO_BALSA_STUDY_ID_TAG,
+                                    getBalsaStudyID());
         for (int32_t i = 0; i < numScenes; i++) {
             m_scenes[i]->getSceneInfo()->writeSceneInfo(xmlWriter,
                                                         i);

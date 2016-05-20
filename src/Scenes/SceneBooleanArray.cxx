@@ -160,7 +160,7 @@ int32_t
 SceneBooleanArray::integerValue(const int32_t arrayIndex) const
 {    
     CaretAssertVectorIndex(m_values, arrayIndex);
-    const float i = (m_values[arrayIndex] ? 1 : 0);
+    const int32_t i = (m_values[arrayIndex] ? 1 : 0);
     return i;
 }
 
@@ -176,5 +176,19 @@ SceneBooleanArray::stringValue(const int32_t arrayIndex) const
     CaretAssertVectorIndex(m_values, arrayIndex);
     const AString s = (m_values[arrayIndex] ? "true" : "false");
     return s;
+}
+
+/**
+ * Get the values as an unsigned byte.
+ * @param arrayIndex
+ *    Index of element.
+ * @return The value.
+ */
+uint8_t
+SceneBooleanArray::unsignedByteValue(const int32_t arrayIndex) const
+{
+    CaretAssertVectorIndex(m_values, arrayIndex);
+    const uint8_t b = (m_values[arrayIndex] ? 1 : 0);
+    return b;
 }
 

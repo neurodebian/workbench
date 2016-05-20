@@ -20,6 +20,7 @@
 /*LICENSE_END*/
 
 #include <algorithm>
+#include <limits>
 
 #define __SCENE_STRING_ARRAY_DECLARE__
 #include "SceneStringArray.h"
@@ -185,4 +186,31 @@ SceneStringArray::stringValue(const int32_t arrayIndex) const
     CaretAssertVectorIndex(m_values, arrayIndex);
     return m_values[arrayIndex];
 }
+
+/**
+ * Get the values as a integer.
+ * @param arrayIndex
+ *    Index of element.
+ * @return The value.
+ */
+uint8_t
+SceneStringArray::unsignedByteValue(const int32_t arrayIndex) const
+{
+    bool isValid = false;
+    const uint32_t i = m_values[arrayIndex].toUInt(&isValid);
+    if ( ! isValid) {
+        return 0;
+    }
+    
+    if (i > std::numeric_limits<uint8_t>::max()) {
+        return std::numeric_limits<uint8_t>::max();
+    }
+    else if (i < std::numeric_limits<uint8_t>::min()) {
+        return std::numeric_limits<uint8_t>::min();
+    }
+    
+    const uint8_t b = static_cast<uint8_t>(i);
+    return b;
+}
+
 

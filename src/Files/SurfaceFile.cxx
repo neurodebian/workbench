@@ -246,20 +246,6 @@ SurfaceFile::validateDataArraysAfterReading()
     
     this->computeNormals();
 
-    const uint64_t numColorComponents = numNodes * 4;
-    
-    if (numColorComponents != this->nodeColoring.size()) {
-        this->nodeColoring.resize(numColorComponents);
-        
-        for (int32_t i = 0; i < numNodes; i++) {
-            const int64_t i4 = i * 4;
-            this->nodeColoring[i4]   = 0.75f;
-            this->nodeColoring[i4+1] = 0.75f;
-            this->nodeColoring[i4+2] = 0.75f;
-            this->nodeColoring[i4+3] = 1.0f;
-        }
-    }
-    
     /*
      * Apply the first transformation matrix that transforms to 
      * Talairach space.
@@ -687,26 +673,6 @@ SurfaceFile::getTriangleNormalVector(const int32_t triangleIndex,
                                 &this->coordinatePointer[c2],
                                 &this->coordinatePointer[c3],
                                 normalOut);
-}
-
-
-/**
- * Get the coloring for a node.
- *
- * @param nodeIndex
- *    Index of node for color components.
- * @return
- *    A pointer to 4 elements that are the 
- *    red, green, blue, and alpha components
- *    each of which ranges zero to one.
- */
-const float* 
-SurfaceFile::getNodeColor(int32_t nodeIndex) const
-{
-    CaretAssertMessage((nodeIndex >= 0) && (nodeIndex < this->getNumberOfNodes()),
-                       "Invalid index for vertex coloring.");
-    
-    return &this->nodeColoring[nodeIndex * 4];
 }
 
 /**
@@ -1212,6 +1178,32 @@ CaretPointer<const CaretPointLocator> SurfaceFile::getPointLocator() const
     return m_locator;
 }
 
+void SurfaceFile::clearCachedHelpers() const
+{
+    {
+        CaretMutexLocker locked(&m_topoHelperMutex);
+        m_topoHelperIndex = 0;
+        m_topoHelpers.clear();
+        m_topoBase.grabNew(NULL);
+    }
+    {
+        CaretMutexLocker locked(&m_geoHelperMutex);
+        m_geoHelperIndex = 0;
+        m_geoHelpers.clear();
+        m_geoBase.grabNew(NULL);
+    }
+    {
+        CaretMutexLocker locked(&m_distHelperMutex);
+        m_distHelperIndex = 0;
+        m_distHelpers.clear();
+        m_distBase.grabNew(NULL);
+    }
+    {
+        CaretMutexLocker locked(&m_locatorMutex);
+        m_locator.grabNew(NULL);
+    }
+}
+
 /**
  * @return Information about the surface.
  */
@@ -1601,8 +1593,8 @@ bool SurfaceFile::matchesTopology(const SurfaceFile& rhs) const
     for (int i = 0; i < numTriangles; ++i)
     {
         int i3 = i * 3;
-        if (trianglePointer[i3] != rhs.trianglePointer[i3]) return false;//naively assume exactly same order of triangles and nodes, for strictest topology equivalence
-        if (trianglePointer[i3 + 1] != rhs.trianglePointer[i3 + 1]) return false;
+        if (trianglePointer[i3] != rhs.trianglePointer[i3]) return false;//exactly same order of triangles and nodes, for strictest topology equivalence
+        if (trianglePointer[i3 + 1] != rhs.trianglePointer[i3 + 1]) return false;//also, is a faster test
         if (trianglePointer[i3 + 2] != rhs.trianglePointer[i3 + 2]) return false;
     }
     return true;
@@ -1613,6 +1605,7 @@ bool SurfaceFile::hasNodeCorrespondence(const SurfaceFile& rhs) const
     int numNodes = getNumberOfNodes();
     if (numNodes != rhs.getNumberOfNodes()) return false;
     if (getNumberOfTriangles() != rhs.getNumberOfTriangles()) return false;
+    if (matchesTopology(rhs)) return true;//short circuit the common, faster to check case, should fail very early if it fails at all
     CaretPointer<TopologyHelper> myHelp = getTopologyHelper(), rightHelp = rhs.getTopologyHelper();
     for (int i = 0; i < numNodes; ++i)
     {

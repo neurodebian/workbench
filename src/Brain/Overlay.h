@@ -33,6 +33,7 @@
 #include "StructureEnum.h"
 
 namespace caret {
+    class AnnotationColorBar;
     class CaretMappableDataFile;
     class SceneClassAssistant;
     
@@ -85,13 +86,13 @@ namespace caret {
         void setSelectionData(CaretMappableDataFile* selectedMapFile,
                               const int32_t selectedMapIndex);
         
-        bool isPaletteDisplayEnabled() const;
-        
-        void setPaletteDisplayEnabled(const bool enabled);
-        
         MapYokingGroupEnum::Enum getMapYokingGroup() const;
         
         void setMapYokingGroup(const MapYokingGroupEnum::Enum mapYokingGroup);
+        
+        AnnotationColorBar* getColorBar();
+        
+        const AnnotationColorBar* getColorBar() const;
         
         virtual SceneClass* saveToScene(const SceneAttributes* sceneAttributes,
                                         const AString& instanceName);
@@ -136,11 +137,11 @@ namespace caret {
         /** selected data file map unique id */
         //AString m_selectedMapUniqueID;
         
-        /** Display palette in graphics window */
-        bool m_paletteDisplayedFlag;
-        
         /** Voxel drawing mode in Whole Brain View */
         WholeBrainVoxelDrawingMode::Enum m_wholeBrainVoxelDrawingMode;
+        
+        /** The color bar displayed in the graphics window */
+        AnnotationColorBar* m_colorBar;
         
         /** helps with scene save/restore */
         SceneClassAssistant* m_sceneAssistant;

@@ -291,6 +291,39 @@ PaletteColorMappingSaxReader::endElement(const AString& /* namspaceURI */,
            else if (qName == PaletteColorMappingXmlElements::XML_TAG_PALETTE_COLOR_MAPPING) {
                /* Top level tag, nothing to do */
            }
+           else if (qName == PaletteColorMappingXmlElements::XML_TAG_NUMERIC_FORMAT_MODE) {
+               bool isValid = false;
+               NumericFormatModeEnum::Enum numericFormatMode = NumericFormatModeEnum::fromName(this->elementText,
+                                                                                                       &isValid);
+               if (isValid) {
+                   this->paletteColorMapping->setNumericFormatMode(numericFormatMode);
+               }
+               else {
+                   throw XmlSaxParserException("Invalid PalettePrecisionModeEnum::Enum: "
+                                               + this->elementText);
+               }
+           }
+           else if (qName == PaletteColorMappingXmlElements::XML_TAG_PRECISION_DIGITS) {
+               this->paletteColorMapping->setPrecisionDigits(this->elementText.toInt());
+           }
+           else if (qName == PaletteColorMappingXmlElements::XML_TAG_NUMERIC_SUBDIVISIONS) {
+               this->paletteColorMapping->setNumericSubdivisionCount(this->elementText.toInt());
+           }
+           else if (qName == PaletteColorMappingXmlElements::XML_TAG_COLOR_BAR_VALUES_MODE) {
+               bool isValid = false;
+               PaletteColorBarValuesModeEnum::Enum colorBarMode = PaletteColorBarValuesModeEnum::fromName(this->elementText,
+                                                                                               &isValid);
+               if (isValid) {
+                   this->paletteColorMapping->setColorBarValuesMode(colorBarMode);
+               }
+               else {
+                   throw XmlSaxParserException("Invalid PaletteColorBarValuesModeEnum::Enum: "
+                                               + this->elementText);
+               }
+           }
+           else if (qName == PaletteColorMappingXmlElements::XML_TAG_SHOW_TICK_MARKS) {
+               this->paletteColorMapping->setShowTickMarksSelected(toBool(this->elementText));
+           }
            else {
                std::ostringstream str;
                str

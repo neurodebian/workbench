@@ -166,14 +166,22 @@ void ZFileImpl::open(const QString& filename, const CaretBinaryFile::OpenMode& o
 #endif
     if (m_zfile == NULL)
     {
-        throw DataFileException("error opening compressed file '" + filename + "'");
+        if (!QFile::exists(filename))
+        {
+            if (!(opmode & CaretBinaryFile::TRUNCATE))
+            {
+                throw DataFileException("failed to open compressed file '" + filename + "', file does not exist, or folder permissions prevent seeing it");
+            } else {//use same logic as QFile impl for now
+                throw DataFileException("failed to open compressed file '" + filename + "', unable to create file");
+            }
+        }//TODO: check gzerror and errno for more informative error messages
+        throw DataFileException("failed to open compressed file '" + filename + "'");
     }
 }
 
 void ZFileImpl::close()
 {
     if (m_zfile == NULL) return;//happens when closed and then destroyed, error opening
-    gzflush(m_zfile, Z_FULL_FLUSH);
     if (gzclose(m_zfile) != 0) throw DataFileException("error closing compressed file '" + m_fileName + "'");
     m_zfile = NULL;
 }
@@ -254,11 +262,11 @@ ZFileImpl::~ZFileImpl()
     {
         close();
     } catch (CaretException& e) {//handles DataFileException, should be the only culprit
-        CaretLogWarning(e.whatString());
+        CaretLogSevere(e.whatString());
     } catch (exception& e) {
-        CaretLogWarning(e.what());
+        CaretLogSevere(e.what());
     } catch (...) {
-        CaretLogWarning("caught unknown exception type while closing a compressed file");
+        CaretLogSevere("caught unknown exception type while closing a compressed file");
     }
 }
 #endif //ZLIB_VERSION
@@ -274,7 +282,22 @@ void QFileImpl::open(const QString& filename, const CaretBinaryFile::OpenMode& o
     m_file.setFileName(filename);
     if (!m_file.open(mode))
     {
-        throw DataFileException("failed to open file '" + m_fileName + "'");
+        if (!m_file.exists())
+        {
+            if (!(opmode & CaretBinaryFile::TRUNCATE))
+            {
+                throw DataFileException("failed to open file '" + filename + "', file does not exist, or folder permissions prevent seeing it");
+            } else {//m_file.error() doesn't help identify this case, see below
+                throw DataFileException("failed to open file '" + filename + "', unable to create file");
+            }
+        }
+        switch (m_file.error())
+        {
+            case QFile::ResourceError://on linux at least, it never gives another code besides the unhelpful OpenError
+                throw DataFileException("failed to open file '" + filename + "', too many open files");
+            default:
+                throw DataFileException("failed to open file '" + filename + "'");
+        }
     }
 }
 

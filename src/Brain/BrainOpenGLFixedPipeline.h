@@ -27,6 +27,7 @@
 #include "BrainConstants.h"
 #include "BrainOpenGL.h"
 #include "BrainOpenGLTextRenderInterface.h"
+#include "CaretPointer.h"
 #include "CaretVolumeExtension.h"
 #include "DisplayGroupEnum.h"
 #include "FiberOrientationColoringTypeEnum.h"
@@ -45,12 +46,17 @@ class QImage;
 
 namespace caret {
     
+    class AnnotationText;
     class BoundingBox;
     class Brain;
+    class BrainOpenGLAnnotationDrawingFixedPipeline;
     class BrainOpenGLShapeCone;
     class BrainOpenGLShapeCube;
     class BrainOpenGLShapeCylinder;
+    class BrainOpenGLShapeRing;
+    class BrainOpenGLShapeRingOutline;
     class BrainOpenGLShapeSphere;
+    class BrainOpenGLTextureManager;
     class BrainOpenGLViewportContent;
     class BrowserTabContent;
     class CaretMappableDataFile;
@@ -96,18 +102,22 @@ namespace caret {
         BrainOpenGLFixedPipeline& operator=(const BrainOpenGLFixedPipeline&);
         
     public:
-        BrainOpenGLFixedPipeline(BrainOpenGLTextRenderInterface* textRenderer);
+        BrainOpenGLFixedPipeline(const int32_t windowIndex,
+                                 BrainOpenGLTextRenderInterface* textRenderer);
 
         ~BrainOpenGLFixedPipeline();
         
-        void drawModels(std::vector<BrainOpenGLViewportContent*>& viewportContents);
+        void drawModels(Brain* brain,
+                        std::vector<BrainOpenGLViewportContent*>& viewportContents);
         
-        void selectModel(BrainOpenGLViewportContent* viewportContent,
+        void selectModel(Brain* brain,
+                         BrainOpenGLViewportContent* viewportContent,
                          const int32_t mouseX,
                          const int32_t mouseY,
                          const bool applySelectionBackgroundFiltering);
         
-        void projectToModel(BrainOpenGLViewportContent* viewportContent,
+        void projectToModel(Brain* brain,
+                            BrainOpenGLViewportContent* viewportContent,
                             const int32_t mouseX,
                             const int32_t mouseY,
                             SurfaceProjectedItem& projectionOut);
@@ -115,6 +125,15 @@ namespace caret {
         void initializeOpenGL();
         
         virtual AString getStateOfOpenGL() const;
+        
+        static void createSubViewportSizeAndGaps(const int32_t viewportSize,
+                                                 const float gapPercentage,
+                                                 const int32_t gapOverride,
+                                                 const int32_t numberOfSubViewports,
+                                                 int32_t& subViewportSizeOut,
+                                                 int32_t& gapOut);
+        
+        virtual BrainOpenGLTextureManager* getTextureManager();
         
     private:
         class VolumeDrawInfo {
@@ -173,7 +192,8 @@ namespace caret {
                                    const int32_t viewport[4]);
         
         void drawSurface(Surface* surface,
-                         const float* nodeColoringRGBA);
+                         const float* nodeColoringRGBA,
+                         const bool drawAnnotationsInModelSpaceFlag);
         
         void drawSurfaceNodes(Surface* surface,
                               const float* nodeColoringRGBA);
@@ -299,6 +319,10 @@ namespace caret {
                                                  const ProjectionViewTypeEnum::Enum projectionType,
                                                  const float halfWindowHeight);
         
+        void setOrthographicProjectionWithWidth(const int32_t viewport[4],
+                                                 const ProjectionViewTypeEnum::Enum projectionType,
+                                                 const float halfWindowWidgth);
+        
         void checkForOpenGLError(const Model* modelModel,
                                  const AString& msg);
         
@@ -307,6 +331,7 @@ namespace caret {
         void disableLighting();
         
         void enableLineAntiAliasing();
+        
         void disableLineAntiAliasing();
         
         void getIndexFromColorSelection(const SelectionItemDataTypeEnum::Enum dataType,
@@ -344,7 +369,8 @@ namespace caret {
                                                                 const  ProjectionViewTypeEnum::Enum projectionType,
                                                                 const SurfaceFile* surfaceFile);
         
-        void applyViewingTransformations(const float objectCenterXYZ[3],
+        void applyViewingTransformations(const Model* model,
+                                         const float objectCenterXYZ[3],
                                          const ProjectionViewTypeEnum::Enum projectionViewType);
         
         void applyViewingTransformationsVolumeSlice(const ModelVolume* modelVolume,
@@ -352,6 +378,21 @@ namespace caret {
                                          const VolumeSliceViewPlaneEnum::Enum viewPlane);
         
         void drawSurfaceAxes();
+        
+        void drawCircleOutline(const uint8_t rgba[4],
+                               const double diameter);
+        
+        void drawCircleFilled(const uint8_t rgba[4],
+                              const double diameter);
+        
+        void drawEllipseOutline(const uint8_t rgba[4],
+                                const double majorAxis,
+                                const double minorAxis,
+                                const double lineThickness);
+        
+        void drawEllipseFilled(const uint8_t rgba[4],
+                               const double majorAxis,
+                               const double minorAxis);
         
         void drawSphereWithDiameter(const uint8_t rgba[4],
                                     const double diameter);
@@ -395,29 +436,26 @@ namespace caret {
                                 const float baseRotationAngle,
                                 const bool backwardsFlag);
         
-        void drawTextWindowCoords(const int windowX,
-                                  const int windowY,
-                                  const QString& text,
-                                  const BrainOpenGLTextRenderInterface::TextAlignmentX alignmentX,
-                                  const BrainOpenGLTextRenderInterface::TextAlignmentY alignmentY,
-                                  const BrainOpenGLTextRenderInterface::TextStyle textStyle,
-                                  const int fontHeight);
+        void drawTextAtViewportCoords(const double viewportX,
+                                      const double viewportY,
+                                      const AnnotationText& annotationText);
         
-        void drawTextWindowCoordsWithBackground(const int windowX,
-                                      const int windowY,
-                                      const QString& text,
-                                      const BrainOpenGLTextRenderInterface::TextAlignmentX alignmentX,
-                                      const BrainOpenGLTextRenderInterface::TextAlignmentY alignmentY,
-                                      const BrainOpenGLTextRenderInterface::TextStyle textStyle,
-                                      const int fontHeight);
+        void drawTextAtModelCoords(const double modelX,
+                                   const double modelY,
+                                   const double modelZ,
+                                   const AnnotationText& annotationText);
         
-        void drawTextModelCoords(const double modelX,
-                                 const double modelY,
-                                 const double modelZ,
-                                 const QString& text);
+        void drawTextAtModelCoords(const double modelXYZ[3],
+                                   const AnnotationText& annotationText);
         
-        void drawTextModelCoords(const double modelXYZ[3],
-                                 const QString& text);
+        void drawTextAtModelCoords(const float modelXYZ[3],
+                                   const AnnotationText& annotationText);
+        
+        void drawWindowAnnotations(const int windowViewport[4]);
+        
+//        void drawTabAnnotations(BrainOpenGLViewportContent* tabContent,
+//                                const int32_t tabViewport[4]);
+        void drawTabAnnotations(BrainOpenGLViewportContent* tabContent);
         
         void drawAllPalettes(Brain* brain);
         
@@ -470,6 +508,13 @@ namespace caret {
         
         void updateForegroundAndBackgroundColors(BrainOpenGLViewportContent* vpContent);
         
+        void setTabViewport(const BrainOpenGLViewportContent* vpContent);
+        
+        void setAnnotationColorBarsForDrawing(std::vector<BrainOpenGLViewportContent*>& viewportContents);
+        
+        /** Index of window */
+        const int32_t m_windowIndex;
+        
         /** Indicates OpenGL has been initialized */
         bool initializedOpenGLFlag;
         
@@ -490,6 +535,9 @@ namespace caret {
         
         int32_t mouseX;
         int32_t mouseY;
+        
+        /** Viewport for tab content that is being drawn */
+        int m_tabViewport[4];
         
         /** Clipping plane group active in browser tab */
         ClippingPlaneGroup* m_clippingPlaneGroup;
@@ -519,7 +567,10 @@ namespace caret {
         
         /** Performs node coloring */
         SurfaceNodeColoring* surfaceNodeColoring;
-         
+        
+        /** Tile tabs active */
+        bool m_tileTabsActiveFlag;
+        
         /** Sphere symbol */
         BrainOpenGLShapeSphere* m_shapeSphere;
         
@@ -528,6 +579,15 @@ namespace caret {
         
         /** Cube symbol */
         BrainOpenGLShapeCube* m_shapeCube;
+        
+        /** Outline circle symbol */
+        BrainOpenGLShapeRing* m_shapeCircleOutline;
+        
+        /** Outline ellipse symbol.   KEY is line thickness */
+        std::map<float, BrainOpenGLShapeRingOutline*> m_shapeEllipseOutlines;
+        
+        /** Filled circle symbol */
+        BrainOpenGLShapeRing* m_shapeCircleFilled;
         
         /** Rounded Cube symbol */
         BrainOpenGLShapeCube* m_shapeCubeRounded;
@@ -547,12 +607,22 @@ namespace caret {
         double orthographicFar; 
         double orthographicNear;
         
+        CaretPointer<BrainOpenGLAnnotationDrawingFixedPipeline> m_annotationDrawing;
+        
+        std::vector<AnnotationColorBar*> m_annotationColorBarsForDrawing;
+        
+        /** The texture manager. */
+        CaretPointer<BrainOpenGLTextureManager> m_textureManager;
+        
         static bool s_staticInitialized;
+
+        static const float s_gluLookAtCenterFromEyeOffsetDistance;
         
         static float COLOR_RED[3];
         static float COLOR_GREEN[3];
         static float COLOR_BLUE[3];
         
+        friend class BrainOpenGLAnnotationDrawingFixedPipeline;
         friend class BrainOpenGLChartDrawingFixedPipeline;
         friend class BrainOpenGLVolumeObliqueSliceDrawing;
         friend class BrainOpenGLVolumeSliceDrawing;
@@ -564,6 +634,7 @@ namespace caret {
     float BrainOpenGLFixedPipeline::COLOR_RED[3]   = { 1.0, 0.0, 0.0 };
     float BrainOpenGLFixedPipeline::COLOR_GREEN[3] = { 0.0, 1.0, 0.0 };
     float BrainOpenGLFixedPipeline::COLOR_BLUE[3]  = { 0.0, 0.0, 1.0 };
+    const float BrainOpenGLFixedPipeline::s_gluLookAtCenterFromEyeOffsetDistance = 1.0;
 #endif //__BRAIN_OPENGL_FIXED_PIPELINE_DEFINE_H
 
 } // namespace

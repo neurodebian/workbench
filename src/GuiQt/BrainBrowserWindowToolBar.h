@@ -80,6 +80,8 @@ namespace caret {
                                   BrowserTabContent* initialBrowserTabContent,
                                   QAction* overlayToolBoxAction,
                                   QAction* layersToolBoxAction,
+                                  QAction* windowAspectRatioLockedAction,
+                                  QAction* tabAspectRatioLockedAction,
                                   BrainBrowserWindow* parentBrainBrowserWindow);
         
         ~BrainBrowserWindowToolBar();
@@ -134,7 +136,8 @@ namespace caret {
         QWidget* createWholeBrainSurfaceOptionsWidget();
         QWidget* createVolumeIndicesWidget();
         QWidget* createModeWidget();
-        QWidget* createTabOptionsWidget();
+        QWidget* createTabOptionsWidget(QAction* windowAspectRatioLockedAction,
+                                        QAction* tabAspectRatioLockedAction);
         QWidget* createChartAxesWidget();
         QWidget* createChartAttributesWidget();
         QWidget* createChartTypeWidget();
@@ -240,8 +243,8 @@ namespace caret {
         
     private slots:
         void selectedTabChanged(int indx);
-        void tabClosed(int index);
         void tabMoved(int, int);
+        void tabCloseSelected(int);
         
     private:
         void insertTabAtIndex(BrowserTabContent* browserTabContent,
@@ -251,6 +254,7 @@ namespace caret {
                                const int32_t insertAtIndex);
         
         void removeTab(int index);
+        void tabClosed(int index);
         
         BrowserTabContent* createNewTab(AString& errorMessage);
         
@@ -361,6 +365,7 @@ namespace caret {
     private:
         void updateDisplayedModeUserInputWidget();
         QActionGroup* modeInputModeActionGroup;
+        QAction* modeInputModeAnnotationsAction;
         QAction* modeInputModeBordersAction;
         QAction* modeInputModeFociAction;
         QAction* modeInputModeViewAction;

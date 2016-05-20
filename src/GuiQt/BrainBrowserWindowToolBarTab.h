@@ -25,7 +25,7 @@
 
 #include "BrainBrowserWindowToolBarComponent.h"
 
-
+class QToolButton;
 
 namespace caret {
     class BrainBrowserWindowToolBar;
@@ -36,6 +36,8 @@ namespace caret {
         
     public:
         BrainBrowserWindowToolBarTab(const int32_t browserWindowIndex,
+                                     QAction* windowAspectRatioLockedAction,
+                                     QAction* tabAspectRatioLockedAction,
                                      BrainBrowserWindowToolBar* parentToolBar);
         
         virtual ~BrainBrowserWindowToolBarTab();
@@ -58,6 +60,8 @@ namespace caret {
         const int32_t m_browserWindowIndex;
         
         BrainBrowserWindowToolBar* m_parentToolBar;
+        
+        QAction* m_tabAspectRatioLockedAction;
         
         // ADD_NEW_MEMBERS_HERE
 

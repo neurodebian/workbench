@@ -31,6 +31,7 @@ AlgorithmCiftiCreateDenseTimeseries.h
 AlgorithmCiftiCreateLabel.h
 AlgorithmCiftiCrossCorrelation.h
 AlgorithmCiftiDilate.h
+AlgorithmCiftiErode.h
 AlgorithmCiftiExtrema.h
 AlgorithmCiftiFalseCorrelation.h
 AlgorithmCiftiFindClusters.h
@@ -38,6 +39,7 @@ AlgorithmCiftiGradient.h
 AlgorithmCiftiLabelAdjacency.h
 AlgorithmCiftiLabelToROI.h
 AlgorithmCiftiMergeDense.h
+AlgorithmCiftiMergeParcels.h
 AlgorithmCiftiPairwiseCorrelation.h
 AlgorithmCiftiParcellate.h
 AlgorithmCiftiParcelMappingToLabel.h
@@ -59,10 +61,13 @@ AlgorithmGiftiAllLabelsToROIs.h
 AlgorithmGiftiLabelAddPrefix.h
 AlgorithmGiftiLabelToROI.h
 AlgorithmLabelDilate.h
+AlgorithmLabelErode.h
 AlgorithmLabelModifyKeys.h
 AlgorithmLabelResample.h
 AlgorithmLabelToBorder.h
+AlgorithmLabelToVolumeMapping.h
 AlgorithmMetricDilate.h
+AlgorithmMetricErode.h
 AlgorithmMetricEstimateFWHM.h
 AlgorithmMetricExtrema.h
 AlgorithmMetricFalseCorrelation.h
@@ -88,6 +93,7 @@ AlgorithmSurfaceApplyWarpfield.h
 AlgorithmSurfaceAverage.h
 AlgorithmSurfaceCortexLayer.h
 AlgorithmSurfaceCreateSphere.h
+AlgorithmSurfaceCurvature.h
 AlgorithmSurfaceDistortion.h
 AlgorithmSurfaceFlipLR.h
 AlgorithmSurfaceGenerateInflated.h
@@ -102,6 +108,7 @@ AlgorithmSurfaceWedgeVolume.h
 AlgorithmVolumeAffineResample.h
 AlgorithmVolumeAllLabelsToROIs.h
 AlgorithmVolumeDilate.h
+AlgorithmVolumeErode.h
 AlgorithmVolumeEstimateFWHM.h
 AlgorithmVolumeExtrema.h
 AlgorithmVolumeFillHoles.h
@@ -136,6 +143,7 @@ AlgorithmCiftiCreateDenseTimeseries.cxx
 AlgorithmCiftiCreateLabel.cxx
 AlgorithmCiftiCrossCorrelation.cxx
 AlgorithmCiftiDilate.cxx
+AlgorithmCiftiErode.cxx
 AlgorithmCiftiExtrema.cxx
 AlgorithmCiftiFalseCorrelation.cxx
 AlgorithmCiftiFindClusters.cxx
@@ -143,6 +151,7 @@ AlgorithmCiftiGradient.cxx
 AlgorithmCiftiLabelAdjacency.cxx
 AlgorithmCiftiLabelToROI.cxx
 AlgorithmCiftiMergeDense.cxx
+AlgorithmCiftiMergeParcels.cxx
 AlgorithmCiftiPairwiseCorrelation.cxx
 AlgorithmCiftiParcellate.cxx
 AlgorithmCiftiParcelMappingToLabel.cxx
@@ -164,10 +173,13 @@ AlgorithmGiftiAllLabelsToROIs.cxx
 AlgorithmGiftiLabelAddPrefix.cxx
 AlgorithmGiftiLabelToROI.cxx
 AlgorithmLabelDilate.cxx
+AlgorithmLabelErode.cxx
 AlgorithmLabelModifyKeys.cxx
 AlgorithmLabelResample.cxx
 AlgorithmLabelToBorder.cxx
+AlgorithmLabelToVolumeMapping.cxx
 AlgorithmMetricDilate.cxx
+AlgorithmMetricErode.cxx
 AlgorithmMetricEstimateFWHM.cxx
 AlgorithmMetricExtrema.cxx
 AlgorithmMetricFalseCorrelation.cxx
@@ -193,6 +205,7 @@ AlgorithmSurfaceApplyWarpfield.cxx
 AlgorithmSurfaceAverage.cxx
 AlgorithmSurfaceCortexLayer.cxx
 AlgorithmSurfaceCreateSphere.cxx
+AlgorithmSurfaceCurvature.cxx
 AlgorithmSurfaceDistortion.cxx
 AlgorithmSurfaceFlipLR.cxx
 AlgorithmSurfaceGenerateInflated.cxx
@@ -207,6 +220,7 @@ AlgorithmSurfaceWedgeVolume.cxx
 AlgorithmVolumeAffineResample.cxx
 AlgorithmVolumeAllLabelsToROIs.cxx
 AlgorithmVolumeDilate.cxx
+AlgorithmVolumeErode.cxx
 AlgorithmVolumeEstimateFWHM.cxx
 AlgorithmVolumeExtrema.cxx
 AlgorithmVolumeFillHoles.cxx
@@ -233,6 +247,7 @@ OverlapLogicEnum.cxx
 #
 INCLUDE_DIRECTORIES(
 ${CMAKE_SOURCE_DIR}/Algorithms
+${CMAKE_SOURCE_DIR}/Annotations
 ${CMAKE_SOURCE_DIR}/OperationsBase
 ${CMAKE_SOURCE_DIR}/FilesBase
 ${CMAKE_SOURCE_DIR}/Files

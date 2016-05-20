@@ -26,6 +26,7 @@
 #include "BrowserTabContent.h"
 #undef __BROWSER_TAB_CONTENT_DECLARE__
 
+#include "AnnotationColorBar.h"
 #include "BorderFile.h"
 #include "Brain.h"
 #include "BrainOpenGLViewportContent.h"
@@ -46,6 +47,7 @@
 #include "DeveloperFlagsEnum.h"
 #include "DisplayPropertiesBorders.h"
 #include "DisplayPropertiesFoci.h"
+#include "EventAnnotationColorBarGet.h"
 #include "EventCaretMappableDataFileMapsViewedInOverlays.h"
 #include "EventIdentificationHighlightLocation.h"
 #include "EventModelGetAll.h"
@@ -64,6 +66,7 @@
 #include "ModelWholeBrain.h"
 #include "Overlay.h"
 #include "OverlaySet.h"
+#include "PaletteColorMapping.h"
 #include "SceneAttributes.h"
 #include "SceneClass.h"
 #include "SceneClassAssistant.h"
@@ -111,7 +114,10 @@ BrowserTabContent::BrowserTabContent(const int32_t tabNumber)
     m_volumeSurfaceOutlineSetModel = new VolumeSurfaceOutlineSetModel();
     m_yokingGroup = YokingGroupEnum::YOKING_GROUP_OFF;
     m_identificationUpdatesVolumeSlices = prefs->isVolumeIdentificationDefaultedOn();
-
+    
+    m_aspectRatio = 1.0;
+    m_aspectRatioLocked = false;
+    
     m_cerebellumViewingTransformation  = new ViewingTransformationsCerebellum();
     m_flatSurfaceViewingTransformation = new ViewingTransformations();
     m_viewingTransformation            = new ViewingTransformations();
@@ -171,13 +177,20 @@ BrowserTabContent::BrowserTabContent(const int32_t tabNumber)
     m_sceneClassAssistant->add("m_identificationUpdatesVolumeSlices",
                                &m_identificationUpdatesVolumeSlices);
     
+    m_sceneClassAssistant->add("m_aspectRatio",
+                               &m_aspectRatio);
+    m_sceneClassAssistant->add("m_aspectRatioLocked",
+                               &m_aspectRatioLocked);
+    
     m_sceneClassAssistant->add<YokingGroupEnum, YokingGroupEnum::Enum>("m_yokingGroup",
                                                                    &m_yokingGroup);
-    
+    EventManager::get()->addEventListener(this,
+                                          EventTypeEnum::EVENT_ANNOTATION_COLOR_BAR_GET);
     EventManager::get()->addEventListener(this,
                                           EventTypeEnum::EVENT_IDENTIFICATION_HIGHLIGHT_LOCATION);
     EventManager::get()->addEventListener(this,
                                           EventTypeEnum::EVENT_CARET_MAPPABLE_DATA_FILE_MAPS_VIEWED_IN_OVERLAYS);
+    
     
     isExecutingConstructor = false;
     
@@ -300,30 +313,36 @@ BrowserTabContent::cloneBrowserTabContent(BrowserTabContent* tabToClone)
 }
 
 /**
+ * @return Default name for this tab.
+ */
+AString
+BrowserTabContent::getDefaultName() const
+{
+    AString s = "(" + AString::number(m_tabNumber + 1) + ") ";
+    
+    const Model* displayedModel =
+    getModelForDisplay();
+    if (displayedModel != NULL) {
+        const AString name = displayedModel->getNameForBrowserTab();
+        s += name;
+    }
+    
+    return s;
+}
+
+/**
  * Get the name of this browser tab.
- * Name priority is (1) name set by user, (2) name set by
- * user-interface, and (3) the default name.
  *
  * @return  Name of this tab.
  */
 AString 
 BrowserTabContent::getName() const
 {
-    AString s = "(" + AString::number(m_tabNumber + 1) + ") ";
-    
-    if (m_userName.isEmpty() == false) {
-        s += m_userName;
-    }
-    else {
-        const Model* displayedModel =
-            getModelForDisplay();
-        if (displayedModel != NULL) {
-            const AString name = displayedModel->getNameForBrowserTab();
-            s += name;
-        }
+    if ( ! m_userName.isEmpty()) {
+        return m_userName;
     }
     
-    return s;
+    return getDefaultName();
 }
 
 /**
@@ -345,6 +364,10 @@ BrowserTabContent::setUserName(const AString& userName)
 AString 
 BrowserTabContent::getUserName() const
 {
+    if (m_userName.isEmpty()) {
+        return getDefaultName();
+    }
+    
     return m_userName;
 }
 
@@ -627,6 +650,20 @@ BrowserTabContent::getDisplayedVolumeModel()
 {
     ModelVolume* mdcv =
         dynamic_cast<ModelVolume*>(getModelForDisplay());
+    return mdcv;
+}
+
+/**
+ * Get the displayed volume model.
+ *
+ * @return  Pointer to displayed volume model or
+ *          NULL if the displayed model is NOT a
+ *          volume.
+ */
+const ModelVolume*
+BrowserTabContent::getDisplayedVolumeModel() const
+{
+    const ModelVolume* mdcv = dynamic_cast<const ModelVolume*>(getModelForDisplay());
     return mdcv;
 }
 
@@ -1010,15 +1047,68 @@ BrowserTabContent::isSurfaceMontageModelValid() const
 }
 
 /**
- * Receive an event.
+ * @return Is the aspect ratio locked?
+ */
+bool
+BrowserTabContent::isAspectRatioLocked() const
+{
+    return m_aspectRatioLocked;
+}
+
+/**
+ * Set the aspect ratio locked status.
  * 
+ * @param locked
+ *     New status.
+ */
+void
+BrowserTabContent::setAspectRatioLocked(const bool locked)
+{
+    m_aspectRatioLocked = locked;
+}
+
+/**
+ * @return The aspect ratio.
+ */
+float
+BrowserTabContent::getAspectRatio() const
+{
+    return m_aspectRatio;
+}
+
+/**
+ * Set the aspect ratio.
+ *
+ * @param aspectRatio
+ *     New value for aspect ratio.
+ */
+void
+BrowserTabContent::setAspectRatio(const float aspectRatio)
+{
+    m_aspectRatio = aspectRatio;
+}
+
+
+/**
+ * Receive an event.
+ *
  * @param event
  *     The event that the receive can respond to.
  */
 void
 BrowserTabContent::receiveEvent(Event* event)
 {
-    if (event->getEventType() == EventTypeEnum::EVENT_IDENTIFICATION_HIGHLIGHT_LOCATION) {
+    if (event->getEventType() == EventTypeEnum::EVENT_ANNOTATION_COLOR_BAR_GET) {
+        EventAnnotationColorBarGet* colorBarEvent = dynamic_cast<EventAnnotationColorBarGet*>(event);
+        CaretAssert(colorBarEvent);
+        
+        if (colorBarEvent->isGetAnnotationColorBarsForTabIndex(m_tabNumber)) {
+            std::vector<AnnotationColorBar*> colorBars;
+            getAnnotationColorBars(colorBars);
+            colorBarEvent->addAnnotationColorBars(colorBars);
+        }
+    }
+    else if (event->getEventType() == EventTypeEnum::EVENT_IDENTIFICATION_HIGHLIGHT_LOCATION) {
         EventIdentificationHighlightLocation* idLocationEvent =
         dynamic_cast<EventIdentificationHighlightLocation*>(event);
         CaretAssert(idLocationEvent);
@@ -1117,7 +1207,146 @@ BrowserTabContent::receiveEvent(Event* event)
 }
 
 /**
- * Get the map files for which a palette should be displayed in the 
+ * Get annotation color bars that should be drawn for this tab.
+ *
+ * @param colorBarsOut
+ *     Colorbars that should be drawn.
+ */
+void
+BrowserTabContent::getAnnotationColorBars(std::vector<AnnotationColorBar*>& colorBarsOut)
+{
+    colorBarsOut.clear();
+    
+    if (getModelForDisplay() == NULL) {
+        return;
+    }
+    
+    bool useOverlayFlag = false;
+    bool useChartsFlag  = false;
+    switch (getSelectedModelType()) {
+        case ModelTypeEnum::MODEL_TYPE_INVALID:
+            break;
+        case ModelTypeEnum::MODEL_TYPE_CHART:
+            useChartsFlag = true;
+            break;
+        case ModelTypeEnum::MODEL_TYPE_SURFACE:
+            useOverlayFlag = true;
+            break;
+        case ModelTypeEnum::MODEL_TYPE_SURFACE_MONTAGE:
+            useOverlayFlag = true;
+            break;
+        case ModelTypeEnum::MODEL_TYPE_VOLUME_SLICES:
+            useOverlayFlag = true;
+            break;
+        case ModelTypeEnum::MODEL_TYPE_WHOLE_BRAIN:
+            useOverlayFlag = true;
+            break;
+    }
+    
+    
+    std::vector<ColorBarFileMap> colorBarMapFileInfo;
+    
+    if (useOverlayFlag) {
+        OverlaySet* overlaySet = getOverlaySet();
+        const int32_t numOverlays = overlaySet->getNumberOfDisplayedOverlays();
+        for (int32_t i = (numOverlays - 1); i >= 0; i--) {
+            Overlay* overlay = overlaySet->getOverlay(i);
+            if (overlay->isEnabled()) {
+                AnnotationColorBar* colorBar = overlay->getColorBar();
+                CaretMappableDataFile* mapFile;
+                int32_t mapIndex;
+                overlay->getSelectionData(mapFile, mapIndex);
+                
+                colorBarMapFileInfo.push_back(ColorBarFileMap(colorBar,
+                                                              mapFile,
+                                                              mapIndex));
+            }
+        }
+    }
+    
+    if (useChartsFlag) {
+        ModelChart* modelChart = getDisplayedChartModel();
+        if (modelChart != NULL) {
+            CaretDataFileSelectionModel* fileModel = NULL;
+            
+            switch (modelChart->getSelectedChartDataType(m_tabNumber)) {
+                case ChartDataTypeEnum::CHART_DATA_TYPE_INVALID:
+                    break;
+                case ChartDataTypeEnum::CHART_DATA_TYPE_LINE_DATA_SERIES:
+                    break;
+                case ChartDataTypeEnum::CHART_DATA_TYPE_LINE_FREQUENCY_SERIES:
+                    break;
+                case ChartDataTypeEnum::CHART_DATA_TYPE_LINE_TIME_SERIES:
+                    break;
+                case ChartDataTypeEnum::CHART_DATA_TYPE_MATRIX_LAYER:
+                    if (modelChart->getSelectedChartDataType(m_tabNumber) == ChartDataTypeEnum::CHART_DATA_TYPE_MATRIX_LAYER) {
+                        fileModel = modelChart->getChartableMatrixParcelFileSelectionModel(m_tabNumber);
+                    }
+                    break;
+                case ChartDataTypeEnum::CHART_DATA_TYPE_MATRIX_SERIES:
+                    if (modelChart->getSelectedChartDataType(m_tabNumber) == ChartDataTypeEnum::CHART_DATA_TYPE_MATRIX_SERIES) {
+                        fileModel = modelChart->getChartableMatrixSeriesFileSelectionModel(m_tabNumber);
+                    }
+            }
+            
+            if (fileModel != NULL) {
+                CaretDataFile* caretFile = fileModel->getSelectedFile();
+                if (caretFile != NULL) {
+                    CaretMappableDataFile* mapFile = dynamic_cast<CaretMappableDataFile*>(caretFile);
+                    if (mapFile != NULL) {
+                        ChartableMatrixInterface* matrixFile = dynamic_cast<ChartableMatrixInterface*>(mapFile);
+                        if (matrixFile != NULL) {
+                            ChartMatrixDisplayProperties* props = matrixFile->getChartMatrixDisplayProperties(m_tabNumber);
+                            AnnotationColorBar* colorBar = props->getColorBar();
+                            
+                            const int32_t mapIndex = 0;
+                            colorBarMapFileInfo.push_back(ColorBarFileMap(colorBar,
+                                                                          mapFile,
+                                                                          mapIndex));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    const int32_t numColorBarMapInfo = static_cast<int32_t>(colorBarMapFileInfo.size());
+    for (int32_t i = 0; i < numColorBarMapInfo; i++) {
+        CaretAssertVectorIndex(colorBarMapFileInfo, i);
+        const ColorBarFileMap& info = colorBarMapFileInfo[i];
+        
+        if (info.m_colorBar->isDisplayed()) {
+            if (info.m_mapFile != NULL) {
+                if (info.m_mapFile->isMappedWithPalette()) {
+                    if ((info.m_mapIndex >= 0)
+                        && (info.m_mapIndex < info.m_mapFile->getNumberOfMaps())) {
+                        PaletteColorMapping* paletteColorMapping = info.m_mapFile->getMapPaletteColorMapping(info.m_mapIndex);
+                        if (paletteColorMapping != NULL) {
+                            FastStatistics* statistics = NULL;
+                            switch (info.m_mapFile->getPaletteNormalizationMode()) {
+                                case PaletteNormalizationModeEnum::NORMALIZATION_ALL_MAP_DATA:
+                                    statistics = const_cast<FastStatistics*>(info.m_mapFile->getFileFastStatistics());
+                                    break;
+                                case PaletteNormalizationModeEnum::NORMALIZATION_SELECTED_MAP_DATA:
+                                    statistics = const_cast<FastStatistics*>(info.m_mapFile->getMapFastStatistics(info.m_mapIndex));
+                                    break;
+                            }
+                            
+                            paletteColorMapping->setupAnnotationColorBar(statistics,
+                                                                         info.m_colorBar);
+                            
+                            info.m_colorBar->setTabIndex(m_tabNumber);
+                            colorBarsOut.push_back(info.m_colorBar);
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Get the map files for which a palette should be displayed in the
  * graphcis window.  Note that the order of map files and indices starts
  * with the bottom most layer and ends with the top most overlay.
  *
@@ -1165,7 +1394,8 @@ BrowserTabContent::getDisplayedPaletteMapFiles(std::vector<CaretMappableDataFile
         for (int32_t i = (numOverlays - 1); i >= 0; i--) {
             Overlay* overlay = overlaySet->getOverlay(i);
             if (overlay->isEnabled()) {
-                if (overlay->isPaletteDisplayEnabled()) {
+                AnnotationColorBar* colorBar = overlay->getColorBar();
+                if (colorBar->isDisplayed()) {
                     CaretMappableDataFile* mapFile;
                     int32_t mapFileIndex;
                     overlay->getSelectionData(mapFile, mapFileIndex);
@@ -1216,7 +1446,7 @@ BrowserTabContent::getDisplayedPaletteMapFiles(std::vector<CaretMappableDataFile
                         ChartableMatrixInterface* matrixFile = dynamic_cast<ChartableMatrixInterface*>(mapFile);
                         if (matrixFile != NULL) {
                             ChartMatrixDisplayProperties* props = matrixFile->getChartMatrixDisplayProperties(m_tabNumber);
-                            if (props->isColorBarDisplayed()) {
+                            if (props->getColorBar()->isDisplayed()) {
                                 /*
                                  * Matrix contains all file data and always
                                  * uses a map index of zero.
@@ -1248,6 +1478,33 @@ const VolumeSurfaceOutlineSetModel*
 BrowserTabContent::getVolumeSurfaceOutlineSet() const
 {
     return m_volumeSurfaceOutlineSetModel;
+}
+
+/**
+ * @return Structures from surface(s) displayed in this tab.
+ */
+std::vector<StructureEnum::Enum>
+BrowserTabContent::getSurfaceStructuresDisplayed()
+{
+    std::vector<CaretDataFile*> allDisplayedFiles;
+    getFilesDisplayedInTab(allDisplayedFiles);
+    
+    std::set<StructureEnum::Enum> structures;
+    for (std::vector<CaretDataFile*>::iterator fileIter = allDisplayedFiles.begin();
+         fileIter != allDisplayedFiles.end();
+         fileIter++) {
+        CaretDataFile* file = *fileIter;
+        CaretAssert(file);
+        if (file->getDataFileType() == DataFileTypeEnum::SURFACE) {
+            SurfaceFile* surfaceFile = dynamic_cast<SurfaceFile*>(file);
+            CaretAssert(surfaceFile);
+            structures.insert(surfaceFile->getStructure());
+        }
+    }
+    
+    std::vector<StructureEnum::Enum> structuresOut(structures.begin(),
+                                                   structures.end());
+    return structuresOut;
 }
 
 /**
@@ -1578,6 +1835,58 @@ BrowserTabContent::setObliqueVolumeRotationMatrix(const Matrix4x4& obliqueRotati
     *m_obliqueVolumeRotationMatrix = obliqueRotationMatrix;
     
     updateYokedBrowserTabs();
+}
+
+/**
+ * Get the offset for the right flat map offset.
+ *
+ * @param offsetX
+ *    Output with X-offset.
+ * @param offsetY
+ *    Output with Y-offset.
+ */
+void
+BrowserTabContent::getRightCortexFlatMapOffset(float& offsetX,
+                                               float& offsetY) const
+{
+    getViewingTransformation()->getRightCortexFlatMapOffset(offsetX, offsetY);
+}
+
+/**
+ * Set the offset for the right flat map offset.
+ *
+ * @param offsetX
+ *    X-offset.
+ * @param offsetY
+ *    Y-offset.
+ */
+void
+BrowserTabContent::setRightCortexFlatMapOffset(const float offsetX,
+                                               const float offsetY)
+{
+    getViewingTransformation()->setRightCortexFlatMapOffset(offsetX, offsetY);
+    updateYokedBrowserTabs();
+}
+
+/**
+ * @return The right cortex flat map zoom factor.
+ */
+float
+BrowserTabContent::getRightCortexFlatMapZoomFactor() const
+{
+    return getViewingTransformation()->getRightCortexFlatMapZoomFactor();
+}
+
+/**
+ * Set the right cortex flat map zoom factor.
+ *
+ * @param zoomFactor
+ *     The zoom factor.
+ */
+void
+BrowserTabContent::setRightCortexFlatMapZoomFactor(const float zoomFactor)
+{
+    getViewingTransformation()->setRightCortexFlatMapZoomFactor(zoomFactor);
 }
 
 /**
@@ -2590,6 +2899,12 @@ BrowserTabContent::getTransformationsInModelTransform(ModelTransform& modelTrans
     obliqueRotationMatrix.getMatrix(mob);
     modelTransform.setObliqueRotation(mob);
     
+    float rightFlatX, rightFlatY;
+    getRightCortexFlatMapOffset(rightFlatX, rightFlatY);
+    modelTransform.setRightCortexFlatMapOffset(rightFlatX, rightFlatY);
+    
+    modelTransform.setRightCortexFlatMapZoomFactor(getRightCortexFlatMapZoomFactor());
+
     modelTransform.setScaling(getScaling());
 }
 
@@ -2624,6 +2939,14 @@ BrowserTabContent::setTransformationsFromModelTransform(const ModelTransform& mo
 
     const float scale = modelTransform.getScaling();
     setScaling(scale);
+    
+    float rightFlatX, rightFlatY;
+    modelTransform.getRightCortexFlatMapOffset(rightFlatX, rightFlatY);
+    setRightCortexFlatMapOffset(rightFlatX, rightFlatY);
+    
+    const float rightFlatZoom = modelTransform.getRightCortexFlatMapZoomFactor();
+    setRightCortexFlatMapZoomFactor(rightFlatZoom);
+    
     updateYokedBrowserTabs();
 }
 
@@ -2649,7 +2972,9 @@ BrowserTabContent::saveToScene(const SceneAttributes* sceneAttributes,
 {
     SceneClass* sceneClass = new SceneClass(instanceName,
                                             "BrowserTabContent",
-                                            4);  // WB-491, 1/28/2015
+                                            6); // WB-491 Flat Fixes
+                                            //5); // WB-576
+                                            //4);  // WB-491, 1/28/2015
                                             //3); // version 3 as of 4/22/2014
 
     float obliqueMatrix[16];
@@ -2886,6 +3211,34 @@ BrowserTabContent::restoreFromScene(const SceneAttributes* sceneAttributes,
                     float scaling = getScaling();
                     scaling *= scaleAdjustment;
                     setScaling(scaling);
+                }
+            }
+        }
+    }
+    
+    if (sceneClass->getVersionNumber() < 5) {
+        if ( ! m_userName.isEmpty()) {
+            /*
+             * Prior to version 5 and WB-576,
+             * the tab number was ALWAYS displayed.
+             */
+            m_userName.insert(0,
+                              "(" + AString::number(m_tabNumber + 1) + ") ");
+
+        }
+    }
+
+    if (sceneClass->getVersionNumber() < 6) {
+        /*
+         * WB-491 sets the viewport for flat surfaces to fit the 
+         * flat surface when viewing a flat montage
+         */
+        const ModelSurfaceMontage* msm = getDisplayedSurfaceMontageModel();
+        if (msm != NULL) {
+            const SurfaceMontageConfigurationAbstract* smc = msm->getSelectedConfiguration(m_tabNumber);
+            if (smc != NULL) {
+                if (smc->getConfigurationType() == SurfaceMontageConfigurationTypeEnum::FLAT_CONFIGURATION) {
+                    setScaling(1.0);
                 }
             }
         }
@@ -3692,5 +4045,7 @@ BrowserTabContent::updateYokedBrowserTabs()
         }
     }
 }
+
+
 
 

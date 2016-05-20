@@ -21,16 +21,19 @@
  */
 /*LICENSE_END*/
 
-
+#include "BrainBrowserWindowEditMenuItemEnum.h"
 #include "CaretObject.h"
+#include "CaretPointer.h"
 #include "CursorEnum.h"
 
+class QPoint;
 class QWidget;
 
 namespace caret {
 
     class BrainOpenGLViewportContent;
     class BrainOpenGLWidget;
+    class KeyEvent;
     class MouseEvent;
     
     class UserInputModeAbstract : public CaretObject {
@@ -40,6 +43,8 @@ namespace caret {
         enum UserInputMode {
             /** Invalid */
             INVALID,
+            /** Annotation Operations */
+            ANNOTATIONS,
             /** Border Operations */
             BORDERS,
             /** Foci Operations */
@@ -83,6 +88,38 @@ namespace caret {
          * @return The cursor for display in the OpenGL widget.
          */
         virtual CursorEnum::Enum getCursor() const = 0;
+        
+        /**
+         * Process a key press event
+         *
+         * @param keyEvent
+         *     Key event information.
+         */
+        virtual void keyPressEvent(const KeyEvent& /*keyEvent*/) { }
+        
+        /**
+         * Process a mouse left double-click event.
+         *
+         * @param mouseEvent
+         *     Mouse event information.
+         */
+        virtual void mouseLeftDoubleClick(const MouseEvent& /*mouseEvent*/) { }
+        
+        /**
+         * Process a mouse left press event.
+         *
+         * @param mouseEvent
+         *     Mouse event information.
+         */
+        virtual void mouseLeftPress(const MouseEvent& /*mouseEvent*/) { }
+        
+        /**
+         * Process a mouse left release event.
+         *
+         * @param mouseEvent
+         *     Mouse event information.
+         */
+        virtual void mouseLeftRelease(const MouseEvent& /*mouseEvent*/) { }
         
         /**
          * Process a mouse left click event.
@@ -148,6 +185,49 @@ namespace caret {
          */
         virtual void mouseLeftDragWithShift(const MouseEvent& /*mouseEvent*/) { }
         
+        /**
+         * Process a mouse move with no buttons or keys down
+         *
+         * @param mouseEvent
+         *     Mouse event information.
+         */
+        virtual void mouseMove(const MouseEvent& /*mouseEvent*/) { }
+        
+        /**
+         * Process a mouse move with no buttons and shift key down
+         *
+         * @param mouseEvent
+         *     Mouse event information.
+         */
+        virtual void mouseMoveWithShift(const MouseEvent& /*mouseEvent*/) { }
+        
+        /**
+         * Show a context menu (pop-up menu at mouse location)
+         *
+         * @param mouseEvent
+         *     Mouse event information.
+         * @param menuPosition
+         *     Point at which menu is displayed (passed to QMenu::exec())
+         * @param openGLWidget
+         *     OpenGL widget in which context menu is requested
+         */
+        virtual void showContextMenu(const MouseEvent& /*mouseEvent*/,
+                                     const QPoint& /* menuPosition */,
+                                     BrainOpenGLWidget* /* openGLWidget */) { }
+        
+        virtual void processEditMenuItemSelection(const BrainBrowserWindowEditMenuItemEnum::Enum editMenuItem);
+        
+        virtual void getEnabledEditMenuItems(std::vector<BrainBrowserWindowEditMenuItemEnum::Enum>& enabledEditMenuItemsOut,
+                                             AString& redoMenuItemSuffixTextOut,
+                                             AString& undoMenuItemSuffixTextOut,
+                                             AString& pasteTextOut,
+                                             AString& pasteSpecialTextOut);
+        
+        const MouseEvent* getMousePosition() const;
+        
+        void setMousePosition(const MouseEvent* mouseEvent,
+                              const bool valid);
+        
     protected:
         void setWidgetForToolBar(QWidget* widgetForToolBar);
         
@@ -159,6 +239,9 @@ namespace caret {
         const UserInputMode m_userInputMode;
         
         QWidget* m_widgetForToolBar;
+        
+        bool    m_mousePositionValid;
+        CaretPointer<MouseEvent> m_mousePositionEvent;
         
         // ADD_NEW_MEMBERS_HERE
 

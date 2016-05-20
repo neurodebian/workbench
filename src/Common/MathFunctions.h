@@ -142,11 +142,13 @@ public:
                                     const double x2,
                                     const double y2);
     
-    static void subtractVectors(
-                    const float v1[3],
-                    const float v2[3],
-                    float resultOut[3]);
+    static void subtractVectors(const float v1[3],
+                                const float v2[3],
+                                float resultOut[3]);
 
+    static void subtractVectors(const double v1[3],
+                                const double v2[3],
+                                double resultOut[3]);
     static void addVectors(
                     const float v1[3],
                     const float v2[3],
@@ -166,7 +168,7 @@ public:
                     const float p1[3],
                     const float p2[3]);
 
-    static float dotProduct(
+    static double dotProduct(
                             const double p1[3],
                             const double p2[3]);
     
@@ -262,12 +264,17 @@ public:
                     const float b[],
                     const int32_t numElements);
 
-    static void averageOfThreeCoordinates(
+    static void averageOfTwoCoordinates(
                     const float c1[3],
                     const float c2[3],
-                    const float c3[3],
                     float outputAverage[3]);
 
+    static void averageOfThreeCoordinates(
+                                          const float c1[3],
+                                          const float c2[3],
+                                          const float c3[3],
+                                          float outputAverage[3]);
+    
     static void averageOfThreeCoordinates(
                     const float xyzAll[],
                     const int32_t offsetCoord1,
@@ -276,6 +283,12 @@ public:
                     float outputAverage[],
                     const int32_t outputOffset);
 
+    static void averageOfFourCoordinates(const float c1[3],
+                                         const float c2[3],
+                                         const float c3[3],
+                                         const float c4[3],
+                                         float outputAverage[3]);
+    
     static float angle(
                     const float p1[3],
                     const float p2[3],

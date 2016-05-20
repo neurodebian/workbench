@@ -452,6 +452,7 @@ EventManager::sendSimpleEvent(const EventTypeEnum::Enum eventType)
 {
     
     switch (eventType) {
+        case EventTypeEnum::EVENT_ANNOTATION_TOOLBAR_UPDATE:
         case EventTypeEnum::EVENT_BROWSER_WINDOW_MENUS_UPDATE:
         {
             sendEvent(Event(eventType).getPointer());
@@ -465,9 +466,13 @@ EventManager::sendSimpleEvent(const EventTypeEnum::Enum eventType)
             CaretAssertMessage(0, msg);
             CaretLogSevere(msg);
         }
-            return;
             break;
         case EventTypeEnum::EVENT_ALERT_USER:
+        case EventTypeEnum::EVENT_ANNOTATION_ADD_TO_REMOVE_FROM_FILE:
+        case EventTypeEnum::EVENT_ANNOTATION_COLOR_BAR_GET:
+        case EventTypeEnum::EVENT_ANNOTATION_CREATE_NEW_TYPE:
+        case EventTypeEnum::EVENT_ANNOTATION_GROUP_GET_WITH_KEY:
+        case EventTypeEnum::EVENT_ANNOTATION_GROUPING:
         case EventTypeEnum::EVENT_BRAIN_RESET:
         case EventTypeEnum::EVENT_BRAIN_STRUCTURE_GET_ALL:
         case EventTypeEnum::EVENT_BROWSER_TAB_DELETE:
@@ -490,11 +495,14 @@ EventManager::sendSimpleEvent(const EventTypeEnum::Enum eventType)
         case EventTypeEnum::EVENT_GET_DISPLAYED_DATA_FILES:
         case EventTypeEnum::EVENT_GET_NODE_DATA_FILES:
         case EventTypeEnum::EVENT_GET_OR_SET_USER_INPUT_MODE:
+        case EventTypeEnum::EVENT_GET_TEXT_RENDERER_FOR_WINDOW:
+        case EventTypeEnum::EVENT_GET_VIEWPORT_SIZE:
         case EventTypeEnum::EVENT_GRAPHICS_UPDATE_ALL_WINDOWS:
         case EventTypeEnum::EVENT_GRAPHICS_UPDATE_ONE_WINDOW:
         case EventTypeEnum::EVENT_HELP_VIEWER_DISPLAY:
         case EventTypeEnum::EVENT_IDENTIFICATION_HIGHLIGHT_LOCATION:
         case EventTypeEnum::EVENT_IDENTIFICATION_SYMBOL_REMOVAL:
+        case EventTypeEnum::EVENT_IDENTIFICATION_REQUEST:
         case EventTypeEnum::EVENT_IMAGE_CAPTURE:
         case EventTypeEnum::EVENT_MAC_DOCK_MENU_UPDATE:
         case EventTypeEnum::EVENT_MAP_YOKING_SELECT_MAP:
@@ -504,6 +512,7 @@ EventManager::sendSimpleEvent(const EventTypeEnum::Enum eventType)
         case EventTypeEnum::EVENT_MODEL_GET_ALL:
         case EventTypeEnum::EVENT_MODEL_SURFACE_GET:
         case EventTypeEnum::EVENT_NODE_IDENTIFICATION_COLORS_GET_FROM_CHARTS:
+        case EventTypeEnum::EVENT_OPENGL_TEXTURE:
         case EventTypeEnum::EVENT_OPERATING_SYSTEM_REQUEST_OPEN_DATA_FILE:
         case EventTypeEnum::EVENT_OVERLAY_SETTINGS_EDITOR_SHOW:
         case EventTypeEnum::EVENT_OVERLAY_VALIDATE:

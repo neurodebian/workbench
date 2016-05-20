@@ -23,12 +23,17 @@
 #include "BrainBrowserWindowToolBarTab.h"
 #undef __BRAIN_BROWSER_WINDOW_TOOL_BAR_TAB_DECLARE__
 
+#include <QAction>
 #include <QLabel>
+#include <QCheckBox>
+#include <QToolButton>
 #include <QVBoxLayout>
 
+#include "BrainBrowserWindow.h"
 #include "BrainBrowserWindowToolBar.h"
 #include "BrowserTabContent.h"
 #include "CaretAssert.h"
+#include "CaretLogger.h"
 #include "EnumComboBoxTemplate.h"
 #include "GuiManager.h"
 #include "WuQtUtilities.h"
@@ -45,12 +50,24 @@ using namespace caret;
 
 /**
  * Constructor.
+ *
+ * @param browserWindowIndex
+ *     Index of browser window.
+ * @param windowAspectRatioLockedAction
+ *     Action for locking window aspect ratio.
+ * @param tabAspectRatioLockedAction
+ *     Action for locking tab aspect ratio.
+ * @param parentToolBar
+ *     Parent toolbar.
  */
 BrainBrowserWindowToolBarTab::BrainBrowserWindowToolBarTab(const int32_t browserWindowIndex,
+                                                           QAction* windowAspectRatioLockedAction,
+                                                           QAction* tabAspectRatioLockedAction,
                                                            BrainBrowserWindowToolBar* parentToolBar)
 : BrainBrowserWindowToolBarComponent(parentToolBar),
 m_browserWindowIndex(browserWindowIndex),
-m_parentToolBar(parentToolBar)
+m_parentToolBar(parentToolBar),
+m_tabAspectRatioLockedAction(tabAspectRatioLockedAction)
 {
     m_yokingGroupComboBox = new EnumComboBoxTemplate(this);
     m_yokingGroupComboBox->setup<YokingGroupEnum, YokingGroupEnum::Enum>();
@@ -64,10 +81,19 @@ m_parentToolBar(parentToolBar)
     QObject::connect(m_yokingGroupComboBox, SIGNAL(itemActivated()),
                      this, SLOT(yokeToGroupComboBoxIndexChanged()));
     
+    QToolButton* windowAspectRatioLockedToolButton = new QToolButton();
+    windowAspectRatioLockedToolButton->setDefaultAction(windowAspectRatioLockedAction);
+    
+    QToolButton* tabAspectRatioLockedToolButton = new QToolButton();
+    tabAspectRatioLockedToolButton->setDefaultAction(tabAspectRatioLockedAction);
+    
     QVBoxLayout* layout = new QVBoxLayout(this);
     WuQtUtilities::setLayoutSpacingAndMargins(layout, 4, 0);
     layout->addWidget(yokeToLabel);
     layout->addWidget(m_yokingGroupComboBox->getWidget());
+    layout->addSpacing(15);
+    layout->addWidget(windowAspectRatioLockedToolButton);
+    layout->addWidget(tabAspectRatioLockedToolButton);
     
     addToWidgetGroup(yokeToLabel);
     addToWidgetGroup(m_yokingGroupComboBox->getWidget());
@@ -92,6 +118,10 @@ BrainBrowserWindowToolBarTab::updateContent(BrowserTabContent* browserTabContent
     blockAllSignals(true);
     
     m_yokingGroupComboBox->setSelectedItem<YokingGroupEnum, YokingGroupEnum::Enum>(browserTabContent->getYokingGroup());
+    m_tabAspectRatioLockedAction->blockSignals(true);
+    m_tabAspectRatioLockedAction->setChecked(browserTabContent->isAspectRatioLocked());
+    m_tabAspectRatioLockedAction->blockSignals(false);
+    
     blockAllSignals(false);
 }
 
@@ -113,5 +143,3 @@ BrainBrowserWindowToolBarTab::yokeToGroupComboBoxIndexChanged()
 
     this->updateGraphicsWindow();
 }
-
-

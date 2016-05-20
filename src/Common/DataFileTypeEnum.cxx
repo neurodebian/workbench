@@ -114,12 +114,21 @@ DataFileTypeEnum::initialize()
     }
     initializedFlag = true;
 
-    enumData.push_back(DataFileTypeEnum(BORDER, 
+    enumData.push_back(DataFileTypeEnum(ANNOTATION,
+                                        "ANNOTATION",
+                                        "Annotation",
+                                        "ANNOTATION",
+                                        false,
+                                        "annot",
+                                        "wb_annot"));
+    
+    enumData.push_back(DataFileTypeEnum(BORDER,
                                         "BORDER", 
                                         "Border",
                                         "BORDER",
                                         true,
-                                        "border"));
+                                        "border",
+                                        "wb_border"));
     
     enumData.push_back(DataFileTypeEnum(CONNECTIVITY_DENSE, 
                                         "CONNECTIVITY_DENSE", 
@@ -217,7 +226,8 @@ DataFileTypeEnum::initialize()
                                         "Foci",
                                         "FOCI",
                                         false,
-                                        "foci"));
+                                        "foci",
+                                        "wb_foci"));
     
     enumData.push_back(DataFileTypeEnum(IMAGE,
                                         "IMAGE",
@@ -247,7 +257,8 @@ DataFileTypeEnum::initialize()
                                         "Palette",
                                         "PALETTE",
                                         false,
-                                        "palette"));
+                                        "palette",
+                                        "wb_palette"));
     
     enumData.push_back(DataFileTypeEnum(RGBA, 
                                         "RGBA", 
@@ -261,14 +272,16 @@ DataFileTypeEnum::initialize()
                                         "Scene",
                                         "SCENE",
                                         false,
-                                        "scene"));
+                                        "scene",
+                                        "wb_scene"));
     
     enumData.push_back(DataFileTypeEnum(SPECIFICATION, 
                                         "SPECIFICATION", 
                                         "Specification",
                                         "SPECIFICATION",
                                         false,
-                                        "spec"));
+                                        "spec",
+                                        "wb_spec"));
     
     enumData.push_back(DataFileTypeEnum(SURFACE, 
                                         "SURFACE", 

@@ -30,6 +30,7 @@
 #include "Plane.h"
 #include "ProjectionViewTypeEnum.h"
 #include "SceneableInterface.h"
+#include "StructureEnum.h"
 #include "VolumeSliceDrawingTypeEnum.h"
 #include "VolumeSliceProjectionTypeEnum.h"
 #include "VolumeSliceViewPlaneEnum.h"
@@ -37,6 +38,7 @@
 
 namespace caret {
 
+    class AnnotationColorBar;
     class BrainOpenGLViewportContent;
     class CaretDataFile;
     class CaretMappableDataFile;
@@ -110,6 +112,8 @@ namespace caret {
         
         ModelVolume* getDisplayedVolumeModel();
         
+        const ModelVolume* getDisplayedVolumeModel() const;
+        
         ModelWholeBrain* getDisplayedWholeBrainModel();
         
         ModelSurfaceMontage* getDisplayedSurfaceMontageModel();
@@ -119,6 +123,8 @@ namespace caret {
         const std::vector<ModelSurface*> getAllSurfaceModels() const;
         
         ModelSurfaceSelector* getSurfaceModelSelector();
+        
+        std::vector<StructureEnum::Enum> getSurfaceStructuresDisplayed();
         
         bool isCerebellumDisplayed() const;
         
@@ -144,6 +150,8 @@ namespace caret {
 
         bool isSurfaceMontageModelValid() const;
         
+        void getAnnotationColorBars(std::vector<AnnotationColorBar*>& colorBarsOut);
+        
         void getDisplayedPaletteMapFiles(std::vector<CaretMappableDataFile*>& mapFiles,
                                          std::vector<int32_t>& mapIndices);
         
@@ -151,6 +159,15 @@ namespace caret {
         
         const VolumeSurfaceOutlineSetModel* getVolumeSurfaceOutlineSet() const;
         
+        bool isAspectRatioLocked() const;
+        
+        void setAspectRatioLocked(const bool locked);
+        
+        float getAspectRatio() const;
+        
+        void setAspectRatio(const float aspectRatio);
+        
+
         void getClippingPlaneEnabled(bool& xEnabled,
                                      bool& yEnabled,
                                      bool& zEnabled,
@@ -201,6 +218,16 @@ namespace caret {
         
         void setObliqueVolumeRotationMatrix(const Matrix4x4& obliqueRotationMatrix);
 
+        void getRightCortexFlatMapOffset(float& offsetX,
+                                         float& offsetY) const;
+        
+        void setRightCortexFlatMapOffset(const float offsetX,
+                                         const float offsetY);
+        
+        float getRightCortexFlatMapZoomFactor() const;
+        
+        void setRightCortexFlatMapZoomFactor(const float zoomFactor);
+        
         ProjectionViewTypeEnum::Enum getProjectionViewType() const;
         
         void resetView();
@@ -354,6 +381,22 @@ namespace caret {
         virtual void restoreFromScene(const SceneAttributes* sceneAttributes,
                                       const SceneClass* sceneClass);
     private:
+        class ColorBarFileMap {
+        public:
+            ColorBarFileMap(AnnotationColorBar* colorBar,
+                            CaretMappableDataFile* mapFile,
+                            const int32_t mapIndex)
+            : m_colorBar(colorBar),
+            m_mapFile(mapFile),
+            m_mapIndex(mapIndex)
+            {
+            }
+            
+            AnnotationColorBar* m_colorBar;
+            CaretMappableDataFile* m_mapFile;
+            int32_t m_mapIndex;
+        };
+        
         BrowserTabContent(const BrowserTabContent&);
         
         BrowserTabContent& operator=(const BrowserTabContent&);
@@ -366,6 +409,8 @@ namespace caret {
         ViewingTransformations* getViewingTransformation();
         
         const ViewingTransformations* getViewingTransformation() const;
+        
+        AString getDefaultName() const;
         
         /** Number of this tab */
         int32_t m_tabNumber;
@@ -438,6 +483,12 @@ namespace caret {
         
         /** Whole brain surface settings. */
         WholeBrainSurfaceSettings* m_wholeBrainSurfaceSettings;
+        
+        /** aspect ratio */
+        float m_aspectRatio;
+        
+        /** aspect ratio locked */
+        bool m_aspectRatioLocked;
         
         /** 
          * If true, selected volume slices in tab move to location

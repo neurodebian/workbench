@@ -849,7 +849,9 @@ WuQDialog::clicked(QAbstractButton* button)
 {
     QDialogButtonBox::StandardButton standardButton = this->getDialogButtonBox()->standardButton(button);
     if (standardButton == QDialogButtonBox::Ok) {
+        button->setEnabled(false);
         okButtonClicked();
+        button->setEnabled(true);
     }
     else if (standardButton == QDialogButtonBox::Cancel) {
         cancelButtonClicked();
@@ -864,7 +866,7 @@ WuQDialog::clicked(QAbstractButton* button)
         this->helpButtonClicked();
     }
     else {
-        QPushButton* pushButton = dynamic_cast<QPushButton*>(button);
+        QPushButton* pushButton = qobject_cast<QPushButton*>(button);
         CaretAssert(pushButton);
         const DialogUserButtonResult result = this->userButtonPressed(pushButton);
         switch (result) {

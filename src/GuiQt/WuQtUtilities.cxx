@@ -33,6 +33,7 @@
 #include <QHeaderView>
 #include <QIcon>
 #include <QLabel>
+#include <QPainter>
 #include <QPushButton>
 #include <QSound>
 #include <QTableWidget>
@@ -440,12 +441,30 @@ WuQtUtilities::moveAndSizeWindow(QWidget* window,
         if (yPos > maxY) {
             yPos = maxY;
         }
+        
+        /*
+         * ScreenRect width/height is size of screen
+         * reduced by menu bars, docks and other items
+         * that reduce available screen space
+         */
+        const int32_t maxWidth = screenRect.width();
+        if (width > maxWidth) {
+            width = maxWidth;
+        }
+        
+        const int32_t maxHeight = screenRect.height();
+        if (height > maxHeight) {
+            height = maxHeight;
+        }
+        
+        const QRect geom = dw->screenGeometry(nearestScreen);
+        CaretLogInfo(QString("Window Available width/height: %1, %2 \n      Screen width/height: %3, %4"
+                             ).arg(maxWidth).arg(maxHeight).arg(geom.width()).arg(geom.height()));
     }
+
     /*
      * Move and size window
      */
-//    std::cout << "Moving to " << xPos << ", " << yPos << std::endl;
-//    std::cout << "Width " << width << ", " << height << std::endl;
     window->move(xPos,
                  yPos);
     window->resize(width,
@@ -727,6 +746,60 @@ WuQtUtilities::loadPixmap(const QString& filename,
 }
 
 /**
+ * Get the maximum height from the given widgets.
+ *
+ * @param w1   Required widget.
+ * @param w2   Required widget.
+ * @param w3   Optional widget.
+ * @param w4   Optional widget.
+ * @param w5   Optional widget.
+ * @param w6   Optional widget.
+ * @param w7   Optional widget.
+ * @param w8   Optional widget.
+ * @param w9   Optional widget.
+ * @param w10  Optional widget.
+ * @return
+ *    Maximum height of the widgets.
+ */
+int
+WuQtUtilities::getMaximumWidgetHeight(QWidget* w1,
+                                      QWidget* w2,
+                                      QWidget* w3,
+                                      QWidget* w4,
+                                      QWidget* w5,
+                                      QWidget* w6,
+                                      QWidget* w7,
+                                      QWidget* w8,
+                                      QWidget* w9,
+                                      QWidget* w10)
+{
+    QVector<QWidget*> widgets;
+    
+    if (w1 != NULL) widgets.push_back(w1);
+    if (w2 != NULL) widgets.push_back(w2);
+    if (w3 != NULL) widgets.push_back(w3);
+    if (w4 != NULL) widgets.push_back(w4);
+    if (w5 != NULL) widgets.push_back(w5);
+    if (w6 != NULL) widgets.push_back(w6);
+    if (w7 != NULL) widgets.push_back(w7);
+    if (w8 != NULL) widgets.push_back(w8);
+    if (w9 != NULL) widgets.push_back(w9);
+    if (w10 != NULL) widgets.push_back(w10);
+    
+    int maxHeight = 0;
+    const int num = widgets.size();
+    for (int i = 0; i < num; i++) {
+        const int h = widgets[i]->sizeHint().height();
+        if (h > maxHeight) {
+            maxHeight = h;
+        }
+    }
+    
+    return maxHeight;
+}
+
+
+/**
  * Find the widget with the maximum height in its
  * size hint.  Apply this height to all of the widgets.
  * 
@@ -753,32 +826,27 @@ WuQtUtilities::matchWidgetHeights(QWidget* w1,
                                   QWidget* w9,
                                   QWidget* w10)
 {
-    QVector<QWidget*> widgets;
-    
-    if (w1 != NULL) widgets.push_back(w1);
-    if (w2 != NULL) widgets.push_back(w2);
-    if (w3 != NULL) widgets.push_back(w3);
-    if (w4 != NULL) widgets.push_back(w4);
-    if (w5 != NULL) widgets.push_back(w5);
-    if (w6 != NULL) widgets.push_back(w6);
-    if (w7 != NULL) widgets.push_back(w7);
-    if (w8 != NULL) widgets.push_back(w8);
-    if (w9 != NULL) widgets.push_back(w9);
-    if (w10 != NULL) widgets.push_back(w10);
-    
-    int maxHeight = 0;
-    const int num = widgets.size();
-    for (int i = 0; i < num; i++) {
-        const int h = widgets[i]->sizeHint().height();
-        if (h > maxHeight) {
-            maxHeight = h;
-        }
-    }
-    
+    const int maxHeight = getMaximumWidgetHeight(w1,
+                                                 w2,
+                                                 w3,
+                                                 w4,
+                                                 w5,
+                                                 w6,
+                                                 w7,
+                                                 w8,
+                                                 w9,
+                                                 w10);
     if (maxHeight > 0) {
-        for (int i = 0; i < num; i++) {
-            widgets[i]->setFixedHeight(maxHeight);
-        }
+        w1->setFixedHeight(maxHeight);
+        w2->setFixedHeight(maxHeight);
+        if (w3  != NULL) w3->setFixedHeight(maxHeight);
+        if (w4  != NULL) w4->setFixedHeight(maxHeight);
+        if (w5  != NULL) w5->setFixedHeight(maxHeight);
+        if (w6  != NULL) w6->setFixedHeight(maxHeight);
+        if (w7  != NULL) w7->setFixedHeight(maxHeight);
+        if (w8  != NULL) w8->setFixedHeight(maxHeight);
+        if (w9  != NULL) w9->setFixedHeight(maxHeight);
+        if (w10 != NULL) w10->setFixedHeight(maxHeight);
     }
 }
 
@@ -1066,5 +1134,250 @@ WuQtUtilities::boolToCheckState(const bool value)
     }
     return Qt::Unchecked;
 }
+
+/**
+ * Create a pixmap with the given color.
+ *
+ * @param widget
+ *    Widget that will contain pixmap.  It used for getting the widget's
+ *    foreground and background colors.
+ * @param pixmapWidth
+ *    Width for the pixmap.
+ * @param pixmapHeight
+ *    Height for the pixmap.
+ * @param caretColor
+ *    The Caret Color Enum value.
+ * @param rgba
+ *    RGBA color for the pixmap.  If the alpha component is zero, a
+ *    outline box with an 'X' symbol is drawn using the widget's
+ *    foreground color.
+ * @param outlineFlag
+ *    If true, drawn an outline with the given color and the background
+ *    using the widget's background color.
+ * @return
+ *    The pixmap.
+ */
+QPixmap
+WuQtUtilities::createCaretColorEnumPixmap(const QWidget* widget,
+                                          const int32_t  pixmapWidth,
+                                          const int32_t  pixmapHeight,
+                                          const CaretColorEnum::Enum caretColor,
+                                          const float    customColorRGBA[4],
+                                          const bool     outlineFlag)
+{
+    bool noneColorFlag      = false;
+    bool validColorFlag     = false;
+    float colorRGBA[4];
+    
+    switch (caretColor) {
+        case CaretColorEnum::NONE:
+            noneColorFlag = true;
+            break;
+        case CaretColorEnum::CUSTOM:
+            if (customColorRGBA[3] > 0.0) {
+                colorRGBA[0] = customColorRGBA[0];
+                colorRGBA[1] = customColorRGBA[1];
+                colorRGBA[2] = customColorRGBA[2];
+                colorRGBA[3] = customColorRGBA[3];
+                validColorFlag = true;
+            }
+            break;
+        case CaretColorEnum::AQUA:
+        case CaretColorEnum::BLACK:
+        case CaretColorEnum::BLUE:
+        case CaretColorEnum::FUCHSIA:
+        case CaretColorEnum::GRAY:
+        case CaretColorEnum::GREEN:
+        case CaretColorEnum::LIME:
+        case CaretColorEnum::MAROON:
+        case CaretColorEnum::NAVY:
+        case CaretColorEnum::OLIVE:
+        case CaretColorEnum::PURPLE:
+        case CaretColorEnum::RED:
+        case CaretColorEnum::SILVER:
+        case CaretColorEnum::TEAL:
+        case CaretColorEnum::WHITE:
+        case CaretColorEnum::YELLOW:
+            CaretColorEnum::toRGBFloat(caretColor,
+                                       colorRGBA);
+            colorRGBA[3] = 1.0;
+            validColorFlag = true;
+            break;
+    }
+
+    /*
+     * Create a small pixmap that will contain
+     * the foreground color around the pixmap's perimeter.
+     */
+    QPixmap pixmap(pixmapWidth,
+                   pixmapHeight);
+    QSharedPointer<QPainter> painter = WuQtUtilities::createPixmapWidgetPainter(widget,
+                                                                                pixmap);
+    
+    if (noneColorFlag) {
+        /*
+         * Draw lines (rectangle) around the perimeter of the pixmap
+         * and an 'X' in the widget's foreground color.
+         */
+        for (int32_t i = 0; i < 1; i++) {
+            painter->drawRect(i, i,
+                             pixmapWidth - 1 - i * 2, pixmapHeight - 1 - i * 2);
+        }
+        painter->drawLine(0, 0, pixmapWidth - 1, pixmapHeight - 1);
+        painter->drawLine(0, pixmapHeight - 1, pixmapWidth - 1, 0);
+    }
+    else if (validColorFlag) {
+        if (outlineFlag) {
+            /*
+             * Draw lines (rectangle) around the perimeter of the pixmap
+             */
+            painter->setPen(QColor::fromRgbF(colorRGBA[0],
+                                            colorRGBA[1],
+                                            colorRGBA[2]));
+            for (int32_t i = 0; i < 3; i++) {
+                painter->drawRect(i, i,
+                                 pixmapWidth - 1 - i * 2, pixmapHeight - 1 - i * 2);
+            }
+        }
+        else {
+            /*
+             * Fill the pixmap with the RGBA color.
+             */
+            pixmap.fill(QColor::fromRgbF(colorRGBA[0],
+                                     colorRGBA[1],
+                                     colorRGBA[2]));
+        }
+    }
+    
+    return pixmap;
+}
+
+/**
+ * Create a painter for the given pixmap that will be placed
+ * into the given widget.  The pixmap's background is painted
+ * with the widget's background color, the painter's pen is set
+ * to the widget's foreground color, and then the painter is
+ * returned.
+ *
+ * Origin of the painter will be in the center with the 
+ * coordinates, both X and Y, ranging -100 to 100.
+ *
+ * @param widget
+ *     Widget used for coloring.
+ * @param pixmap
+ *     The Pixmap must be square (width == height).
+ * @return
+ *     Shared pointer containing QPainter for drawing to the pixmap.
+ */
+QSharedPointer<QPainter>
+WuQtUtilities::createPixmapWidgetPainterOriginCenter100x100(const QWidget* widget,
+                                                            QPixmap& pixmap)
+{
+    CaretAssert(pixmap.width() == pixmap.height());
+    
+    QSharedPointer<QPainter> painter = createPixmapWidgetPainter(widget,
+                                                                 pixmap);
+    
+    /*
+     * Note: QPainter has its origin at the top left.
+     * Using a negative for the Y-scale value will
+     * move the origin to the bottom.
+     */
+    painter->translate(pixmap.width() / 2.0,
+                       pixmap.height() / 2.0);
+    painter->scale(pixmap.width() / 200.0,
+                   -(pixmap.height() / 200.0));
+    
+    return painter;
+}
+
+/**
+ * Create a painter for the given pixmap that will be placed
+ * into the given widget.  The pixmap's background is painted
+ * with the widget's background color, the painter's pen is set
+ * to the widget's foreground color, and then the painter is
+ * returned.
+ *
+ * Origin of painter will be in the BOTTOM LEFT corner.
+ *
+ * @param widget
+ *     Widget used for coloring.
+ * @param pixmap
+ *     The Pixmap.
+ * @return
+ *     Shared pointer containing QPainter for drawing to the pixmap.
+ */
+QSharedPointer<QPainter>
+WuQtUtilities::createPixmapWidgetPainterOriginBottomLeft(const QWidget* widget,
+                                                         QPixmap& pixmap)
+{
+    QSharedPointer<QPainter> painter = createPixmapWidgetPainter(widget,
+                                                                 pixmap);
+    
+    /*
+     * Note: QPainter has its origin at the top left.
+     * Using a negative for the Y-scale value will
+     * move the origin to the bottom.
+     */
+    painter->translate(0.0,
+                       pixmap.height() - 1);
+    painter->scale(1.0,
+                   -1.0);
+    
+    return painter;
+}
+
+
+/**
+ * Create a painter for the given pixmap that will be placed
+ * into the given widget.  The pixmap's background is painted
+ * with the widget's background color, the painter's pen is set
+ * to the widget's foreground color, and then the painter is
+ * returned.
+ *
+ * Origin of painter will be in the TOP LEFT corner.
+ *
+ * @param widget
+ *     Widget used for coloring.
+ * @param pixmap
+ *     The Pixmap.
+ * @return
+ *     Shared pointer containing QPainter for drawing to the pixmap.
+ */
+QSharedPointer<QPainter>
+WuQtUtilities::createPixmapWidgetPainter(const QWidget* widget,
+                                         QPixmap& pixmap)
+{
+    CaretAssert(widget);
+    CaretAssert(pixmap.width() > 0);
+    CaretAssert(pixmap.height() > 0);
+    
+    /*
+     * Get the widget's background and foreground color
+     */
+    const QPalette palette = widget->palette();
+    const QPalette::ColorRole backgroundRole = widget->backgroundRole();
+    const QBrush backgroundBrush = palette.brush(backgroundRole);
+    const QColor backgroundColor = backgroundBrush.color();
+    const QPalette::ColorRole foregroundRole = widget->foregroundRole();
+    const QBrush foregroundBrush = palette.brush(foregroundRole);
+    const QColor foregroundColor = foregroundBrush.color();
+    
+    
+    /*
+     * Create a painter and fill the pixmap with
+     * the background color
+     */
+    QSharedPointer<QPainter> painter(new QPainter(&pixmap));
+    painter->setRenderHint(QPainter::Antialiasing,
+                          true);
+    painter->setBackgroundMode(Qt::OpaqueMode);
+    painter->fillRect(pixmap.rect(), backgroundColor);
+    
+    painter->setPen(foregroundColor);
+    
+    return painter;
+}
+
 
 

@@ -33,6 +33,25 @@
 using namespace std;
 using namespace caret;
 
+int CiftiXML::directionFromString(const QString& input)
+{
+    bool ok = false;
+    int converted = input.toInt(&ok);
+    if (ok)
+    {
+        if (converted < 1) throw CaretException("invalid integer direction, use 1 or greater");
+        return converted - 1;//use 1-indexed convention for input
+    }
+    if (input == "ROW") return ALONG_ROW;
+    if (input == "COLUMN") return ALONG_COLUMN;//should we also allow STACK?  integers seem cleaner
+    throw CaretException("unrecognized direction string, please use an integer, 'ROW', or 'COLUMN'");
+}
+
+QString CiftiXML::directionFromStringExplanation()
+{
+    return "The direction can be either an integer starting from 1, or the strings 'ROW' or 'COLUMN'.";
+}
+
 CiftiXML::CiftiXML(const CiftiXML& rhs)
 {
     copyHelper(rhs);
@@ -226,6 +245,16 @@ CiftiMappingType::MappingType CiftiXML::getMappingType(const int& direction) con
 void CiftiXML::setMap(const int& direction, const CiftiMappingType& mapIn)
 {
     CaretAssertVectorIndex(m_indexMaps, direction);
+    if (mapIn.getType() == CiftiMappingType::LABELS)
+    {
+        for (int i = 0; i < getNumberOfDimensions(); ++i)
+        {
+            if (i != direction && m_indexMaps[i] != NULL && m_indexMaps[i]->getType() == CiftiMappingType::LABELS)
+            {
+                throw CaretException("Cifti XML cannot contain a label mapping on more than one dimension");
+            }
+        }
+    }
     m_indexMaps[direction] = CaretPointer<CiftiMappingType>(mapIn.clone());
 }
 
@@ -851,4 +880,25 @@ void CiftiXML::writeMatrix2(QXmlStreamWriter& xml) const
         }
     }
     xml.writeEndElement();
+}
+
+bool CiftiXML::mutablesModified() const
+{
+    if (m_fileMetaData.isModified()) return true;
+    if (m_filePalette != NULL && m_filePalette->isModified()) return true;
+    for (int d = 0; d < (int)m_indexMaps.size(); ++d)
+    {
+        if (m_indexMaps[d] != NULL && m_indexMaps[d]->mutablesModified()) return true;
+    }
+    return false;
+}
+
+void CiftiXML::clearMutablesModified() const
+{
+    m_fileMetaData.clearModified();
+    if (m_filePalette != NULL) m_filePalette->clearModified();
+    for (int d = 0; d < (int)m_indexMaps.size(); ++d)
+    {
+        if (m_indexMaps[d] != NULL) m_indexMaps[d]->clearMutablesModified();
+    }
 }

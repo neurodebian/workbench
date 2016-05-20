@@ -25,6 +25,8 @@
 #include "BrainOpenGLChartDrawingFixedPipeline.h"
 #undef __BRAIN_OPEN_G_L_CHART_DRAWING_FIXED_PIPELINE_DECLARE__
 
+#include "AnnotationColorBar.h"
+#include "AnnotationPointSizeText.h"
 #include "CaretOpenGLInclude.h"
 #include "BrainOpenGLFixedPipeline.h"
 #include "BrainOpenGLTextRenderInterface.h"
@@ -126,8 +128,6 @@ BrainOpenGLChartDrawingFixedPipeline::drawCartesianChart(Brain* brain,
         return;
     }
     
-    saveStateOfOpenGL();
-    
     SelectionItemChartDataSeries* chartDataSeriesID = m_brain->getSelectionManager()->getChartDataSeriesIdentification();
     SelectionItemChartFrequencySeries* chartFrequencySeriesID = m_brain->getSelectionManager()->getChartFrequencySeriesIdentification();
     SelectionItemChartTimeSeries* chartTimeSeriesID = m_brain->getSelectionManager()->getChartTimeSeriesIdentification();
@@ -155,14 +155,9 @@ BrainOpenGLChartDrawingFixedPipeline::drawCartesianChart(Brain* brain,
             break;
     }
     
-    resetIdentification();
+    saveStateOfOpenGL();
     
-//    const CaretPreferences* preferences = SessionManager::get()->getCaretPreferences();
-//    uint8_t foregroundByte[3];
-//    preferences->getColorForegroundChartView(foregroundByte);
-//    CaretPreferences::byteRgbToFloatRgb(foregroundByte,
-//                                        m_foregroundColor);
-//    m_foregroundColor[3] = 1.0;
+    resetIdentification();
     
     const int32_t vpX      = viewport[0];
     const int32_t vpY      = viewport[1];
@@ -181,17 +176,17 @@ BrainOpenGLChartDrawingFixedPipeline::drawCartesianChart(Brain* brain,
      * Margin is region around the chart in which 
      * the axes legends, values, and ticks are drawn.
      */
-    const int32_t marginSize = 30;
+    const double marginSize = 30;
     Margins margins(marginSize);
     
-    int32_t width, height;
-    estimateCartesianChartAxisLegendsWidthHeight(textRenderer, cartesianChart->getLeftAxis(), width, height);
+    double width, height;
+    estimateCartesianChartAxisLegendsWidthHeight(textRenderer, vpHeight, cartesianChart->getLeftAxis(), width, height);
     margins.m_left = std::max(margins.m_left, width);
-    estimateCartesianChartAxisLegendsWidthHeight(textRenderer, cartesianChart->getRightAxis(), width, height);
+    estimateCartesianChartAxisLegendsWidthHeight(textRenderer, vpHeight, cartesianChart->getRightAxis(), width, height);
     margins.m_right = std::max(margins.m_right, width);
-    estimateCartesianChartAxisLegendsWidthHeight(textRenderer, cartesianChart->getTopAxis(), width, height);
+    estimateCartesianChartAxisLegendsWidthHeight(textRenderer, vpHeight, cartesianChart->getTopAxis(), width, height);
     margins.m_top = std::max(margins.m_top, height);
-    estimateCartesianChartAxisLegendsWidthHeight(textRenderer, cartesianChart->getBottomAxis(), width, height);
+    estimateCartesianChartAxisLegendsWidthHeight(textRenderer, vpHeight, cartesianChart->getBottomAxis(), width, height);
     margins.m_bottom = std::max(margins.m_bottom, height);
     
     if (margins.m_left > marginSize) margins.m_left += 10;
@@ -304,19 +299,6 @@ BrainOpenGLChartDrawingFixedPipeline::drawMatrixChart(Brain* brain,
     
     CaretAssert(chartMatrixInterface);
     
-//    int32_t numberOfRows = 0;
-//    int32_t numberOfColumns = 0;
-//    std::vector<float> matrixRGBA;
-//    chartMatrixInterface->getMatrixDataRGBA(numberOfRows,
-//                                            numberOfColumns,
-//                                            matrixRGBA);
-//    if ((numberOfRows <= 0)
-//        || (numberOfColumns <= 0)) {
-//        return;
-//    }
-    
-    saveStateOfOpenGL();
-    
     SelectionItemChartMatrix* chartMatrixID = m_brain->getSelectionManager()->getChartMatrixIdentification();
     
     /*
@@ -340,16 +322,12 @@ BrainOpenGLChartDrawingFixedPipeline::drawMatrixChart(Brain* brain,
             break;
     }
     
+    saveStateOfOpenGL();
+    
     resetIdentification();
 
-    
-//    const int32_t vpX      = viewport[0];
-//    const int32_t vpY      = viewport[1];
-//    const int32_t vpWidth  = viewport[2];
-//    const int32_t vpHeight = viewport[3];
-    
     ChartMatrixDisplayProperties* matrixProperties = chartMatrixInterface->getChartMatrixDisplayProperties(m_tabIndex);
-    const int32_t paletteHeight = (matrixProperties->isColorBarDisplayed()
+    const int32_t paletteHeight = (matrixProperties->getColorBar()->isDisplayed()
                                    ? 40
                                    : 0);
     
@@ -368,9 +346,6 @@ BrainOpenGLChartDrawingFixedPipeline::drawMatrixChart(Brain* brain,
      * Margin is region around the chart in which
      * the axes legends, values, and ticks are drawn.
      */
-    //const int32_t marginSize = 30;
-    
-    
     glViewport(chartGraphicsDrawingViewport[0],
                chartGraphicsDrawingViewport[1],
                chartGraphicsDrawingViewport[2],
@@ -498,13 +473,14 @@ BrainOpenGLChartDrawingFixedPipeline::drawChartAxisCartesian(const float vpX,
                                 labelTexts);
     
     const int32_t numLabelsToDraw = static_cast<int32_t>(labelTexts.size());
+    AnnotationPointSizeText annotationText(AnnotationAttributesDefaultTypeEnum::NORMAL);
     if (numLabelsToDraw > 0) {
         float labelX = 0.0;
         float labelY = 0.0;
         float labelOffsetMultiplierX = 0.0;
         float labelOffsetMultiplierY = 0.0;
-        BrainOpenGLTextRenderInterface::TextAlignmentX labelAlignmentX = BrainOpenGLTextRenderInterface::X_CENTER;
-        BrainOpenGLTextRenderInterface::TextAlignmentY labelAlignmentY = BrainOpenGLTextRenderInterface::Y_CENTER;
+        annotationText.setHorizontalAlignment(AnnotationTextAlignHorizontalEnum::CENTER);
+        annotationText.setVerticalAlignment(AnnotationTextAlignVerticalEnum::MIDDLE);
         
         /*
          * Viewport for axis name and numeric values
@@ -526,8 +502,8 @@ BrainOpenGLChartDrawingFixedPipeline::drawChartAxisCartesian(const float vpX,
                 labelY = margins.m_bottom;
                 labelOffsetMultiplierX = 1.0;
                 labelOffsetMultiplierY = 0.0;
-                labelAlignmentX = BrainOpenGLTextRenderInterface::X_CENTER;
-                labelAlignmentY = BrainOpenGLTextRenderInterface::Y_TOP;
+                annotationText.setHorizontalAlignment(AnnotationTextAlignHorizontalEnum::CENTER);
+                annotationText.setVerticalAlignment(AnnotationTextAlignVerticalEnum::TOP);
                 tickDeltaXY[0] = 0.0;
                 tickDeltaXY[1] = -tickLength;
                 break;
@@ -540,8 +516,8 @@ BrainOpenGLChartDrawingFixedPipeline::drawChartAxisCartesian(const float vpX,
                 labelY = 0.0;
                 labelOffsetMultiplierX = 1.0;
                 labelOffsetMultiplierY = 0.0;
-                labelAlignmentX = BrainOpenGLTextRenderInterface::X_CENTER;
-                labelAlignmentY = BrainOpenGLTextRenderInterface::Y_BOTTOM;
+                annotationText.setHorizontalAlignment(AnnotationTextAlignHorizontalEnum::CENTER);
+                annotationText.setVerticalAlignment(AnnotationTextAlignVerticalEnum::BOTTOM);
                 tickDeltaXY[0] = 0.0;
                 tickDeltaXY[1] = tickLength;
                 break;
@@ -554,8 +530,8 @@ BrainOpenGLChartDrawingFixedPipeline::drawChartAxisCartesian(const float vpX,
                 labelY = margins.m_bottom;
                 labelOffsetMultiplierX = 0.0;
                 labelOffsetMultiplierY = 1.0;
-                labelAlignmentX = BrainOpenGLTextRenderInterface::X_RIGHT;
-                labelAlignmentY = BrainOpenGLTextRenderInterface::Y_CENTER;
+                annotationText.setHorizontalAlignment(AnnotationTextAlignHorizontalEnum::RIGHT);
+                annotationText.setVerticalAlignment(AnnotationTextAlignVerticalEnum::MIDDLE);
                 tickDeltaXY[0] = -tickLength;
                 tickDeltaXY[1] = 0.0;
                 break;
@@ -568,8 +544,8 @@ BrainOpenGLChartDrawingFixedPipeline::drawChartAxisCartesian(const float vpX,
                 labelY = margins.m_bottom;
                 labelOffsetMultiplierX = 0.0;
                 labelOffsetMultiplierY = 1.0;
-                labelAlignmentX = BrainOpenGLTextRenderInterface::X_LEFT;
-                labelAlignmentY = BrainOpenGLTextRenderInterface::Y_CENTER;
+                annotationText.setHorizontalAlignment(AnnotationTextAlignHorizontalEnum::LEFT);
+                annotationText.setVerticalAlignment(AnnotationTextAlignVerticalEnum::MIDDLE);
                 tickDeltaXY[0] = tickLength;
                 tickDeltaXY[1] = 0.0;
                 break;
@@ -614,42 +590,18 @@ BrainOpenGLChartDrawingFixedPipeline::drawChartAxisCartesian(const float vpX,
             
             const float textX = tickEndX;
             const float textY = tickEndY;
-            textRenderer->drawTextAtWindowCoords(viewport,
-                                                 textX,
-                                                 textY,
-                                                 labelTexts[i],
-                                                 labelAlignmentX,
-                                                 labelAlignmentY);
+            annotationText.setText(labelTexts[i]);
+            textRenderer->drawTextAtViewportCoords(textX,
+                                                   textY,
+                                                   0.0,
+                                                   annotationText);
         }
         
         const AString axisText = axis->getText();
         if ( ! axisText.isEmpty()) {
-//            bool drawAxisTextVerticalFlag = false;
-//            float axisTextCenterX = 0.0;
-//            float axisTextCenterY = 0.0;
-//            switch (axis->getAxisLocation()) {
-//                case ChartAxisLocationEnum::CHART_AXIS_LOCATION_BOTTOM:
-//                    axisTextCenterX = (vpWidth / 2.0);
-//                    axisTextCenterY = (margins.m_bottom / 2.0);
-//                    break;
-//                case ChartAxisLocationEnum::CHART_AXIS_LOCATION_TOP:
-//                    axisTextCenterX = (vpWidth / 2.0);
-//                    axisTextCenterY = (margins.m_top / 2.0);
-//                    break;
-//                case ChartAxisLocationEnum::CHART_AXIS_LOCATION_LEFT:
-//                    axisTextCenterX = (margins.m_left / 2.0);
-//                    axisTextCenterY = (vpHeight / 2.0);
-//                    drawAxisTextVerticalFlag = true;
-//                    break;
-//                case ChartAxisLocationEnum::CHART_AXIS_LOCATION_RIGHT:
-//                    axisTextCenterX = (margins.m_right / 2.0);
-//                    axisTextCenterY = (vpHeight / 2.0);
-//                    drawAxisTextVerticalFlag = true;
-//                    break;
-//            }
-            
-            BrainOpenGLTextRenderInterface::TextAlignmentX textAlignX = BrainOpenGLTextRenderInterface::X_CENTER;
-            BrainOpenGLTextRenderInterface::TextAlignmentY textAlignY = BrainOpenGLTextRenderInterface::Y_CENTER;
+            AnnotationPointSizeText annotationText(AnnotationAttributesDefaultTypeEnum::NORMAL);
+            annotationText.setHorizontalAlignment(AnnotationTextAlignHorizontalEnum::CENTER);
+            annotationText.setVerticalAlignment(AnnotationTextAlignVerticalEnum::MIDDLE);
             
             bool drawAxisTextVerticalFlag = false;
             float axisTextCenterX = axisVpWidth / 2.0;
@@ -659,43 +611,41 @@ BrainOpenGLChartDrawingFixedPipeline::drawChartAxisCartesian(const float vpX,
                 case ChartAxisLocationEnum::CHART_AXIS_LOCATION_BOTTOM:
                     axisTextCenterX = (vpWidth / 2.0);
                     axisTextCenterY = textMarginOffset;
-                    textAlignY = BrainOpenGLTextRenderInterface::Y_BOTTOM;
+                    annotationText.setVerticalAlignment(AnnotationTextAlignVerticalEnum::BOTTOM);
                     break;
                 case ChartAxisLocationEnum::CHART_AXIS_LOCATION_TOP:
                     axisTextCenterX = (vpWidth / 2.0);
                     axisTextCenterY = margins.m_top - textMarginOffset;
-                    textAlignY = BrainOpenGLTextRenderInterface::Y_TOP;
+                    annotationText.setVerticalAlignment(AnnotationTextAlignVerticalEnum::TOP);
                     break;
                 case ChartAxisLocationEnum::CHART_AXIS_LOCATION_LEFT:
                     axisTextCenterX = textMarginOffset;
                     axisTextCenterY = (vpHeight / 2.0);
-                    textAlignX = BrainOpenGLTextRenderInterface::X_LEFT;
+                    annotationText.setHorizontalAlignment(AnnotationTextAlignHorizontalEnum::LEFT);
                     drawAxisTextVerticalFlag = true;
                     break;
                 case ChartAxisLocationEnum::CHART_AXIS_LOCATION_RIGHT:
                     axisTextCenterX = margins.m_right - textMarginOffset;
                     axisTextCenterY = (vpHeight / 2.0);
-                    textAlignX = BrainOpenGLTextRenderInterface::X_RIGHT;
+                    annotationText.setHorizontalAlignment(AnnotationTextAlignHorizontalEnum::RIGHT);
                     drawAxisTextVerticalFlag = true;
                     break;
             }
             if (drawAxisTextVerticalFlag) {
-                textRenderer->drawVerticalTextAtWindowCoords(viewport,
-                                                             axisTextCenterX,
-                                                             axisTextCenterY,
-                                                             axisText,
-                                                             textAlignX,
-                                                             textAlignY,
-                                                             BrainOpenGLTextRenderInterface::NORMAL,
-                                                             14);
+                annotationText.setOrientation(AnnotationTextOrientationEnum::STACKED);
+                annotationText.setText(axisText);
+                textRenderer->drawTextAtViewportCoords(axisTextCenterX,
+                                                       axisTextCenterY,
+                                                       0.0,
+                                                       annotationText);
             }
             else {
-                textRenderer->drawTextAtWindowCoords(viewport,
-                                                     axisTextCenterX,
-                                                     axisTextCenterY,
-                                                     axisText,
-                                                     textAlignX,
-                                                     textAlignY);
+                annotationText.setOrientation(AnnotationTextOrientationEnum::HORIZONTAL);
+                annotationText.setText(axisText);
+                textRenderer->drawTextAtViewportCoords(axisTextCenterX,
+                                                       axisTextCenterY,
+                                                       0.0,
+                                                       annotationText);
             }
         }
     }
@@ -706,6 +656,8 @@ BrainOpenGLChartDrawingFixedPipeline::drawChartAxisCartesian(const float vpX,
  *
  * @param textRenderer
  *     Text rendering.
+ * @param viewportHeight
+ *     Height of viewport.
  * @param axis
  *    The axis.
  * @param widthOut
@@ -715,9 +667,10 @@ BrainOpenGLChartDrawingFixedPipeline::drawChartAxisCartesian(const float vpX,
  */
 void
 BrainOpenGLChartDrawingFixedPipeline::estimateCartesianChartAxisLegendsWidthHeight(BrainOpenGLTextRenderInterface* textRenderer,
+                                                                                   const float viewportHeight,
                                                                                    ChartAxis* axis,
-                                                                                   int32_t& widthOut,
-                                                                                   int32_t& heightOut)
+                                                                                   double& widthOut,
+                                                                                   double& heightOut)
 {
     widthOut  = 0;
     heightOut = 0;
@@ -745,13 +698,12 @@ BrainOpenGLChartDrawingFixedPipeline::estimateCartesianChartAxisLegendsWidthHeig
          iter++) {
         const AString text = *iter;
         if ( ! text.isEmpty()) {
-            int32_t textWidth  = 0;
-            int32_t textHeight = 0;
-            textRenderer->getTextBoundsInPixels(textWidth,
-                                                textHeight,
-                                                text,
-                                                BrainOpenGLTextRenderInterface::NORMAL,
-                                                14);
+            AnnotationPointSizeText annotationText(AnnotationAttributesDefaultTypeEnum::NORMAL);
+            annotationText.setText(text);
+            double textWidth = 0.0;
+            double textHeight = 0.0;
+            textRenderer->getTextWidthHeightInPixels(annotationText, viewportHeight, textWidth, textHeight);
+            
             widthOut  = std::max(widthOut,  textWidth);
             heightOut = std::max(heightOut, textHeight);
         }
@@ -860,7 +812,6 @@ BrainOpenGLChartDrawingFixedPipeline::drawChartGraphicsLineSeries(BrainOpenGLTex
 {
     CaretAssert(chart);
     
-    //std::vector<const ChartData*> chartVector = chart->getAllSelectedChartDatas(m_tabIndex);
     std::vector<ChartData*> chartVector = chart->getAllChartDatas();
     
     if (chartVector.empty()) {
@@ -987,8 +938,7 @@ BrainOpenGLChartDrawingFixedPipeline::drawChartGraphicsMatrix(const int32_t view
     
     CaretPreferences* prefs = SessionManager::get()->getCaretPreferences();
     uint8_t highlightRGBByte[3];
-    //prefs->getColorChartMatrixGridLines(highlightRGBByte);
-    prefs->getColorForegroundChartView(highlightRGBByte);
+    prefs->getBackgroundAndForegroundColors()->getColorForegroundChartView(highlightRGBByte);
     const float highlightRGB[3] = {
         highlightRGBByte[0] / 255.0,
         highlightRGBByte[1] / 255.0,
@@ -1038,9 +988,7 @@ BrainOpenGLChartDrawingFixedPipeline::drawChartGraphicsMatrix(const int32_t view
         CiftiScalarDataSeriesFile* scalarDataSeriesFile = dynamic_cast<CiftiScalarDataSeriesFile*>(chartMatrixInterface);
         if (scalarDataSeriesFile != NULL) {
             if (scalarDataSeriesMapIndex >= 0) {
-                //loadedRowIndex = scalarDataSeriesMapIndex;
                 selectedRowIndices.insert(scalarDataSeriesMapIndex);
-                // 12/29/2014 JWH selectedColumnIndices.insert(scalarDataSeriesMapIndex);
             }
         }
         
@@ -1109,7 +1057,6 @@ BrainOpenGLChartDrawingFixedPipeline::drawChartGraphicsMatrix(const int32_t view
         const float yMin = -margin;
         const float yMax = graphicsHeight + margin;
         
-
         glMatrixMode(GL_PROJECTION);
         glLoadIdentity();
         glOrtho(xMin, xMax,
@@ -1274,7 +1221,7 @@ BrainOpenGLChartDrawingFixedPipeline::drawChartGraphicsMatrix(const int32_t view
              */
             if (displayGridLinesFlag) {
                 uint8_t gridLineColorBytes[3];
-                prefs->getColorChartMatrixGridLines(gridLineColorBytes);
+                prefs->getBackgroundAndForegroundColors()->getColorChartMatrixGridLines(gridLineColorBytes);
                 float gridLineColorFloats[4];
                 CaretPreferences::byteRgbToFloatRgb(gridLineColorBytes,
                                                     gridLineColorFloats);
@@ -1470,7 +1417,6 @@ BrainOpenGLChartDrawingFixedPipeline::saveStateOfOpenGL()
     glPushMatrix();
     
     glShadeModel(GL_FLAT);
-//    glDisable(GL_CULL_FACE);
     glDisable(GL_LIGHTING);
     glDisable(GL_STENCIL_TEST);
     glDisable(GL_DEPTH_TEST);

@@ -58,8 +58,9 @@ Operations
 Algorithms
 OperationsBase
 Brain
-${FTGL_FONT_MODULE_FOR_LINKING}
+${FTGL_LIBRARIES}
 Files
+Annotations
 Palette
 Gifti
 Cifti
@@ -69,7 +70,7 @@ FilesBase
 Scenes
 Xml
 Common
-Quazip
+${QUAZIP_LIBRARIES}
 ${FREETYPE_LIBRARIES}
 ${QT_LIBRARIES}
 ${OSMESA_OFFSCREEN_LIBRARY}
@@ -88,6 +89,7 @@ ${CMAKE_SOURCE_DIR}/CommandLine
 ${CMAKE_SOURCE_DIR}/Commands
 ${CMAKE_SOURCE_DIR}/Operations
 ${CMAKE_SOURCE_DIR}/Algorithms
+${CMAKE_SOURCE_DIR}/Annotations
 ${CMAKE_SOURCE_DIR}/OperationsBase
 ${CMAKE_SOURCE_DIR}/Brain
 ${CMAKE_SOURCE_DIR}/Charting
@@ -100,6 +102,6 @@ ${CMAKE_SOURCE_DIR}/FilesBase
 ${CMAKE_SOURCE_DIR}/Scenes
 ${CMAKE_SOURCE_DIR}/Xml
 ${CMAKE_SOURCE_DIR}/Common
-${CMAKE_SOURCE_DIR}/Quazip
+${QUAZIP_INCLUDE_DIRS}
 )
 

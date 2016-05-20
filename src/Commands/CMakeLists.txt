@@ -25,7 +25,6 @@ CommandClassCreateEnum.h
 CommandClassCreateOperation.h
 CommandC11xTesting.h
 CommandException.h
-CommandGiftiConvert.h
 CommandOperation.h
 CommandOperationManager.h
 CommandParser.h
@@ -39,7 +38,6 @@ CommandClassCreateEnum.cxx
 CommandClassCreateOperation.cxx
 CommandC11xTesting.cxx
 CommandException.cxx
-CommandGiftiConvert.cxx
 CommandOperation.cxx
 CommandOperationManager.cxx
 CommandParser.cxx
@@ -52,6 +50,7 @@ CommandUnitTest.cxx
 INCLUDE_DIRECTORIES(
 ${CMAKE_SOURCE_DIR}/Commands
 ${CMAKE_SOURCE_DIR}/Algorithms
+${CMAKE_SOURCE_DIR}/Annotations
 ${CMAKE_SOURCE_DIR}/Charting
 ${CMAKE_SOURCE_DIR}/Operations
 ${CMAKE_SOURCE_DIR}/OperationsBase

@@ -44,6 +44,7 @@ SceneAttributes::SceneAttributes(const SceneTypeEnum::Enum sceneType)
     m_restoreWindowBehaviorInSceneDisplay = RESTORE_WINDOW_POSITION_RELATIVE_TO_FIRST_AND_USE_SIZES;
     m_specFileNameSavedToScene   = true;
     m_allLoadedFilesSavedToScene = true;
+    m_useSceneForgroundAndBackgroundColorsFlag = true;
 }
 
 /**
@@ -69,9 +70,11 @@ SceneAttributes::getSceneType() const
  *    Indices of tabs that are saved to the scene.
  */
 void 
-SceneAttributes::setIndicesOfTabsForSavingToScene(const std::vector<int32_t>& tabIndices)
+SceneAttributes::setIndicesOfTabsAndWindowsForSavingToScene(const std::vector<int32_t>& tabIndices,
+                                                  const std::vector<int32_t>& windowIndices)
 {
-    m_indicesOfTabsForSavingToScene = tabIndices;
+    m_indicesOfTabsForSavingToScene    = tabIndices;
+    m_indicesOfWindowsForSavingToScene = windowIndices;
 }
 
 /**
@@ -81,6 +84,15 @@ std::vector<int32_t>
 SceneAttributes::getIndicesOfTabsForSavingToScene() const
 {
     return m_indicesOfTabsForSavingToScene;
+}
+
+/**
+ * @return Indices of tabs for saving to the scene.
+ */
+std::vector<int32_t>
+SceneAttributes::getIndicesOfWindowsForSavingToScene() const
+{
+    return m_indicesOfWindowsForSavingToScene;
 }
 
 /**
@@ -97,6 +109,26 @@ SceneAttributes::isTabIndexSavedToScene(const int32_t tabIndex) const
     if (std::find(m_indicesOfTabsForSavingToScene.begin(),
                   m_indicesOfTabsForSavingToScene.end(),
                   tabIndex) != m_indicesOfTabsForSavingToScene.end()) {
+        return true;
+    }
+    
+    return false;
+}
+
+/**
+ * Is the given window index for saving to the scene?
+ *
+ * @param windowIndex
+ *    The window index.
+ * @return
+ *    True if saved to scene, else false.
+ */
+bool
+SceneAttributes::isWindowIndexSavedToScene(const int32_t windowIndex) const
+{
+    if (std::find(m_indicesOfWindowsForSavingToScene.begin(),
+                  m_indicesOfWindowsForSavingToScene.end(),
+                  windowIndex) != m_indicesOfWindowsForSavingToScene.end()) {
         return true;
     }
     
@@ -281,5 +313,31 @@ SceneAttributes::clearErrorMessage()
     m_errorMessage.clear();
 }
 
+/**
+ * @return Use the foreground and background colors from the scene?
+ *
+ * Note that scenes prior May 2016 may not contain foreground and
+ * background colors.
+ */
+bool
+SceneAttributes::isUseSceneForegroundAndBackgroundColors() const
+{
+    return m_useSceneForgroundAndBackgroundColorsFlag;
+}
+
+/**
+ * Set use the foreground and background colors from the scene.
+ *
+ * Note that scenes prior May 2016 may not contain foreground and
+ * background colors.
+ *
+ * @param status
+ *     New status for using colors from scene.
+ */
+void
+SceneAttributes::setUseSceneForegroundAndBackgroundColors(const bool status)
+{
+    m_useSceneForgroundAndBackgroundColorsFlag = status;
+}
 
 

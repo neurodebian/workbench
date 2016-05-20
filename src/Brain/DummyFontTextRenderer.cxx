@@ -66,84 +66,134 @@ DummyFontTextRenderer::isValid() const
 }
 
 /**
- * Draw text at the given window coordinates.
+ * Draw annnotation text at the given viewport coordinates using
+ * the the annotations attributes for the style of text.
  *
- * @param viewport
- *   The current viewport.
- * @param windowX
- *   X-coordinate in the window of first text character
- *   using the 'alignment'
- * @param windowY
- *   Y-coordinate in the window at which bottom of text is placed.
- * @param text
- *   Text that is to be drawn.
- * @param alignment
- *   Alignment of text
- * @param textStyle
- *   Style of the text.
- * @param fontHeight
- *   Height of the text.
+ * Depth testing is DISABLED when drawing text with this method.
+ *
+ * @param viewportX
+ *     Viewport X-coordinate.
+ * @param viewportY
+ *     Viewport Y-coordinate.
+ * @param annotationText
+ *     Annotation text and attributes.
  */
 void
-DummyFontTextRenderer::drawTextAtWindowCoords(const int* /*viewport[4]*/,
-                                             const int /*windowX*/,
-                                             const int /*windowY*/,
-                                             const QString& /*text*/,
-                                             const TextAlignmentX /*alignmentX*/,
-                                             const TextAlignmentY /*alignmentY*/,
-                                             const TextStyle /*textStyle*/,
-                                             const int /*fontHeight*/)
+DummyFontTextRenderer::drawTextAtViewportCoords(const double /*viewportX*/,
+                                                const double /*viewportY*/,
+                                                const AnnotationText& /*annotationText*/)
 {
-}
-
-/**
- * Get the bounds of the text (in pixels) using the given text
- * attributes.
- *
- * @param widthOut
- *   Output containing width of text characters.
- * @param heightOut
- *   Output containing height of text characters.
- * @param text
- *   Text that is to be drawn.
- * @param textStyle
- *   Style of the text.
- * @param fontHeight
- *   Height of the text.
- */
-void
-DummyFontTextRenderer::getTextBoundsInPixels(int32_t& /*widthOut*/,
-                                            int32_t& /*heightOut*/,
-                                            const QString& /*text*/,
-                                            const TextStyle /*textStyle*/,
-                                            const int /*fontHeight*/)
-{
+    
 }
 
 
 /**
- * Draw text at the given model coordinates.
+ * Draw annnotation text at the given viewport coordinates using
+ * the the annotations attributes for the style of text.
+ *
+ * Depth testing is ENABLED when drawing text with this method.
+ *
+ * @param viewportX
+ *     Viewport X-coordinate.
+ * @param viewportY
+ *     Viewport Y-coordinate.
+ * @param viewportZ
+ *     Viewport Z-coordinate.
+ * @param annotationText
+ *     Annotation text and attributes.
+ */
+void
+DummyFontTextRenderer::drawTextAtViewportCoords(const double /*viewportX*/,
+                                      const double /*viewportY*/,
+                                      const double /*viewportZ*/,
+                                      const AnnotationText& /*annotationText*/)
+{
+    
+}
+
+/**
+ * Draw annnotation text at the given model coordinates using
+ * the the annotations attributes for the style of text.
+ *
+ * Depth testing is ENABLED when drawing text with this method.
  *
  * @param modelX
- *   X-coordinate in model space of first text character
+ *     Model X-coordinate.
  * @param modelY
- *   Y-coordinate in model space.
+ *     Model Y-coordinate.
  * @param modelZ
- *   Z-coordinate in model space.
- * @param text
- *   Text that is to be drawn.
- * @param textStyle
- *   Style of the text.
- * @param fontHeight
- *   Height of the text.
+ *     Model Z-coordinate.
+ * @param annotationText
+ *     Annotation text and attributes.
  */
 void
 DummyFontTextRenderer::drawTextAtModelCoords(const double /*modelX*/,
-                                            const double /*modelY*/,
-                                            const double /*modelZ*/,
-                                            const QString& /*text*/,
-                                            const TextStyle /*textStyle*/,
-                                            const int /*fontHeight*/)
+                                   const double /*modelY*/,
+                                   const double /*modelZ*/,
+                                   const AnnotationText& /*annotationText*/)
+{
+    
+}
+
+/**
+ * Get the bounds of text (in pixels) using the given text
+ * attributes.
+ *
+ * See http://ftgl.sourceforge.net/docs/html/metrics.png
+ *
+ * @param annotationText
+ *   Text that is to be drawn.
+ * @param viewportX
+ *    Viewport X-coordinate.
+ * @param viewportY
+ *    Viewport Y-coordinate.
+ * @param viewportZ
+ *    Viewport Z-coordinate.
+ * @param viewportHeight
+ *    Height of the viewport needed for percentage height text.
+ * @param bottomLeftOut
+ *    The bottom left corner of the text bounds.
+ * @param bottomRightOut
+ *    The bottom right corner of the text bounds.
+ * @param topRightOut
+ *    The top right corner of the text bounds.
+ * @param topLeftOut
+ *    The top left corner of the text bounds.
+ */
+void
+DummyFontTextRenderer::getBoundsForTextAtViewportCoords(const AnnotationText& /*annotationText*/,
+                                                        const double /*viewportX*/,
+                                                        const double /*viewportY*/,
+                                                        const double /*viewportZ*/,
+                                                        const double /*viewportHeight*/,
+                                                        double* /*bottomLeftOut[3]*/,
+                                                        double* /*bottomRightOut[3]*/,
+                                                        double* /*topRightOut[3]*/,
+                                                        double* /*topLeftOut[3]*/)
+{
+    
+}
+
+/**
+ * Get the estimated width and height of text (in pixels) using the given text
+ * attributes.
+ *
+ * See http://ftgl.sourceforge.net/docs/html/metrics.png
+ *
+ * @param annotationText
+ *   Text for width and height estimation.
+ * @param viewportHeight
+ *    Height of the viewport needed for percentage height text.
+ * @param widthOut
+ *    Estimated width of text.
+ * @param heightOut
+ *    Estimated height of text.
+ */
+void
+DummyFontTextRenderer::getTextWidthHeightInPixels(const AnnotationText& /*annotationText*/,
+                                                  const double /*viewportHeight*/,
+                                                  double& /*widthOut*/,
+                                                  double& /*heightOut*/)
 {
 }
 

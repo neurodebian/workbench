@@ -65,17 +65,17 @@ namespace caret {
     private:
         class Margins {
         public:
-            Margins(const int32_t defaultSize) {
+            Margins(const double defaultSize) {
                 m_bottom = defaultSize;
                 m_left   = defaultSize;
                 m_right  = defaultSize;
                 m_top    = defaultSize;
             }
             
-            int32_t m_bottom;
-            int32_t m_left;
-            int32_t m_right;
-            int32_t m_top;
+            double m_bottom;
+            double m_left;
+            double m_right;
+            double m_top;
         };
         
         BrainOpenGLChartDrawingFixedPipeline(const BrainOpenGLChartDrawingFixedPipeline&);
@@ -119,9 +119,10 @@ namespace caret {
                                     const float rgb[3]);
         
         void estimateCartesianChartAxisLegendsWidthHeight(BrainOpenGLTextRenderInterface* textRenderer,
-                                              ChartAxis* axis,
-                                              int32_t& widthOut,
-                                              int32_t& heightOut);
+                                                          const float viewportHeight,
+                                                          ChartAxis* axis,
+                                                          double& widthOut,
+                                                          double& heightOut);
         
         void restoreStateOfOpenGL();
         

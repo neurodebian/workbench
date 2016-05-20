@@ -195,7 +195,32 @@ CaretUndoStack::index() const
 }
 
 /**
- * Clears the command stack by deleting all commands on it, and returns 
+ * Delete the command at the given index.  The index of the current
+ * command may change (if it is greater than the index).  After 
+ * calling this method, the command that was at the index has
+ * been deleted, so NEVER use it after calling this method.
+ *
+ * @param index
+ *     Index of command that is removed.
+ */
+void
+CaretUndoStack::deleteCommandAtIndex(const int32_t index)
+{
+    if ((index >= 0)
+        || (index < static_cast<int32_t>(m_undoStack.size()))) {
+        CaretUndoCommand* undoCommand = m_undoStack.at(index);
+        m_undoStack.erase(m_undoStack.begin() + index);
+        delete undoCommand;
+    }
+    else {
+        CaretLogWarning("CaretUndoStack::command() called with invalid index="
+                        + AString::number(index));
+    }
+}
+
+
+/**
+ * Clears the command stack by deleting all commands on it, and returns
  * the stack to the clean state.
  * 
  * Commands are not undone or redone; the state of the edited object 
@@ -246,6 +271,38 @@ CaretUndoStack::command(const int32_t index) const
 }
 
 /**
+ * Execute (redo()) the command and then push the command.
+ *
+ * @seealso push()
+ *
+ * @param newCommand
+ *    Command that is executed and then pushed onto the stack.
+ * @param windowIndex
+ *    Index of window (may be invalid => negative)
+ * @param errorMessageOut
+ *    Output containing error message.
+ * @return
+ *    True if the redo executed successfully, else false.
+ */
+bool
+CaretUndoStack::pushAndRedo(CaretUndoCommand* newCommand,
+                            const int32_t windowIndex,
+                            AString& errorMessageOut)
+{
+    CaretAssert(newCommand);
+    errorMessageOut.clear();
+ 
+    newCommand->setWindowIndex(windowIndex);
+    const bool validFlag = newCommand->redo(errorMessageOut);
+    newCommand->setWindowIndex(-1);
+    
+    push(newCommand);
+    
+    return validFlag;
+}
+
+
+/**
  * Pushes the given command onto the stack.  Unlike QUndoStack the
  * command's redo() method IS NOT called.
  *
@@ -253,15 +310,21 @@ CaretUndoStack::command(const int32_t index) const
  * all commands above it are deleted. Hence cmd always ends up being the 
  * top-most on the stack.
  *
+ * If the command's merge status is set, an attempt will be made to
+ * merge the given command with the command at the top of the stack.
+ * If successful there is no need to push the new command onto the stack
+ * since it has been merged and the command will be deleted.  If merge
+ * is NOT successful, the command will be pushed onto the stack.
+ *
  * Once a command is pushed, the stack takes ownership of it. There are 
  * no getters to return the command, since modifying it after it has been 
  * executed will almost always lead to corruption of the document's state.
  *
- * @param cmd
+ * @param newCommand
  *    Command pushed onto the stack.
  */
 void
-CaretUndoStack::push(CaretUndoCommand* cmd)
+CaretUndoStack::push(CaretUndoCommand* newCommand)
 {
     if (index() < count()) {
         /*
@@ -274,7 +337,18 @@ CaretUndoStack::push(CaretUndoCommand* cmd)
         }
     }
     
-    m_undoStack.push_back(cmd);
+    if (newCommand->isMergeEnabled()) {
+        if ( ! m_undoStack.empty()) {
+            CaretUndoCommand* command = m_undoStack.back();
+            CaretAssert(command);
+            if (command->mergeWith(newCommand)) {
+                delete newCommand;
+                return;
+            }
+        }
+    }
+    
+    m_undoStack.push_back(newCommand);
     
     if (m_undoLimit > 0) {
         /*
@@ -291,50 +365,191 @@ CaretUndoStack::push(CaretUndoCommand* cmd)
 }
 
 /**
- * Redoes the current command by calling QUndoCommand::redo(). 
+ * Redoes the current command by calling QUndoCommand::redo().
+ * Increments the current command index.
+ *
+ * If the stack is empty, or if the top command on the stack has already
+ * been redone, this function does nothing.
+ *
+ * @param windowIndex
+ *     Index of window in which redo was requested.
+ * @param errorMessageOut
+ *    Output containing error message.
+ * @return
+ *    True if the redo executed successfully, else false.
+ */
+bool
+CaretUndoStack::redoInWindow(const int32_t windowIndex,
+                             AString& errorMessageOut)
+{
+//    redo();
+    errorMessageOut.clear();
+    
+    if (m_undoStack.empty()) {
+        errorMessageOut = "No command to redo.";
+        return false;
+    }
+    
+    bool validFlag = true;
+    
+    if ((m_undoStackIndex >= 0)
+        && (m_undoStackIndex < count())) {
+        CaretUndoCommand* command = m_undoStack.at(m_undoStackIndex);
+        CaretAssert(command);
+        command->setWindowIndex(windowIndex);
+        validFlag = redoCommand(command,
+                                errorMessageOut);
+        command->setWindowIndex(-1);
+        ++m_undoStackIndex;
+    }
+    
+    return validFlag;
+}
+
+
+/**
+ * Redoes the current command by calling QUndoCommand::redo().
  * Increments the current command index. 
  *
  * If the stack is empty, or if the top command on the stack has already
  * been redone, this function does nothing.
+ *
+ * @param errorMessageOut
+ *    Output containing error message.
+ * @return
+ *    True if the redo executed successfully, else false.
  */
-void
-CaretUndoStack::redo()
+bool
+CaretUndoStack::redo(AString& errorMessageOut)
 {
-    if (m_undoStack.empty()) {
-        return;
-    }
+    return redoInWindow(-1,
+                        errorMessageOut);
     
-    if ((m_undoStackIndex >= 0)
-        && (m_undoStackIndex < count())) {
-        redoCommand(m_undoStack.at(m_undoStackIndex));
-        ++m_undoStackIndex;
-    }
+//    if (m_undoStack.empty()) {
+//        return;
+//    }
+//    
+//    if ((m_undoStackIndex >= 0)
+//        && (m_undoStackIndex < count())) {
+//        redoCommand(m_undoStack.at(m_undoStackIndex));
+//        ++m_undoStackIndex;
+//    }
 }
 
+/**
+ * @return Returns the description of the command which will be
+ * redone in the next call to redo().
+ */
+AString
+CaretUndoStack::redoText()
+{
+    AString text;
+    
+    if ( ! m_undoStack.empty()) {
+        if ((m_undoStackIndex >= 0)
+            && (m_undoStackIndex < count())) {
+            text = m_undoStack.at(m_undoStackIndex)->getDescription();
+        }
+    }
+    
+    return text;
+}
 
 /**
- * Undoes the command below the current command by calling QUndoCommand::undo(). 
+ * Undoes the command below the current command by calling QUndoCommand::undo().
  * Decrements the current command index.
  *
- * If the stack is empty, or if the bottom command on the stack has already 
- * been undone, this function does nothing. 
+ * If the stack is empty, or if the bottom command on the stack has already
+ * been undone, this function does nothing.
+ *
+ * @param windowIndex
+ *     Index of window in which undo was requested.
+ * @param errorMessageOut
+ *    Output containing error message.
+ * @return
+ *    True if the redo executed successfully, else false.
  */
-void
-CaretUndoStack::undo()
+bool
+CaretUndoStack::undoInWindow(const int32_t windowIndex,
+                             AString& errorMessageOut)
 {
+//    undo();
+    errorMessageOut.clear();
+    
     if (m_undoStack.empty()) {
-        return;
+        errorMessageOut = "No command to undo.";
+        return false;
     }
+    
+    bool validFlag = true;
     
     if ((m_undoStackIndex > 0)
         && (m_undoStackIndex <= count())) {
         --m_undoStackIndex;
-        undoCommand(m_undoStack.at(m_undoStackIndex));
+        CaretUndoCommand* command = m_undoStack.at(m_undoStackIndex);
+        CaretAssert(command);
+        command->setWindowIndex(windowIndex);
+        validFlag = undoCommand(command,
+                                errorMessageOut);
+        command->setWindowIndex(-1);
     }
+    
+    return validFlag;
 }
 
 /**
- * When the number of commands on a stack exceedes the stack's undo limit, 
+ * Undoes the command below the current command by calling QUndoCommand::undo().
+ * Decrements the current command index.
+ *
+ * If the stack is empty, or if the bottom command on the stack has already 
+ * been undone, this function does nothing. 
+ *
+ * @param errorMessageOut
+ *     Output containing error message.
+ * @return
+ *     True if the command executed successfully, else false.void
+ */
+bool
+CaretUndoStack::undo(AString& errorMessageOut)
+{
+    return undoInWindow(-1,
+                        errorMessageOut);
+    
+//    if (m_undoStack.empty()) {
+//        return;
+//    }
+//    
+//    if ((m_undoStackIndex > 0)
+//        && (m_undoStackIndex <= count())) {
+//        --m_undoStackIndex;
+//        undoCommand(m_undoStack.at(m_undoStackIndex));
+//    }
+}
+
+
+/**
+ * @return Returns the description of the command which will be
+ * undone in the next call to undo().
+ */
+AString
+CaretUndoStack::undoText()
+{
+    AString text;
+    
+    if ( ! m_undoStack.empty()) {
+        if ((m_undoStackIndex > 0)
+            && (m_undoStackIndex <= count())) {
+            const int32_t undoIndex = m_undoStackIndex - 1;
+            text = m_undoStack.at(undoIndex)->getDescription();
+        }
+    }
+    
+    return text;
+}
+
+
+/**
+ * When the number of commands on a stack exceedes the stack's undo limit,
  * commands are deleted from the bottom of the stack.  The default
  * value is 0, which means that there is no limit.
  * 
@@ -351,8 +566,10 @@ CaretUndoStack::setUndoLimit(const int32_t undoLimit)
         if (undoLimit >= 0) {
             m_undoLimit = undoLimit;
         }
-        CaretLogWarning("CaretUndoStack::setUndoLimit() called with invalid value="
-                        + AString::number(undoLimit));
+        else {
+            CaretLogWarning("CaretUndoStack::setUndoLimit() called with invalid value="
+                            + AString::number(undoLimit));
+        }
     }
     else {
         CaretLogWarning("CaretUndoStack::setUndoLimit() called while undo stack contains elements."
@@ -367,13 +584,18 @@ CaretUndoStack::setUndoLimit(const int32_t undoLimit)
  *
  * @param cmd
  *     Command that performs a 'redo'.
- */
-void
-CaretUndoStack::redoCommand(CaretUndoCommand* cmd)
+ * @param errorMessageOut
+ *     Output containing error message.
+ * @return
+ *     True if the command executed successfully, else false. */
+bool
+CaretUndoStack::redoCommand(CaretUndoCommand* cmd,
+                            AString& errorMessageOut)
 {
     CaretAssert(cmd);
     
-    cmd->redo();
+    const bool validFlag = cmd->redo(errorMessageOut);
+    return validFlag;
 }
 
 /**
@@ -383,25 +605,37 @@ CaretUndoStack::redoCommand(CaretUndoCommand* cmd)
  *
  * @param cmd
  *     Command that performs a 'undo'.
- */
-void
-CaretUndoStack::undoCommand(CaretUndoCommand* cmd)
+ * @param errorMessageOut
+ *     Output containing error message.
+ * @return
+ *     True if the command executed successfully, else false. */
+bool
+CaretUndoStack::undoCommand(CaretUndoCommand* cmd,
+                            AString& errorMessageOut)
 {
     CaretAssert(cmd);
     
-    cmd->undo();
+    return cmd->undo(errorMessageOut);
 }
 
 /**
  * Undo ALL changes.
- */
-void
-CaretUndoStack::undoAll()
+ *
+ * @param errorMessageOut
+ *     Output containing error message.
+ * @return
+ *     True if the command executed successfully, else false. */
+bool
+CaretUndoStack::undoAll(AString& errorMessageOut)
 {
+    bool validFlag = true;
     while (canUndo()) {
-        undo();
+        AString msg;
+        if ( ! undo(msg)) {
+            validFlag = false;
+            errorMessageOut.appendWithNewLine(msg);
+        }
     }
+    
+    return validFlag;
 }
-
-
-

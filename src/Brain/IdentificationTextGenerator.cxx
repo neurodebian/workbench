@@ -292,6 +292,8 @@ IdentificationTextGenerator::generateVolumeIdentificationText(IdentificationStri
                          */
                         bool limitMapIndicesFlag = false;
                         switch (ciftiFile->getDataFileType()) {
+                            case DataFileTypeEnum::ANNOTATION:
+                                break;
                             case DataFileTypeEnum::BORDER:
                                 break;
                             case DataFileTypeEnum::CONNECTIVITY_DENSE:
@@ -466,6 +468,9 @@ IdentificationTextGenerator::generateSurfaceIdentificationText(IdentificationStr
              */
             bool limitMapIndicesFlag = false;
             switch (cmdf->getDataFileType()) {
+                case DataFileTypeEnum::ANNOTATION:
+                    CaretAssertToDoFatal();
+                    break;
                 case DataFileTypeEnum::BORDER:
                     break;
                 case DataFileTypeEnum::CONNECTIVITY_DENSE:
