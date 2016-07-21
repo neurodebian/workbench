@@ -47,6 +47,7 @@ CaretException.h
 CaretFunctionName.h
 CaretHeap.h
 CaretHttpManager.h
+CaretJsonObject.h
 CaretLogger.h
 CaretMathExpression.h
 CaretMutex.h
@@ -148,6 +149,7 @@ CaretColorEnum.cxx
 CaretCommandLine.cxx
 CaretException.cxx
 CaretHttpManager.cxx
+CaretJsonObject.cxx
 CaretLogger.cxx
 CaretMathExpression.cxx
 CaretObject.cxx

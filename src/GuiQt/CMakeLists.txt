@@ -9,7 +9,7 @@ PROJECT (GuiQt)
 #
 SET(QT_USE_QTNETWORK TRUE)
 SET(QT_USE_QTOPENGL TRUE)
-SET(QT_USE_QTWEBKIT TRUE)
+#SET(QT_USE_QTWEBKIT TRUE)
 
 #
 # QT include files
@@ -49,7 +49,7 @@ AnnotationTextEditorDialog.h
 AnnotationTextEditorWidget.h
 AnnotationTextOrientationWidget.h
 AnnotationWidthHeightWidget.h
-BalsaDatabaseDialog.h
+BalsaDatabaseUploadSceneFileDialog.h
 BorderEditingSelectionDialog.h
 BorderFileSplitDialog.h
 BorderOptimizeDialog.h
@@ -132,6 +132,7 @@ PlotMagnifier.h
 PlotPanner.h
 PreferencesDialog.h
 ProgressReportingDialog.h
+ProgressReportingFromEvent.h
 ProgressReportingWithSlots.h
 RegionOfInterestCreateFromBorderDialog.h
 SceneCreateReplaceDialog.h
@@ -175,7 +176,7 @@ WuQTabWidget.h
 WuQTimedMessageDisplay.h
 WuQTreeWidget.h
 WuQTrueFalseComboBox.h
-WuQWebView.h
+#WuQWebView.h
 WuQWidget.h
 WuQWidgetObjectGroup.h
 )
@@ -213,7 +214,8 @@ AnnotationTextEditorWidget.h
 AnnotationTextOrientationWidget.h
 AnnotationWidgetParentEnum.h
 AnnotationWidthHeightWidget.h
-BalsaDatabaseDialog.h
+BalsaDatabaseManager.h
+BalsaDatabaseUploadSceneFileDialog.h
 BorderEditingSelectionDialog.h
 BorderFileSplitDialog.h
 BorderOptimizeDialog.h
@@ -265,7 +267,7 @@ DisplayGroupAndTabItemViewController.h
 DisplayGroupEnumComboBox.h
 EnumComboBoxTemplate.h
 EventAnnotationCreateNewType.h
-EventBrowserTabGetAllViewed.h
+EventAnnotationGetDrawnInWindow.h
 EventBrowserWindowContentGet.h
 EventBrowserWindowCreateTabs.h
 EventBrowserWindowGraphicsRedrawn.h
@@ -325,6 +327,7 @@ PlotMagnifier.h
 PlotPanner.h
 PreferencesDialog.h
 ProgressReportingDialog.h
+ProgressReportingFromEvent.h
 ProgressReportingWithSlots.h
 QGLWidgetTextRenderer.h
 RegionOfInterestCreateFromBorderDialog.h
@@ -378,7 +381,7 @@ WuQTabWidget.h
 WuQTimedMessageDisplay.h
 WuQTreeWidget.h
 WuQTrueFalseComboBox.h
-WuQWebView.h
+#WuQWebView.h
 WuQWidget.h
 WuQWidgetObjectGroup.h
 WuQtUtilities.h
@@ -408,7 +411,8 @@ AnnotationTextEditorWidget.cxx
 AnnotationTextOrientationWidget.cxx
 AnnotationWidgetParentEnum.cxx
 AnnotationWidthHeightWidget.cxx
-BalsaDatabaseDialog.cxx
+BalsaDatabaseManager.cxx
+BalsaDatabaseUploadSceneFileDialog.cxx
 BorderEditingSelectionDialog.cxx
 BorderFileSplitDialog.cxx
 BorderOptimizeDialog.cxx
@@ -459,7 +463,7 @@ DisplayGroupAndTabItemTreeWidgetItem.cxx
 DisplayGroupAndTabItemViewController.cxx
 DisplayGroupEnumComboBox.cxx
 EventAnnotationCreateNewType.cxx
-EventBrowserTabGetAllViewed.cxx
+EventAnnotationGetDrawnInWindow.cxx
 EventBrowserWindowContentGet.cxx
 EventBrowserWindowCreateTabs.cxx
 EventBrowserWindowGraphicsRedrawn.cxx
@@ -519,6 +523,7 @@ PlotMagnifier.cxx
 PlotPanner.cxx
 PreferencesDialog.cxx
 ProgressReportingDialog.cxx
+ProgressReportingFromEvent.cxx
 ProgressReportingWithSlots.cxx
 QGLWidgetTextRenderer.cxx
 RegionOfInterestCreateFromBorderDialog.cxx
@@ -572,7 +577,7 @@ WuQTabWidget.cxx
 WuQTimedMessageDisplay.cxx
 WuQTreeWidget.cxx
 WuQTrueFalseComboBox.cxx
-WuQWebView.cxx
+#WuQWebView.cxx
 WuQWidget.cxx
 WuQWidgetObjectGroup.cxx
 WuQtUtilities.cxx

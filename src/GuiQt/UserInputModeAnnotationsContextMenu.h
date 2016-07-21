@@ -65,11 +65,17 @@ namespace caret {
         
         void pasteSpecialAnnotationFromAnnotationClipboard();
         
+        void selectAllAnnotations();
+        
         void setAnnotationText();
         
         void turnOffDisplayInOtherTabs();
         
         void turnOnDisplayInAllTabs();
+        
+        void turnOnDisplayInAllGroups();
+        
+        void turnOnDisplayInGroup(QAction*);
         
         void applyGroupingGroup();
         
@@ -83,6 +89,8 @@ namespace caret {
         UserInputModeAnnotationsContextMenu& operator=(const UserInputModeAnnotationsContextMenu&);
         
         void applyGrouping(const AnnotationGroupingModeEnum::Enum grouping);
+        
+        QMenu* createTurnOnInDisplayGroupMenu();
         
         UserInputModeAnnotations* m_userInputModeAnnotations;
         

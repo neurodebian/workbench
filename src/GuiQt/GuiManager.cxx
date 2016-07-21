@@ -55,6 +55,7 @@
 #include "DataFileException.h"
 #include "ElapsedTimer.h"
 #include "EventAlertUser.h"
+#include "EventAnnotationGetDrawnInWindow.h"
 #include "EventBrowserTabGetAll.h"
 #include "EventBrowserWindowNew.h"
 #include "EventGraphicsUpdateAllWindows.h"
@@ -108,6 +109,7 @@
 #include "TileTabsConfigurationDialog.h"
 #include "VolumeMappableInterface.h"
 #include "WuQMessageBox.h"
+//#include "WuQWebView.h"
 #include "WuQtUtilities.h"
 
 #include "CaretAssert.h"
@@ -277,6 +279,7 @@ GuiManager::initializeGuiManager()
     m_helpViewerDialogDisplayAction->blockSignals(false);
     
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_ALERT_USER);
+    EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_ANNOTATION_GET_DRAWN_IN_WINDOW);
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_BROWSER_WINDOW_NEW);
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_HELP_VIEWER_DISPLAY);
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_MAC_DOCK_MENU_UPDATE);
@@ -297,7 +300,8 @@ GuiManager::~GuiManager()
     delete this->cursorManager;
     
     if (this->connectomeDatabaseWebView != NULL) {
-        delete this->connectomeDatabaseWebView;
+        CaretAssertMessage(0, "Need to uncomment out line below if webkit is renabled");
+        //delete this->connectomeDatabaseWebView;
     }
     
     FociPropertiesEditorDialog::deleteStaticMembers();
@@ -641,6 +645,7 @@ GuiManager::testForModifiedFiles(const TestModifiedMode testModifiedMode,
      */
     std::vector<DataFileTypeEnum::Enum> dataFileTypesToExclude;
     dataFileTypesToExclude.push_back(DataFileTypeEnum::CONNECTIVITY_DENSE);
+    dataFileTypesToExclude.push_back(DataFileTypeEnum::CONNECTIVITY_DENSE_DYNAMIC);
     dataFileTypesToExclude.push_back(DataFileTypeEnum::CONNECTIVITY_FIBER_ORIENTATIONS_TEMPORARY);
     dataFileTypesToExclude.push_back(DataFileTypeEnum::CONNECTIVITY_FIBER_TRAJECTORY_TEMPORARY);
     
@@ -1141,6 +1146,42 @@ GuiManager::receiveEvent(Event* event)
         CaretAssert(bbw);
         
         WuQMessageBox::errorOk(bbw, message);
+    }
+    else if (event->getEventType() == EventTypeEnum::EVENT_ANNOTATION_GET_DRAWN_IN_WINDOW) {
+        EventAnnotationGetDrawnInWindow* annGetEvent = dynamic_cast<EventAnnotationGetDrawnInWindow*>(event);
+        CaretAssert(annGetEvent);
+        
+        const int32_t windowIndex = annGetEvent->getWindowIndex();
+        
+        Brain* brain = getBrain();
+        std::vector<AnnotationFile*> allAnnotationFiles;
+        brain->getAllAnnotationFilesIncludingSceneAnnotationFile(allAnnotationFiles);
+        
+        /*
+         * Clear "drawn in window status" for all annotations
+         */
+        for (std::vector<AnnotationFile*>::iterator fileIter = allAnnotationFiles.begin();
+             fileIter != allAnnotationFiles.end();
+             fileIter++) {
+            (*fileIter)->clearAllAnnotationsDrawnInWindowStatus();
+        }
+        
+        /*
+         * Draw the given window
+         */
+        EventManager::get()->sendEvent(EventGraphicsUpdateOneWindow(windowIndex).getPointer());
+        
+        /*
+         * Find annotations that were drawn in the given window.
+         */
+        for (std::vector<AnnotationFile*>::iterator fileIter = allAnnotationFiles.begin();
+             fileIter != allAnnotationFiles.end();
+             fileIter++) {
+            std::vector<Annotation*> annotations;
+            (*fileIter)->getAllAnnotationWithDrawnInWindowStatusSet(windowIndex,
+                                                                    annotations);
+            annGetEvent->addAnnotations(annotations);
+        }
     }
     else if (event->getEventType() == EventTypeEnum::EVENT_BROWSER_WINDOW_NEW) {
         EventBrowserWindowNew* eventNewBrowser =
@@ -2118,12 +2159,14 @@ GuiManager::processShowAllenDataBaseWebView(BrainBrowserWindow* browserWindow)
 void 
 GuiManager::processShowConnectomeDataBaseWebView(BrainBrowserWindow* /*browserWindow*/)
 {
-    if (this->connectomeDatabaseWebView == NULL) {
-        this->connectomeDatabaseWebView = new WuQWebView();
-        this->connectomeDatabaseWebView->load(QUrl("https://db.humanconnectome.org/"));
-        this->addNonModalDialog(this->connectomeDatabaseWebView);
-    }
-    this->connectomeDatabaseWebView->show();
+    CaretLogSevere("Webkit is disabled !!!");
+// no webkit
+//    if (this->connectomeDatabaseWebView == NULL) {
+//        this->connectomeDatabaseWebView = new WuQWebView();
+//        this->connectomeDatabaseWebView->load(QUrl("https://db.humanconnectome.org/"));
+//        this->addNonModalDialog(this->connectomeDatabaseWebView);
+//    }
+//    this->connectomeDatabaseWebView->show();
 }
 
 /**
@@ -2409,6 +2452,10 @@ GuiManager::restoreFromScene(const SceneAttributes* sceneAttributes,
                      + QString::number(timer.getElapsedTimeSeconds(), 'f', 3)
                      + " seconds");
         timer.reset();
+    }
+    
+    if (imageCaptureDialog != NULL) {
+        imageCaptureDialog->updateDialog();
     }
     
     progressEvent.setProgressMessage("Invalidating coloring and updating user interface");

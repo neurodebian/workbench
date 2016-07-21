@@ -84,12 +84,8 @@ namespace caret {
 
         AString getRowLoadedText() const;
 
-		//int64_t getRowLoadedIndex() const;
-
         virtual void getMapData(const int32_t mapIndex, std::vector<float>& dataOut) const;
 
-//        bool loadMapData(const int32_t rowIndex);
-        
         const ConnectivityDataLoaded* getConnectivityDataLoaded() const;
         
         bool getParcelNodesElementForSelectedParcel(std::set<int64_t> &parcelNodesOut,
@@ -123,20 +119,42 @@ namespace caret {
         
         void setChartMatrixLoadingDimension(const ChartMatrixLoadingDimensionEnum::Enum matrixLoadingType);
         
+        virtual void getProcessedDataForColumn(float* dataOut, const int64_t& index) const;
+        
+        virtual void getProcessedDataForRow(float* dataOut, const int64_t& index) const;
+        
+        virtual void getDataForColumn(float* dataOut, const int64_t& index) const;
+        
+        virtual void getDataForRow(float* dataOut, const int64_t& index) const;
+        
+        virtual void processRowAverageData(std::vector<float>& rowAverageData);
+        
     private:
         void setLoadedRowDataToAllZeros();
         
         void clearPrivate();
-        
-//        int64_t getRowIndexForNodeWhenLoading(const StructureEnum::Enum structure,
-//                                              const int64_t surfaceNumberOfNodes,
-//                                              const int64_t nodeIndex);
         
         void getRowColumnIndexForNodeWhenLoading(const StructureEnum::Enum structure,
                                                  const int64_t surfaceNumberOfNodes,
                                                  const int64_t nodeIndex,
                                                  int64_t& rowIndexOut,
                                                  int64_t& columnIndexOut);
+        
+        void getRowColumnIndicesForNodesWhenLoading(const StructureEnum::Enum structure,
+                                                    const int64_t surfaceNumberOfNodes,
+                                                    const std::vector<int32_t>& nodeIndices,
+                                                    std::vector<int64_t>& rowIndicesOut,
+                                                    std::vector<int64_t>& columnIndicesOut);
+        
+        void getRowColumnAverageForIndices(const std::vector<int64_t>& rowIndices,
+                                           const std::vector<int64_t>& columnIndices,
+                                           std::vector<float>& rowAverageOut,
+                                           std::vector<float>& columnAverageOut);
+        
+        void getRowColumnIndicesForVoxelsWhenLoading(const int64_t volumeDimensionIJK[3],
+                                                     const std::vector<VoxelIJK>& voxelIndices,
+                                                     std::vector<int64_t>& rowIndicesOut,
+                                                     std::vector<int64_t>& columnIndicesOut);
         
         void getRowColumnIndexForVoxelAtCoordinateWhenLoading(const float xyz[3],
                                                                  int64_t& rowIndexOut,
@@ -145,10 +163,6 @@ namespace caret {
         void getRowColumnIndexForVoxelIndexWhenLoading(const int64_t ijk[3],
                                                           int64_t& rowIndexOut,
                                                           int64_t& columnIndexOut);
-        
-//        int64_t getRowIndexForVoxelAtCoordinateWhenLoading(const float xyz[3]);
-//        
-//        int64_t getRowIndexForVoxelIndexWhenLoading(const int64_t ijk[3]);
         
         int32_t getCifitDirectionForLoadingRowOrColumn();
         

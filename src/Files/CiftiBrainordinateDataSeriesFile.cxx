@@ -25,6 +25,10 @@
 
 #include "CaretLogger.h"
 #include "ChartDataCartesian.h"
+#include "CiftiConnectivityMatrixDenseDynamicFile.h"
+#include "CiftiFile.h"
+#include "DataFileException.h"
+#include "ElapsedTimer.h"
 #include "SceneClass.h"
 
 using namespace caret;
@@ -46,6 +50,8 @@ CiftiBrainordinateDataSeriesFile::CiftiBrainordinateDataSeriesFile()
     for (int32_t i = 0; i < BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_TABS; i++) {
         m_chartingEnabledForTab[i] = false;
     }
+    
+    m_lazyInitializedDenseDynamicFile = NULL;
 }
 
 /**
@@ -53,8 +59,130 @@ CiftiBrainordinateDataSeriesFile::CiftiBrainordinateDataSeriesFile()
  */
 CiftiBrainordinateDataSeriesFile::~CiftiBrainordinateDataSeriesFile()
 {
+    if (m_lazyInitializedDenseDynamicFile != NULL) {
+        delete m_lazyInitializedDenseDynamicFile;
+    }
 }
 
+/**
+ * Clear the contents of the file.
+ */
+void
+CiftiBrainordinateDataSeriesFile::clear()
+{
+    CiftiMappableDataFile::clear();
+    if (m_lazyInitializedDenseDynamicFile != NULL) {
+        m_lazyInitializedDenseDynamicFile->clear();
+    }
+}
+
+/**
+ * Initialize the dense dynamic file.
+ */
+void
+CiftiBrainordinateDataSeriesFile::initializeDenseDynamicFile()
+{
+    if (m_lazyInitializedDenseDynamicFile != NULL) {
+        return;
+    }
+    
+    m_lazyInitializedDenseDynamicFile = new CiftiConnectivityMatrixDenseDynamicFile(this);
+
+    try {
+        //ElapsedTimer timer;
+        //timer.start();
+        
+        m_lazyInitializedDenseDynamicFile->readFile(getFileName());
+        m_lazyInitializedDenseDynamicFile->updateAfterReading(getCiftiFile());
+        
+        /*
+         * Palette for dynamic file is in my CIFTI file metadata
+         */
+        GiftiMetaData* fileMetaData = m_ciftiFile->getCiftiXML().getFileMetaData();
+        const AString encodedPaletteColorMappingString = fileMetaData->get(s_paletteColorMappingNameInMetaData);
+        if ( ! encodedPaletteColorMappingString.isEmpty()) {
+            if (m_lazyInitializedDenseDynamicFile-getNumberOfMaps() > 0) {
+                PaletteColorMapping* pcm = m_lazyInitializedDenseDynamicFile->getMapPaletteColorMapping(0);
+                CaretAssert(pcm);
+                pcm->decodeFromStringXML(encodedPaletteColorMappingString);
+            }
+        }
+        
+        m_lazyInitializedDenseDynamicFile->clearModified();
+        
+        //        /*
+        //         * Remove palette color mapping from metadata so not seen by user
+        //         */
+        //        fileMetaData->remove(s_paletteColorMappingNameInMetaData);
+        //        clearModified();
+        
+        /*AString msg = ("Time to setup dense dynamic file "
+         + m_lazyInitializedDenseDynamicFile->getFileNameNoPath()
+         + " was "
+         + AString::number(timer.getElapsedTimeSeconds())
+         + " seconds.");
+         CaretLogInfo(msg);//*/
+    }
+    catch (const DataFileException& dfe) {
+        m_lazyInitializedDenseDynamicFile->clear();
+        
+        CaretLogSevere("ERROR initializing dense dynamic file for "
+                       + getFileName()
+                       + ": "
+                       + dfe.whatString());
+    }
+//    std::cout << "Initializing dense dynamic file" << std::endl;
+}
+
+
+/**
+ * Read the file.
+ *
+ * @param ciftiMapFileName
+ *    Name of the file to read.
+ * @throw
+ *    DataFileException if there is an error reading the file.
+ */
+void
+CiftiBrainordinateDataSeriesFile::readFile(const AString& ciftiMapFileName)
+{
+    CiftiMappableDataFile::readFile(ciftiMapFileName);
+}
+
+/**
+ * Write the file.
+ *
+ * @param ciftiMapFileName
+ *    Name of the file to write.
+ * @throw
+ *    DataFileException if there is an error writing the file.
+ */
+void
+CiftiBrainordinateDataSeriesFile::writeFile(const AString& ciftiMapFileName)
+{
+    /*
+     * Put the child dynamic data-series file's palette in the file's metadata.
+     */
+    if (m_lazyInitializedDenseDynamicFile != NULL) {
+        GiftiMetaData* fileMetaData = m_ciftiFile->getCiftiXML().getFileMetaData();
+        CaretAssert(fileMetaData);
+        if (m_lazyInitializedDenseDynamicFile-getNumberOfMaps() > 0) {
+            fileMetaData->set(s_paletteColorMappingNameInMetaData,
+                              m_lazyInitializedDenseDynamicFile->getMapPaletteColorMapping(0)->encodeInXML());
+        }
+        else {
+            fileMetaData->remove(s_paletteColorMappingNameInMetaData);
+        }
+    }
+    
+    CiftiMappableDataFile::writeFile(ciftiMapFileName);
+
+    clearModified();
+    
+    if (m_lazyInitializedDenseDynamicFile != NULL) {
+        m_lazyInitializedDenseDynamicFile->clearModified();
+    }
+}
 /**
  * @return Is charting enabled for this file?
  */
@@ -117,97 +245,6 @@ CiftiBrainordinateDataSeriesFile::loadLineSeriesChartDataForSurfaceNode(const St
     ChartDataCartesian* chartData = helpLoadChartDataForSurfaceNode(structure,
                                                            nodeIndex);
     return chartData;
-    
-//    ChartDataCartesian* chartData = NULL;
-//    
-//    try {
-//        std::vector<float> data;
-//        if (getSeriesDataForSurfaceNode(structure,
-//                                        nodeIndex,
-//                                        data)) {
-//            const int64_t numData = static_cast<int64_t>(data.size());
-//            
-//            bool timeSeriesFlag = false;
-//            bool dataSeriesFlag = false;
-//            float convertTimeToSeconds = 1.0;
-//            switch (getMapIntervalUnits()) {
-//                case NiftiTimeUnitsEnum::NIFTI_UNITS_HZ:
-//                    break;
-//                case NiftiTimeUnitsEnum::NIFTI_UNITS_MSEC:
-//                    timeSeriesFlag = true;
-//                    convertTimeToSeconds = 1000.0;
-//                    break;
-//                case NiftiTimeUnitsEnum::NIFTI_UNITS_PPM:
-//                    break;
-//                case NiftiTimeUnitsEnum::NIFTI_UNITS_SEC:
-//                    convertTimeToSeconds = 1.0;
-//                    timeSeriesFlag = true;
-//                    break;
-//                case NiftiTimeUnitsEnum::NIFTI_UNITS_UNKNOWN:
-//                    dataSeriesFlag = true;
-//                    break;
-//                case NiftiTimeUnitsEnum::NIFTI_UNITS_USEC:
-//                    convertTimeToSeconds = 1000000.0;
-//                    timeSeriesFlag = true;
-//                    break;
-//            }
-//            
-//            if (dataSeriesFlag) {
-//                chartData = new ChartDataCartesian(ChartDataTypeEnum::CHART_DATA_TYPE_LINE_DATA_SERIES,
-//                                                   ChartAxisUnitsEnum::CHART_AXIS_UNITS_NONE,
-//                                                   ChartAxisUnitsEnum::CHART_AXIS_UNITS_NONE);
-//            }
-//            else if (timeSeriesFlag) {
-//                chartData = new ChartDataCartesian(ChartDataTypeEnum::CHART_DATA_TYPE_LINE_TIME_SERIES,
-//                                                   ChartAxisUnitsEnum::CHART_AXIS_UNITS_TIME_SECONDS,
-//                                                   ChartAxisUnitsEnum::CHART_AXIS_UNITS_NONE);
-//            }
-//            
-//            if (chartData != NULL) {
-//                float timeStart = 0.0;
-//                float timeStep  = 1.0;
-//                if (timeSeriesFlag) {
-//                    getMapIntervalStartAndStep(timeStart,
-//                                               timeStep);
-//                    timeStart *= convertTimeToSeconds;
-//                    timeStep  *= convertTimeToSeconds;
-//                    chartData->setTimeStartInSecondsAxisX(timeStart);
-//                    chartData->setTimeStepInSecondsAxisX(timeStep);
-//                }
-//                
-//                for (int64_t i = 0; i < numData; i++) {
-//                    float xValue = i;
-//                    
-//                    if (timeSeriesFlag) {
-//                        xValue = timeStart + (i * timeStep);
-//                    }
-//                    
-//                    chartData->addPoint(xValue,
-//                                        data[i]);
-//                }
-//                
-//                const AString description = (getFileNameNoPath()
-//                                             + " node "
-//                                             + AString::number(nodeIndex));
-//                chartData->setDescription(description);
-//            }
-//            else {
-//                const AString msg = "New type of units for data series flag, needs updating for charting";
-//                CaretAssertMessage(0, msg);
-//                throw DataFileException(msg);
-//            }
-//        }
-//    }
-//    catch (const DataFileException& dfe) {
-//        if (chartData != NULL) {
-//            delete chartData;
-//            chartData = NULL;
-//        }
-//        
-//        throw dfe;
-//    }
-//    
-//    return chartData;
 }
 
 /**
@@ -282,6 +319,11 @@ CiftiBrainordinateDataSeriesFile::saveFileDataToScene(const SceneAttributes* sce
     sceneClass->addBooleanArray("m_chartingEnabledForTab",
                                 m_chartingEnabledForTab,
                                 BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_TABS);
+    
+    if (m_lazyInitializedDenseDynamicFile != NULL) {
+        sceneClass->addClass(m_lazyInitializedDenseDynamicFile->saveToScene(sceneAttributes,
+                                                                   "m_lazyInitializedDenseDynamicFile"));
+    }
 }
 
 /**
@@ -321,6 +363,67 @@ CiftiBrainordinateDataSeriesFile::restoreFileDataFromScene(const SceneAttributes
             m_chartingEnabledForTab[i] = chartingEnabled;
         }
     }
+
+    const SceneClass* dynamicFileSceneClass = sceneClass->getClass("m_lazyInitializedDenseDynamicFile");
+    if (dynamicFileSceneClass != NULL) {
+        CiftiConnectivityMatrixDenseDynamicFile* denseDynamicFile = getConnectivityMatrixDenseDynamicFile();
+        denseDynamicFile->restoreFromScene(sceneAttributes,
+                                                   dynamicFileSceneClass);
+    }
 }
+
+/**
+ * @return My matrix dense dynamic file representation.
+ */
+CiftiConnectivityMatrixDenseDynamicFile*
+CiftiBrainordinateDataSeriesFile::getConnectivityMatrixDenseDynamicFile()
+{
+    if (m_lazyInitializedDenseDynamicFile == NULL) {
+        initializeDenseDynamicFile();
+    }
+    return m_lazyInitializedDenseDynamicFile;
+}
+
+///**
+// * @return My matrix dense dynamic file representation (const method).
+// */
+//const CiftiConnectivityMatrixDenseDynamicFile*
+//CiftiBrainordinateDataSeriesFile::getConnectivityMatrixDenseDynamicFile() const
+//{
+//    CiftiBrainordinateDataSeriesFile* nonConstThis = const_cast<CiftiBrainordinateDataSeriesFile*>(this);
+//    if (m_lazyInitializedDenseDynamicFile == NULL) {
+//        nonConstThis->initializeDenseDynamicFile();
+//    }
+//    return m_lazyInitializedDenseDynamicFile;
+//}
+
+/**
+ * @return True if any of the maps in this file contain a
+ * color mapping that possesses a modified status.
+ */
+bool
+CiftiBrainordinateDataSeriesFile::isModifiedPaletteColorMapping() const
+{
+    /*
+     * This method is override because we need to know if the
+     * encapsulated dynamic dense file has a modified palette.
+     * When restoring a scene, a file with any type of modification
+     * must be reloaded to remove any modifications.  Note that
+     * when a scene is restored, files that are not modified and
+     * are in the new scene are NOT reloaded to save time.
+     */
+    if (CiftiMappableDataFile::isModifiedPaletteColorMapping()) {
+        return true;
+    }
+    
+    if (m_lazyInitializedDenseDynamicFile != NULL) {
+        if (m_lazyInitializedDenseDynamicFile->isModifiedPaletteColorMapping()) {
+            return true;
+        }
+    }
+    
+    return false;
+}
+
 
 

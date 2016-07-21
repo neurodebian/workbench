@@ -43,6 +43,7 @@
 #include "CiftiBrainordinateLabelFile.h"
 #include "CiftiBrainordinateScalarFile.h"
 #include "CiftiConnectivityMatrixDenseFile.h"
+#include "CiftiConnectivityMatrixDenseDynamicFile.h"
 #include "CiftiConnectivityMatrixDenseParcelFile.h"
 #include "CiftiFiberOrientationFile.h"
 #include "CiftiFiberTrajectoryFile.h"
@@ -706,6 +707,8 @@ Brain::resetBrainKeepSceneFiles()
             case DataFileTypeEnum::BORDER:
                 break;
             case DataFileTypeEnum::CONNECTIVITY_DENSE:
+                break;
+            case DataFileTypeEnum::CONNECTIVITY_DENSE_DYNAMIC:
                 break;
             case DataFileTypeEnum::CONNECTIVITY_DENSE_LABEL:
                 break;
@@ -3246,6 +3249,27 @@ Brain::getConnectivityMatrixDenseFiles(std::vector<CiftiConnectivityMatrixDenseF
 }
 
 /**
+ * Get ALL connectivity matrix dense dynamic files.
+ * @param connectivityDenseDynamicFilesOut
+ *   Contains all connectivity dense dynamic files on exit.
+ */
+void
+Brain::getConnectivityMatrixDenseDynamicFiles(std::vector<CiftiConnectivityMatrixDenseDynamicFile*>& connectivityDenseDynamicFilesOut) const
+{
+    connectivityDenseDynamicFilesOut.clear();
+    
+    for (std::vector<CiftiBrainordinateDataSeriesFile*>::const_iterator iter = m_connectivityDataSeriesFiles.begin();
+         iter != m_connectivityDataSeriesFiles.end();
+         iter++) {
+        CiftiConnectivityMatrixDenseDynamicFile* denseDynFile = (*iter)->getConnectivityMatrixDenseDynamicFile();
+        CaretAssert(denseDynFile);
+        if (denseDynFile->isDataValid()) {
+            connectivityDenseDynamicFilesOut.push_back(denseDynFile);
+        }
+    }
+}
+
+/**
  * @return Number of connectivity dense label files.
  */
 int32_t
@@ -4073,6 +4097,9 @@ Brain::addDataFile(CaretDataFile* caretDataFile)
                     m_connectivityMatrixDenseFiles.push_back(file);
                 }
                     break;
+                case DataFileTypeEnum::CONNECTIVITY_DENSE_DYNAMIC:
+                    CaretAssertMessage(0, "Dense Dynamic Files should never be added to Brain.");
+                    break;
                 case DataFileTypeEnum::CONNECTIVITY_DENSE_LABEL:
                 {
                     CiftiBrainordinateLabelFile* file = dynamic_cast<CiftiBrainordinateLabelFile*>(caretDataFile);
@@ -4897,7 +4924,10 @@ Brain::addReadOrReloadDataFile(const FileModeAddReadReload fileMode,
                             const AString& dataFileNameIn,
                             const bool markDataFileAsModified)
 {
-    AString dataFileName = dataFileNameIn;
+    /*
+     * Need absolute path
+     */
+    AString dataFileName = convertFilePathNameToAbsolutePathName(dataFileNameIn);
     
     CaretDataFile* caretDataFileRead = NULL;
 
@@ -4933,6 +4963,9 @@ Brain::addReadOrReloadDataFile(const FileModeAddReadReload fileMode,
                 caretDataFileRead  = addReadOrReloadConnectivityDenseFile(fileMode,
                                                               caretDataFile,
                                                               dataFileName);
+                break;
+            case DataFileTypeEnum::CONNECTIVITY_DENSE_DYNAMIC:
+                CaretAssertMessage(0, "Dense Dynamic files are never read by the Brain.");
                 break;
             case DataFileTypeEnum::CONNECTIVITY_DENSE_LABEL:
                 caretDataFileRead  = addReadOrReloadConnectivityDenseLabelFile(fileMode,
@@ -5565,6 +5598,8 @@ Brain::loadSpecFileFromScene(const SceneAttributes* sceneAttributes,
         }
     }
     
+    m_isSpecFileBeingRead = false;
+    
     if (m_paletteFile != NULL) {
         delete m_paletteFile;
     }
@@ -5651,7 +5686,8 @@ Brain::convertFilePathNameToAbsolutePathName(const AString& filename) const
     }
 
     if (m_currentDirectory.isEmpty()) {
-        return filename;
+        AString fullPathName = FileInformation(filename).getAbsoluteFilePath();
+        return fullPathName;
     }
     
     FileInformation pathFileInfo(m_currentDirectory, filename);
@@ -6101,9 +6137,34 @@ Brain::getAllDataFiles(std::vector<CaretDataFile*>& allDataFilesOut,
                            m_connectivityMatrixDenseFiles.begin(),
                            m_connectivityMatrixDenseFiles.end());
     
-    allDataFilesOut.insert(allDataFilesOut.end(),
-                           m_connectivityDataSeriesFiles.begin(),
-                           m_connectivityDataSeriesFiles.end());
+//    allDataFilesOut.insert(allDataFilesOut.end(),
+//                           m_connectivityDataSeriesFiles.begin(),
+//                           m_connectivityDataSeriesFiles.end());
+    
+    /*
+     * By placing the dynamic connectivity file immediately after
+     * its parent data-series file, they will appear in this
+     * order in the overlay file selectors.
+     */
+    for (std::vector<CiftiBrainordinateDataSeriesFile*>::const_iterator dsIter = m_connectivityDataSeriesFiles.begin();
+         dsIter != m_connectivityDataSeriesFiles.end();
+         dsIter++) {
+        CiftiBrainordinateDataSeriesFile* seriesFile = *dsIter;
+        CaretAssert(seriesFile);
+        allDataFilesOut.push_back(seriesFile);
+        
+        CiftiConnectivityMatrixDenseDynamicFile* dynFile = seriesFile->getConnectivityMatrixDenseDynamicFile();
+        CaretAssert(dynFile);
+        if (dynFile->isDataValid()) {
+            allDataFilesOut.push_back(dynFile);
+        }
+    }
+
+//    std::vector<CiftiConnectivityMatrixDenseDynamicFile*> denseDynFiles;
+//    getConnectivityMatrixDenseDynamicFiles(denseDynFiles);
+//    allDataFilesOut.insert(allDataFilesOut.end(),
+//                           denseDynFiles.begin(),
+//                           denseDynFiles.end());
     
     allDataFilesOut.insert(allDataFilesOut.end(),
                            m_connectivityDenseLabelFiles.begin(),
@@ -6316,6 +6377,8 @@ Brain::writeDataFile(CaretDataFile* caretDataFile)
             break;
         case DataFileTypeEnum::CONNECTIVITY_DENSE:
             break;
+        case DataFileTypeEnum::CONNECTIVITY_DENSE_DYNAMIC:
+            break;
         case DataFileTypeEnum::CONNECTIVITY_DENSE_LABEL:
             break;
         case DataFileTypeEnum::CONNECTIVITY_DENSE_PARCEL:
@@ -6386,6 +6449,14 @@ bool
 Brain::removeWithoutDeleteDataFile(const CaretDataFile* caretDataFile)
 {
     if (caretDataFile == NULL) {
+        return false;
+    }
+    
+    /*
+     * Dense dynamic files are encapsulated in a dense-series file
+     * so they do not get removed.
+     */
+    if (caretDataFile->getDataFileType() == DataFileTypeEnum::CONNECTIVITY_DENSE_DYNAMIC) {
         return false;
     }
     
@@ -6465,6 +6536,8 @@ Brain::removeWithoutDeleteDataFilePrivate(const CaretDataFile* caretDataFile)
         m_connectivityMatrixDenseFiles.erase(connDenseIterator);
         return true;
     }
+    
+    /* Note: There is no test for dense dynamic files as they are a child of data sereies file */
     
     std::vector<CiftiConnectivityMatrixDenseParcelFile*>::iterator connDenseParcelIterator = std::find(m_connectivityMatrixDenseParcelFiles.begin(),
                                                                                                        m_connectivityMatrixDenseParcelFiles.end(),
@@ -6799,6 +6872,7 @@ Brain::saveToScene(const SceneAttributes* sceneAttributes,
          iter != allCaretDataFiles.end();
          iter++) {
         CaretDataFile* cdf = *iter;
+
         const AString caretDataFileName = cdf->getFileName();  // use full path 7/16/2015 cdf->getFileNameNoPath();
         SceneClass* caretDataFileSceneClass = cdf->saveToScene(sceneAttributes,
                                                       caretDataFileName);

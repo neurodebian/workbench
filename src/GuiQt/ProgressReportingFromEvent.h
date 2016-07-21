@@ -1,5 +1,5 @@
-#ifndef __BALSA_DATABASE_DIALOG_H__
-#define __BALSA_DATABASE_DIALOG_H__
+#ifndef __PROGRESS_REPORTING_FROM_EVENT_H__
+#define __PROGRESS_REPORTING_FROM_EVENT_H__
 
 /*LICENSE_START*/
 /*
@@ -22,51 +22,43 @@
 /*LICENSE_END*/
 
 
+#include "ProgressReportingWithSlots.h"
+
 #include "EventListenerInterface.h"
-#include "WuQDialogNonModal.h"
 
-
-class QLineEdit;
 
 namespace caret {
 
-    class BalsaDatabaseDialog : public WuQDialogNonModal, public EventListenerInterface {
-        
+    class ProgressReportingFromEvent : public ProgressReportingWithSlots, public EventListenerInterface {
         Q_OBJECT
-
+        
     public:
-        BalsaDatabaseDialog(QWidget* parent);
+        ProgressReportingFromEvent(QObject* parent);
         
-        virtual ~BalsaDatabaseDialog();
+        virtual ~ProgressReportingFromEvent();
         
-        void updateDialog();
+        void setEventReceivingEnabled(bool enabled);
         
+        bool isEventReceivingEnabled() const;
 
         // ADD_NEW_METHODS_HERE
 
         virtual void receiveEvent(Event* event);
 
-    private slots:
-        void labelHtmlLinkClicked(const QString&);
-        
     private:
-        QWidget* createUsernamePasswordWidget();
-        
-        BalsaDatabaseDialog(const BalsaDatabaseDialog&);
+        ProgressReportingFromEvent(const ProgressReportingFromEvent&);
 
-        BalsaDatabaseDialog& operator=(const BalsaDatabaseDialog&);
-        
-        QLineEdit* m_usernameLineEdit;
-        
-        QLineEdit* m_passwordLineEdit;
+        ProgressReportingFromEvent& operator=(const ProgressReportingFromEvent&);
 
+        bool m_eventReceivingEnabled;
+        
         // ADD_NEW_MEMBERS_HERE
 
     };
     
-#ifdef __BALSA_DATABASE_DIALOG_DECLARE__
+#ifdef __PROGRESS_REPORTING_FROM_EVENT_DECLARE__
     // <PLACE DECLARATIONS OF STATIC MEMBERS HERE>
-#endif // __BALSA_DATABASE_DIALOG_DECLARE__
+#endif // __PROGRESS_REPORTING_FROM_EVENT_DECLARE__
 
 } // namespace
-#endif  //__BALSA_DATABASE_DIALOG_H__
+#endif  //__PROGRESS_REPORTING_FROM_EVENT_H__

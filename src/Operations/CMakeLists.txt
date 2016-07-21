@@ -24,6 +24,7 @@ OperationBorderExportColorTable.h
 OperationBorderFileExportToCaret5.h
 OperationBorderLength.h
 OperationBorderMerge.h
+OperationCiftiChangeMapping.h
 OperationCiftiChangeTimestep.h
 OperationCiftiConvert.h
 OperationCiftiConvertToScalar.h
@@ -71,6 +72,7 @@ OperationMetricVertexSum.h
 OperationMetricWeightedStats.h
 OperationNiftiInformation.h
 OperationProbtrackXDotConvert.h
+OperationSceneFileMerge.h
 OperationSceneFileRelocate.h
 OperationSetMapName.h
 OperationSetMapNames.h
@@ -110,6 +112,7 @@ OperationBorderExportColorTable.cxx
 OperationBorderFileExportToCaret5.cxx
 OperationBorderLength.cxx
 OperationBorderMerge.cxx
+OperationCiftiChangeMapping.cxx
 OperationCiftiChangeTimestep.cxx
 OperationCiftiConvert.cxx
 OperationCiftiConvertToScalar.cxx
@@ -157,6 +160,7 @@ OperationMetricVertexSum.cxx
 OperationMetricWeightedStats.cxx
 OperationNiftiInformation.cxx
 OperationProbtrackXDotConvert.cxx
+OperationSceneFileMerge.cxx
 OperationSceneFileRelocate.cxx
 OperationSetMapName.cxx
 OperationSetMapNames.cxx

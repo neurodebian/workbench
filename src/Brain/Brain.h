@@ -54,6 +54,7 @@ namespace caret {
     class CiftiBrainordinateLabelFile;
     class CiftiBrainordinateScalarFile;
     class CiftiConnectivityMatrixDenseFile;
+    class CiftiConnectivityMatrixDenseDynamicFile;
     class CiftiConnectivityMatrixDenseParcelFile;
     class CiftiConnectivityMatrixParcelFile;
     class CiftiConnectivityMatrixParcelDenseFile;
@@ -207,6 +208,8 @@ namespace caret {
         const CiftiConnectivityMatrixDenseFile* getConnectivityMatrixDenseFile(int32_t indx) const;
         
         void getConnectivityMatrixDenseFiles(std::vector<CiftiConnectivityMatrixDenseFile*>& connectivityDenseFilesOut) const;
+        
+        void getConnectivityMatrixDenseDynamicFiles(std::vector<CiftiConnectivityMatrixDenseDynamicFile*>& connectivityDenseDynamicFilesOut) const;
         
         int32_t getNumberOfConnectivityDenseLabelFiles() const;
         

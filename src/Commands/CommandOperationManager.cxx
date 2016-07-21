@@ -139,6 +139,7 @@
 #include "OperationBorderFileExportToCaret5.h"
 #include "OperationBorderLength.h"
 #include "OperationBorderMerge.h"
+#include "OperationCiftiChangeMapping.h"
 #include "OperationCiftiChangeTimestep.h"
 #include "OperationCiftiConvert.h"
 #include "OperationCiftiConvertToScalar.h"
@@ -186,6 +187,7 @@
 #include "OperationMetricWeightedStats.h"
 #include "OperationNiftiInformation.h"
 #include "OperationProbtrackXDotConvert.h"
+#include "OperationSceneFileMerge.h"
 #include "OperationSceneFileRelocate.h"
 #include "OperationSetMapName.h"
 #include "OperationSetMapNames.h"
@@ -233,6 +235,7 @@
 #include "ProgramParameters.h"
 
 #include "CaretLogger.h"
+#include "StructureEnum.h"
 
 #include <iostream>
 
@@ -388,10 +391,8 @@ CommandOperationManager::CommandOperationManager()
     this->commandOperations.push_back(new CommandParser(new AutoOperationBorderFileExportToCaret5()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationBorderLength()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationBorderMerge()));
-    this->commandOperations.push_back(new CommandParser(new AutoOperationCiftiChangeTimestep()));
+    this->commandOperations.push_back(new CommandParser(new AutoOperationCiftiChangeMapping()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationCiftiConvert()));
-    this->commandOperations.push_back(new CommandParser(new AutoOperationCiftiConvertToScalar()));
-    this->commandOperations.push_back(new CommandParser(new AutoOperationCiftiCopyMapping()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationCiftiCreateDenseFromTemplate()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationCiftiCreateParcellatedFromTemplate()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationCiftiCreateScalarSeries()));
@@ -432,6 +433,7 @@ CommandOperationManager::CommandOperationManager()
     this->commandOperations.push_back(new CommandParser(new AutoOperationMetricWeightedStats()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationNiftiInformation()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationProbtrackXDotConvert()));
+    this->commandOperations.push_back(new CommandParser(new AutoOperationSceneFileMerge()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationSceneFileRelocate()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationSetMapNames()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationSetStructure()));
@@ -475,6 +477,9 @@ CommandOperationManager::CommandOperationManager()
 #endif // WORKBENCH_HAVE_C11X
     this->commandOperations.push_back(new CommandUnitTest());
     
+    this->deprecatedOperations.push_back(new CommandParser(new AutoOperationCiftiChangeTimestep()));
+    this->deprecatedOperations.push_back(new CommandParser(new AutoOperationCiftiConvertToScalar()));
+    this->deprecatedOperations.push_back(new CommandParser(new AutoOperationCiftiCopyMapping()));
     this->deprecatedOperations.push_back(new CommandParser(new AutoOperationCiftiSeparateAll()));
     this->deprecatedOperations.push_back(new CommandParser(new AutoOperationMetricVertexSum()));
     this->deprecatedOperations.push_back(new CommandParser(new AutoOperationSetMapName()));
@@ -536,6 +541,10 @@ CommandOperationManager::runCommand(ProgramParameters& parameters)
         printHelpInfo();
     } else if (commandSwitch == "-arguments-help") {
         printArgumentsHelp("wb_command");
+    } else if (commandSwitch == "-cifti-help") {
+        printCiftiHelp("wb_command");
+    } else if (commandSwitch == "-gifti-help") {
+        printGiftiHelp("wb_command");
     } else if (commandSwitch == "-version") {
         printVersionInfo();
     } else if (commandSwitch == "-list-commands") {
@@ -762,6 +771,8 @@ void CommandOperationManager::printHelpInfo()
     cout << endl << "Information options:" << endl;
     cout << "   -help                       show this help info" << endl;
     cout << "   -arguments-help             explain the format of subcommand help info" << endl;
+    cout << "   -cifti-help                 explain the cifti file format and related terms" << endl;
+    cout << "   -gifti-help                 explain the gifti file format (metric, surface)" << endl;
     cout << "   -version                    show extended version information" << endl;
     cout << "   -list-commands              list all processing subcommands" << endl;
     cout << "   -list-deprecated-commands   list deprecated subcommands" << endl;
@@ -778,7 +789,7 @@ void CommandOperationManager::printHelpInfo()
         cout << "            " << LogLevelEnum::toName(*iter) << endl;
     }
     cout << endl;
-    cout << "To get the help information on a processing subcommand, run it without any" << endl;
+    cout << "To get the help information of a processing subcommand, run it without any" << endl;
     cout << "   additional arguments." << endl;
     cout << endl;
     cout << "If the first argument is not recognized, all processing commands that start" << endl;
@@ -794,26 +805,26 @@ void CommandOperationManager::printArgumentsHelp(const AString& programName)
     cout << "   can have suboptions, which must occur within the scope of the option.  The" << endl;
     cout << "   easiest way to get this right is to specify options and arguments in the" << endl;
     cout << "   order they are listed.  As an example, consider this help information:" << endl;
+    cout << endl;//guide for wrap, assuming 80 columns:                                     |
     cout << "$ " << programName << " -volume-math" << endl;
     cout << "EVALUATE EXPRESSION ON VOLUME FILES" << endl;
     cout << "   " << programName << " -volume-math" << endl;
     cout << "      <expression> - the expression to evaluate, in quotes" << endl;
     cout << "      <volume-out> - output - the output volume" << endl;
-    cout << endl;
+    cout << endl;//guide for wrap, assuming 80 columns:                                     |
     cout << "      [-fixnan] - replace NaN results with a value" << endl;
     cout << "         <replace> - value to replace NaN with" << endl;
-    cout << endl;
+    cout << endl;//guide for wrap, assuming 80 columns:                                     |
     cout << "      [-var] (repeatable) - repeatable - a volume file to use as a variable" << endl;
     cout << "         <name> - the name of the variable, as used in the expression" << endl;
     cout << "         <volume> - the volume file to use as this variable" << endl;
-    cout << endl;
+    cout << endl;//guide for wrap, assuming 80 columns:                                     |
     cout << "         [-subvolume] - select a single subvolume" << endl;
     cout << "            <subvol> - the subvolume number or name" << endl;
-    cout << endl;
+    cout << endl;//guide for wrap, assuming 80 columns:                                     |
     cout << "         [-repeat] - reuse a single subvolume for each subvolume of calculation" << endl;
     cout << "..." << endl;
-    cout << endl;
-    //guide for wrap, assuming 80 columns:                                                  |
+    cout << endl;//guide for wrap, assuming 80 columns:                                     |
     cout << "   '<expression>' and '<volume-out>' denote mandatory parameters.  '[-fixnan]'" << endl;
     cout << "   denotes an option taking one mandatory parameter '<replace>', and" << endl;
     cout << "   '[-var] (repeatable)' denotes a repeatable option with mandatory parameters" << endl;
@@ -822,13 +833,13 @@ void CommandOperationManager::printArgumentsHelp(const AString& programName)
     cout << "   Commands also provide additional help info below the section in the example." << endl;
     cout << "   Each option starts a new scope, and all options and arguments end any scope" << endl;
     cout << "   that they are not valid in.  For example, this command is correct:" << endl;
-    cout << endl;
+    cout << endl;//guide for wrap, assuming 80 columns:                                     |
     cout << "$ " << programName << " -volume-math 'sin(x)' sin_x.nii.gz -fixnan 0 -var x x.nii.gz -subvolume 1" << endl;
     cout << endl;
     cout << "   as is this one (though less intuitive):" << endl;
     cout << endl;
     cout << "$ " << programName << " -volume-math -fixnan 0 'sin(x)' -var x -subvolume 1 x.nii.gz sin_x.nii.gz" << endl;
-    cout << endl;
+    cout << endl;//guide for wrap, assuming 80 columns:                                     |
     cout << "   while this one is not, because the -fixnan option ends the scope of the -var" << endl;
     cout << "   option before all of its mandatory arguments are given:" << endl;
     cout << endl;
@@ -839,12 +850,100 @@ void CommandOperationManager::printArgumentsHelp(const AString& programName)
     cout << "   scope of the -var option has ended due to -fixnan:" << endl;
     cout << endl;
     cout << "$ " << programName << " -volume-math 'sin(x)' sin_x.nii.gz -var x x.nii.gz -fixnan 0 -subvolume 1" << endl;
-    cout << endl;
+    cout << endl;//guide for wrap, assuming 80 columns:                                     |
     cout << "   and this one is similarly incorrect because the -subvolume option occurs" << endl;
     cout << "   after the scope of the -var option has ended due to the volume-out argument:" << endl;
     cout << endl;
     cout << "$ " << programName << " -volume-math 'sin(x)' -fixnan 0 -var x x.nii.gz sin_x.nii.gz -subvolume 1" << endl;
     cout << endl;
+}
+
+void CommandOperationManager::printCiftiHelp(const AString& /*programName*/)
+{
+    //guide for wrap, assuming 80 columns:                                                  |
+    cout << "   The CIFTI format is a new data file format intended to make it easier to" << endl;
+    cout << "   work with data from multiple disjoint structures at the same time - often" << endl;
+    cout << "   this means both hemispheres of cortex as surface data, and other structures" << endl;
+    cout << "   as voxel data (amygdala, thalamus, hippocampus, etc).  Additionally, it" << endl;
+    cout << "   can exclude locations that are uninteresting for the task at hand (medial" << endl;
+    cout << "   wall, white matter, csf), preventing them from taking up room in the data of" << endl;
+    cout << "   the file.  The set of structures and the locations in them that are used in" << endl;
+    cout << "   a cifti file is referred to as 'brainordinates', or for the specific case of" << endl;
+    cout << "   'all gray matter locations', 'grayordinates'." << endl;
+    cout << endl;//guide for wrap, assuming 80 columns:                                     |
+    cout << "   However, to explain the cifti format, it is easiest to work from the" << endl;
+    cout << "   opposite direction, as it is conceptually simpler.  A single cifti file is a" << endl;
+    cout << "   single rectangular data matrix (usually 2 dimensions, but supports 3, and" << endl;
+    cout << "   may support more in the future), where each dimension is labeled with what" << endl;
+    cout << "   we call a 'mapping', each of which uses one of (currently) five possible" << endl;
+    cout << "   'mapping types'.  It is these mapping types that give rise to the diverse" << endl;
+    cout << "   types of cifti files.  A single mapping of type 'brain models' (also known" << endl;
+    cout << "   as 'dense') can represent both hemispheres and all subcortical structures" << endl;
+    cout << "   simultaneously, meaning that only a single dimension is used to represent" << endl;
+    cout << "   over a dozen structures, both surface-based and voxel-based.  The mapping" << endl;
+    cout << "   contains all information needed to figure out what every index along the" << endl;
+    cout << "   dimension means.  By putting a dense mapping along both dimensions in a 2D" << endl;
+    cout << "   cifti file, you get a brainordinates by brainordinates matrix, frequently" << endl;
+    cout << "   used for connectivity measures.  Notably, even if two dimensions use the" << endl;
+    cout << "   same mapping *type*, they can have different information in them, for" << endl;
+    cout << "   example a connectivity matrix between two different parcellations." << endl;
+    cout << endl;//guide for wrap, assuming 80 columns:                                     |
+    cout << "   The other mapping types that currently may be used in a cifti file are:" << endl;
+    cout << "      Parcels: each index refers to a named subset of the brainordinates (i.e." << endl;
+    cout << "         'V1', and the surface vertices in V1)" << endl;
+    cout << "      Scalars: each index is simply given a name (i.e. 'Myelin')" << endl;
+    cout << "      Series: each index is assigned a quantity in a linear series (i.e., a" << endl;
+    cout << "         timeseries of 0 sec, 0.7 sec, 1.4 sec, ...)" << endl;
+    cout << "      Labels: each index is assigned a name (i.e., 'Visual Areas'), but also a" << endl;
+    cout << "         list of labels that maps integer data values to names and colors (i.e." << endl;
+    cout << "         {(5, 'V1', #ff0000), (7, 'V2', #00ff00), ...}" << endl;
+    cout << endl;//guide for wrap, assuming 80 columns:                                     |
+    cout << "   The commands that operate on cifti files often require you to specify which" << endl;
+    cout << "   dimension they should operate on.  Because cifti files can contain 3" << endl;
+    cout << "   dimensions, we specify them as which dimension to operate along, that is, " << endl;
+    cout << "   the ROW dimension refers to the mapping along the length of a row." << endl;
+    cout << "   Additionally, the ROW dimension is the *first* dimension in a cifti file," << endl;
+    cout << "   unlike 2D matrices in linear algebra.  This means that increasing the value" << endl;
+    cout << "   of the first index moves rightwards in the matrix, not downwards." << endl;
+    cout << endl;//guide for wrap, assuming 80 columns:                                     |
+    cout << "   The common types of cifti files and the mapping types they use are:" << endl;
+    cout << "      dconn: ROW is dense, COLUMN is dense" << endl;
+    cout << "      dscalar: ROW is scalars, COLUMN is dense" << endl;
+    cout << "      dtseries: ROW is series, COLUMN is dense" << endl;
+    cout << "      dlabel: ROW is labels, COLUMN is dense" << endl;
+    cout << "      pconn: ROW is parcels, COLUMN is parcels" << endl;
+    cout << "      pdconn: ROW is dense, COLUMN is parcels" << endl;
+    cout << "      dpconn: ROW is parcels, COLUMN is dense" << endl;
+    cout << "      pscalar: ROW is scalars, COLUMN is parcels" << endl;
+    cout << "      ptseries: ROW is series, COLUMN is parcels" << endl;
+    cout << endl;//guide for wrap, assuming 80 columns:                                     |
+    cout << "   For the full details of the CIFTI format, see" << endl;
+    cout << "      http://www.nitrc.org/projects/cifti/" << endl;
+    cout << endl;//guide for wrap, assuming 80 columns:                                     |
+}
+
+void CommandOperationManager::printGiftiHelp(const AString& /*programName*/)
+{
+    //guide for wrap, assuming 80 columns:                                                  |
+    cout << "   The GIFTI format is an established data file format intended for use with" << endl;
+    cout << "   surface-based data.  It has subtypes for geometry (.surf.gii), continuous" << endl;
+    cout << "   data (.func.gii, .shape.gii), and integer label data (.label.gii).  The" << endl;
+    cout << "   files that contain data, rather than geometry, consist mainly of a 2D array," << endl;
+    cout << "   with one dimension having length equal to the number of vertices in the" << endl;
+    cout << "   surface.  Label files (.label.gii) also contain a list of integer values" << endl;
+    cout << "   that are used in the file, plus a name and a color for each one.  In" << endl;
+    cout << "   workbench, the files for continuous data are called 'metric files', and" << endl;
+    cout << "   .func.gii is usually the preferred extension, but there is no difference in" << endl;
+    cout << "   file format between .func.gii and .shape.gii.  Geometry files are simply" << endl;
+    cout << "   called 'surface files', and must contain only the coordinate and triangle" << endl;
+    cout << "   arrays.  Notably, other software may put data arrays (the equivalent of a" << endl;
+    cout << "   metric file) into the same file as the geometry information.  Workbench does" << endl;
+    cout << "   not support these formats, and you must use other tools to separate the data" << endl;
+    cout << "   array from the geometry." << endl;
+    cout << endl;//guide for wrap, assuming 80 columns:                                     |
+    cout << "   For the full details of the GIFTI format, see" << endl;
+    cout << "      http://www.nitrc.org/projects/gifti/" << endl;
+    cout << endl;//guide for wrap, assuming 80 columns:                                     |
 }
 
 void CommandOperationManager::printVersionInfo()

@@ -158,7 +158,8 @@ SpecFile::initializeSpecFile()
     this->metadata = new GiftiMetaData();
     
     std::vector<DataFileTypeEnum::Enum> allEnums;
-    DataFileTypeEnum::getAllEnums(allEnums, false);
+    DataFileTypeEnum::getAllEnums(allEnums,
+                                  DataFileTypeEnum::OPTIONS_NONE);
     
     /*
      * Do surface files first since they need to be loaded before other files
@@ -300,6 +301,10 @@ void
 SpecFile::addCaretDataFile(CaretDataFile* caretDataFile)
 {
     CaretAssert(caretDataFile);
+    
+    if ( ! SpecFile::isDataFileTypeAllowedInSpecFile(caretDataFile->getDataFileType())) {
+        return;
+    }
     
     /*
      * Matches to first file found that has matching name and data file type
@@ -471,7 +476,7 @@ SpecFile::addDataFile(const DataFileTypeEnum::Enum dataFileType,
  *   True if the file is a member of the spec file and is written
  *   into the spec file.
  * @return
- *   SpecFileDataFile that was created or matched.  NULL if error.
+ *   SpecFileDataFile that was created or matched.  NULL if error or file type not allowed.
  *
  * @throws DataFileException
  *   If data file type is UNKNOWN.
@@ -484,6 +489,10 @@ SpecFile::addDataFilePrivate(const DataFileTypeEnum::Enum dataFileType,
                              const bool fileSavingSelectionStatus,
                              const bool specFileMemberStatus)
 {
+    if ( ! SpecFile::isDataFileTypeAllowedInSpecFile(dataFileType)) {
+        return NULL;
+    }
+    
     AString name = filename;
 
     const bool dataFileOnNetwork = DataFile::isFileOnNetwork(name);
@@ -552,26 +561,26 @@ SpecFile::addDataFilePrivate(const DataFileTypeEnum::Enum dataFileType,
     return NULL; // will never get here since exception thrown
 }
 
-/**
- * @return ALL of the connectivity file types (NEVER delete contents of returned vector.
- */
-void 
-SpecFile::getAllConnectivityFileTypes(std::vector<SpecFileDataFile*>& connectivityDataFilesOut)
-{
-    connectivityDataFilesOut.clear();
-    
-    for (std::vector<SpecFileDataFileTypeGroup*>::const_iterator iter = dataFileTypeGroups.begin();
-         iter != dataFileTypeGroups.end();
-         iter++) {
-        SpecFileDataFileTypeGroup* dataFileTypeGroup = *iter;
-        if (DataFileTypeEnum::isConnectivityDataType(dataFileTypeGroup->getDataFileType())) {
-            const int32_t numFiles = dataFileTypeGroup->getNumberOfFiles();
-            for (int32_t i = 0; i < numFiles; i++) {
-                connectivityDataFilesOut.push_back(dataFileTypeGroup->getFileInformation(i));
-            }
-        }
-    }
-}
+///**
+// * @return ALL of the connectivity file types (NEVER delete contents of returned vector.
+// */
+//void 
+//SpecFile::getAllConnectivityFileTypes(std::vector<SpecFileDataFile*>& connectivityDataFilesOut)
+//{
+//    connectivityDataFilesOut.clear();
+//    
+//    for (std::vector<SpecFileDataFileTypeGroup*>::const_iterator iter = dataFileTypeGroups.begin();
+//         iter != dataFileTypeGroups.end();
+//         iter++) {
+//        SpecFileDataFileTypeGroup* dataFileTypeGroup = *iter;
+//        if (DataFileTypeEnum::isConnectivityDataType(dataFileTypeGroup->getDataFileType())) {
+//            const int32_t numFiles = dataFileTypeGroup->getNumberOfFiles();
+//            for (int32_t i = 0; i < numFiles; i++) {
+//                connectivityDataFilesOut.push_back(dataFileTypeGroup->getFileInformation(i));
+//            }
+//        }
+//    }
+//}
 
 /**
  * Set the selection status of a data file.
@@ -1685,4 +1694,24 @@ SpecFile::addToDataFileContentInformation(DataFileContentInformation& dataFileIn
     dataFileInformation.addText("\n"
                                 + table.getInString());
 }
+
+/**
+ * Is the given file type allowed in the spec file?
+ *
+ * @param dataFileType
+ *     Type of data file.
+ * @return
+ *     True if allowed in spec file, else false.
+ */
+bool
+SpecFile::isDataFileTypeAllowedInSpecFile(const DataFileTypeEnum::Enum dataFileType)
+{
+    if (dataFileType == DataFileTypeEnum::CONNECTIVITY_DENSE_DYNAMIC) {
+        return false;
+    }
+    
+    return true;
+}
+
+
 

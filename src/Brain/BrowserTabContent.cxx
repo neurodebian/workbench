@@ -40,6 +40,8 @@
 #include "CaretPreferences.h"
 #include "ChartableMatrixInterface.h"
 #include "ChartModelDataSeries.h"
+#include "CiftiBrainordinateDataSeriesFile.h"
+#include "CiftiConnectivityMatrixDenseDynamicFile.h"
 #include "ClippingPlaneGroup.h"
 #include "GroupAndNameHierarchyGroup.h"
 #include "GroupAndNameHierarchyModel.h"
@@ -1139,9 +1141,12 @@ BrowserTabContent::receiveEvent(Event* event)
                         bool keepSliceCoordinateForSelectedAxis = false;
                         switch (m_volumeSliceSettings->getSliceProjectionType()) {
                             case VolumeSliceProjectionTypeEnum::VOLUME_SLICE_PROJECTION_ORTHOGONAL:
+                                if (getSliceViewPlane() != VolumeSliceViewPlaneEnum::ALL) {
+                                    keepSliceCoordinateForSelectedAxis = true;
+                                }
                                 break;
                             case VolumeSliceProjectionTypeEnum::VOLUME_SLICE_PROJECTION_OBLIQUE:
-                                keepSliceCoordinateForSelectedAxis = true;
+                                //keepSliceCoordinateForSelectedAxis = true;
                                 break;
                         }
                         switch (m_volumeSliceSettings->getSliceDrawingType()) {
@@ -1628,7 +1633,20 @@ BrowserTabContent::getFilesDisplayedInTab(std::vector<CaretDataFile*>& displayed
             int32_t mapIndex;
             overlay->getSelectionData(overlayDataFile,
                                       mapIndex);
-            displayedDataFiles.insert(overlayDataFile);
+            
+            if (overlayDataFile != NULL) {
+                /*
+                 * Dense dynamic is encapsulated within its parent data-series
+                 * file so include both files.
+                 */
+                if (overlayDataFile->getDataFileType() == DataFileTypeEnum::CONNECTIVITY_DENSE_DYNAMIC) {
+                    CiftiConnectivityMatrixDenseDynamicFile* dynFile = dynamic_cast<CiftiConnectivityMatrixDenseDynamicFile*>(overlayDataFile);
+                    CaretAssert(dynFile);
+                    displayedDataFiles.insert(dynFile->getParentBrainordinateDataSeriesFile());
+                }
+                
+                displayedDataFiles.insert(overlayDataFile);
+            }
         }
     }
     

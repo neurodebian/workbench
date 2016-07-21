@@ -92,7 +92,8 @@ IdentifyBrainordinateDialog::IdentifyBrainordinateDialog(QWidget* parent)
      * Filter file types for CIFTI type files
      */
     std::vector<DataFileTypeEnum::Enum> allDataFileTypes;
-    DataFileTypeEnum::getAllEnums(allDataFileTypes);
+    DataFileTypeEnum::getAllEnums(allDataFileTypes,
+                                  DataFileTypeEnum::OPTIONS_INCLUDE_CONNECTIVITY_DENSE_DYNAMIC);
     
     std::vector<DataFileTypeEnum::Enum> supportedCiftiRowFileTypes;
     std::vector<DataFileTypeEnum::Enum> supportedLabelFileTypes;
@@ -111,6 +112,9 @@ IdentifyBrainordinateDialog::IdentifyBrainordinateDialog(QWidget* parent)
             case DataFileTypeEnum::BORDER:
                 break;
             case DataFileTypeEnum::CONNECTIVITY_DENSE:
+                ciftiRowFlag = true;
+                break;
+            case DataFileTypeEnum::CONNECTIVITY_DENSE_DYNAMIC:
                 ciftiRowFlag = true;
                 break;
             case DataFileTypeEnum::CONNECTIVITY_DENSE_LABEL:

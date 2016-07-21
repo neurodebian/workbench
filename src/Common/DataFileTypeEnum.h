@@ -41,6 +41,8 @@ public:
         BORDER,
         /** Connectivity - Dense */
         CONNECTIVITY_DENSE,
+        /** Connectivity - Dense Dynamic (correlate from time-series)*/
+        CONNECTIVITY_DENSE_DYNAMIC,
         /** Connectivity - Dense Label */
         CONNECTIVITY_DENSE_LABEL,
         /** Connectivity - Dense Parcel */
@@ -89,6 +91,19 @@ public:
         VOLUME
     };
     
+    /**
+     * Options for getting all enumerated values.
+     * Bitwise 'OR' for multiple options
+     */
+    enum Options {
+        /** No options */
+        OPTIONS_NONE = 0,
+        /** Include the dense dynamic data file type */
+        OPTIONS_INCLUDE_CONNECTIVITY_DENSE_DYNAMIC = 1,
+        /** Include the unknown data file type */
+        OPTIONS_INCLUDE_UNKNOWN = 2
+    };
+    
     ~DataFileTypeEnum();
 
     static AString toName(Enum enumValue);
@@ -108,7 +123,7 @@ public:
     static Enum fromIntegerCode(const int32_t integerCode, bool* isValidOut);
 
     static void getAllEnums(std::vector<Enum>& allEnums,
-                            const bool includeUnknown = false);
+                            const uint32_t options);
 
     static Enum fromQFileDialogFilter(const AString& qFileDialogNameFilter, bool* isValidOut);
     

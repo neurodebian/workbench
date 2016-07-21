@@ -38,7 +38,6 @@
 
 #include "AboutWorkbenchDialog.h"
 #include "ApplicationInformation.h"
-#include "BalsaDatabaseDialog.h"
 #include "BorderFile.h"
 #include "BorderFileSplitDialog.h"
 #include "Brain.h"
@@ -1423,10 +1422,6 @@ BrainBrowserWindow::createMenuDevelop()
         }
     }
     
-    menu->addAction("BALSA Database...",
-                    this,
-                    SLOT(showBalsaDatabaseDialog()));
-    
     return menu;
 }
 
@@ -1602,7 +1597,7 @@ BrainBrowserWindow::createMenuEdit()
     
     
     QAction* selectAllAction = NULL;
-    const bool addSelectAllFlag = false;
+    const bool addSelectAllFlag = true;
     if (addSelectAllFlag) {
         selectAllAction = addItemToEditMenu(m_editMenu,
                                             BrainBrowserWindowEditMenuItemEnum::SELECT_ALL);
@@ -2773,7 +2768,7 @@ BrainBrowserWindow::processSplitBorderFiles()
 void 
 BrainBrowserWindow::processCaptureImage()
 {
-    std::cout << "Toolbar height " << m_toolbar->height() << std::endl;
+    //std::cout << "Toolbar height " << m_toolbar->height() << std::endl;
     GuiManager::get()->processShowImageCaptureDialog(this);
 }
 
@@ -2898,7 +2893,8 @@ BrainBrowserWindow::processDataFileOpen()
      * Get all file filters.
      */
     std::vector<DataFileTypeEnum::Enum> dataFileTypes;
-    DataFileTypeEnum::getAllEnums(dataFileTypes, false);
+    DataFileTypeEnum::getAllEnums(dataFileTypes,
+                                  DataFileTypeEnum::OPTIONS_NONE);
     QStringList filenameFilterList;
     filenameFilterList.append("Any File (*)");
     for (std::vector<DataFileTypeEnum::Enum>::const_iterator iter = dataFileTypes.begin();
@@ -4009,22 +4005,6 @@ void
 BrainBrowserWindow::processConnectToConnectomeDataBase()
 {
     GuiManager::get()->processShowConnectomeDataBaseWebView(this);
-}
-
-/**
- * Show the BALSA database dialog
- */
-void
-BrainBrowserWindow::showBalsaDatabaseDialog()
-{
-    static BalsaDatabaseDialog* balsaDialog = NULL;
-    if (balsaDialog == NULL) {
-        balsaDialog = new BalsaDatabaseDialog(this);
-    }
-    
-    balsaDialog->setVisible(true);
-    balsaDialog->show();
-    balsaDialog->activateWindow();
 }
 
 /**

@@ -20,7 +20,7 @@
  *  51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 /*LICENSE_END*/
-
+#include <map>
 #include <QtNetwork>
 #include <vector>
 #include "stdint.h"
@@ -46,11 +46,15 @@ namespace caret {
         std::vector<AuthEntry> m_authList;
         static AString getServerString(const AString& url);        
         static void httpRequestPrivate(const CaretHttpRequest& request, CaretHttpResponse& response);
+        
+        static void getHeaders(const QNetworkReply& reply,
+                               std::map<AString, AString>& headersOut);
     public:
         enum Method
         {
             GET,
-            POST,
+            POST_ARGUMENTS,
+            POST_FILE,
             HEAD
         };
         static CaretHttpManager* getHttpManager();
@@ -72,13 +76,16 @@ namespace caret {
         bool m_responseCodeValid;
         QUrl m_redirectionUrl;
         bool m_redirectionUrlValid;
+        std::map<AString, AString> m_headers; // map so that newer values replace older values
     };
 
     struct CaretHttpRequest
     {
         CaretHttpManager::Method m_method;
         AString m_url;
-        std::vector<std::pair<AString, AString> > m_arguments, m_queries;//arguments go to post data if method is post, queries stay as queries
+        AString m_uploadFileName;  // used when mode is POST_FILE
+        std::vector<std::pair<AString, AString> > m_arguments, m_queries;//arguments go to post data if method is POST_ARGUMENTS, queries stay as queries
+        std::map<AString, AString> m_headers; // map so that newer values replace older values
     };
 
 }

@@ -36,10 +36,14 @@
 #include "FileInformation.h"
 #include "GiftiMetaData.h"
 #include "Scene.h"
+#include "SceneAttributes.h"
+#include "SceneClass.h"
+#include "SceneClassArray.h"
 #include "SceneFileSaxReader.h"
 #include "SceneInfo.h"
 #include "SceneXmlElements.h"
 #include "SceneWriterXml.h"
+#include "SpecFile.h"
 #include "XmlSaxParser.h"
 #include "XmlWriter.h"
 
@@ -59,6 +63,7 @@ SceneFile::SceneFile()
 : CaretDataFile(DataFileTypeEnum::SCENE)
 {
     m_balsaStudyID = "";
+    m_baseDirectory = "";
     m_metadata = new GiftiMetaData();
 }
 
@@ -88,6 +93,7 @@ SceneFile::clear()
     m_metadata->clear();
     
     m_balsaStudyID = "";
+    m_baseDirectory = "";
     
     for (std::vector<Scene*>::iterator iter = m_scenes.begin();
          iter != m_scenes.end();
@@ -158,6 +164,8 @@ SceneFile::insertScene(Scene* newScene,
     }
     
     m_scenes = tempSceneVector;
+    
+    setModified();
 }
 
 
@@ -289,6 +297,19 @@ SceneFile::removeSceneAtIndex(const int32_t indx)
 }
 
 /**
+ * Remove the scene at the given index, but return its pointer rather than deleting it.
+ * @param index
+ *     Index of the scene.
+ */
+Scene* SceneFile::releaseScene(const int32_t& index)
+{
+    CaretAssertVectorIndex(m_scenes, index);
+    Scene* scene = m_scenes[index];
+    m_scenes.erase(m_scenes.begin() + index);
+    return scene;
+}
+
+/**
  * Move the scene in the file by the given change in index.
  * 
  * @param scene
@@ -383,6 +404,28 @@ SceneFile::reorderScenes(std::vector<Scene*>& orderedScenes)
     setModified();
 }
 
+int32_t SceneFile::getSceneIndexFromNumberOrName(const AString& numberOrName)
+{
+    bool ok = false;
+    int32_t ret = numberOrName.toInt(&ok) - 1;//compensate for 1-indexing that command line parsing uses
+    if (ok)
+    {
+        if (ret < 0 || ret >= getNumberOfScenes())
+        {
+            return -1;
+        }
+        return ret;
+    } else {//DO NOT search by name if the string was parsed as an integer correctly, or some idiot who names their maps as integers will get confused
+            //when getting map "12" out of a file after the file expands to more than 12 elements suddenly does something different
+        const int32_t numScenes = getNumberOfScenes();
+        for (int32_t i = 0; i < numScenes; i++) {
+            if (numberOrName == getSceneAtIndex(i)->getName()) {
+                return i;
+            }
+        }
+    }
+    return -1;
+}
 
 /**
  * @return The structure for this file.
@@ -445,6 +488,31 @@ SceneFile::setBalsaStudyID(const AString& balsaStudyID)
         setModified();
     }
 }
+
+/**
+ * @return The Base Directory
+ */
+AString
+SceneFile::getBaseDirectory() const
+{
+    return m_baseDirectory;
+}
+
+/**
+ * Set the Base Directory.
+ *
+ * @param baseDirectory
+ *     New value for Base Directory.
+ */
+void
+SceneFile::setBaseDirectory(const AString& baseDirectory)
+{
+    if (baseDirectory != m_baseDirectory) {
+        m_baseDirectory = baseDirectory;
+        setModified();
+    }
+}
+
 
 /**
  * Read the scene file.
@@ -574,6 +642,8 @@ SceneFile::writeFile(const AString& filename)
         xmlWriter.writeStartElement(SceneFile::XML_TAG_SCENE_INFO_DIRECTORY_TAG);
         xmlWriter.writeElementCData(SceneXmlElements::SCENE_INFO_BALSA_STUDY_ID_TAG,
                                     getBalsaStudyID());
+        xmlWriter.writeElementCData(SceneXmlElements::SCENE_INFO_BASE_DIRECTORY_TAG,
+                                    getBaseDirectory());
         for (int32_t i = 0; i < numScenes; i++) {
             m_scenes[i]->getSceneInfo()->writeSceneInfo(xmlWriter,
                                                         i);
@@ -618,11 +688,53 @@ SceneFile::addToDataFileContentInformation(DataFileContentInformation& dataFileI
     
     const int32_t numScenes = getNumberOfScenes();
     if (numScenes > 0) {
-        AString sceneNamesText = "SCENE NAMES";
+        AString sceneNamesText = "Scenes:";
         for (int32_t i = 0; i < numScenes; i++) {
             const Scene* scene = getSceneAtIndex(i);
-            sceneNamesText.appendWithNewLine("    "
-                                             + scene->getName());
+            sceneNamesText.appendWithNewLine("#" + AString::number(i + 1) + "  " +
+                                             scene->getName());
+            if (dataFileInformation.isOptionFlag(DataFileContentInformation::OPTION_SHOW_MAP_INFORMATION))
+            {
+                sceneNamesText += ":";
+                const SceneAttributes* myAttrs = scene->getAttributes();
+                const SceneClass* guiMgrClass = scene->getClassWithName("guiManager");
+                if (guiMgrClass == NULL)
+                {
+                    sceneNamesText.appendWithNewLine("missing guiManager class");
+                    continue;
+                }
+                const SceneClass* sessMgrClass = guiMgrClass->getClass("m_sessionManager");
+                if (sessMgrClass == NULL)
+                {
+                    sceneNamesText.appendWithNewLine("missing m_sessionManager class");
+                    continue;
+                }
+                const SceneClassArray* brainArray = sessMgrClass->getClassArray("m_brains");
+                if (brainArray == NULL)
+                {
+                    sceneNamesText.appendWithNewLine("missing m_brains class array");
+                    continue;
+                }
+                const int numBrainClasses = brainArray->getNumberOfArrayElements();
+                for (int j = 0; j < numBrainClasses; ++j)
+                {
+                    const SceneClass* brainClass = brainArray->getClassAtIndex(j);
+                    const SceneClass* specClass = brainClass->getClass("specFile");
+                    if (specClass == NULL)
+                    {
+                        sceneNamesText.appendWithNewLine("missing specFile class in m_brains element " + AString::number(j));
+                        continue;
+                    }
+                    SpecFile tempSpec;
+                    tempSpec.restoreFromScene(myAttrs, specClass);
+                    std::vector<AString> tempNames = tempSpec.getAllDataFileNamesSelectedForLoading();
+                    int numNames = (int)tempNames.size();
+                    for (int k = 0; k < numNames; ++k)
+                    {
+                        sceneNamesText.appendWithNewLine("        " + tempNames[k]);
+                    }
+                }
+            }
             
         }
         

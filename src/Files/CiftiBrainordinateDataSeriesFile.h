@@ -26,6 +26,7 @@
 #include "CiftiMappableDataFile.h"
 
 namespace caret {
+    class CiftiConnectivityMatrixDenseDynamicFile;
     class PaletteFile;
 
     class CiftiBrainordinateDataSeriesFile :
@@ -55,6 +56,18 @@ namespace caret {
         
         virtual void getSupportedLineSeriesChartDataTypes(std::vector<ChartDataTypeEnum::Enum>& chartDataTypesOut) const;
         
+        CiftiConnectivityMatrixDenseDynamicFile* getConnectivityMatrixDenseDynamicFile();
+
+        //const CiftiConnectivityMatrixDenseDynamicFile* getConnectivityMatrixDenseDynamicFile() const;
+        
+        virtual void clear();
+        
+        virtual void readFile(const AString& ciftiMapFileName);
+        
+        virtual void writeFile(const AString& filename);
+        
+        virtual bool isModifiedPaletteColorMapping() const;
+        
     private:
         CiftiBrainordinateDataSeriesFile(const CiftiBrainordinateDataSeriesFile&);
 
@@ -72,10 +85,17 @@ namespace caret {
     private:
         // ADD_NEW_MEMBERS_HERE
 
+        void initializeDenseDynamicFile();
+        
         bool m_chartingEnabledForTab[BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_TABS];
+        
+        CiftiConnectivityMatrixDenseDynamicFile* m_lazyInitializedDenseDynamicFile;
+        
+        static const AString s_paletteColorMappingNameInMetaData;
     };
     
 #ifdef __CIFTI_BRAINORDINATE_DATA_SERIES_FILE_DECLARE__
+    const AString CiftiBrainordinateDataSeriesFile::s_paletteColorMappingNameInMetaData = "__DYNAMIC_FILE_PALETTE_COLOR_MAPPING__";
     // <PLACE DECLARATIONS OF STATIC MEMBERS HERE>
 #endif // __CIFTI_BRAINORDINATE_DATA_SERIES_FILE_DECLARE__
 
