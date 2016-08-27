@@ -108,6 +108,7 @@ HelpViewerDialog.h
 HyperLinkTextBrowser.h
 IdentifyBrainordinateDialog.h
 ImageCaptureDialog.h
+ImageFileConvertToVolumeFileDialog.h
 ImageSelectionViewController.h
 InformationDisplayDialog.h
 InformationDisplayPropertiesDialog.h
@@ -179,6 +180,7 @@ WuQTrueFalseComboBox.h
 #WuQWebView.h
 WuQWidget.h
 WuQWidgetObjectGroup.h
+ZipSceneFileDialog.h
 )
 
 #
@@ -301,6 +303,7 @@ HelpViewerDialog.h
 HyperLinkTextBrowser.h
 IdentifyBrainordinateDialog.h
 ImageCaptureDialog.h
+ImageFileConvertToVolumeFileDialog.h
 ImageSelectionViewController.h
 InformationDisplayDialog.h
 InformationDisplayPropertiesDialog.h
@@ -385,6 +388,7 @@ WuQTrueFalseComboBox.h
 WuQWidget.h
 WuQWidgetObjectGroup.h
 WuQtUtilities.h
+ZipSceneFileDialog.h
 
 AboutWorkbenchDialog.cxx
 AnnotationChangeCoordinateDialog.cxx
@@ -497,6 +501,7 @@ HelpViewerDialog.cxx
 HyperLinkTextBrowser.cxx
 IdentifyBrainordinateDialog.cxx
 ImageCaptureDialog.cxx
+ImageFileConvertToVolumeFileDialog.cxx
 ImageSelectionViewController.cxx
 InformationDisplayDialog.cxx
 InformationDisplayPropertiesDialog.cxx
@@ -581,6 +586,7 @@ WuQTrueFalseComboBox.cxx
 WuQWidget.cxx
 WuQWidgetObjectGroup.cxx
 WuQtUtilities.cxx
+ZipSceneFileDialog.cxx
 )
 
 SET(FORMS

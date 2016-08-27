@@ -182,6 +182,29 @@ VolumeFileVoxelColorizer::assignVoxelColorsForMap(const int32_t mapIndex,
             }
             break;
         case SubvolumeAttributes::RGB:
+        {
+            const uint8_t thresholdRGB[3] = { 5, 5, 5 };
+            const int32_t numberOfComponents = m_volumeFile->getNumberOfComponents();
+            if ((numberOfComponents == 3)
+                || (numberOfComponents == 4)) {
+                const float* alphaComponents = ((numberOfComponents == 4)
+                                                ? m_volumeFile->getFrame(mapIndex, 3)
+                                                : NULL);
+                
+                NodeAndVoxelColoring::colorScalarsWithRGBA(m_volumeFile->getFrame(mapIndex, 0),
+                                                           m_volumeFile->getFrame(mapIndex, 1),
+                                                           m_volumeFile->getFrame(mapIndex, 2),
+                                                           alphaComponents,
+                                                           m_voxelCountPerMap,
+                                                           thresholdRGB,
+                                                           m_mapRGBA[mapIndex]);
+                m_mapColoringValid[mapIndex] = true;
+            }
+            else {
+                CaretLogSevere("An RGB/RGBA volume must contain 3 or 4 components per voxel: "
+                               + m_volumeFile->getFileNameNoPath());
+            }
+        }
             break;
         case SubvolumeAttributes::SEGMENTATION:
             break;

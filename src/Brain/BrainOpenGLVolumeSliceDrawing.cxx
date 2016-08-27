@@ -766,25 +766,38 @@ BrainOpenGLVolumeSliceDrawing::drawVolumeSliceViewProjection(const VolumeSliceDr
          */
         glDisable(GL_CULL_FACE);
         
+        const bool cullingSliceViewFlag = true;
+        const bool cullingWholeBrainViewFlag = false; // culling only works in a view looking along an axis (any rotation and slices disappear)
+        
         switch (sliceProjectionType) {
             case VolumeSliceProjectionTypeEnum::VOLUME_SLICE_PROJECTION_ORTHOGONAL:
                 if (m_modelVolume != NULL) {
-                    const bool cullingFlag = true;
-                    if (cullingFlag) {
+                    if (cullingSliceViewFlag) {
                         drawOrthogonalSliceWithCulling(sliceViewPlane,
                                                        sliceCoordinates,
                                                        slicePlane);
                     }
                     else {
-                        drawOrthogonalSlice(sliceViewPlane,
+                        drawOrthogonalSlice_LPI_ONLY(sliceViewPlane,
                                             sliceCoordinates,
                                             slicePlane);
                     }
                 }
                 else if (m_modelWholeBrain != NULL) {
-                    drawOrthogonalSlice(sliceViewPlane,
-                                        sliceCoordinates,
-                                        slicePlane);
+                    /*
+                     * At this time (Aug 4, 2016) culled drawing does not
+                     * work for ALL (whole brain) view.
+                     */
+                    if (cullingWholeBrainViewFlag) {
+                        drawOrthogonalSliceWithCulling(sliceViewPlane,
+                                                       sliceCoordinates,
+                                                       slicePlane);
+                    }
+                    else {
+                        drawOrthogonalSlice_LPI_ONLY(sliceViewPlane,
+                                            sliceCoordinates,
+                                            slicePlane);
+                    }
                 }
                 break;
             case VolumeSliceProjectionTypeEnum::VOLUME_SLICE_PROJECTION_OBLIQUE:
@@ -1742,6 +1755,8 @@ BrainOpenGLVolumeSliceDrawing::drawObliqueSlice(const VolumeSliceViewPlaneEnum::
 /**
  * Draw an orthogonal slice.
  *
+ * NOTE: THIS METHOD ONLY DRAWS CORRECTLY IF THE VOLUME IS IN AN LPI OR RPI ORIENTATION.
+ *
  * @param sliceViewPlane
  *    The plane for slice drawing.
  * @param sliceCoordinates
@@ -1750,9 +1765,9 @@ BrainOpenGLVolumeSliceDrawing::drawObliqueSlice(const VolumeSliceViewPlaneEnum::
  *    Plane equation for the selected slice.
  */
 void
-BrainOpenGLVolumeSliceDrawing::drawOrthogonalSlice(const VolumeSliceViewPlaneEnum::Enum sliceViewPlane,
-                                                 const float sliceCoordinates[3],
-                                                 const Plane& plane)
+BrainOpenGLVolumeSliceDrawing::drawOrthogonalSlice_LPI_ONLY(const VolumeSliceViewPlaneEnum::Enum sliceViewPlane,
+                                                  const float sliceCoordinates[3],
+                                                  const Plane& plane)
 {
     const int32_t browserTabIndex = m_browserTabContent->getTabNumber();
     const DisplayPropertiesLabels* displayPropertiesLabels = m_brain->getDisplayPropertiesLabels();

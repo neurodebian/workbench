@@ -294,6 +294,10 @@ void VolumeFile::readFile(const AString& filename)
 void 
 VolumeFile::writeFile(const AString& filename)
 {
+    if (!(filename.endsWith(".nii.gz") || filename.endsWith(".nii")))
+    {
+        CaretLogWarning("volume file '" + filename + "' should be saved ending in .nii.gz or .nii, other formats are not supported");
+    }
     checkFileWritability(filename);
     
     if (getNumberOfComponents() != 1)
@@ -339,6 +343,14 @@ float VolumeFile::interpolateValue(const float* coordIn, InterpType interp, bool
 
 float VolumeFile::interpolateValue(const float coordIn1, const float coordIn2, const float coordIn3, InterpType interp, bool* validOut, const int64_t brickIndex, const int64_t component) const
 {
+    /*
+     * If the volume is a single slice, CUBIC and TRILINEAR will fail they
+     * require and interpolate between adjacent slices.
+     */
+    if (m_singleSliceFlag) {
+        interp = ENCLOSING_VOXEL;
+    }
+    
     const int64_t* dimensions = getDimensionsPtr();
     switch (interp)
     {
@@ -634,6 +646,13 @@ void VolumeFile::validateMembers()
     }
     
     setPaletteNormalizationMode(PaletteNormalizationModeEnum::NORMALIZATION_SELECTED_MAP_DATA);
+    
+    m_singleSliceFlag = false;
+    if ((dimensions[0] == 1)
+        || (dimensions[1] == 1)
+        || (dimensions[2] == 1)) {
+        m_singleSliceFlag = true;
+    }
     
     /*
      * Will handle colorization of voxel data.
@@ -1078,7 +1097,28 @@ VolumeFile::isMappedWithPalette() const
 {
     CaretAssertVectorIndex(m_caretVolExt.m_attributes, 0);
     CaretAssert(m_caretVolExt.m_attributes[0] != NULL);
-    return (m_caretVolExt.m_attributes[0]->m_type != SubvolumeAttributes::LABEL);
+    
+    bool mapsWithPaletteFlag = true;
+    switch (m_caretVolExt.m_attributes[0]->m_type) {
+        case SubvolumeAttributes::ANATOMY:
+            break;
+        case SubvolumeAttributes::FUNCTIONAL:
+            break;
+        case SubvolumeAttributes::LABEL:
+            mapsWithPaletteFlag = false;
+            break;
+        case SubvolumeAttributes::RGB:
+            mapsWithPaletteFlag = false;
+            break;
+        case SubvolumeAttributes::SEGMENTATION:
+            break;
+        case SubvolumeAttributes::UNKNOWN:
+            break;
+        case SubvolumeAttributes::VECTOR:
+            break;
+    }
+    return mapsWithPaletteFlag;
+//    return (m_caretVolExt.m_attributes[0]->m_type != SubvolumeAttributes::LABEL);
 }
 
 /**
@@ -1181,6 +1221,34 @@ VolumeFile::getMapLabelTable(const int32_t mapIndex) const
     CaretAssert(m_caretVolExt.m_attributes[mapIndex] != NULL);
     CaretAssert(m_caretVolExt.m_attributes[mapIndex]->m_labelTable != NULL);
     return m_caretVolExt.m_attributes[mapIndex]->m_labelTable;
+}
+
+/**
+ * @return Is the data in the file mapped to colors using
+ * Red, Green, Blue, Alpha values.
+ */
+bool
+VolumeFile::isMappedWithRGBA() const
+{
+    bool mapsWithRgbaFlag = false;
+    switch (m_caretVolExt.m_attributes[0]->m_type) {
+        case SubvolumeAttributes::ANATOMY:
+            break;
+        case SubvolumeAttributes::FUNCTIONAL:
+            break;
+        case SubvolumeAttributes::LABEL:
+            break;
+        case SubvolumeAttributes::RGB:
+            mapsWithRgbaFlag = true;
+            break;
+        case SubvolumeAttributes::SEGMENTATION:
+            break;
+        case SubvolumeAttributes::UNKNOWN:
+            break;
+        case SubvolumeAttributes::VECTOR:
+            break;
+    }
+    return mapsWithRgbaFlag;
 }
 
 /**

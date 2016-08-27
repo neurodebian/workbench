@@ -25,6 +25,7 @@
 #define _FILE_OFFSET_BITS 64
 #endif
 
+#include "CaretAssert.h"
 #include "CaretBinaryFile.h"
 #include "CaretLogger.h"
 #include "DataFileException.h"
@@ -128,12 +129,14 @@ void CaretBinaryFile::open(const QString& filename, const OpenMode& opmode)
 
 void CaretBinaryFile::read(void* dataOut, const int64_t& count, int64_t* numRead)
 {
+    CaretAssert(count >= 0);//not sure about allowing 0
     if (!getOpenForRead()) throw DataFileException("file is not open for reading");
     m_impl->read(dataOut, count, numRead);
 }
 
 void CaretBinaryFile::seek(const int64_t& position)
 {
+    CaretAssert(position >= 0);
     if (m_curMode == NONE) throw DataFileException("file is not open, can't seek");
     m_impl->seek(position);
 }
@@ -146,6 +149,7 @@ int64_t CaretBinaryFile::pos()
 
 void CaretBinaryFile::write(const void* dataIn, const int64_t& count)
 {
+    CaretAssert(count >= 0);//not sure about allowing 0
     if (!getOpenForWrite()) throw DataFileException("file is not open for writing");
     m_impl->write(dataIn, count);
 }
@@ -202,7 +206,7 @@ void ZFileImpl::read(void* dataOut, const int64_t& count, int64_t* numRead)
     while (totalRead < count)
     {
         int64_t iterSize = min(count - totalRead, CHUNK_SIZE);
-        readret = gzread(m_zfile, ((uint8_t*)dataOut) + totalRead, iterSize);
+        readret = gzread(m_zfile, ((char*)dataOut) + totalRead, iterSize);
         if (readret < 1) break;//0 or -1 indicate eof or error
         totalRead += readret;
     }
@@ -247,7 +251,7 @@ void ZFileImpl::write(const void* dataIn, const int64_t& count)
     while (totalWritten < count)
     {
         int64_t iterSize = min(count - totalWritten, CHUNK_SIZE);
-        int writeret = gzwrite(m_zfile, ((uint8_t*)dataIn) + totalWritten, iterSize);
+        int writeret = gzwrite(m_zfile, ((const char*)dataIn) + totalWritten, iterSize);
         if (writeret < 1) break;//0 or -1 indicate eof or error
         totalWritten += writeret;
     }

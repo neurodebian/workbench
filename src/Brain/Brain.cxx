@@ -2996,6 +2996,20 @@ Brain::addReadOrReloadConnectivityMatrixParcelDenseFile(const FileModeAddReadRel
 }
 
 /**
+ * Initialize a data series file's dense connectivity
+ */
+void
+Brain::initializeDenseDataSeriesFile(CiftiBrainordinateDataSeriesFile* dataSeriesFile)
+{
+    /*
+     * Enable dynamic connectivity using preferences
+     */
+    CaretPreferences* prefs = SessionManager::get()->getCaretPreferences();
+    CiftiConnectivityMatrixDenseDynamicFile* denseDynFile = dataSeriesFile->getConnectivityMatrixDenseDynamicFile();
+    denseDynFile->setEnabledAsLayer(prefs->isDynamicConnectivityDefaultedOn());
+}
+
+/**
  * Read a connectivity data series file.
  *
  * @param fileMode
@@ -3070,6 +3084,8 @@ Brain::addReadOrReloadConnectivityDataSeriesFile(const FileModeAddReadReload fil
                                       file);
         m_connectivityDataSeriesFiles.push_back(file);
     }
+
+    initializeDenseDataSeriesFile(file);
     
     return file;
 }
@@ -4125,6 +4141,7 @@ Brain::addDataFile(CaretDataFile* caretDataFile)
                 {
                     CiftiBrainordinateDataSeriesFile* file = dynamic_cast<CiftiBrainordinateDataSeriesFile*>(caretDataFile);
                     CaretAssert(file);
+                    initializeDenseDataSeriesFile(file);
                     m_connectivityDataSeriesFiles.push_back(file);
                 }
                     break;
@@ -6989,6 +7006,13 @@ Brain::restoreFromScene(const SceneAttributes* sceneAttributes,
         return;
     }
     
+    /*
+     * Prior to restoring the scene, make a copy of the current spec file
+     * so that the "in spec" status for data files within the spec file
+     * can be preserved.
+     */
+    const SpecFile preSceneLoadSpecFile(*m_specFile);
+    
     bool isLoadFiles = false;
     switch (sceneAttributes->getSceneType()) {
         case SceneTypeEnum::SCENE_TYPE_FULL:
@@ -7008,6 +7032,11 @@ Brain::restoreFromScene(const SceneAttributes* sceneAttributes,
                            RESET_BRAIN_KEEP_SCENE_FILES_YES,
                            RESET_BRAIN_KEEP_SPEC_FILE_YES);
     }
+    
+    /*
+     * Preserve "in spec" status prior to loading of scene.
+     */
+    m_specFile->transferDataFilesInSpecStatus(preSceneLoadSpecFile);
     
     /*
      * Add all scene files to the spec file (but not a member of

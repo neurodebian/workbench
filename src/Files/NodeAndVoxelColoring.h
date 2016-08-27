@@ -54,6 +54,14 @@ namespace caret {
                                             uint8_t* rgbaOut,
                                             const bool ignoreThresholding = false);
         
+        static void colorScalarsWithRGBA(const float* redComponents,
+                                         const float* greenComponents,
+                                         const float* blueComponents,
+                                         const float* alphaComponents,
+                                         const int64_t numberOfComponents,
+                                         const uint8_t rgbThreshold[3],
+                                         uint8_t* rgbaOut);
+        
         // JWH 24 April 2015  static const float SMALL_POSITIVE;
         // JWH 24 April 2015  static const float SMALL_NEGATIVE;
         
@@ -94,14 +102,14 @@ namespace caret {
         };
         
         static void colorScalarsWithPalettePrivate(const FastStatistics* statistics,
-                                            const PaletteColorMapping* paletteColorMapping,
-                                            const Palette* palette,
-                                            const float* scalars,
-                                            const float* scalarThresholds,
-                                            const int64_t numberOfScalars,
-                                            const ColorDataType colorDataType,
-                                            void* rgbaOutPointer,
-                                            const bool ignoreThresholding);
+                                                   const PaletteColorMapping* paletteColorMapping,
+                                                   const Palette* palette,
+                                                   const float* scalars,
+                                                   const float* scalarThresholds,
+                                                   const int64_t numberOfScalars,
+                                                   const ColorDataType colorDataType,
+                                                   void* rgbaOutPointer,
+                                                   const bool ignoreThresholding);
         
         static void colorIndicesWithLabelTableForDisplayGroupTabPrivate(const GiftiLabelTable* labelTable,
                                                       const float* labelIndices,
@@ -110,6 +118,16 @@ namespace caret {
                                                       const int32_t tabIndex,
                                                       const ColorDataType colorDataType,
                                                       void* rgbaOutPointer);
+        
+        static void colorScalarsWithRGBAPrivate(const float* redComponents,
+                                                const float* greenComponents,
+                                                const float* blueComponents,
+                                                const float* alphaComponents,
+                                                const int64_t numberOfComponents,
+                                                const ColorDataType colorDataType,
+                                                const uint8_t* rgbThreshold,
+                                                uint8_t* rgbaOutPointer);
+        
         
         NodeAndVoxelColoring();
         

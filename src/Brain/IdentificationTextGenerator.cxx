@@ -42,6 +42,7 @@
 #include "FociFile.h"
 #include "Focus.h"
 #include "GiftiLabel.h"
+#include "ImageFile.h"
 #include "OverlaySet.h"
 #include "SelectionItemBorderSurface.h"
 #include "SelectionItemChartDataSeries.h"
@@ -51,6 +52,7 @@
 #include "SelectionItemChartTimeSeries.h"
 #include "SelectionItemFocusSurface.h"
 #include "SelectionItemFocusVolume.h"
+#include "SelectionItemImage.h"
 #include "SelectionItemSurfaceNode.h"
 #include "SelectionItemVoxel.h"
 #include "SelectionManager.h"
@@ -140,6 +142,9 @@ IdentificationTextGenerator::createIdentificationText(const SelectionManager* id
     
     this->generateCiftiConnectivityMatrixIdentificationText(idText,
                                                             idManager->getCiftiConnectivityMatrixRowColumnIdentification());
+    
+    this->generateImageIdentificationText(idText,
+                                          idManager->getImageIdentification());
     
     return idText.toString();
 }
@@ -263,6 +268,28 @@ IdentificationTextGenerator::generateVolumeIdentificationText(IdentificationStri
                                 else {
                                     text += ("LABLE_MISSING_FOR_INDEX="
                                              + AString::number(labelIndex));
+                                }
+                            }
+                            else if (volumeFile->getType() == SubvolumeAttributes::RGB) {
+                                if (volumeFile->getNumberOfComponents() == 4) {
+                                    text += ("RGBA("
+                                             + AString::number(volumeFile->getValue(vfI, vfJ, vfK, jMap, 0))
+                                             + ","
+                                             + AString::number(volumeFile->getValue(vfI, vfJ, vfK, jMap, 1))
+                                             + ","
+                                             + AString::number(volumeFile->getValue(vfI, vfJ, vfK, jMap, 2))
+                                             + ","
+                                             + AString::number(volumeFile->getValue(vfI, vfJ, vfK, jMap, 3))
+                                             + ")");
+                                }
+                                else if (volumeFile->getNumberOfComponents() == 3) {
+                                    text += ("RGB("
+                                             + AString::number(volumeFile->getValue(vfI, vfJ, vfK, jMap, 0))
+                                             + ","
+                                             + AString::number(volumeFile->getValue(vfI, vfJ, vfK, jMap, 1))
+                                             + ","
+                                             + AString::number(volumeFile->getValue(vfI, vfJ, vfK, jMap, 2))
+                                             + ")");
                                 }
                             }
                             else {
@@ -1055,7 +1082,8 @@ IdentificationTextGenerator::generateSurfaceFociIdentifcationText(Identification
  *     String builder for identification text.
  * @param idVolumeFocus
  *     Information for surface focus ID.
- */void
+ */
+void
 IdentificationTextGenerator::generateVolumeFociIdentifcationText(IdentificationStringBuilder& idText,
                                                                   const SelectionItemFocusVolume* idVolumeFocus) const
 {
@@ -1130,6 +1158,31 @@ IdentificationTextGenerator::generateVolumeFociIdentifcationText(IdentificationS
         
     }
 }
+
+/**
+ * Generate identification text for image identification.
+ * @param idText
+ *     String builder for identification text.
+ * @param idImage
+ *     Information for image ID.
+ */
+void
+IdentificationTextGenerator::generateImageIdentificationText(IdentificationStringBuilder& idText,
+                                                             const SelectionItemImage* idImage) const
+{
+    if (idImage->isValid()) {
+        const AString text = ("Image "
+                              + idImage->getImageFile()->getFileNameNoPath()
+                              + " Pixel IJ ("
+                              + AString::number(idImage->getPixelI())
+                              + ","
+                              + AString::number(idImage->getPixelJ())
+                              + ")");
+        idText.addLine(false,
+                       text);
+    }
+}
+
 
 
 /**

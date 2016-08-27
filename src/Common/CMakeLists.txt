@@ -60,11 +60,13 @@ CaretPreferences.h
 CaretTemporaryFile.h
 CaretUndoCommand.h
 CaretUndoStack.h
+ControlPoint3D.h
 CubicSpline.h
 DataCompressZLib.h
 DataFile.h
-DataFileContentInformation.h
 DataFileContentCopyMoveInterface.h
+DataFileContentCopyMoveParameters.h
+DataFileContentInformation.h
 DataFileException.h
 DataFileInterface.h
 DataFileTypeEnum.h
@@ -159,9 +161,11 @@ CaretPreferences.cxx
 CaretTemporaryFile.cxx
 CaretUndoCommand.cxx
 CaretUndoStack.cxx
+ControlPoint3D.cxx
 CubicSpline.cxx
 DataCompressZLib.cxx
 DataFile.cxx
+DataFileContentCopyMoveParameters.cxx
 DataFileContentInformation.cxx
 DataFileException.cxx
 DataFileTypeEnum.cxx

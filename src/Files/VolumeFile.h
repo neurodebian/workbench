@@ -93,6 +93,9 @@ namespace caret {
         /** Performs coloring of voxels.  Will be NULL if coloring is disabled. */
         CaretPointer<VolumeFileVoxelColorizer> m_voxelColorizer;
         
+        /** True if the volume is a single slice, needed by interpolateValue() methods */
+        bool m_singleSliceFlag;
+        
         mutable CaretMutex m_splineMutex;
         
         mutable bool m_splinesValid;
@@ -273,6 +276,8 @@ namespace caret {
                                          std::vector<VoxelIJK>& voxelIndicesOut) const;
         
         std::vector<int32_t> getUniqueLabelKeysUsedInMap(const int32_t mapIndex) const;
+        
+        virtual bool isMappedWithRGBA() const;
         
         AString getMapUniqueID(const int32_t mapIndex) const;
         

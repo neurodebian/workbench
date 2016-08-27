@@ -953,6 +953,29 @@ CaretPreferences::setShowVolumeIdentificationSymbols(const bool showSymbols)
                      this->showVolumeIdentificationSymbols);
 }
 
+/**
+ * @return Is dynamic connectivity defaulted on?
+ */
+bool
+CaretPreferences::isDynamicConnectivityDefaultedOn() const
+{
+    return this->dynamicConnectivityDefaultedOn;
+}
+
+/**
+ * Set dynamic connectivity defaulted on.
+ *
+ * @param defaultedOn
+ *     New status.
+ */
+void
+CaretPreferences::setDynamicConnectivityDefaultedOn(const bool defaultedOn)
+{
+    this->dynamicConnectivityDefaultedOn = defaultedOn;
+    this->setBoolean(NAME_DYNAMIC_CONNECTIVITY_ON,
+                     defaultedOn);
+}
+
 
 /**
  * @return The image capture method.
@@ -1400,13 +1423,14 @@ CaretPreferences::readPreferences()
     }
     this->setLoggingLevel(logLevel);
     
+    ImageCaptureMethodEnum::Enum defaultCaptureType = ImageCaptureMethodEnum::IMAGE_CAPTURE_WITH_RENDER_PIXMAP;
     AString imageCaptureMethodName = this->qSettings->value(NAME_IMAGE_CAPTURE_METHOD,
-                                                        ImageCaptureMethodEnum::toName(ImageCaptureMethodEnum::IMAGE_CAPTURE_WITH_RENDER_PIXMAP)).toString();
+                                                        ImageCaptureMethodEnum::toName(defaultCaptureType)).toString();
     bool validImageCaptureMethodName = false;
     this->imageCaptureMethod = ImageCaptureMethodEnum::fromName(imageCaptureMethodName,
                                                             &validImageCaptureMethodName);
     if ( ! validImageCaptureMethodName) {
-        this->imageCaptureMethod = ImageCaptureMethodEnum::IMAGE_CAPTURE_WITH_RENDER_PIXMAP;
+        this->imageCaptureMethod = defaultCaptureType;
     }
     
     AString openGLDrawingMethodName = this->qSettings->value(NAME_OPENGL_DRAWING_METHOD,
@@ -1454,6 +1478,9 @@ CaretPreferences::readPreferences()
     
     this->volumeIdentificationDefaultedOn = this->getBoolean(CaretPreferences::NAME_VOLUME_IDENTIFICATION_DEFAULTED_ON,
                                                              true);
+    
+    this->dynamicConnectivityDefaultedOn = this->getBoolean(CaretPreferences::NAME_DYNAMIC_CONNECTIVITY_ON,
+                                                            true);
     
     this->remoteFileUserName = this->getString(NAME_REMOTE_FILE_USER_NAME);
     this->remoteFilePassword = this->getString(NAME_REMOTE_FILE_PASSWORD);

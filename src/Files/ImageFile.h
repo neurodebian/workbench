@@ -27,10 +27,36 @@
 class QImage;
 
 namespace caret {
+    class ControlPoint3D;
+    class Matrix4x4;
+    class PaletteFile;
+    class VolumeFile;
     
 /// File for images
 class ImageFile : public CaretDataFile {
 public:
+//    class ControlPoint {
+//    public:
+//        ControlPoint(const float i,
+//                     const float j,
+//                     const float k,
+//                     const float x,
+//                     const float y,
+//                     const float z)
+//        : i(i), j(j), k(k), x(x), y(y), z(z) { }
+//        
+//        void getSource(double pt[3]) const { pt[0] = i; pt[1] = j; pt[2] = k; }
+//        
+//        void getTarget(double pt[3]) const { pt[0] = x; pt[1] = y; pt[2] = z; }
+//        
+//        const float i;
+//        const float j;
+//        const float k;
+//        const float x;
+//        const float y;
+//        const float z;
+//    };
+    
     /**
      * Location of origin in image data.
      */
@@ -40,6 +66,22 @@ public:
         /** Origin at top (most image formats have origin at top) */
         IMAGE_DATA_ORIGIN_AT_TOP
     };
+    
+    /**
+     * Convert to volume color mode
+     */
+    enum CONVERT_TO_VOLUME_COLOR_MODE {
+        /** Create single component grayscale volume */
+        CONVERT_TO_VOLUME_COLOR_GRAYSCALE,
+        /** Create three component RGB volume */
+        CONVERT_TO_VOLUME_COLOR_RGB
+    };
+    
+//    enum LANDMARK_MODE {
+//        VTK_LANDMARK_AFFINE,
+//        VTK_LANDMARK_RIGIDBODY,
+//        VTK_LANDMARK_SIMILARITY
+//    };
     
     ImageFile();
     
@@ -153,6 +195,11 @@ public:
     
     static void getImageFileFilters(std::vector<AString>& imageFileFilters,
                                     AString& defaultFilter);
+
+    VolumeFile* convertToVolumeFile(const CONVERT_TO_VOLUME_COLOR_MODE colorMode,
+                                    const std::vector<ControlPoint3D>& controlPoints,
+                                    const PaletteFile* paletteFile,
+                                    AString& errorMessageOut) const;
 
     virtual void saveFileDataToScene(const SceneAttributes* sceneAttributes,
                                      SceneClass* sceneClass);

@@ -987,6 +987,10 @@ SpecFile::readFileFromString(const AString& string)
 void 
 SpecFile::writeFile(const AString& filename)
 {
+    if (!(filename.endsWith(".spec") || filename.endsWith(".wb_spec")))
+    {
+        CaretLogWarning("spec file '" + filename + "' should be saved ending in .spec");
+    }
     checkFileWritability(filename);
     
     FileInformation specInfo(filename);
@@ -1330,6 +1334,71 @@ SpecFile::setModifiedFilesSelectedForSaving()
         SpecFileDataFileTypeGroup* dataFileTypeGroup = *iter;
         dataFileTypeGroup->setModifiedFilesSelectedForSaving();
     }    
+}
+
+/**
+ * Get the file information for the file with the given name.
+ * 
+ * @param fileName
+ *     Name of the data file.
+ * @return
+ *     File information for the file or NULL if not found.
+ */
+
+const SpecFileDataFile*
+SpecFile::getFileInfoFromFileName(const AString& fileName) const
+{
+    for (std::vector<SpecFileDataFileTypeGroup*>::const_iterator iter = dataFileTypeGroups.begin();
+         iter != dataFileTypeGroups.end();
+         iter++) {
+        SpecFileDataFileTypeGroup* dataFileTypeGroup = *iter;
+        const int32_t numFiles = dataFileTypeGroup->getNumberOfFiles();
+        for (int32_t i = 0; i < numFiles; i++) {
+            SpecFileDataFile* dataFileInfo = dataFileTypeGroup->getFileInformation(i);
+            if (fileName == dataFileInfo->getFileName()) {
+                return dataFileInfo;
+            }
+        }
+    }
+    
+    return NULL;
+}
+
+/**
+ * Transfer the "in spec" status for all data files from the
+ * given spec file to this spec file.  Files are matched by
+ * data file type and absolute path file name.
+ *
+ * The spec file names MUST match, else no action is taken.
+ *
+ * @param specFile
+ *     Spec file from which in spec statuses are copied.
+ */
+void
+SpecFile::transferDataFilesInSpecStatus(const SpecFile& specFile)
+{
+    if (getFileName() != specFile.getFileName()) {
+        return;
+    }
+    
+    for (std::vector<SpecFileDataFileTypeGroup*>::const_iterator iter = dataFileTypeGroups.begin();
+         iter != dataFileTypeGroups.end();
+         iter++) {
+        SpecFileDataFileTypeGroup* dataFileTypeGroup = *iter;
+        const int32_t numFiles = dataFileTypeGroup->getNumberOfFiles();
+        for (int32_t i = 0; i < numFiles; i++) {
+            SpecFileDataFile* dataFileInfo = dataFileTypeGroup->getFileInformation(i);
+            const AString fileName = dataFileInfo->getFileName();
+            FileInformation fileInfo(fileName);
+            if (fileInfo.exists()
+                && (fileInfo.isAbsolute())) {
+                const SpecFileDataFile* copyFromDataFileInfo = specFile.getFileInfoFromFileName(fileName);
+                if (copyFromDataFileInfo != NULL) {
+                    dataFileInfo->setSpecFileMember(copyFromDataFileInfo->isSpecFileMember());
+                }
+            }
+        }
+    }
 }
 
 /**

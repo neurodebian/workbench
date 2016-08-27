@@ -364,6 +364,15 @@ OverlayViewController::fileComboBoxSelected(int indx)
     updateOverlaySettingsEditor();
     updateViewController(this->overlay);
     updateGraphicsWindow();
+    
+    if (file != NULL) {
+        if (file->isVolumeMappable()) {
+            /*
+             * Need to update slice indices/coords in toolbar.
+             */
+            EventManager::get()->sendEvent(EventUserInterfaceUpdate().setWindowIndex(browserWindowIndex).addToolBar().getPointer());
+        }
+    }
 }
 
 /**
@@ -612,6 +621,7 @@ OverlayViewController::updateViewController(Overlay* overlay)
     FilePathNamePrefixCompactor::removeMatchingPathPrefixFromCaretDataFiles(dataFiles,
                                                                             displayNames);
     CaretAssert(dataFiles.size() == displayNames.size());
+
     /*
      * Load the file selection combo box.
      */
@@ -682,13 +692,16 @@ OverlayViewController::updateViewController(Overlay* overlay)
     bool haveMultipleMaps = false;
     bool dataIsMappedWithPalette = false;
     bool dataIsMappedWithLabelTable = false;
+    bool dataIsMappedWithRGBA = false;
     bool haveOpacity = false;
     if (haveFile) {
         dataIsMappedWithPalette = selectedFile->isMappedWithPalette();
         dataIsMappedWithLabelTable = selectedFile->isMappedWithLabelTable();
+        dataIsMappedWithRGBA    = selectedFile->isMappedWithRGBA();
         haveMultipleMaps = (selectedFile->getNumberOfMaps() > 1);
         haveOpacity = (dataIsMappedWithLabelTable
-                       || dataIsMappedWithPalette);
+                       || dataIsMappedWithPalette
+                       || dataIsMappedWithRGBA);
     }
     
     /**
