@@ -1,3 +1,9 @@
+connectome-workbench (1.2.3-1) unstable; urgency=medium
+
+  * Fresh upstream minor/bugfix release
+
+ -- Yaroslav Halchenko <debian@onerussian.com>  Sat, 27 Aug 2016 12:42:19 -0400
+
 connectome-workbench (1.2.2-1) unstable; urgency=medium
 
   * Fresh upstream release
