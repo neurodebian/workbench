@@ -1,6 +1,9 @@
 connectome-workbench (1.2.3-1) unstable; urgency=medium
 
   * Fresh upstream minor/bugfix release
+  * debian/copyright + debian/patches/up_debian_copyright
+    - updated (upstream helps to maintain it, need to feed back the changes)
+  * debian/control - detabified Build-Depends
 
  -- Yaroslav Halchenko <debian@onerussian.com>  Sat, 27 Aug 2016 12:42:19 -0400
 

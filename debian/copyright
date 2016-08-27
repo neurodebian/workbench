@@ -6,8 +6,8 @@ Files: *
 Copyright: 2014-2016 Washington University School of Medicine
 License: GPL-2+
 
-Files: src/Files/SurfaceResamplingHelper.cxx
-Copyright: 2014 Washington University School of Medicine
+Files: src/Files/SurfaceResamplingHelper.cxx src/Cifti/examples/* src/CommandLine/wb_shortcuts
+Copyright: 2014-2015 Washington University School of Medicine
 License: Expat
 
 Files: src/Quazip/*
@@ -47,7 +47,7 @@ Copyright: 2014 Washington University School of Medicine
            1970-2003, Wm. Randolph Franklin
 License: GPL-2+ and PNPOLY-BSD-3-Clause
 
-Files: src/Resources/FtglFonts/VeraFonts/Vera*.ttf
+Files: src/Resources/FtglFonts/Vera*.ttf
 Copyright: 2003 Bitstream, Inc.
 License: Bitstream-Vera
 
@@ -298,6 +298,7 @@ License: Qt-commercial
  conditions see http://qt.digia.com/licensing.  For further information
  use the contact form at http://qt.digia.com/contact-us.
 
+
 License: GPL-2+ with Font exception
  The linux-libertine fonts are dual-licensed under the GNU General Public
  License (GPL) with font exception, and the SIL Open Font License (OFL).
@@ -425,5 +426,5 @@ License: OFL-1.1
  IN THE FONT SOFTWARE.
 
 Files: debian/*
-Copyright: 2014, Yaroslav Halchenko <debian@onerussian.com>
+Copyright: 2014-2016, Yaroslav Halchenko <debian@onerussian.com>
 License: GPL-2+
