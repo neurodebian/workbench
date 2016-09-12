@@ -1,3 +1,11 @@
+connectome-workbench (1.2.3-2) unstable; urgency=medium
+
+  * debian/patches/deb_dynamic_GLU
+    - to list .so ahead of .a to provide dynamic linking against GLU and co
+      which avoids preferring static linking for those libs (Closes: #837403)
+
+ -- Yaroslav Halchenko <debian@onerussian.com>  Mon, 12 Sep 2016 20:21:31 -0400
+
 connectome-workbench (1.2.3-1) unstable; urgency=medium
 
   * Fresh upstream minor/bugfix release
