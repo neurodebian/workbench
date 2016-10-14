@@ -1,3 +1,10 @@
+connectome-workbench (1.2.3-3) unstable; urgency=medium
+
+  * Do not provide --parallel on mips architectures to dh in hope to reduce
+    memory impact and avoid FTBFS
+
+ -- Yaroslav Halchenko <debian@onerussian.com>  Fri, 14 Oct 2016 18:34:49 -0400
+
 connectome-workbench (1.2.3-2) unstable; urgency=medium
 
   * debian/patches/deb_dynamic_GLU

@@ -4,6 +4,7 @@
 srcpkg = $(shell LC_ALL=C dpkg-parsechangelog | grep '^Source:' | cut -d ' ' -f 2,2)
 debver = $(shell LC_ALL=C dpkg-parsechangelog | grep '^Version:' | cut -d ' ' -f 2,2 )
 uver = $(shell echo $(debver) | cut -d '-' -f 1,1 )
+parallel=$(shell dpkg --print-architecture | grep -q mips && echo '' || echo '--parallel')
 
 export  http_proxy=http://127.0.0.1:9/
 export  https_proxy=http://127.0.0.1:9/
@@ -25,7 +26,7 @@ export DH_VERBOSE=1
 
 # Default mega-rule
 %:
-	dh $@ --parallel --sourcedirectory=src
+	dh $@ $(parallel) --sourcedirectory=src
 
 override_dh_clean:
 	cat src/debian/copyright debian/copyright.debian >| debian/copyright
