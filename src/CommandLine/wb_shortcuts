@@ -25,7 +25,7 @@ set -ue
 
 global_cmd_line="$0 $*"
 global_script_name="wb_shortcuts"
-global_script_version="beta-0.2"
+global_script_version="beta-0.3"
 
 function version ()
 {
@@ -37,9 +37,10 @@ function usage ()
     version
     echo
     echo "Information options:"
-    echo "   -help             display this help info"
-    echo "   -version          display version info"
-    echo "   -list-functions   show available functions"
+    echo "   -help                display this help info"
+    echo "   -version             display version info"
+    echo "   -list-functions      show available functions"
+    echo "   -all-functions-help  show all functions and their help info - VERY LONG"
     echo
     #wrap guide for 80 columns                                                           |
     echo "To get the help information of a function, run it without any additional"
@@ -70,6 +71,9 @@ function main ()
             ;;
         (-list-functions)
             list_functions
+            ;;
+        (-all-functions-help)
+            all_functions_help
             ;;
         (*)
             #magic switch matching and function name conversion happens in here
@@ -107,7 +111,7 @@ function create_function ()
     global_descrip+=("$*")
 }
 
-function switch_to_func_name
+function switch_to_func_name ()
 {
     printf '%s' "$1" | sed 's/^-//' | sed 's/-/_/g'
 }
@@ -135,7 +139,7 @@ function border_file_concatenate ()
         #wrap guide for 80 columns                                                           |
         echo "      Additional input files may be specified after the mandatory input file."
         echo
-        exit 0
+        return 0
     fi
     if (($# < 2))
     then
@@ -169,7 +173,7 @@ function cifti_concatenate ()
         echo "      The -map option takes either a 1-based index or a map name, and causes"
         echo "      the operation to use only one map from each input file."
         echo
-        exit 0
+        return 0
     fi
     local -a maparg
     if [[ "$1" == "-map" ]]
@@ -188,7 +192,7 @@ function cifti_concatenate ()
     local -a merge_arg_array
     for ((i = 2; i <= $#; ++i))
     do
-        merge_arg_array+=("-cifti" "${!i}" "${maparg[@]}")
+        merge_arg_array+=("-cifti" "${!i}" ${maparg[@]+"${maparg[@]}"})
     done
     wb_command -cifti-merge "$1" "${merge_arg_array[@]}"
 }
@@ -212,7 +216,7 @@ function cifti_demean ()
         echo "      concatenates them.  Additional input files may be specified after the"
         echo "      mandatory input file."
         echo
-        exit 0
+        return 0
     fi
     local normalize=0
     if [[ "$1" == "-normalize" ]]
@@ -250,6 +254,77 @@ function cifti_demean ()
     #let the exit hook clean up the normed temporaries, we're done
 }
 
+create_function "-cifti-dlabel-split-cortex" "SEPARATE SURFACE LABELS INTO LEFT/RIGHT"
+function cifti_dlabel_split_cortex ()
+{
+    local function_switch="$1"
+    shift
+    if (($# < 1))
+    then
+        echo "`switch_to_descrip $function_switch`"
+        echo "   $global_script_name $function_switch"
+        echo "      <dlabel-in> - input dlabel file"
+        echo "      <dlabel-out> - output - output dlabel file"
+        echo
+        #wrap guide for 80 columns                                                           |
+        echo "      For every label represented on left or right cortex, rename it with a"
+        echo "      prefix of 'L_' or 'R_', and change the label values as needed to keep"
+        echo "      the new names separate."
+        echo
+        return 0
+    fi
+    if (($# != 2))
+    then
+        error "function requires 2 arguments, $# provided"
+    fi
+    #to prevent it from also changing label keys in a multi-map dlabel (because gifti doesn't support label tables per-map),
+    #we need to loop through the columns
+    local i num_maps=`wb_command -file-information -only-number-of-maps "$1"`
+    local -a mergeargs
+    for ((i = 1; i <= num_maps; ++i))
+    do
+        add_temporary_files "$2".temp$i.dlabel.nii "$2".temp$i.L.label.gii "$2".temp$i.R.label.gii "$2".temp$i.nii.gz
+        add_temporary_files "$2".temp$i.L.txt "$2".temp$i.R.txt "$2".temp$i.vol.txt
+        wb_command -cifti-merge "$2".temp$i.dlabel.nii -cifti "$1" -column $i
+        wb_command -cifti-separate "$2".temp$i.dlabel.nii COLUMN -label CORTEX_LEFT "$2".temp$i.L.label.gii -label CORTEX_RIGHT "$2".temp$i.R.label.gii -volume-all "$2".temp$i.nii.gz -crop
+        #these are temporary files and will be deleted regardless, go ahead and overwrite them
+        #LEFT
+        wb_command -gifti-label-add-prefix "$2".temp$i.L.label.gii L_ "$2".temp$i.L.label.gii
+        #need to remove the unused ones from the table so we don't get stupid overlaps
+        wb_command -label-export-table "$2".temp$i.L.label.gii "$2".temp$i.L.txt
+        #mute the warning from loading a label as a metric
+        wb_command -metric-label-import "$2".temp$i.L.label.gii \
+                                        "$2".temp$i.L.txt \
+                                        "$2".temp$i.L.label.gii \
+                                        -drop-unused-labels 2> /dev/null
+        
+        #RIGHT
+        wb_command -gifti-label-add-prefix "$2".temp$i.R.label.gii R_ "$2".temp$i.R.label.gii
+        #need to remove the unused ones from the table so we don't get stupid overlaps
+        wb_command -label-export-table "$2".temp$i.R.label.gii "$2".temp$i.R.txt
+        #mute the warning from loading a label as a metric
+        wb_command -metric-label-import "$2".temp$i.R.label.gii \
+                                        "$2".temp$i.R.txt \
+                                        "$2".temp$i.R.label.gii \
+                                        -drop-unused-labels 2> /dev/null
+        #VOLUME
+        #need to also remove unused labels from this, too
+        wb_command -volume-label-export-table "$2".temp$i.nii.gz 1 "$2".temp$i.vol.txt
+        #no warning to mute
+        wb_command -volume-label-import "$2".temp$i.nii.gz \
+                                        "$2".temp$i.vol.txt \
+                                        "$2".temp$i.nii.gz \
+                                        -drop-unused-labels
+        
+        wb_command -cifti-create-dense-from-template "$2".temp$i.dlabel.nii "$2".temp$i.dlabel.nii -label CORTEX_LEFT "$2".temp$i.L.label.gii -label CORTEX_RIGHT "$2".temp$i.R.label.gii -volume-all "$2".temp$i.nii.gz -from-cropped
+        rm -f "$2".temp$i.L.label.gii "$2".temp$i.R.label.gii "$2".temp$i.nii.gz
+        rm -f "$2".temp$i.L.txt "$2".temp$i.R.txt "$2".temp$i.vol.txt
+        mergeargs+=(-cifti "$2".temp$i.dlabel.nii)
+    done
+    wb_command -cifti-merge "$2" "${mergeargs[@]}"
+    #let the cleanup function remove the intermediate cifti files
+}
+
 create_function "-command-help-search" "SEARCH WB_COMMAND HELP"
 function command_help_search ()
 {
@@ -259,15 +334,35 @@ function command_help_search ()
     then
         echo "`switch_to_descrip $function_switch`"
         echo "   $global_script_name $function_switch"
+        echo "      [-also-deprecated] - also search deprecated commands"
         echo "      <search-string> - grep pattern to search for"
         echo
         #wrap guide for 80 columns                                                           |
         echo "      Searches for wb_command processing commands that contain the pattern."
         echo
-        exit 0
+        return 0
     fi
     local -a switches
     readarray -t switches < <(wb_command -list-commands | awk '{print $1}')
+    if [[ "$1" == "-also-deprecated" ]]
+    then
+        shift
+        local -a depswitches
+        readarray -t depswitches < <(wb_command -list-deprecated-commands | awk '{print $1}')
+        switches+=("${depswitches[@]}")
+    fi
+    #we could add a -- option to denote end of options, but then it would be harder to search for -- rather than for an option
+    if (($# < 1))
+    then
+        error "function requires an argument"
+    fi
+    #requiring quotes when searching for a phrase is slightly inconvenient
+    #on the other hand, a phrase could get split across lines, so that is error prone anyway
+    #if (($# != 1))
+    #then
+    #    warning "more than one argument provided, check for unquoted spaces and spelling of options"
+    #fi
+    local i
     for ((i = 0; i < ${#switches[@]}; ++i))
     do
         #use $* in case someone didn't quote, but keep it all in the pattern argument
@@ -308,11 +403,11 @@ function freesurfer_resample_prep ()
         echo "      both midthickness surfaces needed by the -area-surfs option of wb_command"
         echo "      -metric-resample, -label-resample, and similar commands."
         echo
-        exit 0
+        return 0
     fi
-    if (($# < 7))
+    if (($# != 7))
     then
-        error "function requires 7 arguments"
+        error "function requires 7 arguments, $# provided"
     fi
     if [[ "$7" != *.surf.gii ]]
     then
@@ -353,11 +448,11 @@ function import_probtrack_roi ()
         echo "      The <cifti-roi> file should contain the ROI used as the mask, and should"
         echo "      be in the desired brainordinate space."
         echo
-        exit 0
+        return 0
     fi
-    if (($# < 3))
+    if (($# != 3))
     then
-        error "function requires 3 arguments"
+        error "function requires 3 arguments, $# provided"
     fi
     #make temporaries based on the output file name
     add_temporary_files "$3.temp1-$$" "$3.temp2-$$"
@@ -388,7 +483,7 @@ function label_concatenate ()
         echo "      The -map option takes either a 1-based index or a map name, and causes"
         echo "      the operation to use only one map from each input file."
         echo
-        exit 0
+        return 0
     fi
     local -a maparg
     if [[ "$1" == "-map" ]]
@@ -405,9 +500,10 @@ function label_concatenate ()
         error "function requires 2 or more arguments"
     fi
     local -a merge_arg_array
+    local i
     for ((i = 2; i <= $#; ++i))
     do
-        merge_arg_array+=("-label" "${!i}" "${maparg[@]}")
+        merge_arg_array+=("-label" "${!i}" ${maparg[@]+"${maparg[@]}"})
     done
     wb_command -label-merge "$1" "${merge_arg_array[@]}"
 }
@@ -432,7 +528,7 @@ function metric_concatenate ()
         echo "      The -map option takes either a 1-based index or a map name, and causes"
         echo "      the operation to use only one map from each input file."
         echo
-        exit 0
+        return 0
     fi
     local -a maparg
     if [[ "$1" == "-map" ]]
@@ -449,9 +545,10 @@ function metric_concatenate ()
         error "function requires 2 or more arguments"
     fi
     local -a merge_arg_array
+    local i
     for ((i = 2; i <= $#; ++i))
     do
-        merge_arg_array+=("-metric" "${!i}" "${maparg[@]}")
+        merge_arg_array+=("-metric" "${!i}" ${maparg[@]+"${maparg[@]}"})
     done
     wb_command -metric-merge "$1" "${merge_arg_array[@]}"
 }
@@ -472,13 +569,14 @@ function scene_file_concatenate ()
         #wrap guide for 80 columns                                                           |
         echo "      Additional input files may be specified after the mandatory input file."
         echo
-        exit 0
+        return 0
     fi
     if (($# < 2))
     then
         error "function requires 2 or more arguments"
     fi
     local -a merge_arg_array
+    local i
     for ((i = 2; i <= $#; ++i))
     do
         merge_arg_array+=("-scene-file" "${!i}")
@@ -506,7 +604,7 @@ function volume_concatenate ()
         echo "      The -map option takes either a 1-based index or a map name, and causes"
         echo "      the operation to use only one map from each input file."
         echo
-        exit 0
+        return 0
     fi
     local -a maparg
     if [[ "$1" == "-map" ]]
@@ -523,9 +621,14 @@ function volume_concatenate ()
         error "function requires 2 or more arguments"
     fi
     local -a merge_arg_array
+    local i
+    #we INTENTIONALLY expand an empty array to 0 elements, but set -u doesn't like this, and there is no simple syntax to tell it to allow it
+    #so, use complicated syntax to tell it to allow it
+    #this syntax is apparently UNDOCUMENTED, but it came from stackoverflow, and it works, so it must be right
+    #http://stackoverflow.com/questions/7577052/bash-empty-array-expansion-with-set-u
     for ((i = 2; i <= $#; ++i))
     do
-        merge_arg_array+=("-volume" "${!i}" "${maparg[@]}")
+        merge_arg_array+=("-volume" "${!i}" ${maparg[@]+"${maparg[@]}"})
     done
     wb_command -volume-merge "$1" "${merge_arg_array[@]}"
 }
@@ -534,12 +637,13 @@ function volume_concatenate ()
 function do_operation ()
 {
     #use the existence of a short description to denote existence of the function
+    local i
     for ((i = 0; i < ${#global_switch[@]}; ++i))
     do
         if [[ "${global_switch[$i]}" == "$1" ]]
         then
             `switch_to_func_name "$1"` "$@"
-            exit 0
+            return $?
         fi
     done
     local maxlength=0
@@ -570,6 +674,7 @@ function do_operation ()
 function switch_to_descrip ()
 {
     #because we aren't using associative arrays, because mac's ancient bash
+    local i
     for ((i = 0; i < ${#global_switch[@]}; ++i))
     do
         if [[ "${global_switch[$i]}" == "$1" ]]
@@ -583,7 +688,7 @@ function switch_to_descrip ()
 
 function list_functions ()
 {
-    local maxlength=0
+    local i maxlength=0
     for ((i = 0; i < ${#global_switch[@]}; ++i))
     do
         local thislength=`printf '%s' "${global_switch[$i]}" | wc -c`
@@ -598,6 +703,16 @@ function list_functions ()
     done | sort
 }
 
+function all_functions_help ()
+{
+    #assume that the commands all print their help info when given no additional arguments besides the command switch itself
+    local i
+    for ((i = 0; i < ${#global_switch[@]}; ++i))
+    do
+        `switch_to_func_name "${global_switch[$i]}"` "${global_switch[$i]}"
+    done
+}
+
 function error ()
 {
     echo >&2
@@ -609,8 +724,16 @@ function error ()
     exit 1
 }
 
+function warning ()
+{
+    echo >&2
+    echo "Warning: $*" >&2
+    echo >&2
+}
+
 function check_functions ()
 {
+    local i
     for ((i = 0; i < ${#global_switch[@]}; ++i))
     do
         local function_name=`switch_to_func_name "${global_switch[$i]}"`
@@ -622,7 +745,7 @@ function check_functions ()
     done
 }
 
-declare -a global_temporary_files
+global_temporary_files=()
 function add_temporary_files ()
 {
     global_temporary_files+=("$@")
@@ -634,7 +757,7 @@ function cleanup ()
     #so first test if the array is empty
     if ((${#global_temporary_files[@]} > 0))
     then
-        rm -f "${global_temporary_files[@]}" &> /dev/null
+        rm -f -- "${global_temporary_files[@]}" &> /dev/null
     fi
 }
 trap cleanup EXIT

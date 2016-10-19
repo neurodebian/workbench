@@ -22,13 +22,16 @@
 /*LICENSE_END*/
 
 
-#include "CaretObject.h"
+#include "CaretObjectTracksModification.h"
+#include "SceneableInterface.h"
+
 
 
 
 namespace caret {
+    class SceneClassAssistant;
 
-    class ControlPoint3D : public CaretObject {
+    class ControlPoint3D : public CaretObjectTracksModification, public SceneableInterface {
         
     public:
         ControlPoint3D(const float sourceXYZ[3],
@@ -47,14 +50,22 @@ namespace caret {
 
         ControlPoint3D& operator=(const ControlPoint3D& obj);
         
-        void getSource(double pt[3]) const;
+        void getSourceXYZ(double pt[3]) const;
         
-        void getTarget(double pt[3]) const;
+        void getTargetXYZ(double pt[3]) const;
         
-        void getSource(float pt[3]) const;
+        void getTransformedXYZ(double pt[3]) const;
         
-        void getTarget(float pt[3]) const;
+        void setTransformedXYZ(const double pt[3]);
+        
+        void getSourceXYZ(float pt[3]) const;
+        
+        void getTargetXYZ(float pt[3]) const;
 
+        void getTransformedXYZ(float pt[3]) const;
+        
+        void setTransformedXYZ(const float pt[3]);
+        
         float getSourceX() const;
         
         float getSourceY() const;
@@ -67,18 +78,30 @@ namespace caret {
         
         float getTargetZ() const;
         
+        void getErrorMeasurements(float xyzTotalErrorOut[4]) const;
+        
         virtual AString toString() const;
         
         static void getSourceNormalVector(const std::vector<ControlPoint3D>& controlPoints,
                                           float sourceNormalVectorOut[3]);
 
+        virtual SceneClass* saveToScene(const SceneAttributes* sceneAttributes,
+                                        const AString& instanceName);
+        
+        virtual void restoreFromScene(const SceneAttributes* sceneAttributes,
+                                      const SceneClass* sceneClass);
+        
         // ADD_NEW_METHODS_HERE
         
     private:
         void copyHelperControlPoint3D(const ControlPoint3D& obj);
 
+        void initializeInstance();
+        
         // ADD_NEW_MEMBERS_HERE
 
+        SceneClassAssistant* m_sceneAssistant;
+        
         float m_sourceX;
         
         float m_sourceY;
@@ -90,6 +113,13 @@ namespace caret {
         float m_targetY;
         
         float m_targetZ;
+        
+        float m_transformedX;
+        
+        float m_transformedY;
+        
+        float m_transformedZ;
+        
     };
     
 #ifdef __CONTROL_POINT3_D_DECLARE__
