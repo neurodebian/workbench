@@ -1,3 +1,11 @@
+connectome-workbench (1.2.3+git3-g7b83782-1) unstable; urgency=medium
+
+  * New upstream snapshot from v1.2.3-3-g7b83782 
+    in attempt to resolve FTBFS on mips,  mipsel due to heavy memory 
+    resource demand -- some files were moved around and possibly split.
+
+ -- Yaroslav Halchenko <debian@onerussian.com>  Wed, 30 Nov 2016 20:00:52 -0500
+
 connectome-workbench (1.2.3-3) unstable; urgency=medium
 
   * Do not provide --parallel on mips architectures to dh in hope to reduce
