@@ -1,3 +1,12 @@
+connectome-workbench (1.2.3+git41-gc4c6c90-1) experimental; urgency=medium
+
+  * Upstream "experimental" snapshot in attempt to resolve FTBFS on mips,
+    mipsel due to heavy memory resource demand -- some files were moved
+    around and possibly split.
+  * debian/patches -- dropped all (all adopted upstream)
+
+ -- Yaroslav Halchenko <debian@onerussian.com>  Wed, 19 Oct 2016 19:32:58 -0400
+
 connectome-workbench (1.2.3+git3-g7b83782-1) unstable; urgency=medium
 
   * New upstream snapshot from v1.2.3-3-g7b83782 
