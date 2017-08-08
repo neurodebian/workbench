@@ -23,12 +23,17 @@
 
 
 #include "BrainConstants.h"
+#include "CaretPointer.h"
 #include "DisplayGroupEnum.h"
 #include "DisplayProperties.h"
+#include "DisplayPropertyDataEnum.h"
+#include "ImageDepthPositionEnum.h"
 
 namespace caret {
 
     class Brain;
+    class DisplayPropertyDataBoolean;
+    class DisplayPropertyDataFloat;
     class ImageFile;
     
     class DisplayPropertiesImages : public DisplayProperties {
@@ -52,6 +57,13 @@ namespace caret {
                           const int32_t tabIndex,
                           const bool displayStatus);
         
+        bool isControlPointsDisplayed(const DisplayGroupEnum::Enum displayGroup,
+                         const int32_t tabIndex) const;
+        
+        void setControlPointsDisplayed(const DisplayGroupEnum::Enum displayGroup,
+                          const int32_t tabIndex,
+                          const bool displayStatus);
+        
         DisplayGroupEnum::Enum getDisplayGroupForTab(const int32_t browserTabIndex) const;
         
         void setDisplayGroupForTab(const int32_t browserTabIndex,
@@ -63,6 +75,34 @@ namespace caret {
         void setSelectedImageFile(const DisplayGroupEnum::Enum displayGroup,
                              const int32_t tabIndex,
                              ImageFile* imageFile);
+        
+        float getThresholdMinimum(const DisplayGroupEnum::Enum displayGroup,
+                                  const int32_t tabIndex) const;
+        
+        void setThresholdMinimum(const DisplayGroupEnum::Enum displayGroup,
+                                 const int32_t tabIndex,
+                                 const float value);
+        
+        float getThresholdMaximum(const DisplayGroupEnum::Enum displayGroup,
+                                  const int32_t tabIndex) const;
+        
+        void setThresholdMaximum(const DisplayGroupEnum::Enum displayGroup,
+                                 const int32_t tabIndex,
+                                 const float value);
+        
+        float getOpacity(const DisplayGroupEnum::Enum displayGroup,
+                         const int32_t tabIndex) const;
+        
+        void setOpacity(const DisplayGroupEnum::Enum displayGroup,
+                        const int32_t tabIndex,
+                        const float value);
+        
+        ImageDepthPositionEnum::Enum getImagePosition(const DisplayGroupEnum::Enum displayGroup,
+                                                      const int32_t tabIndex) const;
+        
+        void setImagePosition(const DisplayGroupEnum::Enum displayGroup,
+                             const int32_t tabIndex,
+                             const ImageDepthPositionEnum::Enum positionType);
         
         virtual SceneClass* saveToScene(const SceneAttributes* sceneAttributes,
                                         const AString& instanceName);
@@ -84,13 +124,21 @@ namespace caret {
         
         DisplayGroupEnum::Enum m_displayGroup[BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_TABS];
         
-        bool m_displayStatusInDisplayGroup[DisplayGroupEnum::NUMBER_OF_GROUPS];
+        CaretPointer<DisplayPropertyDataBoolean> m_displayStatus;
         
-        bool m_displayStatusInTab[BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_TABS];
+        CaretPointer<DisplayPropertyDataBoolean> m_controlPointDisplayStatus;
         
         mutable ImageFile* m_imageFileInDisplayGroup[DisplayGroupEnum::NUMBER_OF_GROUPS];
         
         mutable ImageFile* m_imageFileInTab[BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_TABS];
+        
+        DisplayPropertyDataEnum<ImageDepthPositionEnum, ImageDepthPositionEnum::Enum> m_imageDepthPosition;
+        
+        CaretPointer<DisplayPropertyDataFloat> m_thresholdMinimum;
+        
+        CaretPointer<DisplayPropertyDataFloat> m_thresholdMaximum;
+        
+        CaretPointer<DisplayPropertyDataFloat> m_opacity;
         
         // ADD_NEW_MEMBERS_HERE
 

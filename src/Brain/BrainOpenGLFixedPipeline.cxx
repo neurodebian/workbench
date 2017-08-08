@@ -72,6 +72,8 @@
 #include "CiftiFiberOrientationFile.h"
 #include "CiftiFiberTrajectoryFile.h"
 #include "ClippingPlaneGroup.h"
+#include "ControlPointFile.h"
+#include "ControlPoint3D.h"
 #include "DeveloperFlagsEnum.h"
 #include "DisplayGroupEnum.h"
 #include "DisplayPropertiesAnnotation.h"
@@ -107,6 +109,7 @@
 #include "SelectionItemFocusSurface.h"
 #include "SelectionItemFocusVolume.h"
 #include "SelectionItemImage.h"
+#include "SelectionItemImageControlPoint.h"
 #include "SelectionItemSurfaceNode.h"
 #include "SelectionItemSurfaceNodeIdentificationSymbol.h"
 #include "SelectionItemSurfaceTriangle.h"
@@ -856,7 +859,7 @@ BrainOpenGLFixedPipeline::drawModelInternal(Mode mode,
     
     this->mode = mode;
     
-    drawBackgroundImage(viewportContent);
+//    drawBackgroundImage(viewportContent);
     
     if (this->browserTabContent != NULL) {
         m_clippingPlaneGroup = const_cast<ClippingPlaneGroup*>(this->browserTabContent->getClippingPlaneGroup());
@@ -933,6 +936,8 @@ BrainOpenGLFixedPipeline::drawModelInternal(Mode mode,
             }
         }
     }
+    
+    drawBackgroundImage(viewportContent);
     
     glFlush();
     
@@ -6207,6 +6212,10 @@ BrainOpenGLFixedPipeline::drawBackgroundImage(BrainOpenGLViewportContent* vpCont
         return;
     }
     
+    const float backZ   = -990.0;
+    const float middleZ =    0.0;
+    const float frontZ  =  990.0;
+    
     DisplayPropertiesImages* dpi = m_brain->getDisplayPropertiesImages();
     const int32_t tabIndex = btc->getTabNumber();
     const DisplayGroupEnum::Enum displayGroup = dpi->getDisplayGroupForTab(tabIndex);
@@ -6215,8 +6224,29 @@ BrainOpenGLFixedPipeline::drawBackgroundImage(BrainOpenGLViewportContent* vpCont
         ImageFile* imageFile = dpi->getSelectedImageFile(displayGroup,
                                                                tabIndex);
         if (imageFile != NULL) {
+            float windowZ = 990.0;
+            const ImageDepthPositionEnum::Enum depthPos = dpi->getImagePosition(displayGroup,
+                                                                                tabIndex);
+            switch (depthPos) {
+                case ImageDepthPositionEnum::BACK:
+                    windowZ = backZ;
+                    break;
+                case ImageDepthPositionEnum::FRONT:
+                    windowZ = frontZ;
+                    break;
+                case ImageDepthPositionEnum::MIDDLE:
+                    windowZ = middleZ;
+                    break;
+            }
+            
             drawImage(vpContent,
-                      imageFile);
+                      imageFile,
+                      windowZ,
+                      frontZ,
+                      dpi->getThresholdMinimum(displayGroup, tabIndex),
+                      dpi->getThresholdMaximum(displayGroup, tabIndex),
+                      dpi->getOpacity(displayGroup, tabIndex),
+                      dpi->isControlPointsDisplayed(displayGroup, tabIndex));
         }
     }
 }
@@ -6228,17 +6258,33 @@ BrainOpenGLFixedPipeline::drawBackgroundImage(BrainOpenGLViewportContent* vpCont
  *    The viewport dimensions.
  * @param image
  *    The QImage that is drawn.
+ * @param windowZ
+ *    Z-position for image.
+ * @param frontZ
+ *    Z-position for front (used for control points)
+ * @param minimumThreshold
+ *    Minimum threshold value.
+ * @param maximumThreshold
+ *    Maximum threshold value.
+ * @param opacity
+ *    Opacity.
  */
 void
 BrainOpenGLFixedPipeline::drawImage(BrainOpenGLViewportContent* vpContent,
-                                    ImageFile* imageFile)
+                                    ImageFile* imageFile,
+                                    const float windowZ,
+                                    const float frontZ,
+                                    const float minimumThreshold,
+                                    const float maximumThreshold,
+                                    const float opacity,
+                                    const bool drawControlPointsFlag)
 {
     CaretAssert(vpContent);
     
     const int32_t originalImageWidth  = imageFile->getWidth();
     const int32_t originalImageHeight = imageFile->getHeight();
-    const int32_t imageSize = originalImageWidth * originalImageHeight;
-    if (imageSize <= 0) {
+    const int32_t originalNumberOfPixels = originalImageWidth * originalImageHeight;
+    if (originalNumberOfPixels <= 0) {
         return;
     }
     
@@ -6246,17 +6292,25 @@ BrainOpenGLFixedPipeline::drawImage(BrainOpenGLViewportContent* vpContent,
     vpContent->getModelViewport(viewport);
     
     SelectionItemImage* idImage = m_brain->getSelectionManager()->getImageIdentification();
+    SelectionItemImageControlPoint* idControlPoint = m_brain->getSelectionManager()->getImageControlPointIdentification();
     
     /*
      * Check for a 'selection' type mode
      */
-    bool isSelect = false;
+    bool isSelectImage = false;
+    bool isSelectImageControlPoint = false;
     switch (this->mode) {
         case BrainOpenGLFixedPipeline::MODE_DRAWING:
             break;
         case BrainOpenGLFixedPipeline::MODE_IDENTIFICATION:
             if (idImage->isEnabledForSelection()) {
-                isSelect = true;
+                isSelectImage = true;
+            }
+            if (idControlPoint->isEnabledForSelection()) {
+                isSelectImageControlPoint = true;
+            }
+            if (isSelectImage
+                || isSelectImageControlPoint) {
                 glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
             }
             else {
@@ -6311,7 +6365,9 @@ BrainOpenGLFixedPipeline::drawImage(BrainOpenGLViewportContent* vpContent,
                                      dummyHeight);
     }
     
-    const int32_t correctNumberOfBytes = imageWidth * imageHeight * 4;
+    const int32_t numberOfPixels = imageWidth * imageHeight;
+    const int32_t bytesPerPixel  = 4;
+    const int32_t correctNumberOfBytes = numberOfPixels * bytesPerPixel;
     if (static_cast<int32_t>(imageBytesRGBA.size()) != correctNumberOfBytes) {
         CaretLogSevere("Image size is incorrect.  Number of bytes is "
                        + QString::number(imageBytesRGBA.size())
@@ -6319,6 +6375,46 @@ BrainOpenGLFixedPipeline::drawImage(BrainOpenGLViewportContent* vpContent,
                        + QString::number(correctNumberOfBytes));
     }
 
+    const bool testThresholdFlag = ((minimumThreshold > 0.0)
+                                    || (maximumThreshold < 255.0));
+    const bool testOpacityFlag   = (opacity < 1.0);
+    
+    bool useBlendingFlag = false;
+    
+    if (testThresholdFlag
+        || testOpacityFlag) {
+        for (int32_t i = 0; i < numberOfPixels; i++) {
+            const int32_t i4 = i * 4;
+            CaretAssertVectorIndex(imageBytesRGBA, i4 + 3);
+            uint8_t pixelAlpha = 255; //imageBytesRGBA[i4 + 3];
+            
+            if (testThresholdFlag) {
+                if ((imageBytesRGBA[i4] < minimumThreshold)
+                    || (imageBytesRGBA[i4] > maximumThreshold)
+                    || (imageBytesRGBA[i4+1] < minimumThreshold)
+                    || (imageBytesRGBA[i4+1] > maximumThreshold)
+                    || (imageBytesRGBA[i4+2] < minimumThreshold)
+                    || (imageBytesRGBA[i4+2] > maximumThreshold)) {
+                    pixelAlpha = 0;
+                }
+            }
+            if (testOpacityFlag) {
+                pixelAlpha = static_cast<uint8_t>(pixelAlpha * opacity);
+            }
+            
+            if (pixelAlpha < 255) {
+                useBlendingFlag = true;
+            }
+            
+            imageBytesRGBA[i4 + 3] = pixelAlpha;
+        }
+    }
+    
+    if (isSelectImage
+        || isSelectImageControlPoint) {
+        useBlendingFlag = false;
+    }
+    
     /*
      * Center image in the window
      */
@@ -6349,28 +6445,72 @@ BrainOpenGLFixedPipeline::drawImage(BrainOpenGLViewportContent* vpContent,
      */
     glPushClientAttrib(GL_CLIENT_PIXEL_STORE_BIT);
     
-    /* 
+    GLboolean blendingEnabled = GL_FALSE;
+    glGetBooleanv(GL_BLEND, &blendingEnabled);
+    
+    if (useBlendingFlag) {
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    }
+    
+    /*
      * Set the image's Z coordinate where a depth percentage of 100.0
      * is at the far clipping plane (away from viewer) and a percentage
      * of zero is at the near clipping plane (closest to viewer).
      *
      * Old way to set Z:  const float imageZ = 10.0 - farClip;
      */
-    const float imageZ = -imageFile->getWindowZ();
-    glRasterPos3f(xPos, yPos, imageZ); //-500.0); // set Z so image behind surface
+    glRasterPos3f(xPos, yPos, windowZ);
     
     glDrawPixels(imageWidth, imageHeight,
                  GL_RGBA, GL_UNSIGNED_BYTE,
                  (GLvoid*)&imageBytesRGBA[0]);
     
+    if (blendingEnabled == GL_FALSE) {
+        glDisable(GL_BLEND);
+    }
+    
     glPopClientAttrib();
+    
+    ControlPointFile* controlPointFile = imageFile->getControlPointFile();
+    if (drawControlPointsFlag) {
+        const int32_t numControlPoints = controlPointFile->getNumberOfControlPoints();
+        if (numControlPoints > 0) {
+            const uint8_t red[4] = { 255, 0, 0, 255 };
+            for (int32_t icp = 0; icp < numControlPoints; icp++) {
+                const ControlPoint3D* cp = controlPointFile->getControlPointAtIndex(icp);
+                const float pixelX = cp->getSourceX();
+                const float pixelY = cp->getSourceY();
+                
+                const float percentX = pixelX / originalImageWidth;
+                const float percentY = pixelY / originalImageHeight;
+                
+                const float x = xPos + (percentX * imageWidth);
+                const float y = yPos + (percentY * imageHeight);
+                
+                glPushMatrix();
+                glTranslatef(x, y, frontZ);
+                
+                uint8_t rgba[4] = { red[0], red[1], red[2], red[3] };
+                if (isSelectImageControlPoint) {
+                    this->colorIdentification->addItem(rgba,
+                                                       SelectionItemDataTypeEnum::IMAGE_CONTROL_POINT,
+                                                       0,    // file index
+                                                       icp); // index in file
+                    rgba[3] = 255;
+                }
+                drawSphereWithDiameter(rgba, 10);
+                glPopMatrix();
+            }
+        }
+    }
     
     glPopMatrix();
     glMatrixMode(GL_PROJECTION);
     glPopMatrix();
     glMatrixMode(GL_MODELVIEW);
     
-    if (isSelect) {
+    if (isSelectImage) {
         const float mx = this->mouseX - viewport[0];
         const float my = this->mouseY - viewport[1];
         
@@ -6392,6 +6532,38 @@ BrainOpenGLFixedPipeline::drawImage(BrainOpenGLViewportContent* vpContent,
             idImage->setImageFile(imageFile);
             idImage->setPixelI(pixelX);
             idImage->setPixelJ(pixelY);
+
+            uint8_t pixelByteRGBA[4];
+            if (imageFile->getImagePixelRGBA(ImageFile::IMAGE_DATA_ORIGIN_AT_BOTTOM,
+                                             pixelX,
+                                             pixelY,
+                                             pixelByteRGBA)) {
+                idImage->setPixelRGBA(pixelByteRGBA);
+            }
+        }
+    }
+    
+    if (isSelectImageControlPoint) {
+        int32_t fileIndex = -1;
+        int32_t controlPointIndex = -1;
+        float depth = -1.0;
+        this->getIndexFromColorSelection(SelectionItemDataTypeEnum::IMAGE_CONTROL_POINT,
+                                         this->mouseX,
+                                         this->mouseY,
+                                         fileIndex,
+                                         controlPointIndex,
+                                         depth);
+        if ((fileIndex >= 0)
+            && (controlPointIndex >= 0)) {
+            if (idControlPoint->isOtherScreenDepthCloserToViewer(depth)) {
+                ControlPoint3D* controlPoint = controlPointFile->getControlPointAtIndex(controlPointIndex);
+                idControlPoint->setBrain(m_brain);
+                idControlPoint->setImageFile(imageFile);
+                idControlPoint->setControlPointFile(controlPointFile);
+                idControlPoint->setControlPoint(controlPoint);
+                idControlPoint->setControlPointIndexInFile(controlPointIndex);
+                idControlPoint->setScreenDepth(depth);
+            }
         }
     }
 }

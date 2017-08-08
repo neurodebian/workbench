@@ -27,8 +27,8 @@
 class QImage;
 
 namespace caret {
+    class ControlPointFile;
     class ControlPoint3D;
-    class Matrix4x4;
     class PaletteFile;
     class VolumeFile;
     
@@ -142,13 +142,14 @@ public:
                               const int32_t resizeToHeight,
                               std::vector<uint8_t>& bytesRGBAOut) const;
     
+    bool getImagePixelRGBA(const IMAGE_DATA_ORIGIN_LOCATION imageOrigin,
+                           const int32_t pixelI,
+                           const int32_t pixelJ,
+                           uint8_t pixelRGBAOut[4]) const;
+    
     int32_t getWidth() const;
     
     int32_t getHeight() const;
-    
-    float getWindowZ() const;
-    
-    void setWindowZ(const float windowZ);
     
     virtual void readFile(const AString& filename);
     
@@ -197,10 +198,13 @@ public:
                                     AString& defaultFilter);
 
     VolumeFile* convertToVolumeFile(const CONVERT_TO_VOLUME_COLOR_MODE colorMode,
-                                    const std::vector<ControlPoint3D>& controlPoints,
                                     const PaletteFile* paletteFile,
                                     AString& errorMessageOut) const;
 
+    ControlPointFile* getControlPointFile();
+    
+    const ControlPointFile* getControlPointFile() const;
+    
     virtual void saveFileDataToScene(const SceneAttributes* sceneAttributes,
                                      SceneClass* sceneClass);
     
@@ -222,9 +226,9 @@ private:
     
     QImage* m_image;
     
-    float m_windowZ;
-    
     CaretPointer<GiftiMetaData> m_fileMetaData;
+    
+    CaretPointer<ControlPointFile> m_controlPointFile;
     
     static const float s_defaultWindowDepthPercentage;
 };

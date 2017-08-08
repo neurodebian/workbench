@@ -467,7 +467,13 @@ namespace caret {
         void drawBackgroundImage(BrainOpenGLViewportContent* vpContent);
         
         void drawImage(BrainOpenGLViewportContent* vpContent,
-                       ImageFile* imageFile);
+                       ImageFile* imageFile,
+                       const float windowZ,
+                       const float frontZ,
+                       const float minimumThreshold,
+                       const float maximumThreshold,
+                       const float opacity,
+                       const bool drawControlPointsFlag);
         
         void setProjectionModeData(const float screenDepth,
                                           const float xyz[3],

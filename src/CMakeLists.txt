@@ -184,6 +184,33 @@ endif()
 ENDIF (NOT MSVC)
 
 #
+# If GNU compiler, use SIMD-based dot computation, if possible
+#
+if (CMAKE_COMPILER_IS_GNUCC)
+
+    #
+    # Define flag to avoid trying to compile SIMD stuff (coded for x86 only)
+    #
+    SET(WORKBENCH_USE_SIMD TRUE CACHE BOOL "try to compile with SIMD support")
+
+    #
+    # If we should try to use SIMD, check whether cpuinfo compiles
+    #
+    IF (WORKBENCH_USE_SIMD)
+        TRY_COMPILE(CPUINFO_COMPILES ${CMAKE_CURRENT_BINARY_DIR}/cpuinfo_compile_test ${CMAKE_CURRENT_SOURCE_DIR}/kloewe/cpuinfo cpuinfo)
+        MESSAGE("CPUINFO_COMPILES: ${CPUINFO_COMPILES}")
+    ENDIF (WORKBENCH_USE_SIMD)
+
+    #
+    # Add the necessary definition and include directory to enable the SIMD-based dot product implementations
+    #
+    if (WORKBENCH_USE_SIMD AND CPUINFO_COMPILES)
+        ADD_DEFINITIONS(-DCARET_DOTFCN)
+        INCLUDE_DIRECTORIES(${CMAKE_SOURCE_DIR}/kloewe/dot/src)
+    endif()
+endif()
+
+#
 # will set name of XCode project:  
 # disabled at this time
 #
@@ -394,14 +421,14 @@ IF (EXISTS $ENV{OSMESA_DIR})
     IF (EXISTS $ENV{OSMESA_DIR}/include/GL/osmesa.h)
         MESSAGE("Have Mesa Include Directory")
         FIND_LIBRARY(OSMESA_LIBRARY_FOUND
-                     NAMES libOSMesa.a libOSMesa.so OSMesa.lib OSMesa.dll
-                     PATHS $ENV{OSMESA_DIR}/lib)
+                     NAMES OSMesa
+                     HINTS $ENV{OSMESA_DIR}/lib)
         FIND_LIBRARY(OSMESA_GL_LIBRARY_FOUND
-                     NAMES libGL.a libGL.so
-                     PATHS $ENV{OSMESA_DIR}/lib)
+                     NAMES GL
+                     HINTS $ENV{OSMESA_DIR}/lib)
         FIND_LIBRARY(OSMESA_GLU_LIBRARY_FOUND
-                     NAMES libGLU.a libGLU.so
-                     PATHS $ENV{OSMESA_DIR}/lib)
+                     NAMES GLU
+                     HINTS $ENV{OSMESA_DIR}/lib)
         MESSAGE("OSMesa lib: " ${OSMESA_LIBRARY})
         IF (EXISTS ${OSMESA_LIBRARY_FOUND} AND EXISTS ${OSMESA_GL_LIBRARY_FOUND} AND EXISTS ${OSMESA_GLU_LIBRARY_FOUND})
             SET(OSMESA_DEFINITION -DHAVE_OSMESA)
@@ -462,20 +489,12 @@ ADD_SUBDIRECTORY ( Commands )
 ADD_SUBDIRECTORY ( Desktop )
 ADD_SUBDIRECTORY ( CommandLine )
 ADD_SUBDIRECTORY ( Tests )
+if (WORKBENCH_USE_SIMD AND CPUINFO_COMPILES)
+    ADD_SUBDIRECTORY ( kloewe/cpuinfo )
+    ADD_SUBDIRECTORY ( kloewe/dot )
+ENDIF()
 
 #
 #CTest tests
 #
 ENABLE_TESTING()
-
-ADD_TEST(timer ${CMAKE_CURRENT_BINARY_DIR}/Tests/test_driver timer)
-ADD_TEST(progress ${CMAKE_CURRENT_BINARY_DIR}/Tests/test_driver progress)
-ADD_TEST(volumefile ${CMAKE_CURRENT_BINARY_DIR}/Tests/test_driver volumefile)
-#debian build machines don't have internet access
-#ADD_TEST(http ${CMAKE_CURRENT_BINARY_DIR}/Tests/test_driver http)
-ADD_TEST(heap ${CMAKE_CURRENT_BINARY_DIR}/Tests/test_driver heap)
-ADD_TEST(pointer ${CMAKE_CURRENT_BINARY_DIR}/Tests/test_driver pointer)
-ADD_TEST(statistics ${CMAKE_CURRENT_BINARY_DIR}/Tests/test_driver statistics)
-ADD_TEST(quaternion ${CMAKE_CURRENT_BINARY_DIR}/Tests/test_driver quaternion)
-ADD_TEST(mathexpression ${CMAKE_CURRENT_BINARY_DIR}/Tests/test_driver mathexpression)
-ADD_TEST(lookup ${CMAKE_CURRENT_BINARY_DIR}/Tests/test_driver lookup)

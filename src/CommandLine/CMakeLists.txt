@@ -26,7 +26,7 @@ set (EXE_NAME wb_command)
 #
 # Resources
 #
-QT4_ADD_RESOURCES(IMAGE_RCS_SRCS ../Resources/General/general_resources.qrc)
+QT4_ADD_RESOURCES(IMAGE_RCS_SRCS ../Resources/GeneralResources/general_resources.qrc)
 
 #
 # Create the executable
@@ -80,6 +80,7 @@ ${LIBS})
 
 INSTALL(TARGETS ${EXE_NAME} DESTINATION bin)
 INSTALL(PROGRAMS wb_shortcuts DESTINATION bin)
+INSTALL(PROGRAMS bashcomplete_wb_command DESTINATION /usr/share/bash-completion/completions RENAME wb_command)
 
 #
 # Find Headers
