@@ -60,7 +60,6 @@ CaretPreferences.h
 CaretTemporaryFile.h
 CaretUndoCommand.h
 CaretUndoStack.h
-ControlPoint3D.h
 CubicSpline.h
 DataCompressZLib.h
 DataFile.h
@@ -161,7 +160,6 @@ CaretPreferences.cxx
 CaretTemporaryFile.cxx
 CaretUndoCommand.cxx
 CaretUndoStack.cxx
-ControlPoint3D.cxx
 CubicSpline.cxx
 DataCompressZLib.cxx
 DataFile.cxx
@@ -258,3 +256,10 @@ ELSE(EXISTS ${GIT_REPOSITORY})
         COMMENT "No repository found, setting commit info to 'unknown'.  Reconfigure to look for the repository again."
     )
 ENDIF(EXISTS ${GIT_REPOSITORY})
+
+#
+# Conditionally link the dot library to use the SIMD-based dot product implementation
+#
+IF (WORKBENCH_USE_SIMD AND CPUINFO_COMPILES)
+    TARGET_LINK_LIBRARIES(Common dot)
+ENDIF()
