@@ -1,3 +1,11 @@
+connectome-workbench (1.2.3+git41-gc4c6c90-2) unstable; urgency=medium
+
+  * Upload of the snapshot from experimental to unstable
+  * d/p/changeset_cf1faad575229c6519aee2b773f3e50b3d89e17e.diff
+    to resolve FTBFS with gcc 7 (Closes: #853354)
+
+ -- Yaroslav Halchenko <debian@onerussian.com>  Tue, 08 Aug 2017 00:00:21 -0400
+
 connectome-workbench (1.2.3+git41-gc4c6c90-1) experimental; urgency=medium
 
   * Upstream "experimental" snapshot in attempt to resolve FTBFS on mips,
