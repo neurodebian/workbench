@@ -44,11 +44,23 @@ namespace caret {
                                      AString formattedValuesOut[],
                                      const int32_t numberOfValues);
         
+        static void formatValueRangeNegPos(const NumericFormatModeEnum::Enum numericFormat,
+                                           const int32_t numericFormatPrecision,
+                                           const float negativeValuesIn[],
+                                           AString negativeFormattedValuesOut[],
+                                           const int32_t negativeNumberOfValues,
+                                           const float positiveValuesIn[],
+                                           AString positiveFormattedValuesOut[],
+                                           const int32_t positiveNumberOfValues);
+        
         static AString formatValue(const float valueIn);
         
         static void formatValuesIndividually(const float valuesIn[],
                                              AString formattedValuesOut[],
                                              const int32_t numberOfValues);
+        
+        static AString cleanZerosInValueText(const AString& textValueIn);
+        
         // ADD_NEW_METHODS_HERE
 
     private:
@@ -59,8 +71,6 @@ namespace caret {
         NumericTextFormatting(const NumericTextFormatting&);
         
         NumericTextFormatting& operator=(const NumericTextFormatting&);
-        
-        static AString cleanZerosInValueText(const AString& textValueIn);
         
         static AString removeLeadingZeroFromExponent(const NumericFormatModeEnum::Enum numericFormat,
                                                      const AString& textValueIn);
@@ -74,6 +84,11 @@ namespace caret {
         static void getFormatAndPrecision(const float valueIn,
                                           char& formatOut,
                                           int& precisionOut);
+        
+        static void removeDotZeroIfAllIntegers(AString negativeFormattedValues[],
+                                               const int32_t negativeNumberOfValues,
+                                               AString positiveFormattedValues[],
+                                               const int32_t positiveNumberOfValues);
         // ADD_NEW_MEMBERS_HERE
         
     };

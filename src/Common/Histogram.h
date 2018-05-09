@@ -32,6 +32,8 @@ namespace caret
         std::vector<int64_t> m_buckets, m_cumulative;
         std::vector<float> m_display;
         float m_bucketMin, m_bucketMax;
+        float m_displayHeightMax;
+        
         ///counts of each class of number
         int64_t m_posCount, m_zeroCount, m_negCount, m_infCount, m_negInfCount, m_nanCount;
         
@@ -41,6 +43,16 @@ namespace caret
         
         void computeCumulative();
         
+        void update(const float* data,
+                    const int64_t& dataCount,
+                    float mostPositiveValueInclusive,
+                    float leastPositiveValueInclusive,
+                    float leastNegativeValueInclusive,
+                    float mostNegativeValueInclusive,
+                    const bool& includeZeroValues);
+        
+        void update(const float* data, const int64_t& dataCount);
+        
     public:
         Histogram(const int& numBuckets = 100);
         
@@ -48,11 +60,10 @@ namespace caret
         
         Histogram(const int& numBuckets, const float* data, const int64_t& dataCount);
         
-        void update(const float* data, const int64_t& dataCount);
-        
         void update(const int& numBuckets, const float* data, const int64_t& dataCount);
         
-        void update(const float* data,
+        void update(const int32_t& numBuckets,
+                    const float* data,
                     const int64_t& dataCount,
                     float mostPositiveValueInclusive,
                     float leastPositiveValueInclusive,
@@ -68,6 +79,10 @@ namespace caret
         ///get display values - counts divided by bucket widths - will be consistent on the same data regardless of number of buckets or 
         const std::vector<float>& getHistogramDisplay() const { return m_display; }
         
+        bool getHistogramDisplayBucketDataValueAndHeight( const int32_t bucketIndex,
+                                                         float& bucketDataValueOut,
+                                                         float& bucketHeightOut) const;
+
         int getNumberOfBuckets() const { return (int)m_buckets.size(); }
         
         void getCounts(int64_t& posCount, int64_t& zeroCount, int64_t& negCount, int64_t& infCount, int64_t& negInfCount, int64_t& nanCount) const
@@ -78,6 +93,17 @@ namespace caret
             infCount = m_infCount;
             negInfCount = m_negInfCount;
             nanCount = m_nanCount;
+        }
+        
+        /**
+         * Get the low edge of the low bucket (x-min), and the high edge of the high bucket (x-max)
+         * and the maximum display height (y-max).  Low Y is always zero.
+         */
+        void getRangeAndMaxDisplayHeight(float& histMin, float& histMax, float& displayHeightMax) const
+        {
+            histMin          = m_bucketMin;
+            histMax          = m_bucketMax;
+            displayHeightMax = m_displayHeightMax;
         }
         
         ///returns the low edge of the low bucket, and the high edge of the high bucket

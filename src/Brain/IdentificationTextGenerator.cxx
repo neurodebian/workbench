@@ -32,7 +32,12 @@
 #include "ChartDataCartesian.h"
 #include "ChartDataSource.h"
 #include "ChartModelDataSeries.h"
+#include "ChartTwoDataCartesian.h"
 #include "ChartableMatrixInterface.h"
+#include "ChartableTwoFileDelegate.h"
+#include "ChartableTwoFileHistogramChart.h"
+#include "ChartableTwoFileLineSeriesChart.h"
+#include "ChartableTwoFileMatrixChart.h"
 #include "CiftiMappableConnectivityMatrixDataFile.h"
 #include "CiftiMappableDataFile.h"
 #include "CaretVolumeExtension.h"
@@ -42,7 +47,9 @@
 #include "FociFile.h"
 #include "Focus.h"
 #include "GiftiLabel.h"
+#include "Histogram.h"
 #include "ImageFile.h"
+#include "MapFileDataSelector.h"
 #include "OverlaySet.h"
 #include "SelectionItemBorderSurface.h"
 #include "SelectionItemChartDataSeries.h"
@@ -50,6 +57,9 @@
 #include "SelectionItemChartMatrix.h"
 #include "SelectionItemCiftiConnectivityMatrixRowColumn.h"
 #include "SelectionItemChartTimeSeries.h"
+#include "SelectionItemChartTwoHistogram.h"
+#include "SelectionItemChartTwoLineSeries.h"
+#include "SelectionItemChartTwoMatrix.h"
 #include "SelectionItemFocusSurface.h"
 #include "SelectionItemFocusVolume.h"
 #include "SelectionItemImage.h"
@@ -142,6 +152,15 @@ IdentificationTextGenerator::createIdentificationText(const SelectionManager* id
     
     this->generateCiftiConnectivityMatrixIdentificationText(idText,
                                                             idManager->getCiftiConnectivityMatrixRowColumnIdentification());
+    
+    this->generateChartTwoHistogramIdentificationText(idText,
+                                                      idManager->getChartTwoHistogramIdentification());
+    
+    this->generateChartTwoLineSeriesIdentificationText(idText,
+                                                      idManager->getChartTwoLineSeriesIdentification());
+    
+    this->generateChartTwoMatrixIdentificationText(idText,
+                                                      idManager->getChartTwoMatrixIdentification());
     
     this->generateImageIdentificationText(idText,
                                           idManager->getImageIdentification());
@@ -384,14 +403,6 @@ IdentificationTextGenerator::generateVolumeIdentificationText(IdentificationStri
                             getMapIndicesOfFileUsedInOverlays(ciftiFile,
                                                               mapIndices);
                         }
-//                        /*
-//                         * Limit dense scalar and data series to maps selected in the overlay.
-//                         */
-//                        if ((ciftiFile->getDataFileType() == DataFileTypeEnum::CONNECTIVITY_DENSE_SCALAR)
-//                            || (ciftiFile->getDataFileType() == DataFileTypeEnum::CONNECTIVITY_DENSE_TIME_SERIES)) {
-//                            getMapIndicesOfFileUsedInOverlays(ciftiFile,
-//                                                              mapIndices);
-//                        }
                         
                         AString textValue;
                         int64_t voxelIJK[3];
@@ -456,26 +467,6 @@ IdentificationTextGenerator::generateSurfaceIdentificationText(IdentificationStr
         const BrainStructure* brainStructure = surface->getBrainStructure();
         CaretAssert(brainStructure);
         
-//        std::vector<CiftiMappableDataFile*> allCiftiMappableDataFiles;
-//        brain->getAllCiftiMappableDataFiles(allCiftiMappableDataFiles);
-//        for (std::vector<CiftiMappableDataFile*>::iterator ciftiMapIter = allCiftiMappableDataFiles.begin();
-//             ciftiMapIter != allCiftiMappableDataFiles.end();
-//             ciftiMapIter++) {
-//            const CiftiMappableDataFile* cmdf = *ciftiMapIter;
-//            if (cmdf->isEmpty() == false) {
-//                const int numMaps = cmdf->getNumberOfMaps();
-//                for (int32_t iMap = 0; iMap < numMaps; iMap++) {
-//                    AString textValue;
-//                    if (cmdf->getMapSurfaceNodeValue(iMap, surface->getStructure(), nodeNumber, surface->getNumberOfNodes(), textValue)) {
-//                        AString boldText = (DataFileTypeEnum::toOverlayTypeName(cmdf->getDataFileType())
-//                                            + " "
-//                                            + cmdf->getFileNameNoPath());
-//                        idText.addLine(true, boldText, textValue);
-//                    }
-//                }
-//            }
-//        }
-
         std::vector<CiftiMappableDataFile*> allCiftiMappableDataFiles;
         brain->getAllCiftiMappableDataFiles(allCiftiMappableDataFiles);
         for (std::vector<CiftiMappableDataFile*>::iterator ciftiMapIter = allCiftiMappableDataFiles.begin();
@@ -574,37 +565,6 @@ IdentificationTextGenerator::generateSurfaceIdentificationText(IdentificationStr
                                boldText,
                                textValue);
             }
-            
-//            const CiftiMappableConnectivityMatrixDataFile* connCifti = dynamic_cast<const CiftiMappableConnectivityMatrixDataFile*>(cmdf);
-//            if (cmdf->isEmpty() == false) {
-//                const int numMaps = cmdf->getNumberOfMaps();
-//                if (numMaps > 0) {
-//                    if (connCifti != NULL) {
-//                        AString textValue;
-//                        const int32_t mapIndex = 0;
-//                        if (cmdf->getMapSurfaceNodeValue(mapIndex, surface->getStructure(), nodeNumber, surface->getNumberOfNodes(), textValue)) {
-//                            AString boldText = (DataFileTypeEnum::toOverlayTypeName(cmdf->getDataFileType())
-//                                                + " "
-//                                                + cmdf->getFileNameNoPath());
-//                            idText.addLine(true, boldText, textValue);
-//                        }
-//                    }
-//                    else {
-//                        AString boldText = (DataFileTypeEnum::toOverlayTypeName(cmdf->getDataFileType())
-//                                            + " "
-//                                            + cmdf->getFileNameNoPath());
-//                        std::vector<float> nodeData;
-//                        if (cmdf->getSeriesDataForSurfaceNode(surface->getStructure(),
-//                                                              nodeNumber,
-//                                                              nodeData)) {
-//                            for (int32_t iMap = 0; iMap < numMaps; iMap++) {
-//                                AString textValue = AString::number(nodeData[iMap]);
-//                                idText.addLine(true, boldText, textValue);
-//                            }
-//                        }
-//                    }
-//                }
-//            }
         }
         
         
@@ -697,7 +657,6 @@ IdentificationTextGenerator::generateChartDataSeriesIdentificationText(Identific
                                                                        const SelectionItemChartDataSeries* idChartDataSeries) const
 {
     if (idChartDataSeries->isValid()) {
-        //const ChartModelDataSeries* chartModelDataSeries = idChartDataSeries->getChartModelDataSeries();
         const ChartDataCartesian* chartDataCartesian = idChartDataSeries->getChartDataCartesian();
         
         const ChartDataSource* chartDataSource = chartDataCartesian->getChartDataSource();
@@ -773,6 +732,168 @@ IdentificationTextGenerator::generateChartMatrixIdentificationText(Identificatio
 }
 
 /**
+ * Generate identification text for a chart two histogram.
+ *
+ * @param idText
+ *     String builder for identification text.
+ * @param idChartTwoHistogram
+ *     Information for selected chart two histogram.
+ */
+void
+IdentificationTextGenerator::generateChartTwoHistogramIdentificationText(IdentificationStringBuilder& idText,
+                                                 const SelectionItemChartTwoHistogram* idChartTwoHistogram) const
+{
+    const int32_t mapIndex    = idChartTwoHistogram->getMapIndex();
+    const int32_t bucketIndex = idChartTwoHistogram->getBucketIndex();
+    const bool    allMapsFlag = idChartTwoHistogram->isAllMapsSelected();
+    
+    if (idChartTwoHistogram->isValid()) {
+        ChartableTwoFileHistogramChart* fileHistogramChart = idChartTwoHistogram->getFileHistogramChart();
+        CaretAssert(fileHistogramChart);
+        CaretMappableDataFile* mapFile = fileHistogramChart->getCaretMappableDataFile();
+        CaretAssert(mapFile);
+        
+        {
+            ChartableTwoFileHistogramChart* chartingDelegate = mapFile->getChartingDelegate()->getHistogramCharting();
+            CaretAssert(chartingDelegate);
+            const Histogram* histogram = chartingDelegate->getHistogramForChartDrawing(mapIndex,
+                                                                                       allMapsFlag);
+            CaretAssert(histogram);
+            
+            float bucketValue = 0.0;
+            float bucketHeight = 0.0;
+            if (histogram->getHistogramDisplayBucketDataValueAndHeight(bucketIndex, bucketValue, bucketHeight)) {
+                AString boldText("Histogram");
+                idText.addLine(false,
+                               boldText,
+                               mapFile->getFileNameNoPath());
+                
+                idText.addLine(true,
+                               "Bucket Index",
+                               (AString::number(bucketIndex)));
+                
+                idText.addLine(true,
+                               "Data Value at Bucket",
+                               (AString::number(bucketValue)));
+                
+                const int64_t bucketHeightInteger = static_cast<int64_t>(bucketHeight);
+                idText.addLine(true,
+                               "Bucket Count",
+                               (AString::number(bucketHeightInteger)));
+            }
+        }
+    }
+}
+
+/**
+ * Generate identification text for a chart two line-series.
+ *
+ * @param idText
+ *     String builder for identification text.
+ * @param idChartTwoLineSeries
+ *     Information for selected chart two line-series.
+ */
+void
+IdentificationTextGenerator::generateChartTwoLineSeriesIdentificationText(IdentificationStringBuilder& idText,
+                                                  const SelectionItemChartTwoLineSeries* idChartTwoLineSeries) const
+{
+    if (idChartTwoLineSeries->isValid()) {
+        const ChartableTwoFileLineSeriesChart* fileLineSeriesChart = idChartTwoLineSeries->getFileLineSeriesChart();
+        CaretAssert(fileLineSeriesChart);
+        const CaretMappableDataFile* mapFile = fileLineSeriesChart->getCaretMappableDataFile();
+        CaretAssert(mapFile);
+        const ChartTwoDataCartesian* cartesianData = idChartTwoLineSeries->getChartTwoCartesianData();
+        CaretAssert(cartesianData);
+        const MapFileDataSelector* mapFileDataSelector = cartesianData->getMapFileDataSelector();
+        CaretAssert(mapFileDataSelector);
+        
+        const int32_t primitiveIndex = idChartTwoLineSeries->getLineSegmentIndex();
+        
+        AString boldText("Line Chart");
+        idText.addLine(false,
+                       boldText,
+                       mapFile->getFileNameNoPath());
+        
+        idText.addLine(true,
+                       "Line Segment Index",
+                       (AString::number(primitiveIndex)));
+        
+        generateMapFileSelectorText(idText,
+                                    mapFileDataSelector);
+    }
+}
+
+/**
+ * Generate identification text for a chart two matrix.
+ *
+ * @param idText
+ *     String builder for identification text.
+ * @param idChartTwoMatrix
+ *     Information for selected chart two matrix.
+ */
+void
+IdentificationTextGenerator::generateChartTwoMatrixIdentificationText(IdentificationStringBuilder& idText,
+                                              const SelectionItemChartTwoMatrix* idChartTwoMatrix) const
+{
+    if (idChartTwoMatrix->isValid()) {
+        const ChartableTwoFileMatrixChart* matrixChart = idChartTwoMatrix->getFileMatrixChart();
+        CaretAssert(matrixChart);
+        
+        const int32_t rowIndex = idChartTwoMatrix->getRowIndex();
+        const int32_t colIndex = idChartTwoMatrix->getColumnIndex();
+        
+        const CaretMappableDataFile* mapFile = matrixChart->getCaretMappableDataFile();
+        CaretAssert(mapFile);
+       
+        const bool newIdFlag = true;
+        if (newIdFlag) {
+            AString boldText("MATRIX ");
+            idText.addLine(false,
+                           boldText,
+                           mapFile->getFileNameNoPath());
+            if ((rowIndex >= 0)
+                && (matrixChart->hasRowSelection())) {
+                const AString rowName = matrixChart->getRowName(rowIndex);
+                if ( ! rowName.isEmpty()) {
+                    idText.addLine(true,
+                                   ("Row " + AString::number(rowIndex + 1)),
+                                   rowName);
+                }
+            }
+            if ((colIndex >= 0)
+                && (matrixChart->hasColumnSelection())) {
+                const AString colName = matrixChart->getColumnName(colIndex);
+                if ( ! colName.isEmpty()) {
+                    idText.addLine(true,
+                                   ("Column " + AString::number(colIndex + 1)),
+                                   colName);
+                }
+            }
+        }
+        else {
+            AString boldText("MATRIX ROW/COLUMN");
+            idText.addLine(false,
+                           boldText,
+                           mapFile->getFileNameNoPath());
+            
+            const CiftiMappableConnectivityMatrixDataFile* matrixFile = dynamic_cast<const CiftiMappableConnectivityMatrixDataFile*>(mapFile);
+            if (rowIndex >= 0) {
+                const AString rowName = (matrixFile != NULL) ? ("  " + matrixFile->getRowName(rowIndex + 1)) : "";
+                idText.addLine(true,
+                               "Row",
+                               (AString::number(rowIndex + 1) + rowName));
+            }
+            if (colIndex >= 0) {
+                const AString colName = (matrixFile != NULL) ? ("  " + matrixFile->getColumnName(colIndex + 1)) : "";
+                idText.addLine(true,
+                               "Column",
+                               (AString::number(colIndex + 1) + colName));
+            }
+        }
+    }
+}
+
+/**
  * Generate identification text for a CIFTI Connectivity Matrix Row/Column
  * @param idText
  *     String builder for identification text.
@@ -793,18 +914,18 @@ IdentificationTextGenerator::generateCiftiConnectivityMatrixIdentificationText(I
                        boldText,
                        connMatrixFile->getFileNameNoPath());
         
-        AString rowName = "";
-        AString colName = "";
+        AString rowName = " ";
+        AString colName = " ";
         bool validData = true;
         if (validData) {
             if (rowIndex >= 0) {
                 idText.addLine(true,
-                               ("Row " + AString::number(rowIndex + 1)),
+                               ("Row " + AString::number(rowIndex + CiftiMappableDataFile::getCiftiFileRowColumnIndexBaseForGUI())),
                                rowName);
             }
             if (colIndex >= 0) {
                 idText.addLine(true,
-                               ("Column " + AString::number(colIndex + 1)),
+                               ("Column " + AString::number(colIndex + CiftiMappableDataFile::getCiftiFileRowColumnIndexBaseForGUI())),
                                colName);
             }
         }
@@ -892,6 +1013,107 @@ IdentificationTextGenerator::generateChartDataSourceText(IdentificationStringBui
     }
 }
 
+/**
+ * Generate text for a map file data selector.
+ * @param idText
+ *     String builder for identification text.
+ * @param mapFileDataSelector
+ *     The map file data selector.
+ */
+void
+IdentificationTextGenerator::generateMapFileSelectorText(IdentificationStringBuilder& idText,
+                                 const MapFileDataSelector* mapFileDataSelector) const
+{
+    
+    switch (mapFileDataSelector->getDataSelectionType()) {
+        case MapFileDataSelector::DataSelectionType::INVALID:
+            break;
+        case MapFileDataSelector::DataSelectionType::COLUMN_DATA:
+        {
+            CaretMappableDataFile* mapFile = NULL;
+            AString mapFileName;
+            int32_t columnIndex = -1;
+            mapFileDataSelector->getColumnIndex(mapFile,
+                                                mapFileName,
+                                                columnIndex);
+
+            idText.addLine(true,
+                           "Column File",
+                           mapFileName);
+            idText.addLine(true,
+                           "Column Index",
+                           AString::number(columnIndex));
+        }
+            break;
+        case MapFileDataSelector::DataSelectionType::ROW_DATA:
+        {
+            CaretMappableDataFile* mapFile = NULL;
+            AString mapFileName;
+            int32_t rowIndex = -1;
+            mapFileDataSelector->getRowIndex(mapFile,
+                                                mapFileName,
+                                                rowIndex);
+            
+            idText.addLine(true,
+                           "Row File",
+                           mapFileName);
+            idText.addLine(true,
+                           "Row Index",
+                           AString::number(rowIndex));
+        }
+            break;
+        case MapFileDataSelector::DataSelectionType::SURFACE_VERTEX:
+        {
+            StructureEnum::Enum structure = StructureEnum::INVALID;
+            int32_t numberOfVertices = 0;
+            int32_t vertexIndex = -1;
+            mapFileDataSelector->getSurfaceVertex(structure,
+                                                  numberOfVertices,
+                                                  vertexIndex);
+            
+            if ((structure != StructureEnum::INVALID)
+                && (vertexIndex >= 0)) {
+                idText.addLine(true,
+                               "Structure",
+                               StructureEnum::toGuiName(structure));
+                idText.addLine(true,
+                               "Vertex Index",
+                               AString::number(vertexIndex));
+            }
+        }
+            break;
+        case MapFileDataSelector::DataSelectionType::SURFACE_VERTICES_AVERAGE:
+        {
+            StructureEnum::Enum structure = StructureEnum::INVALID;
+            int32_t numberOfVertices = 0;
+            std::vector<int32_t> vertexIndices;
+            mapFileDataSelector->getSurfaceVertexAverage(structure,
+                                                         numberOfVertices,
+                                                         vertexIndices);
+           
+            const int32_t averageCount = static_cast<int32_t>(vertexIndices.size());
+            if ((structure != StructureEnum::INVALID)
+                && (averageCount > 0)) {
+                idText.addLine(true,
+                               "Structure",
+                               StructureEnum::toGuiName(structure));
+                idText.addLine(true,
+                               "Vertex Average Count",
+                               AString::number(averageCount));
+            }
+        }
+            break;
+        case MapFileDataSelector::DataSelectionType::VOLUME_XYZ:
+        {
+            float voxelXYZ[3];
+            mapFileDataSelector->getVolumeVoxelXYZ(voxelXYZ);
+            idText.addLine(true,
+                           "Voxel XYZ",
+                           AString::fromNumbers(voxelXYZ, 3, ","));
+        }
+            break;
+    }
+}
 
 /**
  * Generate identification text for a time series chart.
@@ -905,7 +1127,6 @@ IdentificationTextGenerator::generateChartTimeSeriesIdentificationText(Identific
                                                                        const SelectionItemChartTimeSeries* idChartTimeSeries) const
 {
     if (idChartTimeSeries->isValid()) {
-        //const ChartModelDataSeries* chartModelDataSeries = idChartDataSeries->getChartModelDataSeries();
         const ChartDataCartesian* chartDataCartesian = idChartTimeSeries->getChartDataCartesian();
         
         const ChartDataSource* chartDataSource = chartDataCartesian->getChartDataSource();

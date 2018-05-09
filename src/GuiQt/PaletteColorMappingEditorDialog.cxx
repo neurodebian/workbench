@@ -19,6 +19,7 @@
  */
 /*LICENSE_END*/
 
+#include <QFocusEvent>
 #include <QGridLayout>
 #include <QLabel>
 #include <QTabWidget>
@@ -133,8 +134,16 @@ PaletteColorMappingEditorDialog::receiveEvent(Event* event)
  *     The focus event.
  */
 void
-PaletteColorMappingEditorDialog::focusInEvent(QFocusEvent* /*event*/)
+PaletteColorMappingEditorDialog::focusInEvent(QFocusEvent* event)
 {
+    if (event->reason() == Qt::PopupFocusReason) {
+        /*
+         * This occurs when a combo box is popped up Mac,
+         * causes a problem, and can be ignored.
+         */
+        return;
+    }
+    
     updateDialog();
 }
 
@@ -180,7 +189,9 @@ PaletteColorMappingEditorDialog::updateDialogContent(CaretMappableDataFile* mapF
                 colorBar = matrixProps->getColorBar();
             }
         }
-        m_paletteColorBarWidget->updateContent(colorBar,
+        m_paletteColorBarWidget->updateContent(m_mapFile,
+                                               m_mapIndex,
+                                               colorBar,
                                                paletteColorMapping);
         m_paletteColorMappingEditor->setEnabled(true);
         m_paletteColorMappingEditor->updateEditor(m_mapFile,

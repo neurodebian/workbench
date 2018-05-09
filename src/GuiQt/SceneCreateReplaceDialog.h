@@ -50,6 +50,12 @@ namespace caret {
                                     SceneFile* sceneFile,
                                     Scene* sceneToReplace);
         
+        static void addImageToScene(Scene* scene,
+                                    AString& errorMessageOut);
+        
+        static bool createSceneImage(QImage& imageOut,
+                                     AString& errorMessageOut);
+        
         virtual ~SceneCreateReplaceDialog();
         
     private:
@@ -76,11 +82,12 @@ namespace caret {
     protected:
         virtual void okButtonClicked();
         
+    private slots:
+        void addWindowContentToolButtonClicked();
+        
     private:
         // ADD_NEW_MEMBERS_HERE
 
-        void addImageToScene(Scene* scene);
-        
         SceneFile* m_sceneFile;
         
         Mode m_mode;
@@ -105,6 +112,8 @@ namespace caret {
         QCheckBox* m_addAllLoadedFilesCheckBox;
         
         QCheckBox* m_addModifiedPaletteSettingsCheckBox;
+        
+        AString m_sceneWindowDescription;
         
         struct PreviousSelections {
             bool m_addSpecFileNameToScene;

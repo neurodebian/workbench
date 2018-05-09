@@ -27,7 +27,6 @@
 
 namespace caret {
     class CiftiConnectivityMatrixDenseDynamicFile;
-    class PaletteFile;
 
     class CiftiBrainordinateDataSeriesFile :
     public CiftiMappableDataFile,
@@ -54,7 +53,7 @@ namespace caret {
         virtual ChartDataCartesian* loadLineSeriesChartDataForVoxelAtCoordinate(const float xyz[3]);
         
         
-        virtual void getSupportedLineSeriesChartDataTypes(std::vector<ChartDataTypeEnum::Enum>& chartDataTypesOut) const;
+        virtual void getSupportedLineSeriesChartDataTypes(std::vector<ChartOneDataTypeEnum::Enum>& chartDataTypesOut) const;
         
         CiftiConnectivityMatrixDenseDynamicFile* getConnectivityMatrixDenseDynamicFile();
 
@@ -66,7 +65,9 @@ namespace caret {
         
         virtual void writeFile(const AString& filename);
         
-        virtual bool isModifiedPaletteColorMapping() const;
+        virtual bool isModifiedPaletteColorMapping() const override;
+        
+        virtual PaletteModifiedStatusEnum::Enum getPaletteColorMappingModifiedStatus() const override;
         
     private:
         CiftiBrainordinateDataSeriesFile(const CiftiBrainordinateDataSeriesFile&);

@@ -29,6 +29,7 @@
 #include "BackgroundAndForegroundColorsSceneHelper.h"
 #include "Brain.h"
 #include "BrowserTabContent.h"
+#include "BrowserWindowContent.h"
 #include "CaretAssert.h"
 #include "CaretLogger.h"
 #include "CaretPreferences.h"
@@ -41,14 +42,18 @@
 #include "EventBrowserTabGetAll.h"
 #include "EventBrowserTabIndicesGetAll.h"
 #include "EventBrowserTabNew.h"
+#include "EventBrowserWindowContent.h"
+#include "EventCaretPreferencesGet.h"
 #include "EventModelAdd.h"
 #include "EventModelDelete.h"
 #include "EventModelGetAll.h"
+#include "EventModelGetAllDisplayed.h"
 #include "EventProgressUpdate.h"
 #include "ImageCaptureSettings.h"
 #include "LogManager.h"
 #include "MapYokingGroupEnum.h"
 #include "ModelWholeBrain.h"
+#include "Scene.h"
 #include "SceneAttributes.h"
 #include "SceneClass.h"
 #include "SceneClassArray.h"
@@ -76,17 +81,24 @@ SessionManager::SessionManager()
         m_browserTabs[i] = NULL;
     }
     
+    for (int32_t i = 0; i < BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_WINDOWS; i++) {
+        CaretAssertStdArrayIndex(m_browserWindowContent, i);
+        m_browserWindowContent[i] = new BrowserWindowContent(i);
+    }
     
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_BROWSER_TAB_DELETE);
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_BROWSER_TAB_GET);
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_BROWSER_TAB_GET_ALL);
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_BROWSER_TAB_INDICES_GET_ALL);
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_BROWSER_TAB_NEW);
+    EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_BROWSER_WINDOW_CONTENT);
+    EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_CARET_PREFERENCES_GET);
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_MODEL_ADD);
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_MODEL_DELETE);
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_MODEL_GET_ALL);
+    EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_MODEL_GET_ALL_DISPLAYED);
     
-    Brain* brain = new Brain();
+    Brain* brain = new Brain(m_caretPreferences);
     m_brains.push_back(brain);
 }
 
@@ -106,6 +118,10 @@ SessionManager::~SessionManager()
             m_browserTabs[i] = NULL;
         }
     }
+    
+    std::for_each(m_browserWindowContent.begin(),
+                  m_browserWindowContent.end(),
+                  [](BrowserWindowContent* bwc) { if (bwc != NULL) delete bwc; } );
     
     int32_t numberOfBrains = getNumberOfBrains();
     for (int32_t i = (numberOfBrains - 1); i >= 0; i--) {
@@ -340,6 +356,39 @@ SessionManager::receiveEvent(Event* event)
             }
         }
     }
+    else if (event->getEventType() == EventTypeEnum::EVENT_BROWSER_WINDOW_CONTENT) {
+        EventBrowserWindowContent* windowEvent =
+        dynamic_cast<EventBrowserWindowContent*>(event);
+        CaretAssert(windowEvent);
+        
+        windowEvent->setEventProcessed();
+        
+        const int32_t windowIndex = windowEvent->getBrowserWindowIndex();
+        CaretAssertStdArrayIndex(m_browserWindowContent, windowIndex);
+        
+        CaretAssert(m_browserWindowContent[windowIndex]);
+        
+        switch (windowEvent->getMode()) {
+            case EventBrowserWindowContent::Mode::DELETER:
+                m_browserWindowContent[windowIndex]->setValid(false);
+                break;
+            case EventBrowserWindowContent::Mode::GET:
+                windowEvent->setBrowserWindowContent(m_browserWindowContent[windowIndex]);
+                break;
+            case EventBrowserWindowContent::Mode::NEW:
+                m_browserWindowContent[windowIndex]->setValid(true);
+                windowEvent->setBrowserWindowContent(m_browserWindowContent[windowIndex]);
+                break;
+        }
+    }
+    else if (event->getEventType() == EventTypeEnum::EVENT_CARET_PREFERENCES_GET) {
+        EventCaretPreferencesGet* preferencesEvent =
+        dynamic_cast<EventCaretPreferencesGet*>(event);
+        CaretAssert(preferencesEvent);
+        
+        preferencesEvent->setCaretPreferences(m_caretPreferences);
+        preferencesEvent->setEventProcessed();
+    }
     else if (event->getEventType() == EventTypeEnum::EVENT_MODEL_ADD) {
         EventModelAdd* addModelsEvent =
         dynamic_cast<EventModelAdd*>(event);
@@ -380,6 +429,19 @@ SessionManager::receiveEvent(Event* event)
         getModelsEvent->setEventProcessed();
         
         getModelsEvent->addModels(m_models);
+    }
+    else if (event->getEventType() == EventTypeEnum::EVENT_MODEL_GET_ALL_DISPLAYED) {
+        EventModelGetAllDisplayed* getDisplayedModelsEvent =
+        dynamic_cast<EventModelGetAllDisplayed*>(event);
+        CaretAssert(getDisplayedModelsEvent);
+        
+        for (const auto tab : m_browserTabs) {
+            if (tab != NULL) {
+                getDisplayedModelsEvent->addModel(tab->getModelForDisplay());
+            }
+        }
+        
+        getDisplayedModelsEvent->setEventProcessed();
     }
 }
 
@@ -500,6 +562,19 @@ SessionManager::saveToScene(const SceneAttributes* sceneAttributes,
     }
     sceneClass->addChild(new SceneClassArray("m_browserTabs",
                                              browserTabSceneClasses));
+    
+    /*
+     * Save browser windows
+     */
+    SceneObjectMapIntegerKey* browserClassMap = new SceneObjectMapIntegerKey("browserWindowContentMap",
+                                                                             SceneObjectDataTypeEnum::SCENE_CLASS);
+    for (auto bw : m_browserWindowContent) {
+        if (bw->isValid()) {
+            browserClassMap->addClass(bw->getWindowIndex(),
+                                      bw->saveToScene(sceneAttributes, "m_browserWindowContent"));
+        }
+    }
+    sceneClass->addChild(browserClassMap);
     
     sceneClass->addChild(m_imageCaptureDialogSettings->saveToScene(sceneAttributes,
                                                                    "m_imageCaptureDialogSettings"));
@@ -696,7 +771,7 @@ SessionManager::restoreFromScene(const SceneAttributes* sceneAttributes,
                                           brainClass);
         }
         else {
-            Brain* brain = new Brain();
+            Brain* brain = new Brain(m_caretPreferences);
             brain->restoreFromScene(sceneAttributes, 
                                     brainClass);
         }
@@ -742,6 +817,72 @@ SessionManager::restoreFromScene(const SceneAttributes* sceneAttributes,
         const int32_t tabIndex = tab->getTabNumber();
         CaretAssert(tabIndex >= 0);
         m_browserTabs[tabIndex] = tab;
+    }
+    
+    /*
+     * Restore windows
+     */
+    const SceneObjectMapIntegerKey* browserClassMap = sceneClass->getMapIntegerKey("browserWindowContentMap");
+    if (browserClassMap != NULL) {
+        /*
+         * m_browserWindowContent was added in Feb 2018 at which time the
+         * aspect locking buttons for window and tab were consolidated into
+         * one button.
+         */
+        const std::vector<int32_t> windowIndices = browserClassMap->getKeys();
+        for (const auto windowIndex : windowIndices) {
+            const SceneClass* windowClass = browserClassMap->classValue(windowIndex);
+            CaretAssert(windowClass);
+            CaretAssertStdArrayIndex(m_browserWindowContent, windowIndex);
+            m_browserWindowContent[windowIndex]->restoreFromScene(sceneAttributes,
+                                                                  windowClass);
+            m_browserWindowContent[windowIndex]->setValid(true);
+        }
+    }
+    else {
+        /*
+         * For scenes before Feb 2018, need to restore from the GUI's browser window
+         * to the browser window content.
+         */
+        const Scene* scene = sceneAttributes->getScene();
+        CaretAssert(scene);
+        
+        const SceneClass* guiManagerClass = scene->getClassWithName("guiManager");
+        if (guiManagerClass->getName() != "guiManager") {
+            sceneAttributes->addToErrorMessage("Top level scene class should be guiManager but it is: "
+                                               + guiManagerClass->getName());
+            return;
+        }
+        
+        const SceneClassArray* browserWindowArray = guiManagerClass->getClassArray("m_brainBrowserWindows");
+        if (browserWindowArray != NULL) {
+            const int32_t numBrowserClasses = browserWindowArray->getNumberOfArrayElements();
+            for (int32_t i = 0; i < numBrowserClasses; i++) {
+                const SceneClass* browserClass = browserWindowArray->getClassAtIndex(i);
+                CaretAssert(browserClass);
+                int32_t windowIndex = browserClass->getIntegerValue("m_browserWindowIndex", -1);
+                if (windowIndex < 0) {
+                    windowIndex = i;
+                }
+                CaretAssert(windowIndex >= 0);
+                CaretAssertStdArrayIndex(m_browserWindowContent, windowIndex);
+                m_browserWindowContent[windowIndex]->restoreFromOldBrainBrowserWindowScene(sceneAttributes,
+                                                                                           browserClass);
+                m_browserWindowContent[windowIndex]->setValid(true);
+            }
+        }
+    }
+    
+    const int32_t numValidBrowserWindows = std::count_if(m_browserWindowContent.begin(),
+                                                         m_browserWindowContent.end(),
+                                                         [](BrowserWindowContent* bwc) { return bwc->isValid(); });
+    if (numValidBrowserWindows <= 0) {
+        sceneAttributes->addToErrorMessage("Scene error, no browser window content was restored");
+        return;
+    }
+    
+    for (auto brainPtr : m_brains) {
+        brainPtr->restoreModelChartOneToModelChartTwo();
     }
     
     /*

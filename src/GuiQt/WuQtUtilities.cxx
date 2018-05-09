@@ -35,10 +35,11 @@
 #include <QLabel>
 #include <QPainter>
 #include <QPushButton>
-#include <QSound>
+//#include <QSound>
 #include <QTableWidget>
 #include <QTableWidgetItem>
 #include <QTextDocument>
+#include <QToolButton>
 
 #include "CaretAssert.h"
 #include "CaretLogger.h"
@@ -389,7 +390,18 @@ WuQtUtilities::moveAndSizeWindow(QWidget* window,
      */
     QPoint pXY(x,
                y);
+#if QT_VERSION >= 0x050000
+    const QRect availableRect = dw->availableGeometry();
+#else
+    /*
+     * Note 23 September 2016:
+     *    Calling geometry is likely the WRONG method to call
+     *    but since it is not causing a problem in in Qt 4.x
+     *    we will continuing using to avoid the risk of 
+     *    breaking scenes.
+     */
     const QRect availableRect = dw->screen()->geometry();
+#endif
     const int32_t screenSizeX = availableRect.width();
     const int32_t screenSizeY = availableRect.height();
     
@@ -514,6 +526,57 @@ WuQtUtilities::resizeWindow(QWidget* window,
                        windowHeight);
     }
 }
+
+/**
+ * Limit a window's size to a percentage of the maximum size.
+ *
+ * @param window
+ *     Window that is resized.
+ * @param widthMaximumPercentage
+ *     Maximum width percentage [0, 100]
+ * @param heightMaximumPercentage
+ *     Maximum height percentage [0, 100]
+ */
+void
+WuQtUtilities::limitWindowSizePercentageOfMaximum(QWidget* window,
+                                                  const float widthMaximumPercentage,
+                                                  const float heightMaximumPercentage)
+{
+    AString message;
+    if ((widthMaximumPercentage < 0.0)
+        || (widthMaximumPercentage > 100.0)) {
+        message.appendWithNewLine("Percentage width must range [0, 100]: value -> "
+                                  + AString::number(widthMaximumPercentage));
+    }
+    if ((heightMaximumPercentage < 0.0)
+        || (heightMaximumPercentage > 100.0)) {
+        message.appendWithNewLine("Percentage height must range [0, 100]: value -> "
+                                  + AString::number(heightMaximumPercentage));
+    }
+    
+    if ( ! message.isEmpty()) {
+        CaretLogSevere(message);
+        return;
+    }
+    
+    QDesktopWidget* dw = QApplication::desktop();
+    QPoint pXY(window->x(),
+               window->y());
+    const int32_t nearestScreen = dw->screenNumber(pXY);
+    if (nearestScreen >= 0) {
+        const QRect screenRect = dw->availableGeometry(nearestScreen);
+        const int32_t screenWidth  = screenRect.width();
+        const int32_t screenHeight = screenRect.height();
+    
+        const float maxWidth = ((widthMaximumPercentage   / 100.0) * screenWidth);
+        const float maxHeight = ((heightMaximumPercentage / 100.0) * screenHeight);
+        
+        window->setMaximumSize(maxWidth,
+                               maxHeight);
+        window->adjustSize();
+    }
+}
+
 
 /**
  * Table widget has a default size of 640 x 480.
@@ -1024,33 +1087,33 @@ WuQtUtilities::getLayoutContentDescription(QLayout* layout)
     return s;
 }
 
-/**
- * Play a sound file.  The sound file MUST be in the distribution's
- * "resources/sounds" directory.
- *
- * Note that sound files, as of Qt 4.8, do not support Qt's resource
- * system.
- *
- * @param soundFileName
- *    Name of sound file (with no path, just the filename).
- */
-void
-WuQtUtilities::playSound(const QString& soundFileName)
-{
-    const QString workbenchDir = SystemUtilities::getWorkbenchHome();
-    const QString soundFilePath = (workbenchDir
-                                   + "/../resources/sounds/"
-                                   + soundFileName);
-    
-    if (QFile::exists(soundFilePath)) {
-        QSound::play(soundFilePath);
-    }
-    else {
-        CaretLogSevere("Sound file \""
-                       + soundFilePath
-                       + "\" does not exist.");
-    }
-}
+///**
+// * Play a sound file.  The sound file MUST be in the distribution's
+// * "resources/sounds" directory.
+// *
+// * Note that sound files, as of Qt 4.8, do not support Qt's resource
+// * system.
+// *
+// * @param soundFileName
+// *    Name of sound file (with no path, just the filename).
+// */
+//void
+//WuQtUtilities::playSound(const QString& soundFileName)
+//{
+//    const QString workbenchDir = SystemUtilities::getWorkbenchHome();
+//    const QString soundFilePath = (workbenchDir
+//                                   + "/../resources/sounds/"
+//                                   + soundFileName);
+//    
+//    if (QFile::exists(soundFilePath)) {
+//        QSound::play(soundFilePath);
+//    }
+//    else {
+//        CaretLogSevere("Sound file \""
+//                       + soundFilePath
+//                       + "\" does not exist.");
+//    }
+//}
 
 /**
  * Create the text for a tooltip so that long lines are
@@ -1098,6 +1161,27 @@ WuQtUtilities::setWordWrappedToolTip(QWidget* widget,
                                      const QString& tooltipText)
 {
     widget->setToolTip(createWordWrappedToolTipText(tooltipText));
+}
+
+/**
+ * Set the text for a tooltip so that long lines are
+ * wrapped and the tooltip is not one giant line
+ * that is the width of the display.
+ *
+ * This is accomplished by placing the text into a
+ * QTextDocument and then retrieving the text with
+ * HTML formatting.
+ *
+ * @param action
+ *    Action on which tooltip is set.
+ * @param tooltipText
+ *    Text for the widget's tooltip.
+ */
+void
+WuQtUtilities::setWordWrappedToolTip(QAction* action,
+                                     const QString& tooltipText)
+{
+    action->setToolTip(createWordWrappedToolTipText(tooltipText));
 }
 
 /**
@@ -1198,7 +1282,7 @@ WuQtUtilities::createCaretColorEnumPixmap(const QWidget* widget,
         case CaretColorEnum::TEAL:
         case CaretColorEnum::WHITE:
         case CaretColorEnum::YELLOW:
-            CaretColorEnum::toRGBFloat(caretColor,
+            CaretColorEnum::toRGBAFloat(caretColor,
                                        colorRGBA);
             colorRGBA[3] = 1.0;
             validColorFlag = true;
@@ -1298,6 +1382,45 @@ WuQtUtilities::createPixmapWidgetPainterOriginCenter100x100(const QWidget* widge
  * to the widget's foreground color, and then the painter is
  * returned.
  *
+ * Origin of the painter will be in the center with the
+ * coordinates, both X and Y, ranging -100 to 100.
+ *
+ * @param widget
+ *     Widget used for coloring.
+ * @param pixmap
+ *     The Pixmap must be square (width == height).
+ * @return
+ *     Shared pointer containing QPainter for drawing to the pixmap.
+ */
+QSharedPointer<QPainter>
+WuQtUtilities::createPixmapWidgetPainterOriginCenter(const QWidget* widget,
+                                                     QPixmap& pixmap)
+{
+    CaretAssert(pixmap.width() == pixmap.height());
+    
+    QSharedPointer<QPainter> painter = createPixmapWidgetPainter(widget,
+                                                                 pixmap);
+    
+    /*
+     * Note: QPainter has its origin at the top left.
+     * Using a negative for the Y-scale value will
+     * move the origin to the bottom.
+     */
+    painter->translate(pixmap.width() / 2.0,
+                       pixmap.height() / 2.0);
+    painter->scale(1.0,
+                   -1.0);
+    
+    return painter;
+}
+
+/**
+ * Create a painter for the given pixmap that will be placed
+ * into the given widget.  The pixmap's background is painted
+ * with the widget's background color, the painter's pen is set
+ * to the widget's foreground color, and then the painter is
+ * returned.
+ *
  * Origin of painter will be in the BOTTOM LEFT corner.
  *
  * @param widget
@@ -1378,6 +1501,96 @@ WuQtUtilities::createPixmapWidgetPainter(const QWidget* widget,
     
     return painter;
 }
+
+/**
+ * With Qt5, a toolbutton placed into a toolbar uses the
+ * background of the toolbar with no border and appears 
+ * similar to a label.  Use a stylesheet so that
+ * the button appears similar to Qt4.
+ *
+ * @param toolButton
+ *     toolButton ToolButton that needs style updated.
+ */
+#ifdef CARET_OS_MACOSX
+#if QT_VERSION >= 0x050000
+void
+WuQtUtilities::setToolButtonStyleForQt5Mac(QToolButton* toolButton)
+{
+    CaretAssert(toolButton);
+    
+    bool hasMenuFlag = false;
+    bool hasCheckableFlag = false;
+    QAction* action = toolButton->defaultAction();
+    if (action != NULL) {
+        if (action->menu() != NULL) {
+            hasMenuFlag = true;
+        }
+        if (action->isCheckable()) {
+            hasCheckableFlag = true;
+        }
+    }
+    
+    const QPalette palette = toolButton->palette();
+    const QPalette::ColorRole backgroundRole = toolButton->backgroundRole();
+    const QBrush backgroundBrush = palette.brush(backgroundRole);
+    const QColor backgroundColor = backgroundBrush.color();
+    const QColor lighterColor    = backgroundColor.lighter(100);
+    const QColor darkerColor = backgroundColor.darker(125);
+    const QColor slightlyDarkerColor = backgroundColor.darker(115);
+    
+    /*
+     * Use a stylesheet to:
+     * (1) Make the background of the button lighter
+     * (2) Add a border around the button that is slightly
+     *     darker than the background.
+     */
+    QString toolButtonStyleSheet(" QToolButton { "
+                                 "   background: " + lighterColor.name() + "; ");
+    if (hasMenuFlag) {
+        //        toolButtonStyleSheet.append("   border-style: solid; "
+        //                                    "   border-width: 1px; "
+        //                                    "   border-color: " + darkerColor.name() + "; "
+        //                                    "   padding-top:    6px; "
+        //                                    "   padding-bottom: 6px; "
+        //                                    "   padding-right:  4px; "
+        //                                    "   padding-left:   3px; ");
+    }
+    else {
+        toolButtonStyleSheet.append("   border-style: solid; "
+                                    "   border-width: 1px; "
+                                    "   border-color: " + darkerColor.name() + "; "
+                                    "   padding-top:    2px; "
+                                    "   padding-bottom: 2px; "
+                                    "   padding-right:  3px; "
+                                    "   padding-left:   3px; ");
+    }
+    toolButtonStyleSheet.append(" } ");
+    
+    if (hasCheckableFlag) {
+        /*
+         * Background color when button is "checked"
+         */
+        toolButtonStyleSheet.append(" QToolButton:checked { "
+                                    "   background-color: " + slightlyDarkerColor.name() + "; "
+                                    " } ");
+    }
+    else {
+        /*
+         * Background color when button is "pressed"
+         */
+        toolButtonStyleSheet.append(" QToolButton:pressed { "
+                                    "   background-color: " + slightlyDarkerColor.name() + "; "
+                                    " } ");
+    }
+    
+    toolButton->setStyleSheet(toolButtonStyleSheet);
+}
+#else
+    void WuQtUtilities::setToolButtonStyleForQt5Mac(QToolButton*) { }
+#endif
+#else
+    void WuQtUtilities::setToolButtonStyleForQt5Mac(QToolButton*) { }
+#endif
 
 
 

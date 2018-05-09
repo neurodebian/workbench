@@ -51,7 +51,7 @@ namespace caret {
         
         void updateGraphicsWindow();
         
-        void updateOtherYokedWindows();
+        void updateGraphicsWindowAndYokedWindows();
         
         void updateUserInterface();
         
@@ -78,6 +78,7 @@ namespace caret {
         
         // ADD_NEW_MEMBERS_HERE
 
+        friend class BrainBrowserWindowToolBarChartTwoOrientation;
     };
     
 #ifdef __BRAIN_BROWSER_WINDOW_TOOL_BAR_COMPONENT_DECLARE__

@@ -22,6 +22,7 @@
  */
 /*LICENSE_END*/
 
+#include <set>
 #include <stdint.h>
 
 #include <QImage>
@@ -36,11 +37,13 @@ class QAction;
 class QActionGroup;
 class QDockWidget;
 class QMenu;
+class QToolButton;
 
 namespace caret {
     class BrainBrowserWindowToolBar;
     class BrainBrowserWindowOrientedToolBox;
     class BrainOpenGLWidget;
+    class BrowserWindowContent;
     class BrowserTabContent;
     class PlainTextStringBuilder;
     class SceneClassAssistant;
@@ -66,6 +69,9 @@ namespace caret {
         
         BrowserTabContent* getBrowserTabContent(int tabIndex);
 
+        BrowserWindowContent* getBrowerWindowContent();
+        
+        const BrowserWindowContent* getBrowerWindowContent() const;
         
         QMenu* createPopupMenu();
         
@@ -109,8 +115,6 @@ namespace caret {
         virtual void restoreFromScene(const SceneAttributes* sceneAttributes,
                                       const SceneClass* sceneClass);
 
-//        void getViewportSize(int &w, int &h);
-        
         TileTabsConfiguration* getSelectedTileTabsConfiguration();
         
         void setSelectedTileTabsConfiguration(TileTabsConfiguration* configuration);
@@ -138,14 +142,16 @@ namespace caret {
         
         float getOpenGLWidgetAspectRatio() const;
         
-        bool isAspectRatioLocked() const;
+        bool changeInputModeToAnnotationsWarningDialog();
         
-        void setAspectRatioLocked(const bool locked);
+        bool isWindowAspectRatioLocked() const;
         
         float getAspectRatio() const;
         
-        void setAspectRatio(const float aspectRatio);
+        bool hasValidOpenGL();
         
+        bool isOpenGLContextSharingValid() const;
+
     protected:
         void closeEvent(QCloseEvent* event);
         void keyPressEvent(QKeyEvent* event);
@@ -223,16 +229,20 @@ namespace caret {
         
         void processProjectFoci();
         void processSplitBorderFiles();
-        void processTabAspectRatioLockedToggled(bool checked);
-        void processWindowAspectRatioLockedToggled(bool checked);
-        void processLockAllTabsAspectRatioTriggered();
-        void processUnlockAllTabsAspectRatioTriggered();
         
+        void processWindowMenuLockWindowAspectRatioTriggered(bool checked);
+        void processWindowMenuLockAllTabAspectRatioTriggered(bool checked);
+        void processToolBarLockWindowAndAllTabAspectTriggered(bool checked);
+        void processToolBarLockWindowAndAllTabAspectMenu(const QPoint& pos);
+
         void processEditMenuItemTriggered(QAction* action);
         void processEditMenuAboutToShow();
         
+        void aspectRatioDialogUpdateForTab(const double aspectRatio);
+        void aspectRatioDialogUpdateForWindow(const double aspectRatio);
+        
     private:
-        // Contains status of components such as enter/exit full screen
+        /** Contains status of components such as enter/exit full screen */
         struct WindowComponentStatus {
             bool isFeaturesToolBoxDisplayed;
             bool isOverlayToolBoxDisplayed;
@@ -245,6 +255,11 @@ namespace caret {
         enum CreateDefaultTabsMode {
             CREATE_DEFAULT_TABS_YES,
             CREATE_DEFAULT_TABS_NO
+        };
+        
+        enum class AspectRatioMode {
+            TAB,
+            WINDOW
         };
         
         BrainBrowserWindow(const int browserWindowIndex,
@@ -295,8 +310,23 @@ namespace caret {
         
         bool isMacOptionKeyDown() const;
         
+        void showDataFileReadWarningsDialog();
+        
+        void lockWindowAspectRatio(const bool checked);
+        void lockAllTabAspectRatios(const bool checked);
+        void updateActionsForLockingAspectRatios();
+        
+        float getAspectRatioFromDialog(const AspectRatioMode aspectRatioMode,
+                                       const QString& title,
+                                       const float aspectRatio,
+                                       QWidget* parent) const;
+        
+        void saveBrowserWindowContentForScene();
+        
         /** Index of this window */
-        int32_t m_browserWindowIndex;
+        const int32_t m_browserWindowIndex;
+        
+        BrowserWindowContent* m_browserWindowContent = NULL;
         
         BrainOpenGLWidget* m_openGLWidget;
         
@@ -340,7 +370,6 @@ namespace caret {
         
         QAction* m_viewFullScreenAction;
         QAction* m_viewTileTabsAction;
-        bool m_viewTileTabsSelected;
         
         QMenu* m_tileTabsMenu;
         QAction* m_createAndEditTileTabsAction;
@@ -376,10 +405,10 @@ namespace caret {
         
         QAction* m_overlayToolBoxAction;
         
-        QAction* m_lockAllTabsAspectRatioAction;
-        QAction* m_unlockAllTabsAspectRatioAction;
-        QAction* m_tabAspectRatioLockedAction;
-        QAction* m_windowAspectRatioLockedAction;
+        QAction* m_windowMenuLockWindowAspectRatioAction;
+        QAction* m_windowMenuLockAllTabAspectRatioAction;
+        QAction* m_toolBarLockWindowAndAllTabAspectRatioAction;
+        QToolButton* m_toolBarLockWindowAndAllTabAspectRatioButton;
         
         QAction* m_featuresToolBoxAction;
         
@@ -405,8 +434,6 @@ namespace caret {
         
         AString m_selectedTileTabsConfigurationUniqueIdentifier;
         TileTabsConfiguration* m_defaultTileTabsConfiguration;
-        TileTabsConfiguration* m_sceneTileTabsConfiguration;
-        AString m_sceneTileTabsConfigurationText;
         
         static AString s_previousOpenFileNameFilter;
         static AString s_previousOpenFileDirectory;
@@ -414,8 +441,6 @@ namespace caret {
         
         WindowComponentStatus m_defaultWindowComponentStatus;
         WindowComponentStatus m_normalWindowComponentStatus;
-        
-        float m_aspectRatio;
         
         static bool s_firstWindowFlag;
         
@@ -430,8 +455,10 @@ namespace caret {
         /** Y position from scene file for first window */
         static int32_t s_sceneFileFirstWindowY;
         
+        static std::set<BrainBrowserWindow*> s_brainBrowserWindows;
     };
 #ifdef __BRAIN_BROWSER_WINDOW_DECLARE__
+    std::set<BrainBrowserWindow*> BrainBrowserWindow::s_brainBrowserWindows;
     AString BrainBrowserWindow::s_previousOpenFileNameFilter;
     AString BrainBrowserWindow::s_previousOpenFileDirectory;
     QByteArray BrainBrowserWindow::s_previousOpenFileGeometry;

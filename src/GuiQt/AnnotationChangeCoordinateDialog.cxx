@@ -115,9 +115,9 @@ AnnotationChangeCoordinateDialog::createCurrentCoordinateWidget()
 
     bool useXyzFlag = true;
     switch (m_annotation->getCoordinateSpace()) {
-        case AnnotationCoordinateSpaceEnum::STEREOTAXIC:
+        case AnnotationCoordinateSpaceEnum::CHART:
             break;
-        case AnnotationCoordinateSpaceEnum::PIXELS:
+        case AnnotationCoordinateSpaceEnum::STEREOTAXIC:
             break;
         case AnnotationCoordinateSpaceEnum::SURFACE:
         {
@@ -136,6 +136,8 @@ AnnotationChangeCoordinateDialog::createCurrentCoordinateWidget()
             break;
         case AnnotationCoordinateSpaceEnum::TAB:
             spaceText += (AString::number(m_annotation->getTabIndex() + 1) + " ");
+            break;
+        case AnnotationCoordinateSpaceEnum::VIEWPORT:
             break;
         case AnnotationCoordinateSpaceEnum::WINDOW:
             spaceText += (AString::number(m_annotation->getWindowIndex() + 1) + " ");

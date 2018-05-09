@@ -196,8 +196,10 @@ CiftiBrainordinateScalarFile::newInstanceFromRowInCiftiConnectivityMatrixFile(co
         CaretAssert(scalarPalette);
         const PaletteColorMapping* densePalette = sourceCiftiMatrixFile->getMapPaletteColorMapping(0);
         CaretAssert(densePalette);
-        scalarPalette->copy(*densePalette);
+        scalarPalette->copy(*densePalette,
+                            true);
         
+        scalarFile->updateAfterFileDataChanges();
         scalarFile->setModified();
         
         return scalarFile;
@@ -262,7 +264,7 @@ CiftiBrainordinateScalarFile::setLineSeriesChartingEnabled(const int32_t tabInde
  *    Chart types supported by this file.
  */
 void
-CiftiBrainordinateScalarFile::getSupportedLineSeriesChartDataTypes(std::vector<ChartDataTypeEnum::Enum>& chartDataTypesOut) const
+CiftiBrainordinateScalarFile::getSupportedLineSeriesChartDataTypes(std::vector<ChartOneDataTypeEnum::Enum>& chartDataTypesOut) const
 {
     helpGetSupportedLineSeriesChartDataTypes(chartDataTypesOut);
 }
@@ -296,7 +298,7 @@ CiftiBrainordinateScalarFile::loadLineSeriesChartDataForSurfaceNode(const Struct
 //                                        data)) {
 //            const int64_t numData = static_cast<int64_t>(data.size());
 //            
-//            chartData = new ChartDataCartesian(ChartDataTypeEnum::CHART_DATA_TYPE_LINE_DATA_SERIES,
+//            chartData = new ChartDataCartesian(ChartOneDataTypeEnum::CHART_DATA_TYPE_LINE_DATA_SERIES,
 //                                               ChartAxisUnitsEnum::CHART_AXIS_UNITS_NONE,
 //                                               ChartAxisUnitsEnum::CHART_AXIS_UNITS_NONE);
 //            for (int64_t i = 0; i < numData; i++) {

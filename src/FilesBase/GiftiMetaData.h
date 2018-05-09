@@ -129,6 +129,11 @@ public:
     
     void resetUniqueIdentifier();
 
+    bool isEmpty() const;
+    
+    int32_t getNumberOfMetaData() const;
+    
+    
 private:
     void readEntry(QXmlStreamReader& xml);
     

@@ -25,8 +25,10 @@
 
 #include "CaretLogger.h"
 #include "ChartDataCartesian.h"
+#include "CiftiParcelReorderingModel.h"
 #include "SceneClass.h"
 #include "SceneClassArray.h"
+#include "SceneClassAssistant.h"
 
 using namespace caret;
 
@@ -47,6 +49,13 @@ CiftiParcelSeriesFile::CiftiParcelSeriesFile()
     for (int32_t i = 0; i < BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_TABS; i++) {
         m_chartingEnabledForTab[i] = false;
     }
+    
+    m_parcelReorderingModel = std::unique_ptr<CiftiParcelReorderingModel>(new CiftiParcelReorderingModel(this));
+    
+    m_sceneAssistant = std::unique_ptr<SceneClassAssistant>(new SceneClassAssistant());
+    m_sceneAssistant->add("m_parcelReorderingModel",
+                          "CiftiParcelReorderingModel",
+                          m_parcelReorderingModel.get());
 }
 
 /**
@@ -107,7 +116,7 @@ CiftiParcelSeriesFile::setLineSeriesChartingEnabled(const int32_t tabIndex,
  *    Chart types supported by this file.
  */
 void
-CiftiParcelSeriesFile::getSupportedLineSeriesChartDataTypes(std::vector<ChartDataTypeEnum::Enum>& chartDataTypesOut) const
+CiftiParcelSeriesFile::getSupportedLineSeriesChartDataTypes(std::vector<ChartOneDataTypeEnum::Enum>& chartDataTypesOut) const
 {
     helpGetSupportedLineSeriesChartDataTypes(chartDataTypesOut);
 }
@@ -131,97 +140,6 @@ CiftiParcelSeriesFile::loadLineSeriesChartDataForSurfaceNode(const StructureEnum
     ChartDataCartesian* chartData = helpLoadChartDataForSurfaceNode(structure,
                                                            nodeIndex);
     return chartData;
-
-//    ChartDataCartesian* chartData = NULL;
-//    
-//    try {
-//        std::vector<float> data;
-//        if (getSeriesDataForSurfaceNode(structure,
-//                                        nodeIndex,
-//                                        data)) {
-//            const int64_t numData = static_cast<int64_t>(data.size());
-//            
-//            bool timeSeriesFlag = false;
-//            bool dataSeriesFlag = false;
-//            float convertTimeToSeconds = 1.0;
-//            switch (getMapIntervalUnits()) {
-//                case NiftiTimeUnitsEnum::NIFTI_UNITS_HZ:
-//                    break;
-//                case NiftiTimeUnitsEnum::NIFTI_UNITS_MSEC:
-//                    timeSeriesFlag = true;
-//                    convertTimeToSeconds = 1000.0;
-//                    break;
-//                case NiftiTimeUnitsEnum::NIFTI_UNITS_PPM:
-//                    break;
-//                case NiftiTimeUnitsEnum::NIFTI_UNITS_SEC:
-//                    convertTimeToSeconds = 1.0;
-//                    timeSeriesFlag = true;
-//                    break;
-//                case NiftiTimeUnitsEnum::NIFTI_UNITS_UNKNOWN:
-//                    dataSeriesFlag = true;
-//                    break;
-//                case NiftiTimeUnitsEnum::NIFTI_UNITS_USEC:
-//                    convertTimeToSeconds = 1000000.0;
-//                    timeSeriesFlag = true;
-//                    break;
-//            }
-//            
-//            if (dataSeriesFlag) {
-//                chartData = new ChartDataCartesian(ChartDataTypeEnum::CHART_DATA_TYPE_LINE_DATA_SERIES,
-//                                                   ChartAxisUnitsEnum::CHART_AXIS_UNITS_NONE,
-//                                                   ChartAxisUnitsEnum::CHART_AXIS_UNITS_NONE);
-//            }
-//            else if (timeSeriesFlag) {
-//                chartData = new ChartDataCartesian(ChartDataTypeEnum::CHART_DATA_TYPE_LINE_TIME_SERIES,
-//                                                   ChartAxisUnitsEnum::CHART_AXIS_UNITS_TIME_SECONDS,
-//                                                   ChartAxisUnitsEnum::CHART_AXIS_UNITS_NONE);
-//            }
-//            
-//            if (chartData != NULL) {
-//                float timeStart = 0.0;
-//                float timeStep  = 1.0;
-//                if (timeSeriesFlag) {
-//                    getMapIntervalStartAndStep(timeStart,
-//                                               timeStep);
-//                    timeStart *= convertTimeToSeconds;
-//                    timeStep  *= convertTimeToSeconds;
-//                    chartData->setTimeStartInSecondsAxisX(timeStart);
-//                    chartData->setTimeStepInSecondsAxisX(timeStep);
-//                }
-//                
-//                for (int64_t i = 0; i < numData; i++) {
-//                    float xValue = i;
-//                    
-//                    if (timeSeriesFlag) {
-//                        xValue = timeStart + (i * timeStep);
-//                    }
-//                    
-//                    chartData->addPoint(xValue,
-//                                        data[i]);
-//                }
-//                
-//                const AString description = (getFileNameNoPath()
-//                                             + " node "
-//                                             + AString::number(nodeIndex));
-//                chartData->setDescription(description);
-//            }
-//            else {
-//                const AString msg = "New type of units for data series flag, needs updating for charting";
-//                CaretAssertMessage(0, msg);
-//                throw DataFileException(msg);
-//            }
-//        }
-//    }
-//    catch (const DataFileException& dfe) {
-//        if (chartData != NULL) {
-//            delete chartData;
-//            chartData = NULL;
-//        }
-//        
-//        throw dfe;
-//    }
-//    
-//    return chartData;
 }
 
 /**
@@ -282,6 +200,9 @@ CiftiParcelSeriesFile::saveFileDataToScene(const SceneAttributes* sceneAttribute
     CiftiMappableDataFile::saveFileDataToScene(sceneAttributes,
                                                sceneClass);
     
+    m_sceneAssistant->saveMembers(sceneAttributes,
+                                  sceneClass);
+    
     sceneClass->addBooleanArray("m_chartingEnabledForTab",
                                 m_chartingEnabledForTab,
                                 BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_TABS);
@@ -308,6 +229,9 @@ CiftiParcelSeriesFile::restoreFileDataFromScene(const SceneAttributes* sceneAttr
     CiftiMappableDataFile::restoreFileDataFromScene(sceneAttributes,
                                                     sceneClass);
     
+    m_sceneAssistant->restoreMembers(sceneAttributes,
+                                     sceneClass);
+    
     const ScenePrimitiveArray* tabArray = sceneClass->getPrimitiveArray("m_chartingEnabledForTab");
     if (tabArray != NULL) {
         sceneClass->getBooleanArrayValue("m_chartingEnabledForTab",
@@ -324,6 +248,97 @@ CiftiParcelSeriesFile::restoreFileDataFromScene(const SceneAttributes* sceneAttr
             m_chartingEnabledForTab[i] = chartingEnabled;
         }
     }
+}
+
+/**
+ * Get the selected parcel label file used for reordering of parcels.
+ *
+ * @param compatibleParcelLabelFilesOut
+ *    All Parcel Label files that are compatible with file implementing
+ *    this interface.
+ * @param selectedParcelLabelFileOut
+ *    The selected parcel label file used for reordering the parcels.
+ *    May be NULL!
+ * @param selectedParcelLabelFileMapIndexOut
+ *    Map index in the selected parcel label file.
+ * @param enabledStatusOut
+ *    Enabled status of reordering.
+ */
+void
+CiftiParcelSeriesFile::getSelectedParcelLabelFileAndMapForReordering(std::vector<CiftiParcelLabelFile*>& compatibleParcelLabelFilesOut,
+                                                                     CiftiParcelLabelFile* &selectedParcelLabelFileOut,
+                                                                     int32_t& selectedParcelLabelFileMapIndexOut,
+                                                                     bool& enabledStatusOut) const
+{
+    m_parcelReorderingModel->getSelectedParcelLabelFileAndMapForReordering(compatibleParcelLabelFilesOut,
+                                                                           selectedParcelLabelFileOut,
+                                                                           selectedParcelLabelFileMapIndexOut,
+                                                                           enabledStatusOut);
+}
+
+/**
+ * Set the selected parcel label file used for reordering of parcels.
+ *
+ * @param selectedParcelLabelFile
+ *    The selected parcel label file used for reordering the parcels.
+ *    May be NULL!
+ * @param selectedParcelLabelFileMapIndex
+ *    Map index in the selected parcel label file.
+ * @param enabledStatus
+ *    Enabled status of reordering.
+ */
+void
+CiftiParcelSeriesFile::setSelectedParcelLabelFileAndMapForReordering(CiftiParcelLabelFile* selectedParcelLabelFile,
+                                                                     const int32_t selectedParcelLabelFileMapIndex,
+                                                                     const bool enabledStatus)
+{
+    m_parcelReorderingModel->setSelectedParcelLabelFileAndMapForReordering(selectedParcelLabelFile,
+                                                                           selectedParcelLabelFileMapIndex,
+                                                                           enabledStatus);
+}
+
+/**
+ * Get the parcel reordering for the given map index that was created using
+ * the given parcel label file and its map index.
+ *
+ * @param parcelLabelFile
+ *    The selected parcel label file used for reordering the parcels.
+ * @param parcelLabelFileMapIndex
+ *    Map index in the selected parcel label file.
+ * @return
+ *    Pointer to parcel reordering or NULL if not found.
+ */
+const CiftiParcelReordering*
+CiftiParcelSeriesFile::getParcelReordering(const CiftiParcelLabelFile* parcelLabelFile,
+                                           const int32_t parcelLabelFileMapIndex) const
+{
+    return m_parcelReorderingModel->getParcelReordering(parcelLabelFile,
+                                                        parcelLabelFileMapIndex);
+}
+
+/**
+ * Create the parcel reordering for the given map index using
+ * the given parcel label file and its map index.
+ *
+ * @param parcelLabelFile
+ *    The selected parcel label file used for reordering the parcels.
+ * @param parcelLabelFileMapIndex
+ *    Map index in the selected parcel label file.
+ * @param ciftiParcelsMap
+ *    The CIFTI parcels map that will or has been reordered.
+ * @param errorMessageOut
+ *    Error message output.  Will only be non-empty if NULL is returned.
+ * @return
+ *    Pointer to parcel reordering or NULL if not found.
+ */
+bool
+CiftiParcelSeriesFile::createParcelReordering(const CiftiParcelLabelFile* parcelLabelFile,
+                                              const int32_t parcelLabelFileMapIndex,
+                                              AString& errorMessageOut)
+{
+    return m_parcelReorderingModel->createParcelReordering(parcelLabelFile,
+                                                           parcelLabelFileMapIndex,
+                                                           errorMessageOut);
 }
 
 

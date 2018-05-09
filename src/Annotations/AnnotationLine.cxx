@@ -117,6 +117,8 @@ AnnotationLine::initializeMembersAnnotationLine()
     
     
     m_sceneAssistant.grabNew(new SceneClassAssistant());
+    if (testProperty(Property::SCENE_CONTAINS_ATTRIBUTES)) {
+    }
 }
 
 /**
@@ -160,19 +162,6 @@ AnnotationLine::setDisplayEndArrow(const bool displayArrow)
 {
     m_displayEndArrow = displayArrow;
 }
-
-/**
- * @return Is background color supported?
- * Most annotations support a background color.
- * Annotations that do not support a background color
- * must override this method and return a value of false.
- */
-bool
-AnnotationLine::isBackgroundColorSupported() const
-{
-    return false;
-}
-
 
 /**
  * Save subclass data to the scene.

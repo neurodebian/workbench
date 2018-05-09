@@ -35,14 +35,16 @@ public:
      * Enumerated values.
      */
     enum Enum {
-        /** Annotation in pixels (origin is bottom, left corner). */
-        PIXELS,
+        /** Chart space */
+        CHART,
         /** Annotation in stereotaxic (3D) space */
         STEREOTAXIC,
         /** Annotation on surface node */
         SURFACE,
         /** Annotation in tab space */
         TAB,
+        /** Annotation in viewport space */
+        VIEWPORT,
         /** Annotation in window space */
         WINDOW
     };

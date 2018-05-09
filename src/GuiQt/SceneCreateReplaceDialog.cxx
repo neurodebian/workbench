@@ -25,6 +25,7 @@
 #include "SceneCreateReplaceDialog.h"
 #undef __SCENE_CREATE_REPLACE_DIALOG_DECLARE__
 
+#include <QAction>
 #include <QCheckBox>
 #include <QDateTime>
 #include <QGridLayout>
@@ -32,8 +33,10 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QPlainTextEdit>
+#include <QPushButton>
 #include <QVBoxLayout>
 
+#include "ApplicationInformation.h"
 #include "Brain.h"
 #include "BrainBrowserWindow.h"
 #include "CaretAssert.h"
@@ -48,6 +51,7 @@
 #include "PlainTextStringBuilder.h"
 #include "Scene.h"
 #include "SceneAttributes.h"
+#include "SceneDialog.h"
 #include "SceneFile.h"
 #include "SceneInfo.h"
 #include "SessionManager.h"
@@ -129,14 +133,15 @@ SceneCreateReplaceDialog::SceneCreateReplaceDialog(const AString& dialogTitle,
     m_balsaSceneIDLineEdit = new QLineEdit();
     m_balsaSceneIDLineEdit->setToolTip("Scene ID is for use with BALSA Database");
     
+    QPushButton* addWindowDescriptionPushButton = new QPushButton("Add Window Info");
+    QObject::connect(addWindowDescriptionPushButton, &QPushButton::clicked,
+                     this, &SceneCreateReplaceDialog::addWindowContentToolButtonClicked);
+    
     QLabel* descriptionLabel = new QLabel("Description");
     m_descriptionTextEdit = new QPlainTextEdit();
     
     const Qt::Alignment labelAlignment = (Qt::AlignLeft | Qt::AlignTop);
     
-    /*
-     * Layout for  widgets
-     */
     int32_t columnCounter = 0;
     const int32_t labelColumn  = columnCounter++;
     const int32_t widgetColumn = columnCounter++;
@@ -157,14 +162,18 @@ SceneCreateReplaceDialog::SceneCreateReplaceDialog(const AString& dialogTitle,
     infoGridLayout->addWidget(m_balsaSceneIDLineEdit,
                               rowCounter, widgetColumn);
     rowCounter++;
-    infoGridLayout->setRowStretch(rowCounter, 100);
     infoGridLayout->addWidget(descriptionLabel,
                               rowCounter, labelColumn,
                               labelAlignment);
     infoGridLayout->addWidget(m_descriptionTextEdit,
-                              rowCounter, widgetColumn);
+                              rowCounter, widgetColumn,
+                              2, 1);
     rowCounter++;
-    infoGridLayout->setRowStretch(rowCounter, 0);
+    infoGridLayout->addWidget(addWindowDescriptionPushButton,
+                              rowCounter, labelColumn,
+                              labelAlignment);
+    infoGridLayout->setRowStretch(rowCounter, 100);
+    rowCounter++;
     infoGridLayout->addWidget(optionsLabel,
                               rowCounter, labelColumn,
                               labelAlignment);
@@ -187,40 +196,49 @@ SceneCreateReplaceDialog::SceneCreateReplaceDialog(const AString& dialogTitle,
     setCentralWidget(dialogWidget,
                      WuQDialog::SCROLL_AREA_NEVER);
 
-    QDateTime dateTime = QDateTime::currentDateTime();
-    const QString dateTimeText = dateTime.toString("dd MMM yyyy hh:mm:ss");
-
-    PlainTextStringBuilder description;
-    description.addLine("Created " + dateTimeText);
+    PlainTextStringBuilder windowDescriptionBuilder;
     std::vector<BrainBrowserWindow*> windows = GuiManager::get()->getAllOpenBrainBrowserWindows();
     for (std::vector<BrainBrowserWindow*>::iterator iter = windows.begin();
          iter != windows.end();
          iter++) {
         BrainBrowserWindow* window = *iter;
-        window->getDescriptionOfContent(description);
-        description.addLine("");
+        window->getDescriptionOfContent(windowDescriptionBuilder);
+        windowDescriptionBuilder.addLine("");
     }
-    QString descriptionString = description.getText().trimmed();
+    const AString windowDescription = windowDescriptionBuilder.getText().trimmed();
+    
+    QDateTime dateTime = QDateTime::currentDateTime();
+    const QString dateTimeText = dateTime.toString("dd MMM yyyy hh:mm:ss");
+    const QString commitName   = (ApplicationInformation().getCommit());
+    const QString dataTimeCommitText(dateTimeText + "\n" + commitName);
+    
+    const AString defaultNewSceneName = ("New Scene " + AString::number(sceneFile->getNumberOfScenes() + 1));
+    m_nameLineEdit->setText(defaultNewSceneName);
     
     switch (m_mode) {
         case MODE_ADD_NEW_SCENE:
-            m_descriptionTextEdit->setPlainText(descriptionString);
-            break;
         case MODE_INSERT_NEW_SCENE:
-            m_descriptionTextEdit->setPlainText(descriptionString);
+            m_sceneWindowDescription = ("Created on " + dataTimeCommitText + "\n");
+            m_sceneWindowDescription.appendWithNewLine(windowDescription);
             break;
         case MODE_REPLACE_SCENE:
             m_nameLineEdit->setText(sceneToInsertOrReplace->getName());
             m_balsaSceneIDLineEdit->setText(sceneToInsertOrReplace->getBalsaSceneID());
+            m_sceneWindowDescription = ("Replaced on " + dataTimeCommitText + "\n");
+            m_sceneWindowDescription.appendWithNewLine(windowDescription);
+            m_sceneWindowDescription.appendWithNewLine(" ");
+            m_sceneWindowDescription.appendWithNewLine(sceneToInsertOrReplace->getDescription());
             m_descriptionTextEdit->setPlainText(sceneToInsertOrReplace->getDescription());
             break;
     }
+    
+    m_nameLineEdit->setFocus();
+    m_nameLineEdit->selectAll();
     
     setMinimumWidth(600);
     setMinimumHeight(300);
     
     setSaveWindowPositionForNextTime("SceneCreateDialog");
-    
 }
 
 /**
@@ -338,9 +356,10 @@ SceneCreateReplaceDialog::replaceExistingScene(QWidget* parent,
  *    Scene to which image is added.
  */
 void
-SceneCreateReplaceDialog::addImageToScene(Scene* scene)
+SceneCreateReplaceDialog::addImageToScene(Scene* scene,
+                                          AString& errorMessageOut)
 {
-    AString errorMessage;
+    errorMessageOut.clear();
     
     CaretAssert(scene);
 
@@ -363,7 +382,7 @@ SceneCreateReplaceDialog::addImageToScene(Scene* scene)
         
         if (imageCaptureEvent.getEventProcessCount() > 0) {
             if (imageCaptureEvent.isError()) {
-                errorMessage.appendWithNewLine(imageCaptureEvent.getErrorMessage());
+                errorMessageOut.appendWithNewLine(imageCaptureEvent.getErrorMessage());
             }
             else {
                 imageFiles.push_back(new ImageFile(imageCaptureEvent.getImage()));
@@ -408,9 +427,8 @@ SceneCreateReplaceDialog::addImageToScene(Scene* scene)
                                                  PREFERRED_IMAGE_FORMAT);
         }
         catch (const DataFileException& dfe) {
-            WuQMessageBox::errorOk(this,
-                                   (dfe.whatString()
-                                    + "\n\nEven though image failed, scene was created."));
+            errorMessageOut.appendWithNewLine((dfe.whatString()
+                                               + "\n\nEven though image failed, scene was created."));
         }
     }
     
@@ -422,6 +440,104 @@ SceneCreateReplaceDialog::addImageToScene(Scene* scene)
          iter++) {
         delete *iter;
     }
+}
+
+/**
+ * Create an image for the loaded scene.
+ *
+ * @param imageOut
+ *     Output image of the scene.
+ * @param errorMessageOut
+ *     Contains error information if image was not created.
+ * @return
+ *     True if output image is valid, else false.
+ */
+bool
+SceneCreateReplaceDialog::createSceneImage(QImage& imageOut,
+                                           AString& errorMessageOut)
+{
+    bool validImageFlag = false;
+    imageOut = QImage();
+    errorMessageOut.clear();
+    
+    uint8_t backgroundColor[3] = { 0, 0, 0 };
+    bool backgroundColorValid = false;
+    
+    /*
+     * Capture an image of each window
+     */
+    std::vector<ImageFile*> imageFiles;
+    std::vector<BrainBrowserWindow*> windows = GuiManager::get()->getAllOpenBrainBrowserWindows();
+    for (std::vector<BrainBrowserWindow*>::iterator iter = windows.begin();
+         iter != windows.end();
+         iter++) {
+        BrainBrowserWindow* bbw = *iter;
+        const int32_t browserWindowIndex = bbw->getBrowserWindowIndex();
+        
+        EventImageCapture imageCaptureEvent(browserWindowIndex);
+        EventManager::get()->sendEvent(imageCaptureEvent.getPointer());
+        
+        if (imageCaptureEvent.getEventProcessCount() > 0) {
+            if (imageCaptureEvent.isError()) {
+                errorMessageOut.appendWithNewLine(imageCaptureEvent.getErrorMessage());
+            }
+            else {
+                imageFiles.push_back(new ImageFile(imageCaptureEvent.getImage()));
+                if ( ! backgroundColorValid) {
+                    imageCaptureEvent.getBackgroundColor(backgroundColor);
+                    backgroundColorValid = true;
+                }
+            }
+        }
+    }
+    
+    /*
+     * Assemble images of each window into a single image
+     * and add it to the scene.  Use one image per row
+     * since the images are limited in horizontal space
+     * when shown in the listing of scenes.
+     */
+    if ( ! imageFiles.empty()) {
+        try {
+            const int32_t numImagesPerRow = 1;
+            ImageFile compositeImageFile;
+            compositeImageFile.combinePreservingAspectAndFillIfNeeded(imageFiles,
+                                                                      numImagesPerRow,
+                                                                      backgroundColor);
+            
+            if (backgroundColorValid) {
+                const int marginSize = 5;
+                compositeImageFile.cropImageRemoveBackground(marginSize,
+                                                             backgroundColor);
+            }
+            
+            const int MAXIMUM_IMAGE_WIDTH = 1024;
+            compositeImageFile.resizeToMaximumWidth(MAXIMUM_IMAGE_WIDTH);
+            
+            const AString PREFERRED_IMAGE_FORMAT = "png";
+            
+            QByteArray byteArray;
+            compositeImageFile.getImageInByteArray(byteArray,
+                                                   PREFERRED_IMAGE_FORMAT);
+            
+            imageOut = *compositeImageFile.getAsQImage();
+            validImageFlag = true;
+        }
+        catch (const DataFileException&) {
+            errorMessageOut.appendWithNewLine("Even though image generation failed, scene was created.");
+        }
+    }
+    
+    /*
+     * Free memory from the image files.
+     */
+    for (std::vector<ImageFile*>::iterator iter = imageFiles.begin();
+         iter != imageFiles.end();
+         iter++) {
+        delete *iter;
+    }
+    
+    return validImageFlag;
 }
 
 /**
@@ -515,6 +631,18 @@ SceneCreateReplaceDialog::okButtonClicked()
         return;
     }
     
+    if ( ! s_previousSelections.m_addModifiedPaletteSettings) {
+        if ( ! SceneDialog::checkForModifiedFiles(GuiManager::TEST_FOR_MODIFIED_FILES_PALETTE_ONLY_MODE_FOR_SCENE_ADD,
+                                                  this)) {
+            /*
+             * Add modified palettes to scene is off but
+             * there are modified palettes and user has
+             * chose to not create the scene
+             */
+            return;
+        }
+    }
+    
     Scene* newScene = new Scene(SceneTypeEnum::SCENE_TYPE_FULL);
     Scene::setSceneBeingCreated(newScene);
     newScene->setName(newSceneName);
@@ -553,7 +681,13 @@ SceneCreateReplaceDialog::okButtonClicked()
     newScene->addClass(GuiManager::get()->saveToScene(sceneAttributes,
                                                       "guiManager"));
     
-    addImageToScene(newScene);
+    AString imageErrorMessage;
+    addImageToScene(newScene,
+                    imageErrorMessage);
+    if ( ! imageErrorMessage.isEmpty()) {
+        WuQMessageBox::errorOk(this,
+                               imageErrorMessage);
+    }
     
     switch (m_mode) {
         case MODE_ADD_NEW_SCENE:
@@ -574,6 +708,17 @@ SceneCreateReplaceDialog::okButtonClicked()
     Scene::setSceneBeingCreated(NULL);
     
     WuQDialogModal::okButtonClicked();
+}
+
+/**
+ * Called when add window content button clicked
+ */
+void
+SceneCreateReplaceDialog::addWindowContentToolButtonClicked()
+{
+    AString txt = m_descriptionTextEdit->document()->toPlainText();
+    txt.appendWithNewLine(m_sceneWindowDescription);
+    m_descriptionTextEdit->setPlainText(txt);
 }
 
 

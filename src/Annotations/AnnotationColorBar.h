@@ -74,8 +74,6 @@ namespace caret {
         
         virtual void setCustomTextColor(const uint8_t rgba[4]);
         
-        virtual bool isStylesSupported() const;
-        
         virtual bool isBoldStyleEnabled() const;
         
         virtual void setBoldStyleEnabled(const bool enabled);
@@ -91,8 +89,6 @@ namespace caret {
         virtual bool isOutlineStyleEnabled() const;
         
         virtual void setOutlineStyleEnabled(const bool enabled);
-        
-        virtual bool isLineWidthSupported() const;
         
         bool isDisplayed() const;
         
@@ -127,7 +123,9 @@ namespace caret {
         
         void setShowTickMarksSelected(const bool selected);
         
-        virtual bool isDeletable() const;
+        bool isFontTooSmallWhenLastDrawn() const override;
+        
+        void setFontTooSmallWhenLastDrawn(const bool tooSmallFontFlag) const override;
         
         // ADD_NEW_METHODS_HERE
 
@@ -162,6 +160,8 @@ namespace caret {
         std::vector<const AnnotationColorBarNumericText*> m_numericText;
         
         bool m_showTickMarksSelected;
+        
+        mutable bool m_fontTooSmallWhenLastDrawnFlag = false;
         
         // ADD_NEW_MEMBERS_HERE
 

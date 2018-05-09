@@ -41,6 +41,7 @@ class QPixmap;
 class QPushButton;
 class QString;
 class QTableWidget;
+class QToolButton;
 class QWidget;
 
 namespace caret {
@@ -82,11 +83,11 @@ namespace caret {
         
         static QWidget* createHorizontalLineWidget();
         
-        static QPixmap createCaretColorEnumPixmap(const QWidget* widgetForPixmap,
+        static QPixmap createCaretColorEnumPixmap(const QWidget* widget,
                                                   const int32_t  pixmapWidth,
                                                   const int32_t  pixmapHeight,
                                                   const CaretColorEnum::Enum caretColor,
-                                                  const float    rgba[4],
+                                                  const float    customColorRGBA[4],
                                                   const bool     outlineFlag);
         
         static QSharedPointer<QPainter> createPixmapWidgetPainter(const QWidget* widget,
@@ -95,6 +96,9 @@ namespace caret {
         static QSharedPointer<QPainter> createPixmapWidgetPainterOriginBottomLeft(const QWidget* widget,
                                                                                   QPixmap& pixmap);
                 
+        static QSharedPointer<QPainter> createPixmapWidgetPainterOriginCenter(const QWidget* widget,
+                                                                              QPixmap& pixmap);
+        
         static QSharedPointer<QPainter> createPixmapWidgetPainterOriginCenter100x100(const QWidget* widget,
                                                                                      QPixmap& pixmap);
         
@@ -132,6 +136,10 @@ namespace caret {
         static void resizeWindow(QWidget* window,
                                  const int32_t width,
                                  const int32_t height);
+        
+        static void limitWindowSizePercentageOfMaximum(QWidget* window,
+                                                       const float widthMaximumPercentage,
+                                                       const float heightMaximumPercentage);
         
         static int getMaximumWidgetHeight(QWidget* w1,
                                           QWidget* w2,
@@ -181,16 +189,21 @@ namespace caret {
         
         static QString getLayoutContentDescription(QLayout* layout);
         
-        static void playSound(const QString& soundFileName);
+        //static void playSound(const QString& soundFileName);
         
         static QString createWordWrappedToolTipText(const QString& tooltipText);
         
         static void setWordWrappedToolTip(QWidget* widget,
                                           const QString& tooltipText);
         
+        static void setWordWrappedToolTip(QAction* action,
+                                          const QString& tooltipText);
+        
         static bool checkStateToBool(const Qt::CheckState checkState);
         
         static Qt::CheckState boolToCheckState(const bool value);
+        
+        static void setToolButtonStyleForQt5Mac(QToolButton* toolButton);
         
     private:
         WuQtUtilities();

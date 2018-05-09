@@ -22,7 +22,11 @@
  */
 /*LICENSE_END*/
 
+#include <map>
+
 #include <QMessageBox>
+
+class QCheckBox;
 
 namespace caret {
     class WuQMessageBox : public QMessageBox {
@@ -36,24 +40,48 @@ namespace caret {
             RESULT_CANCEL
         };
         
+        enum class YesToAllYesNoResult {
+            YES_TO_ALL,
+            YES,
+            NO
+        };
+        
         static void errorOk(QWidget* parent,
                                   const QString& text);
         
         static void informationOk(QWidget* parent,
                                   const QString& text);
         
+        static int32_t informationTwoButtons(QWidget* parent,
+                                          const QString& text,
+                                          const QString& buttonOneText,
+                                          const QString& buttonTwoText);
+        
         static void warningOk(QWidget* parent,
                               const QString& text);
+        
+        static void warningOkWithDoNotShowAgain(QWidget* parent,
+                                                const QString& uniqueIdentifier,
+                                                const QString& text);
         
         static bool warningOkCancel(QWidget* parent,
                                     const QString& text);
         
+        static bool warningYesNoWithDoNotShowAgain(QWidget* parent,
+                                                   const QString& uniqueIdentifier,
+                                                   const QString& text);
+        
         static bool warningYesNo(QWidget* parent,
-                                    const QString& text);
+                                 const QString& text);
         
         static bool warningOkCancel(QWidget* parent,
                                     const QString& text,
                                     const QString& informativeText);
+        
+        static bool warningYesNoWithDoNotShowAgain(QWidget* parent,
+                                                      const QString& uniqueIdentifier,
+                                                      const QString& text,
+                                                      const QString& informativeText);
         
         static bool warningYesNo(QWidget* parent,
                                     const QString& text,
@@ -71,6 +99,18 @@ namespace caret {
                                                              const QString& text,
                                                              const QString& informativeText);
         
+        static YesToAllYesNoResult warningYesToAllYesNo(QWidget* parent,
+                                                                const QString& yesToAllButtonText,
+                                                                const QString& yesButtonText,
+                                                                const QString& noButtonText,
+                                                                const QString& text,
+                                                                const QString& informativeText);
+        static bool warningAcceptReject(QWidget* parent,
+                                        const QString& text,
+                                        const QString& acceptButtonText,
+                                        const QString& rejectButtonText);
+        
+        
     private:
         WuQMessageBox(QWidget* parent = 0);
         ~WuQMessageBox();
@@ -78,7 +118,26 @@ namespace caret {
         WuQMessageBox(const WuQMessageBox&);
         WuQMessageBox& operator=(const WuQMessageBox&);
         
+        static QCheckBox* addDoNotShowAgainCheckBox(QMessageBox& messageBox);
+        
+        static void updateButtonText(QMessageBox& messageBox,
+                                     const QMessageBox::StandardButton standardButton,
+                                     const QString& text);
+        
+        /*
+         * Maintains "do not show again selections.
+         * Key is unique identifier supplied by caller to a dialog.
+         * Value is the button that was clicked.
+         */
+        static std::map<QString, QMessageBox::StandardButton> s_doNotShowAgainButtonSelection;
+        
     };
+
+#ifdef __WU_QMESSAGE_DEFINE__
+    std::map<QString, QMessageBox::StandardButton> WuQMessageBox::s_doNotShowAgainButtonSelection;
+#endif // __WU_QMESSAGE_DEFINE__
+
 }
+
 
 #endif // __WU_QMESSAGE_DIALOG_H__

@@ -856,9 +856,9 @@ GiftiFile::readFile(const AString& filename)
         int colNum  = e.getColumnNumber();
         
         std::ostringstream str;
-        str << "Parse error while reading";
+        str << "File is not a valid GIFTI file";
         if ((lineNum >= 0) && (colNum >= 0)) {
-            str << ", line/col ("
+            str << ", error parsing at line/col ("
             << e.getLineNumber()
             << "/"
             << e.getColumnNumber()
@@ -994,7 +994,7 @@ GiftiFile::writeFile(const AString& filename)
    std::ofstream* externalBinaryOutputStream = NULL;
    if (encoding == GiftiDataArray::ENCODING_EXTERNAL_FILE_BINARY) {
        externalBinaryFileName = getFileNameNoPath() + ".data";
-       externalBinaryOutputStream = new std::ofstream(externalBinaryFileName.toAscii().constData(),
+       externalBinaryOutputStream = new std::ofstream(externalBinaryFileName.toLatin1().constData(),
                                                       std::ofstream::binary);
        if (externalBinaryOutputStream == NULL) {
           throw GiftiException("Unable to open " + externalBinaryFileName + " for output.");

@@ -54,21 +54,23 @@ AnnotationFontAttributesInterface()
     reset();
     
     m_sceneAssistant.grabNew(new SceneClassAssistant());
-    m_sceneAssistant->add<AnnotationTextFontNameEnum, AnnotationTextFontNameEnum::Enum>("m_fontName",
-                                                                                        &m_fontName);
-    m_sceneAssistant->add("m_fontPercentViewportHeight",
-                          &m_fontPercentViewportHeight);
-    m_sceneAssistant->add<AnnotationColorBarPositionModeEnum, AnnotationColorBarPositionModeEnum::Enum>("m_positionMode",
-                                                                                                        &m_positionMode);
-    m_sceneAssistant->add("m_displayedFlag",
-                          &m_displayedFlag);
-    
-    m_sceneAssistant->add("m_showTickMarksSelected",
-                          &m_showTickMarksSelected);
-    m_sceneAssistant->add<CaretColorEnum,CaretColorEnum::Enum>("m_colorText",
-                                                               &m_colorText);
-    m_sceneAssistant->addArray("m_customColorText",
-                               m_customColorText, 4, 1.0);
+    if (testProperty(Property::SCENE_CONTAINS_ATTRIBUTES)) {
+        m_sceneAssistant->add<AnnotationTextFontNameEnum, AnnotationTextFontNameEnum::Enum>("m_fontName",
+                                                                                            &m_fontName);
+        m_sceneAssistant->add("m_fontPercentViewportHeight",
+                              &m_fontPercentViewportHeight);
+        m_sceneAssistant->add<AnnotationColorBarPositionModeEnum, AnnotationColorBarPositionModeEnum::Enum>("m_positionMode",
+                                                                                                            &m_positionMode);
+        m_sceneAssistant->add("m_displayedFlag",
+                              &m_displayedFlag);
+        
+        m_sceneAssistant->add("m_showTickMarksSelected",
+                              &m_showTickMarksSelected);
+        m_sceneAssistant->add<CaretColorEnum,CaretColorEnum::Enum>("m_colorText",
+                                                                   &m_colorText);
+        m_sceneAssistant->addArray("m_customColorText",
+                                   m_customColorText, 4, 1.0);
+    }
 }
 
 /**
@@ -136,6 +138,7 @@ AnnotationColorBar::copyHelperAnnotationColorBar(const AnnotationColorBar& obj)
     m_customColorText[1]  = obj.m_customColorText[1];
     m_customColorText[2]  = obj.m_customColorText[2];
     m_customColorText[3]  = obj.m_customColorText[3];
+    m_fontTooSmallWhenLastDrawnFlag = obj.m_fontTooSmallWhenLastDrawnFlag;
 }
 
 /**
@@ -163,6 +166,8 @@ AnnotationColorBar::reset()
     
     clearSections();
     clearNumericText();
+    
+    m_fontTooSmallWhenLastDrawnFlag = false;
 }
 
 /**
@@ -227,15 +232,6 @@ AnnotationColorBar::setFontPercentViewportSize(const float fontPercentViewportHe
 }
 
 /**
- * Are font styles (Bold, Italic, Underline) supported?
- */
-bool
-AnnotationColorBar::isStylesSupported() const
-{
-    return false;
-}
-
-/**
  * @return The foreground color.
  */
 CaretColorEnum::Enum
@@ -295,7 +291,7 @@ AnnotationColorBar::getTextColorRGBA(float rgbaOut[4]) const
         case CaretColorEnum::TEAL:
         case CaretColorEnum::WHITE:
         case CaretColorEnum::YELLOW:
-            CaretColorEnum::toRGBFloat(m_colorText,
+            CaretColorEnum::toRGBAFloat(m_colorText,
                                        rgbaOut);
             rgbaOut[3] = 1.0;
             break;
@@ -471,19 +467,6 @@ AnnotationColorBar::setOutlineStyleEnabled(const bool /*enabled*/)
 }
 
 /**
- * @return Is foreground line width supported?
- * Most annotations support a foreground line width.
- * Annotations that do not support a foreground line width
- * must override this method and return a value of false.
- */
-bool
-AnnotationColorBar::isLineWidthSupported() const
-{
-    return false;
-}
-
-
-/**
  * @return The position mode for the colorbar annotation.
  */
 AnnotationColorBarPositionModeEnum::Enum
@@ -537,17 +520,6 @@ AnnotationColorBar::setDisplayed(const bool displayed)
         setModified();
     }
 }
-
-/**
- * @return Is this annotation deletable?  This method may be overridden
- * by annotations (such as colorbars) that cannot be deleted.
- */
-bool
-AnnotationColorBar::isDeletable() const
-{
-    return false;
-}
-
 
 /**
  * Save subclass data to the scene.
@@ -788,6 +760,23 @@ AnnotationColorBar::getScalarMinimumAndMaximumValues(float& minimumScalarOut,
         maximumScalarOut = std::max(maximumScalarOut,
                                     section->getEndScalar());
     }
+}
+
+/**
+ * @return Is the font too small when it is last drawn
+ * that may cause an OpenGL error and, as a result,
+ * the text is not seen by the user.
+ */
+bool
+AnnotationColorBar::isFontTooSmallWhenLastDrawn() const
+{
+    return m_fontTooSmallWhenLastDrawnFlag;
+}
+
+void
+AnnotationColorBar::setFontTooSmallWhenLastDrawn(const bool tooSmallFontFlag) const
+{
+    m_fontTooSmallWhenLastDrawnFlag = tooSmallFontFlag;
 }
 
 

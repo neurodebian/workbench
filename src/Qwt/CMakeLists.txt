@@ -15,44 +15,56 @@ PROJECT (Qwt)
 #
 # QT include files
 #
-INCLUDE(${QT_USE_FILE})
+if(Qt5_FOUND)
+    include_directories(${Qt5Concurrent_INCLUDE_DIRS})
+    include_directories(${Qt5Core_INCLUDE_DIRS})
+    include_directories(${Qt5Widgets_INCLUDE_DIRS})
+endif()
+IF (QT4_FOUND)
+    INCLUDE(${QT_USE_FILE})
+ENDIF ()
 
 add_definitions(-DQWT_NO_SVG -DQWT_NO_OPENGL)
 
 #
-# Headers that must be processed with QT's "moc"
-# Any class that derives from a QT class and contains
-# the "Q_OBJECT" macro must be listed here.
+# With AUTOMOC, do not need to specify files
+# that contain Q_OBJECT macro for Qt to process with 'moc'
+# (meta-object compiler).
 #
-# Also LIST each of these headers in the
-# source files section so that they show
-# up in development tools such as XCode.
-#
-SET(MOC_INPUT_HEADER_FILES
-qwt_abstract_legend.h
-qwt_dyngrid_layout.h
-qwt_legend.h
-qwt_legend_label.h
-qwt_magnifier.h
-qwt_panner.h
-qwt_picker.h
-qwt_plot_canvas.h
-qwt_plot.h
-qwt_plot_magnifier.h
-qwt_plot_panner.h
-qwt_plot_picker.h
-qwt_plot_renderer.h
-qwt_plot_zoomer.h
-qwt_sampling_thread.h
-qwt_scale_widget.h
-qwt_text_label.h
-)
+IF(WORKBENCH_USE_CMAKE_AUTOMOC)
+    SET(CMAKE_AUTOMOC ON)
+ELSE()
+    SET(MOC_INPUT_HEADER_FILES
+        qwt_abstract_legend.h
+        qwt_dyngrid_layout.h
+        qwt_legend.h
+        qwt_legend_label.h
+        qwt_magnifier.h
+        qwt_panner.h
+        qwt_picker.h
+        qwt_plot_canvas.h
+        qwt_plot.h
+        qwt_plot_magnifier.h
+        qwt_plot_panner.h
+        qwt_plot_picker.h
+        qwt_plot_renderer.h
+        qwt_plot_zoomer.h
+        qwt_sampling_thread.h
+        qwt_scale_widget.h
+        qwt_text_label.h
+    )
 
-# Header files
+    IF(Qt5_FOUND)
+        QT5_WRAP_CPP(MOC_SOURCE_FILES ${MOC_INPUT_HEADER_FILES})
+    ENDIF()
+    IF (QT4_FOUND)
+        QT4_WRAP_CPP(MOC_SOURCE_FILES ${MOC_INPUT_HEADER_FILES})
+    ENDIF ()
+ENDIF()
+
+
 #
-# If the header file is qt 'moc' file
-# also list it in the section above
-# named MOC_INPUT_HEADER_FILES
+# Header files
 #
 SET(SOURCE_FILES
 qwt_abstract_legend.h
@@ -225,15 +237,16 @@ qwt_widget_overlay.cpp
 # Process the header files with moc producing moc_*.cpp files
 #
 INCLUDE_DIRECTORIES(${CMAKE_CURRENT_BINARY_DIR})
-QT4_WRAP_CPP(MOC_SOURCE_FILES ${MOC_INPUT_HEADER_FILES})
 
 #
 # Create the GUI library
 #
 ADD_LIBRARY(Qwt
-${SOURCE_FILES}
-${MOC_SOURCE_FILES}
+    ${SOURCE_FILES}
+    ${MOC_SOURCE_FILES}
 )
+
+TARGET_LINK_LIBRARIES(Qwt ${CARET_QT5_LINK})
 
 SET(Qwt_LIBRARIES Qwt PARENT_SCOPE)
 SET(Qwt_INCLUDE_DIRS ${CMAKE_CURRENT_SOURCE_DIR} PARENT_SCOPE)

@@ -32,6 +32,17 @@
 #include "CaretLogger.h"
 #include "CaretPreferences.h"
 #include "DummyFontTextRenderer.h"
+#include "EventGetBrainOpenGLTextRenderer.h"
+#include "EventGraphicsOpenGLCreateBufferObject.h"
+#include "EventGraphicsOpenGLCreateTextureName.h"
+#include "EventGraphicsOpenGLDeleteBufferObject.h"
+#include "EventGraphicsOpenGLDeleteTextureName.h"
+#include "EventOpenGLObjectToWindowTransform.h"
+#include "EventManager.h"
+#include "GraphicsOpenGLBufferObject.h"
+#include "GraphicsOpenGLError.h"
+#include "GraphicsOpenGLTextureName.h"
+#include "GraphicsUtilitiesOpenGL.h"
 #include "Model.h"
 #include "SessionManager.h"
 
@@ -52,6 +63,13 @@ BrainOpenGL::BrainOpenGL(BrainOpenGLTextRenderInterface* textRenderer)
     m_textRenderer = textRenderer;
     this->borderBeingDrawn = NULL;
     m_drawHighlightedEndPoints = false;
+    
+    EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_GET_TEXT_RENDERER_FOR_WINDOW);
+    EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_GRAPHICS_OPENGL_CREATE_BUFFER_OBJECT);
+    EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_GRAPHICS_OPENGL_CREATE_TEXTURE_NAME);
+    EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_GRAPHICS_OPENGL_DELETE_BUFFER_OBJECT);
+    EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_GRAPHICS_OPENGL_DELETE_TEXTURE_NAME);
+    EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_OPENGL_OBJECT_TO_WINDOW_TRANSFORM);
 }
 
 /**
@@ -59,11 +77,329 @@ BrainOpenGL::BrainOpenGL(BrainOpenGLTextRenderInterface* textRenderer)
  */
 BrainOpenGL::~BrainOpenGL()
 {
+    EventManager::get()->removeAllEventsFromListener(this);
+    
     if (m_textRenderer != NULL) {
         delete m_textRenderer;
         m_textRenderer = NULL;
     }
 }
+
+/**
+ * Receive an event.
+ *
+ * @param event
+ *    An event for which this instance is listening.
+ */
+void
+BrainOpenGL::receiveEvent(Event* event)
+{
+    if (event->getEventType() == EventTypeEnum::EVENT_GRAPHICS_OPENGL_CREATE_BUFFER_OBJECT) {
+        EventGraphicsOpenGLCreateBufferObject* createBufferEvent
+        = dynamic_cast<EventGraphicsOpenGLCreateBufferObject*>(event);
+        CaretAssert(createBufferEvent);
+        
+        if (m_contextSharingGroupPointer == NULL) {
+            AString msg("PROGRAM ERROR: "
+                        "A request for a new OpenGL Buffer Object has been made.  "
+                        "However, there is no OpenGL context currently active so "
+                        "a buffer cannot be created.  This is an error in the "
+                        "code and it is likely that the software will crash.");
+            createBufferEvent->setErrorMessage(msg);
+            createBufferEvent->setOpenGLBufferObject(NULL);
+            CaretAssertMessage(0, msg);
+            CaretLogSevere(msg);
+            return;
+        }
+        
+        GLuint bufferName = 0;
+        glGenBuffers(1, &bufferName);
+        
+        createBufferEvent->setOpenGLBufferObject(new GraphicsOpenGLBufferObject(m_contextSharingGroupPointer,
+                                                                                bufferName));
+        createBufferEvent->setEventProcessed();
+    }
+    else if (event->getEventType() == EventTypeEnum::EVENT_GRAPHICS_OPENGL_CREATE_TEXTURE_NAME) {
+        EventGraphicsOpenGLCreateTextureName* createTextureEvent
+        = dynamic_cast<EventGraphicsOpenGLCreateTextureName*>(event);
+        CaretAssert(createTextureEvent);
+        
+        if (m_contextSharingGroupPointer == NULL) {
+            AString msg("PROGRAM ERROR: "
+                        "A request for a new OpenGL Texture Name has been made.  "
+                        "However, there is no OpenGL context currently active so "
+                        "a texture cannot be created.  This is an error in the "
+                        "code and it is likely that the software will crash.");
+            createTextureEvent->setErrorMessage(msg);
+            createTextureEvent->setOpenGLTextureName(NULL);
+            CaretAssertMessage(0, msg);
+            CaretLogSevere(msg);
+            return;
+        }
+        
+        GLuint textureName = 0;
+        glGenTextures(1, &textureName);
+        
+        createTextureEvent->setOpenGLTextureName(new GraphicsOpenGLTextureName(m_contextSharingGroupPointer,
+                                                                                textureName));
+        createTextureEvent->setEventProcessed();
+    }
+    else if (event->getEventType() == EventTypeEnum::EVENT_GRAPHICS_OPENGL_DELETE_BUFFER_OBJECT) {
+        QMutexLocker locker(&m_buffersForDeletionLaterMutex);
+
+        EventGraphicsOpenGLDeleteBufferObject* deleteBufferEvent
+        = dynamic_cast<EventGraphicsOpenGLDeleteBufferObject*>(event);
+        CaretAssert(deleteBufferEvent);
+        const GraphicsOpenGLBufferObject* bufferObject = deleteBufferEvent->getOpenGLBufferObject();
+        if (bufferObject != NULL) {
+            /*
+             * Buffers are created within an OpenGL context and must
+             * be deleted within that OpenGL context.
+             */
+            m_buffersForDeletionLater.emplace(m_buffersForDeletionLater.end(),
+                                              bufferObject->getOpenGLContextPointer(),
+                                              bufferObject->getBufferObjectName());
+        }
+        
+        deleteBufferEvent->setEventProcessed();
+    }
+    else if (event->getEventType() == EventTypeEnum::EVENT_GRAPHICS_OPENGL_DELETE_TEXTURE_NAME) {
+        QMutexLocker locker(&m_texturesForDeletionLaterMutex);
+        
+        EventGraphicsOpenGLDeleteTextureName* deleteTextureEvent
+        = dynamic_cast<EventGraphicsOpenGLDeleteTextureName*>(event);
+        CaretAssert(deleteTextureEvent);
+        const GraphicsOpenGLTextureName* textureName = deleteTextureEvent->getOpenGLTextureName();
+        if (textureName != NULL) {
+            /*
+             * Textures names are created within an OpenGL context and must
+             * be deleted within that OpenGL context.
+             */
+            m_texturesForDeletionLater.emplace(m_texturesForDeletionLater.end(),
+                                              textureName->getOpenGLContextPointer(),
+                                              textureName->getTextureName());
+        }
+        
+        deleteTextureEvent->setEventProcessed();
+    }
+    else if (event->getEventType() == EventTypeEnum::EVENT_GET_TEXT_RENDERER_FOR_WINDOW) {
+        EventGetBrainOpenGLTextRenderer* textRenderEvent = dynamic_cast<EventGetBrainOpenGLTextRenderer*>(event);
+        CaretAssert(textRenderEvent);
+        
+        textRenderEvent->setTextRenderer(m_textRenderer);
+        textRenderEvent->setEventProcessed();
+    }
+    else if (event->getEventType() == EventTypeEnum::EVENT_OPENGL_OBJECT_TO_WINDOW_TRANSFORM) {
+        EventOpenGLObjectToWindowTransform* transformEvent = dynamic_cast<EventOpenGLObjectToWindowTransform*>(event);
+        loadObjectToWindowTransform(transformEvent);
+    }
+}
+
+/**
+ * Draw models in their respective viewports.
+ *
+ * @param windowIndex
+ *    Index of window for drawing.
+ * @param brain
+ *    The brain (must be valid!)
+ * @param contextSharingGroupPointer
+ *    Pointer to the active OpenGL context.
+ * @param viewportContents
+ *    Viewport info for drawing.
+ */
+void BrainOpenGL::drawModels(const int32_t windowIndex,
+                             Brain* brain,
+                             void* contextSharingGroupPointer,
+                             const std::vector<const BrainOpenGLViewportContent*>& viewportContents)
+{
+    m_contextSharingGroupPointer = contextSharingGroupPointer;
+    
+    const std::vector<const BrainOpenGLViewportContent*> vpContents(viewportContents.begin(),
+                                                                    viewportContents.end());
+//    for (const auto& vp : viewportContents) {
+//        vpContents.push_back(vp);
+//    }
+    
+    
+    drawModelsImplementation(windowIndex,
+                             brain,
+                             vpContents);
+    
+    deleteUnusedOpenGLNames();
+    
+    m_contextSharingGroupPointer = NULL;
+}
+
+/**
+ * Selection on a model.
+ *
+ * @param windowIndex
+ *    Index of window for selection.
+ * @param brain
+ *    The brain (must be valid!)
+ * @param contextSharingGroupPointer
+ *    Pointer to the active OpenGL context
+ * @param viewportContent
+ *    Viewport content in which mouse was clicked
+ * @param mouseX
+ *    X position of mouse click
+ * @param mouseY
+ *    Y position of mouse click
+ * @param applySelectionBackgroundFiltering
+ *    If true (which is in most cases), if there are multiple items
+ *    selected, those items "behind" other items are not reported.
+ *    For example, suppose a focus is selected and there is a node
+ *    the focus.  If this parameter is true, the node will NOT be
+ *    selected.  If this parameter is false, the node will be
+ *    selected.
+ */
+void BrainOpenGL::selectModel(const int32_t windowIndex,
+                              Brain* brain,
+                              void* contextSharingGroupPointer,
+                              const BrainOpenGLViewportContent* viewportContent,
+                              const int32_t mouseX,
+                              const int32_t mouseY,
+                              const bool applySelectionBackgroundFiltering)
+{
+    m_contextSharingGroupPointer = contextSharingGroupPointer;
+
+    selectModelImplementation(windowIndex,
+                              brain,
+                              viewportContent,
+                              mouseX,
+                              mouseY,
+                              applySelectionBackgroundFiltering);
+    
+    deleteUnusedOpenGLNames();
+    
+    m_contextSharingGroupPointer = NULL;
+}
+
+/**
+ * Project the given window coordinate to the active models.
+ * If the projection is successful, The 'original' XYZ
+ * coordinate in 'projectionOut' will be valid.  In addition,
+ * the barycentric coordinate may also be valid in 'projectionOut'.
+ *
+ * @param windowIndex
+ *    Index of window for projection
+ * @param brain
+ *    The brain (must be valid!)
+ * @param contextSharingGroupPointer
+ *    Pointer to the active OpenGL context.
+ * @param viewportContent
+ *    Viewport content in which mouse was clicked
+ * @param mouseX
+ *    X position of mouse click
+ * @param mouseY
+ *    Y position of mouse click
+ * @param projectionOut
+ *    Output with projection result.
+ */
+void BrainOpenGL::projectToModel(const int32_t windowIndex,
+                                 Brain* brain,
+                    void* contextSharingGroupPointer,
+                    const BrainOpenGLViewportContent* viewportContent,
+                    const int32_t mouseX,
+                    const int32_t mouseY,
+                    SurfaceProjectedItem& projectionOut)
+{
+    m_contextSharingGroupPointer = contextSharingGroupPointer;
+
+    projectToModelImplementation(windowIndex,
+                                 brain,
+                                 viewportContent,
+                                 mouseX,
+                                 mouseY,
+                                 projectionOut);
+    deleteUnusedOpenGLNames();
+    
+    m_contextSharingGroupPointer = NULL;
+}
+
+
+/**
+ * This method must be called only when the OpenGL context
+ * is current.
+ */
+void
+BrainOpenGL::deleteUnusedOpenGLNames()
+{
+    if ( ! m_buffersForDeletionLater.empty()) {
+        QMutexLocker locker(&m_buffersForDeletionLaterMutex);
+        
+        std::vector<OpenGLNameInfo> otherContextBufferIdentifiers;
+        
+        std::vector<GLuint> bufferNames;
+        
+        for (auto bufferInfo : m_buffersForDeletionLater) {
+            if (bufferInfo.m_openglContextPointer == m_contextSharingGroupPointer) {
+                if (glIsBuffer(bufferInfo.m_name)) {
+                    bufferNames.push_back(bufferInfo.m_name);
+                }
+                else {
+                    CaretLogWarning("Attempting to delete invalid OpenGL buffer ID: "
+                                    + AString::number(bufferInfo.m_name));
+                }
+            }
+            else {
+                otherContextBufferIdentifiers.push_back(bufferInfo);
+            }
+        }
+        
+        if ( ! bufferNames.empty()) {
+            const GLuint* namesPointer = &bufferNames[0];
+            glDeleteBuffers(bufferNames.size(),
+                            namesPointer);
+            m_buffersForDeletionLater.clear();
+        }
+        
+        m_buffersForDeletionLater = otherContextBufferIdentifiers;
+        if ( ! m_buffersForDeletionLater.empty()) {
+            CaretLogWarning("Not deleting "
+                            + AString::number(m_buffersForDeletionLater.size())
+                            + " buffers in another OpenGL Context.");
+        }
+    }
+    
+    if ( ! m_texturesForDeletionLater.empty()) {
+        QMutexLocker locker(&m_texturesForDeletionLaterMutex);
+        
+        std::vector<OpenGLNameInfo> otherContextTextureIdentifiers;
+        
+        std::vector<GLuint> textureNames;
+        
+        for (auto textureInfo : m_texturesForDeletionLater) {
+            if (textureInfo.m_openglContextPointer == m_contextSharingGroupPointer) {
+                if (glIsTexture(textureInfo.m_name)) {
+                    textureNames.push_back(textureInfo.m_name);
+                }
+                else {
+                    CaretLogWarning("Attempting to delete invalid OpenGL Texture Name: "
+                                    + AString::number(textureInfo.m_name));
+                }
+            }
+            else {
+                otherContextTextureIdentifiers.push_back(textureInfo);
+            }
+        }
+        
+        if ( ! textureNames.empty()) {
+            const GLuint* namesPointer = &textureNames[0];
+            glDeleteTextures(textureNames.size(),
+                             namesPointer);
+            m_texturesForDeletionLater.clear();
+        }
+        
+        m_texturesForDeletionLater = otherContextTextureIdentifiers;
+        if ( ! m_texturesForDeletionLater.empty()) {
+            CaretLogWarning("Not deleting "
+                            + AString::number(m_texturesForDeletionLater.size())
+                            + " textures in another OpenGL Context.");
+        }
+    }
+}
+
 
 /**
  * @return The active text renderer.
@@ -75,27 +411,41 @@ BrainOpenGL::getTextRenderer()
 }
 
 /**
- * Set the text renderer.  The existing text renderer will
- * be destroyed.  This instance will take ownership of
- * the text renderer passed in and destory it at the
- * proper time.
- *
- * @param textRenderer
- *   The text renderer is used for text rendering.
- *   This parameter MUST NOT be NULL.  It must be
- *   a pointer to a text renderer.
+ * Set the OpenGL line width.  Value is clamped
+ * to minimum and maximum values to prevent
+ * OpenGL error caused by invalid line width.
  */
 void
-BrainOpenGL::setTextRenderer(BrainOpenGLTextRenderInterface* textRenderer)
+BrainOpenGL::setLineWidth(const float lineWidth)
 {
-    CaretAssert(textRenderer);
-    
-    if (m_textRenderer != NULL) {
-        delete m_textRenderer;
-        m_textRenderer = NULL;
+    if (lineWidth > s_maxLineWidth) {
+        glLineWidth(s_maxLineWidth);
     }
-    
-    m_textRenderer = textRenderer;
+    else if (lineWidth < s_minLineWidth) {
+        glLineWidth(s_minLineWidth);
+    }
+    else {
+        glLineWidth(lineWidth);
+    }
+}
+
+/**
+ * Set the OpenGL point size.  Value is clamped
+ * to minimum and maximum values to prevent
+ * OpenGL error caused by invalid point size.
+ */
+void
+BrainOpenGL::setPointSize(const float pointSize)
+{
+    if (pointSize > s_maxPointSize) {
+        glPointSize(s_maxPointSize);
+    }
+    else if (pointSize < s_minPointSize) {
+        glPointSize(s_minPointSize);
+    }
+    else {
+        glPointSize(pointSize);
+    }
 }
 
 /**
@@ -215,6 +565,42 @@ BrainOpenGL::testForVersionOfOpenGLSupported(const AString& versionOfOpenGL)
     
     return false;
 }
+
+/**
+ * Test for the required version of OpenGL Workbench needs.
+ *
+ * @param errorMessageOut
+ *     Output with error message if required version is not available.
+ * @return 
+ *     True if required version available, else false.
+ */
+bool
+BrainOpenGL::testForRequiredOpenGLVersion(AString& errorMessageOut)
+{
+    const AString minimumOpenGLVersion("1.5");
+    if ( ! BrainOpenGL::testForVersionOfOpenGLSupported(minimumOpenGLVersion)) {
+        const AString msg("OpenGL Version "
+                          + minimumOpenGLVersion
+                          + " or later is required.  This computer has version "
+                          + BrainOpenGL::getOpenGLVersion()
+                          + "\nYou may continue but the software may crash.");
+        errorMessageOut = msg;
+        return false;
+    }
+    
+    return true;
+}
+
+
+/**
+ * @return The OpenGL version.
+ */
+AString
+BrainOpenGL::getOpenGLVersion()
+{
+    return QLatin1String(reinterpret_cast<const char*>(glGetString(GL_VERSION)));
+}
+
 
 /**
  * Extract the major and minor versions from an OpenGL version string.
@@ -493,7 +879,7 @@ BrainOpenGL::initializeOpenGL()
     glGetFloatv(GL_POINT_SIZE_RANGE, sizes);
     s_minPointSize = sizes[0];
     s_maxPointSize = sizes[1];
-    glGetFloatv(GL_LINE_WIDTH_RANGE, sizes);
+    glGetFloatv(GL_ALIASED_LINE_WIDTH_RANGE, sizes);
     s_minLineWidth = sizes[0];
     s_maxLineWidth = sizes[1];
 
@@ -632,6 +1018,13 @@ BrainOpenGL::getOpenGLInformation()
                         + "\nOpenGL Vendor: " + AString(vendorStr)
                         + "\nOpenGL Renderer: " + AString(renderStr));
     
+    AString glewVersionName("No GLEW in this version of Workbench");
+#ifdef HAVE_GLEW
+    glewVersionName = AString(reinterpret_cast<const char*>(glewGetString(GLEW_VERSION)));
+#endif /* HAVE_GLEW */
+    lineInfo += "\n";
+    lineInfo += ("\nGLEW Version: " + glewVersionName);
+    
     lineInfo += "\n";
     lineInfo += ("\nFont Renderer: " + m_textRenderer->getName());
     lineInfo += "\n";
@@ -651,9 +1044,14 @@ BrainOpenGL::getOpenGLInformation()
         const AString smoothLineWidthGranularity = ("GL_SMOOTH_LINE_WIDTH_GRANULARITY value is "
                                                     + AString::number(values[0]));
         
+        glGetFloatv(GL_SMOOTH_POINT_SIZE_RANGE, values);
+        const AString smoothPointSizeRange = ("GL_SMOOTH_POINT_SIZE_RANGE value is "
+                                              + AString::fromNumbers(values, 2, ", "));
+        
         lineInfo += ("\n" + aliasedLineWidthRange
                      + "\n" + smoothLineWidthRange
-                     + "\n" + smoothLineWidthGranularity);
+                     + "\n" + smoothLineWidthGranularity
+                     + "\n" + smoothPointSizeRange);
     }
 #endif // GL_VERSION_2_0
     //#else  // GL_VERSION_2_0
@@ -709,6 +1107,16 @@ BrainOpenGL::getOpenGLInformation()
                  + AString::fromBool(s_supportsImmediateMode));
     lineInfo += ("\nVertex Buffers Supported: "
                  + AString::fromBool(s_supportsVertexBuffers));
+    
+    GLint sampleBuffersCount = 0;
+    glGetIntegerv(GL_SAMPLE_BUFFERS, &sampleBuffersCount);
+    GLint sampleCount = 0;
+    glGetIntegerv(GL_SAMPLES, &sampleCount);
+    
+    lineInfo += "\n";
+    lineInfo += ("\nSample Buffer Count: " + AString::number(sampleBuffersCount));
+    lineInfo += ("\nSamples Count: " + AString::number(sampleCount));
+    lineInfo += ("\nMultisampling Enabled: " + AString::fromBool(glIsEnabled(GL_MULTISAMPLE)));
     
     lineInfo += "\n";
     lineInfo += "\n";
@@ -819,7 +1227,7 @@ AString BrainOpenGL::getOpenGLEnabledEnumAsText(const AString& enumName,
     /*
      * Reset error status
      */
-    glGetError();
+    GraphicsUtilitiesOpenGL::resetOpenGLError();
     
     GLboolean boolValue= glIsEnabled(enumValue);
     
@@ -828,7 +1236,7 @@ AString BrainOpenGL::getOpenGLEnabledEnumAsText(const AString& enumName,
     if (errorCode != GL_NO_ERROR) {
         const GLubyte* errorChars = gluErrorString(errorCode);
         if (errorChars != NULL) {
-            errorText = ("ERROR = "
+            errorText = ("ERROR failed to glIsEnabled() value.  Reason: "
                          + AString((char*)errorChars));
         }
     }
@@ -858,7 +1266,7 @@ AString BrainOpenGL::getOpenGLBooleanAsText(const AString& enumName,
     /*
      * Reset error status
      */
-    glGetError();
+    GraphicsUtilitiesOpenGL::resetOpenGLError();
     
     GLboolean boolValue = GL_FALSE;
     glGetBooleanv(enumValue, &boolValue);
@@ -868,7 +1276,7 @@ AString BrainOpenGL::getOpenGLBooleanAsText(const AString& enumName,
     if (errorCode != GL_NO_ERROR) {
         const GLubyte* errorChars = gluErrorString(errorCode);
         if (errorChars != NULL) {
-            errorText = ("ERROR = "
+            errorText = ("ERROR failed to glGetBooleanv() value.  Reason: "
                          + AString((char*)errorChars));
         }
     }
@@ -901,7 +1309,7 @@ AString BrainOpenGL::getOpenGLFloatAsText(const AString& enumName,
     /*
      * Reset error status
      */
-    glGetError();
+    GraphicsUtilitiesOpenGL::resetOpenGLError();
     
     AString valuesString;
     
@@ -915,7 +1323,7 @@ AString BrainOpenGL::getOpenGLFloatAsText(const AString& enumName,
         if (errorCode != GL_NO_ERROR) {
             const GLubyte* errorChars = gluErrorString(errorCode);
             if (errorChars != NULL) {
-                valuesString = ("ERROR = "
+                valuesString = ("ERROR failed to glGetFloatv() value.  Reason: "
                              + AString((char*)errorChars));
             }
         }
@@ -955,7 +1363,7 @@ AString BrainOpenGL::getOpenGLLightAsText(const AString& enumName,
     /*
      * Reset error status
      */
-    glGetError();
+    GraphicsUtilitiesOpenGL::resetOpenGLError();
     
     AString valuesString;
     
@@ -971,7 +1379,7 @@ AString BrainOpenGL::getOpenGLLightAsText(const AString& enumName,
         if (errorCode != GL_NO_ERROR) {
             const GLubyte* errorChars = gluErrorString(errorCode);
             if (errorChars != NULL) {
-                valuesString = ("ERROR = "
+                valuesString = ("ERROR failed to get glGetLightfv() value.  Reason "
                                 + AString((char*)errorChars));
             }
         }
@@ -1032,61 +1440,24 @@ BrainOpenGL::testForOpenGLError(const AString& message,
                                 const int32_t windowIndex,
                                 const int32_t tabIndex)
 {
-    GLenum errorCode = glGetError();
-    if (errorCode != GL_NO_ERROR) {
+    std::unique_ptr<GraphicsOpenGLError> openglError = GraphicsUtilitiesOpenGL::getOpenGLError();
+    if (openglError) {
         AString msg;
         if ( ! message.isEmpty()) {
             msg.appendWithNewLine(message);
         }
-        msg += ("OpenGL Error: " + AString((char*)gluErrorString(errorCode)) + "\n");
-        msg += ("OpenGL Version: " + AString((char*)glGetString(GL_VERSION)) + "\n");
-        msg += ("OpenGL Vendor:  " + AString((char*)glGetString(GL_VENDOR)) + "\n");
         if (model != NULL) {
-            msg += ("While drawing brain model " + model->getNameForGUI(true) + "\n");
+            msg.appendWithNewLine("While drawing brain model " + model->getNameForGUI(true));
         }
         if (windowIndex >= 0) {
-            msg += ("In window number " + AString::number(windowIndex) + "\n");
+            msg.appendWithNewLine("In window number " + AString::number(windowIndex));
         }
         if (tabIndex >= 0) {
-            msg += ("In tab number " + AString::number(tabIndex) + "\n");
+            msg.appendWithNewLine("In tab number " + AString::number(tabIndex));
         }
         
-        GLint maxNameStackDepth, maxModelStackDepth, maxProjStackDepth;
-        glGetIntegerv(GL_MAX_PROJECTION_STACK_DEPTH,
-                      &maxProjStackDepth);
-        glGetIntegerv(GL_MAX_MODELVIEW_STACK_DEPTH,
-                      &maxModelStackDepth);
-        glGetIntegerv(GL_MAX_NAME_STACK_DEPTH,
-                      &maxNameStackDepth);
+        msg.appendWithNewLine(openglError->getVerboseDescription());
         
-        GLint nameStackDepth, modelStackDepth, projStackDepth;
-        glGetIntegerv(GL_PROJECTION_STACK_DEPTH,
-                      &projStackDepth);
-        glGetIntegerv(GL_MODELVIEW_STACK_DEPTH,
-                      &modelStackDepth);
-        glGetIntegerv(GL_NAME_STACK_DEPTH,
-                      &nameStackDepth);
-        
-        msg += ("Projection Matrix Stack Depth "
-                + AString::number(projStackDepth)
-                + "  Max Depth "
-                + AString::number(maxProjStackDepth)
-                + "\n");
-        msg += ("Model Matrix Stack Depth "
-                + AString::number(modelStackDepth)
-                + "  Max Depth "
-                + AString::number(maxModelStackDepth)
-                + "\n");
-        msg += ("Name Matrix Stack Depth "
-                + AString::number(nameStackDepth)
-                + "  Max Depth "
-                + AString::number(maxNameStackDepth)
-                + "\n");
-        SystemBacktrace myBacktrace;
-        SystemUtilities::getBackTrace(myBacktrace);
-        msg += ("Backtrace:\n"
-                + myBacktrace.toSymbolString()
-                + "\n");
         CaretLogSevere(msg);
     }
 }

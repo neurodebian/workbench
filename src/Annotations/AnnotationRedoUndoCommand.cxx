@@ -188,6 +188,11 @@ AnnotationRedoUndoCommand::applyRedoOrUndo(Annotation* annotation,
                                    + AnnotationRedoUndoCommandModeEnum::toName(m_mode)
                                    + " is handle in the redo() and undo() functions."));
             break;
+        case AnnotationRedoUndoCommandModeEnum::DUPLICATE_ANNOTATION:
+            CaretAssertMessage(0, ("This mode "
+                                   + AnnotationRedoUndoCommandModeEnum::toName(m_mode)
+                                   + " is handle in the redo() and undo() functions."));
+            break;
         case AnnotationRedoUndoCommandModeEnum::GROUPING_GROUP:
             CaretAssert(0);
         case AnnotationRedoUndoCommandModeEnum::GROUPING_REGROUP:
@@ -219,9 +224,8 @@ AnnotationRedoUndoCommand::applyRedoOrUndo(Annotation* annotation,
             }
             break;
         case AnnotationRedoUndoCommandModeEnum::LINE_WIDTH_FOREGROUND:
-            if (annotation->isLineWidthSupported()) {
-                //annotation->setLineWidth(value.m_floatValue);
-                annotation->setLineWidth(annotationValue->getLineWidth());
+            if (annotation->testProperty(Annotation::Property::LINE_THICKNESS)) {
+                annotation->setLineWidthPercentage(annotationValue->getLineWidthPercentage());
             }
             break;
         case AnnotationRedoUndoCommandModeEnum::LOCATION_AND_SIZE:
@@ -483,8 +487,6 @@ AnnotationRedoUndoCommand::redo(AString& errorMessageOut)
         
         EventManager::get()->sendEvent(groupEvent.getPointer());
         
-        //m_annotationGroupMemento->setUndoAnnotationGroupKey(groupEvent.getGroupKeyToWhichAnnotationsWereMoved());
-
         if (groupEvent.isError()) {
             errorMessageOut = groupEvent.getErrorMessage();
             return false;
@@ -550,6 +552,17 @@ AnnotationRedoUndoCommand::redo(AString& errorMessageOut)
                 validFlag = false;
             }
         }
+        else if (m_mode == AnnotationRedoUndoCommandModeEnum::DUPLICATE_ANNOTATION) {
+            EventAnnotationAddToRemoveFromFile duplicateEvent(EventAnnotationAddToRemoveFromFile::MODE_DUPLICATE,
+                                                          annMem->m_annotationFile,
+                                                          annMem->m_annotation);
+            EventManager::get()->sendEvent(duplicateEvent.getPointer());
+            
+            if (duplicateEvent.isError()) {
+                errorMessageOut.appendWithNewLine(duplicateEvent.getErrorMessage());
+                validFlag = false;
+            }
+        }
         else if (m_mode == AnnotationRedoUndoCommandModeEnum::PASTE_ANNOTATION) {
             EventAnnotationAddToRemoveFromFile pasteEvent(EventAnnotationAddToRemoveFromFile::MODE_PASTE,
                                                            annMem->m_annotationFile,
@@ -606,9 +619,6 @@ AnnotationRedoUndoCommand::undo(AString& errorMessageOut)
                                              m_annotationGroupMemento->m_annotationGroupKey);
         
         EventManager::get()->sendEvent(groupEvent.getPointer());
-        
-        //m_annotationGroupMemento->setUndoAnnotationGroupKey(groupEvent.getGroupKeyToWhichAnnotationsWereMoved());
-        
         
         if (groupEvent.isError()) {
             errorMessageOut = groupEvent.getErrorMessage();
@@ -676,6 +686,17 @@ AnnotationRedoUndoCommand::undo(AString& errorMessageOut)
                 validFlag = false;
             }
         }
+        else if (m_mode == AnnotationRedoUndoCommandModeEnum::DUPLICATE_ANNOTATION) {
+            EventAnnotationAddToRemoveFromFile duplicateEvent(EventAnnotationAddToRemoveFromFile::MODE_UNDUPLICATE,
+                                                              annMem->m_annotationFile,
+                                                              annMem->m_annotation);
+            EventManager::get()->sendEvent(duplicateEvent.getPointer());
+            
+            if (duplicateEvent.isError()) {
+                errorMessageOut.appendWithNewLine(duplicateEvent.getErrorMessage());
+                validFlag = false;
+            }
+        }
         else if (m_mode == AnnotationRedoUndoCommandModeEnum::PASTE_ANNOTATION) {
             EventAnnotationAddToRemoveFromFile pasteEvent(EventAnnotationAddToRemoveFromFile::MODE_UNPASTE,
                                                            annMem->m_annotationFile,
@@ -710,8 +731,6 @@ AnnotationRedoUndoCommand::isValid() const
     }
     
     return false;
-    
-//    return m_annotationMementos.size();
 }
 
 /**
@@ -1047,7 +1066,7 @@ AnnotationRedoUndoCommand::setModeLineWidth(const float newLineWidth,
         CaretAssert(annotation);
         
         Annotation* redoAnnotation = annotation->clone();
-        redoAnnotation->setLineWidth(newLineWidth);
+        redoAnnotation->setLineWidthPercentage(newLineWidth);
         Annotation* undoAnnotation = annotation->clone();
         
         AnnotationMemento* am = new AnnotationMemento(annotation,
@@ -1326,6 +1345,41 @@ AnnotationRedoUndoCommand::setModePasteAnnotation(AnnotationFile* annotationFile
 }
 
 /**
+ * Set the mode to duplicate annotations and create the undo/redo instances.
+ *
+ * @param annotationFile
+ *     File to which annotation is pasted.
+ * @param annotations
+ *     The new anntotation duplicated from existing annotation.
+ */
+void
+AnnotationRedoUndoCommand::setModeDuplicateAnnotation(AnnotationFile* annotationFile,
+                                                  Annotation* annotation)
+{
+    m_mode = AnnotationRedoUndoCommandModeEnum::DUPLICATE_ANNOTATION;
+    setDescription("Duplicate Annotation");
+    
+    CaretAssert(annotationFile);
+    CaretAssert(annotation);
+    
+    /*
+     * NOTE: We only need the pointer since the file containing
+     * the annotation will handle delete/undelete of the
+     * annotation.  If we don't use NULL for the redo and
+     * undo annotations, copies of the annotation would be
+     * needed since the AnnotationMemento will delete
+     * the redo and undo annotations when it is deleted.
+     */
+    AnnotationMemento* am = new AnnotationMemento(annotationFile,
+                                                  annotation,
+                                                  NULL,
+                                                  NULL);
+    
+    m_annotationMementos.push_back(am);
+}
+
+
+/**
  * Set the mode to rotation angle and create the undo/redo instances
  *
  * @param newRotationAngle
@@ -1362,7 +1416,7 @@ AnnotationRedoUndoCommand::setModeRotationAngle(const float newRotationAngle,
             int32_t viewport[4] = { 0, 0, 0, 0 };
             bool viewportValid = false;
             switch (oneDimAnn->getCoordinateSpace()) {
-                case AnnotationCoordinateSpaceEnum::PIXELS:
+                case AnnotationCoordinateSpaceEnum::CHART:
                     break;
                 case AnnotationCoordinateSpaceEnum::STEREOTAXIC:
                     break;
@@ -1379,6 +1433,8 @@ AnnotationRedoUndoCommand::setModeRotationAngle(const float newRotationAngle,
                         viewportValid = true;
                     }
                 }
+                    break;
+                case AnnotationCoordinateSpaceEnum::VIEWPORT:
                     break;
                 case AnnotationCoordinateSpaceEnum::WINDOW:
                 {
@@ -1407,37 +1463,10 @@ AnnotationRedoUndoCommand::setModeRotationAngle(const float newRotationAngle,
                 
                 const bool rotateAroundMiddleFlag = true;
                 if (rotateAroundMiddleFlag) {
-//                    const float midPointXYZ[3] = {
-//                        (annOneX + annTwoX) / 2.0,
-//                        (annOneY + annTwoY) / 2.0,
-//                        0.0
-//                    };
-//                    
-//                    const float vpOneXYZ[3] = { annOneX, annOneY, 0.0 };
-//                    const float vpTwoXYZ[3] = { annTwoX, annTwoY, 0.0 };
-//                    const float length = MathFunctions::distance3D(vpOneXYZ, vpTwoXYZ);
-//                    const float lengthMidToOne = MathFunctions::distance3D(midPointXYZ, vpOneXYZ);
-//                    const float angleRadians = MathFunctions::toRadians(-newRotationAngle);
-//                    const float dy = lengthMidToOne * std::sin(angleRadians);
-//                    const float dx = lengthMidToOne * std::cos(angleRadians);
-//                    annOneX = midPointXYZ[0] - dx;
-//                    annOneY = midPointXYZ[1] - dy;
-//                    
-//                    annTwoX = midPointXYZ[0] + dx;
-//                    annTwoY = midPointXYZ[1] + dy;
-//                    
-////                    const float newVpOneXYZ[3] = { annOneX, annOneY, 0.0 };
-////                    float vectorOneToMid[3] = { 0.0, 0.0, 0.0 };
-////                    MathFunctions::subtractVectors(newVpOneXYZ, midPointXYZ, vectorOneToMid);
-////                    MathFunctions::normalizeVector(vectorOneToMid);
-////                    annTwoX = annOneX + vectorOneToMid[0] * length;
-////                    annTwoY = annOneY + vectorOneToMid[1] * length;
 
                     AnnotationOneDimensionalShape* redoAnnotation = dynamic_cast<AnnotationOneDimensionalShape*>(annotation->clone());
                     CaretAssert(redoAnnotation);
                     redoAnnotation->setRotationAngle(vpWidth, vpHeight, newRotationAngle);
-//                    redoAnnotation->getStartCoordinate()->setXYZFromViewportXYZ(vpWidth, vpHeight, annOneX, annOneY);
-//                    redoAnnotation->getEndCoordinate()->setXYZFromViewportXYZ(vpWidth, vpHeight, annTwoX, annTwoY);
                     Annotation* undoAnnotation = annotation->clone();
                     AnnotationMemento* am = new AnnotationMemento(annotation,
                                                                   redoAnnotation,
@@ -1465,29 +1494,6 @@ AnnotationRedoUndoCommand::setModeRotationAngle(const float newRotationAngle,
                     m_annotationMementos.push_back(am);
                 }
             }
-//            float xyzOne[3];
-//            oneDimAnn->getStartCoordinate()->getXYZ(xyzOne);
-//            float xyzTwo[3];
-//            oneDimAnn->getEndCoordinate()->getXYZ(xyzTwo);
-//
-////            const float dx = xyzTwo[0] - xyzOne[0];
-////            const float dy = xyzTwo[1] - xyzOne[1];
-//            const float length = MathFunctions::distance3D(xyzOne, xyzTwo);
-//            const float angleRadians = MathFunctions::toRadians(-newRotationAngle);
-//            const float dy = length * std::sin(angleRadians);
-//            const float dx = length * std::cos(angleRadians);
-//            xyzTwo[0] = xyzOne[0] + dx;
-//            xyzTwo[1] = xyzOne[1] + dy;
-//
-//            
-//            AnnotationOneDimensionalShape* redoAnnotation = dynamic_cast<AnnotationOneDimensionalShape*>(annotation->clone());
-//            CaretAssert(redoAnnotation);
-//            redoAnnotation->getEndCoordinate()->setXYZ(xyzTwo);
-//            Annotation* undoAnnotation = annotation->clone();
-//            AnnotationMemento* am = new AnnotationMemento(annotation,
-//                                                          redoAnnotation,
-//                                                          undoAnnotation);
-//            m_annotationMementos.push_back(am);
         }
     }
     
@@ -1586,9 +1592,29 @@ AnnotationRedoUndoCommand::setModeTextCharacters(const AString& text,
         Annotation* annotation = *iter;
         CaretAssert(annotation);
         
-        if (annotation->getType() == AnnotationTypeEnum::TEXT) {
-            AnnotationText* redoAnnotation = dynamic_cast<AnnotationText*>(annotation->clone());
-            CaretAssert(redoAnnotation);
+        AnnotationText* redoAnnotation = NULL;
+        switch (annotation->getType()) {
+            case AnnotationTypeEnum::BOX:
+                break;
+            case AnnotationTypeEnum::COLOR_BAR:
+                break;
+            case AnnotationTypeEnum::IMAGE:
+                break;
+            case AnnotationTypeEnum::LINE:
+                break;
+            case AnnotationTypeEnum::OVAL:
+                break;
+            case AnnotationTypeEnum::TEXT:
+                redoAnnotation = dynamic_cast<AnnotationText*>(annotation->clone());
+                break;
+        }
+        
+        /*
+         * This method should only get call for text-type annotations.
+         */
+        CaretAssert(redoAnnotation);
+        
+        if (redoAnnotation != NULL) {
             redoAnnotation->setText(text);
             
             Annotation* undoAnnotation = annotation->clone();
@@ -1853,7 +1879,7 @@ AnnotationRedoUndoCommand::setModeTextFontPercentSize(const float newFontPercent
             
             float percentSize = newFontPercentSize;
             switch (redoAnnotation->getCoordinateSpace()) {
-                case AnnotationCoordinateSpaceEnum::PIXELS:
+                case AnnotationCoordinateSpaceEnum::CHART:
                     break;
                 case AnnotationCoordinateSpaceEnum::STEREOTAXIC:
                     percentSize *= surfaceSpaceRowCount;
@@ -1862,6 +1888,8 @@ AnnotationRedoUndoCommand::setModeTextFontPercentSize(const float newFontPercent
                     percentSize *= surfaceSpaceRowCount;
                     break;
                 case AnnotationCoordinateSpaceEnum::TAB:
+                    break;
+                case AnnotationCoordinateSpaceEnum::VIEWPORT:
                     break;
                 case  AnnotationCoordinateSpaceEnum::WINDOW:
                     break;
@@ -1877,33 +1905,6 @@ AnnotationRedoUndoCommand::setModeTextFontPercentSize(const float newFontPercent
         }
     }
 }
-
-//void
-//AnnotationRedoUndoCommand::setModeTextFontPercentSize(const float newFontPercentSize,
-//                                                    const std::vector<Annotation*>& annotations)
-//{
-//    m_mode        = AnnotationRedoUndoCommandModeEnum::TEXT_FONT_PERCENT_SIZE;
-//    setDescription("Text Font Percent Size");
-//    
-//    for (std::vector<Annotation*>::const_iterator iter = annotations.begin();
-//         iter != annotations.end();
-//         iter++) {
-//        Annotation* annotation = *iter;
-//        CaretAssert(annotation);
-//        
-//        if (annotation->getType() == AnnotationTypeEnum::TEXT) {
-//            AnnotationPercentSizeText* redoAnnotation = dynamic_cast<AnnotationPercentSizeText*>(annotation->clone());
-//            CaretAssert(redoAnnotation);
-//            redoAnnotation->setFontPercentViewportSize(newFontPercentSize);
-//            
-//            Annotation* undoAnnotation = annotation->clone();
-//            AnnotationMemento* am = new AnnotationMemento(annotation,
-//                                                          redoAnnotation,
-//                                                          undoAnnotation);
-//            m_annotationMementos.push_back(am);
-//        }
-//    }
-//}
 
 /**
  * Set the mode to text font underline and create the undo/redo instances.

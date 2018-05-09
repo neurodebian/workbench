@@ -117,6 +117,34 @@ Model::initializeSelectedSurfaces()
 }
 
 /**
+ * Get the chart overlay set for this model.
+ * 
+ * @param tabIndex
+ *     Index for the chart overlay set.
+ * @return
+ *     Chart overlay set or NULL if not valid for this model.
+ */
+ChartTwoOverlaySet*
+Model::getChartTwoOverlaySet(const int /*tabIndex*/)
+{
+    return NULL;
+}
+
+/**
+ * Get the chart overlay set for this model.
+ *
+ * @param tabIndex
+ *     Index for the chart overlay set.
+ * @return
+ *     Chart overlay set or NULL if not valid for this model.
+ */
+const ChartTwoOverlaySet*
+Model::getChartTwoOverlaySet(const int /*tabIndex*/) const
+{
+    return NULL;
+}
+
+/**
  * Create a scene for an instance of a class.
  *
  * @param sceneAttributes
@@ -225,6 +253,8 @@ Model::restoreFromScene(const SceneAttributes* sceneAttributes,
     if (savedModelType != m_modelType) {
         return;
     }
+    
+    setRestoredFromScene(true);
     
     if (m_modelType == ModelTypeEnum::MODEL_TYPE_SURFACE) {
         const AString surfaceName = sceneClass->getStringValue("surfaceName",
@@ -405,5 +435,26 @@ Model::copyTabContent(const int32_t /*sourceTabIndex*/,
 {
     
 }
+
+/**
+ * @return True if model was restored from scene
+ */
+bool Model::isRestoredFromScene() const
+{
+    return m_restoredFromSceneFlag;
+}
+
+/**
+ * Set model was restored from scene.
+ *
+ * @param restoredStatus
+ *    New value for restored status.
+ */
+void
+Model::setRestoredFromScene(const bool restoredStatus)
+{
+    m_restoredFromSceneFlag = restoredStatus;
+}
+
 
 

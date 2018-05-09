@@ -36,6 +36,7 @@
 #include "EnumComboBoxTemplate.h"
 #include "EventGraphicsUpdateAllWindows.h"
 #include "EventManager.h"
+#include "MapSettingsColorBarPaletteOptionsWidget.h"
 #include "NumericFormatModeEnum.h"
 #include "Overlay.h"
 #include "PaletteColorBarValuesModeEnum.h"
@@ -65,12 +66,14 @@ MapSettingsColorBarWidget::MapSettingsColorBarWidget(QWidget* parent)
     
     QWidget* numericsWidget = this->createDataNumericsSection();
     
+    m_paletteOptionsWidget = new MapSettingsColorBarPaletteOptionsWidget();
     
     
     QGridLayout* layout = new QGridLayout(this);
     WuQtUtilities::setLayoutSpacingAndMargins(layout, 6, 6);
     layout->addWidget(locationPositionWidget, 0, 0, Qt::AlignLeft);
     layout->addWidget(numericsWidget, 1, 0, Qt::AlignLeft);
+    layout->addWidget(m_paletteOptionsWidget);
     layout->setSizeConstraint(QLayout::SetFixedSize);
     
     setSizePolicy(QSizePolicy::Fixed,
@@ -113,10 +116,22 @@ MapSettingsColorBarWidget::~MapSettingsColorBarWidget()
 //    }
 //}
 
+/**
+ * Update the content of the widget.
+ *
+ * @param caretMappableDataFile
+ *    Data file containing palette that is edited.
+ * @param mapIndex
+ *    Index of map for palette that is edited.
+ */
 void
-MapSettingsColorBarWidget::updateContent(AnnotationColorBar* annotationColorBar,
+MapSettingsColorBarWidget::updateContent(CaretMappableDataFile* caretMappableDataFile,
+                                         const int32_t mapIndex,
+                                         AnnotationColorBar* annotationColorBar,
                                          PaletteColorMapping* paletteColorMapping)
 {
+    m_caretMappableDataFile = caretMappableDataFile;
+    m_mapIndex            = mapIndex;
     m_colorBar            = annotationColorBar;
     m_paletteColorMapping = paletteColorMapping;
 
@@ -144,6 +159,9 @@ MapSettingsColorBarWidget::updateContentPrivate()
         
         std::vector<AnnotationTwoDimensionalShape*> annotationTwoDimVector;
         annotationTwoDimVector.push_back(m_colorBar);
+
+        m_paletteOptionsWidget->updateEditor(m_caretMappableDataFile,
+                                             m_mapIndex);
         
         enableWidget = true;
     }
@@ -162,11 +180,13 @@ MapSettingsColorBarWidget::applySelections()
 {
     if (m_paletteColorMapping != NULL) {
         m_paletteColorMapping->setColorBarValuesMode(m_colorBarDataModeComboBox->getSelectedItem<PaletteColorBarValuesModeEnum, PaletteColorBarValuesModeEnum::Enum>());
-        m_paletteColorMapping->setNumericFormatMode(m_colorBarNumericFormatModeComboBox->getSelectedItem<NumericFormatModeEnum, NumericFormatModeEnum::Enum>());
-        m_paletteColorMapping->setPrecisionDigits(m_colorBarDecimalsSpinBox->value());
-        m_paletteColorMapping->setNumericSubdivisionCount(m_colorBarNumericSubdivisionsSpinBox->value());
-        m_paletteColorMapping->setShowTickMarksSelected(m_showTickMarksCheckBox->isChecked());
+        m_paletteColorMapping->setColorBarNumericFormatMode(m_colorBarNumericFormatModeComboBox->getSelectedItem<NumericFormatModeEnum, NumericFormatModeEnum::Enum>());
+        m_paletteColorMapping->setColorBarPrecisionDigits(m_colorBarDecimalsSpinBox->value());
+        m_paletteColorMapping->setColorBarNumericSubdivisionCount(m_colorBarNumericSubdivisionsSpinBox->value());
+        m_paletteColorMapping->setColorBarShowTickMarksSelected(m_showTickMarksCheckBox->isChecked());
     }
+    
+    m_paletteOptionsWidget->applyOptions();
     
     EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
 }
@@ -369,7 +389,7 @@ MapSettingsColorBarWidget::updateColorBarAttributes()
                 break;
         }
         
-        const NumericFormatModeEnum::Enum numericFormat = m_paletteColorMapping->getNumericFormatMode();
+        const NumericFormatModeEnum::Enum numericFormat = m_paletteColorMapping->getColorBarNumericFormatMode();
         switch (numericFormat) {
             case NumericFormatModeEnum::AUTO:
                 precisionDigitsSpinBoxEnabled = false;
@@ -388,17 +408,17 @@ MapSettingsColorBarWidget::updateColorBarAttributes()
         
         m_colorBarDecimalsLabel->setEnabled(precisionDigitsSpinBoxEnabled);
         m_colorBarDecimalsSpinBox->blockSignals(true);
-        m_colorBarDecimalsSpinBox->setValue(m_paletteColorMapping->getPrecisionDigits());
+        m_colorBarDecimalsSpinBox->setValue(m_paletteColorMapping->getColorBarPrecisionDigits());
         m_colorBarDecimalsSpinBox->blockSignals(false);
         m_colorBarDecimalsSpinBox->setEnabled(precisionDigitsSpinBoxEnabled);
         
         m_colorBarNumericSubdivisionsLabel->setEnabled(subdivisionsSpinBoxEnabled);
         m_colorBarNumericSubdivisionsSpinBox->blockSignals(true);
-        m_colorBarNumericSubdivisionsSpinBox->setValue(m_paletteColorMapping->getNumericSubdivisionCount());
+        m_colorBarNumericSubdivisionsSpinBox->setValue(m_paletteColorMapping->getColorBarNumericSubdivisionCount());
         m_colorBarNumericSubdivisionsSpinBox->blockSignals(false);
         m_colorBarNumericSubdivisionsSpinBox->setEnabled(subdivisionsSpinBoxEnabled);
         
-        m_showTickMarksCheckBox->setChecked(m_paletteColorMapping->isShowTickMarksSelected());
+        m_showTickMarksCheckBox->setChecked(m_paletteColorMapping->isColorBarShowTickMarksSelected());
     }
 }
 

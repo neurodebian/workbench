@@ -40,6 +40,7 @@ PaletteColorMappingSaxReader::PaletteColorMappingSaxReader(PaletteColorMapping* 
     this->stateStack.push(state);
     this->elementText = "";
     this->paletteColorMapping = paletteColorMapping;
+    this->paletteColorMapping->setInvertedMode(PaletteInvertModeEnum::OFF);
 }
 
 /**
@@ -183,6 +184,28 @@ PaletteColorMappingSaxReader::endElement(const AString& /* namspaceURI */,
            else if (qName == PaletteColorMappingXmlElements::XML_TAG_INTERPOLATE) {
                this->paletteColorMapping->setInterpolatePaletteFlag(toBool(this->elementText));
            }
+           else if (qName == PaletteColorMappingXmlElements::XML_TAG_INVERT) {
+               bool isValid = false;
+               PaletteInvertModeEnum::Enum invertMode = PaletteInvertModeEnum::fromName(this->elementText,
+                                                                                        &isValid);
+               if (isValid) {
+                   this->paletteColorMapping->setInvertedMode(invertMode);
+               }
+               else {
+                   if (this->elementText == "true") {
+                       this->paletteColorMapping->setInvertedMode(PaletteInvertModeEnum::POSITIVE_WITH_NEGATIVE);
+                   }
+                   else if (this->elementText == "false") {
+                       this->paletteColorMapping->setInvertedMode(PaletteInvertModeEnum::OFF);
+                   }
+                   else {
+                       this->paletteColorMapping->setInvertedMode(PaletteInvertModeEnum::OFF);
+                       CaretLogWarning("Invalid PaletteInvertModeEnum::Enum value \""
+                                       + this->elementText
+                                       + "\"");
+                   }
+               }
+           }
            else if (qName == PaletteColorMappingXmlElements::XML_TAG_PALETTE_NAME) {
                this->paletteColorMapping->setSelectedPaletteName(this->elementText);
            }
@@ -289,25 +312,83 @@ PaletteColorMappingSaxReader::endElement(const AString& /* namspaceURI */,
                this->paletteColorMapping->setThresholdNegMinPosMaxLinked(toBool(this->elementText));
            }
            else if (qName == PaletteColorMappingXmlElements::XML_TAG_PALETTE_COLOR_MAPPING) {
-               /* Top level tag, nothing to do */
+               /* WB-  
+                * We want to default the range mode to 'FILE'.  While we do that in the constructor
+                * for PaletteColorMapping, most files contain PaletteColorMapping in the XML for 
+                * each map and when the file is read, the default values are replaced.  So,
+                * to avoid breaking older scenes, only change the range mode from 'MAP' to 'FILE'
+                * if thresholding is off when reading palette color mapping from XML.
+                */
+               if (this->paletteColorMapping->getThresholdType()  == PaletteThresholdTypeEnum::THRESHOLD_TYPE_OFF) {
+                   this->paletteColorMapping->setThresholdRangeMode(PaletteThresholdRangeModeEnum::PALETTE_THRESHOLD_RANGE_MODE_FILE);
+               }
+           }
+           else if (qName == PaletteColorMappingXmlElements::XML_TAG_HISTOGRAM_RANGE_MODE) {
+               bool isValid = false;
+               PaletteHistogramRangeModeEnum::Enum histogramRangeMode = PaletteHistogramRangeModeEnum::fromName(this->elementText,
+                                                                                               &isValid);
+               if (isValid) {
+                   this->paletteColorMapping->setHistogramRangeMode(histogramRangeMode);
+               }
+               else {
+                   throw XmlSaxParserException("Invalid PaletteHistogramRangeModeEnum::Enum: "
+                                               + this->elementText);
+               }
+           }
+           else if (qName == PaletteColorMappingXmlElements::XML_TAG_HISTOGRAM_BARS_VISIBLE) {
+               this->paletteColorMapping->setHistogramBarsVisible(toBool(this->elementText));
+           }
+           else if (qName == PaletteColorMappingXmlElements::XML_TAG_HISTOGRAM_ENVELOPE_VISIBLE) {
+               this->paletteColorMapping->setHistogramEnvelopeVisible(toBool(this->elementText));
+           }
+           else if ((qName == PaletteColorMappingXmlElements::XML_TAG_HISTOGRAM_BARS_COLOR)
+                    || (qName == "HistogramColor")) {
+               bool isValid = false;
+               CaretColorEnum::Enum histogramBarsColor = CaretColorEnum::fromName(this->elementText,
+                                                                                  &isValid);
+               if (isValid) {
+                   this->paletteColorMapping->setHistogramBarsColor(histogramBarsColor);
+               }
+               else {
+                   throw XmlSaxParserException("Invalid CaretColorEnum::Enum: "
+                                               + this->elementText);
+               }
+           }
+           else if (qName == PaletteColorMappingXmlElements::XML_TAG_HISTOGRAM_ENVELOPE_COLOR) {
+               bool isValid = false;
+               CaretColorEnum::Enum histogramEnvelopeColor = CaretColorEnum::fromName(this->elementText,
+                                                                                  &isValid);
+               if (isValid) {
+                   this->paletteColorMapping->setHistogramEnvelopeColor(histogramEnvelopeColor);
+               }
+               else {
+                   throw XmlSaxParserException("Invalid CaretColorEnum::Enum: "
+                                               + this->elementText);
+               }
+           }
+           else if (qName == PaletteColorMappingXmlElements::XML_TAG_HISTOGRAM_ENVELOPE_LINE_WIDTH_PERCENTAGE) {
+                this->paletteColorMapping->setHistogramEnvelopeLineWidthPercentage(this->elementText.toFloat());
+           }
+           else if (qName == PaletteColorMappingXmlElements::XML_TAG_HISTOGRAM_NUMBER_OF_BUCKETS) {
+               this->paletteColorMapping->setHistogramNumberOfBuckets(this->elementText.toInt());
            }
            else if (qName == PaletteColorMappingXmlElements::XML_TAG_NUMERIC_FORMAT_MODE) {
                bool isValid = false;
                NumericFormatModeEnum::Enum numericFormatMode = NumericFormatModeEnum::fromName(this->elementText,
                                                                                                        &isValid);
                if (isValid) {
-                   this->paletteColorMapping->setNumericFormatMode(numericFormatMode);
+                   this->paletteColorMapping->setColorBarNumericFormatMode(numericFormatMode);
                }
                else {
-                   throw XmlSaxParserException("Invalid PalettePrecisionModeEnum::Enum: "
+                   throw XmlSaxParserException("Invalid NumericFormatModeEnum::Enum: "
                                                + this->elementText);
                }
            }
            else if (qName == PaletteColorMappingXmlElements::XML_TAG_PRECISION_DIGITS) {
-               this->paletteColorMapping->setPrecisionDigits(this->elementText.toInt());
+               this->paletteColorMapping->setColorBarPrecisionDigits(this->elementText.toInt());
            }
            else if (qName == PaletteColorMappingXmlElements::XML_TAG_NUMERIC_SUBDIVISIONS) {
-               this->paletteColorMapping->setNumericSubdivisionCount(this->elementText.toInt());
+               this->paletteColorMapping->setColorBarNumericSubdivisionCount(this->elementText.toInt());
            }
            else if (qName == PaletteColorMappingXmlElements::XML_TAG_COLOR_BAR_VALUES_MODE) {
                bool isValid = false;
@@ -322,15 +403,16 @@ PaletteColorMappingSaxReader::endElement(const AString& /* namspaceURI */,
                }
            }
            else if (qName == PaletteColorMappingXmlElements::XML_TAG_SHOW_TICK_MARKS) {
-               this->paletteColorMapping->setShowTickMarksSelected(toBool(this->elementText));
+               this->paletteColorMapping->setColorBarShowTickMarksSelected(toBool(this->elementText));
            }
            else {
                std::ostringstream str;
                str
-               << "Unrecognized palette color mapping element \""
+               << "Unrecognized (perhaps new) palette color mapping element ignored \""
                << qName.toStdString()
-               << "\".";
-               throw XmlSaxParserException(AString::fromStdString(str.str()));
+               << "\" with content: "
+               << this->elementText.toStdString();
+               warning(XmlSaxParserException(AString::fromStdString(str.str())));
            }
          break;
    }

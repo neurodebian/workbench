@@ -38,6 +38,8 @@
 #include "CaretLogger.h"
 #include "CaretPreferences.h"
 #include "ChartingDataManager.h"
+#include "ChartableTwoFileDelegate.h"
+#include "ChartableTwoFileMatrixChart.h"
 #include "ChartableLineSeriesBrainordinateInterface.h"
 #include "CiftiBrainordinateDataSeriesFile.h"
 #include "CiftiBrainordinateLabelFile.h"
@@ -69,10 +71,12 @@
 #include "EventDataFileDelete.h"
 #include "EventDataFileRead.h"
 #include "EventDataFileReload.h"
+#include "EventCaretDataFilesGet.h"
 #include "EventGetDisplayedDataFiles.h"
 #include "EventModelAdd.h"
 #include "EventModelDelete.h"
 #include "EventModelGetAll.h"
+#include "EventModelGetAllDisplayed.h"
 #include "EventPaletteGetByName.h"
 #include "EventProgressUpdate.h"
 #include "EventSpecFileReadDataFiles.h"
@@ -87,6 +91,7 @@
 #include "MathFunctions.h"
 #include "MetricFile.h"
 #include "ModelChart.h"
+#include "ModelChartTwo.h"
 #include "ModelSurface.h"
 #include "ModelSurfaceMontage.h"
 #include "ModelVolume.h"
@@ -118,8 +123,11 @@ using namespace caret;
 
 /**
  *  Constructor.
+ *
+ * @param caretPreferences
+ *    The caret preferencers used to initialize some components.
  */
-Brain::Brain()
+Brain::Brain(const CaretPreferences* caretPreferences)
 {
     m_annotationManager = new AnnotationManager(this);
     
@@ -139,6 +147,7 @@ Brain::Brain()
     m_sceneAnnotationFile->clearModified();
     
     m_modelChart = NULL;
+    m_modelChartTwo = NULL;
     m_surfaceMontageModel = NULL;
     m_volumeSliceModel = NULL;
     m_wholeBrainModel = NULL;
@@ -167,6 +176,8 @@ Brain::Brain()
     m_displayPropertiesVolume = new DisplayPropertiesVolume();
     m_displayProperties.push_back(m_displayPropertiesVolume);
     
+    EventManager::get()->addEventListener(this,
+                                          EventTypeEnum::EVENT_CARET_DATA_FILES_GET);
     EventManager::get()->addEventListener(this,
                                           EventTypeEnum::EVENT_DATA_FILE_ADD);
     EventManager::get()->addEventListener(this,
@@ -231,7 +242,7 @@ Brain::Brain()
     
     m_selectionManager = new SelectionManager();
 
-    m_identificationManager = new IdentificationManager();
+    m_identificationManager = new IdentificationManager(caretPreferences);
     
     m_brainordinateHighlightRegionOfInterest = new BrainordinateRegionOfInterest();
     
@@ -264,6 +275,9 @@ Brain::~Brain()
     delete m_paletteFile;
     if (m_modelChart != NULL) {
         delete m_modelChart;
+    }
+    if (m_modelChartTwo != NULL) {
+        delete m_modelChartTwo;
     }
     if (m_surfaceMontageModel != NULL) {
         delete m_surfaceMontageModel;
@@ -369,6 +383,30 @@ Brain::getBrainStructure(StructureEnum::Enum structure,
     
     return NULL;
 }
+
+/**
+ * Update brain structures by removing any that contain zero data files
+ */
+void
+Brain::updateBrainStructures()
+{
+    std::vector<BrainStructure*> validBrainStructures;
+    
+    for (auto bs : m_brainStructures) {
+        CaretAssert(bs);
+        if (bs->hasDataFiles()) {
+            validBrainStructures.push_back(bs);
+        }
+        else {
+            delete bs;
+        }
+    }
+    
+    if (m_brainStructures.size() != validBrainStructures.size()) {
+        m_brainStructures = validBrainStructures;
+    }
+}
+
 
 /**
  * Increment and return the duplicate counter for the given data file type.
@@ -656,6 +694,9 @@ Brain::resetBrain(const ResetBrainKeepSceneFiles keepSceneFiles,
     if (m_modelChart != NULL) {
         m_modelChart->reset();
     }
+    if (m_modelChartTwo != NULL) {
+        m_modelChartTwo->reset();
+    }
     
     m_gapsAndMargins->reset();
     
@@ -695,6 +736,29 @@ Brain::resetBrainKeepSceneFiles()
          iter++) {
         CaretDataFile* caretDataFile = *iter;
         if (caretDataFile->isModified()) {
+            continue;
+        }
+        else {
+            /*
+             * If a palette is modified by user or by showing a previous scene,
+             * then the file MUST be reloaded because the palette may be different
+             * in the new scene that is being loaded.
+             */
+            CaretMappableDataFile* cmdf = dynamic_cast<CaretMappableDataFile*>(caretDataFile);
+            if (cmdf != NULL) {
+                switch (cmdf->getPaletteColorMappingModifiedStatus()) {
+                    case PaletteModifiedStatusEnum::MODIFIED:
+                        continue;
+                        break;
+                    case PaletteModifiedStatusEnum::MODIFIED_BY_SHOW_SCENE:
+                        continue;
+                        break;
+                    case PaletteModifiedStatusEnum::UNMODIFIED:
+                        break;
+                }
+            }
+        }
+        if (caretDataFile->isModifiedSinceTimeOfLastReadOrWrite()) {
             continue;
         }
         
@@ -1459,7 +1523,7 @@ Brain::addReadOrReloadVolumeFile(const FileModeAddReadReload fileMode,
     
     ElapsedTimer timer;
     timer.start();
-    vf->updateScalarColoringForAllMaps(m_paletteFile);
+    vf->updateScalarColoringForAllMaps();
     CaretLogInfo("Time to color volume data is "
                  + AString::number(timer.getElapsedTimeSeconds(), 'f', 3)
                  + " seconds.");
@@ -3421,7 +3485,7 @@ Brain::getAllChartableLineSeriesDataFiles(std::vector<ChartableLineSeriesInterfa
  *    Contains all chartable data files upon exit.
  */
 void
-Brain::getAllChartableLineSeriesDataFilesForChartDataType(const ChartDataTypeEnum::Enum chartDataType,
+Brain::getAllChartableLineSeriesDataFilesForChartDataType(const ChartOneDataTypeEnum::Enum chartDataType,
                                                 std::vector<ChartableLineSeriesInterface*>& chartableDataFilesOut) const
 {
     chartableDataFilesOut.clear();
@@ -3518,7 +3582,7 @@ Brain::getAllChartableMatrixDataFiles(std::vector<ChartableMatrixInterface*>& ch
  *    Contains all chartable data files upon exit.
  */
 void
-Brain::getAllChartableMatrixDataFilesForChartDataType(const ChartDataTypeEnum::Enum chartDataType,
+Brain::getAllChartableMatrixDataFilesForChartDataType(const ChartOneDataTypeEnum::Enum chartDataType,
                                                       std::vector<ChartableMatrixInterface*>& chartableDataFilesOut) const
 {
     chartableDataFilesOut.clear();
@@ -4684,12 +4748,61 @@ Brain::updateChartModel()
             m_modelChart = NULL;
         }
     }
+    
+    /*
+     * For Chart Two, test for any files that report a valid charting data type
+     * and then update (add/remove charting two model)
+     */
+    EventCaretMappableDataFilesGet allMapFilesEvent;
+    EventManager::get()->sendEvent(allMapFilesEvent.getPointer());
+    std::vector<CaretMappableDataFile*> allMapFiles;
+    allMapFilesEvent.getAllFiles(allMapFiles);
+    
+    bool haveChartableFileFlag = false;
+    for (auto mapFile : allMapFiles) {
+        CaretAssert(mapFile);
+        std::vector<ChartTwoDataTypeEnum::Enum> chartDataTypes;
+        mapFile->getChartingDelegate()->getSupportedChartTwoDataTypes(chartDataTypes);
+        if ( ! chartDataTypes.empty()) {
+            haveChartableFileFlag = true;
+            break;
+        }
+    }
+
+    if (haveChartableFileFlag) {
+        if (m_modelChartTwo == NULL) {
+            createModelChartTwo();
+        }
+    }
+    else {
+        if (m_modelChartTwo != NULL) {
+            EventModelDelete eventDeleteModel(m_modelChartTwo);
+            EventManager::get()->sendEvent(eventDeleteModel.getPointer());
+            delete m_modelChartTwo;
+            m_modelChartTwo = NULL;
+        }
+    }
+}
+
+/**
+ * Create the model chart two.
+ */
+void
+Brain::createModelChartTwo()
+{
+    m_modelChartTwo = new ModelChartTwo(this);
+    EventModelAdd eventAddModel(m_modelChartTwo);
+    EventManager::get()->sendEvent(eventAddModel.getPointer());
+    
+    if (m_isSpecFileBeingRead == false) {
+        m_modelChartTwo->initializeOverlays();
+    }
 }
 
 /**
  * Update the volume slice model.
  */
-void 
+void
 Brain::updateVolumeSliceModel()
 {
     bool isValid = false;
@@ -5149,6 +5262,8 @@ Brain::addReadOrReloadDataFile(const FileModeAddReadReload fileMode,
         throw dfe;
     }
    
+    loadMatrixChartingFileDefaultRowOrColumn(caretDataFileRead);
+    
     updateAfterFilesAddedOrRemoved();
     
     return caretDataFileRead;
@@ -5195,7 +5310,7 @@ Brain::readDataFile(const DataFileTypeEnum::Enum dataFileType,
         FileInformation fileInfoFullPath(dataFileName);
         if (fileInfoFullPath.exists() == false) {
             throw DataFileException(dataFileName,
-                                    "File does not exist!");
+                                    "File not found:");
         }
     }
     
@@ -5215,10 +5330,11 @@ Brain::readDataFile(const DataFileTypeEnum::Enum dataFileType,
 void
 Brain::updateAfterFilesAddedOrRemoved()
 {
-    updateChartModel();
+    updateBrainStructures();
+    updateSurfaceMontageModel();
     updateVolumeSliceModel();
     updateWholeBrainModel();
-    updateSurfaceMontageModel();
+    updateChartModel();
     
     updateFiberTrajectoryMatchingFiberOrientationFiles();
 }
@@ -5768,6 +5884,15 @@ Brain::receiveEvent(Event* event)
             processReloadDataFileEvent(reloadDataFileEvent);
         }
     }
+    else if (event->getEventType() == EventTypeEnum::EVENT_CARET_DATA_FILES_GET) {
+        EventCaretDataFilesGet* filesEvent = dynamic_cast<EventCaretDataFilesGet*>(event);
+        CaretAssert(filesEvent);
+        
+        std::vector<CaretDataFile*> caretDataFiles;
+        getAllDataFiles(caretDataFiles);
+        filesEvent->addAllCaretDataFiles(caretDataFiles);
+        filesEvent->setEventProcessed();
+    }
     else if (event->getEventType() == EventTypeEnum::EVENT_CARET_MAPPABLE_DATA_FILES_GET) {
         EventCaretMappableDataFilesGet* dataFilesEvent =
         dynamic_cast<EventCaretMappableDataFilesGet*>(event);
@@ -5898,6 +6023,24 @@ const ModelChart*
 Brain::getChartModel() const
 {
     return m_modelChart;
+}
+
+/**
+ * @return The chart two model (warning may be NULL!)
+ */
+ModelChartTwo*
+Brain::getChartTwoModel()
+{
+    return m_modelChartTwo;
+}
+
+/**
+ * @return The chart two model (warning may be NULL!)
+ */
+const ModelChartTwo*
+Brain::getChartTwoModel() const
+{
+    return m_modelChartTwo;
 }
 
 /**
@@ -6480,7 +6623,10 @@ Brain::removeWithoutDeleteDataFile(const CaretDataFile* caretDataFile)
     const bool wasRemoved = removeWithoutDeleteDataFilePrivate(caretDataFile);
     
     if (wasRemoved) {
-        m_specFile->removeCaretDataFile(caretDataFile);
+        /* Scene annotation file is NOT in the spec file */
+        if (caretDataFile != m_sceneAnnotationFile) {
+            m_specFile->removeCaretDataFile(caretDataFile);
+        }
         
         updateAfterFilesAddedOrRemoved();
     }
@@ -6519,6 +6665,12 @@ Brain::removeWithoutDeleteDataFilePrivate(const CaretDataFile* caretDataFile)
                                                                           caretDataFile);
     if (annotationIterator != m_annotationFiles.end()) {
         m_annotationFiles.erase(annotationIterator);
+        return true;
+    }
+    
+    if (caretDataFile == m_sceneAnnotationFile) {
+        m_sceneAnnotationFile->clear();
+        m_sceneAnnotationFile->clearModified();
         return true;
     }
     
@@ -6694,7 +6846,14 @@ bool
 Brain::removeAndDeleteDataFile(CaretDataFile* caretDataFile)
 {
     if (removeWithoutDeleteDataFile(caretDataFile)) {
-        delete caretDataFile;
+        /* NEVER delete scene annotation file */
+        if (caretDataFile == m_sceneAnnotationFile) {
+            m_sceneAnnotationFile->clear();
+            m_sceneAnnotationFile->clearModified();
+        }
+        else {
+            delete caretDataFile;
+        }
         return true;
     }
     
@@ -6927,16 +7086,13 @@ Brain::saveToScene(const SceneAttributes* sceneAttributes,
     m_sceneAnnotationFile->clearModified();
     
     /*
-     * Save all models
+     * Save all DISPLAYED models
      */
     std::vector<SceneClass*> modelClassVector;
-    EventModelGetAll getAllModels;
+    EventModelGetAllDisplayed getAllModels;
     EventManager::get()->sendEvent(getAllModels.getPointer());
-    std::vector<Model*> allModels = getAllModels.getModels();
-    for (std::vector<Model*>::iterator iter = allModels.begin();
-         iter != allModels.end();
-         iter++) {
-        Model* mdc = *iter;
+    std::set<Model*> allModels = getAllModels.getModels();
+    for (auto mdc : allModels) {
         modelClassVector.push_back(mdc->saveToScene(sceneAttributes,
                                                     "models"));
     }
@@ -7097,6 +7253,8 @@ Brain::restoreFromScene(const SceneAttributes* sceneAttributes,
                 caretDataFile->restoreFromScene(sceneAttributes,
                                                 bestMatchingSceneClass);
             }
+            
+            loadMatrixChartingFileDefaultRowOrColumn(caretDataFile);
         }
     }
     
@@ -7128,9 +7286,16 @@ Brain::restoreFromScene(const SceneAttributes* sceneAttributes,
         CiftiMappableConnectivityMatrixDataFile* cmf = *iter;
         if (cmf->isEmpty() == false) {
             const int32_t mapIndex = 0;
-            cmf->updateScalarColoringForMap(mapIndex,
-                                            getPaletteFile());
+            cmf->updateScalarColoringForMap(mapIndex);
         }
+    }
+    
+    /*
+     * Need to color all volume files since a thresholded volume may
+     * not get loaded until after its "thresholdee"
+     */
+    for (auto vf : m_volumeFiles) {
+        vf->updateScalarColoringForAllMaps();
     }
 
     /*
@@ -7139,6 +7304,9 @@ Brain::restoreFromScene(const SceneAttributes* sceneAttributes,
     EventModelGetAll getAllModels;
     EventManager::get()->sendEvent(getAllModels.getPointer());
     std::vector<Model*> allModels = getAllModels.getModels();
+    for (auto model : allModels) {
+        model->setRestoredFromScene(false);
+    }
     const SceneClassArray* modelsClassArray = sceneClass->getClassArray("models");
     const int32_t numModelClasses = modelsClassArray->getNumberOfArrayElements();
     for (int32_t i = 0; i < numModelClasses; i++) {
@@ -7150,7 +7318,7 @@ Brain::restoreFromScene(const SceneAttributes* sceneAttributes,
              iter != allModels.end();
              iter++) {
             Model* mdc = *iter;
-            mdc->restoreFromScene(sceneAttributes, 
+            mdc->restoreFromScene(sceneAttributes,
                                   modelsClassArray->getClassAtIndex(i));
         }
     }
@@ -7216,6 +7384,54 @@ Brain::restoreFromScene(const SceneAttributes* sceneAttributes,
                                                                sceneClass->getClass("m_brainordinateHighlightRegionOfInterest"));
     
     m_sceneAnnotationFile->clearModified();
+}
+
+/**
+ * Load the default row/column for a matrix charting file.
+ * If the file is not matrix chartable, no action is taken.
+ *
+ * @param caretDataFile
+ *     The Caret Data File.
+ */
+void
+Brain::loadMatrixChartingFileDefaultRowOrColumn(CaretDataFile* caretDataFile)
+{
+    if (caretDataFile == NULL) {
+        return;
+    }
+    
+    CaretMappableDataFile* cmdf = dynamic_cast<CaretMappableDataFile*>(caretDataFile);
+    if (cmdf != NULL) {
+        cmdf->getChartingDelegate()->getMatrixCharting()->loadDefaultRowOrColumn();
+    }
+}
+
+
+/**
+ * If model one charts are in scene but not
+ * model two charts, attempt to restore model
+ * one charts to model two charts.
+ *
+ * This must be performed AFTER browser tabs
+ * have been restored by the SessionManager.
+ */
+void
+Brain::restoreModelChartOneToModelChartTwo()
+{
+    if (m_modelChartTwo != NULL) {
+        if (m_modelChartTwo->isRestoredFromScene()) {
+            return;
+        }
+    }
+    
+    if (m_modelChart != NULL) {
+        if (m_modelChart->isRestoredFromScene()) {
+            if (m_modelChartTwo == NULL) {
+                createModelChartTwo();
+            }
+            m_modelChartTwo->restoreSceneFromChartOneModel(m_modelChart);
+        }
+    }
 }
 
 /**

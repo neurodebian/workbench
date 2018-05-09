@@ -23,6 +23,7 @@
 #undef __EVENT_TYPE_ENUM_DECLARE__
 
 #include "CaretAssert.h"
+#include "CaretLogger.h"
 
 using namespace caret;
 
@@ -72,7 +73,11 @@ EventTypeEnum::initialize()
     enumData.push_back(EventTypeEnum(EVENT_ANNOTATION_ADD_TO_REMOVE_FROM_FILE,
                                      "EVENT_ANNOTATION_ADD_TO_REMOVE_FROM_FILE",
                                      "Event to add or remove an annotation from a file"));
-
+    
+    enumData.push_back(EventTypeEnum(EVENT_ANNOTATION_CHART_LABEL_GET,
+                                     "EVENT_ANNOTATION_CHART_LABEL_GET",
+                                     "Event to get annotation chart labels"));
+    
     enumData.push_back(EventTypeEnum(EVENT_ANNOTATION_COLOR_BAR_GET,
                                      "EVENT_ANNOTATION_COLOR_BAR_GET",
                                      "Event to get annotation color bars from tab(s)"));
@@ -129,8 +134,12 @@ EventTypeEnum::initialize()
                                      "EVENT_BROWSER_TAB_NEW", 
                                      "Create a browser tab"));
     
-    enumData.push_back(EventTypeEnum(EVENT_BROWSER_WINDOW_CONTENT_GET, 
-                                     "EVENT_BROWSER_WINDOW_CONTENT_GET", 
+    enumData.push_back(EventTypeEnum(EVENT_BROWSER_WINDOW_CONTENT,
+                                     "EVENT_BROWSER_WINDOW_CONTENT",
+                                     "Event for browser window content"));
+    
+    enumData.push_back(EventTypeEnum(EVENT_BROWSER_WINDOW_DRAWING_CONTENT_GET,
+                                     "EVENT_BROWSER_WINDOW_DRAWING_CONTENT_GET", 
                                      "Get the content in a browser window"));
 
     enumData.push_back(EventTypeEnum(EVENT_BROWSER_WINDOW_CREATE_TABS, 
@@ -149,18 +158,58 @@ EventTypeEnum::initialize()
                                      "EVENT_BROWSER_WINDOW_NEW", 
                                      "Create a new browser window"));
     
-    enumData.push_back(EventTypeEnum(EVENT_CARET_MAPPABLE_DATA_FILES_GET, 
+    enumData.push_back(EventTypeEnum(EVENT_BROWSER_WINDOW_TILE_TAB_OPERATION,
+                                     "EVENT_BROWSER_WINDOW_TILE_TAB_OPERATION",
+                                     "Browser Window Tile Tab Operation"));
+    
+    enumData.push_back(EventTypeEnum(EVENT_CARET_DATA_FILES_GET,
+                                     "EVENT_CARET_DATA_FILES_GET",
+                                     "Get all Caret data files"));
+    
+    enumData.push_back(EventTypeEnum(EVENT_CARET_MAPPABLE_DATA_FILES_GET,
                                      "EVENT_CARET_MAPPABLE_DATA_FILES_GET", 
                                      "Get all Caret Mappable data files"));
 
     enumData.push_back(EventTypeEnum(EVENT_CARET_MAPPABLE_DATA_FILE_MAPS_VIEWED_IN_OVERLAYS,
                                      "EVENT_CARET_MAPPABLE_DATA_FILE_MAPS_VIEWED_IN_OVERLAYS",
                                      "Get Caret Mappable data file maps viewed in overlays"));
+
+    enumData.push_back(EventTypeEnum(EVENT_CARET_PREFERENCES_GET,
+                                     "EVENT_CARET_PREFERENCES_GET",
+                                     "Get the Caret Preferences"));
     
     enumData.push_back(EventTypeEnum(EVENT_CHART_MATRIX_YOKING_VALIDATION,
                                      "EVENT_CHART_MATRIX_YOKING_VALIDATION",
                                      "Validate Yoking of matrix chart's rows/columns"));
+    enumData.push_back(EventTypeEnum(EVENT_GRAPHICS_OPENGL_CREATE_BUFFER_OBJECT,
+                                     "EVENT_GRAPHICS_OPENGL_CREATE_BUFFER_OBJECT",
+                                     "Create an OpenGL Buffer Object for an OpenGL Context"));
+    enumData.push_back(EventTypeEnum(EVENT_GRAPHICS_OPENGL_CREATE_TEXTURE_NAME,
+                                     "EVENT_GRAPHICS_OPENGL_CREATE_TEXTURE_NAME",
+                                     "Create an OpenGL Texture Name for an OpenGL Context"));
+    enumData.push_back(EventTypeEnum(EVENT_GRAPHICS_OPENGL_DELETE_BUFFER_OBJECT,
+                                     "EVENT_GRAPHICS_OPENGL_DELETE_BUFFER_OBJECT",
+                                     "Delete an OpenGL Buffer Object for an OpenGL Context"));
+    enumData.push_back(EventTypeEnum(EVENT_GRAPHICS_OPENGL_DELETE_TEXTURE_NAME,
+                                     "EVENT_GRAPHICS_OPENGL_DELETE_TEXTURE_NAME",
+                                     "Delete an OpenGL Texture Name for an OpenGL Context"));
 
+    enumData.push_back(EventTypeEnum(EVENT_CHART_OVERLAY_VALIDATE,
+                                     "EVENT_CHART_OVERLAY_VALIDATE",
+                                     "Validate a chart overlay for validity (it exists)"));
+    
+    enumData.push_back(EventTypeEnum(EVENT_CHART_TWO_ATTRIBUTES_CHANGED,
+                                     "EVENT_CHART_TWO_ATTRIBUTES_CHANGED",
+                                     "GUI notification of the change in chart two atttributes"));
+    
+    enumData.push_back(EventTypeEnum(EVENT_CHART_TWO_AXIS_GET_DATA_RANGE,
+                                     "EVENT_CHART_TWO_AXIS_GET_DATA_RANGE",
+                                     "Get the range of data for a chart two axis"));
+    
+    enumData.push_back(EventTypeEnum(EVENT_CHART_TWO_LOAD_LINE_SERIES_DATA,
+                                     "EVENT_CHART_TWO_LOAD_LINE_SERIES_DATA",
+                                     "Load line series data for chart two implementation"));
+    
     enumData.push_back(EventTypeEnum(EVENT_DATA_FILE_ADD,
                                      "EVENT_DATA_FILE_ADD",
                                      "Add a data file to the Brain"));
@@ -249,7 +298,11 @@ EventTypeEnum::initialize()
                                     "EVENT_MODEL_GET_ALL", 
                                     "Get all models"));
 
-    enumData.push_back(EventTypeEnum(EVENT_MODEL_SURFACE_GET, 
+    enumData.push_back(EventTypeEnum(EVENT_MODEL_GET_ALL_DISPLAYED,
+                                     "EVENT_MODEL_GET_ALL_DISPLAYED",
+                                     "Get all displayed models"));
+    
+    enumData.push_back(EventTypeEnum(EVENT_MODEL_SURFACE_GET,
                                      "EVENT_MODEL_SURFACE_GET", 
                                      "Get a specific model surface"));
     
@@ -257,9 +310,9 @@ EventTypeEnum::initialize()
                                      "EVENT_NODE_IDENTIFICATION_COLORS_GET_FROM_CHARTS",
                                      "Get the color for node identification symbols from all charts that contain nodes"));
     
-    enumData.push_back(EventTypeEnum(EVENT_OPENGL_TEXTURE,
-                                     "EVENT_OPENGL_TEXTURE",
-                                     "OpenGL Texture Event"));
+    enumData.push_back(EventTypeEnum(EVENT_OPENGL_OBJECT_TO_WINDOW_TRANSFORM,
+                                     "EVENT_OPENGL_OBJECT_TO_WINDOW_TRANSFORM",
+                                     "Get transformation for converting object coordinates to window coordinates"));
     
     enumData.push_back(EventTypeEnum(EVENT_OPERATING_SYSTEM_REQUEST_OPEN_DATA_FILE,
                                      "EVENT_OPERATING_SYSTEM_REQUEST_OPEN_DATA_FILE",
@@ -280,6 +333,10 @@ EventTypeEnum::initialize()
     enumData.push_back(EventTypeEnum(EVENT_PALETTE_GET_BY_NAME,
                                      "EVENT_PALETTE_GET_BY_NAME",
                                      "Read the selected files in a spec file"));
+    
+    enumData.push_back(EventTypeEnum(EVENT_SHOW_FILE_DATA_READ_WARNING_DIALOG,
+                                     "EVENT_SHOW_FILE_DATA_READ_WARNING_DIALOG",
+                                     "Show a dialog with warnings encountered reading data files"));
     
     enumData.push_back(EventTypeEnum(EVENT_SPEC_FILE_READ_DATA_FILES,
                                      "EVENT_SPEC_FILE_READ_DATA_FILES",
@@ -315,8 +372,8 @@ EventTypeEnum::initialize()
 
     enumData.push_back(EventTypeEnum(EVENT_UPDATE_YOKED_WINDOWS,
                                      "EVENT_UPDATE_YOKED_WINDOWS",
-                                     "Update yoked windows graphics and toolbar"));
-
+                                     "Update yoked windows"));
+    
     enumData.push_back(EventTypeEnum(EVENT_UPDATE_VOLUME_EDITING_TOOLBAR,
                                      "EVENT_UPDATE_VOLUME_EDITING_TOOLBAR",
                                      "Update the volume editing toolbar"));
@@ -354,7 +411,11 @@ EventTypeEnum::findData(const Enum enumValue)
         }
     }
 
-    return NULL;
+    AString msg("Failed to find EventTypeEnum for an enumerated value.  The most likely causes is a failure "
+                "to add the enumerated value in EventTypeEnum::initialize()");
+    CaretAssertMessage(0, msg);
+    CaretLogSevere(msg);
+    return &enumData[0];  // prevent crash
 }
 
 /**

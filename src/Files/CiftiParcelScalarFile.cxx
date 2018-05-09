@@ -34,7 +34,6 @@
 #include "NodeAndVoxelColoring.h"
 #include "Palette.h"
 #include "PaletteColorMapping.h"
-#include "PaletteFile.h"
 #include "SceneClass.h"
 #include "SceneClassArray.h"
 #include "SceneClassAssistant.h"
@@ -124,7 +123,7 @@ CiftiParcelScalarFile::isLineSeriesChartingSupported() const
  *    Chart types supported by this file.
  */
 void
-CiftiParcelScalarFile::getSupportedLineSeriesChartDataTypes(std::vector<ChartDataTypeEnum::Enum>& chartDataTypesOut) const
+CiftiParcelScalarFile::getSupportedLineSeriesChartDataTypes(std::vector<ChartOneDataTypeEnum::Enum>& chartDataTypesOut) const
 {
     helpGetSupportedLineSeriesChartDataTypes(chartDataTypesOut);
 }
@@ -164,41 +163,6 @@ CiftiParcelScalarFile::loadLineSeriesChartDataForSurfaceNode(const StructureEnum
     ChartDataCartesian* chartData = helpLoadChartDataForSurfaceNode(structure,
                                                            nodeIndex);
     return chartData;
-    
-//    ChartDataCartesian* chartData = NULL;
-//    
-//    try {
-//        std::vector<float> data;
-//        if (getSeriesDataForSurfaceNode(structure,
-//                                        nodeIndex,
-//                                        data)) {
-//            const int64_t numData = static_cast<int64_t>(data.size());
-//            
-//            chartData = new ChartDataCartesian(ChartDataTypeEnum::CHART_DATA_TYPE_LINE_DATA_SERIES,
-//                                               ChartAxisUnitsEnum::CHART_AXIS_UNITS_NONE,
-//                                               ChartAxisUnitsEnum::CHART_AXIS_UNITS_NONE);
-//            for (int64_t i = 0; i < numData; i++) {
-//                float xValue = i;
-//                chartData->addPoint(xValue,
-//                                    data[i]);
-//            }
-//            
-//            const AString description = (getFileNameNoPath()
-//                                         + " node "
-//                                         + AString::number(nodeIndex));
-//            chartData->setDescription(description);
-//        }
-//    }
-//    catch (const DataFileException& dfe) {
-//        if (chartData != NULL) {
-//            delete chartData;
-//            chartData = NULL;
-//        }
-//        
-//        throw dfe;
-//    }
-//    
-//    return chartData;
 }
 
 /**
@@ -393,10 +357,10 @@ CiftiParcelScalarFile::setMatrixChartingEnabled(const int32_t tabIndex,
  *    Chart types supported by this file.
  */
 void
-CiftiParcelScalarFile::getSupportedMatrixChartDataTypes(std::vector<ChartDataTypeEnum::Enum>& chartDataTypesOut) const
+CiftiParcelScalarFile::getSupportedMatrixChartDataTypes(std::vector<ChartOneDataTypeEnum::Enum>& chartDataTypesOut) const
 {
     chartDataTypesOut.clear();
-    chartDataTypesOut.push_back(ChartDataTypeEnum::CHART_DATA_TYPE_MATRIX_LAYER);
+    chartDataTypesOut.push_back(ChartOneDataTypeEnum::CHART_DATA_TYPE_MATRIX_LAYER);
 }
 
 /**

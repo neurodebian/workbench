@@ -55,11 +55,31 @@ CommandParser::CommandParser(AutoOperationInterface* myAutoOper) :
     OperationParserInterface(myAutoOper)
 {
     m_doProvenance = true;
+    m_ciftiScale = false;
+    m_ciftiDType = NIFTI_TYPE_FLOAT32;
+    m_ciftiMax = -1.0;//these values won't get used, but don't leave them uninitialized
+    m_ciftiMin = -1.0;
 }
 
 void CommandParser::disableProvenance()
 {
     m_doProvenance = false;
+}
+
+void CommandParser::setCiftiOutputDTypeAndScale(const int16_t& dtype, const double& minVal, const double& maxVal)
+{
+    m_ciftiDType = dtype;
+    m_ciftiMin = minVal;
+    m_ciftiMax = maxVal;
+    m_ciftiScale = true;
+}
+
+void CommandParser::setCiftiOutputDTypeNoScale(const int16_t& dtype)
+{
+    m_ciftiDType = dtype;
+    m_ciftiMax = -1.0;//for sanity, don't keep any previous value around
+    m_ciftiMin = -1.0;
+    m_ciftiScale = false;
 }
 
 void CommandParser::executeOperation(ProgramParameters& parameters)
@@ -103,7 +123,7 @@ void CommandParser::parseComponent(ParameterComponent* myComponent, ProgramParam
     for (int i = 0; i < (int)myComponent->m_paramList.size(); ++i)
     {
         bool hyphenReplaced = false;
-        //TSC: until someone complains, I say non-unicode dashes don't belong on the command line, EVER
+        //TSC: until someone complains, I say non-ascii dashes don't belong on the command line, EVER
         AString rawArg = parameters.nextString(myComponent->m_paramList[i]->m_shortName);
         AString nextArg = rawArg.fixUnicodeHyphens(&hyphenReplaced);
         if (hyphenReplaced)
@@ -384,7 +404,7 @@ void CommandParser::parseComponent(ParameterComponent* myComponent, ProgramParam
     for (int i = 0; i < (int)myComponent->m_outputList.size(); ++i)
     {//parse the output options of this component
         bool hyphenReplaced = false;
-        //TSC: until someone complains, I say non-unicode dashes don't belong on the command line, EVER
+        //TSC: until someone complains, I say non-ascii dashes don't belong on the command line, EVER
         AString rawArg = parameters.nextString(myComponent->m_outputList[i]->m_shortName);
         AString nextArg = rawArg.fixUnicodeHyphens(&hyphenReplaced);
         if (hyphenReplaced)
@@ -510,7 +530,7 @@ void CommandParser::parseRemainingOptions(ParameterComponent* myComponent, Progr
     while (parameters.hasNext())
     {
         bool hyphenReplaced = false;
-        //TSC: until someone complains, I say non-unicode dashes don't belong on the command line, EVER
+        //TSC: until someone complains, I say non-ascii dashes don't belong on the command line, EVER
         AString rawArg = parameters.nextString("option");
         AString nextArg = rawArg.fixUnicodeHyphens(&hyphenReplaced);
         if (hyphenReplaced)
@@ -553,7 +573,7 @@ CommandParser::CompletionInfo CommandParser::completionComponent(ParameterCompon
         // if parameters remain after the option is completed, restart the iteration in order to be able take another option immediately
         if (parameters.hasNext())
         {
-            //TSC: until someone complains, I say non-unicode dashes don't belong on the command line, EVER
+            //TSC: until someone complains, I say non-ascii dashes don't belong on the command line, EVER
             AString rawArg = parameters.nextString(myComponent->m_paramList[i]->m_shortName);
             AString nextArg = rawArg.fixUnicodeHyphens();
             if (!nextArg.isEmpty() && nextArg[0] == '-')
@@ -665,8 +685,8 @@ CommandParser::CompletionInfo CommandParser::completionComponent(ParameterCompon
     {//parse the output options of this component
         if (parameters.hasNext())
         {
-            //TSC: until someone complains, I say non-unicode dashes don't belong on the command line, EVER
-            AString rawArg = parameters.nextString(myComponent->m_paramList[i]->m_shortName);
+            //TSC: until someone complains, I say non-ascii dashes don't belong on the command line, EVER
+            AString rawArg = parameters.nextString(myComponent->m_outputList[i]->m_shortName);
             AString nextArg = rawArg.fixUnicodeHyphens();
             if (!nextArg.isEmpty() && nextArg[0] == '-')
             {
@@ -785,7 +805,7 @@ CommandParser::CompletionInfo CommandParser::completionRemainingOptions(Paramete
     CompletionInfo prev;
     while (parameters.hasNext())
     {
-        //TSC: until someone complains, I say non-unicode dashes don't belong on the command line, EVER
+        //TSC: until someone complains, I say non-ascii dashes don't belong on the command line, EVER
         AString rawArg = parameters.nextString("option");
         AString nextArg = rawArg.fixUnicodeHyphens();
         if (!nextArg.isEmpty() && nextArg[0] == '-')
@@ -946,6 +966,12 @@ void CommandParser::makeOnDiskOutputs(const vector<OutputAssoc>& outAssociation)
                     myCiftiParam->m_parameter.grabNew(new CiftiFile());
                     myCiftiParam->m_parameter->setWritingFile(outAssociation[i].m_fileName);
                 }
+                if (m_ciftiScale)
+                {
+                    myCiftiParam->m_parameter->setWritingDataTypeAndScaling(m_ciftiDType, m_ciftiMin, m_ciftiMax);
+                } else {
+                    myCiftiParam->m_parameter->setWritingDataTypeNoScaling(m_ciftiDType);
+                }
                 break;
             }
             default:
@@ -974,6 +1000,7 @@ void CommandParser::writeOutput(const vector<OutputAssoc>& outAssociation)
             {
                 CiftiFile* myFile = ((CiftiParameter*)myParam)->m_parameter;//we can't set metadata here because the XML is already on disk, see provenanceForOnDiskOutputs
                 myFile->writeFile(outAssociation[i].m_fileName);//this is basically a noop unless outputs and inputs collide, we opened ON_DISK and set cache file to this name back in makeOnDiskOutputs
+                myFile->close();//if there is a problem flushing the file, let it throw here instead of doing a severe log message
                 break;
             }
             case OperationParametersEnum::DOUBLE:

@@ -21,12 +21,13 @@
  */
 /*LICENSE_END*/
 
-
+#include "ChartTwoOverlay.h"
 #include "Event.h"
 
 namespace caret {
 
     class CaretMappableDataFile;
+    class ChartTwoOverlay;
     class Overlay;
     
     /// Event for showing edit map scalar color mapping editor
@@ -42,7 +43,14 @@ namespace caret {
                                                 const int32_t browserWindowIndex,
                                                 Overlay* overlay,
                                                 CaretMappableDataFile* mapFile,
-                                                const int32_t mapIndex);
+                                                const int32_t selectedIndex);
+        
+        EventOverlaySettingsEditorDialogRequest(const Mode mode,
+                                                const int32_t browserWindowIndex,
+                                                ChartTwoOverlay* chartOverlay,
+                                                CaretMappableDataFile* mapFile,
+                                                ChartTwoOverlay::SelectedIndexType selectedIndexType,
+                                                const int32_t selectedIndex);
         
         virtual ~EventOverlaySettingsEditorDialogRequest();
         
@@ -61,10 +69,10 @@ namespace caret {
          */
         CaretMappableDataFile* getCaretMappableDataFile() const { return m_mapFile; }
         
-        /** 
-         * @return Index of map in the map file 
-         */
-        int32_t getMapIndex() const { return m_mapIndex; }
+//        /** 
+//         * @return Index of selection in the map file
+//         */
+//        int32_t getSelectedIndex() const { return m_selectedIndex; }
         
         /**
          * @return The overlay for the editor.
@@ -75,6 +83,21 @@ namespace caret {
          * @return The overlay for the editor.
          */
         const Overlay* getOverlay() const { return m_overlay; }
+        
+        /**
+         * @return The chart overlay for the editor.
+         */
+        ChartTwoOverlay* getChartTwoOverlay() { return m_chartOverlay; }
+        
+        /**
+         * @return The overlay for the editor.
+         */
+        const ChartTwoOverlay* getChartTwoOverlay() const { return m_chartOverlay; }
+        
+//        /**
+//         * @return The type of index for chart file
+//         */
+//        ChartTwoOverlay::SelectedIndexType getChartSelectedIndexType() const { return m_chartSelectedIndexType; }
         
     private:
         EventOverlaySettingsEditorDialogRequest(const EventOverlaySettingsEditorDialogRequest&);
@@ -90,11 +113,17 @@ namespace caret {
         /** Overlay for editor. */
         Overlay* m_overlay;
 
+        /** Chart Overlay for editor. */
+        ChartTwoOverlay* m_chartOverlay;
+        
         /** Map file containing map whose color palette is edited */
         CaretMappableDataFile* m_mapFile;
         
-        /** Index of map in the map file */
-        int32_t m_mapIndex;
+        /** Selected index type for charts */
+        ChartTwoOverlay::SelectedIndexType m_chartSelectedIndexType;
+        
+        /** Selected index in the map file */
+        int32_t m_selectedIndex;
     };
 
 } // namespace

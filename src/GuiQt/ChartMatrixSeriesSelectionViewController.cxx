@@ -44,7 +44,6 @@
 #include "CaretDataFileSelectionModel.h"
 #include "CaretLogger.h"
 #include "CaretMappableDataFile.h"
-#include "CaretMappableDataFileAndMapSelectionModel.h"
 #include "CaretMappableDataFileAndMapSelectorObject.h"
 #include "ChartableMatrixInterface.h"
 #include "ChartMatrixDisplayProperties.h"
@@ -242,13 +241,13 @@ ChartMatrixSeriesSelectionViewController::updateSelectionViewController()
     }
     const int32_t browserTabIndex = browserTabContent->getTabNumber();
 
-    ChartDataTypeEnum::Enum chartDataType = ChartDataTypeEnum::CHART_DATA_TYPE_INVALID;
+    ChartOneDataTypeEnum::Enum chartDataType = ChartOneDataTypeEnum::CHART_DATA_TYPE_INVALID;
     ModelChart* modelChart = brain->getChartModel();
     if (modelChart != NULL) {
-        chartDataType = modelChart->getSelectedChartDataType(browserTabIndex);
+        chartDataType = modelChart->getSelectedChartOneDataType(browserTabIndex);
     }
     
-    if (chartDataType == ChartDataTypeEnum::CHART_DATA_TYPE_MATRIX_SERIES) {
+    if (chartDataType == ChartOneDataTypeEnum::CHART_DATA_TYPE_MATRIX_SERIES) {
         CaretMappableDataFile*          caretMappableDataFile        = NULL;
         ChartableMatrixInterface*       chartableMatrixInterface     = NULL;
         ChartMatrixDisplayProperties*   chartMatrixDisplayProperties = NULL;
@@ -353,10 +352,10 @@ ChartMatrixSeriesSelectionViewController::getChartMatrixAndProperties(CaretMappa
     
     ModelChart* modelChart = brain->getChartModel();
     if (modelChart != NULL) {
-        switch (modelChart->getSelectedChartDataType(browserTabIndexOut)) {
-            case ChartDataTypeEnum::CHART_DATA_TYPE_INVALID:
+        switch (modelChart->getSelectedChartOneDataType(browserTabIndexOut)) {
+            case ChartOneDataTypeEnum::CHART_DATA_TYPE_INVALID:
                 break;
-            case ChartDataTypeEnum::CHART_DATA_TYPE_MATRIX_LAYER:
+            case ChartOneDataTypeEnum::CHART_DATA_TYPE_MATRIX_LAYER:
             {
                 CaretDataFileSelectionModel* parcelFileSelectionModel = modelChart->getChartableMatrixParcelFileSelectionModel(browserTabIndexOut);
                 //m_matrixParcelFileSelectionComboBox->updateComboBox(parcelFileSelectionModel);
@@ -373,7 +372,7 @@ ChartMatrixSeriesSelectionViewController::getChartMatrixAndProperties(CaretMappa
                 }
             }
                 break;
-            case ChartDataTypeEnum::CHART_DATA_TYPE_MATRIX_SERIES:
+            case ChartOneDataTypeEnum::CHART_DATA_TYPE_MATRIX_SERIES:
             {
                 CaretDataFileSelectionModel* seriesFileSelectionModel = modelChart->getChartableMatrixSeriesFileSelectionModel(browserTabIndexOut);
                 CaretDataFile* caretSeriesFile = seriesFileSelectionModel->getSelectedFile();
@@ -390,11 +389,11 @@ ChartMatrixSeriesSelectionViewController::getChartMatrixAndProperties(CaretMappa
                 }
             }
                 break;
-            case ChartDataTypeEnum::CHART_DATA_TYPE_LINE_DATA_SERIES:
+            case ChartOneDataTypeEnum::CHART_DATA_TYPE_LINE_DATA_SERIES:
                 break;
-            case ChartDataTypeEnum::CHART_DATA_TYPE_LINE_FREQUENCY_SERIES:
+            case ChartOneDataTypeEnum::CHART_DATA_TYPE_LINE_FREQUENCY_SERIES:
                 break;
-            case ChartDataTypeEnum::CHART_DATA_TYPE_LINE_TIME_SERIES:
+            case ChartOneDataTypeEnum::CHART_DATA_TYPE_LINE_TIME_SERIES:
                 break;
         }
     }

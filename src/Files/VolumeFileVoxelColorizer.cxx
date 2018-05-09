@@ -87,19 +87,9 @@ VolumeFileVoxelColorizer::~VolumeFileVoxelColorizer()
  *
  * @param mapIndex
  *     Index of map.
- * @param palette  
- *     Palette used for scalar color assignment.  May be NULL for data
- *     not mapped with a palette.
- * @param thresholdVolume
- *     Volume that contains thresholding (if NULL indicates no thresholding).
- * @param thresholdVolumeMapIndex
- *     Index of map in thresholding volume.
  */
 void
-VolumeFileVoxelColorizer::assignVoxelColorsForMap(const int32_t mapIndex,
-                                                  const Palette* palette,
-                                                  const VolumeFile* thresholdVolume,
-                                                  const int32_t /*thresholdVolumeMapIndex*/)
+VolumeFileVoxelColorizer::assignVoxelColorsForMap(const int32_t mapIndex)
 {
     CaretAssertVectorIndex(m_mapRGBA, mapIndex);
     
@@ -111,10 +101,38 @@ VolumeFileVoxelColorizer::assignVoxelColorsForMap(const int32_t mapIndex,
      */
     const float* mapDataPointer = m_volumeFile->getFrame(mapIndex);
     
+    VolumeFile* thresholdVolume = NULL;
+    int32_t thresholdVolumeMapIndex   = -1;
+    switch (m_volumeFile->getMapPaletteColorMapping(mapIndex)->getThresholdType()) {
+        case PaletteThresholdTypeEnum::THRESHOLD_TYPE_FILE:
+        {
+            CaretMappableDataFileAndMapSelectionModel* threshSel = m_volumeFile->getMapThresholdFileSelectionModel(mapIndex);
+            CaretMappableDataFile* mapFile = threshSel->getSelectedFile();
+            if (mapFile != NULL) {
+                thresholdVolume = dynamic_cast<VolumeFile*>(mapFile);
+                CaretAssert(thresholdVolume);
+                thresholdVolumeMapIndex = threshSel->getSelectedMapIndex();
+            }
+        }
+            break;
+        case PaletteThresholdTypeEnum::THRESHOLD_TYPE_MAPPED:
+            break;
+        case PaletteThresholdTypeEnum::THRESHOLD_TYPE_MAPPED_AVERAGE_AREA:
+            break;
+        case PaletteThresholdTypeEnum::THRESHOLD_TYPE_NORMAL:
+            /*
+             * Thresholding with 'self'
+             */
+            thresholdVolume = m_volumeFile;
+            thresholdVolumeMapIndex = mapIndex;
+            break;
+        case PaletteThresholdTypeEnum::THRESHOLD_TYPE_OFF:
+            break;
+    }
+    
     /*
      * Get access to threshold data
      */
-    //float* thresholdDataPointer = NULL;
     bool ignoreThresholding = true;
     if (thresholdVolume != NULL) {
         int64_t threshI, threshJ, threshK, threshMapCount, threshNumberOfComponents;
@@ -131,12 +149,15 @@ VolumeFileVoxelColorizer::assignVoxelColorsForMap(const int32_t mapIndex,
                            + ") dimensions do not match "
                            + m_volumeFile->getFileNameNoPath());
         }
+        else if ((thresholdVolumeMapIndex < 0)
+                 || (thresholdVolumeMapIndex >= thresholdVolume->getNumberOfMaps())) {
+            CaretLogSevere("Threshold volume ("
+                           + thresholdVolume->getFileNameNoPath()
+                           + ") map index="
+                           + AString::number(thresholdVolumeMapIndex)
+                           + " is invalid");
+        }
         else {
-            /*
-             * Can use same voxel counter per map since volumes are
-             * identical dimensions;
-             */
-            //thresholdDataPointer = thresholdVolume->m_data + m_voxelCountPerMap;//TSC: this is unused, and can easily be an invalid pointer - commenting out for unused warning
             ignoreThresholding = false;
         }
     }
@@ -146,9 +167,6 @@ VolumeFileVoxelColorizer::assignVoxelColorsForMap(const int32_t mapIndex,
         case SubvolumeAttributes::ANATOMY:
         case SubvolumeAttributes::FUNCTIONAL:
         {
-            CaretAssert(palette);
-
-            
             FastStatistics* statistics = NULL;
             switch (m_volumeFile->getPaletteNormalizationMode()) {
                 case PaletteNormalizationModeEnum::NORMALIZATION_ALL_MAP_DATA:
@@ -160,12 +178,18 @@ VolumeFileVoxelColorizer::assignVoxelColorsForMap(const int32_t mapIndex,
             }
             CaretAssert(statistics);
             
+            const float* thresholdDataPointer = (ignoreThresholding
+                                                 ? mapDataPointer
+                                                 : thresholdVolume->getFrame(thresholdVolumeMapIndex));
+            const PaletteColorMapping* thresholdPaletteColorMapping = (ignoreThresholding
+                                                                       ? m_volumeFile->getMapPaletteColorMapping(mapIndex)
+                                                                       : thresholdVolume->getMapPaletteColorMapping(thresholdVolumeMapIndex));
 
-            NodeAndVoxelColoring::colorScalarsWithPalette(statistics, //m_volumeFile->getMapFastStatistics(mapIndex),
+            NodeAndVoxelColoring::colorScalarsWithPalette(statistics,
                                                           m_volumeFile->getMapPaletteColorMapping(mapIndex),
-                                                          palette,
                                                           mapDataPointer,
-                                                          mapDataPointer,
+                                                          thresholdPaletteColorMapping,
+                                                          thresholdDataPointer,
                                                           m_voxelCountPerMap,
                                                           m_mapRGBA[mapIndex],
                                                           ignoreThresholding);
@@ -486,7 +510,7 @@ VolumeFileVoxelColorizer::getVoxelColorsForSubSliceInMap(const int32_t mapIndex,
                                                          const int64_t sliceIndex,
                                                          const int64_t firstCornerVoxelIndex[3],
                                                          const int64_t lastCornerVoxelIndex[3],
-                                                         const int64_t voxelCountIJK[3],
+                                                         const int64_t* CaretParameterUsedInDebugCompileOnly(voxelCountIJK),
                                                          const DisplayGroupEnum::Enum displayGroup,
                                                          const int32_t tabIndex,
                                                          uint8_t* rgbaOut) const
@@ -544,8 +568,8 @@ VolumeFileVoxelColorizer::getVoxelColorsForSubSliceInMap(const int32_t mapIndex,
             CaretAssert(false);
     }
     
-    const int64_t voxelCount = (voxelCountIJK[0] * voxelCountIJK[1] * voxelCountIJK[2]);
-    const int64_t rgbaCount = voxelCount * 4;
+    CaretUsedInDebugCompileOnly(const int64_t voxelCount = (voxelCountIJK[0] * voxelCountIJK[1] * voxelCountIJK[2]));
+    CaretUsedInDebugCompileOnly(const int64_t rgbaCount = voxelCount * 4);
     
     /*
      * Pointer to maps RGBA values
@@ -561,7 +585,7 @@ VolumeFileVoxelColorizer::getVoxelColorsForSubSliceInMap(const int32_t mapIndex,
     
     int64_t validVoxelCount = 0;
     
-    int64_t innerCount = std::abs(lastCornerVoxelIndex[innerLoop] - firstCornerVoxelIndex[innerLoop]) + 1;//to check validity of index
+    CaretUsedInDebugCompileOnly(int64_t innerCount = std::abs(lastCornerVoxelIndex[innerLoop] - firstCornerVoxelIndex[innerLoop]) + 1);//to check validity of index
     
     int64_t rgbaOutIndex = 0;
     for (iterijk[outerLoop] = firstCornerVoxelIndex[outerLoop];

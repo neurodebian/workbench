@@ -24,10 +24,12 @@
 #include "BrainOpenGLFixedPipeline.h"
 #include "CaretObject.h"
 #include "DisplayGroupEnum.h"
+#include "ModelTypeEnum.h"
+#include "VolumeSliceInterpolationEdgeEffectsMaskingEnum.h"
 #include "VolumeSliceProjectionTypeEnum.h"
 #include "VolumeSliceDrawingTypeEnum.h"
+#include "VolumeSliceViewAllPlanesLayoutEnum.h"
 #include "VolumeSliceViewPlaneEnum.h"
-
 
 namespace caret {
 
@@ -37,7 +39,6 @@ namespace caret {
     class Matrix4x4;
     class ModelVolume;
     class ModelWholeBrain;
-    class PaletteFile;
     class Plane;
     class VolumeMappableInterface;
     
@@ -53,6 +54,7 @@ namespace caret {
                   std::vector<BrainOpenGLFixedPipeline::VolumeDrawInfo>& volumeDrawInfo,
                   const VolumeSliceDrawingTypeEnum::Enum sliceDrawingType,
                   const VolumeSliceProjectionTypeEnum::Enum sliceProjectionType,
+                  const VolumeSliceInterpolationEdgeEffectsMaskingEnum::Enum obliqueSliceMaskingType,
                   const int32_t viewport[4]);
 
         // ADD_NEW_METHODS_HERE
@@ -72,7 +74,8 @@ namespace caret {
              *   Volume that contains the data values.
              */
             VolumeSlice(VolumeMappableInterface* volumeMappableInterface,
-                        const int32_t mapIndex);
+                        const int32_t mapIndex,
+                        const float opacity);
             
             /**
              * Add a value and return its index.
@@ -129,6 +132,11 @@ namespace caret {
              * Map index
              */
             int32_t m_mapIndex;
+            
+            /**
+             * Opacity
+             */
+            float m_opacity;
             
             /**
              * The voxel values for single scalar or red if RGBA volume
@@ -197,6 +205,7 @@ namespace caret {
         void drawVolumeSliceViewPlane(const VolumeSliceDrawingTypeEnum::Enum sliceDrawingType,
                                       const VolumeSliceProjectionTypeEnum::Enum sliceProjectionType,
                                       const VolumeSliceViewPlaneEnum::Enum sliceViewPlane,
+                                      const VolumeSliceViewAllPlanesLayoutEnum::Enum allPlanesLayout,
                                       const int32_t viewport[4]);
         
         void drawVolumeSliceViewType(const VolumeSliceDrawingTypeEnum::Enum sliceDrawingType,
@@ -252,7 +261,7 @@ namespace caret {
                         const Plane& slicePlane,
                         const float sliceCoordinates[3]);
         
-        void drawSurfaceOutline(const Plane& plane);
+//        void drawSurfaceOutline(const Plane& plane);
         
         void drawVolumeSliceFoci(const Plane& plane);
         
@@ -338,6 +347,8 @@ namespace caret {
         
         ModelWholeBrain* m_modelWholeBrain;
         
+        ModelTypeEnum::Enum m_modelType;
+        
         VolumeMappableInterface* m_underlayVolume;
         
         Brain* m_brain;
@@ -350,8 +361,6 @@ namespace caret {
         
         BrowserTabContent* m_browserTabContent;
         
-        PaletteFile* m_paletteFile;
-        
         DisplayGroupEnum::Enum m_displayGroup;
         
         int32_t m_tabIndex;
@@ -361,6 +370,8 @@ namespace caret {
         double m_viewingMatrix[16];
         
         double m_orthographicBounds[6];
+        
+        VolumeSliceInterpolationEdgeEffectsMaskingEnum::Enum m_obliqueSliceMaskingType = VolumeSliceInterpolationEdgeEffectsMaskingEnum::OFF;
         
         std::vector<int32_t> m_identificationIndices;
         

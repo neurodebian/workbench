@@ -108,10 +108,10 @@ namespace caret {
         
         virtual const GiftiLabelTable* getMapLabelTable(const int32_t mapIndex) const;
         
-        virtual void getPaletteNormalizationModesSupported(std::vector<PaletteNormalizationModeEnum::Enum>& modesSupportedOut);
+        virtual void getPaletteNormalizationModesSupported(std::vector<PaletteNormalizationModeEnum::Enum>& modesSupportedOut) const;
         
-        virtual void updateScalarColoringForMap(const int32_t mapIndex,
-                                                const PaletteFile* paletteFile);
+        virtual void updateScalarColoringForMap(const int32_t mapIndex) override;
+        
         virtual void readFile(const AString& filename);
         
         virtual void writeFile(const AString& filename);
@@ -170,6 +170,15 @@ namespace caret {
                                                                           AString& errorMessageOut) const;
         
         void addToDataFileContentInformation(DataFileContentInformation& dataFileInformation);
+        
+        bool hasCiftiXML() const;
+        
+        const CiftiXML getCiftiXML() const;
+
+        virtual void getDataForSelector(const MapFileDataSelector& mapFileDataSelector,
+                                        std::vector<float>& dataOut) const override;
+
+        virtual BrainordinateMappingMatch getBrainordinateMappingMatch(const CaretMappableDataFile* mapFile) const override;
         
         // ADD_NEW_METHODS_HERE
         

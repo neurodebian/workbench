@@ -42,6 +42,8 @@ public:
         EVENT_ALERT_USER,
         /** Add annotation to or remove from a file */
         EVENT_ANNOTATION_ADD_TO_REMOVE_FROM_FILE,
+        /** Get annnotation chart labels */
+        EVENT_ANNOTATION_CHART_LABEL_GET,
         /** Get color bars from tab(s) */
         EVENT_ANNOTATION_COLOR_BAR_GET,
         /** Annotation create new of a particular type */
@@ -70,8 +72,10 @@ public:
         EVENT_BROWSER_TAB_GET_ALL_VIEWED,
         /** Create a new browser tab */
         EVENT_BROWSER_TAB_NEW,
+        /** Event for browser window content */
+        EVENT_BROWSER_WINDOW_CONTENT,
         /** Get the content of a browser window */
-        EVENT_BROWSER_WINDOW_CONTENT_GET,
+        EVENT_BROWSER_WINDOW_DRAWING_CONTENT_GET,
         /** Create tabs after loading a file */
         EVENT_BROWSER_WINDOW_CREATE_TABS,
         /** Issued after a browser window's graphicshave been redrawn */
@@ -80,12 +84,26 @@ public:
         EVENT_BROWSER_WINDOW_MENUS_UPDATE,
         /** Create a new browser window */
         EVENT_BROWSER_WINDOW_NEW,
+        /** Browser tile tab operations */
+        EVENT_BROWSER_WINDOW_TILE_TAB_OPERATION,
+        /** Get caret data files */
+        EVENT_CARET_DATA_FILES_GET,
         /** Get CaretMappable data files */
         EVENT_CARET_MAPPABLE_DATA_FILES_GET,
         /** Get CaretMappableDataFiles and their maps viewed as overlays */
         EVENT_CARET_MAPPABLE_DATA_FILE_MAPS_VIEWED_IN_OVERLAYS,
+        /** Event to get the Caret Preferences */
+        EVENT_CARET_PREFERENCES_GET,
         /** Event for yoking the loading of matrix chart rows/columns */
         EVENT_CHART_MATRIX_YOKING_VALIDATION,
+        /** Validate that chart overlay is valid (it exists). */
+        EVENT_CHART_OVERLAY_VALIDATE,
+        /** GUI notification of the change in chart two atttributes */
+        EVENT_CHART_TWO_ATTRIBUTES_CHANGED,
+        /** Get the range of data for a chart two axis */
+        EVENT_CHART_TWO_AXIS_GET_DATA_RANGE,
+        /** Load chart two line series data */
+        EVENT_CHART_TWO_LOAD_LINE_SERIES_DATA,
         /** Add a data file into the Brain*/
         EVENT_DATA_FILE_ADD,
         /** Delete a data file from the brain */
@@ -104,6 +122,14 @@ public:
         EVENT_GET_TEXT_RENDERER_FOR_WINDOW,
         /** Get the viewport size for model, tab, window */
         EVENT_GET_VIEWPORT_SIZE,
+        /** Create a buffer object for an OpenGL context */
+        EVENT_GRAPHICS_OPENGL_CREATE_BUFFER_OBJECT,
+        /** Create a texture name for an OpenGL context */
+        EVENT_GRAPHICS_OPENGL_CREATE_TEXTURE_NAME,
+        /** Delete a buffer object for an OpenGL context */
+        EVENT_GRAPHICS_OPENGL_DELETE_BUFFER_OBJECT,
+        /** Delete a texture name for an OpenGL context */
+        EVENT_GRAPHICS_OPENGL_DELETE_TEXTURE_NAME,
         /** Update all graphics windows */
         EVENT_GRAPHICS_UPDATE_ALL_WINDOWS,
         /** Update graphics in a window */
@@ -130,12 +156,14 @@ public:
         EVENT_MODEL_DELETE,
         /** model - get all*/
         EVENT_MODEL_GET_ALL,
+        /** model - get all displayed */
+        EVENT_MODEL_GET_ALL_DISPLAYED,
         /** model surface - get */
         EVENT_MODEL_SURFACE_GET,
         /** Get the color for a node's identification symbol from a chart that contains the node */
         EVENT_NODE_IDENTIFICATION_COLORS_GET_FROM_CHARTS,
-        /** OpenGL Texture related event */
-        EVENT_OPENGL_TEXTURE,
+        /** Get the transformation for converting object coordinates to window coordinates */
+        EVENT_OPENGL_OBJECT_TO_WINDOW_TRANSFORM,
         /** open file request from the operating system (Mac only) for now */
         EVENT_OPERATING_SYSTEM_REQUEST_OPEN_DATA_FILE,
         /** request display of overlay settings editor */
@@ -146,6 +174,8 @@ public:
         EVENT_PALETTE_COLOR_MAPPING_EDITOR_SHOW,
         /** Get a palette by name from a palette file */
         EVENT_PALETTE_GET_BY_NAME,
+        /** Show a dialog containing warnings encountered when reading data files */
+        EVENT_SHOW_FILE_DATA_READ_WARNING_DIALOG,
         /** Read the selected files in a spec file */
         EVENT_SPEC_FILE_READ_DATA_FILES,
         /** Invalidate surface coloring */
@@ -162,10 +192,10 @@ public:
         EVENT_PROGRESS_UPDATE,
         /** Update the information windows */
         EVENT_UPDATE_INFORMATION_WINDOWS,
-        /** Event to update yoked windows (graphics and toolbar) */
-        EVENT_UPDATE_YOKED_WINDOWS,
         /** Update the volume editing toolbar */
         EVENT_UPDATE_VOLUME_EDITING_TOOLBAR,
+        /** Update yoked windows */
+        EVENT_UPDATE_YOKED_WINDOWS,
         /* THIS MUST ALWAYS BE LAST - NOT an event type but is number of event types */
         EVENT_COUNT
     };

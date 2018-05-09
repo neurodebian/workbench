@@ -40,6 +40,9 @@
 #include "CaretPreferences.h"
 #include "ChartableMatrixInterface.h"
 #include "ChartModelDataSeries.h"
+#include "ChartTwoMatrixDisplayProperties.h"
+#include "ChartTwoOverlay.h"
+#include "ChartTwoOverlaySet.h"
 #include "CiftiBrainordinateDataSeriesFile.h"
 #include "CiftiConnectivityMatrixDenseDynamicFile.h"
 #include "ClippingPlaneGroup.h"
@@ -60,6 +63,7 @@
 #include "MathFunctions.h"
 #include "Matrix4x4.h"
 #include "ModelChart.h"
+#include "ModelChartTwo.h"
 #include "ModelSurface.h"
 #include "ModelSurfaceMontage.h"
 #include "ModelSurfaceSelector.h"
@@ -111,11 +115,20 @@ BrowserTabContent::BrowserTabContent(const int32_t tabNumber)
     m_wholeBrainModel = NULL;
     m_surfaceMontageModel = NULL;
     m_chartModel = NULL;
+    m_chartTwoModel = NULL;
     m_guiName = "";
     m_userName = "";
     m_volumeSurfaceOutlineSetModel = new VolumeSurfaceOutlineSetModel();
-    m_yokingGroup = YokingGroupEnum::YOKING_GROUP_OFF;
+    m_brainModelYokingGroup = YokingGroupEnum::YOKING_GROUP_OFF;
+    m_chartModelYokingGroup = YokingGroupEnum::YOKING_GROUP_OFF;
     m_identificationUpdatesVolumeSlices = prefs->isVolumeIdentificationDefaultedOn();
+    
+    m_displayVolumeAxesCrosshairs = prefs->isVolumeAxesCrosshairsDisplayed();
+    m_displayVolumeAxesCrosshairLabels = prefs->isVolumeAxesLabelsDisplayed();
+    m_displayVolumeMontageAxesCoordinates = prefs->isVolumeMontageAxesCoordinatesDisplayed();
+    m_volumeMontageCoordinatePrecision = prefs->getVolumeMontageCoordinatePrecision();
+
+    m_lightingEnabled = true;
     
     m_aspectRatio = 1.0;
     m_aspectRatioLocked = false;
@@ -124,6 +137,8 @@ BrowserTabContent::BrowserTabContent(const int32_t tabNumber)
     m_flatSurfaceViewingTransformation = new ViewingTransformations();
     m_viewingTransformation            = new ViewingTransformations();
     m_volumeSliceViewingTransformation = new ViewingTransformationsVolume();
+    m_chartTwoMatrixViewingTranformation  = new ViewingTransformations();
+    m_chartTwoMatrixDisplayProperties = new ChartTwoMatrixDisplayProperties();
     
     m_wholeBrainSurfaceSettings        = new WholeBrainSurfaceSettings();
     
@@ -168,6 +183,14 @@ BrowserTabContent::BrowserTabContent(const int32_t tabNumber)
                                "ViewingTransformations",
                                m_volumeSliceViewingTransformation);
     
+    m_sceneClassAssistant->add("m_chartTwoMatrixViewingTranformation",
+                               "ViewingTransformations",
+                               m_chartTwoMatrixViewingTranformation);
+    
+    m_sceneClassAssistant->add("m_chartTwoMatrixDisplayProperties",
+                               "ChartTwoMatrixDisplayProperties",
+                               m_chartTwoMatrixDisplayProperties);
+    
     m_sceneClassAssistant->add("m_volumeSliceSettings",
                                "VolumeSliceSettings",
                                m_volumeSliceSettings);
@@ -179,13 +202,26 @@ BrowserTabContent::BrowserTabContent(const int32_t tabNumber)
     m_sceneClassAssistant->add("m_identificationUpdatesVolumeSlices",
                                &m_identificationUpdatesVolumeSlices);
     
+    m_sceneClassAssistant->add("m_displayVolumeAxesCrosshairs",
+                               &m_displayVolumeAxesCrosshairs);
+    m_sceneClassAssistant->add("m_displayVolumeAxesCrosshairLabels",
+                               &m_displayVolumeAxesCrosshairLabels);
+    m_sceneClassAssistant->add("m_displayVolumeMontageAxesCoordinates",
+                               &m_displayVolumeMontageAxesCoordinates);
+    m_sceneClassAssistant->add("m_volumeMontageCoordinatePrecision",
+                               &m_volumeMontageCoordinatePrecision);
+
+    m_sceneClassAssistant->add("m_lightingEnabled",
+                               &m_lightingEnabled);
     m_sceneClassAssistant->add("m_aspectRatio",
                                &m_aspectRatio);
     m_sceneClassAssistant->add("m_aspectRatioLocked",
                                &m_aspectRatioLocked);
     
-    m_sceneClassAssistant->add<YokingGroupEnum, YokingGroupEnum::Enum>("m_yokingGroup",
-                                                                   &m_yokingGroup);
+    m_sceneClassAssistant->add<YokingGroupEnum, YokingGroupEnum::Enum>("m_brainModelYokingGroup",
+                                                                       &m_brainModelYokingGroup);
+    m_sceneClassAssistant->add<YokingGroupEnum, YokingGroupEnum::Enum>("m_chartModelYokingGroup",
+                                                                       &m_chartModelYokingGroup);
     EventManager::get()->addEventListener(this,
                                           EventTypeEnum::EVENT_ANNOTATION_COLOR_BAR_GET);
     EventManager::get()->addEventListener(this,
@@ -200,7 +236,8 @@ BrowserTabContent::BrowserTabContent(const int32_t tabNumber)
      * Need to be done from here
      */
     if (prefs->isYokingDefaultedOn()) {
-        setYokingGroup(YokingGroupEnum::YOKING_GROUP_A);
+        setBrainModelYokingGroup(YokingGroupEnum::YOKING_GROUP_A);
+        setChartModelYokingGroup(YokingGroupEnum::YOKING_GROUP_OFF);
     }
 }
 
@@ -218,6 +255,8 @@ BrowserTabContent::~BrowserTabContent()
     delete m_cerebellumViewingTransformation;
     delete m_viewingTransformation;
     delete m_volumeSliceViewingTransformation;
+    delete m_chartTwoMatrixViewingTranformation;
+    delete m_chartTwoMatrixDisplayProperties;
     delete m_obliqueVolumeRotationMatrix;
     
     delete m_surfaceModelSelector;
@@ -264,18 +303,30 @@ BrowserTabContent::cloneBrowserTabContent(BrowserTabContent* tabToClone)
     
     *m_clippingPlaneGroup = *tabToClone->m_clippingPlaneGroup;
     
-    m_yokingGroup = tabToClone->m_yokingGroup;
+    m_brainModelYokingGroup = tabToClone->m_brainModelYokingGroup;
+    m_chartModelYokingGroup = tabToClone->m_chartModelYokingGroup;
+    m_aspectRatio = tabToClone->m_aspectRatio;
+    m_aspectRatioLocked = tabToClone->m_aspectRatioLocked;
     
     *m_cerebellumViewingTransformation = *tabToClone->m_cerebellumViewingTransformation;
     *m_flatSurfaceViewingTransformation = *tabToClone->m_flatSurfaceViewingTransformation;
     *m_viewingTransformation = *tabToClone->m_viewingTransformation;
     *m_volumeSliceViewingTransformation = *tabToClone->m_volumeSliceViewingTransformation;
+    *m_chartTwoMatrixViewingTranformation = *tabToClone->m_chartTwoMatrixViewingTranformation;
+    *m_chartTwoMatrixDisplayProperties = *tabToClone->m_chartTwoMatrixDisplayProperties;
     *m_volumeSliceSettings = *tabToClone->m_volumeSliceSettings;
     *m_wholeBrainSurfaceSettings = *tabToClone->m_wholeBrainSurfaceSettings;
     
     *m_obliqueVolumeRotationMatrix = *tabToClone->m_obliqueVolumeRotationMatrix;
     
     m_identificationUpdatesVolumeSlices = tabToClone->m_identificationUpdatesVolumeSlices;
+    
+    m_displayVolumeAxesCrosshairs = tabToClone->m_displayVolumeAxesCrosshairs;
+    m_displayVolumeAxesCrosshairLabels = tabToClone->m_displayVolumeAxesCrosshairLabels;
+    m_displayVolumeMontageAxesCoordinates = tabToClone->m_displayVolumeMontageAxesCoordinates;
+    m_volumeMontageCoordinatePrecision = tabToClone->m_volumeMontageCoordinatePrecision;
+    
+    m_lightingEnabled = tabToClone->m_lightingEnabled;
 
     Model* model = getModelForDisplay();
     
@@ -405,14 +456,17 @@ BrowserTabContent::getDescriptionOfContent(PlainTextStringBuilder& descriptionOu
     const Model* model = getModelForDisplay();
     
     if (model != NULL) {
-        bool chartFlag      = false;
-        bool surfaceFlag    = false;
+        bool chartOneFlag = false;
+        bool chartTwoFlag = false;
+        bool surfaceFlag  = false;
         bool surfaceMontageFlag = false;
         bool wholeBrainFlag = false;
         bool volumeFlag     = false;
         switch (model->getModelType()) {
             case ModelTypeEnum::MODEL_TYPE_CHART:
-                chartFlag = true;
+                chartOneFlag = true;
+            case ModelTypeEnum::MODEL_TYPE_CHART_TWO:
+                chartTwoFlag = true;
                 break;
             case ModelTypeEnum::MODEL_TYPE_INVALID:
                 break;
@@ -430,7 +484,7 @@ BrowserTabContent::getDescriptionOfContent(PlainTextStringBuilder& descriptionOu
                 break;
         }
         
-        if (chartFlag) {
+        if (chartOneFlag) {
             model->getDescriptionOfContent(tabIndex,
                                            descriptionOut);
         }
@@ -482,7 +536,13 @@ BrowserTabContent::getDescriptionOfContent(PlainTextStringBuilder& descriptionOu
             descriptionOut.popIndentation();
         }
         
-        if ( ! chartFlag) {
+        if (chartOneFlag) {
+            /* nothing */
+        }
+        else if (chartTwoFlag) {
+            getChartTwoOverlaySet()->getDescriptionOfContent(descriptionOut);
+        }
+        else {
             getOverlaySet()->getDescriptionOfContent(descriptionOut);
         }
     }
@@ -543,6 +603,9 @@ BrowserTabContent::getModelForDisplay()
         case ModelTypeEnum::MODEL_TYPE_CHART:
             mdc = m_chartModel;
             break;
+        case ModelTypeEnum::MODEL_TYPE_CHART_TWO:
+            mdc = m_chartTwoModel;
+            break;
     }
     
     return mdc;
@@ -577,6 +640,9 @@ BrowserTabContent::getModelForDisplay() const
         case ModelTypeEnum::MODEL_TYPE_CHART:
             mdc = m_chartModel;
             break;
+        case ModelTypeEnum::MODEL_TYPE_CHART_TWO:
+            mdc = m_chartTwoModel;
+            break;
     }
     
     return mdc;
@@ -590,7 +656,7 @@ BrowserTabContent::getModelForDisplay() const
  *          chart.
  */
 ModelChart*
-BrowserTabContent::getDisplayedChartModel()
+BrowserTabContent::getDisplayedChartOneModel()
 {
     ModelChart* mc = dynamic_cast<ModelChart*>(getModelForDisplay());
     return mc;
@@ -604,9 +670,37 @@ BrowserTabContent::getDisplayedChartModel()
  *          chart.
  */
 const ModelChart*
-BrowserTabContent::getDisplayedChartModel() const
+BrowserTabContent::getDisplayedChartOneModel() const
 {
     const ModelChart* mc = dynamic_cast<const ModelChart*>(getModelForDisplay());
+    return mc;
+}
+
+/**
+ * Get the displayed chart model two.
+ *
+ * @return  Pointer to displayed chart model or
+ *          NULL if the displayed model is NOT a
+ *          chart.
+ */
+ModelChartTwo*
+BrowserTabContent::getDisplayedChartTwoModel()
+{
+    ModelChartTwo* mc = dynamic_cast<ModelChartTwo*>(getModelForDisplay());
+    return mc;
+}
+
+/**
+ * Get the displayed chart model two.
+ *
+ * @return  Pointer to displayed chart model or
+ *          NULL if the displayed model is NOT a
+ *          chart.
+ */
+const ModelChartTwo*
+BrowserTabContent::getDisplayedChartTwoModel() const
+{
+    const ModelChartTwo* mc = dynamic_cast<const ModelChartTwo*>(getModelForDisplay());
     return mc;
 }
 
@@ -716,18 +810,33 @@ BrowserTabContent::isFlatSurfaceDisplayed() const
 }
 
 /**
- * @return True if the displayed model is a chart
+ * @return True if the displayed model is a chart one
  */
 bool
-BrowserTabContent::isChartDisplayed() const
+BrowserTabContent::isChartOneDisplayed() const
 {
-    const ModelChart* chartModel = getDisplayedChartModel();
+    const ModelChart* chartModel = getDisplayedChartOneModel();
     if (chartModel != NULL) {
         return true;
     }
     
     return false;
 }
+
+/**
+ * @return True if the displayed model is a chart two
+ */
+bool
+BrowserTabContent::isChartTwoDisplayed() const
+{
+    const ModelChartTwo* chartModel = getDisplayedChartTwoModel();
+    if (chartModel != NULL) {
+        return true;
+    }
+    
+    return false;
+}
+
 
 /**
  * @return Is the displayed model a volume slice model?
@@ -846,6 +955,51 @@ BrowserTabContent::getOverlaySet() const
 }
 
 /**
+ * @return Chart overlay set for this tab.
+ */
+ChartTwoOverlaySet*
+BrowserTabContent::getChartTwoOverlaySet()
+{
+    if (m_chartTwoModel == NULL) {
+        return NULL;
+    }
+    
+    CaretAssert(m_chartTwoModel);
+    return m_chartTwoModel->getChartTwoOverlaySet(m_tabNumber);
+}
+
+/**
+ * @return Chart overlay set for this tab.
+ */
+const ChartTwoOverlaySet*
+BrowserTabContent::getChartTwoOverlaySet() const
+{
+    if (m_chartTwoModel == NULL) {
+        return NULL;
+    }
+    CaretAssert(m_chartTwoModel);
+    return m_chartTwoModel->getChartTwoOverlaySet(m_tabNumber);
+}
+
+/**
+ * @return Chart two matrix display properties.
+ */
+ChartTwoMatrixDisplayProperties*
+BrowserTabContent::getChartTwoMatrixDisplayProperties()
+{
+    return m_chartTwoMatrixDisplayProperties;
+}
+
+/**
+ * @return Chart two matrix display properties (const method)
+ */
+const ChartTwoMatrixDisplayProperties*
+BrowserTabContent::getChartTwoMatrixDisplayProperties() const
+{
+    return m_chartTwoMatrixDisplayProperties;
+}
+
+/**
  * Get the tab number for this content.
  * 
  * @return  Tab number.
@@ -874,6 +1028,7 @@ BrowserTabContent::update(const std::vector<Model*> models)
     m_wholeBrainModel = NULL;
     m_surfaceMontageModel = NULL;
     m_chartModel = NULL;
+    m_chartTwoModel = NULL;
     
     for (int i = 0; i < numModels; i++) {
         Model* mdc = models[i];
@@ -883,6 +1038,7 @@ BrowserTabContent::update(const std::vector<Model*> models)
         ModelWholeBrain* mdcwb = dynamic_cast<ModelWholeBrain*>(mdc);
         ModelSurfaceMontage* mdcsm = dynamic_cast<ModelSurfaceMontage*>(mdc);
         ModelChart* mdch = dynamic_cast<ModelChart*>(mdc);
+        ModelChartTwo* mdchTwo = dynamic_cast<ModelChartTwo*>(mdc);
         
         if (mdcs != NULL) {
             /* nothing to do since the surface model selector handles surfaces */
@@ -900,8 +1056,12 @@ BrowserTabContent::update(const std::vector<Model*> models)
             m_surfaceMontageModel = mdcsm;
         }
         else if (mdch != NULL) {
-            CaretAssertMessage((m_chartModel == NULL), "There is more than one surface chart model.");
+            CaretAssertMessage((m_chartModel == NULL), "There is more than one chart model.");
             m_chartModel = mdch;
+        }
+        else if (mdchTwo != NULL) {
+            CaretAssertMessage((m_chartTwoModel == NULL), "There is more than one chart two model.");
+            m_chartTwoModel = mdchTwo;
         }
         else {
             CaretAssertMessage(0, (AString("Unknown type of brain model.") + mdc->getNameForGUI(true)));
@@ -936,11 +1096,16 @@ BrowserTabContent::update(const std::vector<Model*> models)
                 m_selectedModelType = ModelTypeEnum::MODEL_TYPE_INVALID;
             }
             break;
+        case ModelTypeEnum::MODEL_TYPE_CHART_TWO:
+            if (m_chartTwoModel == NULL) {
+                m_selectedModelType = ModelTypeEnum::MODEL_TYPE_INVALID;
+            }
+            break;
     }
     
     if (m_selectedModelType == ModelTypeEnum::MODEL_TYPE_INVALID) {
-        if (m_surfaceModelSelector->getSelectedSurfaceModel() != NULL) {
-            m_selectedModelType = ModelTypeEnum::MODEL_TYPE_SURFACE;
+        if (m_surfaceMontageModel != NULL) {
+            m_selectedModelType = ModelTypeEnum::MODEL_TYPE_SURFACE_MONTAGE;
         }
         else if (m_volumeModel != NULL) {
             m_selectedModelType = ModelTypeEnum::MODEL_TYPE_VOLUME_SLICES;
@@ -948,8 +1113,11 @@ BrowserTabContent::update(const std::vector<Model*> models)
         else if (m_wholeBrainModel != NULL) {
             m_selectedModelType = ModelTypeEnum::MODEL_TYPE_WHOLE_BRAIN;
         }
-        else if (m_surfaceMontageModel != NULL) {
-            m_selectedModelType = ModelTypeEnum::MODEL_TYPE_SURFACE_MONTAGE;
+        else if (m_chartTwoModel != NULL) {
+            m_selectedModelType = ModelTypeEnum::MODEL_TYPE_CHART_TWO;
+        }
+        else if (m_surfaceModelSelector->getSelectedSurfaceModel() != NULL) {
+            m_selectedModelType = ModelTypeEnum::MODEL_TYPE_SURFACE;
         }
         else if (m_chartModel != NULL) {
             m_selectedModelType = ModelTypeEnum::MODEL_TYPE_CHART;
@@ -989,14 +1157,26 @@ BrowserTabContent::update(const std::vector<Model*> models)
 }
 
 /**
- * Is the chart model selection valid?
+ * Is the chart one model selection valid?
  *
  * @return bool indicating validity.
  */
 bool
-BrowserTabContent::isChartModelValid() const
+BrowserTabContent::isChartOneModelValid() const
 {
     bool valid = (m_chartModel != NULL);
+    return valid;
+}
+
+/**
+ * Is the chart two model selection valid?
+ *
+ * @return bool indicating validity.
+ */
+bool
+BrowserTabContent::isChartTwoModelValid() const
+{
+    bool valid = (m_chartTwoModel != NULL);
     return valid;
 }
 
@@ -1227,12 +1407,16 @@ BrowserTabContent::getAnnotationColorBars(std::vector<AnnotationColorBar*>& colo
     }
     
     bool useOverlayFlag = false;
-    bool useChartsFlag  = false;
+    bool useChartOneFlag  = false;
+    bool useChartTwoFlag  = false;
     switch (getSelectedModelType()) {
         case ModelTypeEnum::MODEL_TYPE_INVALID:
             break;
         case ModelTypeEnum::MODEL_TYPE_CHART:
-            useChartsFlag = true;
+            useChartOneFlag = true;
+            break;
+        case ModelTypeEnum::MODEL_TYPE_CHART_TWO:
+            useChartTwoFlag = true;
             break;
         case ModelTypeEnum::MODEL_TYPE_SURFACE:
             useOverlayFlag = true;
@@ -1269,27 +1453,27 @@ BrowserTabContent::getAnnotationColorBars(std::vector<AnnotationColorBar*>& colo
         }
     }
     
-    if (useChartsFlag) {
-        ModelChart* modelChart = getDisplayedChartModel();
+    if (useChartOneFlag) {
+        ModelChart* modelChart = getDisplayedChartOneModel();
         if (modelChart != NULL) {
             CaretDataFileSelectionModel* fileModel = NULL;
             
-            switch (modelChart->getSelectedChartDataType(m_tabNumber)) {
-                case ChartDataTypeEnum::CHART_DATA_TYPE_INVALID:
+            switch (modelChart->getSelectedChartOneDataType(m_tabNumber)) {
+                case ChartOneDataTypeEnum::CHART_DATA_TYPE_INVALID:
                     break;
-                case ChartDataTypeEnum::CHART_DATA_TYPE_LINE_DATA_SERIES:
+                case ChartOneDataTypeEnum::CHART_DATA_TYPE_LINE_DATA_SERIES:
                     break;
-                case ChartDataTypeEnum::CHART_DATA_TYPE_LINE_FREQUENCY_SERIES:
+                case ChartOneDataTypeEnum::CHART_DATA_TYPE_LINE_FREQUENCY_SERIES:
                     break;
-                case ChartDataTypeEnum::CHART_DATA_TYPE_LINE_TIME_SERIES:
+                case ChartOneDataTypeEnum::CHART_DATA_TYPE_LINE_TIME_SERIES:
                     break;
-                case ChartDataTypeEnum::CHART_DATA_TYPE_MATRIX_LAYER:
-                    if (modelChart->getSelectedChartDataType(m_tabNumber) == ChartDataTypeEnum::CHART_DATA_TYPE_MATRIX_LAYER) {
+                case ChartOneDataTypeEnum::CHART_DATA_TYPE_MATRIX_LAYER:
+                    if (modelChart->getSelectedChartOneDataType(m_tabNumber) == ChartOneDataTypeEnum::CHART_DATA_TYPE_MATRIX_LAYER) {
                         fileModel = modelChart->getChartableMatrixParcelFileSelectionModel(m_tabNumber);
                     }
                     break;
-                case ChartDataTypeEnum::CHART_DATA_TYPE_MATRIX_SERIES:
-                    if (modelChart->getSelectedChartDataType(m_tabNumber) == ChartDataTypeEnum::CHART_DATA_TYPE_MATRIX_SERIES) {
+                case ChartOneDataTypeEnum::CHART_DATA_TYPE_MATRIX_SERIES:
+                    if (modelChart->getSelectedChartOneDataType(m_tabNumber) == ChartOneDataTypeEnum::CHART_DATA_TYPE_MATRIX_SERIES) {
                         fileModel = modelChart->getChartableMatrixSeriesFileSelectionModel(m_tabNumber);
                     }
             }
@@ -1308,6 +1492,72 @@ BrowserTabContent::getAnnotationColorBars(std::vector<AnnotationColorBar*>& colo
                             colorBarMapFileInfo.push_back(ColorBarFileMap(colorBar,
                                                                           mapFile,
                                                                           mapIndex));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    if (useChartTwoFlag) {
+        ModelChartTwo* modelChartTwo = getDisplayedChartTwoModel();
+        if (modelChartTwo != NULL) {
+            ChartTwoOverlaySet* overlaySet = m_chartTwoModel->getChartTwoOverlaySet(m_tabNumber);
+            if (overlaySet != NULL) {
+                const int32_t numOverlays = overlaySet->getNumberOfDisplayedOverlays();
+                for (int32_t i = 0; i < numOverlays; i++) {
+                    ChartTwoOverlay* chartOverlay = overlaySet->getOverlay(i);
+                    if (chartOverlay->isEnabled()) {
+                        switch (chartOverlay->getChartTwoDataType()) {
+                            case ChartTwoDataTypeEnum::CHART_DATA_TYPE_HISTOGRAM:
+                            {
+                                CaretMappableDataFile* mapFile = NULL;
+                                ChartTwoOverlay::SelectedIndexType selectedIndexType = ChartTwoOverlay::SelectedIndexType::INVALID;
+                                int32_t selectedIndex = -1;
+                                chartOverlay->getSelectionData(mapFile,
+                                                               selectedIndexType,
+                                                               selectedIndex);
+                                
+                                
+                                if (mapFile != NULL) {
+                                    if (mapFile->isMappedWithPalette()) {
+                                        AnnotationColorBar* colorBar = chartOverlay->getColorBar();
+                                        colorBarMapFileInfo.push_back(ColorBarFileMap(colorBar,
+                                                                                      mapFile,
+                                                                                      selectedIndex));
+                                    }
+                                }
+                            }
+                                break;
+                            case ChartTwoDataTypeEnum::CHART_DATA_TYPE_INVALID:
+                                break;
+                            case ChartTwoDataTypeEnum::CHART_DATA_TYPE_LINE_SERIES:
+                                break;
+                            case ChartTwoDataTypeEnum::CHART_DATA_TYPE_MATRIX:
+                            {
+                                CaretMappableDataFile* mapFile = NULL;
+                                ChartTwoOverlay::SelectedIndexType selectedIndexType = ChartTwoOverlay::SelectedIndexType::INVALID;
+                                int32_t selectedIndex = -1;
+                                chartOverlay->getSelectionData(mapFile,
+                                                               selectedIndexType,
+                                                               selectedIndex);
+                                
+                                
+                                if (mapFile != NULL) {
+                                    if (mapFile->isMappedWithPalette()) {
+                                        AnnotationColorBar* colorBar = chartOverlay->getColorBar();
+                                        /*
+                                         * Matrix is all maps and uses map index 0
+                                         */
+                                        selectedIndex = 0;
+
+                                        colorBarMapFileInfo.push_back(ColorBarFileMap(colorBar,
+                                                                                      mapFile,
+                                                                                      selectedIndex));
+                                    }
+                                }
+                            }
+                                break;
                         }
                     }
                 }
@@ -1337,11 +1587,17 @@ BrowserTabContent::getAnnotationColorBars(std::vector<AnnotationColorBar*>& colo
                                     break;
                             }
                             
-                            paletteColorMapping->setupAnnotationColorBar(statistics,
-                                                                         info.m_colorBar);
-                            
-                            info.m_colorBar->setTabIndex(m_tabNumber);
-                            colorBarsOut.push_back(info.m_colorBar);
+                            /*
+                             * Statistics may be NULL for some instances of histograms
+                             * from dynamically loaded files (dynconn)
+                             */
+                            if (statistics != NULL) {
+                                paletteColorMapping->setupAnnotationColorBar(statistics,
+                                                                             info.m_colorBar);
+                                
+                                info.m_colorBar->setTabIndex(m_tabNumber);
+                                colorBarsOut.push_back(info.m_colorBar);
+                            }
                         }
                     }
                 }
@@ -1372,12 +1628,16 @@ BrowserTabContent::getDisplayedPaletteMapFiles(std::vector<CaretMappableDataFile
     }
     
     bool useOverlayFlag = false;
-    bool useChartsFlag  = false;
+    bool useChartOneFlag  = false;
+    bool useChartTwoFlag  = false;
     switch (getSelectedModelType()) {
         case ModelTypeEnum::MODEL_TYPE_INVALID:
             break;
         case ModelTypeEnum::MODEL_TYPE_CHART:
-            useChartsFlag = true;
+            useChartOneFlag = true;
+            break;
+        case ModelTypeEnum::MODEL_TYPE_CHART_TWO:
+            useChartTwoFlag = true;
             break;
         case ModelTypeEnum::MODEL_TYPE_SURFACE:
             useOverlayFlag = true;
@@ -1418,27 +1678,27 @@ BrowserTabContent::getDisplayedPaletteMapFiles(std::vector<CaretMappableDataFile
         }
     }
     
-    if (useChartsFlag) {
-        ModelChart* modelChart = getDisplayedChartModel();
+    if (useChartOneFlag) {
+        ModelChart* modelChart = getDisplayedChartOneModel();
         if (modelChart != NULL) {
             CaretDataFileSelectionModel* fileModel = NULL;
             
-            switch (modelChart->getSelectedChartDataType(m_tabNumber)) {
-                case ChartDataTypeEnum::CHART_DATA_TYPE_INVALID:
+            switch (modelChart->getSelectedChartOneDataType(m_tabNumber)) {
+                case ChartOneDataTypeEnum::CHART_DATA_TYPE_INVALID:
                     break;
-                case ChartDataTypeEnum::CHART_DATA_TYPE_LINE_DATA_SERIES:
+                case ChartOneDataTypeEnum::CHART_DATA_TYPE_LINE_DATA_SERIES:
                     break;
-                case ChartDataTypeEnum::CHART_DATA_TYPE_LINE_FREQUENCY_SERIES:
+                case ChartOneDataTypeEnum::CHART_DATA_TYPE_LINE_FREQUENCY_SERIES:
                     break;
-                case ChartDataTypeEnum::CHART_DATA_TYPE_LINE_TIME_SERIES:
+                case ChartOneDataTypeEnum::CHART_DATA_TYPE_LINE_TIME_SERIES:
                     break;
-                case ChartDataTypeEnum::CHART_DATA_TYPE_MATRIX_LAYER:
-                    if (modelChart->getSelectedChartDataType(m_tabNumber) == ChartDataTypeEnum::CHART_DATA_TYPE_MATRIX_LAYER) {
+                case ChartOneDataTypeEnum::CHART_DATA_TYPE_MATRIX_LAYER:
+                    if (modelChart->getSelectedChartOneDataType(m_tabNumber) == ChartOneDataTypeEnum::CHART_DATA_TYPE_MATRIX_LAYER) {
                         fileModel = modelChart->getChartableMatrixParcelFileSelectionModel(m_tabNumber);
                     }
                     break;
-                case ChartDataTypeEnum::CHART_DATA_TYPE_MATRIX_SERIES:
-                    if (modelChart->getSelectedChartDataType(m_tabNumber) == ChartDataTypeEnum::CHART_DATA_TYPE_MATRIX_SERIES) {
+                case ChartOneDataTypeEnum::CHART_DATA_TYPE_MATRIX_SERIES:
+                    if (modelChart->getSelectedChartOneDataType(m_tabNumber) == ChartOneDataTypeEnum::CHART_DATA_TYPE_MATRIX_SERIES) {
                         fileModel = modelChart->getChartableMatrixSeriesFileSelectionModel(m_tabNumber);
                     }
             }
@@ -1465,6 +1725,67 @@ BrowserTabContent::getDisplayedPaletteMapFiles(std::vector<CaretMappableDataFile
             }
         }
     }
+    
+    if (useChartTwoFlag) {
+        ModelChartTwo* modelChartTwo = getDisplayedChartTwoModel();
+        if (modelChartTwo != NULL) {
+            ChartTwoOverlaySet* overlaySet = m_chartTwoModel->getChartTwoOverlaySet(m_tabNumber);
+            const int32_t numOverlays = overlaySet->getNumberOfDisplayedOverlays();
+            for (int32_t i = (numOverlays - 1); i >= 0; i--) {
+                ChartTwoOverlay* chartOverlay = overlaySet->getOverlay(i);
+                if (chartOverlay->isEnabled()) {
+                    switch (chartOverlay->getChartTwoDataType()) {
+                        case ChartTwoDataTypeEnum::CHART_DATA_TYPE_HISTOGRAM:
+                        {
+                            CaretMappableDataFile* mapFile = NULL;
+                            ChartTwoOverlay::SelectedIndexType selectedIndexType = ChartTwoOverlay::SelectedIndexType::INVALID;
+                            int32_t selectedIndex = -1;
+                            chartOverlay->getSelectionData(mapFile,
+                                                           selectedIndexType,
+                                                           selectedIndex);
+                            
+                            if (mapFile != NULL) {
+                                if (mapFile->isMappedWithPalette()) {
+                                    AnnotationColorBar* colorBar = chartOverlay->getColorBar();
+                                    if (colorBar->isDisplayed()) {
+                                        mapFiles.push_back(mapFile);
+                                        mapIndices.push_back(selectedIndex);
+                                    }
+                                }
+                            }
+                        }
+                            break;
+                        case ChartTwoDataTypeEnum::CHART_DATA_TYPE_INVALID:
+                            break;
+                        case ChartTwoDataTypeEnum::CHART_DATA_TYPE_LINE_SERIES:
+                            break;
+                        case ChartTwoDataTypeEnum::CHART_DATA_TYPE_MATRIX:
+                        {
+                            CaretMappableDataFile* mapFile = NULL;
+                            ChartTwoOverlay::SelectedIndexType selectedIndexType = ChartTwoOverlay::SelectedIndexType::INVALID;
+                            int32_t selectedIndex = -1;
+                            chartOverlay->getSelectionData(mapFile,
+                                                           selectedIndexType,
+                                                           selectedIndex);
+                            
+                            if (mapFile != NULL) {
+                                if (mapFile->isMappedWithPalette()) {
+                                    AnnotationColorBar* colorBar = chartOverlay->getColorBar();
+                                    if (colorBar->isDisplayed()) {
+                                        mapFiles.push_back(mapFile);
+                                        mapIndices.push_back(0);
+                                    }
+                                }
+                            }
+                        }
+                            break;
+                    }
+                }
+            }
+        }
+    }
+    
+    CaretAssert(mapFiles.size() == mapIndices.size());
 }
 
 /**
@@ -1619,6 +1940,29 @@ BrowserTabContent::getFilesDisplayedInTab(std::vector<CaretDataFile*>& displayed
             break;
         case ModelTypeEnum::MODEL_TYPE_CHART:
             break;
+        case ModelTypeEnum::MODEL_TYPE_CHART_TWO:
+        {
+            const ChartTwoOverlaySet* overlaySet = m_chartTwoModel->getChartTwoOverlaySet(tabIndex);
+            if (overlaySet != NULL) {
+                const int32_t numOverlays = overlaySet->getNumberOfDisplayedOverlays();
+                for (int32_t i = 0; i < numOverlays; i++) {
+                    const ChartTwoOverlay* chartOverlay = overlaySet->getOverlay(i);
+                    if (chartOverlay->isEnabled()) {
+                        CaretMappableDataFile* mapFile = NULL;
+                        ChartTwoOverlay::SelectedIndexType selectedIndexType = ChartTwoOverlay::SelectedIndexType::INVALID;
+                        int32_t selectedIndex = -1;
+                        chartOverlay->getSelectionData(mapFile,
+                                                       selectedIndexType,
+                                                       selectedIndex);
+                        
+                        if (mapFile != NULL) {
+                            displayedDataFiles.insert(mapFile);
+                        }
+                    }
+                }
+            }
+        }
+            break;
     }
 
     /*
@@ -1646,6 +1990,21 @@ BrowserTabContent::getFilesDisplayedInTab(std::vector<CaretDataFile*>& displayed
                 }
                 
                 displayedDataFiles.insert(overlayDataFile);
+                
+                if (overlayDataFile->isMappedWithPalette()) {
+                    /*
+                     * If mapped with palette, there may be thresholding with another file
+                     * so need to include that file
+                     */
+                    if (overlayDataFile->getMapPaletteColorMapping(mapIndex)->getThresholdType() == PaletteThresholdTypeEnum::THRESHOLD_TYPE_FILE) {
+                        CaretMappableDataFileAndMapSelectionModel* mapFileSelector = overlayDataFile->getMapThresholdFileSelectionModel(mapIndex);
+                        CaretAssert(mapFileSelector);
+                        CaretMappableDataFile* thresholdFile = mapFileSelector->getSelectedFile();
+                        if (thresholdFile != NULL) {
+                            displayedDataFiles.insert(thresholdFile);
+                        }
+                    }
+                }
             }
         }
     }
@@ -1715,6 +2074,9 @@ BrowserTabContent::getViewingTransformation()
     else if (isCerebellumDisplayed()) {
         return m_cerebellumViewingTransformation;
     }
+    else if (isChartTwoDisplayed()) {
+        return m_chartTwoMatrixViewingTranformation;
+    }
     return m_viewingTransformation;
 }
 
@@ -1729,6 +2091,9 @@ BrowserTabContent::getViewingTransformation() const
     }
     else if (isCerebellumDisplayed()) {
         return m_cerebellumViewingTransformation;
+    }
+    else if (isChartTwoDisplayed()) {
+        return m_chartTwoMatrixViewingTranformation;
     }
     return m_viewingTransformation;
 }
@@ -1765,7 +2130,7 @@ void
 BrowserTabContent::setTranslation( const float translation[3])
 {
     getViewingTransformation()->setTranslation(translation);
-    updateYokedBrowserTabs();
+    updateBrainModelYokedBrowserTabs();
 }
 
 /**
@@ -1786,7 +2151,7 @@ BrowserTabContent::setTranslation(const float translationX,
     getViewingTransformation()->setTranslation(translationX,
                                                translationY,
                                                translationZ);
-    updateYokedBrowserTabs();
+    updateYokedModelBrowserTabs();
 }
 
 /**
@@ -1807,7 +2172,7 @@ void
 BrowserTabContent::setScaling(const float scaling)
 {
     return getViewingTransformation()->setScaling(scaling);
-    updateYokedBrowserTabs();
+    updateYokedModelBrowserTabs();
 }
 
 /**
@@ -1829,7 +2194,7 @@ void
 BrowserTabContent::setRotationMatrix(const Matrix4x4& rotationMatrix)
 {
     getViewingTransformation()->setRotationMatrix(rotationMatrix);
-    updateYokedBrowserTabs();
+    updateYokedModelBrowserTabs();
 }
 
 /**
@@ -1852,7 +2217,7 @@ BrowserTabContent::setObliqueVolumeRotationMatrix(const Matrix4x4& obliqueRotati
 {
     *m_obliqueVolumeRotationMatrix = obliqueRotationMatrix;
     
-    updateYokedBrowserTabs();
+    updateBrainModelYokedBrowserTabs();
 }
 
 /**
@@ -1883,7 +2248,7 @@ BrowserTabContent::setRightCortexFlatMapOffset(const float offsetX,
                                                const float offsetY)
 {
     getViewingTransformation()->setRightCortexFlatMapOffset(offsetX, offsetY);
-    updateYokedBrowserTabs();
+    updateBrainModelYokedBrowserTabs();
 }
 
 /**
@@ -1917,7 +2282,7 @@ BrowserTabContent::resetView()
     if (isVolumeSlicesDisplayed()) {
         m_obliqueVolumeRotationMatrix->identity();
     }
-    updateYokedBrowserTabs();
+    updateYokedModelBrowserTabs();
 }
 
 /**
@@ -1930,7 +2295,7 @@ BrowserTabContent::rightView()
         return;
     }
     getViewingTransformation()->rightView();
-    updateYokedBrowserTabs();
+    updateYokedModelBrowserTabs();
 }
 
 /**
@@ -1943,7 +2308,7 @@ BrowserTabContent::leftView()
         return;
     }
     getViewingTransformation()->leftView();
-    updateYokedBrowserTabs();
+    updateYokedModelBrowserTabs();
 }
 
 /**
@@ -1956,7 +2321,7 @@ BrowserTabContent::anteriorView()
         return;
     }
     getViewingTransformation()->anteriorView();
-    updateYokedBrowserTabs();
+    updateYokedModelBrowserTabs();
 }
 
 /**
@@ -1969,7 +2334,7 @@ BrowserTabContent::posteriorView()
         return;
     }
     getViewingTransformation()->posteriorView();
-    updateYokedBrowserTabs();
+    updateYokedModelBrowserTabs();
 }
 
 /**
@@ -1982,7 +2347,7 @@ BrowserTabContent::dorsalView()
         return;
     }
     getViewingTransformation()->dorsalView();
-    updateYokedBrowserTabs();
+    updateYokedModelBrowserTabs();
 }
 
 /**
@@ -1995,87 +2360,7 @@ BrowserTabContent::ventralView()
         return;
     }
     getViewingTransformation()->ventralView();
-    updateYokedBrowserTabs();
-}
-
-/*
- * @return The slice view plane for the given viewport coordinate.
- * If ALL is returned, is indicates that the given viewport coordinate
- * is in the bottom left region in which volume slices are not displayed.
- *
- * @param viewport
- *   The viewport.
- * @param mousePressX
- *   X Location of the mouse press.
- * @param mousePressY
- *   Y Location of the mouse press.
- */
-VolumeSliceViewPlaneEnum::Enum
-BrowserTabContent::getSliceViewPlaneForVolumeAllSliceView(const int32_t viewport[4],
-                                                          const int32_t mousePressX,
-                                                          const int32_t mousePressY,
-                                                          int32_t sliceViewportOut[4]) const
-{
-    VolumeSliceViewPlaneEnum::Enum view = VolumeSliceViewPlaneEnum::ALL;
-    
-    const int32_t halfWidth  = viewport[2] / 2;
-    const int32_t halfHeight = viewport[3] / 2;
-    const int32_t viewportMousePressedX = mousePressX - viewport[0];
-    const int32_t viewportMousePressedY = mousePressY - viewport[1];
-    bool isRight  = false;
-    bool isTop = false;
-    if (viewportMousePressedX > halfWidth) {
-        isRight = true;
-    }
-    if (viewportMousePressedY > halfHeight) {
-        isTop = true;
-    }
-    
-    /*
-     * Top Right is Coronal
-     * Top Left is Parasagittal
-     * Bottom Right is Axial
-     * Bottom Left is Empty or Surfaces
-     */
-    if (isTop) {
-        if (isRight) {
-            view = VolumeSliceViewPlaneEnum::CORONAL;
-        }
-        else {
-            view = VolumeSliceViewPlaneEnum::PARASAGITTAL;
-        }
-    }
-    else {
-        if (isRight) {
-            view = VolumeSliceViewPlaneEnum::AXIAL;
-        }
-        else {
-            
-        }
-    }
-
-    sliceViewportOut[0] = viewport[0];
-    sliceViewportOut[1] = viewport[1];
-    sliceViewportOut[2] = halfWidth;
-    sliceViewportOut[3] = halfHeight;
-    
-    switch (view) {
-        case VolumeSliceViewPlaneEnum::ALL:
-            sliceViewportOut[2] = viewport[2];
-            sliceViewportOut[3] = viewport[3];
-            break;
-        case VolumeSliceViewPlaneEnum::AXIAL:
-            sliceViewportOut[0] = halfWidth;
-            break;
-        case VolumeSliceViewPlaneEnum::CORONAL:
-            sliceViewportOut[0] = halfWidth;
-            sliceViewportOut[1] = halfHeight;
-            break;
-        case VolumeSliceViewPlaneEnum::PARASAGITTAL:
-            sliceViewportOut[1] = halfHeight;
-            break;
-    }
-    return view;
+    updateYokedModelBrowserTabs();
 }
 
 /**
@@ -2117,10 +2402,11 @@ BrowserTabContent::applyMouseRotation(BrainOpenGLViewportContent* viewportConten
                     viewport[3]
                 };
                 if (slicePlane == VolumeSliceViewPlaneEnum::ALL) {
-                    slicePlane = getSliceViewPlaneForVolumeAllSliceView(viewport,
-                                                                        mousePressX,
-                                                                        mousePressY,
-                                                                        sliceViewport);
+                    slicePlane = BrainOpenGLViewportContent::getSliceViewPlaneForVolumeAllSliceView(viewport,
+                                                                                                    getSlicePlanesAllViewLayout(),
+                                                                                                    mousePressX,
+                                                                                                    mousePressY,
+                                                                                                    sliceViewport);
                 }
                 
                 Matrix4x4 rotationMatrix = getObliqueVolumeRotationMatrix();
@@ -2140,20 +2426,20 @@ BrowserTabContent::applyMouseRotation(BrainOpenGLViewportContent* viewportConten
                          * Need to account for the quadrants!!!!
                          */
                         const float viewportCenter[3] = {
-                            sliceViewport[0] + sliceViewport[2] / 2,
-                            sliceViewport[1] + sliceViewport[3] / 2,
+                            (float)(sliceViewport[0] + sliceViewport[2] / 2),
+                            ((float)sliceViewport[1] + sliceViewport[3] / 2),
                             0.0
                         };
                         
                         const float oldPos[3] = {
-                            previousMouseX,
-                            previousMouseY,
+                            (float)previousMouseX,
+                            (float)previousMouseY,
                             0.0
                         };
                         
                         const float newPos[3] = {
-                            mouseX,
-                            mouseY,
+                            (float)mouseX,
+                            (float)mouseY,
                             0.0
                         };
                         
@@ -2247,7 +2533,8 @@ BrowserTabContent::applyMouseRotation(BrainOpenGLViewportContent* viewportConten
                 break;
         }
     }
-    else if (isChartDisplayed()) {
+    else if (isChartOneDisplayed()
+             || isChartTwoDisplayed()) {
         /* no rotation for chart */
     }
     else if (isCerebellumDisplayed()) {
@@ -2420,7 +2707,7 @@ BrowserTabContent::applyMouseRotation(BrainOpenGLViewportContent* viewportConten
             viewingTransform->setRotationMatrix(rotationMatrix);
         }
     }
-    updateYokedBrowserTabs();
+    updateYokedModelBrowserTabs();
 }
 
 /**
@@ -2435,33 +2722,43 @@ void
 BrowserTabContent::applyMouseScaling(const int32_t /*mouseDX*/,
                                      const int32_t mouseDY)
 {
-    if (isChartDisplayed()) {
-        ModelChart* modelChart = getDisplayedChartModel();
+    if (isChartOneDisplayed()) {
+        ModelChart* modelChart = getDisplayedChartOneModel();
         CaretAssert(modelChart);
         
         CaretDataFileSelectionModel* matrixSelectionModel = NULL;
-        if (modelChart->getSelectedChartDataType(m_tabNumber) == ChartDataTypeEnum::CHART_DATA_TYPE_MATRIX_LAYER) {
+        if (modelChart->getSelectedChartOneDataType(m_tabNumber) == ChartOneDataTypeEnum::CHART_DATA_TYPE_MATRIX_LAYER) {
             matrixSelectionModel = modelChart->getChartableMatrixParcelFileSelectionModel(m_tabNumber);
         }
         
-        if (modelChart->getSelectedChartDataType(m_tabNumber) == ChartDataTypeEnum::CHART_DATA_TYPE_MATRIX_SERIES) {
+        if (modelChart->getSelectedChartOneDataType(m_tabNumber) == ChartOneDataTypeEnum::CHART_DATA_TYPE_MATRIX_SERIES) {
             matrixSelectionModel = modelChart->getChartableMatrixSeriesFileSelectionModel(m_tabNumber);
         }
-            if (matrixSelectionModel != NULL) {
-                ChartableMatrixInterface* chartableInterface = matrixSelectionModel->getSelectedFileOfType<ChartableMatrixInterface>();
-                if (chartableInterface != NULL) {
-                    ChartMatrixDisplayProperties* matrixProperties = chartableInterface->getChartMatrixDisplayProperties(m_tabNumber);
-                    matrixProperties->setScaleMode(ChartMatrixScaleModeEnum::CHART_MATRIX_SCALE_MANUAL);
-                    float scaling = matrixProperties->getViewZooming();
-                    if (mouseDY != 0.0) {
-                        scaling *= (1.0f + (mouseDY * 0.01));
-                    }
-                    if (scaling < 0.01) {
-                        scaling = 0.01;
-                    }
-                    matrixProperties->setViewZooming(scaling);
+        if (matrixSelectionModel != NULL) {
+            ChartableMatrixInterface* chartableInterface = matrixSelectionModel->getSelectedFileOfType<ChartableMatrixInterface>();
+            if (chartableInterface != NULL) {
+                ChartMatrixDisplayProperties* matrixProperties = chartableInterface->getChartMatrixDisplayProperties(m_tabNumber);
+                matrixProperties->setScaleMode(ChartMatrixScaleModeEnum::CHART_MATRIX_SCALE_MANUAL);
+                float scaling = matrixProperties->getViewZooming();
+                if (mouseDY != 0.0) {
+                    scaling *= (1.0f + (mouseDY * 0.01));
                 }
+                if (scaling < 0.01) {
+                    scaling = 0.01;
+                }
+                matrixProperties->setViewZooming(scaling);
             }
+        }
+    }
+    else if (isChartTwoDisplayed()) {
+        float scaling = getViewingTransformation()->getScaling();
+        if (mouseDY != 0.0) {
+            scaling *= (1.0f + (mouseDY * 0.01));
+        }
+        if (scaling < 0.01) {
+            scaling = 0.01;
+        }
+        getViewingTransformation()->setScaling(scaling);
     }
     else {
         float scaling = getViewingTransformation()->getScaling();
@@ -2473,7 +2770,7 @@ BrowserTabContent::applyMouseScaling(const int32_t /*mouseDX*/,
         }
         getViewingTransformation()->setScaling(scaling);
     }
-    updateYokedBrowserTabs();
+    updateYokedModelBrowserTabs();
 }
 
 /**
@@ -2512,44 +2809,24 @@ BrowserTabContent::applyMouseTranslation(BrainOpenGLViewportContent* viewportCon
         float dx = 0.0;
         float dy = 0.0;
         float dz = 0.0;
-        switch (this->getSliceViewPlane())
-        {
+        
+        int viewport[4];
+        viewportContent->getModelViewport(viewport);
+        int sliceViewport[4];
+        viewportContent->getModelViewport(sliceViewport);
+        
+        VolumeSliceViewPlaneEnum::Enum slicePlane = getSliceViewPlane();
+        if (slicePlane == VolumeSliceViewPlaneEnum::ALL) {
+            slicePlane = BrainOpenGLViewportContent::getSliceViewPlaneForVolumeAllSliceView(viewport,
+                                                                                            getSlicePlanesAllViewLayout(),
+                                                                                            mousePressX,
+                                                                                            mousePressY,
+                                                                                            sliceViewport);
+        }
+        
+        switch (slicePlane) {
             case VolumeSliceViewPlaneEnum::ALL:
-            {
-                int viewport[4];
-                viewportContent->getModelViewport(viewport);
-                const int32_t halfWidth  = viewport[2] / 2;
-                const int32_t halfHeight = viewport[3] / 2;
-                const int32_t viewportMousePressedX = mousePressX - viewport[0];
-                const int32_t viewportMousePressedY = mousePressY - viewport[1];
-                bool isRight  = false;
-                bool isTop = false;
-                if (viewportMousePressedX > halfWidth) {
-                    isRight = true;
-                }
-                if (viewportMousePressedY > halfHeight) {
-                    isTop = true;
-                }
-                //CaretLogInfo("right: " + AString::fromBool(isRight) + " top: " + AString::fromBool(isTop));
-                if (isTop)
-                {
-                    if (isRight)//coronal
-                    {
-                        dx = mouseDX * slowdown;
-                        dz = mouseDY * slowdown;
-                    } else {//parasaggital
-                        dy = -mouseDX * slowdown;
-                        dz = mouseDY * slowdown;
-                    }
-                } else {
-                    if (isRight)//axial
-                    {
-                        dx = mouseDX * slowdown;
-                        dy = mouseDY * slowdown;
-                    }//bottom left has no slice
-                }
                 break;
-            }
             case VolumeSliceViewPlaneEnum::AXIAL:
                 dx = mouseDX * slowdown;
                 dy = mouseDY * slowdown;
@@ -2571,16 +2848,16 @@ BrowserTabContent::applyMouseTranslation(BrainOpenGLViewportContent* viewportCon
         translation[2] += dz;
         m_volumeSliceViewingTransformation->setTranslation(translation);
     }
-    else if (isChartDisplayed()) {
-        ModelChart* modelChart = getDisplayedChartModel();
+    else if (isChartOneDisplayed()) {
+        ModelChart* modelChart = getDisplayedChartOneModel();
         CaretAssert(modelChart);
         
         CaretDataFileSelectionModel* matrixSelectionModel = NULL;
-        if (modelChart->getSelectedChartDataType(m_tabNumber) == ChartDataTypeEnum::CHART_DATA_TYPE_MATRIX_LAYER) {
+        if (modelChart->getSelectedChartOneDataType(m_tabNumber) == ChartOneDataTypeEnum::CHART_DATA_TYPE_MATRIX_LAYER) {
             matrixSelectionModel = modelChart->getChartableMatrixParcelFileSelectionModel(m_tabNumber);
         }
         
-        if (modelChart->getSelectedChartDataType(m_tabNumber) == ChartDataTypeEnum::CHART_DATA_TYPE_MATRIX_SERIES) {
+        if (modelChart->getSelectedChartOneDataType(m_tabNumber) == ChartOneDataTypeEnum::CHART_DATA_TYPE_MATRIX_SERIES) {
             matrixSelectionModel = modelChart->getChartableMatrixSeriesFileSelectionModel(m_tabNumber);
         }
         if (matrixSelectionModel != NULL) {
@@ -2595,6 +2872,14 @@ BrowserTabContent::applyMouseTranslation(BrainOpenGLViewportContent* viewportCon
                 matrixProperties->setViewPanning(translation);
             }
         }
+    }
+    else if (isChartTwoDisplayed()) {
+        float translation[3];
+        m_chartTwoMatrixViewingTranformation->getTranslation(translation);
+        translation[0] += mouseDX;
+        translation[1] += mouseDY;
+        translation[2] = 0; // NO Z-translation
+        m_chartTwoMatrixViewingTranformation->setTranslation(translation);
     }
     else if (isCerebellumDisplayed()) {
         const float screenDX = mouseDX;
@@ -2768,7 +3053,7 @@ BrowserTabContent::applyMouseTranslation(BrainOpenGLViewportContent* viewportCon
             getViewingTransformation()->setTranslation(translation);
         }
     }
-    updateYokedBrowserTabs();
+    updateYokedModelBrowserTabs();
 }
 
 /**
@@ -2800,6 +3085,15 @@ BrowserTabContent::getTransformationsForOpenGLDrawing(const ProjectionViewTypeEn
         
         scalingOut = m_volumeSliceViewingTransformation->getScaling();
         
+        return;
+    }
+    
+    if (isChartTwoDisplayed()) {
+        m_chartTwoMatrixViewingTranformation->getTranslation(translationOut);
+        Matrix4x4 matrix;
+        matrix.identity();
+        matrix.getMatrixForOpenGL(rotationMatrixOut);
+        scalingOut = m_chartTwoMatrixViewingTranformation->getScaling();
         return;
     }
     
@@ -2965,7 +3259,7 @@ BrowserTabContent::setTransformationsFromModelTransform(const ModelTransform& mo
     const float rightFlatZoom = modelTransform.getRightCortexFlatMapZoomFactor();
     setRightCortexFlatMapZoomFactor(rightFlatZoom);
     
-    updateYokedBrowserTabs();
+    updateYokedModelBrowserTabs();
 }
 
 
@@ -3025,8 +3319,27 @@ BrowserTabContent::restoreFromScene(const SceneAttributes* sceneAttributes,
         return;
     }
     
-    m_sceneClassAssistant->restoreMembers(sceneAttributes, 
+    m_brainModelYokingGroup = YokingGroupEnum::YOKING_GROUP_A;
+    m_chartModelYokingGroup = YokingGroupEnum::YOKING_GROUP_OFF;
+    
+    m_sceneClassAssistant->restoreMembers(sceneAttributes,
                                           sceneClass);
+    
+    /*
+     * With charting version two, yoking was split into chart and non-chart yoking
+     * If old yoking group is found, apply it to the brain model yoking group
+     */
+    const AString oldYokingGroupName = sceneClass->getEnumeratedTypeValueAsString("m_yokingGroup",
+                                                                                  "XXXXXX");
+    if ( ! oldYokingGroupName.isEmpty()) {
+        bool validFlag = false;
+        const YokingGroupEnum::Enum oldYokeGroup = YokingGroupEnum::fromName(oldYokingGroupName,
+                                                                             &validFlag);
+        if (validFlag) {
+            m_brainModelYokingGroup = oldYokeGroup;
+            m_chartModelYokingGroup = oldYokeGroup;
+        }
+    }
     
     m_obliqueVolumeRotationMatrix->identity();
     float obliqueMatrix[16];
@@ -3172,6 +3485,8 @@ BrowserTabContent::restoreFromScene(const SceneAttributes* sceneAttributes,
         switch (getSelectedModelType()) {
             case ModelTypeEnum::MODEL_TYPE_CHART:
                 break;
+            case ModelTypeEnum::MODEL_TYPE_CHART_TWO:
+                break;
             case ModelTypeEnum::MODEL_TYPE_INVALID:
                 break;
             case ModelTypeEnum::MODEL_TYPE_SURFACE:
@@ -3261,6 +3576,7 @@ BrowserTabContent::restoreFromScene(const SceneAttributes* sceneAttributes,
             }
         }
     }
+    
 }
 
 /**
@@ -3332,7 +3648,7 @@ BrowserTabContent::setClippingPlaneEnabled(const bool xEnabled,
     m_clippingPlaneGroup->setVolumeSelected(volumeEnabled);
     m_clippingPlaneGroup->setFeaturesSelected(featuresEnabled);
 
-    updateYokedBrowserTabs();
+    updateYokedModelBrowserTabs();
 }
 
 /**
@@ -3380,7 +3696,7 @@ BrowserTabContent::setClippingPlaneTransformation(const float panning[3],
     
     m_clippingPlaneGroup->setDisplayClippingBoxSelected(displayClippingBox);
 
-    updateYokedBrowserTabs();
+    updateYokedModelBrowserTabs();
 }
 
 /**
@@ -3403,7 +3719,7 @@ void
 BrowserTabContent::resetClippingPlaneTransformation()
 {
     m_clippingPlaneGroup->resetTransformation();
-    updateYokedBrowserTabs();
+    updateYokedModelBrowserTabs();
 }
 
 /**
@@ -3457,7 +3773,29 @@ void
 BrowserTabContent::setSliceViewPlane(const VolumeSliceViewPlaneEnum::Enum slicePlane)
 {
     m_volumeSliceSettings->setSliceViewPlane(slicePlane);
-    updateYokedBrowserTabs();
+    updateBrainModelYokedBrowserTabs();
+}
+
+/**
+ * @return The layout for all slices view (grid, row, column)
+ */
+VolumeSliceViewAllPlanesLayoutEnum::Enum
+BrowserTabContent::getSlicePlanesAllViewLayout() const
+{
+    return m_volumeSliceSettings->getSlicePlanesAllViewLayout();
+}
+
+/**
+ * Set the layout for all slices view (grid, row, column)
+ *
+ * @param slicePlanesAllViewLayout
+ *     New value for layout.
+ */
+void
+BrowserTabContent::setSlicePlanesAllViewLayout(const VolumeSliceViewAllPlanesLayoutEnum::Enum slicePlanesAllViewLayout)
+{
+    m_volumeSliceSettings->setSlicePlanesAllViewLayout(slicePlanesAllViewLayout);
+    updateBrainModelYokedBrowserTabs();
 }
 
 /**
@@ -3479,7 +3817,7 @@ void
 BrowserTabContent::setSliceDrawingType(const VolumeSliceDrawingTypeEnum::Enum sliceDrawingType)
 {
     m_volumeSliceSettings->setSliceDrawingType(sliceDrawingType);
-    updateYokedBrowserTabs();
+    updateBrainModelYokedBrowserTabs();
 }
 
 /**
@@ -3501,7 +3839,29 @@ void
 BrowserTabContent::setSliceProjectionType(const VolumeSliceProjectionTypeEnum::Enum sliceProjectionType)
 {
     m_volumeSliceSettings->setSliceProjectionType(sliceProjectionType);
-    updateYokedBrowserTabs();
+    updateBrainModelYokedBrowserTabs();
+}
+
+/**
+ * @return The masking used when drawing an oblique volume slice
+ */
+VolumeSliceInterpolationEdgeEffectsMaskingEnum::Enum
+BrowserTabContent::getVolumeSliceInterpolationEdgeEffectsMaskingType() const
+{
+    return m_volumeSliceSettings->getVolumeSliceInterpolationEdgeEffectsMaskingType();
+}
+
+/**
+ * Set the masking used when drawing an oblique volume slice.
+ *
+ * @param maskingType
+ *     Type of masking.
+ */
+void
+BrowserTabContent::setVolumeSliceInterpolationEdgeEffectsMaskingType(const VolumeSliceInterpolationEdgeEffectsMaskingEnum::Enum maskingType)
+{
+    m_volumeSliceSettings->setVolumeSliceInterpolationEdgeEffectsMaskingType(maskingType);
+    updateBrainModelYokedBrowserTabs();
 }
 
 /**
@@ -3522,7 +3882,7 @@ void
 BrowserTabContent::setMontageNumberOfColumns(const int32_t montageNumberOfColumns)
 {
     m_volumeSliceSettings->setMontageNumberOfColumns(montageNumberOfColumns);
-    updateYokedBrowserTabs();
+    updateBrainModelYokedBrowserTabs();
 }
 
 /**
@@ -3543,7 +3903,7 @@ void
 BrowserTabContent::setMontageNumberOfRows(const int32_t montageNumberOfRows)
 {
     m_volumeSliceSettings->setMontageNumberOfRows(montageNumberOfRows);
-    updateYokedBrowserTabs();
+    updateBrainModelYokedBrowserTabs();
 }
 
 /**
@@ -3564,7 +3924,7 @@ void
 BrowserTabContent::setMontageSliceSpacing(const int32_t montageSliceSpacing)
 {
     m_volumeSliceSettings->setMontageSliceSpacing(montageSliceSpacing);
-    updateYokedBrowserTabs();
+    updateBrainModelYokedBrowserTabs();
 }
 
 /**
@@ -3574,7 +3934,7 @@ void
 BrowserTabContent::setSlicesToOrigin()
 {
     selectSlicesAtOrigin();
-    updateYokedBrowserTabs();
+    updateBrainModelYokedBrowserTabs();
 }
 
 /**
@@ -3588,7 +3948,7 @@ BrowserTabContent::reset()
         m_volumeSliceSettings->reset();
         m_obliqueVolumeRotationMatrix->identity();
     }
-    updateYokedBrowserTabs();
+    updateBrainModelYokedBrowserTabs();
 }
 
 /**
@@ -3610,7 +3970,7 @@ void
 BrowserTabContent::selectSlicesAtOrigin()
 {
     m_volumeSliceSettings->selectSlicesAtOrigin();
-    updateYokedBrowserTabs();
+    updateBrainModelYokedBrowserTabs();
 }
 
 /**
@@ -3622,7 +3982,7 @@ void
 BrowserTabContent::selectSlicesAtCoordinate(const float xyz[3])
 {
     m_volumeSliceSettings->selectSlicesAtCoordinate(xyz);
-    updateYokedBrowserTabs();
+    updateBrainModelYokedBrowserTabs();
 }
 
 /**
@@ -3646,8 +4006,118 @@ void
 BrowserTabContent::setIdentificationUpdatesVolumeSlices(const bool status)
 {
     m_identificationUpdatesVolumeSlices = status;
-    updateYokedBrowserTabs();
+    updateBrainModelYokedBrowserTabs();
 }
+
+/**
+ * @return Is volume axis crosshairs displayed
+ */
+bool
+BrowserTabContent::isVolumeAxesCrosshairsDisplayed() const
+{
+    return m_displayVolumeAxesCrosshairs;
+}
+
+/**
+ * Set volume axis crosshairs displayed
+ *
+ * @param displayed
+ *     New status
+ */
+void
+BrowserTabContent::setVolumeAxesCrosshairsDisplayed(const bool displayed)
+{
+    m_displayVolumeAxesCrosshairs = displayed;
+    updateBrainModelYokedBrowserTabs();
+}
+
+/**
+ * @return Is volume axis crosshairs labels displayed
+ */
+bool
+BrowserTabContent::isVolumeAxesCrosshairLabelsDisplayed() const
+{
+    return m_displayVolumeAxesCrosshairLabels;
+}
+
+/**
+ * Set volume axis crosshairs labels displayed
+ *
+ * @param displayed
+ *     New status
+ */
+void
+BrowserTabContent::setVolumeAxesCrosshairLabelsDisplayed(const bool displayed)
+{
+    m_displayVolumeAxesCrosshairLabels = displayed;
+    updateBrainModelYokedBrowserTabs();
+}
+
+/**
+ * @return Is volume montage axes coordinates displayed
+ */
+bool
+BrowserTabContent::isVolumeMontageAxesCoordinatesDisplayed() const
+{
+    return m_displayVolumeMontageAxesCoordinates;
+}
+
+/**
+ * Set volume montage axes coordinates displayed
+ *
+ * @param displayed
+ *     New status
+ */
+void
+BrowserTabContent::setVolumeMontageAxesCoordinatesDisplayed(const bool displayed)
+{
+    m_displayVolumeMontageAxesCoordinates = displayed;
+    updateBrainModelYokedBrowserTabs();
+}
+
+/**
+ * @return Digits right of decimal for montage coordinates
+ */
+int32_t
+BrowserTabContent::getVolumeMontageCoordinatePrecision() const
+{
+    return m_volumeMontageCoordinatePrecision;
+}
+
+/**
+ * Set digits right of decimal for montage coordinates
+ *
+ * @param volumeMontageCoordinatePrecision
+ *     New precision
+ */
+void
+BrowserTabContent::setVolumeMontageCoordinatePrecision(const int32_t volumeMontageCoordinatePrecision)
+{
+    m_volumeMontageCoordinatePrecision = volumeMontageCoordinatePrecision;
+    updateBrainModelYokedBrowserTabs();
+}
+
+/**
+ * @return Is lighting enabled ?
+ */
+bool
+BrowserTabContent::isLightingEnabled() const
+{
+    return m_lightingEnabled;
+}
+
+/**
+ * Set lighting enabled.
+ *
+ * @param lightingEnabled
+ *     New status for lighting.
+ */
+void
+BrowserTabContent::setLightingEnabled(const bool lightingEnabled)
+{
+    m_lightingEnabled = lightingEnabled;
+}
+
 
 /**
  * Return the axial slice index.
@@ -3670,7 +4140,7 @@ BrowserTabContent::setSliceIndexAxial(const VolumeMappableInterface* volumeFile,
                                         const int64_t sliceIndexAxial)
 {
     m_volumeSliceSettings->setSliceIndexAxial(volumeFile, sliceIndexAxial);
-    updateYokedBrowserTabs();
+    updateBrainModelYokedBrowserTabs();
 }
 
 /**
@@ -3695,7 +4165,7 @@ BrowserTabContent::setSliceIndexCoronal(const VolumeMappableInterface* volumeFil
                                           const int64_t sliceIndexCoronal)
 {
     m_volumeSliceSettings->setSliceIndexCoronal(volumeFile, sliceIndexCoronal);
-    updateYokedBrowserTabs();
+    updateBrainModelYokedBrowserTabs();
 }
 
 /**
@@ -3720,7 +4190,7 @@ BrowserTabContent::setSliceIndexParasagittal(const VolumeMappableInterface* volu
 {
     m_volumeSliceSettings->setSliceIndexParasagittal(volumeFile,
                                                          sliceIndexParasagittal);
-    updateYokedBrowserTabs();
+    updateBrainModelYokedBrowserTabs();
 }
 
 /**
@@ -3741,7 +4211,7 @@ void
 BrowserTabContent::setSliceCoordinateAxial(const float z)
 {
     m_volumeSliceSettings->setSliceCoordinateAxial(z);
-    updateYokedBrowserTabs();
+    updateBrainModelYokedBrowserTabs();
 }
 
 /**
@@ -3762,7 +4232,7 @@ void
 BrowserTabContent::setSliceCoordinateCoronal(const float y)
 {
     m_volumeSliceSettings->setSliceCoordinateCoronal(y);
-    updateYokedBrowserTabs();
+    updateBrainModelYokedBrowserTabs();
 }
 
 /**
@@ -3783,7 +4253,7 @@ void
 BrowserTabContent::setSliceCoordinateParasagittal(const float x)
 {
     m_volumeSliceSettings->setSliceCoordinateParasagittal(x);
-    updateYokedBrowserTabs();
+    updateBrainModelYokedBrowserTabs();
 }
 
 /**
@@ -3806,7 +4276,7 @@ void
 BrowserTabContent::setSliceParasagittalEnabled(const bool sliceEnabledParasagittal)
 {
     m_volumeSliceSettings->setSliceParasagittalEnabled(sliceEnabledParasagittal);
-    updateYokedBrowserTabs();
+    updateBrainModelYokedBrowserTabs();
 }
 
 /**
@@ -3829,7 +4299,7 @@ void
 BrowserTabContent::setSliceCoronalEnabled(const bool sliceEnabledCoronal)
 {
     m_volumeSliceSettings->setSliceCoronalEnabled(sliceEnabledCoronal);
-    updateYokedBrowserTabs();
+    updateBrainModelYokedBrowserTabs();
 }
 
 /**
@@ -3852,7 +4322,7 @@ void
 BrowserTabContent::setSliceAxialEnabled(const bool sliceEnabledAxial)
 {
     m_volumeSliceSettings->setSliceAxialEnabled(sliceEnabledAxial);
-    updateYokedBrowserTabs();
+    updateBrainModelYokedBrowserTabs();
 }
 
 
@@ -3877,7 +4347,7 @@ void
 BrowserTabContent::setWholeBrainLeftEnabled(const bool enabled)
 {
     m_wholeBrainSurfaceSettings->setLeftEnabled(enabled);
-    updateYokedBrowserTabs();
+    updateBrainModelYokedBrowserTabs();
 }
 
 /**
@@ -3898,7 +4368,7 @@ void
 BrowserTabContent::setWholeBrainRightEnabled(const bool enabled)
 {
     m_wholeBrainSurfaceSettings->setRightEnabled(enabled);
-    updateYokedBrowserTabs();
+    updateBrainModelYokedBrowserTabs();
 }
 
 /**
@@ -3919,7 +4389,7 @@ void
 BrowserTabContent::setWholeBrainCerebellumEnabled(const bool enabled)
 {
     m_wholeBrainSurfaceSettings->setCerebellumEnabled(enabled);
-    updateYokedBrowserTabs();
+    updateBrainModelYokedBrowserTabs();
 }
 
 /**
@@ -3940,7 +4410,7 @@ void
 BrowserTabContent::setWholeBrainLeftRightSeparation(const float separation)
 {
     m_wholeBrainSurfaceSettings->setLeftRightSeparation(separation);
-    updateYokedBrowserTabs();
+    updateBrainModelYokedBrowserTabs();
 }
 
 /**
@@ -3961,30 +4431,88 @@ void
 BrowserTabContent::setWholeBrainCerebellumSeparation(const float separation)
 {
     m_wholeBrainSurfaceSettings->setCerebellumSeparation(separation);
-    updateYokedBrowserTabs();
+    updateBrainModelYokedBrowserTabs();
 }
 
 /**
- * @return Selected yoking group.
+ * @return Selected yoking group for charts
  */
 YokingGroupEnum::Enum
-BrowserTabContent::getYokingGroup() const
+BrowserTabContent::getChartModelYokingGroup() const
 {
-    return m_yokingGroup;
+    return m_chartModelYokingGroup;
 }
 
 /**
- * Set the selected yoking group.
+ * Set the selected yoking group for charts.
  *
- * @param yokingGroup
+ * @param chartModelYokingType
  *    New value for yoking group.
  */
 void
-BrowserTabContent::setYokingGroup(const YokingGroupEnum::Enum yokingGroup)
+BrowserTabContent::setChartModelYokingGroup(const YokingGroupEnum::Enum chartModelYokingType)
 {
-    m_yokingGroup = yokingGroup;
+    m_chartModelYokingGroup = chartModelYokingType;
     
-    if (m_yokingGroup == YokingGroupEnum::YOKING_GROUP_OFF) {
+    if (m_chartModelYokingGroup == YokingGroupEnum::YOKING_GROUP_OFF) {
+        return;
+    }
+    
+    int32_t copyFromTabIndex = -1;
+    
+    /*
+     * Find another browser tab using the same yoking as 'me' and copy
+     * yoked data from the other browser tab.
+     */
+    for (std::set<BrowserTabContent*>::iterator iter = s_allBrowserTabContent.begin();
+         iter != s_allBrowserTabContent.end();
+         iter++) {
+        BrowserTabContent* btc = *iter;
+        if (btc != this) {
+            if (btc->getChartModelYokingGroup() == m_chartModelYokingGroup) {
+                copyFromTabIndex = btc->getTabNumber();
+                /*
+                 * If anything is added, also need to update updateYokedBrowserTabs()
+                 */
+                *m_chartTwoMatrixViewingTranformation = *btc->m_chartTwoMatrixViewingTranformation;
+                *m_chartTwoMatrixDisplayProperties = *btc->m_chartTwoMatrixDisplayProperties;
+                break;
+            }
+        }
+    }
+    
+    if (copyFromTabIndex >= 0) {
+        /*
+         * Maybe NULL when restoring scenes
+         */
+        if (m_chartTwoModel != NULL) {
+            m_chartTwoModel->copyChartTwoCartesianAxes(copyFromTabIndex,
+                                                       m_tabNumber);
+        }
+    }
+}
+
+/**
+ * @return Selected yoking group for brain models (surface or volumes)
+ */
+YokingGroupEnum::Enum
+BrowserTabContent::getBrainModelYokingGroup() const
+{
+    return m_brainModelYokingGroup;
+}
+
+/**
+ * Set the selected yoking group for brain models (surface or volumes)
+ *
+ * @param brainModelYokingType
+ *    New value for yoking group.
+ */
+void
+BrowserTabContent::setBrainModelYokingGroup(const YokingGroupEnum::Enum brainModelYokingType)
+{
+    m_brainModelYokingGroup = brainModelYokingType;
+    
+    if (m_brainModelYokingGroup == YokingGroupEnum::YOKING_GROUP_OFF) {
         return;
     }
     
@@ -3997,7 +4525,7 @@ BrowserTabContent::setYokingGroup(const YokingGroupEnum::Enum yokingGroup)
          iter++) {
         BrowserTabContent* btc = *iter;
         if (btc != this) {
-            if (btc->getYokingGroup() == m_yokingGroup) {
+            if (btc->getBrainModelYokingGroup() == m_brainModelYokingGroup) {
                 /*
                  * If anything is added, also need to update updateYokedBrowserTabs()
                  */
@@ -4009,6 +4537,14 @@ BrowserTabContent::setYokingGroup(const YokingGroupEnum::Enum yokingGroup)
                 *m_obliqueVolumeRotationMatrix = *btc->m_obliqueVolumeRotationMatrix;
                 *m_clippingPlaneGroup = *btc->m_clippingPlaneGroup;
                 m_identificationUpdatesVolumeSlices = btc->m_identificationUpdatesVolumeSlices;
+                m_displayVolumeAxesCrosshairs = btc->m_displayVolumeAxesCrosshairs;
+                m_displayVolumeAxesCrosshairLabels = btc->m_displayVolumeAxesCrosshairLabels;
+                m_displayVolumeMontageAxesCoordinates = btc->m_displayVolumeMontageAxesCoordinates;
+                m_volumeMontageCoordinatePrecision = btc->m_volumeMontageCoordinatePrecision;
+                /**
+                 * lighting enabled NOT yoked 
+                 * m_lightingEnabled = btc->m_lightingEnabled;
+                 */
                 break;
             }
         }
@@ -4016,26 +4552,71 @@ BrowserTabContent::setYokingGroup(const YokingGroupEnum::Enum yokingGroup)
 }
 
 /**
- * @return Is this browser tab yoked?
+ * @return Is this browser tab brain model yoked?
  */
 bool
-BrowserTabContent::isYoked() const
+BrowserTabContent::isBrainModelYoked() const
 {
-    const bool yoked = (m_yokingGroup != YokingGroupEnum::YOKING_GROUP_OFF);
+    const bool yoked = (m_brainModelYokingGroup != YokingGroupEnum::YOKING_GROUP_OFF);
     return yoked;
 }
 
 /**
- * Update other browser tabs with yoked data.
+ * @return Is this browser tab chart model yoked?
+ */
+bool
+BrowserTabContent::isChartModelYoked() const
+{
+    const bool yoked = (m_chartModelYokingGroup != YokingGroupEnum::YOKING_GROUP_OFF);
+    return yoked;
+}
+
+/**
+ * Update other browser tabs with brain or chart yoked data dependent upon active model
  */
 void
-BrowserTabContent::updateYokedBrowserTabs()
+BrowserTabContent::updateYokedModelBrowserTabs()
+{
+    bool chartFlag = false;
+    
+    switch (getSelectedModelType()) {
+        case ModelTypeEnum::MODEL_TYPE_CHART:
+            chartFlag = true;
+            break;
+        case ModelTypeEnum::MODEL_TYPE_CHART_TWO:
+            chartFlag = true;
+            break;
+        case ModelTypeEnum::MODEL_TYPE_INVALID:
+            break;
+        case ModelTypeEnum::MODEL_TYPE_SURFACE:
+            break;
+        case ModelTypeEnum::MODEL_TYPE_SURFACE_MONTAGE:
+            break;
+        case ModelTypeEnum::MODEL_TYPE_VOLUME_SLICES:
+            break;
+        case ModelTypeEnum::MODEL_TYPE_WHOLE_BRAIN:
+            break;
+    }
+ 
+    if (chartFlag) {
+        updateChartModelYokedBrowserTabs();
+    }
+    else {
+        updateBrainModelYokedBrowserTabs();
+    }
+}
+
+/**
+ * Update other browser tabs with brain model yoked data.
+ */
+void
+BrowserTabContent::updateBrainModelYokedBrowserTabs()
 {
     if (isExecutingConstructor) {
         return;
     }
     
-    if (m_yokingGroup == YokingGroupEnum::YOKING_GROUP_OFF) {
+    if (m_brainModelYokingGroup == YokingGroupEnum::YOKING_GROUP_OFF) {
         return;
     }
     
@@ -4050,7 +4631,7 @@ BrowserTabContent::updateYokedBrowserTabs()
             /*
              * If anything is added, also need to update setYokingGroup()
              */
-            if (btc->getYokingGroup() == m_yokingGroup) {
+            if (btc->getBrainModelYokingGroup() == m_brainModelYokingGroup) {
                 *btc->m_viewingTransformation = *m_viewingTransformation;
                 *btc->m_flatSurfaceViewingTransformation = *m_flatSurfaceViewingTransformation;
                 *btc->m_cerebellumViewingTransformation = *m_cerebellumViewingTransformation;
@@ -4059,6 +4640,47 @@ BrowserTabContent::updateYokedBrowserTabs()
                 *btc->m_obliqueVolumeRotationMatrix = *m_obliqueVolumeRotationMatrix;
                 *btc->m_clippingPlaneGroup = *m_clippingPlaneGroup;
                 btc->m_identificationUpdatesVolumeSlices = m_identificationUpdatesVolumeSlices;
+                btc->m_displayVolumeAxesCrosshairs = m_displayVolumeAxesCrosshairs;
+                btc->m_displayVolumeAxesCrosshairLabels = m_displayVolumeAxesCrosshairLabels;
+                btc->m_displayVolumeMontageAxesCoordinates = m_displayVolumeMontageAxesCoordinates;
+                btc->m_volumeMontageCoordinatePrecision = m_volumeMontageCoordinatePrecision;
+                /**
+                 * lighting enabled NOT yoked
+                 * btc->m_lightingEnabled = m_lightingEnabled;
+                 */
+            }
+        }
+    }
+}
+
+/**
+ * Update other browser tabs with brain model yoked data.
+ */
+void
+BrowserTabContent::updateChartModelYokedBrowserTabs()
+{
+    if (isExecutingConstructor) {
+        return;
+    }
+    
+    if (m_chartModelYokingGroup == YokingGroupEnum::YOKING_GROUP_OFF) {
+        return;
+    }
+    
+    /*
+     * Copy yoked data from 'me' to all other yoked browser tabs
+     */
+    for (std::set<BrowserTabContent*>::iterator iter = s_allBrowserTabContent.begin();
+         iter != s_allBrowserTabContent.end();
+         iter++) {
+        BrowserTabContent* btc = *iter;
+        if (btc != this) {
+            /*
+             * If anything is added, also need to update setYokingGroup()
+             */
+            if (btc->getChartModelYokingGroup() == m_chartModelYokingGroup) {
+                *btc->m_chartTwoMatrixViewingTranformation = *m_chartTwoMatrixViewingTranformation;
+                *btc->m_chartTwoMatrixDisplayProperties = *m_chartTwoMatrixDisplayProperties;
             }
         }
     }

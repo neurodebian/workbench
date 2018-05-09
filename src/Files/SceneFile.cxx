@@ -19,10 +19,12 @@
  */
 /*LICENSE_END*/
 
+#include <QDir>
 #include <QTextStream>
 
 #include <algorithm>
 #include <memory>
+#include <set>
 
 #define __SCENE_FILE_DECLARE__
 #include "SceneFile.h"
@@ -41,9 +43,11 @@
 #include "SceneClassArray.h"
 #include "SceneFileSaxReader.h"
 #include "SceneInfo.h"
+#include "ScenePathName.h"
 #include "SceneXmlElements.h"
 #include "SceneWriterXml.h"
 #include "SpecFile.h"
+#include "SystemUtilities.h"
 #include "XmlSaxParser.h"
 #include "XmlWriter.h"
 
@@ -63,7 +67,10 @@ SceneFile::SceneFile()
 : CaretDataFile(DataFileTypeEnum::SCENE)
 {
     m_balsaStudyID = "";
-    m_baseDirectory = "";
+    m_balsaStudyTitle = "";
+    m_balsaCustomBaseDirectory = "";
+    m_balsaExtractToDirectoryName = "";
+    m_basePathType = SceneFileBasePathTypeEnum::AUTOMATIC;
     m_metadata = new GiftiMetaData();
 }
 
@@ -93,7 +100,10 @@ SceneFile::clear()
     m_metadata->clear();
     
     m_balsaStudyID = "";
-    m_baseDirectory = "";
+    m_balsaStudyTitle = "";
+    m_balsaCustomBaseDirectory = "";
+    m_balsaExtractToDirectoryName = "";
+    m_basePathType = SceneFileBasePathTypeEnum::AUTOMATIC;
     
     for (std::vector<Scene*>::iterator iter = m_scenes.begin();
          iter != m_scenes.end();
@@ -490,25 +500,72 @@ SceneFile::setBalsaStudyID(const AString& balsaStudyID)
 }
 
 /**
- * @return The Base Directory
+ * @return The BALSA Study Title.
  */
 AString
-SceneFile::getBaseDirectory() const
+SceneFile::getBalsaStudyTitle() const
 {
-    return m_baseDirectory;
+    return m_balsaStudyTitle;
 }
 
 /**
- * Set the Base Directory.
+ * Set the BALSA Study Title.
+ *
+ * @param balsaStudyTitle
+ *     New value for BALSA Study Title.
+ */
+void
+SceneFile::setBalsaStudyTitle(const AString& balsaStudyTitle)
+{
+    if (balsaStudyTitle != m_balsaStudyTitle) {
+        m_balsaStudyTitle = balsaStudyTitle;
+        setModified();
+    }
+}
+
+/**
+ * @return The Custom Base Directory
+ */
+AString
+SceneFile::getBalsaCustomBaseDirectory() const
+{
+    return m_balsaCustomBaseDirectory;
+}
+
+/**
+ * Set the Custom Base Directory.
  *
  * @param baseDirectory
  *     New value for Base Directory.
  */
 void
-SceneFile::setBaseDirectory(const AString& baseDirectory)
+SceneFile::setBalsaCustomBaseDirectory(const AString& balsaBaseDirectory)
 {
-    if (baseDirectory != m_baseDirectory) {
-        m_baseDirectory = baseDirectory;
+    if (balsaBaseDirectory != m_balsaCustomBaseDirectory) {
+        m_balsaCustomBaseDirectory = balsaBaseDirectory;
+        setModified();
+    }
+}
+
+/**
+ * @return The base path type.
+ */
+SceneFileBasePathTypeEnum::Enum
+SceneFile::getBasePathType() const
+{
+    return m_basePathType;
+}
+
+/**
+ * Set the base path type.
+ * 
+ * @param basePathType
+ *     New type for base path.
+ */
+void SceneFile::setBasePathType(const SceneFileBasePathTypeEnum::Enum basePathType)
+{
+    if (basePathType != m_basePathType) {
+        m_basePathType = basePathType;
         setModified();
     }
 }
@@ -534,7 +591,8 @@ SceneFile::readFile(const AString& filenameIn)
     checkFileReadability(filename);
     
     this->setFileName(filename);
-    SceneFileSaxReader saxReader(this);
+    SceneFileSaxReader saxReader(this,
+                                 filename);
     std::auto_ptr<XmlSaxParser> parser(XmlSaxParser::createXmlParser());
     try {
         parser->parseFile(filename, &saxReader);
@@ -646,8 +704,46 @@ SceneFile::writeFile(const AString& filename)
         xmlWriter.writeStartElement(SceneFile::XML_TAG_SCENE_INFO_DIRECTORY_TAG);
         xmlWriter.writeElementCData(SceneXmlElements::SCENE_INFO_BALSA_STUDY_ID_TAG,
                                     getBalsaStudyID());
-        xmlWriter.writeElementCData(SceneXmlElements::SCENE_INFO_BASE_DIRECTORY_TAG,
-                                    getBaseDirectory());
+        xmlWriter.writeElementCData(SceneXmlElements::SCENE_INFO_BALSA_STUDY_TITLE_TAG,
+                                    getBalsaStudyTitle());
+        switch (getBasePathType()) {
+            case SceneFileBasePathTypeEnum::AUTOMATIC:
+                xmlWriter.writeElementCData(SceneXmlElements::SCENE_INFO_BALSA_BASE_DIRECTORY_TAG,
+                                            "");
+                break;
+            case SceneFileBasePathTypeEnum::CUSTOM:
+            {
+                /*
+                 * Write base path as a path RELATIVE to the scene file
+                 * but only when base path type is CUSTOM
+                 * Note: we do not use FileInformation::getCanonicalFilePath()
+                 * because it returns an empty string if the file DOES NOT exist
+                 * and this may occur since the file may be new and has not
+                 * been closed.
+                 */
+                if ( ! getBalsaCustomBaseDirectory().isEmpty()) {
+                    const AString baseDirAbsPath = FileInformation(getBalsaCustomBaseDirectory()).getAbsoluteFilePath();
+                    const AString sceneFileAbsPath = FileInformation(filename).getAbsoluteFilePath();
+                    ScenePathName basePathName("basePathName",
+                                               baseDirAbsPath);
+                    
+                    const AString relativeBasePath = basePathName.getRelativePathToSceneFile(sceneFileAbsPath);
+                    
+                    //std::cout << "baseDirAbsPath: " << baseDirAbsPath << std::endl;
+                    //std::cout << "sceneFileAbsPath: " << sceneFileAbsPath << std::endl;
+                    //std::cout << "relativeTempFileName: " << relativeBasePath << std::endl;
+                    
+                    xmlWriter.writeElementCData(SceneXmlElements::SCENE_INFO_BALSA_BASE_DIRECTORY_TAG,
+                                                relativeBasePath);
+                }
+            }
+                break;
+        }
+        xmlWriter.writeElementCData(SceneXmlElements::SCENE_INFO_BALSA_EXTRACT_TO_DIRECTORY_TAG,
+                                    getBalsaExtractToDirectoryName());
+        xmlWriter.writeElementCData(SceneXmlElements::SCENE_INFO_BASE_PATH_TYPE,
+                                    SceneFileBasePathTypeEnum::toName(getBasePathType()));
+        
         for (int32_t i = 0; i < numScenes; i++) {
             m_scenes[i]->getSceneInfo()->writeSceneInfo(xmlWriter,
                                                         i);
@@ -746,3 +842,317 @@ SceneFile::addToDataFileContentInformation(DataFileContentInformation& dataFileI
     }
 }
 
+/**
+ * @return Extract to directory name for zip file
+ */
+AString
+SceneFile::getBalsaExtractToDirectoryName() const
+{
+    return m_balsaExtractToDirectoryName;
+}
+
+/**
+ * Set Extract to directory name for zip file
+ *
+ * @param extractToDirectoryName
+ *    New value for Extract to directory name for zip file
+ */
+void
+SceneFile::setBalsaExtractToDirectoryName(const AString& extractToDirectoryName)
+{
+    if (extractToDirectoryName != m_balsaExtractToDirectoryName) {
+        setModified();
+        m_balsaExtractToDirectoryName = extractToDirectoryName;
+    }
+}
+
+/**
+ * Find the base directory that is a directory that is parent to all loaded data files
+ * and also including the scene file.
+ *
+ * @param baseDirectoryOut
+ *    Output containing the base directory
+ * @param missingFileNamesOut
+ *    Will contain data files that are in scenes but do not exist.
+ * @param errorMessageOut
+ *    Error message if finding base directory fails
+ * @return
+ *    True if the base directory is valid, else false.
+ */
+bool
+SceneFile::findBaseDirectoryForDataFiles(AString& baseDirectoryOut,
+                                         std::vector<AString>& missingFileNamesOut,
+                                         AString& errorMessageOut) const
+{
+    baseDirectoryOut.clear();
+    missingFileNamesOut.clear();
+    errorMessageOut.clear();
+    
+    const AString directorySeparator("/");
+    
+    std::vector<AString> allFileNames = getAllDataFileNamesFromAllScenes();
+    allFileNames.push_back(getFileName());
+    
+    /*
+     * Find a unique set of directory names used by the data files and
+     * also verify that all files exist.
+     */
+    std::set<AString> directoryNamesUniqueSet;
+    std::set<AString> missingFileNames;
+    for (auto name : allFileNames) {
+        if (DataFile::isFileOnNetwork(name)) {
+            /* assume file on network are valid */
+        }
+        else {
+            FileInformation fileInfo(name);
+            if (fileInfo.exists()) {
+                AString dirName = fileInfo.getAbsolutePath().trimmed();
+                if ( ! dirName.isEmpty()) {
+                    /*
+                     * QDir::cleanPath() removes multiple separators and resolves "." or ".."
+                     * QDir::fromNativeSeparators() ensures "/" is used for the directory separator.
+                     */
+                    dirName = QDir::cleanPath(dirName);
+                    dirName = QDir::fromNativeSeparators(dirName);
+                    if ( ! dirName.isEmpty()) {
+                        directoryNamesUniqueSet.insert(dirName);
+                    }
+                }
+            }
+            else {
+                missingFileNames.insert(name);
+            }
+        }
+    }
+    
+    const FileInformation fileInfo(getFileName());
+    const AString sceneFilePath = fileInfo.getAbsolutePath().trimmed();
+    
+    missingFileNamesOut.insert(missingFileNamesOut.end(),
+                               missingFileNames.begin(),
+                               missingFileNames.end());
+    
+    const int32_t numDirs = static_cast<int32_t>(directoryNamesUniqueSet.size());
+    if (numDirs <= 0) {
+        /*
+         * if no valid files in scene, user path of scene file.
+         */
+        baseDirectoryOut = sceneFilePath;
+        return true;
+    }
+    
+    /*
+     * Compare the first directory with all other directories
+     * to find longest common directory path.
+     * Each directory is split into its path components and they
+     * are compared.
+     */
+    bool firstFlag = true;
+    std::vector<AString> longestPathMatch;
+    for (const auto dirName : directoryNamesUniqueSet) {
+        if (firstFlag) {
+            firstFlag = false;
+            longestPathMatch = AString::stringListToVector(dirName.split(directorySeparator));
+        }
+        else {
+            const std::vector<AString> otherPath = AString::stringListToVector(dirName.split(directorySeparator));
+            const int32_t matchCount = AString::matchingCount(longestPathMatch,
+                                                              otherPath);
+            longestPathMatch.resize(matchCount);
+        }
+    }
+    
+    baseDirectoryOut = sceneFilePath;
+    if ( ! longestPathMatch.empty()) {
+        /*
+         * Assemble the path components into a directory.
+         */
+        baseDirectoryOut = AString::join(longestPathMatch,
+                                          directorySeparator);
+    }
+    
+    /*
+     * If no "longest path", files are on multiple disks
+     */
+    if (baseDirectoryOut.isEmpty()) {
+        if (SystemUtilities::isWindowsOperatingSystem()) {
+            /*
+             * On Windows, there is no "root directory"
+             */
+            baseDirectoryOut = "";
+            errorMessageOut = ("Files appear to be on different disks.  On the Windows Operating System, "
+                               "there is no directory that is parent to the disks.  Files will need to "
+                               "be moved so that they are on one disk");
+            return false;
+        }
+        else {
+            /*
+             * On Unix, user root directory
+             */
+            baseDirectoryOut = directorySeparator;
+        }
+    }
+    
+    return true;
+}
+
+/**
+ * @return The base directory for all data files and all of 
+ *         the base directorys ancestors (parent directory
+ *         up to root directory).
+ *
+ * @param maximumAncestorCount
+ *         Maximum number of ancestor directories for output
+ */
+std::vector<AString>
+SceneFile::getBaseDirectoryHierarchyForDataFiles(const int32_t maximumAncestorCount)
+{
+    std::vector<AString> names;
+    
+    AString baseDirectoryName;
+    std::vector<AString> missingFileNames;
+    AString errorMessage;
+    if (findBaseDirectoryForDataFiles(baseDirectoryName,
+                                      missingFileNames,
+                                      errorMessage)) {
+        QDir dir(baseDirectoryName);
+        
+        for (int32_t i = 0; i < maximumAncestorCount; i++) {
+            names.push_back(dir.absolutePath());
+            
+            if (dir.isRoot()) {
+                break;
+            }
+            else {
+                if ( ! dir.cdUp()) {
+                    break;
+                }
+            }
+        }
+    }
+    
+    return names;
+}
+
+/**
+ * @return A vector containing the names of all data files from all scenes.
+ */
+std::vector<AString>
+SceneFile::getAllDataFileNamesFromAllScenes() const
+{
+    const bool includeSpecFileFlag = false;
+    
+    std::set<AString> filenamesSet;
+    
+    /**
+     * Find all 'path name' elements from ALL scenes
+     */
+    for (Scene* scene: m_scenes) {
+        CaretAssert(scene);
+        std::vector<SceneObject*> children = scene->getDescendants();
+        for (SceneObject* sceneObject : children) {
+            CaretAssert(sceneObject);
+            if (sceneObject->getDataType() == SceneObjectDataTypeEnum::SCENE_PATH_NAME) {
+                const ScenePathName* scenePathName = dynamic_cast<ScenePathName*>(sceneObject);
+                /*
+                 * Will be NULL for 'path name arrays' which we ignore
+                 */
+                if (scenePathName != NULL) {
+                    /*
+                     * files in spec file are named "fileName" in the scene
+                     * specFile is named "specFileName"
+                     * and these names are unique to name of files in the spec file
+                     */
+                    bool useNameFlag = false;
+                    if (sceneObject->getName() == "fileName") {
+                        useNameFlag = true;
+                    }
+                    else if (sceneObject->getName() == "specFileName") {
+                        useNameFlag = includeSpecFileFlag;
+                    }
+                    if (useNameFlag) {
+                        AString pathName = scenePathName->stringValue().trimmed();
+                        if ( ! pathName.isEmpty()) {
+                            QFileInfo fileInfo(pathName);
+                            const QString absPathName = fileInfo.absoluteFilePath();
+                            if ( ! absPathName.isEmpty()) {
+                                pathName = absPathName;
+                            }
+                            filenamesSet.insert(pathName);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    std::vector<AString> filenamesOut(filenamesSet.begin(),
+                                      filenamesSet.end());
+    
+    return filenamesOut;
+}
+
+/**
+ * @return Default name for a ZIP file containing the scene file and its data files.
+ */
+AString
+SceneFile::getDefaultZipFileName() const
+{
+    return FileInformation::replaceExtension(getFileName(), ".zip");
+}
+
+/**
+ * @return The default extract to directory name (end of default base directory)
+ */
+AString
+SceneFile::getDefaultExtractToDirectoryName() const
+{
+    AString directoryName;
+
+    AString baseDirectoryName;
+    std::vector<AString> missingFileNames;
+    AString errorMessage;
+    if (findBaseDirectoryForDataFiles(baseDirectoryName,
+                                      missingFileNames,
+                                      errorMessage)) {
+        QDir dir(baseDirectoryName);
+        directoryName = dir.dirName();
+    }
+    
+    if (directoryName.isEmpty()) {
+        QDir dir(SystemUtilities::systemCurrentDirectory());
+        directoryName = dir.dirName();
+    }
+    
+    return directoryName;
+}
+
+/**
+ * @return True if this scene is modified.
+ */
+bool
+SceneFile::isModified() const
+{
+    if (CaretDataFile::isModified()) {
+        return true;
+    }
+    for (const auto scene : m_scenes) {
+        if (scene->isModified()) {
+            return true;
+        }
+    }
+    
+    return false;
+}
+
+/**
+ * Clear the modified status of this scene.
+ */
+void
+SceneFile::clearModified()
+{
+    CaretDataFile::clearModified();
+    for (auto scene : m_scenes) {
+        scene->clearModified();
+    }
+}

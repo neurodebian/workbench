@@ -21,7 +21,18 @@
  */
 /*LICENSE_END*/
 
+/*
+ * When GLEW is used, CaretOpenGLInclude.h will include "Gl/glew.h".
+ * Gl/glew.h MUST BE BEFORE Gl/gl.h and Gl/gl.h is included by
+ * QGLWidget so, we must include CaretOpenGL.h before QGLWidget.
+ */
+#include "CaretOpenGLInclude.h"
+
+#ifdef WORKBENCH_USE_QT5_QOPENGL_WIDGET
+#include <QOpenGLWidget>
+#else
 #include <QGLWidget>
+#endif
 
 #include "Matrix4x4.h"
 
@@ -33,7 +44,11 @@ namespace caret {
     class BrainOpenGLShapeRing;
     class BrainOpenGLShapeSphere;
     
+#ifdef WORKBENCH_USE_QT5_QOPENGL_WIDGET
+    class FiberSamplesOpenGLWidget : public QOpenGLWidget {
+#else
     class FiberSamplesOpenGLWidget : public QGLWidget {
+#endif
         Q_OBJECT
         
     public:

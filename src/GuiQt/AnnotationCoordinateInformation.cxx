@@ -100,6 +100,10 @@ AnnotationCoordinateInformation::reset() {
     m_windowPixelXYZ[0] = 0.0;
     m_windowPixelXYZ[1] = 0.0;
     m_windowPixelXYZ[2] = 0.0;
+    m_chartXYZ[0] = 0.0;
+    m_chartXYZ[1] = 0.0;
+    m_chartXYZ[2] = 0.0;
+    m_chartXYZValid = false;
 }
 
 bool
@@ -108,8 +112,8 @@ AnnotationCoordinateInformation::isCoordinateSpaceValid(const AnnotationCoordina
     bool validSpaceFlag = false;
     
     switch (space) {
-        case AnnotationCoordinateSpaceEnum::PIXELS:
-            CaretAssertMessage(0, "Space should never be pixels");
+        case AnnotationCoordinateSpaceEnum::CHART:
+            validSpaceFlag = m_chartXYZValid;
             break;
         case AnnotationCoordinateSpaceEnum::STEREOTAXIC:
             validSpaceFlag = m_modelXYZValid;
@@ -119,6 +123,9 @@ AnnotationCoordinateInformation::isCoordinateSpaceValid(const AnnotationCoordina
             break;
         case AnnotationCoordinateSpaceEnum::TAB:
             validSpaceFlag = (m_tabIndex >= 0);
+            break;
+        case AnnotationCoordinateSpaceEnum::VIEWPORT:
+            CaretAssertMessage(0, "Should not create/move viewport annotations");
             break;
         case AnnotationCoordinateSpaceEnum::WINDOW:
             validSpaceFlag = (m_windowIndex >= 0);
@@ -157,8 +164,9 @@ AnnotationCoordinateInformation::getValidCoordinateSpaces(const AnnotationCoordi
         const AnnotationCoordinateSpaceEnum::Enum space = *spaceIter;
         
         switch (space) {
-            case AnnotationCoordinateSpaceEnum::PIXELS:
+            case AnnotationCoordinateSpaceEnum::VIEWPORT:
                 break;
+            case AnnotationCoordinateSpaceEnum::CHART:
             case AnnotationCoordinateSpaceEnum::STEREOTAXIC:
             case AnnotationCoordinateSpaceEnum::SURFACE:
             case AnnotationCoordinateSpaceEnum::TAB:
@@ -175,7 +183,13 @@ AnnotationCoordinateInformation::getValidCoordinateSpaces(const AnnotationCoordi
                         addItFlag = coordInfoTwo->isCoordinateSpaceValid(space);
                         
                         switch (space) {
-                            case AnnotationCoordinateSpaceEnum::PIXELS:
+                            case AnnotationCoordinateSpaceEnum::CHART:
+                                /*
+                                 * Both coord info's must be in the SAME TAB
+                                 */
+                                if (coordInfoOne->m_tabIndex != coordInfoTwo->m_tabIndex) {
+                                    addItFlag = false;
+                                }
                             case AnnotationCoordinateSpaceEnum::STEREOTAXIC:
                                 /*
                                  * Both coord info's must be in the SAME TAB
@@ -198,6 +212,11 @@ AnnotationCoordinateInformation::getValidCoordinateSpaces(const AnnotationCoordi
                                 if (coordInfoOne->m_tabIndex != coordInfoTwo->m_tabIndex) {
                                     addItFlag = false;
                                 }
+                                break;
+                            case AnnotationCoordinateSpaceEnum::VIEWPORT:
+//                                if (coordInfoOne->m_windowIndex != coordInfoTwo->m_windowIndex) {
+//                                    addItFlag = false;
+//                                }
                                 break;
                             case AnnotationCoordinateSpaceEnum::WINDOW:
                                 if (coordInfoOne->m_windowIndex != coordInfoTwo->m_windowIndex) {
@@ -336,6 +355,37 @@ AnnotationCoordinateInformation::createCoordinateInformationFromXY(BrainOpenGLWi
         }
     }
     
+    if (tabContent != NULL) {
+        Matrix4x4 projectionMatrix;
+        Matrix4x4 modelviewMatrix;
+        int viewport[4];
+        if (viewportContent->getChartDataMatricesAndViewport(projectionMatrix,
+                                                             modelviewMatrix,
+                                                             viewport)) {
+            if ((windowX >= viewport[0])
+                && (windowX < (viewport[0] + viewport[2]))
+                && (windowY >= viewport[1])
+                && (windowY < (viewport[1] + viewport[3]))) {
+                double projectionArray[16];
+                projectionMatrix.getMatrixForOpenGL(projectionArray);
+                double modelviewArray[16];
+                modelviewMatrix.getMatrixForOpenGL(modelviewArray);
+                
+                double chartX = 0.0;
+                double chartY = 0.0;
+                double chartZ = 0.0;
+                if (gluUnProject(windowX, windowY, 0.0,
+                                 modelviewArray, projectionArray, viewport,
+                                 &chartX, &chartY, &chartZ) == GL_TRUE) {
+                    coordInfoOut.m_chartXYZ[0] = static_cast<float>(chartX);
+                    coordInfoOut.m_chartXYZ[1] = static_cast<float>(chartY);
+                    coordInfoOut.m_chartXYZ[2] = static_cast<float>(chartZ);
+                    coordInfoOut.m_chartXYZValid = true;
+                }
+            }
+        }
+    }
+    
     int windowViewport[4];
     viewportContent->getWindowViewport(windowViewport);
     coordInfoOut.m_windowPixelXYZ[0] = windowX - windowViewport[0];
@@ -423,6 +473,22 @@ AnnotationCoordinateInformation::setOneDimAnnotationCoordinatesForSpace(Annotati
     CaretAssert(endCoordinate);
     
     switch (coordinateSpace) {
+        case AnnotationCoordinateSpaceEnum::CHART:
+            if (coordInfoOne->m_chartXYZValid) {
+                startCoordinate->setXYZ(coordInfoOne->m_chartXYZ);
+                annotation->setCoordinateSpace(AnnotationCoordinateSpaceEnum::CHART);
+                
+                validCoordinateFlag = true;
+                
+                if (coordInfoTwo != NULL) {
+                    if (coordInfoTwo->m_chartXYZValid) {
+                        if (endCoordinate != NULL) {
+                            endCoordinate->setXYZ(coordInfoTwo->m_chartXYZ);
+                        }
+                    }
+                }
+            }
+            break;
         case AnnotationCoordinateSpaceEnum::STEREOTAXIC:
             if (coordInfoOne->m_modelXYZValid) {
                 startCoordinate->setXYZ(coordInfoOne->m_modelXYZ);
@@ -438,9 +504,6 @@ AnnotationCoordinateInformation::setOneDimAnnotationCoordinatesForSpace(Annotati
                     }
                 }
             }
-            break;
-        case AnnotationCoordinateSpaceEnum::PIXELS:
-            CaretAssert(0);
             break;
         case AnnotationCoordinateSpaceEnum::SURFACE:
             if (coordInfoOne->m_surfaceNodeValid) {
@@ -493,13 +556,18 @@ AnnotationCoordinateInformation::setOneDimAnnotationCoordinatesForSpace(Annotati
                     };
                     if (xyz[1] > 50.0) {
                         xyz[1] -= 25.0;
+                        endCoordinate->setXYZ(xyz);
                     }
                     else {
                         xyz[1] += 25.0;
+                        endCoordinate->setXYZ(coordInfoOne->m_tabXYZ);
+                        startCoordinate->setXYZ(xyz);
                     }
-                    endCoordinate->setXYZ(xyz);
                 }
             }
+            break;
+        case AnnotationCoordinateSpaceEnum::VIEWPORT:
+            CaretAssert(0);
             break;
         case AnnotationCoordinateSpaceEnum::WINDOW:
             if (coordInfoOne->m_windowIndex >= 0) {
@@ -524,11 +592,13 @@ AnnotationCoordinateInformation::setOneDimAnnotationCoordinatesForSpace(Annotati
                     };
                     if (xyz[1] > 50.0) {
                         xyz[1] -= 25.0;
+                        endCoordinate->setXYZ(xyz);
                     }
                     else {
                         xyz[1] += 25.0;
+                        endCoordinate->setXYZ(coordInfoOne->m_windowXYZ);
+                        startCoordinate->setXYZ(xyz);
                     }
-                    endCoordinate->setXYZ(xyz);
                 }
             }
             break;
@@ -569,6 +639,26 @@ AnnotationCoordinateInformation::setTwoDimAnnotationCoordinatesForSpace(Annotati
     AnnotationCoordinate* coordinate = annotation->getCoordinate();
     
     switch (coordinateSpace) {
+        case AnnotationCoordinateSpaceEnum::CHART:
+            if (coordInfoOne->m_chartXYZValid) {
+                coordinate->setXYZ(coordInfoOne->m_chartXYZ);
+                annotation->setCoordinateSpace(AnnotationCoordinateSpaceEnum::CHART);
+                
+                validCoordinateFlag = true;
+                
+                if (optionalCoordInfoTwo != NULL) {
+                    if (optionalCoordInfoTwo->m_chartXYZValid) {
+                        float centerXYZ[3] = {
+                            (float)(coordInfoOne->m_modelXYZ[0] + optionalCoordInfoTwo->m_modelXYZ[0]) / 2.0f,
+                            (float)(coordInfoOne->m_modelXYZ[1] + optionalCoordInfoTwo->m_modelXYZ[1]) / 2.0f,
+                            (float)(coordInfoOne->m_modelXYZ[2] + optionalCoordInfoTwo->m_modelXYZ[2]) / 2.0f
+                        };
+                        coordinate->setXYZ(centerXYZ);
+                        setWidthHeightWithTabCoordsFlag = true;
+                    }
+                }
+            }
+            break;
         case AnnotationCoordinateSpaceEnum::STEREOTAXIC:
             if (coordInfoOne->m_modelXYZValid) {
                 coordinate->setXYZ(coordInfoOne->m_modelXYZ);
@@ -579,18 +669,15 @@ AnnotationCoordinateInformation::setTwoDimAnnotationCoordinatesForSpace(Annotati
                 if (optionalCoordInfoTwo != NULL) {
                     if (optionalCoordInfoTwo->m_modelXYZValid) {
                         float centerXYZ[3] = {
-                            (coordInfoOne->m_modelXYZ[0] + optionalCoordInfoTwo->m_modelXYZ[0]) / 2.0,
-                            (coordInfoOne->m_modelXYZ[1] + optionalCoordInfoTwo->m_modelXYZ[1]) / 2.0,
-                            (coordInfoOne->m_modelXYZ[2] + optionalCoordInfoTwo->m_modelXYZ[2]) / 2.0
+                            (float)(coordInfoOne->m_modelXYZ[0] + optionalCoordInfoTwo->m_modelXYZ[0]) / 2.0f,
+                            (float)(coordInfoOne->m_modelXYZ[1] + optionalCoordInfoTwo->m_modelXYZ[1]) / 2.0f,
+                            (float)(coordInfoOne->m_modelXYZ[2] + optionalCoordInfoTwo->m_modelXYZ[2]) / 2.0f
                         };
                         coordinate->setXYZ(centerXYZ);
                         setWidthHeightWithTabCoordsFlag = true;
                     }
                 }
             }
-            break;
-        case AnnotationCoordinateSpaceEnum::PIXELS:
-            CaretAssert(0);
             break;
         case AnnotationCoordinateSpaceEnum::SURFACE:
             if (coordInfoOne->m_surfaceNodeValid) {
@@ -648,15 +735,18 @@ AnnotationCoordinateInformation::setTwoDimAnnotationCoordinatesForSpace(Annotati
                 if (optionalCoordInfoTwo != NULL) {
                     if (optionalCoordInfoTwo->m_tabIndex == coordInfoOne->m_tabIndex) {
                         float centerXYZ[3] = {
-                            (coordInfoOne->m_tabXYZ[0] + optionalCoordInfoTwo->m_tabXYZ[0]) / 2.0,
-                            (coordInfoOne->m_tabXYZ[1] + optionalCoordInfoTwo->m_tabXYZ[1]) / 2.0,
-                            (coordInfoOne->m_tabXYZ[2] + optionalCoordInfoTwo->m_tabXYZ[2]) / 2.0
+                            (coordInfoOne->m_tabXYZ[0] + optionalCoordInfoTwo->m_tabXYZ[0]) / 2.0f,
+                            (coordInfoOne->m_tabXYZ[1] + optionalCoordInfoTwo->m_tabXYZ[1]) / 2.0f,
+                            (coordInfoOne->m_tabXYZ[2] + optionalCoordInfoTwo->m_tabXYZ[2]) / 2.0f
                         };
                         coordinate->setXYZ(centerXYZ);
                         setWidthHeightWithTabCoordsFlag = true;
                     }
                 }
             }
+            break;
+        case AnnotationCoordinateSpaceEnum::VIEWPORT:
+            CaretAssert(0);
             break;
         case AnnotationCoordinateSpaceEnum::WINDOW:
             if (coordInfoOne->m_windowIndex >= 0) {
@@ -669,9 +759,9 @@ AnnotationCoordinateInformation::setTwoDimAnnotationCoordinatesForSpace(Annotati
                 if (optionalCoordInfoTwo != NULL) {
                     if (optionalCoordInfoTwo->m_windowIndex == coordInfoOne->m_windowIndex) {
                         float centerXYZ[3] = {
-                            (coordInfoOne->m_windowXYZ[0] + optionalCoordInfoTwo->m_windowXYZ[0]) / 2.0,
-                            (coordInfoOne->m_windowXYZ[1] + optionalCoordInfoTwo->m_windowXYZ[1]) / 2.0,
-                            (coordInfoOne->m_windowXYZ[2] + optionalCoordInfoTwo->m_windowXYZ[2]) / 2.0
+                            (coordInfoOne->m_windowXYZ[0] + optionalCoordInfoTwo->m_windowXYZ[0]) / 2.0f,
+                            (coordInfoOne->m_windowXYZ[1] + optionalCoordInfoTwo->m_windowXYZ[1]) / 2.0f,
+                            (coordInfoOne->m_windowXYZ[2] + optionalCoordInfoTwo->m_windowXYZ[2]) / 2.0f
                         };
                         coordinate->setXYZ(centerXYZ);
                         setWidthHeightWithWindowCoordsFlag = true;

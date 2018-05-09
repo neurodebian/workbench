@@ -22,6 +22,10 @@
 #include <cstdio>
 #include <fstream>
 
+#ifdef HAVE_GLEW
+#include <GL/glew.h>
+#endif
+
 #ifdef HAVE_OSMESA
 #include <GL/osmesa.h>
 #endif // HAVE_OSMESA
@@ -33,15 +37,21 @@
 #include "Brain.h"
 #include "BrainOpenGLFixedPipeline.h"
 #include "BrainOpenGLViewportContent.h"
+#include "BrainOpenGLWindowContent.h"
+#include "BrowserWindowContent.h"
 #include "CaretAssert.h"
+#include "CaretPreferences.h"
 #include "CaretLogger.h"
 #include "DataFileException.h"
 #include "EventBrowserTabGet.h"
+#include "EventBrowserWindowContent.h"
+#include "EventMapYokingSelectMap.h"
 #include "EventManager.h"
 #include "FileInformation.h"
 #include "DummyFontTextRenderer.h"
 #include "FtglFontTextRenderer.h"
 #include "ImageFile.h"
+#include "MapYokingGroupEnum.h"
 #include "OperationShowScene.h"
 #include "OperationException.h"
 #include "Scene.h"
@@ -59,7 +69,7 @@
 using namespace caret;
 
 /**
- * \class caret::OperationShowScene 
+ * \class caret::OperationShowScene
  * \brief Offscreen rendering of scene to an image file
  *
  * Render a scene into an image file using the Offscreen Mesa Library
@@ -98,13 +108,21 @@ OperationShowScene::getParameters()
     ret->addStringParameter(3, "image-file-name", "output image file name");
     
     ret->addIntegerParameter(4, "image-width", "width of output image(s)");
-
+    
     ret->addIntegerParameter(5, "image-height", "height of output image(s)");
     
     const QString windowSizeSwitch("-use-window-size");
     ret->createOptionalParameter(6, windowSizeSwitch, "Override image size with window size");
     
     ret->createOptionalParameter(7, "-no-scene-colors", "Do not use background and foreground colors in scene");
+    
+    OptionalParameter* mapYokeOpt = ret->createOptionalParameter(8, "-set-map-yoke", "Override selected map index for a map yoking group.");
+    mapYokeOpt->addStringParameter(1, "Map Yoking Roman Numeral", "Roman numeral identifying the map yoking group (I, II, III, IV, V, VI, VII, VIII, IX, X)");
+    mapYokeOpt->addIntegerParameter(2, "Map Index", "Map index for yoking group.  Indices start at 1 (one)");
+    
+    OptionalParameter* connDbOpt = ret->createOptionalParameter(9, "-conn-db-login", "Login for scenes with files in Connectome Database");
+    connDbOpt->addStringParameter(1, "Username", "Connectome DB Username");
+    connDbOpt->addStringParameter(2, "Password", "Connectome DB Password");
     
     AString helpText("Render content of browser windows displayed in a scene "
                      "into image file(s).  The image file name should be "
@@ -114,9 +132,16 @@ OperationShowScene::getParameters()
                      "into the image name: \"capture_01.png\", \"capture_02.png\" "
                      "etc.\n"
                      "\n"
+                     "If the scene references files in the Connectome Database,\n"
+                     "the \"-conn-db-login\" option is available for providing the \n"
+                     "username and password.  If this options is not specified, \n"
+                     "the username and password stored in the user's preferences\n"
+                     "is used.\n"
+                     "\n"
                      "The image format is determined by the image file extension.\n"
                      "The available image formats may vary by operating system.\n"
-                     "Image formats available on this system are:\n");
+                     "Image formats available on this system are:\n"
+                     );
     std::vector<AString> imageFileExtensions;
     AString defaultExtension;
     ImageFile::getImageFileExtensions(imageFileExtensions,
@@ -157,7 +182,7 @@ OperationShowScene::getParameters()
 #ifndef HAVE_OSMESA
 void
 OperationShowScene::useParameters(OperationParameters* /*myParams*/,
-                                          ProgressObject* /*myProgObj*/)
+                                  ProgressObject* /*myProgObj*/)
 {
     throw OperationException("Show scene command not available due to this software version "
                              "not being built with the Mesa OffScreen Library");
@@ -179,6 +204,28 @@ OperationShowScene::useParameters(OperationParameters* myParams,
     
     const bool doNotUseSceneColorsFlag = myParams->getOptionalParameter(7)->m_present;
     
+    MapYokingGroupEnum::Enum mapYokingGroup = MapYokingGroupEnum::MAP_YOKING_GROUP_OFF;
+    int32_t mapYokingMapIndex = -1;
+    OptionalParameter* mapYokeOpt = myParams->getOptionalParameter(8);
+    if (mapYokeOpt->m_present) {
+        const AString romanNumeral = mapYokeOpt->getString(1);
+        bool validFlag = false;
+        mapYokingGroup = MapYokingGroupEnum::fromGuiName(romanNumeral, &validFlag);
+        if ( ! validFlag) {
+            throw OperationException(romanNumeral
+                                     + " does not identify a valid Map Yoking Group.  ");
+        }
+        mapYokingMapIndex = mapYokeOpt->getInteger(2);
+        if (mapYokingMapIndex < 1) {
+            throw OperationException("Map yoking map index must be one or greater.");
+        }
+        
+        /*
+         * Map indice in code start at zero
+         */
+        mapYokingMapIndex--;
+    }
+    
     if ( ! useWindowSizeForImageSizeFlag) {
         if ((userImageWidth <= 0)
             || (userImageHeight <= 0)) {
@@ -188,7 +235,25 @@ OperationShowScene::useParameters(OperationParameters* myParams,
                                      + QString::number(userImageHeight));
         }
     }
-    
+
+    /*
+     * Need to set username/password for files in ConnectomeDB
+     */
+    AString username;
+    AString password;
+    OptionalParameter* connDbOpt = myParams->getOptionalParameter(9);
+    if (connDbOpt->m_present) {
+        username = connDbOpt->getString(1);
+        password = connDbOpt->getString(2);
+    }
+    else {
+        CaretPreferences* prefs = SessionManager::get()->getCaretPreferences();
+        prefs->getRemoteFileUserNameAndPassword(username,
+                                                password);
+    }
+    CaretDataFile::setFileReadingUsernameAndPassword(username,
+                                                     password);
+
     /*
      * Read the scene file and load the scene
      */
@@ -212,13 +277,14 @@ OperationShowScene::useParameters(OperationParameters* myParams,
             throw OperationException("Scene name is invalid");
         }
     }
-
+    
     /*
      * Enable voxel coloring since it is defaulted off for commands
      */
     VolumeFile::setVoxelColoringEnabled(true);
     
-    SceneAttributes sceneAttributes(SceneTypeEnum::SCENE_TYPE_FULL);
+    SceneAttributes sceneAttributes(SceneTypeEnum::SCENE_TYPE_FULL,
+                                    scene);
     
     if (doNotUseSceneColorsFlag) {
         sceneAttributes.setUseSceneForegroundAndBackgroundColors(false);
@@ -237,6 +303,11 @@ OperationShowScene::useParameters(OperationParameters* myParams,
     sessionManager->restoreFromScene(&sceneAttributes,
                                      guiManagerClass->getClass("m_sessionManager"));
     
+    /*
+     * Get the error message but continue processing since the error
+     * may not affect the scene.  Print error message later.
+     */
+    const AString sceneErrorMessage = sceneAttributes.getErrorMessage();
     
     if (sessionManager->getNumberOfBrains() <= 0) {
         throw OperationException("Scene loading failure, SessionManager contains no Brains");
@@ -248,251 +319,205 @@ OperationShowScene::useParameters(OperationParameters* myParams,
     bool missingWindowMessageHasBeenDisplayed = false;
     
     /*
+     * Apply map yoking
+     */
+    if (mapYokingGroup != MapYokingGroupEnum::MAP_YOKING_GROUP_OFF) {
+        MapYokingGroupEnum::setSelectedMapIndex(mapYokingGroup, mapYokingMapIndex);
+        
+        EventMapYokingSelectMap yokeEvent(mapYokingGroup,
+                                          NULL,
+                                          mapYokingMapIndex,
+                                          true);
+        EventManager::get()->sendEvent(yokeEvent.getPointer());
+    }
+    
+    std::vector<const BrowserWindowContent*> allBrowserWindowContent;
+    for (int32_t i = 0; i < BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_WINDOWS; i++) {
+        std::unique_ptr<EventBrowserWindowContent> browserContentEvent = EventBrowserWindowContent::getWindowContent(i);
+        EventManager::get()->sendEvent(browserContentEvent->getPointer());
+        const BrowserWindowContent* bwc = browserContentEvent->getBrowserWindowContent();
+        CaretAssert(bwc);
+        if (bwc->isValid()) {
+            allBrowserWindowContent.push_back(bwc);
+        }
+    }
+    const int32_t numberOfWindows = static_cast<int32_t>(allBrowserWindowContent.size());
+    if (numberOfWindows <= 0) {
+        throw OperationException("No BrowserWindowContent was found for showing as scene");
+    }
+    
+    /*
      * Restore windows
      */
-    const SceneClassArray* browserWindowArray = guiManagerClass->getClassArray("m_brainBrowserWindows");
-    if (browserWindowArray != NULL) {
-        const int32_t numBrowserClasses = browserWindowArray->getNumberOfArrayElements();
-        for (int32_t i = 0; i < numBrowserClasses; i++) {
-            const SceneClass* browserClass = browserWindowArray->getClassAtIndex(i);
-            
-            const bool restoreToTabTiles = browserClass->getBooleanValue("m_viewTileTabsAction",
-                                                                         false);
-            const int32_t windowIndex = browserClass->getIntegerValue("m_browserWindowIndex", 0);
-            
-            int32_t imageWidth  = userImageWidth;
-            int32_t imageHeight = userImageHeight;
-            
-            if (useWindowSizeForImageSizeFlag) {
-                /*
-                 * Requires version AFTER 1.2.0-pre1
-                 */
-                const SceneClass* graphicsGeometry = browserClass->getClass("openGLWidgetGeometry");
-                if (graphicsGeometry != NULL) {
-                    const int32_t windowGeometryWidth  = graphicsGeometry->getIntegerValue("geometryWidth", -1);
-                    const int32_t windowGeometryHeight = graphicsGeometry->getIntegerValue("geometryHeight", -1);
-                    
-                    if ((windowGeometryWidth > 0)
-                        && (windowGeometryHeight > 0)) {
-                        imageWidth  = windowGeometryWidth;
-                        imageHeight = windowGeometryHeight;
-                    }
-                }
-                else {
-                    if ((imageWidth <= 0)
-                        || (imageHeight <= 0)) {
-                        const QString msg("Option "
-                                          + useWindowSizeParam->m_optionSwitch
-                                          + " is used but window size not found in scene and width="
-                                          + QString::number(imageWidth)
-                                          + " height="
-                                          + QString::number(imageWidth)
-                                          + " on command line is invalid.");
-                        
-                        throw OperationException(msg);
-                    }
-                    
-                    if ( ! missingWindowMessageHasBeenDisplayed) {
-                        const QString msg("Option \""
-                                          + useWindowSizeParam->m_optionSwitch
-                                          + "\" is used but window size not found in scene.\n"
-                                          "   Scene was created prior to implementation of this option.\n"
-                                          "   Image size will be width="
-                                          + QString::number(imageWidth)
-                                          + " and height="
-                                          + QString::number(imageHeight)
-                                          + " as specified on command line.\n"
-                                          "   Recreating the scene will allow use of the option.\n");
-                        CaretLogWarning(msg);
-                        
-                        /*
-                         * Avoid message being displayed more than once when
-                         * there are more than one windows.
-                         */
-                        missingWindowMessageHasBeenDisplayed = true;
-                    }
-                }
-            }
-            
-            if ((imageWidth <= 0)
-                || (imageHeight <= 0)) {
-                throw OperationException("Invalid image size width="
-                                         + QString::number(imageWidth)
-                                         + " height="
-                                         + QString::number(imageHeight));
-            }
-            
-            int windowViewport[4] = { 0.0, 0.0, imageWidth, imageHeight };
-            
-            float aspectRatio = -1.0;
-            const bool windowAspectRatioLocked = browserClass->getBooleanValue("m_aspectRatioLockedStatus");
-            if (windowAspectRatioLocked) {
-                aspectRatio = browserClass->getFloatValue("m_aspectRatio", -1.0);
-            }
-            
-            const int windowWidth  = windowViewport[2];
-            const int windowHeight = windowViewport[3];
-            
-            //
-            // Create the Mesa Context
-            //
-            const int depthBits = 16;
-            const int stencilBits = 0;
-            const int accumBits = 0;
-            OSMesaContext mesaContext = OSMesaCreateContextExt(OSMESA_RGBA,
-                                                               depthBits,
-                                                               stencilBits,
-                                                               accumBits,
-                                                               NULL);
-            if (mesaContext == 0) {
-                throw ("Creating Mesa Context failed.");
-            }
-            
-            //
-            // Allocate image buffer
-            //
-            const int32_t imageBufferSize =imageWidth * imageHeight * 4 * sizeof(unsigned char);
-            unsigned char* imageBuffer = new unsigned char[imageBufferSize];
-            if (imageBuffer == 0) {
-                throw OperationException("Allocating image buffer size="
-                                         + QString::number(imageBufferSize)
-                                         + " failed.");
-            }
-            
-            //
-            // Assign buffer to Mesa Context and make current
-            //
-            if (OSMesaMakeCurrent(mesaContext,
-                                  imageBuffer,
-                                  GL_UNSIGNED_BYTE,
-                                  imageWidth,
-                                  imageHeight) == 0) {
-                throw OperationException("Assigning buffer to context and make current failed.");
-            }
-            
+    for (int32_t iWindow = 0; iWindow < numberOfWindows; iWindow++) {
+        CaretAssertVectorIndex(allBrowserWindowContent, iWindow);
+        const auto bwc = allBrowserWindowContent[iWindow];
+        
+        const bool restoreToTabTiles = bwc->isTileTabsEnabled();
+        const int32_t windowIndex = bwc->getWindowIndex();
+        
+        int32_t imageWidth  = userImageWidth;
+        int32_t imageHeight = userImageHeight;
+        
+        if (useWindowSizeForImageSizeFlag) {
             /*
-             * If tile tabs was saved to the scene, restore it as the scenes tile tabs configuration
+             * Requires version AFTER 1.2.0-pre1
              */
-            if (restoreToTabTiles) {
-                CaretPointer<BrainOpenGL> brainOpenGL(createBrainOpenGL(windowIndex));
-                
-                const AString tileTabsConfigString = browserClass->getStringValue("m_sceneTileTabsConfiguration");
-                if ( ! tileTabsConfigString.isEmpty()) {
-                    TileTabsConfiguration tileTabsConfiguration;
-                    tileTabsConfiguration.decodeFromXML(tileTabsConfigString);
-                    
-                    /*
-                     * Restore toolbar
-                     */
-                    const SceneClass* toolbarClass = browserClass->getClass("m_toolbar");
-                    if (toolbarClass != NULL) {
-                        /*
-                         * Index of selected browser tab (NOT the tabBar)
-                         */
-                        std::vector<BrowserTabContent*> allTabContent;
-                        const ScenePrimitiveArray* tabIndexArray = toolbarClass->getPrimitiveArray("tabIndices");
-                        if (tabIndexArray != NULL) {
-                            const int32_t numTabs = tabIndexArray->getNumberOfArrayElements();
-                            for (int32_t iTab = 0; iTab < numTabs; iTab++) {
-                                const int32_t tabIndex = tabIndexArray->integerValue(iTab);
-                                
-                                EventBrowserTabGet getTabContent(tabIndex);
-                                EventManager::get()->sendEvent(getTabContent.getPointer());
-                                BrowserTabContent* tabContent = getTabContent.getBrowserTab();
-                                if (tabContent == NULL) {
-                                    throw OperationException("Failed to obtain tab number "
-                                                             + AString::number(tabIndex + 1)
-                                                             + " for window "
-                                                             + AString::number(windowIndex + 1));
-                                }
-                                allTabContent.push_back(tabContent);
-                            }
-                        }
-                        
-                        const int32_t numTabContent = static_cast<int32_t>(allTabContent.size());
-                        if (numTabContent <= 0) {
-                            throw OperationException("Failed to find any tab content");
-                        }
-                        std::vector<int32_t> rowHeights;
-                        std::vector<int32_t> columnWidths;
-                        if ( ! tileTabsConfiguration.getRowHeightsAndColumnWidthsForWindowSize(windowWidth,
-                                                                                               windowHeight,
-                                                                                               numTabContent,
-                                                                                               rowHeights,
-                                                                                               columnWidths)) {
-                            throw OperationException("Tile Tabs Row/Column sizing failed !!!");
-                        }
-                        
-                        const int32_t tabIndexToHighlight = -1;
-                        std::vector<BrainOpenGLViewportContent*> viewports =
-                            BrainOpenGLViewportContent::createViewportContentForTileTabs(allTabContent,
-                                                                                                     &tileTabsConfiguration,
-                                                                                                     gapsAndMargins,
-                                                                                                     windowIndex,
-                                                                                                     windowViewport,
-                                                                                                     tabIndexToHighlight);
-                        
-                        brainOpenGL->drawModels(brain,
-                                                viewports);
-                        
-                        const int32_t outputImageIndex = ((numBrowserClasses > 1)
-                                                          ? i
-                                                          : -1);
-                        
-                        writeImage(imageFileName,
-                                   outputImageIndex,
-                                   imageBuffer,
-                                   imageWidth,
-                                   imageHeight);
-                        
-                        for (std::vector<BrainOpenGLViewportContent*>::iterator vpIter = viewports.begin();
-                             vpIter != viewports.end();
-                             vpIter++) {
-                            delete *vpIter;
-                        }
-                        viewports.clear();
-                    }
-                }
-                else {
-                    throw OperationException("Tile tabs configuration is corrupted.");
-                }
+            const float geomWidth = bwc->getSceneGraphicsWidth();
+            const float geomHeight = bwc->getSceneGraphicsHeight();
+            if ((geomWidth > 0)
+                && (geomHeight > 0)) {
+                imageWidth = geomWidth;
+                imageHeight = geomHeight;
             }
             else {
-                CaretPointer<BrainOpenGL> brainOpenGL(createBrainOpenGL(windowIndex));
-                
-                /*
-                 * Restore toolbar
-                 */
-                const SceneClass* toolbarClass = browserClass->getClass("m_toolbar");
-                if (toolbarClass != NULL) {
-                    /*
-                     * Index of selected browser tab (NOT the tabBar)
-                     */
-                    const int32_t selectedTabIndex = toolbarClass->getIntegerValue("selectedTabIndex", -1);
+                if ((imageWidth <= 0)
+                    || (imageHeight <= 0)) {
+                    const QString msg("Option "
+                                      + useWindowSizeParam->m_optionSwitch
+                                      + " is used but window size not found in scene and width="
+                                      + QString::number(imageWidth)
+                                      + " height="
+                                      + QString::number(imageWidth)
+                                      + " on command line is invalid.");
                     
-                    EventBrowserTabGet getTabContent(selectedTabIndex);
-                    EventManager::get()->sendEvent(getTabContent.getPointer());
-                    BrowserTabContent* tabContent = getTabContent.getBrowserTab();
-                    if (tabContent == NULL) {
-                        throw OperationException("Failed to obtain tab number "
-                                                 + AString::number(selectedTabIndex + 1)
-                                                 + " for window "
-                                                 + AString::number(i + 1));
+                    throw OperationException(msg);
+                }
+                
+                if ( ! missingWindowMessageHasBeenDisplayed) {
+                    const QString msg("Option \""
+                                      + useWindowSizeParam->m_optionSwitch
+                                      + "\" is used but window size not found in scene.\n"
+                                      "   Scene was created prior to implementation of this option.\n"
+                                      "   Image size will be width="
+                                      + QString::number(imageWidth)
+                                      + " and height="
+                                      + QString::number(imageHeight)
+                                      + " as specified on command line.\n"
+                                      "   Recreating the scene will allow use of the option.\n");
+                    CaretLogWarning(msg);
+                    
+                    /*
+                     * Avoid message being displayed more than once when
+                     * there are more than one windows.
+                     */
+                    missingWindowMessageHasBeenDisplayed = true;
+                }
+            }
+        }
+        
+        if ((imageWidth <= 0)
+            || (imageHeight <= 0)) {
+            throw OperationException("Invalid image size width="
+                                     + QString::number(imageWidth)
+                                     + " height="
+                                     + QString::number(imageHeight));
+        }
+        
+        int windowViewport[4] = { 0, 0, imageWidth, imageHeight };
+        
+        const int windowWidth  = windowViewport[2];
+        const int windowHeight = windowViewport[3];
+        
+        //
+        // Create the Mesa Context
+        //
+        const int depthBits = 16;
+        const int stencilBits = 0;
+        const int accumBits = 0;
+        OSMesaContext mesaContext = OSMesaCreateContextExt(OSMESA_RGBA,
+                                                           depthBits,
+                                                           stencilBits,
+                                                           accumBits,
+                                                           NULL);
+        if (mesaContext == 0) {
+            throw ("Creating Mesa Context failed.");
+        }
+        
+        //
+        // Allocate image buffer
+        //
+        const int32_t imageBufferSize =imageWidth * imageHeight * 4 * sizeof(unsigned char);
+        unsigned char* imageBuffer = new unsigned char[imageBufferSize];
+        if (imageBuffer == 0) {
+            throw OperationException("Allocating image buffer size="
+                                     + QString::number(imageBufferSize)
+                                     + " failed.");
+        }
+        
+        //
+        // Assign buffer to Mesa Context and make current
+        //
+        if (OSMesaMakeCurrent(mesaContext,
+                              imageBuffer,
+                              GL_UNSIGNED_BYTE,
+                              imageWidth,
+                              imageHeight) == 0) {
+            throw OperationException("Assigning buffer to context and make current failed.");
+        }
+        
+        /*
+         * If tile tabs was saved to the scene, restore it as the scenes tile tabs configuration
+         */
+        if (restoreToTabTiles) {
+            CaretPointer<BrainOpenGL> brainOpenGL(createBrainOpenGL());
+            
+            TileTabsConfiguration* tileTabsConfiguration = bwc->getSceneTileTabsConfiguration();
+            CaretAssert(tileTabsConfiguration);
+            if ((tileTabsConfiguration->getMaximumNumberOfRows() > 0)
+                && (tileTabsConfiguration->getMaximumNumberOfColumns() > 0)) {
+                
+                const std::vector<int32_t> tabIndices = bwc->getSceneTabIndices();
+                if ( ! tabIndices.empty()) {
+                    std::vector<BrowserTabContent*> allTabContent;
+                    const int32_t numTabs = static_cast<int32_t>(tabIndices.size());
+                    for (int32_t iTab = 0; iTab < numTabs; iTab++) {
+                        CaretAssertVectorIndex(tabIndices, iTab);
+                        const int32_t tabIndex = tabIndices[iTab];
+                        EventBrowserTabGet getTabContent(tabIndex);
+                        EventManager::get()->sendEvent(getTabContent.getPointer());
+                        BrowserTabContent* tabContent = getTabContent.getBrowserTab();
+                        if (tabContent == NULL) {
+                            throw OperationException("Failed to obtain tab number "
+                                                     + AString::number(tabIndex + 1)
+                                                     + " for window "
+                                                     + AString::number(windowIndex + 1));
+                        }
+                        allTabContent.push_back(tabContent);
                     }
                     
-                    CaretPointer<BrainOpenGLViewportContent> content(NULL);
-                    content.grabNew(BrainOpenGLViewportContent::createViewportForSingleTab(tabContent,
-                                                                                           gapsAndMargins,
-                                                                                           windowIndex,
-                                                                                           windowViewport));
-                    std::vector<BrainOpenGLViewportContent*> viewportContents;
-                    viewportContents.push_back(content);
+                    const int32_t numTabContent = static_cast<int32_t>(allTabContent.size());
+                    if (numTabContent <= 0) {
+                        throw OperationException("Failed to find any tab content");
+                    }
+                    std::vector<int32_t> rowHeights;
+                    std::vector<int32_t> columnWidths;
+                    if ( ! tileTabsConfiguration->getRowHeightsAndColumnWidthsForWindowSize(windowWidth,
+                                                                                            windowHeight,
+                                                                                            numTabContent,
+                                                                                            rowHeights,
+                                                                                            columnWidths)) {
+                        throw OperationException("Tile Tabs Row/Column sizing failed !!!");
+                    }
                     
-                    brainOpenGL->drawModels(brain,
-                                            viewportContents);
+                    const int32_t tabIndexToHighlight = -1;
+                    std::vector<BrainOpenGLViewportContent*> viewports =
+                    BrainOpenGLViewportContent::createViewportContentForTileTabs(allTabContent,
+                                                                                 tileTabsConfiguration,
+                                                                                 gapsAndMargins,
+                                                                                 windowIndex,
+                                                                                 windowViewport,
+                                                                                 tabIndexToHighlight);
                     
-                    const int32_t outputImageIndex = ((numBrowserClasses > 1)
-                                                      ? i
+                    std::vector<const BrainOpenGLViewportContent*> constViewports(viewports.begin(),
+                                                                                  viewports.end());
+                    brainOpenGL->drawModels(windowIndex,
+                                            brain,
+                                            mesaContext,
+                                            constViewports);
+                    
+                    const int32_t outputImageIndex = ((numberOfWindows > 1)
+                                                      ? iWindow
                                                       : -1);
                     
                     writeImage(imageFileName,
@@ -501,15 +526,73 @@ OperationShowScene::useParameters(OperationParameters* myParams,
                                imageWidth,
                                imageHeight);
                     
+                    for (std::vector<BrainOpenGLViewportContent*>::iterator vpIter = viewports.begin();
+                         vpIter != viewports.end();
+                         vpIter++) {
+                        delete *vpIter;
+                    }
+                    viewports.clear();
                 }
             }
-            
-            /*
-             * Free image memory and Mesa context
-             */
-            delete[] imageBuffer;
-            OSMesaDestroyContext(mesaContext);
+            else {
+                throw OperationException("Tile tabs configuration is corrupted.");
+            }
         }
+        else {
+            CaretPointer<BrainOpenGL> brainOpenGL(createBrainOpenGL());
+            
+            const int32_t selectedTabIndex = bwc->getSceneSelectedTabIndex();
+            
+            EventBrowserTabGet getTabContent(selectedTabIndex);
+            EventManager::get()->sendEvent(getTabContent.getPointer());
+            BrowserTabContent* tabContent = getTabContent.getBrowserTab();
+            if (tabContent == NULL) {
+                throw OperationException("Failed to obtain tab number "
+                                         + AString::number(selectedTabIndex + 1)
+                                         + " for window "
+                                         + AString::number(iWindow + 1));
+            }
+            
+            CaretPointer<BrainOpenGLViewportContent> content(NULL);
+            std::vector<BrowserTabContent*> allTabs;
+            allTabs.push_back(tabContent);
+            content.grabNew(BrainOpenGLViewportContent::createViewportForSingleTab(allTabs,
+                                                                                   tabContent,
+                                                                                   gapsAndMargins,
+                                                                                   windowIndex,
+                                                                                   windowViewport));
+            std::vector<const BrainOpenGLViewportContent*> viewportContents;
+            viewportContents.push_back(content);
+            
+            brainOpenGL->drawModels(windowIndex,
+                                    brain,
+                                    mesaContext,
+                                    viewportContents);
+            
+            const int32_t outputImageIndex = ((numberOfWindows > 1)
+                                              ? iWindow
+                                              : -1);
+            
+            writeImage(imageFileName,
+                       outputImageIndex,
+                       imageBuffer,
+                       imageWidth,
+                       imageHeight);
+        }
+        
+        /*
+         * Free image memory and Mesa context
+         */
+        delete[] imageBuffer;
+        OSMesaDestroyContext(mesaContext);
+    }
+    
+    /*
+     * Print error messages
+     */
+    if ( ! sceneErrorMessage.isEmpty()) {
+        std::cerr << "ERRORS loading scene, output image may be incorrect." << std::endl;
+        std::cerr << sceneErrorMessage << std::endl;
     }
 }
 
@@ -586,7 +669,7 @@ OperationShowScene::estimateGraphicsSize(const SceneClass* windowSceneClass,
 
 /**
  * Get the size of a toolbox.
- * 
+ *
  * @param toolBoxClass
  *    The toolbox scene class.
  * @param overlayToolBoxWidthOut
@@ -601,9 +684,9 @@ OperationShowScene::estimateGraphicsSize(const SceneClass* windowSceneClass,
 bool
 OperationShowScene::getToolBoxSize(const SceneClass* toolBoxClass,
                                    const SceneClass* activeToolBoxClass,
-               float& overlayToolBoxWidthOut,
-               float& overlayToolBoxHeightOut,
-               QString& overlayToolBoxOrientationOut)
+                                   float& overlayToolBoxWidthOut,
+                                   float& overlayToolBoxHeightOut,
+                                   QString& overlayToolBoxOrientationOut)
 {
     if (toolBoxClass == NULL) {
         return false;
@@ -652,13 +735,11 @@ OperationShowScene::getToolBoxSize(const SceneClass* toolBoxClass,
 /**
  * Create OpenGL Rendering.
  *
- * @param windowIndex
- *     Index of window.
  * @return
  *     BrainOpenGL.
  */
 BrainOpenGLFixedPipeline*
-OperationShowScene::createBrainOpenGL(const int32_t windowIndex)
+OperationShowScene::createBrainOpenGL()
 {
     /*
      * The OpenGL rendering takes ownership of the text renderer
@@ -686,8 +767,7 @@ OperationShowScene::createBrainOpenGL(const int32_t windowIndex)
      * will occur as the OpenGL context is invalid when things such as
      * display lists or buffers are deleted.
      */
-    BrainOpenGLFixedPipeline* brainOpenGL = new BrainOpenGLFixedPipeline(windowIndex,
-                                                                         textRenderer);
+    BrainOpenGLFixedPipeline* brainOpenGL = new BrainOpenGLFixedPipeline(textRenderer);
     brainOpenGL->initializeOpenGL();
     
     return brainOpenGL;
@@ -737,7 +817,6 @@ OperationShowScene::writeImage(const AString& imageFileName,
     }
     
     try {
-        //ImageFile imageFile(image);
         ImageFile imageFile(imageContent,
                             imageWidth,
                             imageHeight,

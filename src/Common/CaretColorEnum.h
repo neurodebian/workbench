@@ -97,6 +97,8 @@ public:
 
     static void getColorEnums(std::vector<Enum>& allColorEnums);
     
+    static void getColorEnumsNoBlackOrWhite(std::vector<Enum>& allColorEnums);
+    
     static void getColorAndOptionalEnums(std::vector<Enum>& allEnums,
                                          const int64_t colorOptions);
     
@@ -106,11 +108,11 @@ public:
 
     static const float* toRGB(Enum enumValue);
     
-    static void toRGBFloat(Enum enumValue,
-                           float rgbOut[3]);
+    static void toRGBAFloat(Enum enumValue,
+                            float rgbaOut[4]);
     
-    static void toRGBByte(Enum enumValue,
-                          uint8_t rgbOut[3]);
+    static void toRGBAByte(Enum enumValue,
+                           uint8_t rgbaOut[4]);
     
 private:
     CaretColorEnum(const Enum enumValue, 

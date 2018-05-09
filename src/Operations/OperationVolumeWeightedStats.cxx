@@ -51,6 +51,7 @@ OperationParameters* OperationVolumeWeightedStats::getParameters()
     
     OptionalParameter* weightVolumeOpt = ret->createOptionalParameter(2, "-weight-volume", "use weights from a volume file");
     weightVolumeOpt->addVolumeParameter(1, "weight-volume", "volume file containing the weights");
+    weightVolumeOpt->createOptionalParameter(2, "-match-maps", "each subvolume of input uses the corresponding subvolume from the weights file");
     
     OptionalParameter* subvolOpt = ret->createOptionalParameter(3, "-subvolume", "only display output for one subvolume");
     subvolOpt->addStringParameter(1, "subvolume", "the subvolume number or name");
@@ -275,11 +276,21 @@ void OperationVolumeWeightedStats::useParameters(OperationParameters* myParams, 
     OptionalParameter* weightVolumeOpt = myParams->getOptionalParameter(2);
     VolumeFile* myWeights = NULL;
     const float* weightData = NULL;
+    bool matchSubvolWeights = false;
     if (weightVolumeOpt->m_present)
     {
         myWeights = weightVolumeOpt->getVolume(1);
         if (!myWeights->matchesVolumeSpace(input)) throw OperationException("weight volume doesn't match volume space of input");
-        weightData = myWeights->getFrame();
+        if (weightVolumeOpt->getOptionalParameter(2)->m_present)
+        {
+            if (myWeights->getDimensions()[3] != dims[3])
+            {
+                throw OperationException("-match-maps specified, but weights file has different number of subvolumes than input");
+            }
+            matchSubvolWeights = true;
+        } else {
+            weightData = myWeights->getFrame();
+        }
     }
     int subvol = -1;
     OptionalParameter* subvolOpt = myParams->getOptionalParameter(3);
@@ -290,21 +301,20 @@ void OperationVolumeWeightedStats::useParameters(OperationParameters* myParams, 
     }
     bool matchSubvolMode = false;
     VolumeFile* myRoi = NULL;
-    const float* roiData = NULL;
+    int numRoiMaps = 1;//trick: pretend there is one ROI map with no ROI file
     OptionalParameter* roiOpt = myParams->getOptionalParameter(4);
     if (roiOpt->m_present)
     {
         myRoi = roiOpt->getVolume(1);
+        numRoiMaps = myRoi->getNumberOfMaps();
         if (!input->matchesVolumeSpace(myRoi)) throw OperationException("roi doesn't match volume space of input");
         if (roiOpt->getOptionalParameter(2)->m_present)
         {
             if (myRoi->getDimensions()[3] != dims[3])
             {
-                throw OperationException("-match-maps specified, but roi has different number of subvolumes than input");
+                throw OperationException("-match-maps specified, but roi file has different number of subvolumes than input");
             }
             matchSubvolMode = true;
-        } else {
-            roiData = myRoi->getFrame();
         }
     }
     bool haveOp = false;
@@ -345,13 +355,25 @@ void OperationVolumeWeightedStats::useParameters(OperationParameters* myParams, 
     if (!haveOp) throw OperationException("you must specify an operation");
     bool showMapName = myParams->getOptionalParameter(9)->m_present;
     int numMaps = input->getNumberOfMaps();
+    int startSubvol, endSubvol;
     if (subvol == -1)
     {
-        for (int i = 0; i < numMaps; ++i)
-        {//store result before printing anything, in case it throws while computing
-            if (matchSubvolMode)
+        startSubvol = 0;
+        endSubvol = numMaps;
+    } else {
+        startSubvol = subvol;
+        endSubvol = subvol + 1;
+    }
+    const float* roiData = NULL;
+    for (int i = startSubvol; i < endSubvol; ++i)
+    {
+        if (showMapName) cout << AString::number(i + 1) << ":\t" << input->getMapName(i) << ":\t";
+        if (matchSubvolMode)
+        {//trick: matchSubvolMode is only true when we have an roi
+            roiData = myRoi->getFrame(i);
+            if (matchSubvolWeights)
             {
-                roiData = myRoi->getFrame(i);
+                weightData = myWeights->getFrame(i);
             }
             float result;
             if (weightData != NULL)
@@ -360,26 +382,30 @@ void OperationVolumeWeightedStats::useParameters(OperationParameters* myParams, 
             } else {
                 result = doOperationSingleWeight(input->getFrame(i), constWeight, frameSize, myop, roiData, argument);
             }
-            if (showMapName) cout << AString::number(i + 1) << ": " << input->getMapName(i) << ": ";
             stringstream resultsstr;
             resultsstr << setprecision(7) << result;
-            cout << resultsstr.str() << endl;
-        }
-    } else {
-        if (matchSubvolMode)
-        {
-            roiData = myRoi->getFrame(subvol);
-        }
-        float result;
-        if (weightData != NULL)
-        {
-            result = doOperation(input->getFrame(subvol), weightData, frameSize, myop, roiData, argument);
+            cout << resultsstr.str();
         } else {
-            result = doOperationSingleWeight(input->getFrame(subvol), constWeight, frameSize, myop, roiData, argument);
+            if (matchSubvolWeights)
+            {
+                weightData = myWeights->getFrame(i);
+            }
+            for (int j = 0; j < numRoiMaps; ++j)
+            {
+                if (myRoi != NULL) roiData = myRoi->getFrame(j);
+                float result;
+                if (weightData != NULL)
+                {
+                    result = doOperation(input->getFrame(i), weightData, frameSize, myop, roiData, argument);
+                } else {
+                    result = doOperationSingleWeight(input->getFrame(i), constWeight, frameSize, myop, roiData, argument);
+                }
+                stringstream resultsstr;
+                resultsstr << setprecision(7) << result;
+                if (j != 0) cout << "\t";
+                cout << resultsstr.str();
+            }
         }
-        if (showMapName) cout << AString::number(subvol + 1) << ": " << input->getMapName(subvol) << ": ";
-        stringstream resultsstr;
-        resultsstr << setprecision(7) << result;
-        cout << resultsstr.str() << endl;
+        cout << endl;
     }
 }

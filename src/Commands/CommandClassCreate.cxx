@@ -55,15 +55,21 @@ CommandClassCreate::getHelpInformation(const AString& /*programName*/)
                         "\n"
                         "Usage:  <class-name> \n"
                         "        [-copy] \n"
+                        "        [-equal] \n"
                         "        [-event-class <event-type-enum>]\n"
                         "        [-event-listener] \n"
                         "        [-no-parent] \n"
                         "        [-parent <parent-class-name>] \n"
+                        "        [-scene] \n"
+                        "        [-scene-sub-class] \n"
                         "\n"
                         "\n"
                         "Options: \n"
                         "    -copy\n"
                         "        Adds copy constructor and assignment operator\n"
+                        "    \n"
+                        "    -equal\n"
+                        "        Adds equality operator.\n"
                         "    \n"
                         "    -event-class <event-type-enum>\n"
                         "        When creating an Event subclass, using this\n"
@@ -124,6 +130,7 @@ CommandClassCreate::executeOperation(ProgramParameters& parameters)
     AString eventTypeEnumName;
     
     bool hasCopyAndAssignment = false;
+    bool hasEqualityOperator = false;
     bool hasEventListener = false;
     bool hasScenes = false;
     bool hasScenesSubClass = false;
@@ -132,6 +139,9 @@ CommandClassCreate::executeOperation(ProgramParameters& parameters)
         const AString& param = parameters.nextString("Create Class Parameter");
         if (param == "-copy") {
             hasCopyAndAssignment = true;
+        }
+        else if (param == "-equal") {
+            hasEqualityOperator = true;
         }
         else if (param == "-event-class") {
             eventTypeEnumName = parameters.nextString("Event Type Enum Name");
@@ -218,6 +228,7 @@ CommandClassCreate::executeOperation(ProgramParameters& parameters)
                            ifndefName, 
                            ifdefNameStaticDeclarations, 
                            hasCopyAndAssignment,
+                           hasEqualityOperator,
                            hasEventListener,
                            hasScenes,
                            hasScenesSubClass);
@@ -228,6 +239,7 @@ CommandClassCreate::executeOperation(ProgramParameters& parameters)
                                    eventTypeEnumName,
                                    ifdefNameStaticDeclarations, 
                                    hasCopyAndAssignment,
+                                   hasEqualityOperator,
                                    hasEventListener,
                                    hasScenes,
                                    hasScenesSubClass);
@@ -248,6 +260,8 @@ CommandClassCreate::executeOperation(ProgramParameters& parameters)
  *    Name for "infdef" of static declarations.
  * @param hasCopyAndAssignment
  *    Has copy constructor and assignment operator.
+ * @param hasEqualityOperator
+ *    Class implements equality operator
  * @param hasEventListener
  *    Class implements the EventListener interface 
  * @param hasSceneInterface
@@ -260,9 +274,10 @@ void
 CommandClassCreate::createHeaderFile(const AString& outputFileName,
                                      const AString& className,
                                      const AString& derivedFromClassName,
-                                         const AString& ifndefName,
-                                         const AString& ifdefNameStaticDeclaration,
+                                     const AString& ifndefName,
+                                     const AString& ifdefNameStaticDeclaration,
                                      const bool hasCopyAndAssignment,
+                                     const bool hasEqualityOperator,
                                      const bool hasEventListener,
                                      const bool hasSceneInterface,
                                      const bool hasSubClassSceneSaving)
@@ -278,6 +293,11 @@ CommandClassCreate::createHeaderFile(const AString& outputFileName,
     t += ("#define " + ifndefName + "\n");
     t += this->getCopyright();
     t += ("\n");
+    if (m_useUniquePtrFlag) {
+        t += ("\n");
+        t += ("#include <memory>\n");
+        t += ("\n");
+    }
     
     t += (this->getIncludeDeclaration(derivedFromClassName) + "\n");
     t += ("\n");    
@@ -329,12 +349,15 @@ CommandClassCreate::createHeaderFile(const AString& outputFileName,
         t += ("        \n");
     }
     else {
-//        t += ("    private:\n");
-//        t += ("        " + className + "(const " + className + "&);\n");
-//        t += ("\n");
-//        t += ("        " + className + "& operator=(const " + className + "&);\n");
-//        t += ("        \n");
-//        t += ("    public:\n");
+        t += ("        " + className + "(const " + className + "&) = delete;\n");
+        t += ("\n");
+        t += ("        " + className + "& operator=(const " + className + "&) = delete;\n");
+        t += ("        \n");
+    }
+    
+    if (hasEqualityOperator) {
+        t += ("        bool operator==(const " + className + "& obj) const;\n");
+        t += ("        \n");
     }
     
     t += ("\n");
@@ -391,15 +414,14 @@ CommandClassCreate::createHeaderFile(const AString& outputFileName,
         t += ("        void copyHelper" + className + "(const " + className + "& obj);\n");
         t += ("\n");
     }
-    else {
-        t += ("        " + className + "(const " + className + "&);\n");
-        t += ("\n");
-        t += ("        " + className + "& operator=(const " + className + "&);\n");
-        t += ("        \n");
-    }
     if (hasSceneInterface
         || hasSubClassSceneSaving) {
-        t += ("        SceneClassAssistant* m_sceneAssistant;\n");
+        if (m_useUniquePtrFlag) {
+            t += ("        std::unique_ptr<SceneClassAssistant> m_sceneAssistant;\n");
+        }
+        else {
+            t += ("        SceneClassAssistant* m_sceneAssistant;\n");
+        }
         t += ("\n");
     }
     t += ("        " + getNewMembersString() + "\n");
@@ -440,6 +462,8 @@ CommandClassCreate::createHeaderFile(const AString& outputFileName,
  *    Name for "infdef" of static declarations.
  * @param hasCopyAndAssignment
  *    Has copy constructor and assignment operator.
+ * @param hasEqualityOperator 
+ *    Class implements equality operator
  * @param hasEventListener
  *    Class implements the EventListener interface
  * @param hasSceneInterface
@@ -453,8 +477,9 @@ CommandClassCreate::createImplementationFile(const AString& outputFileName,
                                              const AString& className,
                                              const AString& derivedFromClassName,
                                              const AString& eventTypeEnumName,
-                                                 const AString& ifdefNameStaticDeclaration,
+                                             const AString& ifdefNameStaticDeclaration,
                                              const bool hasCopyAndAssignment,
+                                             const bool hasEqualityOperator,
                                              const bool hasEventListener,
                                              const bool hasSceneInterface,
                                              const bool hasSubClassSceneSaving)
@@ -513,7 +538,12 @@ CommandClassCreate::createImplementationFile(const AString& outputFileName,
     t += ("    \n");
     if (hasSceneInterface
         || hasSubClassSceneSaving) {
-        t += ("    m_sceneAssistant = new SceneClassAssistant();\n");
+        if (m_useUniquePtrFlag) {
+            t += ("    m_sceneAssistant = std::unique_ptr<SceneClassAssistant>(new SceneClassAssistant());\n");
+        }
+        else {
+            t += ("    m_sceneAssistant = new SceneClassAssistant();\n");
+        }
         t += ("    \n");
     }
     if (hasEventListener) {
@@ -531,7 +561,9 @@ CommandClassCreate::createImplementationFile(const AString& outputFileName,
     }
     if (hasSceneInterface
         || hasSubClassSceneSaving) {
-        t += ("    delete m_sceneAssistant;\n");
+        if ( ! m_useUniquePtrFlag) {
+            t += ("    delete m_sceneAssistant;\n");
+        }
     }
     t += ("}\n");
     t += ("\n");
@@ -574,6 +606,28 @@ CommandClassCreate::createImplementationFile(const AString& outputFileName,
         t += ("" + className + "::copyHelper" + className + "(const " + className + "& obj)\n");
         t += ("{\n");
         t += ("    \n");
+        t += ("}\n");
+        t += ("\n");
+    }
+    
+    if (hasEqualityOperator) {
+        t += ("/**\n");
+        t += (" * Equality operator.\n");
+        t += (" * @param obj\n");
+        t += (" *    Instance compared to this for equality.\n");
+        t += (" * @return \n");
+        t += (" *    True if this instance and 'obj' instance are considered equal.\n");
+        t += (" */\n");
+        t += ("bool\n");
+        t += ("" + className + "::operator==(const " + className + "& obj) const\n");
+        t += ("{\n");
+        t += ("    if (this == &obj) {\n");
+        t += ("        return true;    \n");
+        t += ("    }\n");
+        t += ("\n");
+        t += ("    /* perform equality testing HERE and return true if equal ! */\n");
+        t += ("\n");
+        t += ("    return false;    \n");
         t += ("}\n");
         t += ("\n");
     }

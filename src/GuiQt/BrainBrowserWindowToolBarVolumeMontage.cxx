@@ -24,6 +24,7 @@
 #undef __BRAIN_BROWSER_WINDOW_TOOL_BAR_VOLUME_MONTAGE_DECLARE__
 
 #include <QAction>
+#include <QCheckBox>
 #include <QGridLayout>
 #include <QLabel>
 #include <QSpinBox>
@@ -43,8 +44,6 @@ using namespace caret;
  * \class caret::BrainBrowserWindowToolBarVolumeMontage 
  * \brief Toolbar component for volume montage slice selections
  * \ingroup GuiQt
- *
- * <REPLACE-WITH-THOROUGH DESCRIPTION>
  */
 
 /**
@@ -54,36 +53,56 @@ BrainBrowserWindowToolBarVolumeMontage::BrainBrowserWindowToolBarVolumeMontage(B
 : BrainBrowserWindowToolBarComponent(parentToolBar),
 m_parentToolBar(parentToolBar)
 {
-    QLabel* rowsLabel = new QLabel("Rows:");
-    QLabel* columnsLabel = new QLabel("Cols:");
-    QLabel* spacingLabel = new QLabel("Step:");
     
     const int spinBoxWidth = 48;
     
+    QLabel* rowsLabel = new QLabel("Rows:");
+    rowsLabel->setToolTip("Select the number of rows in montage of volume slices");
     m_montageRowsSpinBox = WuQFactory::newSpinBox();
     m_montageRowsSpinBox->setRange(1, 20);
     m_montageRowsSpinBox->setMaximumWidth(spinBoxWidth);
-    WuQtUtilities::setToolTipAndStatusTip(m_montageRowsSpinBox,
-                                          "Select the number of rows in montage of volume slices");
+    m_montageRowsSpinBox->setToolTip(rowsLabel->toolTip());
     QObject::connect(m_montageRowsSpinBox, SIGNAL(valueChanged(int)),
                      this, SLOT(montageRowsSpinBoxValueChanged(int)));
     
+    QLabel* columnsLabel = new QLabel("Cols:");
+    columnsLabel->setToolTip("Select the number of columns in montage of volume slices");
     m_montageColumnsSpinBox = WuQFactory::newSpinBox();
     m_montageColumnsSpinBox->setRange(1, 20);
     m_montageColumnsSpinBox->setMaximumWidth(spinBoxWidth);
-    WuQtUtilities::setToolTipAndStatusTip(m_montageColumnsSpinBox,
-                                          "Select the number of columns in montage of volume slices");
+    m_montageColumnsSpinBox->setToolTip(columnsLabel->toolTip());
     QObject::connect(m_montageColumnsSpinBox, SIGNAL(valueChanged(int)),
                      this, SLOT(montageColumnsSpinBoxValueChanged(int)));
     
+    QLabel* spacingLabel = new QLabel("Step:");
+    spacingLabel->setToolTip("Select the number of slices stepped (incremented) between displayed montage slices");
     m_montageSpacingSpinBox = WuQFactory::newSpinBox();
     m_montageSpacingSpinBox->setRange(1, 2500);
     m_montageSpacingSpinBox->setMaximumWidth(spinBoxWidth);
-    WuQtUtilities::setToolTipAndStatusTip(m_montageSpacingSpinBox,
-                                          "Select the number of slices stepped (incremented) between displayed montage slices");
+    m_montageSpacingSpinBox->setToolTip(spacingLabel->toolTip());
     QObject::connect(m_montageSpacingSpinBox, SIGNAL(valueChanged(int)),
                      this, SLOT(montageSpacingSpinBoxValueChanged(int)));
     
+    m_showSliceCoordinateAction = new QAction("XYZ");
+    m_showSliceCoordinateAction->setText("XYZ");
+    m_showSliceCoordinateAction->setCheckable(true);
+    m_showSliceCoordinateAction->setToolTip("Show coordinates on slices");
+    QObject::connect(m_showSliceCoordinateAction, &QAction::triggered,
+                     this, &BrainBrowserWindowToolBarVolumeMontage::showSliceCoordinateToolButtonClicked);
+
+    QToolButton* showSliceCoordToolButton = new QToolButton;
+    showSliceCoordToolButton->setDefaultAction(m_showSliceCoordinateAction);
+    WuQtUtilities::setToolButtonStyleForQt5Mac(showSliceCoordToolButton);
+
+    QLabel* decimalsLabel = new QLabel("Prec:");
+    decimalsLabel->setToolTip("Digits right of decimal in slice coordinates");
+    m_sliceCoordinatePrecisionSpinBox = WuQFactory::newSpinBox();
+    m_sliceCoordinatePrecisionSpinBox->setRange(0, 10);
+    m_sliceCoordinatePrecisionSpinBox->setMaximumWidth(spinBoxWidth);
+    m_sliceCoordinatePrecisionSpinBox->setToolTip(decimalsLabel->toolTip());
+    QObject::connect(m_sliceCoordinatePrecisionSpinBox, static_cast<void (QSpinBox::*)(int)>(&QSpinBox::valueChanged),
+                     this, &BrainBrowserWindowToolBarVolumeMontage::slicePrecisionSpinBoxValueChanged);
+
 
     m_montageEnabledAction = WuQtUtilities::createAction("On",
                                                          "View a montage of parallel slices",
@@ -93,7 +112,8 @@ m_parentToolBar(parentToolBar)
     m_montageEnabledAction->setCheckable(true);
     QToolButton* montageEnabledToolButton = new QToolButton();
     montageEnabledToolButton->setDefaultAction(m_montageEnabledAction);
-    
+    WuQtUtilities::setToolButtonStyleForQt5Mac(montageEnabledToolButton);
+
     QGridLayout* gridLayout = new QGridLayout(this);
     WuQtUtilities::setLayoutSpacingAndMargins(gridLayout, 0, 0);
     gridLayout->setVerticalSpacing(2);
@@ -103,13 +123,19 @@ m_parentToolBar(parentToolBar)
     gridLayout->addWidget(m_montageColumnsSpinBox, 1, 1);
     gridLayout->addWidget(spacingLabel, 2, 0);
     gridLayout->addWidget(m_montageSpacingSpinBox, 2, 1);
-    gridLayout->addWidget(montageEnabledToolButton, 3, 0, 1, 2, Qt::AlignHCenter);
+    gridLayout->addWidget(decimalsLabel, 3, 0);
+    gridLayout->addWidget(m_sliceCoordinatePrecisionSpinBox, 3, 1);
+    gridLayout->addWidget(showSliceCoordToolButton, 4, 0);
+    gridLayout->addWidget(montageEnabledToolButton, 4, 1);
+//    gridLayout->addWidget(montageEnabledToolButton, 4, 0, 1, 2, Qt::AlignHCenter);
     
     m_volumeMontageWidgetGroup = new WuQWidgetObjectGroup(this);
     m_volumeMontageWidgetGroup->add(m_montageRowsSpinBox);
     m_volumeMontageWidgetGroup->add(m_montageColumnsSpinBox);
     m_volumeMontageWidgetGroup->add(m_montageSpacingSpinBox);
     m_volumeMontageWidgetGroup->add(m_montageEnabledAction);
+    m_volumeMontageWidgetGroup->add(m_showSliceCoordinateAction);
+    m_volumeMontageWidgetGroup->add(m_sliceCoordinatePrecisionSpinBox);
 }
 
 /**
@@ -142,6 +168,9 @@ BrainBrowserWindowToolBarVolumeMontage::updateContent(BrowserTabContent* browser
     m_montageColumnsSpinBox->setValue(browserTabContent->getMontageNumberOfColumns());
     m_montageSpacingSpinBox->setValue(browserTabContent->getMontageSliceSpacing());
     
+    m_showSliceCoordinateAction->setChecked(browserTabContent->isVolumeMontageAxesCoordinatesDisplayed());
+    m_sliceCoordinatePrecisionSpinBox->setValue(browserTabContent->getVolumeMontageCoordinatePrecision());
+    
     m_volumeMontageWidgetGroup->blockAllSignals(false);
 }
 
@@ -161,8 +190,7 @@ BrainBrowserWindowToolBarVolumeMontage::montageEnabledActionToggled(bool)
     
     btc->setSliceDrawingType(drawingType);
     
-    this->updateGraphicsWindow();
-    this->updateOtherYokedWindows();
+    this->updateGraphicsWindowAndYokedWindows();
 }
 
 
@@ -176,8 +204,7 @@ BrainBrowserWindowToolBarVolumeMontage::montageRowsSpinBoxValueChanged(int /*i*/
     
     btc->setMontageNumberOfRows(m_montageRowsSpinBox->value());
     
-    this->updateGraphicsWindow();
-    this->updateOtherYokedWindows();
+    this->updateGraphicsWindowAndYokedWindows();
 }
 
 /**
@@ -189,8 +216,7 @@ BrainBrowserWindowToolBarVolumeMontage::montageColumnsSpinBoxValueChanged(int /*
     BrowserTabContent* btc = this->getTabContentFromSelectedTab();
     btc->setMontageNumberOfColumns(m_montageColumnsSpinBox->value());
     
-    this->updateGraphicsWindow();
-    this->updateOtherYokedWindows();
+    this->updateGraphicsWindowAndYokedWindows();
 }
 
 /**
@@ -203,7 +229,39 @@ BrainBrowserWindowToolBarVolumeMontage::montageSpacingSpinBoxValueChanged(int /*
     
     btc->setMontageSliceSpacing(m_montageSpacingSpinBox->value());
     
-    this->updateGraphicsWindow();
-    this->updateOtherYokedWindows();
+    this->updateGraphicsWindowAndYokedWindows();
+}
+
+/**
+ * Called when show slice coordinate tool button is clicked
+ *
+ * @param checked
+ *     New checked status
+ */
+void
+BrainBrowserWindowToolBarVolumeMontage::showSliceCoordinateToolButtonClicked(bool checked)
+{
+    BrowserTabContent* btc = this->getTabContentFromSelectedTab();
+    
+    btc->setVolumeMontageAxesCoordinatesDisplayed(checked);
+    
+    this->updateGraphicsWindowAndYokedWindows();
+}
+
+
+/**
+ * Called when montage slice precision spin box value is changed.
+ *
+ * @param value
+ *     New value
+ */
+void
+BrainBrowserWindowToolBarVolumeMontage::slicePrecisionSpinBoxValueChanged(int value)
+{
+    BrowserTabContent* btc = this->getTabContentFromSelectedTab();
+    
+    btc->setVolumeMontageCoordinatePrecision(value);
+    
+    this->updateGraphicsWindowAndYokedWindows();
 }
 

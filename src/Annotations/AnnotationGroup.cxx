@@ -70,7 +70,7 @@ SceneableInterface()
     CaretAssert(annotationFile);
     CaretAssert(groupType != AnnotationGroupTypeEnum::INVALID);
     CaretAssert(uniqueKey > 0);
-    CaretAssert(coordinateSpace != AnnotationCoordinateSpaceEnum::PIXELS);
+    CaretAssert(coordinateSpace != AnnotationCoordinateSpaceEnum::VIEWPORT);
     
     initializeInstance();
     
@@ -93,8 +93,7 @@ SceneableInterface()
     m_tabOrWindowIndex = tabOrWindowIndex;
     
     switch (m_coordinateSpace) {
-        case AnnotationCoordinateSpaceEnum::PIXELS:
-            CaretAssert(0);
+        case AnnotationCoordinateSpaceEnum::CHART:
             break;
         case AnnotationCoordinateSpaceEnum::STEREOTAXIC:
             break;
@@ -103,6 +102,9 @@ SceneableInterface()
         case AnnotationCoordinateSpaceEnum::TAB:
             CaretAssert((tabOrWindowIndex >= 0)
                         && (tabOrWindowIndex < BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_TABS));
+            break;
+        case AnnotationCoordinateSpaceEnum::VIEWPORT:
+            CaretAssert(0);
             break;
         case AnnotationCoordinateSpaceEnum::WINDOW:
             CaretAssert((tabOrWindowIndex >= 0)
@@ -179,7 +181,7 @@ void
 AnnotationGroup::initializeInstance()
 {
     m_groupKey.reset();
-    m_coordinateSpace  = AnnotationCoordinateSpaceEnum::PIXELS;
+    m_coordinateSpace  = AnnotationCoordinateSpaceEnum::VIEWPORT;
     m_name             = "";
     m_tabOrWindowIndex = -1;
     
@@ -259,8 +261,7 @@ AnnotationGroup::getName() const
         
         AString spaceName = AnnotationCoordinateSpaceEnum::toGuiName(m_coordinateSpace);
         switch (m_coordinateSpace) {
-            case AnnotationCoordinateSpaceEnum::PIXELS:
-                CaretAssertMessage(0, "Should never be pixels");
+            case AnnotationCoordinateSpaceEnum::CHART:
                 break;
             case AnnotationCoordinateSpaceEnum::STEREOTAXIC:
                 break;
@@ -269,6 +270,9 @@ AnnotationGroup::getName() const
             case AnnotationCoordinateSpaceEnum::TAB:
                 spaceName.append(" "
                                  + AString::number(getTabOrWindowIndex() + 1));
+                break;
+            case AnnotationCoordinateSpaceEnum::VIEWPORT:
+                CaretAssertMessage(0, "Should never be viewport");
                 break;
             case AnnotationCoordinateSpaceEnum::WINDOW:
                 spaceName.append(" "
@@ -419,7 +423,7 @@ AnnotationGroup::validateAddedAnnotation(const Annotation* annotation)
     }
     
     switch (space) {
-        case AnnotationCoordinateSpaceEnum::PIXELS:
+        case AnnotationCoordinateSpaceEnum::CHART:
             break;
         case AnnotationCoordinateSpaceEnum::STEREOTAXIC:
             break;
@@ -431,6 +435,8 @@ AnnotationGroup::validateAddedAnnotation(const Annotation* annotation)
                 CaretAssert(0);
                 return false;
             }
+            break;
+        case AnnotationCoordinateSpaceEnum::VIEWPORT:
             break;
         case AnnotationCoordinateSpaceEnum::WINDOW:
             if (m_tabOrWindowIndex != annotation->getWindowIndex()) {

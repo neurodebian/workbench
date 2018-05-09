@@ -3,119 +3,77 @@
 #
 CMAKE_MINIMUM_REQUIRED (VERSION 2.8)
 
-MESSAGE("\nCMake Version: ${CMAKE_VERSION}\n")
-
 #
+# Set to true for verbose output when debugging this file
 #
+SET(WB_CMAKE_VERBOSE_OUTPUT_FLAG TRUE)
+
+##########################################################################################
 #
-#message(INFORMATION "\nTo get the correct version of QT, qmake must be in the PATH\n")
+# A function to get all user defined variables with a specified prefix
+# From https://cmake.org/Wiki/CMake/Tutorials/SettingVariableGroups
+#
+function (getListOfVarsStartingWith _prefix _varResult)
+    get_cmake_property(_vars CACHE_VARIABLES)
+    string (REGEX MATCHALL "(^|;)${_prefix}[A-Za-z0-9_]*" _matchedVars "${_vars}")
+    set (${_varResult} ${_matchedVars} PARENT_SCOPE)
+endfunction()
 
-#TSC: use "CACHE <type> <docstring>" syntax in SET commands so they can be overridden by cmake options
 
+##########################################################################################
+#
+# Workbench CACHE variables
+# TSC: use "CACHE <type> <docstring>" syntax in SET commands so they can be overridden by cmake options
+#
+set (WORKBENCH_QT5_DISABLE_DEPRECATED FALSE CACHE BOOL 
+     "If TRUE, use of Qt 5 deprecated functionality will cause compiler to fail")
+set (WORKBENCH_USE_CMAKE_AUTOMOC FALSE CACHE BOOL 
+     "If TRUE, use CMAKE_AUTOMOC command for generating 'moc' files")
+set (WORKBENCH_USE_QT5 TRUE CACHE BOOL 
+     "If TRUE, require Qt5, else Qt4.<NEWLINE>Specify as argument to cmake: -DWORKBENCH_USE_QT5=TRUE")
+set (WORKBENCH_USE_QT5_QOPENGL_WIDGET FALSE CACHE BOOL 
+     "With Qt5, QOpenGLWidget instead of deprecated QGLWidget")
+set (WORKBENCH_MESA_DIR "" CACHE PATH 
+     "Directory containing Mesa's 'include' and 'lib' <NEWLINE>directories.  Mesa is optional and used by <NEWLINE>wb_command's -show-scene operation.")
+
+##########################################################################################
 #
 # Setting the compiler MUST be done before the PROJECT
 # statement or else an infinite loop will occur indicating
 # that the compiler has been redefined.
 #
- 
- 
-
 IF(APPLE)
     ADD_DEFINITIONS(-DCARET_OS_MACOSX)
 ELSEIF(UNIX)
     IF(${CMAKE_SYSTEM_NAME} MATCHES "Linux")
         ADD_DEFINITIONS(-DCARET_OS_LINUX)
+        SET(CMAKE_POSITION_INDEPENDENT_CODE ON)
     ENDIF(${CMAKE_SYSTEM_NAME} MATCHES "Linux")
 ELSEIF(WIN32)
     ADD_DEFINITIONS(-DCARET_OS_WINDOWS)
+    # Policy CMP0020 is related to Qt
+    # https://cmake.org/cmake/help/v3.5/policy/CMP0020.html
+    if(POLICY CMP0020) 
+        cmake_policy(SET CMP0020 NEW)
+    endif()
     IF(MSVC)
         ADD_DEFINITIONS(-DCARET_OS_WINDOWS_MSVC)
+            ADD_DEFINITIONS(-D_USE_MATH_DEFINES -DNOMINMAX)
+            SET( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -MP -wd4290 -wd4244 -wd4267 -wd4305 -wd4100 -wd4005" )
         IF(CMAKE_CL_64)
-## SET(CMAKE_GENERATOR_TOOLSET "v120_CTP_Nov2012" CACHE STRING "Platform Toolset" FORCE) 
-            ADD_DEFINITIONS(-D_USE_MATH_DEFINES -DNOMINMAX)
-            SET( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -MP -wd4290 -wd4244 -wd4267 -wd4305 -wd4100 -wd4005" )
-            ##SET( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -we4061")
-            SET( ZLIB_INCLUDE_DIR "C:\\dev64\\install\\zlib\\include" CACHE STRING "zlib include directory (headers)")
-#           SET( ZLIB_LIBRARY "C:\\dev64\\install\\zlib\\lib\\zlib.lib" CACHE STRING "zlib library (binary)")
-            SET(ZLIB_LIBRARY optimized "C:\\dev64\\install\\zlib\\lib\\zlib.lib" debug "C:\\dev64\\install\\zlib\\lib\\zlibd.lib" CACHE STRING "zlib library (binary)")
-            SET( OPENSSL_ROOT_DIR "c:\\dev64\\install\\openssl-1.0.1t" CACHE_STRING "open ssl root directory")
-
         ELSE()
-## SET(CMAKE_GENERATOR_TOOLSET "v120_CTP_Nov2012" CACHE STRING "Platform Toolset" FORCE)         
-            ADD_DEFINITIONS(-D_USE_MATH_DEFINES -DNOMINMAX)
-            SET( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -MP -wd4290 -wd4244 -wd4267 -wd4305 -wd4100 -wd4005" )
-            ##SET( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -we4061")
-            SET( ZLIB_INCLUDE_DIR "C:\\dev32\\install\\zlib\\include" CACHE STRING "zlib include directory (headers)")
-#            SET( ZLIB_LIBRARY "C:\\dev32\\install\\zlib\\lib\\zlib.lib" CACHE STRING "zlib library (binary)") 
-            SET(ZLIB_LIBRARY optimized "C:\\dev32\\install\\zlib\\lib\\zlib.lib" debug "C:\\dev32\\install\\zlib\\lib\\zlibd.lib" CACHE STRING "zlib library (binary)")             
-            SET( OPENSSL_ROOT_DIR "c:\\dev32\\install\\openssl" CACHE_STRING "open ssl root directory")
         ENDIF(CMAKE_CL_64)
     ELSE(MSVC)
-        SET( OPENSSL_ROOT_DIR "c:\\dev32\\install\\openssl" CACHE_STRING "open ssl root directory")
-        FIND_PATH(ZLIB_INCLUDE_DIR zlib.h
-            C:\\dev32\\install\\zlib\\include
-            C:\\zlib_software\\zlib-1.2.5-install\\include
-            $ENV{ZLIB_INC_DIR})
-        FIND_PATH(ZLIB_LIBRARY libzlib.a
-            C:\\zlib_software\\zlib-1.2.5-install\\lib)
-        IF (NOT ZLIB_FOUND)
-            FIND_PATH(ZLIB_LIBRARY zlib.lib
-            C:\\dev32\\install\\zlib\\lib)
-        ENDIF(NOT ZLIB_FOUND)
-        IF (NOT ZLIB_FOUND)
-            FIND_PATH(ZLIB_LIBRARY libz.a
-                $ENV{ZLIB_LIB_DIR})
-        ENDIF(NOT ZLIB_FOUND)
-
-      ###  SET( ZLIB_INCLUDE_DIR "C:\\dev32\\install\\zlib\\include" CACHE STRING "zlib include directory (headers)")
-      ###  SET( ZLIB_LIBRARY "C:\\dev32\\install\\zlib\\lib\\zlib.lib" CACHE STRING "zlib library (binary)")
     ENDIF(MSVC)
 ELSE(APPLE)
-    MESSAGE(FATAL_ERROR "Unrecognized operating system " ${CMAKE_SYSTEM_NAME})
+    MESSAGE(SEND_ERROR "Unrecognized operating system " ${CMAKE_SYSTEM_NAME})
 ENDIF(APPLE)
-
-
-
-#cmake_policy(SET CMP0015 OLD)
-
-#
-# Shows compilation command when true
-#
-SET(CMAKE_VERBOSE_MAKEFILE TRUE CACHE BOOL "cause all build commands to be displayed")
-
-#
-# Allow support for C11X compiler
-#
-SET (WORKBENCH_C11X FALSE)
-##SET (WORKBENCH_C11X TRUE)
-IF ("$ENV{WORKBENCH_CONFIGURE_C11X}" STREQUAL "YES")
-   SET (WORKBENCH_C11X TRUE)
-   MESSAGE("Configuring Workbench build with C11X enabled.")
-ENDIF ("$ENV{WORKBENCH_CONFIGURE_C11X}" STREQUAL "YES")
-
-
-#
-# Set flags for C11 compiler
-# Only set for C++ compiler
-# C11x options are not recognized by C compiler
-#
-SET (CLANG_11X_FLAGS "")
-SET (GNU_11X_FLAGS "")
-SET (INTEL_11X_FLAGS "")
-IF (WORKBENCH_C11X)
-    ADD_DEFINITIONS("-DWORKBENCH_HAVE_C11X")
-    SET (CLANG_11X_FLAGS "-std=c++11 -stdlib=libstdc++ -Wno-error=c++11-narrowing")
-    ####SET (CLANG_11X_FLAGS "-std=c++11 -stdlib=libc++ -Wno-error=c++11-narrowing")
-    SET (GNU_11X_FLAGS "-std=c++11 -Wno-error=c++11-narrowing")
-    SET (INTEL_11X_FLAGS "-std=c++11 -Wno-error=c++11-narrowing")
-ENDIF (WORKBENCH_C11X)
 
 #
 # Intel compiler
 #
 IF (${CMAKE_CXX_COMPILER} MATCHES "^.*icpc$")
     ADD_DEFINITIONS("-W -Wall -Werror=return-type -Werror=switch -Wunused-parameter")
-    SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${INTEL_11X_FLAGS}")
 ENDIF (${CMAKE_CXX_COMPILER} MATCHES "^.*icpc$")
 
 #
@@ -129,15 +87,7 @@ IF (${CMAKE_CXX_COMPILER} MATCHES "^.*clang2\\+\\+.*")
     SET(CLANG_FLAG TRUE)
 ENDIF (${CMAKE_CXX_COMPILER} MATCHES "^.*clang2\\+\\+.*")
 IF (CLANG_FLAG)
-    MESSAGE("USING CLANG COMPILER ${CMAKE_CXX_COMPILER}")
     ADD_DEFINITIONS("-W -Wall -Werror=return-type -Werror=switch -Wunused-parameter -Wno-deprecated-declarations")
-    SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CLANG_11X_FLAGS}")
-    ##SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CLANG_11X_FLAGS} -W -Wall -Werror=return-type -Werror=switch -Wunused-parameter")
-    ##SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CLANG_11X_FLAGS} -W -Wall -Werror=return-type -Werror=switch -Wunused-parameter" CACHE STRING "C++ compiler options" FORCE)
-
-    IF (WORKBENCH_C11X)
-        ####set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -std=c++11 -stdlib=libc++")
-    ENDIF (WORKBENCH_C11X)
 ENDIF (CLANG_FLAG)
 
 
@@ -146,48 +96,31 @@ ENDIF (CLANG_FLAG)
 # statements that do not handle all of the enumerated types
 # are treated as an error.  Also, all warnings.
 #
-###IF (CMAKE_COMPILER_IS_GNUCXX)
 IF (NOT MSVC)
-##    SET(CMAKE_CXX_FLAGS "-W -Wall -Werror=return-type -Werror=switch ${CMAKE_CXX_FLAGS}" CACHE STRING "c++ compiler specific options")
-##    SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -W -Wall -Werror=return-type -Werror=switch -std=c++0x")
-##SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x")
-if (CMAKE_COMPILER_IS_GNUCC)
-    execute_process(COMMAND ${CMAKE_C_COMPILER} -dumpversion
-                    OUTPUT_VARIABLE GCC_VERSION)
-    string(REGEX MATCHALL "[0-9]+" GCC_VERSION_COMPONENTS ${GCC_VERSION})
-    list(GET GCC_VERSION_COMPONENTS 0 GCC_MAJOR)
-    list(GET GCC_VERSION_COMPONENTS 1 GCC_MINOR)
-    message("gcc major minor version numbers are: " ${GCC_MAJOR},${GCC_MINOR})
-    if(${GCC_VERSION} VERSION_LESS "4.2")
-        #SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -W -Wall" CACHE STRING "c++ compiler specific options")
-        ADD_DEFINITIONS(-W -Wall)
-    else()
-        #SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -W -Wall -Werror=return-type -Werror=switch" CACHE STRING "c++ compiler specific options")
-        ADD_DEFINITIONS(-W -Wall -Werror=return-type -Werror=switch -Wunused-parameter)
-        SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${GNU_11X_FLAGS}")
+    if (CMAKE_COMPILER_IS_GNUCC)
+        execute_process(COMMAND ${CMAKE_C_COMPILER} -dumpversion
+                        OUTPUT_VARIABLE GCC_VERSION)
+        message("gcc version is: " ${GCC_VERSION})
+        if(${GCC_VERSION} VERSION_LESS "4.2")
+            ADD_DEFINITIONS(-W -Wall)
+        else()
+            ADD_DEFINITIONS(-W -Wall -Werror=return-type -Werror=switch -Wunused-parameter)
+        endif()
+
+        if (${GCC_VERSION} VERSION_LESS "4.9")
+            # there is no greater than or equal in CMake
+        else()
+            ADD_DEFINITIONS(-Wno-narrowing -Wno-unused-local-typedefs)
+        endif()
     endif()
-
-    if (${GCC_VERSION} VERSION_LESS "4.9")
-        # there is no greater than or equal in CMake
-    else()
-        ADD_DEFINITIONS(-Wno-narrowing -Wno-unused-local-typedefs)
-    endif()
-
-#    execute_process(COMMAND uname -n OUTPUT_VARIABLE MACHINE_NAME)
-#    message("MACHINE_NAME: ${MACHINE_NAME}")
-#    if (${MACHINE_NAME} MATCHES "linuxbuild")
-#        message("is linuxbuild")
-#        SET(CMAKE_EXE_LINKER_FLAGS "-Wl,-E" ${CMAKE_EXE_LINKER_FLAGS})
-#    endif()
-
-endif()
 ENDIF (NOT MSVC)
 
+##########################################################################################
 #
 # If GNU compiler, use SIMD-based dot computation, if possible
 #
-if (CMAKE_COMPILER_IS_GNUCC)
-
+SET(SIMD_RESULT "Search for SIMD disabled for compiler on this system.")
+if (CMAKE_COMPILER_IS_GNUCC OR CLANG_FLAG)
     #
     # Define flag to avoid trying to compile SIMD stuff (coded for x86 only)
     #
@@ -198,62 +131,180 @@ if (CMAKE_COMPILER_IS_GNUCC)
     #
     IF (WORKBENCH_USE_SIMD)
         TRY_COMPILE(CPUINFO_COMPILES ${CMAKE_CURRENT_BINARY_DIR}/cpuinfo_compile_test ${CMAKE_CURRENT_SOURCE_DIR}/kloewe/cpuinfo cpuinfo)
-        MESSAGE("CPUINFO_COMPILES: ${CPUINFO_COMPILES}")
+        
+        #
+        # Add the necessary definition and include directory to enable the 
+        # SIMD-based dot product implementations
+        #
+        IF (CPUINFO_COMPILES)
+            ADD_DEFINITIONS(-DCARET_DOTFCN)
+            INCLUDE_DIRECTORIES(${CMAKE_SOURCE_DIR}/kloewe/dot/src)
+            SET(SIMD_RESULT "Enabled")
+        ELSE()
+            SET(SIMD_RESULT "Failed when compiling with SIMD")
+        ENDIF()
+    ELSE (WORKBENCH_USE_SIMD)
+        SET(SIMD_RESULT "Search for SIMD disabled, WORKBENCH_USE_SIMD=FALSE")
     ENDIF (WORKBENCH_USE_SIMD)
+endif(CMAKE_COMPILER_IS_GNUCC OR CLANG_FLAG)
 
-    #
-    # Add the necessary definition and include directory to enable the SIMD-based dot product implementations
-    #
-    if (WORKBENCH_USE_SIMD AND CPUINFO_COMPILES)
-        ADD_DEFINITIONS(-DCARET_DOTFCN)
-        INCLUDE_DIRECTORIES(${CMAKE_SOURCE_DIR}/kloewe/dot/src)
-    endif()
-endif()
+#TSC: we require c++11, so it needs to be in the compile flags - in older cmake, this needs to be done manually
+IF (${CMAKE_VERSION} VERSION_LESS "3.1")
+    IF (CMAKE_COMPILER_IS_GNUCC)
+        include(CheckCXXCompilerFlag)
+        CHECK_CXX_COMPILER_FLAG("-std=c++11" GCC_STD11)
+        IF (${GCC_STD11})
+            SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
+        ELSE (${GCC_STD11})
+            SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x")
+        ENDIF (${GCC_STD11})
+    ENDIF (CMAKE_COMPILER_IS_GNUCC)
+ELSE (${CMAKE_VERSION} VERSION_LESS "3.1")
+    SET(CMAKE_CXX_STANDARD 11)
+    SET(CMAKE_CXX_STANDARD_REQUIRED TRUE)
+ENDIF (${CMAKE_VERSION} VERSION_LESS "3.1")
 
+##########################################################################################
 #
-# will set name of XCode project:  
-# disabled at this time
+# OpenSSL
 #
-##PROJECT(BorderOptProject C CXX)
-
+SET(OPENSSL_RESULT "Not Found")
 FIND_PACKAGE(OpenSSL)
 IF(OPENSSL_FOUND)
     INCLUDE_DIRECTORIES(${OPENSSL_INCLUDE_DIR})
-    MESSAGE("OpenSSL version=${OPENSSL_VERSION}")
-    MESSAGE("OpenSSL include=${OPENSSL_INCLUDE_DIR}")
-    MESSAGE("OpenSSL libraries=${OPENSSL_LIBRARIES}")
+    SET(OPENSSL_RESULT "${OPENSSL_VERSION}   ${OPENSSL_LIBRARIES}")
 ELSE (OPENSSL_FOUND)
-    MESSAGE("OpenSSL NOT FOUND")
+    MESSAGE("OpenSSL NOT FOUND.  May need to define OPENSSL_ROOT_DIR when running CMake.")
+    MESSAGE("   cmake -DOPENSSL_ROOT_DIR=<path> \n")
+    MESSAGE("See: https://cmake.org/cmake/help/v3.5/module/FindOpenSSL.html")
 ENDIF(OPENSSL_FOUND)
 
+##########################################################################################
 #
-# Must have QT 4.8 or later
+# Must have QT 4.8 or QT 5, recommended 5.6 or later
+# https://cmake.org/cmake/help/v3.5/manual/cmake-packages.7.html#manual:cmake-packages(7)
+# Modules List: http://doc.qt.io/qt-5/qtmodules.html
 #
-FIND_PACKAGE(Qt4 4.8 REQUIRED)
-IF(QT4_FOUND)
-ELSE(QT4_FOUND)
-    MESSAGE(FATAL_ERROR "QT4 not found")
-ENDIF(QT4_FOUND)
+SET(QT_RESULT "Not Found")
+SET(CARET_QT5_LINK "")
+IF (WORKBENCH_USE_QT5) 
+    #
+    # The OpenGL module is deprecated in Qt5 and 
+    # is needed only if QGLWidget is used for
+    # the OpenGL graphics.
+    #
+    IF (NOT WORKBENCH_USE_QT5_QOPENGL_WIDGET)
+        SET(WB_QT_OPENGL_MODULE "OpenGL")
+    ENDIF ()
 
-#
-# QT include files
-#
-INCLUDE(${QT_USE_FILE})
+    FIND_PACKAGE(Qt5 REQUIRED COMPONENTS Concurrent Core Gui Network ${WB_QT_OPENGL_MODULE} PrintSupport Test Widgets Xml)
+    IF (WORKBENCH_USE_QT5_QOPENGL_WIDGET)
+        #
+        # QGLWidget is deprecated in Qt 5 and is replaced with QOpenGLWidget
+        #
+        # If WORKBENCH_USE_QT5_QOPENGL_WIDGET is defined, QOpenGLWidget is used
+        # for OpenGL.  Otherwise, QGLWidget is used.
+        #
+        add_definitions(-DWORKBENCH_USE_QT5_QOPENGL_WIDGET)
+    ELSE (WORKBENCH_USE_QT5_QOPENGL_WIDGET)
+        remove_definitions(-DWORKBENCH_USE_QT5_QOPENGL_WIDGET)
+    ENDIF (WORKBENCH_USE_QT5_QOPENGL_WIDGET)
 
+    IF (WORKBENCH_QT5_DISABLE_DEPRECATED)
+        # Causes Qt to remove declarations for deprecated functionality
+        add_definitions(-DQT_DISABLE_DEPRECATED_BEFORE=0x050700) 
+        # Enable usage of replacements for Qt deprecated functionality in Workbench source code
+        add_definitions(-DWORKBENCH_REPLACE_QT_DEPRECATED)
+    ENDIF (WORKBENCH_QT5_DISABLE_DEPRECATED)
+
+    #small hack to get the qt5 compile flag requirements into libraries
+    SET(CARET_QT5_LINK "Qt5::Core")
+
+    SET(QT_RESULT "${Qt5_VERSION}")
+ELSE ()
+    FIND_PACKAGE(Qt4 4.8 REQUIRED)
+    IF(QT4_FOUND)
+        INCLUDE(${QT_USE_FILE})
+        SET(QT_RESULT "${QTVERSION}")
+    ELSE(QT4_FOUND)
+        MESSAGE(SEND_ERROR "QT4 not found")
+    ENDIF(QT4_FOUND)
+ENDIF ()
+
+##########################################################################################
 #
-# Try to find Qwt, utherwise use bundle
+# Try to find Qwt, otherwise use bundle
 #
+SET(QWT_RESULT "Not Found")
 IF (NOT WIN32)
     PKG_CHECK_MODULES(Qwt qwt)
 ENDIF (NOT WIN32)
 IF (Qwt_FOUND)
-    MESSAGE("Qwt library found")
-    MESSAGE("   INCLUDES ${Qwt_INCLUDE_DIRS}")
-    MESSAGE("   LIBS ${Qwt_LIBRARIES}")
+    SET(QWT_RESULT "Using Qwt Library ${Qwt_LIBRARIES}")
 ELSE (Qwt_FOUND)
-    MESSAGE("Qwt library not found, using bundled")
+    SET(QWT_RESULT "In Workbench Source Code")
 ENDIF (Qwt_FOUND)
 
+##########################################################################################
+#
+# Need OpenGL
+#
+SET(OPENGL_RESULT "")
+FIND_PACKAGE(OpenGL REQUIRED)
+IF (OPENGL_FOUND)
+    #
+    # Need help finding includes on Apple
+    #
+    IF (APPLE)
+        # When searching for the include directory, find the location
+        # for the OpenGL framework rather than an individual header file.
+        FIND_PATH(OPENGL_INCLUDE_DIR OpenGL.framework
+                  /System/Library/Frameworks
+                  /Library/Frameworks
+                  ~/Library/Frameworks)
+    ENDIF (APPLE)
+    #
+    # OpenGL Include Directory
+    #
+    INCLUDE_DIRECTORIES(${OPENGL_INCLUDE_DIR})
+    MESSAGE("OpenGL Include Directory: ${OPENGL_INCLUDE_DIR}")
+    MESSAGE("OpenGL Libraries: ${OPENGL_LIBRARIES}")
+    SET(OPENGL_RESULT ${OPENGL_LIBRARIES})
+ELSE (OPENGL_FOUND)
+    MESSAGE(SEND_ERROR "OpenGL Libraries were not found")
+ENDIF (OPENGL_FOUND)
+
+##########################################################################################
+#
+# Look for GLEW but only on Windows
+#
+SET(GLEW_RESULT "No")
+IF (WIN32)
+    FIND_PACKAGE(GLEW)
+ENDIF ()
+
+IF (GLEW_FOUND)
+    SET(GLEW_RESULT "${GLEW_INCLUDE_DIRS} ${GLEW_LIBRARIES}")
+    MESSAGE("GLEW Include Dirs: ${GLEW_INCLUDE_DIRS}")
+    MESSAGE("GLEW Libraries: ${GLEW_LIBRARIES}")
+    STRING(FIND ${GLEW_LIBRARIES} "glew32s.lib" GLEW_STATIC_LIB_NAME_INDEX)
+    ADD_DEFINITIONS(-DHAVE_GLEW)
+    IF (GLEW_STATIC_LIB_NAME_INDEX GREATER -1)
+        ADD_DEFINITIONS(-DHAVE_GLEW_STATIC_LIB)
+        MESSAGE("GLEW Static Library Found")
+    ENDIF()
+    INCLUDE_DIRECTORIES(${GLEW_INCLUDE_DIRS})
+ELSE()
+    SET(GLEW_LIBRARIES "")
+    SET(GLEW_INCLUDE_DIRS "")
+    IF (WIN32)
+        MESSAGE(SEND_ERROR "GLEW not found and is required on Windows for finding OpenGL functions.\n"
+                           "    Setting CMAKE_PREFIX_PATH to the GLEW installation directory when\n"
+                           "    running CMAKE may help find GLEW.\n")
+    ENDIF()
+ENDIF()
+
+##########################################################################################
 #
 # The Find OpenMP package may not work on all systems and the user may
 # furnish the paths to the OpenMP files by using environment variables.
@@ -290,6 +341,7 @@ ENDIF (NOT OPENMP_FOUND)
 #
 # If OpenMP is found, may need to set compiler and linker flags
 #
+SET(OPENMP_RESULT "Not Found")
 IF (OPENMP_FOUND)
     # add definitions will add the flag to the linker and resource compilers, which don't understand the openmp option
     SET(CMAKE_CXX_FLAGS "${OpenMP_CXX_FLAGS} ${CMAKE_CXX_FLAGS}")
@@ -303,6 +355,7 @@ IF (OPENMP_FOUND)
         SET (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static-intel")
         ADD_DEFINITIONS("-static-intel")
     ENDIF()
+    SET(OPENMP_RESULT "Yes")
 ELSE (OPENMP_FOUND)
     MESSAGE(WARNING "OpenMP was not found")
 
@@ -316,28 +369,33 @@ ELSE (OPENMP_FOUND)
     ENDIF (CLANG_FLAG)
 ENDIF(OPENMP_FOUND)
 
-MESSAGE("\nC++ flags ${CMAKE_CXX_FLAGS}\n")
-
+##########################################################################################
 #
 # MUST have ZLIB
 #
+SET(ZLIB_RESULT "Not Found")
 FIND_PACKAGE(ZLIB)
 IF ( ZLIB_FOUND )
     INCLUDE_DIRECTORIES(${ZLIB_INCLUDE_DIRS})
+    SET(ZLIB_RESULT ${ZLIB_VERSION_STRING})
 ELSE (ZLIB_FOUND)
-    MESSAGE(FATAL_ERROR "ZLIB was not found")
+    MESSAGE(SEND_ERROR "ZLIB was not found.  It may be necessary to define "
+                  "the variable ZLIB_ROOT when running cmake so that "
+                  "the FindZLIB module is able to find ZLIB.\n"
+                  "   cmake -DZLIB_ROOT=<path> \n"
+                  "See HINTS at "
+                  "https://cmake.org/cmake/help/v3.5/module/FindZLIB.html")
 ENDIF (ZLIB_FOUND)
 
+##########################################################################################
 #
 # Try to find QuaZip, otherwise use bundled
 #
-FIND_PACKAGE(QuaZip)
+SET(QUAZIP_RESULT "Not Found")
+FIND_PACKAGE(QuaZip  QUIET)
 IF (QUAZIP_FOUND)
-  MESSAGE("QuaZip library found")
-  MESSAGE("   INCLUDES ${QUAZIP_INCLUDE_DIRS}")
-  MESSAGE("   LIBS ${QUAZIP_LIBRARIES}")
+  SET(QUAZIP_RESULT "Using QuaZip Library ${QUAZIP_LIBRARIES}")
 ELSE (QUAZIP_FOUND)
-    MESSAGE("QuaZip library not found, using bundled")
     #
     # Quazip needs this defined here for static linking on windows
     #
@@ -345,55 +403,45 @@ ELSE (QUAZIP_FOUND)
         IF(MSVC)
             ADD_DEFINITIONS(-DQUAZIP_STATIC)
         ENDIF(MSVC)
-     ENDIF(WIN32)
+    ENDIF(WIN32)
+    SET(QUAZIP_RESULT "In Workbench Source Code")
 ENDIF (QUAZIP_FOUND)
 
+##########################################################################################
 #
 # Find FreeType
 #
+SET(FREETYPE_RESULT "Not Found")
+SET(FTGL_RESULT "Must have FreeType to use FTGL")
 SET(FTGL_FONT_MODULE_FOR_LINKING "")
-
+IF (DEFINED WORKBENCH_FREETYPE_DIR)
+   # FindFreeType looks for environment variable FREETYPE_DIR as a hint
+   SET(ENV{FREETYPE_DIR} ${WORKBENCH_FREETYPE_DIR})
+ENDIF ()
 FIND_PACKAGE(Freetype)
 IF (FREETYPE_FOUND)
-    MESSAGE("FreeType library found")
-    MESSAGE("   INCLUDES ${FREETYPE_INCLUDE_DIRS}")
-    MESSAGE("   INCLUDES_FT2_BUILD ${FREETYPE_INCLUDE_DIR_ft2build}")
-    MESSAGE("   INCLUDES_FT2 ${FREETYPE_INCLUDE_DIR_freetype2}")
-    MESSAGE("   LIBS ${FREETYPE_LIBRARIES}")
-
     IF (NOT WIN32)
         PKG_CHECK_MODULES(FTGL ftgl)
     ENDIF (NOT WIN32)
     IF (FTGL_FOUND)
-        MESSAGE("FTGL library found")
-        MESSAGE("   INCLUDES ${FTGL_INCLUDE_DIRS}")
-        MESSAGE("   LIBS ${FTGL_LIBRARIES}")
+        SET(FTGL_RESULT "Using FTGL Library ${FTGL_LIBRARIES}")
     ELSE (FTGL_FOUND)
-        MESSAGE("FTGL library not found, using bundled")
+        SET(FTGL_RESULT "In Workbench Source Code")
     ENDIF (FTGL_FOUND)
 
     ADD_DEFINITIONS(-DHAVE_FREETYPE)
+    SET(FREETYPE_RESULT "${FREETYPE_VERSION_STRING} ${FREETYPE_LIBRARIES}")
 ELSE (FREETYPE_FOUND)
     SET (FREETYPE_LIBRARY "")
     SET (FREETYPE_LIBRARIES "")
     MESSAGE("FreeType library NOT found")
-    MESSAGE("    The environment variable FREETYPE_DIR can be set to the")
-    MESSAGE("    directory containing FreeType include and lib.")
-    MESSAGE("")
-    MESSAGE("    ")
-    MESSAGE("    On Windows (and possibly other systems) it may be necessary to set")
-    MESSAGE("        DFREETYPE_INCLUDE_DIR_freetype2")
-    MESSAGE("            <your-path>/FreeType-X.Y.Z/include/freetype2")
-    MESSAGE("        DFREETYPE_INCLUDE_DIR_ft2build")
-    MESSAGE("            <your-path>/FreeType-X.Y.Z/include")
-    MESSAGE("        DFREETYPE_LIBRARY")
-    MESSAGE("            <your-path>/FreeType-X.Y.Z/lib/freetype.lib")
-    MESSAGE("    ")
-    MESSAGE("    These variable can be set when running cmake.  For example:")
-    MESSAGE("        cmake -DFREETYPE_INCLUDE_DIR_freetype2=<your-path>/FreeType-X.Y.Z/include/freetype2")
-    MESSAGE("    ")
+    MESSAGE("    Define the PATH to FreeType when running CMake")
+    MESSAGE("       -DWORKBENCH_FREETYPE_DIR=<PATH>")
+    MESSAGE("    Where <PATH> is the directory containing FreeType's")
+    MESSAGE("    'include' and 'lib' directories.")
 ENDIF (FREETYPE_FOUND)
 
+##########################################################################################
 #
 # Fixes issue with XCode and newer version of CMake.
 # It prevents the ZERO_CHECK dependency from running
@@ -403,11 +451,12 @@ ENDIF (FREETYPE_FOUND)
 IF (APPLE)
     SET (CMAKE_SUPPRESS_REGENERATION TRUE)
 ENDIF (APPLE)
-#=============================================================================
+
+##########################################################################################
 #
-# Test for offscreen mesa (optional library)
-# If found, set some variables.  Since, Mesa is only used for 
-# command line 
+# Test for offscreen MESA (optional library)
+# Mesa is used by wb_command's -show-scene.
+# If Mesa is not found, the "-show-scene" command will not be available.
 #
 SET(OSMESA_FOUND FALSE)
 SET(OSMESA_DEFINITION "")
@@ -416,46 +465,32 @@ SET(OSMESA_GL_LIBRARY "")
 SET(OSMESA_GLU_LIBRARY "")
 SET(OSMESA_INCLUDE_DIRECTORY "")
 
-MESSAGE("OSMESA_DIR: $ENV{OSMESA_DIR}")
-IF (EXISTS $ENV{OSMESA_DIR})
-    IF (EXISTS $ENV{OSMESA_DIR}/include/GL/osmesa.h)
-        MESSAGE("Have Mesa Include Directory")
+SET(OSMESA_RESULT "Not found")
+IF (EXISTS ${WORKBENCH_MESA_DIR})
+    IF (EXISTS ${WORKBENCH_MESA_DIR}/include/GL/osmesa.h)
         FIND_LIBRARY(OSMESA_LIBRARY_FOUND
-                     NAMES OSMesa
-                     HINTS $ENV{OSMESA_DIR}/lib)
+                     NAMES OSMesa OSMESA32
+                     HINTS ${WORKBENCH_MESA_DIR}/lib)
         FIND_LIBRARY(OSMESA_GL_LIBRARY_FOUND
-                     NAMES GL
-                     HINTS $ENV{OSMESA_DIR}/lib)
+                     NAMES GL OPENGL32
+                     HINTS ${WORKBENCH_MESA_DIR}/lib)
         FIND_LIBRARY(OSMESA_GLU_LIBRARY_FOUND
-                     NAMES GLU
-                     HINTS $ENV{OSMESA_DIR}/lib)
-        MESSAGE("OSMesa lib: " ${OSMESA_LIBRARY})
+                     NAMES GLU GLU32
+                     HINTS ${WORKBENCH_MESA_DIR}/lib)
         IF (EXISTS ${OSMESA_LIBRARY_FOUND} AND EXISTS ${OSMESA_GL_LIBRARY_FOUND} AND EXISTS ${OSMESA_GLU_LIBRARY_FOUND})
             SET(OSMESA_DEFINITION -DHAVE_OSMESA)
             SET(OSMESA_OFFSCREEN_LIBRARY ${OSMESA_LIBRARY_FOUND})
             SET(OSMESA_GL_LIBRARY ${OSMESA_GL_LIBRARY_FOUND})
             SET(OSMESA_GLU_LIBRARY ${OSMESA_GLU_LIBRARY_FOUND})
-            SET(OSMESA_INCLUDE_DIRECTORY $ENV{OSMESA_DIR}/include)
+            SET(OSMESA_INCLUDE_DIRECTORY ${WORKBENCH_MESA_DIR}/include)
             SET(OSMESA_FOUND TRUE)
 
-            MESSAGE("Offscreen Mesa Library was found")
-            MESSAGE("   Definition: ${OSMESA_DEFINITION}")
-            MESSAGE("   Include:    ${OSMESA_INCLUDE_DIRECTORY}")
-            MESSAGE("   Libraries:  ${OSMESA_OFFSCREEN_LIBRARY}")
-            MESSAGE("   Libraries:  ${OSMESA_GL_LIBRARY}")
-            MESSAGE("   Libraries:  ${OSMESA_GLU_LIBRARY}")
+            SET(OSMESA_RESULT ${OSMESA_OFFSCREEN_LIBRARY})
         ENDIF (EXISTS ${OSMESA_LIBRARY_FOUND} AND EXISTS ${OSMESA_GL_LIBRARY_FOUND} AND EXISTS ${OSMESA_GLU_LIBRARY_FOUND})
-    ENDIF (EXISTS $ENV{OSMESA_DIR}/include/GL/osmesa.h)
-ENDIF (EXISTS $ENV{OSMESA_DIR})
+    ENDIF (EXISTS ${WORKBENCH_MESA_DIR}/include/GL/osmesa.h)
+ENDIF (EXISTS ${WORKBENCH_MESA_DIR})
 
-#=============================================================================
-MESSAGE("")
-MESSAGE("Compiler: ${CMAKE_CXX_COMPILER}")
-MESSAGE("Compiler Version: ${CMAKE_CXX_COMPILER_VERSION}")
-MESSAGE("")
-#=============================================================================
-
-
+##########################################################################################
 #
 # All subdirectories that will be configured for building
 #
@@ -481,6 +516,7 @@ ADD_SUBDIRECTORY ( OperationsBase )
 ADD_SUBDIRECTORY ( Algorithms )
 ADD_SUBDIRECTORY ( Operations )
 ADD_SUBDIRECTORY ( Brain )
+ADD_SUBDIRECTORY ( Graphics )
 IF (NOT Qwt_FOUND)
     ADD_SUBDIRECTORY ( Qwt )
 ENDIF (NOT Qwt_FOUND)
@@ -494,7 +530,73 @@ if (WORKBENCH_USE_SIMD AND CPUINFO_COMPILES)
     ADD_SUBDIRECTORY ( kloewe/dot )
 ENDIF()
 
+##########################################################################################
 #
-#CTest tests
+# CTest tests
 #
 ENABLE_TESTING()
+
+##########################################################################################
+#
+# DEBUGGING ONLY
+#
+# Some find modules do not always document all of their variables.
+# If you know the prefix for the find module's variables,
+# this code can be used to print the variables by setting
+# DEBUG_VARIABLE_PREFIX to the prefix.
+# For example, set to "Q" to find all variables beginning from Qt
+# or to "OSMESA" to print all OSMESA variables.
+#
+SET(DEBUG_VARIABLE_PREFIX "")
+IF(NOT ("${DEBUG_VARIABLE_PREFIX}" STREQUAL ""))
+    getListOfVarsStartingWith(${DEBUG_VARIABLE_PREFIX} allVars)
+    foreach( debugVar IN LISTS allVars ) 
+            message(${MSG_TYPE} ${MSG_INDENT} "${debugVar}=${${debugVar}}" )
+    endforeach()
+ENDIF()
+
+##########################################################################################
+#
+# Print Summary
+#
+IF(WB_CMAKE_VERBOSE_OUTPUT_FLAG)
+    SET(MSG_MODE "")  #Optional 
+    SET(MSG_INDENT "    ")
+    MESSAGE(${MSG_MODE} "************* SUMMARY FROM RUNNING CMake ********************")
+    FIND_PROGRAM(QMAKE_PROGRAM "qmake" NAMES "qmake.exe")
+
+    MESSAGE(${MSG_MODE} "TOOLS:")
+    MESSAGE(${MSG_MODE} ${MSG_INDENT} "CMake Build Type:     ${CMAKE_BUILD_TYPE}")
+    MESSAGE(${MSG_MODE} ${MSG_INDENT} "CMake Version:        ${CMAKE_VERSION}")
+    MESSAGE(${MSG_MODE} ${MSG_INDENT} "CXX Compiler          ${CMAKE_CXX_COMPILER_ID}")
+    MESSAGE(${MSG_MODE} ${MSG_INDENT} "CXX Compiler Version: ${CMAKE_CXX_COMPILER_VERSION}")
+    MESSAGE(${MSG_MODE} ${MSG_INDENT} "CXX Compiler Flags:   ${CMAKE_CXX_FLAGS}")
+    MESSAGE(${MSG_MODE} ${MSG_INDENT} "CXX Compiler Path:    ${CMAKE_CXX_COMPILER}")
+    MESSAGE(${MSG_MODE} ${MSG_INDENT} "QMake Program:        ${QMAKE_PROGRAM}")
+
+    MESSAGE(${MSG_MODE} "WORKBENCH VARIABLES:")
+    getListOfVarsStartingWith("WORKBENCH" allVars)
+    foreach( var IN LISTS allVars ) 
+            get_property(docString CACHE ${var} PROPERTY HELPSTRING)
+            message(${MSG_MODE} ${MSG_INDENT} "${var}=${${var}}" )
+            
+            STRING(REPLACE "<NEWLINE>" "\n${MSG_INDENT}${MSG_INDENT}" docPrint ${docString})
+            message(${MSG_MODE} ${MSG_INDENT} ${MSG_INDENT} ${docPrint})
+    endforeach()
+
+    MESSAGE(${MSG_MODE} "PACKAGES:")
+    MESSAGE(${MSG_MODE} ${MSG_INDENT} "FTGL:     " ${FTGL_RESULT})
+    MESSAGE(${MSG_MODE} ${MSG_INDENT} "FreeType: " ${FREETYPE_RESULT})
+    MESSAGE(${MSG_MODE} ${MSG_INDENT} "GLEW:     " ${GLEW_RESULT})
+    MESSAGE(${MSG_MODE} ${MSG_INDENT} "OpenGL:   " ${OPENGL_RESULT})
+    MESSAGE(${MSG_MODE} ${MSG_INDENT} "OpenMP:   " ${OPENMP_RESULT})
+    MESSAGE(${MSG_MODE} ${MSG_INDENT} "OpenSSL:  " ${OPENSSL_RESULT})
+    MESSAGE(${MSG_MODE} ${MSG_INDENT} "OSMESA:   " ${OSMESA_RESULT})
+    MESSAGE(${MSG_MODE} ${MSG_INDENT} "Qt:       " ${QT_RESULT})
+    MESSAGE(${MSG_MODE} ${MSG_INDENT} "QuaZip:   " ${QUAZIP_RESULT})
+    MESSAGE(${MSG_MODE} ${MSG_INDENT} "Qwt:      " ${QWT_RESULT})
+    MESSAGE(${MSG_MODE} ${MSG_INDENT} "SIMD:     " ${SIMD_RESULT})
+    MESSAGE(${MSG_MODE} ${MSG_INDENT} "ZLIB:     " ${ZLIB_RESULT})
+
+    MESSAGE(${MSG_MODE} "************* END SUMMARY FROM RUNNING CMake *****************")
+ENDIF(WB_CMAKE_VERBOSE_OUTPUT_FLAG)

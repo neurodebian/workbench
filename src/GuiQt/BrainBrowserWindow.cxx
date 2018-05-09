@@ -22,6 +22,7 @@
 #include <QCheckBox>
 #include <QCloseEvent>
 #include <QDesktopServices>
+#include <QDoubleSpinBox>
 #include <QGroupBox>
 #include <QLabel>
 #include <QLineEdit>
@@ -29,6 +30,7 @@
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QTabBar>
+#include <QToolButton>
 #include <QUrl>
 #include <QUuid>
 
@@ -48,6 +50,7 @@
 #include "BrainOpenGLWidget.h"
 #include "BrainStructure.h"
 #include "BrowserTabContent.h"
+#include "BrowserWindowContent.h"
 #include "CaretAssert.h"
 #include "CaretFileDialog.h"
 #include "CaretFileRemoteDialog.h"
@@ -62,6 +65,7 @@
 #include "ElapsedTimer.h"
 #include "EventGetViewportSize.h"
 #include "EventBrowserWindowCreateTabs.h"
+#include "EventBrowserWindowContent.h"
 #include "EventDataFileRead.h"
 #include "EventMacDockMenuUpdate.h"
 #include "EventManager.h"
@@ -74,7 +78,9 @@
 #include "EventUserInterfaceUpdate.h"
 #include "FileInformation.h"
 #include "FociProjectionDialog.h"
+#include "GapsAndMargins.h"
 #include "GuiManager.h"
+#include "LockAspectWarningDialog.h"
 #include "ModelSurface.h"
 #include "ModelSurfaceMontage.h"
 #include "ModelWholeBrain.h"
@@ -96,8 +102,10 @@
 #include "SurfaceSelectionViewController.h"
 #include "TileTabsConfiguration.h"
 #include "WuQDataEntryDialog.h"
+#include "WuQDoubleSpinBox.h"
 #include "WuQMessageBox.h"
 #include "WuQtUtilities.h"
+#include "WuQTextEditorDialog.h"
 #include "VtkFileExporter.h"
 
 using namespace caret;
@@ -120,40 +128,44 @@ BrainBrowserWindow::BrainBrowserWindow(const int browserWindowIndex,
                                        const CreateDefaultTabsMode createDefaultTabsMode,
                                        QWidget* parent,
                                        Qt::WindowFlags flags)
-: QMainWindow(parent, flags)
+: QMainWindow(parent, flags),
+m_browserWindowIndex(browserWindowIndex)
 {
     m_developMenuAction = NULL;
+    
+    std::unique_ptr<EventBrowserWindowContent> bwc = EventBrowserWindowContent::newWindowContent(m_browserWindowIndex);
+    EventManager::get()->sendEvent(bwc->getPointer());
+    
+    m_browserWindowContent = bwc->getBrowserWindowContent();
+    CaretAssert(m_browserWindowContent);
     
     if (BrainBrowserWindow::s_firstWindowFlag) {
         BrainBrowserWindow::s_firstWindowFlag = false;
     }
-    m_viewTileTabsSelected = false;
-    
-    m_aspectRatio = 1.0;
-    
-    m_sceneTileTabsConfigurationText = "From Scene: ";
-    m_sceneTileTabsConfiguration = new TileTabsConfiguration();
-    m_sceneTileTabsConfiguration->setName(m_sceneTileTabsConfigurationText);
     
     m_defaultTileTabsConfiguration = new TileTabsConfiguration();
     m_defaultTileTabsConfiguration->setDefaultConfiguration(true);
     m_defaultTileTabsConfiguration->setName("All Tabs (Default)");
     m_selectedTileTabsConfigurationUniqueIdentifier = m_defaultTileTabsConfiguration->getUniqueIdentifier();
     
-    GuiManager* guiManager = GuiManager::get();
-    
     setAttribute(Qt::WA_DeleteOnClose);
     
-    m_browserWindowIndex = browserWindowIndex;
-    
-    setWindowTitle(guiManager->applicationName() 
+    setWindowTitle(ApplicationInformation().getName()
                          + " "
                          + AString::number(m_browserWindowIndex + 1));
     setObjectName(windowTitle());
     
+    BrainOpenGLWidget* shareOpenGLContextWidget = NULL;
+    if ( ! s_brainBrowserWindows.empty()) {
+        std::set<BrainBrowserWindow*>::iterator iter = s_brainBrowserWindows.begin();
+        CaretAssert(iter != s_brainBrowserWindows.end());
+        shareOpenGLContextWidget = (*iter)->m_openGLWidget;
+        CaretAssert(shareOpenGLContextWidget);
+    }
     m_openGLWidget = new BrainOpenGLWidget(this,
-                                               browserWindowIndex);
-    
+                                           shareOpenGLContextWidget,
+                                           browserWindowIndex);
+
     const int openGLSizeX = 500;
     const int openGLSizeY = (WuQtUtilities::isSmallDisplay() ? 200 : 375);
     m_openGLWidget->setMinimumSize(openGLSizeX, 
@@ -179,13 +191,11 @@ BrainBrowserWindow::BrainBrowserWindow(const int browserWindowIndex,
         m_overlayActiveToolBox = m_overlayVerticalToolBox;
         addDockWidget(Qt::LeftDockWidgetArea, m_overlayVerticalToolBox);
         m_overlayHorizontalToolBox->setVisible(false);
-        //m_overlayHorizontalToolBox->toggleViewAction()->trigger();
     }
     else {
         m_overlayActiveToolBox = m_overlayHorizontalToolBox;
         addDockWidget(Qt::BottomDockWidgetArea, m_overlayHorizontalToolBox);
         m_overlayVerticalToolBox->setVisible(false);
-        //m_overlayVerticalToolBox->toggleViewAction()->trigger();
     }
     
     QObject::connect(m_overlayHorizontalToolBox, SIGNAL(visibilityChanged(bool)),
@@ -213,8 +223,7 @@ BrainBrowserWindow::BrainBrowserWindow(const int browserWindowIndex,
                                               browserTabContent,
                                               m_overlayToolBoxAction,
                                               m_featuresToolBoxAction,
-                                              m_windowAspectRatioLockedAction,
-                                              m_tabAspectRatioLockedAction,
+                                              m_toolBarLockWindowAndAllTabAspectRatioButton,
                                                   this);
     m_showToolBarAction = m_toolbar->toolBarToolButtonAction;
     addToolBar(m_toolbar);
@@ -235,8 +244,6 @@ BrainBrowserWindow::BrainBrowserWindow(const int browserWindowIndex,
     }
     
     m_sceneAssistant = new SceneClassAssistant();
-    m_sceneAssistant->add("m_aspectRatio",
-                          &m_aspectRatio);
     
     m_defaultWindowComponentStatus.isFeaturesToolBoxDisplayed = m_featuresToolBoxAction->isChecked();
     m_defaultWindowComponentStatus.isOverlayToolBoxDisplayed  = m_overlayToolBoxAction->isChecked();
@@ -246,6 +253,32 @@ BrainBrowserWindow::BrainBrowserWindow(const int browserWindowIndex,
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_GET_VIEWPORT_SIZE);
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_GRAPHICS_UPDATE_ALL_WINDOWS);
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_GRAPHICS_UPDATE_ONE_WINDOW);
+
+#if QT_VERSION >= 0x050600
+    if (m_overlayHorizontalToolBox == m_overlayActiveToolBox) {
+        /*
+         * With Qt5, default height of overlay toolbox at bottom is
+         * way too tall. Qt 5.6 added a 'resizeDocks' method and
+         * it is used to initialize the height of the overlay toolbox.
+         */
+        const int toolboxHeight = 150;
+        QList<QDockWidget*> docks;
+        docks.push_back(m_overlayHorizontalToolBox);
+        QList<int> dockSizes;
+        dockSizes.push_back(toolboxHeight);
+        
+        resizeDocks(docks,
+                    dockSizes,
+                    Qt::Vertical);
+    }
+#endif
+    s_brainBrowserWindows.insert(this);
+    
+    GapsAndMargins* gapsAndMargins = GuiManager::get()->getBrain()->getGapsAndMargins();
+    gapsAndMargins->setSurfaceMontageHorizontalGapForWindow(m_browserWindowIndex, 0.0f);
+    gapsAndMargins->setSurfaceMontageVerticalGapForWindow(m_browserWindowIndex, 0.0f);
+    gapsAndMargins->setVolumeMontageHorizontalGapForWindow(m_browserWindowIndex, 0.0f);
+    gapsAndMargins->setVolumeMontageVerticalGapForWindow(m_browserWindowIndex, 0.0f);
 }
 
 /**
@@ -253,10 +286,18 @@ BrainBrowserWindow::BrainBrowserWindow(const int browserWindowIndex,
  */
 BrainBrowserWindow::~BrainBrowserWindow()
 {
+    std::unique_ptr<EventBrowserWindowContent> bwc = EventBrowserWindowContent::deleteWindowContent(m_browserWindowIndex);
+    EventManager::get()->sendEvent(bwc->getPointer());
+    m_browserWindowContent = NULL;
+    
     EventManager::get()->removeAllEventsFromListener(this);
     
+    s_brainBrowserWindows.erase(this);
+    
+    if (s_brainBrowserWindows.empty()) {
+    }
+    
     delete m_defaultTileTabsConfiguration;
-    delete m_sceneTileTabsConfiguration;
     delete m_sceneAssistant;
 }
 
@@ -425,131 +466,6 @@ BrainBrowserWindow::receiveEvent(Event* event)
             viewportSizeEvent->setViewportSize(viewport);
         }
     }
-//    else if (event->getEventType() == EventTypeEnum::EVENT_BROWSER_TAB_GET_VIEWPORT_SIZE) {
-//        EventBrowserTabGetViewportSize* viewportSizeEvent = dynamic_cast<EventBrowserTabGetViewportSize*>(event);
-//        CaretAssert(viewportSizeEvent);
-//        
-//        std::vector<BrowserTabContent*> allTabContent;
-//        m_toolbar->getAllTabContent(allTabContent);
-//        
-//        const std::vector<const BrainOpenGLViewportContent*> allViewportContent = m_openGLWidget->getViewportContent();
-//        
-//        int32_t tabViewport[4] = { 0, 0, 0, 0 };
-//        bool tabViewportValid = false;
-//        
-//        int32_t notBestTabViewport[4] = { 0, 0, 0, 0 };
-//        bool notBestTabViewportValid = false;
-//        
-//        /*
-//         * Find the viewport content containing the specified tab by index
-//         */
-//        for (std::vector<BrowserTabContent*>::iterator tabIter = allTabContent.begin();
-//             tabIter != allTabContent.end();
-//             tabIter++) {
-//            const BrowserTabContent* btc = *tabIter;
-//            CaretAssert(btc);
-//            
-//            switch (viewportSizeEvent->getMode()) {
-//                case EventBrowserTabGetViewportSize::MODE_SURFACE_MONTAGE:
-//                {
-//                    const Model* model = btc->getModelForDisplay();
-//                    if (model->getModelType() == ModelTypeEnum::MODEL_TYPE_SURFACE_MONTAGE) {
-//                        for (std::vector<const BrainOpenGLViewportContent*>::const_iterator vpIter = allViewportContent.begin();
-//                             vpIter != allViewportContent.end();
-//                             vpIter++) {
-//                            const BrainOpenGLViewportContent* vpContent = *vpIter;
-//                            if (vpContent->getTabIndex() == btc->getTabNumber()) {
-//                                vpContent->getTabViewportBeforeApplyingMargins(tabViewport);
-//                                tabViewportValid = true;
-//                                break;
-//                            }
-//                        }
-//                    }
-//                }
-//                    break;
-//                case EventBrowserTabGetViewportSize::MODE_TAB_INDEX:
-//                    if (btc->getTabNumber() == viewportSizeEvent->getIndex()) {
-//                        for (std::vector<const BrainOpenGLViewportContent*>::const_iterator vpIter = allViewportContent.begin();
-//                             vpIter != allViewportContent.end();
-//                             vpIter++) {
-//                            const BrainOpenGLViewportContent* vpContent = *vpIter;
-//                            if (vpContent->getTabIndex() == viewportSizeEvent->getIndex()) {
-//                                vpContent->getTabViewportBeforeApplyingMargins(tabViewport);
-//                                tabViewportValid = true;
-//                                break;
-//                            }
-//                        }
-//                    }
-//                    break;
-//                case EventBrowserTabGetViewportSize::MODE_VOLUME_MONTAGE:
-//                {
-//                    const Model* model = btc->getModelForDisplay();
-//                    if (model->getModelType() == ModelTypeEnum::MODEL_TYPE_VOLUME_SLICES) {
-//                        for (std::vector<const BrainOpenGLViewportContent*>::const_iterator vpIter = allViewportContent.begin();
-//                             vpIter != allViewportContent.end();
-//                             vpIter++) {
-//                            const BrainOpenGLViewportContent* vpContent = *vpIter;
-//                            if (vpContent->getTabIndex() == btc->getTabNumber()) {
-//                                if (btc->getSliceDrawingType() == VolumeSliceDrawingTypeEnum::VOLUME_SLICE_DRAW_MONTAGE) {
-//                                    vpContent->getTabViewportBeforeApplyingMargins(tabViewport);
-//                                    tabViewportValid = true;
-//                                    break;
-//                                }
-//                                else {
-//                                    vpContent->getTabViewportBeforeApplyingMargins(notBestTabViewport);
-//                                    notBestTabViewportValid = true;
-//                                }
-//                            }
-//                        }
-//                    }
-//                }
-//                    break;
-//                case EventBrowserTabGetViewportSize::MODE_WINDOW_INDEX:
-//                    if (m_browserWindowIndex == viewportSizeEvent->getIndex()) {
-//                        for (std::vector<const BrainOpenGLViewportContent*>::const_iterator vpIter = allViewportContent.begin();
-//                             vpIter != allViewportContent.end();
-//                             vpIter++) {
-//                            const BrainOpenGLViewportContent* vpContent = *vpIter;
-//                            if (vpContent->getTabIndex() == viewportSizeEvent->getIndex()) {
-//                                vpContent->getTabViewportBeforeApplyingMargins(tabViewport);
-//                                tabViewportValid = true;
-//                                break;
-//                            }
-//                        }
-//                    }
-//                    break;
-//            }
-//            
-//            if (tabViewportValid) {
-//                break;
-//            }
-//        }
-//        
-//        if ( ! tabViewportValid) {
-//            if (notBestTabViewportValid) {
-//                tabViewport[0] = notBestTabViewport[0];
-//                tabViewport[1] = notBestTabViewport[1];
-//                tabViewport[2] = notBestTabViewport[2];
-//                tabViewport[3] = notBestTabViewport[3];
-//                tabViewportValid = true;
-//            }
-//            else {
-//                /*
-//                 * Tab is in this window but not the active tab.
-//                 * So, use the active tab's viewport
-//                 */
-//                if ( ! allViewportContent.empty()) {
-//                    CaretAssertVectorIndex(allViewportContent, 0);
-//                    allViewportContent[0]->getTabViewportBeforeApplyingMargins(tabViewport);
-//                    tabViewportValid = true;
-//                }
-//            }
-//        }
-//        
-//        if (tabViewportValid) {
-//            viewportSizeEvent->setViewportSize(tabViewport);
-//        }
-//    }
     else if ((event->getEventType() == EventTypeEnum::EVENT_GRAPHICS_UPDATE_ONE_WINDOW)
              || (event->getEventType() == EventTypeEnum::EVENT_GRAPHICS_UPDATE_ALL_WINDOWS)) {
         /*
@@ -565,6 +481,18 @@ BrainBrowserWindow::receiveEvent(Event* event)
          */
         processEditMenuAboutToShow();
     }
+}
+
+/**
+ * @return True if OpenGL Context Sharing is valid among
+ * multiple graphics windows.
+ * Note: If there is one window, we declare sharing valid.
+ */
+bool
+BrainBrowserWindow::isOpenGLContextSharingValid() const
+{
+    CaretAssert(m_openGLWidget);
+    return m_openGLWidget->isOpenGLContextSharingValid();
 }
 
 /**
@@ -591,47 +519,49 @@ BrainBrowserWindow::setGraphicsWidgetFixedSize(const int32_t width,
 /**
  * Get the graphics widget size.
  *
- * @param xOut
- *     X-coord of graphics region (may be non-zero when lock aspect applied)
- * @param yOut
- *     Y-coord of graphics region (may be non-zero when lock aspect applied)
- * @param widthOut
- *     Width of the graphics widget.
- * @param heightOut
- *     Height of the graphics widget.
- * @param graphicsWidthOut
- *     True width of graphics region as if no aspect ratio was applied.
- * @param graphicsHeightOut
- *     True height of graphics region as if no aspect ratio was applied.
+ * @param viewportXOut
+ *     X-coord of viewport in graphics region (may be non-zero when lock aspect applied)
+ * @param viewportYOut
+ *     Y-coord of viewport in graphics region (may be non-zero when lock aspect applied)
+ * @param viewportWidthOut
+ *     Width of the viewport into which graphics are drawn (may be less than
+ *     graphicsWidthOut when lock aspect is applied)
+ * @param viewportHeightOut
+ *     Height of the viewport into which graphics are drawn (may be less than
+ *     graphicsHeightOut when lock aspect is applied)
+ * @param openGLWidgetWidthOut
+ *     True width of the OpenGL Widget.
+ * @param openGLWidgetHeightOut
+ *     True height of the OpenGL Widget.
  * @param applyLockedAspectRatiosFlag
  *     True if locked tab or window aspect ratio should be applied for
- *     graphics region size.
+ *     viewport but only if lock aspect is enabled by the user.
  */
 void
-BrainBrowserWindow::getGraphicsWidgetSize(int32_t& xOut,
-                                          int32_t& yOut,
-                                          int32_t& widthOut,
-                                          int32_t& heightOut,
-                                          int32_t& graphicsWidthOut,
-                                          int32_t& graphicsHeightOut,
+BrainBrowserWindow::getGraphicsWidgetSize(int32_t& viewportXOut,
+                                          int32_t& viewportYOut,
+                                          int32_t& viewportWidthOut,
+                                          int32_t& viewportHeightOut,
+                                          int32_t& openGLWidgetWidthOut,
+                                          int32_t& openGLWidgetHeightOut,
                                           const bool applyLockedAspectRatiosFlag) const
 {
-    xOut = 0;
-    yOut = 0;
-    graphicsWidthOut  = m_openGLWidget->width();
-    graphicsHeightOut = m_openGLWidget->height();
-    widthOut  = m_openGLWidget->width();
-    heightOut = m_openGLWidget->height();
+    viewportXOut = 0;
+    viewportYOut = 0;
+    openGLWidgetWidthOut  = m_openGLWidget->width();
+    openGLWidgetHeightOut = m_openGLWidget->height();
+    viewportWidthOut  = m_openGLWidget->width();
+    viewportHeightOut = m_openGLWidget->height();
     
     int aspectViewport[4] = {
         0,
         0,
-        widthOut,
-        heightOut
+        openGLWidgetWidthOut,
+        openGLWidgetHeightOut
     };
     
     if (isTileTabsSelected()) {
-        if (isAspectRatioLocked()) {
+        if (isWindowAspectRatioLocked()) {
             BrainOpenGLViewportContent::adjustViewportForAspectRatio(aspectViewport,
                                                                      getAspectRatio());
         }
@@ -643,7 +573,7 @@ BrainBrowserWindow::getGraphicsWidgetSize(int32_t& xOut,
                 BrainOpenGLViewportContent::adjustViewportForAspectRatio(aspectViewport,
                                                                          btc->getAspectRatio());
             }
-            else if (isAspectRatioLocked()) {
+            else if (isWindowAspectRatioLocked()) {
                 BrainOpenGLViewportContent::adjustViewportForAspectRatio(aspectViewport,
                                                                          getAspectRatio());
             }
@@ -662,30 +592,15 @@ BrainBrowserWindow::getGraphicsWidgetSize(int32_t& xOut,
             
             if ((windowWidth > 0)
                 && (windowHeight > 0)) {
-                if ((windowWidth != widthOut)
-                    || (windowHeight != heightOut)) {
-                    xOut      = windowViewport[0];
-                    yOut      = windowViewport[1];
-                    widthOut  = windowWidth;
-                    heightOut = windowHeight;
+                if ((windowWidth != viewportWidthOut)
+                    || (windowHeight != viewportHeightOut)) {
+                    viewportXOut      = windowViewport[0];
+                    viewportYOut      = windowViewport[1];
+                    viewportWidthOut  = windowWidth;
+                    viewportHeightOut = windowHeight;
                 }
             }
         }
-        
-//        float aspectLockedWidth  = aspectViewport[2];
-//        float aspectLockedHeight = aspectViewport[3];
-//        if ((aspectLockedWidth > 0)
-//            && (aspectLockedHeight > 0)) {
-//            if ((widthOut != aspectLockedWidth)
-//                || (heightOut != aspectLockedHeight)) {
-//                
-//                std::cout << "Viewport adjusted from << " << AString::number(widthOut) << ", " << AString::number(heightOut)
-//                << " to " << aspectLockedWidth << ", " << aspectLockedHeight << std::endl;
-//                
-//                widthOut  = aspectLockedWidth;
-//                heightOut = aspectLockedHeight;
-//            }
-//        }
     }
 }
 
@@ -697,7 +612,7 @@ BrainBrowserWindow::getGraphicsWidgetSize(int32_t& xOut,
 bool
 BrainBrowserWindow::isTileTabsSelected() const
 {
-    return m_viewTileTabsSelected;
+    return m_browserWindowContent->isTileTabsEnabled();
 }
 
 /**
@@ -825,186 +740,339 @@ BrainBrowserWindow::createActionsUsedByToolBar()
         m_featuresToolBoxAction->setIconText("LT");
     }
     
-    m_windowAspectRatioLockedAction = new QAction(this);
-    m_windowAspectRatioLockedAction->setCheckable(true);
-    m_windowAspectRatioLockedAction->setChecked(false);
-    m_windowAspectRatioLockedAction->setText("Lock Window Aspect");
-    m_windowAspectRatioLockedAction->setToolTip("Lock aspect ratio of window");
-    m_windowAspectRatioLockedAction->setShortcut(Qt::SHIFT + Qt::CTRL+Qt::Key_K);
-    QObject::connect(m_windowAspectRatioLockedAction, SIGNAL(toggled(bool)),
-                     this, SLOT(processWindowAspectRatioLockedToggled(bool)));
     
-    m_tabAspectRatioLockedAction = new QAction(this);
-    m_tabAspectRatioLockedAction->setCheckable(true);
-    m_tabAspectRatioLockedAction->setText("Lock Tab Aspect");
-    m_tabAspectRatioLockedAction->setToolTip("Lock aspect ratio of selected tab");
-    m_tabAspectRatioLockedAction->setShortcut(Qt::CTRL+Qt::Key_K);
-    QObject::connect(m_tabAspectRatioLockedAction, SIGNAL(toggled(bool)),
-                     this, SLOT(processTabAspectRatioLockedToggled(bool)));
+    
+    m_windowMenuLockWindowAspectRatioAction = new QAction(this);
+    m_windowMenuLockWindowAspectRatioAction->setCheckable(true);
+    m_windowMenuLockWindowAspectRatioAction->setChecked(m_browserWindowContent->isWindowAspectLocked());
+    m_windowMenuLockWindowAspectRatioAction->setText("Lock Window Aspect Ratio");
+    m_windowMenuLockWindowAspectRatioAction->setShortcut(Qt::SHIFT + Qt::CTRL+Qt::Key_K);
+    QObject::connect(m_windowMenuLockWindowAspectRatioAction, &QAction::triggered,
+                     this, &BrainBrowserWindow::processWindowMenuLockWindowAspectRatioTriggered);
 
-    m_lockAllTabsAspectRatioAction = new QAction(this);
-    m_lockAllTabsAspectRatioAction->setText("Lock Aspect Ratio for All Tabs");
-    m_lockAllTabsAspectRatioAction->setToolTip("Lock aspect ratio of all tabs in this window");
-    QObject::connect(m_lockAllTabsAspectRatioAction, SIGNAL(triggered(bool)),
-                     this, SLOT(processLockAllTabsAspectRatioTriggered()));
+    m_windowMenuLockAllTabAspectRatioAction = new QAction(this);
+    m_windowMenuLockAllTabAspectRatioAction->setCheckable(true);
+    m_windowMenuLockAllTabAspectRatioAction->setChecked(false);
+    m_windowMenuLockAllTabAspectRatioAction->setText("Lock All Tab Aspect Ratios");
+    m_windowMenuLockAllTabAspectRatioAction->setShortcut(Qt::CTRL+Qt::Key_K);
+    QObject::connect(m_windowMenuLockAllTabAspectRatioAction, &QAction::triggered,
+                     this, &BrainBrowserWindow::processWindowMenuLockAllTabAspectRatioTriggered);
     
-    m_unlockAllTabsAspectRatioAction = new QAction(this);
-    m_unlockAllTabsAspectRatioAction->setText("Unlock Aspect Ratio for All Tabs");
-    m_unlockAllTabsAspectRatioAction->setToolTip("Unlock aspect ratio of all tabs in this window");
-    QObject::connect(m_unlockAllTabsAspectRatioAction, SIGNAL(triggered(bool)),
-                     this, SLOT(processUnlockAllTabsAspectRatioTriggered()));
+    const QString aspectButtonToolTipText("<html>"
+                                          "Lock the aspect ratio of the window and all tabs.  "
+                                          "Aspect ratios should be locked prior to creating "
+                                          "annotations and remain locked while annotations are "
+                                          "present."
+                                          "<p>"
+                                          "Advanced users can right-click (control-click on Mac) "
+                                          "to manually adjust the aspect "
+                                          "ratio for the selected tab or the window."
+                                          "</html>");
+    
+    m_toolBarLockWindowAndAllTabAspectRatioAction = new QAction();
+    m_toolBarLockWindowAndAllTabAspectRatioAction->setCheckable(true);
+    m_toolBarLockWindowAndAllTabAspectRatioAction->setChecked(false);
+    m_toolBarLockWindowAndAllTabAspectRatioAction->setText("Lock Aspect");
+    m_toolBarLockWindowAndAllTabAspectRatioAction->setToolTip(aspectButtonToolTipText);
+    QObject::connect(m_toolBarLockWindowAndAllTabAspectRatioAction, &QAction::triggered,
+                     this, &BrainBrowserWindow::processToolBarLockWindowAndAllTabAspectTriggered);
+
+    /*
+     * Button for locking aspect is passed to ToolBar's constructor
+     * and is displayed on the toolbar
+     */
+    m_toolBarLockWindowAndAllTabAspectRatioButton = new QToolButton();
+    m_toolBarLockWindowAndAllTabAspectRatioButton->setDefaultAction(m_toolBarLockWindowAndAllTabAspectRatioAction);
+    WuQtUtilities::setToolButtonStyleForQt5Mac(m_toolBarLockWindowAndAllTabAspectRatioButton);
+    QObject::connect(m_toolBarLockWindowAndAllTabAspectRatioButton, &QToolButton::customContextMenuRequested,
+                     this, &BrainBrowserWindow::processToolBarLockWindowAndAllTabAspectMenu);
+    m_toolBarLockWindowAndAllTabAspectRatioButton->setContextMenuPolicy(Qt::CustomContextMenu);
 }
 
 /**
- * Called when Lock Aspect Ratio for All Tabs is selected.
+ * Is called by toolbar when the user changes input mode to annotations.
+ * 
+ * @return
+ *     True if it is okay to change to annotations mode, else false.
+ */
+bool
+BrainBrowserWindow::changeInputModeToAnnotationsWarningDialog()
+{
+    LockAspectWarningDialog::Result result = LockAspectWarningDialog::runDialog(m_browserWindowIndex);
+    
+    bool okFlag = true;
+    
+    switch (result) {
+        case LockAspectWarningDialog::Result::CANCEL:
+            okFlag = false;
+            break;
+        case LockAspectWarningDialog::Result::LOCK_ASPECT:
+            processToolBarLockWindowAndAllTabAspectTriggered(true);
+            break;
+        case LockAspectWarningDialog::Result::NO_CHANGES:
+            break;
+    }
+    
+    return okFlag;
+}
+
+/**
+ * Called when the window menu's lock window aspect is triggered by user.
+ *
+ * @param checked
+ *    True if checked, false if unchecked
  */
 void
-BrainBrowserWindow::processLockAllTabsAspectRatioTriggered()
+BrainBrowserWindow::processWindowMenuLockWindowAspectRatioTriggered(bool checked)
 {
-    
-    std::vector<const BrainOpenGLViewportContent*> vpContent = m_openGLWidget->getViewportContent();
+    lockWindowAspectRatio(checked);
+    updateActionsForLockingAspectRatios();
+}
 
-    if (isTileTabsSelected()) {
-        /*
-         * When tile tabs is on, set the aspect ratio for each tab that does not
-         * already have its aspect ratio locked
-         */
-        for (std::vector<const BrainOpenGLViewportContent*>::iterator vpIter = vpContent.begin();
-             vpIter != vpContent.end();
-             vpIter++) {
-            const BrainOpenGLViewportContent* vp = *vpIter;
-            CaretAssert(vp);
-            
-            BrowserTabContent* tabContent = vp->getBrowserTabContent();
-            if (tabContent != NULL) {
-                if ( ! tabContent->isAspectRatioLocked()) {
-                    int32_t tabViewport[4];
-                    vp->getTabViewportBeforeApplyingMargins(tabViewport);
-                    
-                    const float width = tabViewport[2];
-                    if (width > 0.0) {
-                        const float aspectRatio = tabViewport[3] / width;
-                        
-                        tabContent->setAspectRatioLocked(true);
-                        tabContent->setAspectRatio(aspectRatio);
-                    }
-                }
-            }
+/**
+ * Called when the window menu's lock all tab aspect is triggered by user
+ *
+ * @param checked
+ *    True if checked, false if unchecked
+ */
+void
+BrainBrowserWindow::processWindowMenuLockAllTabAspectRatioTriggered(bool checked)
+{
+    lockAllTabAspectRatios(checked);
+    updateActionsForLockingAspectRatios();
+}
+
+/**
+ * Lock the window's aspect ratio and if it transitions from 
+ * unlocked to locked, set the aspect ratio.
+ */
+void
+BrainBrowserWindow::lockWindowAspectRatio(const bool checked)
+{
+    const bool oldCheckedStatus = m_browserWindowContent->isWindowAspectLocked();
+    m_browserWindowContent->setWindowAspectLocked(checked);
+    
+    if (checked) {
+        if ( ! oldCheckedStatus) {
+            m_browserWindowContent->setWindowAspectLockedRatio(getOpenGLWidgetAspectRatio());
         }
+    }
+}
+
+/**
+ * Lock the window's aspect ratio and if it transitions from
+ * unlocked to locked, set the aspect ratio.
+ */
+void
+BrainBrowserWindow::lockAllTabAspectRatios(const bool checked)
+{
+    m_browserWindowContent->setAllTabsInWindowAspectRatioLocked(checked);
+    
+    if (checked) {
+        /*
+         * Locking takes place in BrainOpenGLViewportContent
+         * when the tab is drawn as the size of the viewport
+         * is needed.
+         */
     }
     else {
         /*
-         * Set the aspect ratio for each tab that does not already have its 
-         * aspect ratio locked.  Since only one tab is displayed, use the 
-         * size of the graphics region for the aspect ratio.
+         * Turn off lock aspect for all tabs
          */
+        std::vector<BrowserTabContent*> allTabContent;
+        m_toolbar->getAllTabContent(allTabContent);
         
-        if ( ! vpContent.empty()) {
-            CaretAssertVectorIndex(vpContent, 0);
-            const BrainOpenGLViewportContent* vp = vpContent[0];
+        for (auto tab : allTabContent) {
+            tab->setAspectRatioLocked(false);
+        }
+    }
+}
+
+/**
+ * Called when the toolbar's lock window and all tab aspect is triggered
+ *
+ * @param checked
+ *    True if checked, false if unchecked
+ */
+void
+BrainBrowserWindow::processToolBarLockWindowAndAllTabAspectTriggered(bool checked)
+{
+    lockWindowAspectRatio(checked);
+    lockAllTabAspectRatios(checked);
+    updateActionsForLockingAspectRatios();
+}
+
+/**
+ * Called when an item is selected from the lock aspect action menu
+ *
+ * @param pos
+ *     Location of click.
+ */
+void
+BrainBrowserWindow::processToolBarLockWindowAndAllTabAspectMenu(const QPoint& pos)
+{
+    BrowserTabContent* tabContent = getBrowserTabContent();
+    if (tabContent != NULL) {
+        QMenu menu;
+        QAction* tabAspectAction = menu.addAction("Set Selected Tab Aspect Ratio...");
+        QAction* windowAspectAction = menu.addAction("Set Window Aspect Ratio...");
+        
+        QAction* selectedAction = menu.exec(m_toolBarLockWindowAndAllTabAspectRatioButton->parentWidget()->mapToGlobal(pos));
+        
+        if (selectedAction == windowAspectAction) {
+            float aspectRatio = getAspectRatioFromDialog(AspectRatioMode::WINDOW,
+                                                         ("Window "
+                                                          + AString::number(m_browserWindowIndex + 1)
+                                                          + " Aspect Ratio"),
+                                                         getAspectRatio(),
+                                                         this);
+            if (aspectRatio > 0.0f) {
+                aspectRatioDialogUpdateForWindow(aspectRatio);
+            }
+        }
+        else if (selectedAction == tabAspectAction) {
+            float aspectRatio = tabContent->getAspectRatio();
             
-            int32_t tabViewport[4];
-            vp->getTabViewportBeforeApplyingMargins(tabViewport);
-            
-            const float width = tabViewport[2];
-            if (width > 0.0) {
-                const float aspectRatio = tabViewport[3] / width;
+            if ( ! tabContent->isAspectRatioLocked()) {
+                /*
+                 * When aspect is NOT locked, need to get current aspect ratio
+                 */
+                aspectRatio = getOpenGLWidgetAspectRatio();
                 
-                std::vector<BrowserTabContent*> allTabContent;
-                getAllTabContent(allTabContent);
-                
-                for (std::vector<BrowserTabContent*>::iterator iter = allTabContent.begin();
-                     iter != allTabContent.end();
-                     iter++) {
-                    BrowserTabContent* tabContent = *iter;
-                    CaretAssert(tabContent);
-                    if ( ! tabContent->isAspectRatioLocked()) {
-                        tabContent->setAspectRatioLocked(true);
-                        tabContent->setAspectRatio(aspectRatio);
+                if (isTileTabsSelected()) {
+                    /*
+                     * When tile tabs is enabled, find the tab to get its aspect ratio
+                     */
+                    std::vector<const BrainOpenGLViewportContent*> allViewportContent = m_openGLWidget->getViewportContent();
+                    for (auto vc : allViewportContent) {
+                        if (vc->getTabIndex() == tabContent->getTabNumber()) {
+                            int viewport[4];
+                            vc->getModelViewport(viewport);
+                            if (viewport[3] > 0) {
+                                aspectRatio = (static_cast<float>(viewport[3])
+                                               / static_cast<float>(viewport[2]));
+                                break;
+                            }
+                        }
                     }
                 }
             }
-        }
-    }
-
-    EventManager::get()->sendEvent(EventGraphicsUpdateOneWindow(getBrowserWindowIndex()).getPointer());
-    m_toolbar->updateToolBar();
-}
-
-/**
- * Called when Unlock Aspect Ratio for All Tabs is selected.
- */
-void
-BrainBrowserWindow::processUnlockAllTabsAspectRatioTriggered()
-{
-    std::vector<BrowserTabContent*> allTabContent;
-    getAllTabContent(allTabContent);
-    
-    for (std::vector<BrowserTabContent*>::iterator iter = allTabContent.begin();
-         iter != allTabContent.end();
-         iter++) {
-        BrowserTabContent* tabContent = *iter;
-        CaretAssert(tabContent);
-        tabContent->setAspectRatioLocked(false);
-    }
-
-    EventManager::get()->sendEvent(EventGraphicsUpdateOneWindow(getBrowserWindowIndex()).getPointer());
-    m_toolbar->updateToolBar();
-}
-
-/**
- * Called when the Tab aspect ratio action it toggled.
- *
- * @param new tab locked status
- */
-void
-BrainBrowserWindow::processTabAspectRatioLockedToggled(bool checked)
-{
-    BrowserTabContent* selectedTab = m_toolbar->getTabContentFromSelectedTab();
-    if (selectedTab != NULL) {
-        std::vector<const BrainOpenGLViewportContent*> vpContent = m_openGLWidget->getViewportContent();
-        for (std::vector<const BrainOpenGLViewportContent*>::iterator vpIter = vpContent.begin();
-             vpIter != vpContent.end();
-             vpIter++) {
-            const BrainOpenGLViewportContent* vp = *vpIter;
-            CaretAssert(vp);
             
-            BrowserTabContent* tabContent = vp->getBrowserTabContent();
-            if (selectedTab == tabContent) {
-                int32_t tabViewport[4];
-                vp->getTabViewportBeforeApplyingMargins(tabViewport);
-                
-                const float width = tabViewport[2];
-                if (width > 0.0) {
-                    const float aspectRatio = tabViewport[3] / width;
-                    
-                    tabContent->setAspectRatioLocked(checked);
-                    if (checked) {
-                        tabContent->setAspectRatio(aspectRatio);
-                    }
-                }
+            aspectRatio = getAspectRatioFromDialog(AspectRatioMode::TAB,
+                                                   ("Tab "
+                                                    + tabContent->getName()
+                                                    + " Aspect Ratio"),
+                                                   aspectRatio,
+                                                   this);
+            if (aspectRatio > 0.0f) {
+                aspectRatioDialogUpdateForTab(aspectRatio);
             }
         }
     }
+}
+
+/**
+ * Get the new aspect ratio using a dialog.
+ *
+ * @param aspectRatioMode
+ *     Mode (tab or window)
+ * @param title
+ *     Title for dialog.
+ * @param originalAspectRatio
+ *     Default value for aspect ratio
+ * @param parent
+ *     Parent for the dialog.
+ */
+float
+BrainBrowserWindow::getAspectRatioFromDialog(const AspectRatioMode aspectRatioMode,
+                                             const QString& title,
+                                             const float aspectRatio,
+                                             QWidget* parent) const
+{
+    float aspectRatioOut = -1.0;
     
+    WuQDataEntryDialog ded("Set Aspect Ratio",
+                           parent);
+    ded.setCancelButtonText("");
+    QDoubleSpinBox* ratioSpinBox = ded.addDoubleSpinBox(title,
+                                                        aspectRatio);
+    ratioSpinBox->setSingleStep(0.01);
+    ratioSpinBox->setRange(ratioSpinBox->singleStep(), 100.0);
+    ratioSpinBox->setDecimals(3);
+    ratioSpinBox->setKeyboardTracking(true);
+    
+    switch (aspectRatioMode) {
+        case AspectRatioMode::TAB:
+            QObject::connect(ratioSpinBox,  static_cast<void (QDoubleSpinBox::*)(double)>(&QDoubleSpinBox::valueChanged),
+                             this, &BrainBrowserWindow::aspectRatioDialogUpdateForTab);
+            break;
+        case AspectRatioMode::WINDOW:
+            QObject::connect(ratioSpinBox,  static_cast<void (QDoubleSpinBox::*)(double)>(&QDoubleSpinBox::valueChanged),
+                             this, &BrainBrowserWindow::aspectRatioDialogUpdateForWindow);
+            break;
+    }
+    if (ded.exec() == WuQDataEntryDialog::Accepted) {
+        aspectRatioOut = ratioSpinBox->value();
+    }
+    
+    return aspectRatioOut;
+}
+
+/**
+ * Called when the user manually adjust aspect ratio for all tabs.
+ *
+ * @param aspectRatio
+ *      New aspect ratio.
+ */
+void
+BrainBrowserWindow::aspectRatioDialogUpdateForTab(const double aspectRatio)
+{
+    BrowserTabContent* tabContent = getBrowserTabContent();
+    
+    if (aspectRatio > 0.0f) {
+        lockAllTabAspectRatios(true);
+        tabContent->setAspectRatio(aspectRatio);
+        tabContent->setAspectRatioLocked(true);
+    }
+    
+    updateActionsForLockingAspectRatios();
     EventManager::get()->sendEvent(EventGraphicsUpdateOneWindow(getBrowserWindowIndex()).getPointer());
 }
 
 /**
- * Called when the Window aspect ratio action it toggled.
- *
- * @param new tab locked status
+ * Called when the user manually adjust aspect ratio for window.
+ * 
+ * @param aspectRatio
+ *      New aspect ratio.
  */
 void
-BrainBrowserWindow::processWindowAspectRatioLockedToggled(bool checked)
+BrainBrowserWindow::aspectRatioDialogUpdateForWindow(const double aspectRatio)
 {
-    setAspectRatioLocked(checked);
-    if (checked) {
-        const float aspectRatio = getOpenGLWidgetAspectRatio();
-        if (aspectRatio > 0) {
-            setAspectRatio(aspectRatio);
-        }
+    if (aspectRatio > 0.0f) {
+        lockWindowAspectRatio(true);
+        m_browserWindowContent->setWindowAspectLockedRatio(aspectRatio);
     }
+    
+    updateActionsForLockingAspectRatios();
+    EventManager::get()->sendEvent(EventGraphicsUpdateOneWindow(getBrowserWindowIndex()).getPointer());
+}
+
+/**
+ * Update the actions for window menu's lock window aspect, window menu's lock
+ * all tab aspect, and the toolbar's lock window and all tab aspect.
+ */
+void
+BrainBrowserWindow::updateActionsForLockingAspectRatios()
+{
+    QSignalBlocker windowAspectBlocker(m_windowMenuLockWindowAspectRatioAction);
+    m_windowMenuLockWindowAspectRatioAction->setChecked(m_browserWindowContent->isWindowAspectLocked());
+    
+    QSignalBlocker tabAspectBlocker(m_windowMenuLockAllTabAspectRatioAction);
+    m_windowMenuLockAllTabAspectRatioAction->setChecked(m_browserWindowContent->isAllTabsInWindowAspectRatioLocked());
+    
+    QSignalBlocker toolbarLockAllBlocker(m_toolBarLockWindowAndAllTabAspectRatioAction);
+    m_toolBarLockWindowAndAllTabAspectRatioAction->setChecked(m_browserWindowContent->isWindowAspectLocked()
+                                                              && m_browserWindowContent->isAllTabsInWindowAspectRatioLocked());
     
     EventManager::get()->sendEvent(EventGraphicsUpdateOneWindow(getBrowserWindowIndex()).getPointer());
 }
@@ -1013,23 +1081,9 @@ BrainBrowserWindow::processWindowAspectRatioLockedToggled(bool checked)
  * @return Is the aspect ratio locked?
  */
 bool
-BrainBrowserWindow::isAspectRatioLocked() const
+BrainBrowserWindow::isWindowAspectRatioLocked() const
 {
-    return m_windowAspectRatioLockedAction->isChecked();
-}
-
-/**
- * Set the aspect ratio locked status.
- *
- * @param locked
- *     New status.
- */
-void
-BrainBrowserWindow::setAspectRatioLocked(const bool locked)
-{
-    m_windowAspectRatioLockedAction->blockSignals(true);
-    m_windowAspectRatioLockedAction->setChecked(locked);
-    m_windowAspectRatioLockedAction->blockSignals(false);
+    return m_browserWindowContent->isWindowAspectLocked();
 }
 
 /**
@@ -1038,19 +1092,14 @@ BrainBrowserWindow::setAspectRatioLocked(const bool locked)
 float
 BrainBrowserWindow::getAspectRatio() const
 {
-    return m_aspectRatio;
-}
-
-/**
- * Set the aspect ratio.
- *
- * @param aspectRatio
- *     New value for aspect ratio.
- */
-void
-BrainBrowserWindow::setAspectRatio(const float aspectRatio)
-{
-    m_aspectRatio = aspectRatio;
+    if ( ! m_browserWindowContent->isWindowAspectLocked()) {
+        /*
+         * When aspect NOT locked, use the OpenGL widget's aspect ratio
+         */
+        m_browserWindowContent->setWindowAspectLockedRatio(getOpenGLWidgetAspectRatio());
+    }
+    
+    return m_browserWindowContent->getWindowAspectLockedRatio();
 }
 
 /**
@@ -1525,7 +1574,6 @@ BrainBrowserWindow::createMenuFile()
     QObject::connect(m_recentSceneFileMenu, SIGNAL(triggered(QAction*)),
                      this, SLOT(processRecentSceneFileMenuSelection(QAction*)));
     
-    //menu->addAction(m_openFileViaSpecFileAction);
     menu->addAction(m_manageFilesAction);
     menu->addAction(m_closeSpecFileAction);
     menu->addSeparator();
@@ -1956,8 +2004,6 @@ BrainBrowserWindow::loadRecentSpecFileMenu(QMenu* recentSpecFileMenu)
 void 
 BrainBrowserWindow::processRecentSpecFileMenuSelection(QAction* itemAction)
 {
-    //AString errorMessages;
-    
     const AString specFileName = itemAction->data().toString();
     if (specFileName == "CLEAR_CLEAR") {
         CaretPreferences* prefs = SessionManager::get()->getCaretPreferences();
@@ -1989,7 +2035,6 @@ BrainBrowserWindow::processRecentSpecFileMenuSelection(QAction* itemAction)
             }
         }
         catch (const DataFileException& e) {
-            //errorMessages += e.whatString();
             QMessageBox::critical(this,
                                   "ERROR",
                                   e.whatString());
@@ -2082,8 +2127,6 @@ BrainBrowserWindow::loadRecentSceneFileMenu(QMenu* recentSceneFileMenu)
 void
 BrainBrowserWindow::processRecentSceneFileMenuSelection(QAction* itemAction)
 {
-    //AString errorMessages;
-    
     const AString sceneFileName = itemAction->data().toString();
     if (sceneFileName == "CLEAR_CLEAR") {
         CaretPreferences* prefs = SessionManager::get()->getCaretPreferences();
@@ -2237,10 +2280,9 @@ BrainBrowserWindow::processTileTabsMenuAboutToBeDisplayed()
     /*
      * Add the scene configuration
      */
-    QAction* sceneAction = m_tileTabsMenu->addAction(m_sceneTileTabsConfiguration->getName());
+    QAction* sceneAction = m_tileTabsMenu->addAction(m_browserWindowContent->getSceneTileTabsConfiguration()->getName());
     sceneAction->setCheckable(true);
-    sceneAction->setData(QVariant(m_sceneTileTabsConfiguration->getUniqueIdentifier()));
-    //sceneAction->setEnabled(false);
+    sceneAction->setData(QVariant(m_browserWindowContent->getSceneTileTabsConfiguration()->getUniqueIdentifier()));
     
     bool haveSelectedTileTabsConfiguration = false;
     
@@ -2262,7 +2304,7 @@ BrainBrowserWindow::processTileTabsMenuAboutToBeDisplayed()
         }
     }
     
-    if (m_selectedTileTabsConfigurationUniqueIdentifier == m_sceneTileTabsConfiguration->getUniqueIdentifier()) {
+    if (m_selectedTileTabsConfigurationUniqueIdentifier == m_browserWindowContent->getSceneTileTabsConfiguration()->getUniqueIdentifier()) {
         haveSelectedTileTabsConfiguration = true;
         sceneAction->setChecked(true);
     }
@@ -2333,11 +2375,11 @@ BrainBrowserWindow::getSelectedTileTabsConfiguration()
          */
         return m_defaultTileTabsConfiguration;
     }
-    else if (m_selectedTileTabsConfigurationUniqueIdentifier == m_sceneTileTabsConfiguration->getUniqueIdentifier()) {
+    else if (m_selectedTileTabsConfigurationUniqueIdentifier == m_browserWindowContent->getSceneTileTabsConfiguration()->getUniqueIdentifier()) {
         /*
          * Scene's configuration is selected
          */
-        return m_sceneTileTabsConfiguration;
+        return m_browserWindowContent->getSceneTileTabsConfiguration();
     }
     else {
         /*
@@ -2532,8 +2574,6 @@ BrainBrowserWindow::processSurfaceMenuInformation()
 QMenu* 
 BrainBrowserWindow::createMenuVolume()
 {
-//    QMenu* menu = new QMenu("Volume", this);
-//    return menu;
     return NULL;
 }
 
@@ -2551,11 +2591,9 @@ BrainBrowserWindow::createMenuWindow()
                      this, SLOT(processMoveSelectedTabToWindowMenuSelection(QAction*)));
     
     QMenu* menu = new QMenu("Window", this);
-    
-    menu->addAction(m_windowAspectRatioLockedAction);
-    menu->addAction(m_tabAspectRatioLockedAction);
-    menu->addAction(m_lockAllTabsAspectRatioAction);
-    menu->addAction(m_unlockAllTabsAspectRatioAction);
+
+    menu->addAction(m_windowMenuLockWindowAspectRatioAction);
+    menu->addAction(m_windowMenuLockAllTabAspectRatioAction);
     menu->addSeparator();
     
     menu->addAction(m_nextTabAction);
@@ -2709,7 +2747,7 @@ BrainBrowserWindow::processDevelopExportVtkFile()
                                 "Export to VTK File",
                                 GuiManager::get()->getBrain()->getCurrentDirectory(),
                                 vtkSurfaceFileFilter);
-            cfd.selectFilter(vtkSurfaceFileFilter);
+            cfd.selectNameFilter(vtkSurfaceFileFilter);
             cfd.setAcceptMode(QFileDialog::AcceptSave);
             cfd.setFileMode(CaretFileDialog::AnyFile);
             if (previousVtkFileName.isEmpty() == false) {
@@ -2768,7 +2806,6 @@ BrainBrowserWindow::processSplitBorderFiles()
 void 
 BrainBrowserWindow::processCaptureImage()
 {
-    //std::cout << "Toolbar height " << m_toolbar->height() << std::endl;
     GuiManager::get()->processShowImageCaptureDialog(this);
 }
 
@@ -2997,12 +3034,32 @@ BrainBrowserWindow::loadFilesFromCommandLine(const std::vector<AString>& filenam
 {
     std::vector<DataFileTypeEnum::Enum> dataFileTypesDummyNotUsed;
     
+    AString userName;
+    AString password;
+    switch (loadSpecFileMode) {
+        case LOAD_SPEC_FILE_CONTENTS_VIA_COMMAND_LINE:
+        {
+            /*
+             * Spec file might contain a file on the network so try
+             * using the saved username and password.
+             */
+            CaretPreferences* prefs = SessionManager::get()->getCaretPreferences();
+            prefs->getRemoteFileUserNameAndPassword(userName,
+                                                    password);
+        }
+            break;
+        case LOAD_SPEC_FILE_WITH_DIALOG:
+            break;
+        case LOAD_SPEC_FILE_WITH_DIALOG_VIA_COMMAND_LINE:
+            break;
+    }
+    
     loadFiles(this,
               filenames,
               dataFileTypesDummyNotUsed,
               loadSpecFileMode,
-              "",
-              "");
+              userName,
+              password);
 }
 
 /**
@@ -3031,14 +3088,15 @@ BrainBrowserWindow::loadSceneFromCommandLine(const AString& sceneFileName,
     const int32_t numSceneFiles = brain->getNumberOfSceneFiles();
     for (int32_t i = 0; i < numSceneFiles; i++) {
         SceneFile* sf = brain->getSceneFile(i);
-        if (sf->getFileName().contains(sceneFileName)) {
+        FileInformation fileInfo(sceneFileName);
+        if (sf->getFileName().contains(fileInfo.getFileName())) {
             haveSceneFileError = false;
             Scene* scene = sf->getSceneWithName(sceneNameOrNumber);
             if (scene == NULL) {
                 bool isValidNumber = false;
                 int sceneNumber = sceneNameOrNumber.toInt(&isValidNumber);
                 if (isValidNumber) {
-                    sceneNumber--;  // convert to index (numbers start at one)
+                    sceneNumber--;  /* convert to index (numbers start at one) */
                     if ((sceneNumber >= 0)
                         && (sceneNumber < sf->getNumberOfScenes())) {
                         scene = sf->getSceneAtIndex(sceneNumber);
@@ -3068,6 +3126,8 @@ BrainBrowserWindow::loadSceneFromCommandLine(const AString& sceneFileName,
                              + "\" found in scene file.");
         WuQMessageBox::errorOk(this, msg);
     }
+    
+    /* NOTE: File warning dialog is performed by scene dialog */
 }
 
 
@@ -3230,7 +3290,7 @@ BrainBrowserWindow::loadFiles(QWidget* parentForDialogs,
         switch (loadSpecFileMode) {
             case LOAD_SPEC_FILE_CONTENTS_VIA_COMMAND_LINE:
             {
-                timer.reset(); // resets timer
+                timer.reset(); /* resets timer */
                 specFileTimeStart = timer.getElapsedTimeSeconds();
                 
                 /*
@@ -3412,6 +3472,8 @@ BrainBrowserWindow::loadFiles(QWidget* parentForDialogs,
     
     EventManager::get()->sendEvent(EventMacDockMenuUpdate().getPointer());
     
+    showDataFileReadWarningsDialog();
+    
     return successFlag;
 }
 
@@ -3496,7 +3558,7 @@ BrainBrowserWindow::processViewFullScreenSelected()
 void
 BrainBrowserWindow::processViewTileTabs()
 {
-    const bool toggledStatus = (! m_viewTileTabsSelected);
+    const bool toggledStatus = (! isTileTabsSelected());
     
     setViewTileTabs(toggledStatus);
 }
@@ -3507,7 +3569,7 @@ BrainBrowserWindow::processViewTileTabs()
 void
 BrainBrowserWindow::setViewTileTabs(const bool newStatus)
 {
-    m_viewTileTabsSelected = newStatus;
+    m_browserWindowContent->setTileTabsEnabled(newStatus);
     EventManager::get()->sendEvent(EventUserInterfaceUpdate().setWindowIndex(m_browserWindowIndex).addToolBar().getPointer());
     EventManager::get()->sendEvent(EventGraphicsUpdateOneWindow(m_browserWindowIndex).getPointer());
 }
@@ -3608,7 +3670,7 @@ BrainBrowserWindow::saveWindowComponentStatus(WindowComponentStatus& wcs)
 /**
  * Adds a new tab to the window.
  */
-void 
+void
 BrainBrowserWindow::processNewTab()
 {
     m_toolbar->addNewTab();
@@ -3621,7 +3683,7 @@ void
 BrainBrowserWindow::processDuplicateTab()
 {
     BrowserTabContent* previousTabContent = getBrowserTabContent();
-    m_toolbar->addNewTabCloneContent(previousTabContent);
+    m_toolbar->addNewDuplicatedTab(previousTabContent);
 }
 
 /**
@@ -3975,6 +4037,23 @@ BrainBrowserWindow::getAllTabContentIndices(std::vector<int32_t>& allTabContentI
     }
 }
 
+/**
+ * @return Browser window's content.
+ */
+BrowserWindowContent*
+BrainBrowserWindow::getBrowerWindowContent()
+{
+    return m_browserWindowContent;
+}
+
+/**
+ * @return Browser window's content (const method).
+ */
+const BrowserWindowContent*
+BrainBrowserWindow::getBrowerWindowContent() const
+{
+    return m_browserWindowContent;
+}
 
 /**
  * Returns a popup menu for the main window.
@@ -4051,6 +4130,36 @@ BrainBrowserWindow::getOpenGLWidgetAspectRatio() const
 }
 
 /**
+ * BrowserWindowContent is owned and saved to and restored from
+ * Scenes by SessionManager.  Since SessionManager is save to 
+ * Scene before instances of this class, update content
+ * of BrowserWindowContent.
+ */
+void
+BrainBrowserWindow::saveBrowserWindowContentForScene()
+{
+    std::vector<int32_t> allTabIndices;
+    getAllTabContentIndices(allTabIndices);
+    m_browserWindowContent->setSceneWindowTabIndices(allTabIndices);
+    
+    const BrowserTabContent* activeTabContent = getBrowserTabContent();
+    if (activeTabContent != NULL) {
+        m_browserWindowContent->setSceneSelectedTabIndex(activeTabContent->getTabNumber());
+    }
+    
+    if (isTileTabsSelected()) {
+        const TileTabsConfiguration* tileTabsConfig = getSelectedTileTabsConfiguration();
+        if (tileTabsConfig != NULL) {
+            m_browserWindowContent->copyTileTabsConfigurationForSavingScene(tileTabsConfig);
+        }
+    }
+    
+    m_browserWindowContent->setSceneGraphicsWidth(m_openGLWidget->width());
+    m_browserWindowContent->setSceneGraphicsHeight(m_openGLWidget->height());
+}
+
+
+/**
  * Create a scene for an instance of a class.
  *
  * @param sceneAttributes
@@ -4068,37 +4177,15 @@ BrainBrowserWindow::saveToScene(const SceneAttributes* sceneAttributes,
 {
     SceneClass* sceneClass = new SceneClass(instanceName,
                                             "BrainBrowserWindow",
-                                            1);
+                                            2); /* Version 2: 07 feb 2018 */
     
     m_sceneAssistant->saveMembers(sceneAttributes, 
                                   sceneClass);
-
+    
+    /* m_browserWindowIndex used with wb_command -show-scene */
     sceneClass->addInteger("m_browserWindowIndex",
                            m_browserWindowIndex);
-    sceneClass->addBoolean("m_windowAspectRatioLockedAction",
-                           m_windowAspectRatioLockedAction->isChecked());
 
-    /*
-     * Save the selected tile tabs configuration as the scene configuration
-     */
-    if (m_viewTileTabsSelected) {
-        /*
-         * Note: The number of rows and columns in the default tile tabs
-         * configuration is updated each time the graphics region of the 
-         * window is drawn in BrainOpenGLWidget::paintGL().
-         */
-        const TileTabsConfiguration* tileTabs = getSelectedTileTabsConfiguration();
-        if (tileTabs != NULL) {
-            TileTabsConfiguration writeConfig(*tileTabs);
-            writeConfig.setName(QUuid::createUuid().toString());
-            sceneClass->addString("m_sceneTileTabsConfiguration",
-                                  writeConfig.encodeInXML());
-            
-//            sceneClass->addString("m_sceneTileTabsConfiguration",
-//                                  tileTabs->encodeInXML());
-        }
-    }
-    
     /*
      * Save toolbar
      */
@@ -4166,11 +4253,9 @@ BrainBrowserWindow::saveToScene(const SceneAttributes* sceneAttributes,
                            isFullScreen());
     sceneClass->addBoolean("isMaximized",
                            isMaximized());
-    sceneClass->addBoolean("m_viewTileTabsAction",
-                           m_viewTileTabsSelected);
     
     /*
-     * Graphics position and size
+     * Graphics position and size, used with wb_command -show-scene
      */
     SceneWindowGeometry openGLGeometry(m_openGLWidget);
     sceneClass->addClass(openGLGeometry.saveToScene(sceneAttributes,
@@ -4198,6 +4283,8 @@ BrainBrowserWindow::restoreFromScene(const SceneAttributes* sceneAttributes,
         return;
     }
     
+    const int32_t sceneVersion = sceneClass->getVersionNumber();
+    
     /*
      * Restore toolbar
      */
@@ -4210,11 +4297,11 @@ BrainBrowserWindow::restoreFromScene(const SceneAttributes* sceneAttributes,
     m_sceneAssistant->restoreMembers(sceneAttributes,
                                      sceneClass);
     
-    const bool aspectRatioLocked = sceneClass->getBooleanValue("m_windowAspectRatioLockedAction",
-                                                               false);
-    m_windowAspectRatioLockedAction->blockSignals(true);
-    m_windowAspectRatioLockedAction->setChecked(aspectRatioLocked);
-    m_windowAspectRatioLockedAction->blockSignals(false);
+    if ( ! m_browserWindowContent->isValid()) {
+        sceneAttributes->addToErrorMessage("Scene Error: Browser window content is invalid for window "
+                                           + AString::number(m_browserWindowIndex + 1));
+        return;
+    }
     
     /*
      * Restore Unique ID of selected tile tabs configuration.
@@ -4265,29 +4352,27 @@ BrainBrowserWindow::restoreFromScene(const SceneAttributes* sceneAttributes,
     else {
         restoreToFullScreen = sceneClass->getBooleanValue("isFullScreen",
                                                           false);
-        restoreToTabTiles = sceneClass->getBooleanValue("m_viewTileTabsAction",
-                                                          false);
+        
+        if (sceneVersion >= 2) {
+            restoreToTabTiles = m_browserWindowContent->isTileTabsEnabled();
+        }
+        else {
+            restoreToTabTiles = sceneClass->getBooleanValue("m_viewTileTabsAction",
+                                                            false);
+        }
+        setViewTileTabs(restoreToTabTiles);
         
         /*
          * If tile tabs was saved to the scene, restore it as the scenes tile tabs configuration
          */
         if (restoreToTabTiles) {
-            const AString tileTabsConfigString = sceneClass->getStringValue("m_sceneTileTabsConfiguration");
-            if ( ! tileTabsConfigString.isEmpty()) {
-                m_sceneTileTabsConfiguration->decodeFromXML(tileTabsConfigString);
-                m_sceneTileTabsConfiguration->setName(m_sceneTileTabsConfigurationText
-                                                      + " "
-                                                      + sceneAttributes->getSceneName());
-                m_selectedTileTabsConfigurationUniqueIdentifier = m_sceneTileTabsConfiguration->getUniqueIdentifier();
-            }
+                m_selectedTileTabsConfigurationUniqueIdentifier = m_browserWindowContent->getSceneTileTabsConfiguration()->getUniqueIdentifier();
         }
     }
 
     m_normalWindowComponentStatus = m_defaultWindowComponentStatus;
     processViewFullScreen(restoreToFullScreen,
                           false);
-    
-    setViewTileTabs(restoreToTabTiles);
     
     /*
      * Position and size
@@ -4323,6 +4408,28 @@ BrainBrowserWindow::restoreFromScene(const SceneAttributes* sceneAttributes,
             m_featuresToolBoxAction->trigger();
             m_featuresToolBox->restoreFromScene(sceneAttributes,
                                                 sceneClass->getClass("m_featuresToolBox"));
+            
+#if QT_VERSION >= 0x050600
+            /*
+             * Toolboxes were not restoring to correct size in Qt5.
+             * Qt5.6 adds a new method, QMainWindow::resizeDocks() that 
+             * resizes a QDockWidget in one dimension.  Use it to resize
+             * the toolbox.
+             */
+            const SceneClass* featureToolBoxClass = sceneClass->getClass("m_featuresToolBox");
+            if (featureToolBoxClass != NULL) {
+                const int w = featureToolBoxClass->getIntegerValue("toolboxWidth", -1);
+                const int h = featureToolBoxClass->getIntegerValue("toolboxHeight", -1);
+                if ((w > 0)
+                    && (h > 0)) {
+                    QList<QDockWidget*> dockList;
+                    dockList.append(m_featuresToolBox);
+                    QList<int> sizeList;
+                    sizeList.append(w);
+                    resizeDocks(dockList, sizeList, Qt::Horizontal);
+                }
+            }
+#endif
         }
         
         /*
@@ -4348,6 +4455,36 @@ BrainBrowserWindow::restoreFromScene(const SceneAttributes* sceneAttributes,
             processShowOverlayToolBox(toolBoxVisible);
             m_overlayActiveToolBox->restoreFromScene(sceneAttributes,
                                                      sceneClass->getClass("m_overlayActiveToolBox"));
+            
+
+#if QT_VERSION >= 0x050600
+            /*
+             * Toolboxes were not restoring to correct size in Qt5.
+             * Qt5 adds a new method, QMainWindow::resizeDocks() that
+             * resizes a QDockWidget in one dimension.  Use it to resize
+             * the toolbox.
+             */
+            const SceneClass* activeToolBoxClass = sceneClass->getClass("m_overlayActiveToolBox");
+            if (activeToolBoxClass != NULL) {
+                const int w = activeToolBoxClass->getIntegerValue("toolboxWidth", -1);
+                const int h = activeToolBoxClass->getIntegerValue("toolboxHeight", -1);
+                if ((w > 0)
+                    && (h > 0)) {
+                    QList<QDockWidget*> dockList;
+                    dockList.append(m_overlayActiveToolBox);
+                    if (orientationName == "horizontal") {
+                        QList<int> sizeList;
+                        sizeList.append(h);
+                        resizeDocks(dockList, sizeList, Qt::Vertical);
+                    }
+                    else {
+                        QList<int> sizeList;
+                        sizeList.append(w);
+                        resizeDocks(dockList, sizeList, Qt::Horizontal);
+                    }
+                }
+            }
+#endif
         }
     }
     
@@ -4363,21 +4500,35 @@ BrainBrowserWindow::restoreFromScene(const SceneAttributes* sceneAttributes,
     if (maximizedWindow) {
         showMaximized();
     }
-}
+    
+    /* prevent "failed to restore" messages */
+    sceneClass->getIntegerValue("m_browserWindowIndex");
+    const SceneClass* openglGeomClass = sceneClass->getClass("openGLWidgetGeometry");
+    if (openglGeomClass != NULL) {
+        openglGeomClass->setDescendantsRestored(true);
+    }
+    
+    if (sceneVersion >= 2) {
+        
+    }
+    else {
+        /* 
+         * Before version 2, each tab was allowed its own aspect locking status
+         */
+        std::vector<BrowserTabContent*> allTabContent;
+        m_toolbar->getAllTabContent(allTabContent);
+        
+        const int32_t lockedCount = std::count_if(allTabContent.begin(),
+                                                  allTabContent.end(),
+                                                  [](BrowserTabContent* btc) { return btc->isAspectRatioLocked(); });
 
-///**
-// * Get the viewport size for the window.
-// *
-// * @param w
-// *    Output width.
-// * @param h
-// *    Output height.
-// */
-//void
-//BrainBrowserWindow::getViewportSize(int &w, int &h)
-//{
-//    m_openGLWidget->getViewPortSize(w,h);
-//}
+        EventManager::get()->sendEvent(EventGraphicsUpdateOneWindow(getBrowserWindowIndex()).getPointer());
+
+        lockAllTabAspectRatios(lockedCount > 0);
+    }
+    
+    updateActionsForLockingAspectRatios();
+}
 
 /**
  * @return A string describing the object's content.
@@ -4434,6 +4585,53 @@ BrainBrowserWindow::getDescriptionOfContent(PlainTextStringBuilder& descriptionO
     descriptionOut.popIndentation();
 }
 
+/**
+ * @return Has valid OpenGL.
+ */
+bool
+BrainBrowserWindow::hasValidOpenGL()
+{
+    return m_openGLWidget->isValid();
+}
 
+/**
+ * Show the data file read warnings dialog but only
+ * if warnings are found in any files.
+ */
+void
+BrainBrowserWindow::showDataFileReadWarningsDialog()
+{
+    Brain* brain = GuiManager::get()->getBrain();
+    if (brain == NULL) {
+        return;
+    }
+    
+    std::vector<CaretDataFile*> dataFiles;
+    brain->getAllDataFiles(dataFiles);
+    
+    AString messages;
+    for (auto file : dataFiles) {
+        const AString msg = file->getFileReadWarnings();
+        if ( ! msg.isEmpty()) {
+            messages.append("<LI>"
+                            + file->getFileName()
+                            + "<br>"
+                            + msg
+                            + "</LI>");
+        }
+    }
+    
+    if ( ! messages.isEmpty()) {
+        messages.insert(0,
+                        "<html><ul>");
+        messages.append("</ul></html>");
+        
+        WuQTextEditorDialog::runNonModal("Data File Warnings",
+                                         messages,
+                                         WuQTextEditorDialog::TextMode::HTML,
+                                         WuQTextEditorDialog::WrapMode::NO,
+                                         this);
+    }
+}
 
 

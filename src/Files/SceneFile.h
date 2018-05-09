@@ -23,6 +23,7 @@
 
 
 #include "CaretDataFile.h"
+#include "SceneFileBasePathTypeEnum.h"
 
 namespace caret {
 
@@ -87,9 +88,25 @@ namespace caret {
         
         void setBalsaStudyID(const AString& balsaStudyID);
         
-        AString getBaseDirectory() const;
+        AString getBalsaStudyTitle() const;
         
-        void setBaseDirectory(const AString& baseDirectory);
+        void setBalsaStudyTitle(const AString& balsaStudyTitle);
+        
+        SceneFileBasePathTypeEnum::Enum getBasePathType() const;
+        
+        void setBasePathType(const SceneFileBasePathTypeEnum::Enum basePathType);
+        
+        AString getBalsaCustomBaseDirectory() const;
+        
+        void setBalsaCustomBaseDirectory(const AString& balsaBaseDirectory);
+        
+        bool findBaseDirectoryForDataFiles(AString& baseDirectoryOut,
+                                           std::vector<AString>& missingFileNamesOut,
+                                           AString& errorMessageOut) const;
+        
+        std::vector<AString> getBaseDirectoryHierarchyForDataFiles(const int32_t maximumAncestorCount = 25);
+        
+        std::vector<AString> getAllDataFileNamesFromAllScenes() const;
         
         void reorderScenes(std::vector<Scene*>& orderedScenes);
         
@@ -97,6 +114,18 @@ namespace caret {
         
         Scene* releaseScene(const int32_t& index);
 
+        AString getDefaultZipFileName() const;
+        
+        AString getBalsaExtractToDirectoryName() const;
+        
+        void setBalsaExtractToDirectoryName(const AString& balsaExtractToDirectoryName);
+
+        AString getDefaultExtractToDirectoryName() const;
+        
+        virtual bool isModified() const override;
+        
+        virtual void clearModified() override;
+        
         // ADD_NEW_METHODS_HERE
 
         /** Version of file */
@@ -124,8 +153,17 @@ namespace caret {
         /** the BALSA Study ID */
         AString m_balsaStudyID;
         
-        /** the Base Directory */
-        AString m_baseDirectory;
+        /** the BALSA Study Title */
+        AString m_balsaStudyTitle;
+        
+        /** the Base Path Type */
+        SceneFileBasePathTypeEnum::Enum m_basePathType;
+        
+        /** the Custom Base Directory */
+        AString m_balsaCustomBaseDirectory;
+        
+        /** The "extract to" directory name */
+        AString m_balsaExtractToDirectoryName;
         
         // ADD_NEW_MEMBERS_HERE
 
@@ -137,7 +175,7 @@ namespace caret {
     const AString SceneFile::XML_TAG_SCENE_FILE = "SceneFile";
     const AString SceneFile::XML_ATTRIBUTE_VERSION = "Version";
     const AString SceneFile::XML_TAG_SCENE_INFO_DIRECTORY_TAG = "SceneInfoDirectory";
-    const float SceneFile::s_sceneFileVersion = 2.0;
+    const float SceneFile::s_sceneFileVersion = 3.0;
 #endif // __SCENE_FILE_DECLARE__
 
 } // namespace

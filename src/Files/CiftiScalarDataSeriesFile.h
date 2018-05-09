@@ -35,8 +35,7 @@ namespace caret {
     class CiftiScalarDataSeriesFile :
     public CiftiMappableDataFile,
     public ChartableLineSeriesRowColumnInterface,
-    public ChartableMatrixSeriesInterface,
-    public EventListenerInterface {
+    public ChartableMatrixSeriesInterface {
         
     public:
         CiftiScalarDataSeriesFile();
@@ -48,7 +47,7 @@ namespace caret {
         virtual void setMatrixRowColumnMapYokingGroup(const int32_t tabIndex,
                                     const MapYokingGroupEnum::Enum yokingType);
         
-        virtual int32_t getSelectedMapIndex(const int32_t tabIndex);
+        virtual int32_t getSelectedMapIndex(const int32_t tabIndex) const override;
         
         virtual void setSelectedMapIndex(const int32_t tabIndex,
                                          const int32_t mapIndex);
@@ -75,7 +74,7 @@ namespace caret {
         virtual void setMatrixChartingEnabled(const int32_t tabIndex,
                                               const bool enabled);
         
-        virtual void getSupportedMatrixChartDataTypes(std::vector<ChartDataTypeEnum::Enum>& chartDataTypesOut) const;
+        virtual void getSupportedMatrixChartDataTypes(std::vector<ChartOneDataTypeEnum::Enum>& chartDataTypesOut) const;
         
         const ChartMatrixDisplayProperties* getChartMatrixDisplayProperties(const int32_t tabIndex) const;
         
@@ -92,7 +91,7 @@ namespace caret {
         
         virtual ChartDataCartesian* loadLineSeriesChartDataForRow(const int32_t rowIndex);
 
-        virtual void getSupportedLineSeriesChartDataTypes(std::vector<ChartDataTypeEnum::Enum>& chartDataTypesOut) const;
+        virtual void getSupportedLineSeriesChartDataTypes(std::vector<ChartOneDataTypeEnum::Enum>& chartDataTypesOut) const;
         
         // ADD_NEW_METHODS_HERE
 

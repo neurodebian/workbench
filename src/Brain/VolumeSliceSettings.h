@@ -26,7 +26,9 @@
 #include "ModelTypeEnum.h"
 #include "SceneableInterface.h"
 #include "VolumeSliceDrawingTypeEnum.h"
+#include "VolumeSliceInterpolationEdgeEffectsMaskingEnum.h"
 #include "VolumeSliceProjectionTypeEnum.h"
+#include "VolumeSliceViewAllPlanesLayoutEnum.h"
 #include "VolumeSliceViewPlaneEnum.h"
 
 namespace caret {
@@ -51,9 +53,17 @@ namespace caret {
         
         void setSliceViewPlane(VolumeSliceViewPlaneEnum::Enum sliceAxisMode);
         
+        VolumeSliceViewAllPlanesLayoutEnum::Enum getSlicePlanesAllViewLayout() const;
+        
+        void setSlicePlanesAllViewLayout(const VolumeSliceViewAllPlanesLayoutEnum::Enum slicePlanesAllViewLayout);
+        
         VolumeSliceDrawingTypeEnum::Enum getSliceDrawingType() const;
 
         void setSliceDrawingType(const VolumeSliceDrawingTypeEnum::Enum sliceDrawingType);
+        
+        VolumeSliceInterpolationEdgeEffectsMaskingEnum::Enum getVolumeSliceInterpolationEdgeEffectsMaskingType() const;
+        
+        void setVolumeSliceInterpolationEdgeEffectsMaskingType(const VolumeSliceInterpolationEdgeEffectsMaskingEnum::Enum maskingType);
         
         VolumeSliceProjectionTypeEnum::Enum getSliceProjectionType() const;
         
@@ -144,9 +154,15 @@ namespace caret {
 
         /** Axis of slice being viewed */
         VolumeSliceViewPlaneEnum::Enum m_sliceViewPlane;
+
+        /** Layout of slice in all slices view */
+        VolumeSliceViewAllPlanesLayoutEnum::Enum m_slicePlanesAllViewLayout;
         
         /** Type of slice drawing (single/montage) */
         VolumeSliceDrawingTypeEnum::Enum m_sliceDrawingType;
+        
+        /** Type of masking for oblique slice drawing */
+        VolumeSliceInterpolationEdgeEffectsMaskingEnum::Enum m_volumeSliceInterpolationEdgeEffectsMaskingType;
         
         /** Type of slice projection (oblique/orthogonal) */
         VolumeSliceProjectionTypeEnum::Enum m_sliceProjectionType;
@@ -165,7 +181,7 @@ namespace caret {
         mutable float m_sliceCoordinateCoronal;
         
         mutable float m_sliceCoordinateAxial;
-        
+
         bool m_sliceEnabledParasagittal;
         
         bool m_sliceEnabledCoronal;

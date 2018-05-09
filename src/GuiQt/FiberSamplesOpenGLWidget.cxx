@@ -57,7 +57,11 @@ FiberSamplesOpenGLWidget::FiberSamplesOpenGLWidget(const int32_t browserWindowIn
                                                    QLabel* fiberMeanLabels[3],
                                                    QLabel* fiberVarianceLabels[3],
                                                    QWidget* parent)
+#ifdef WORKBENCH_USE_QT5_QOPENGL_WIDGET
+: QOpenGLWidget(parent)
+#else
 : QGLWidget(parent)
+#endif
 {
     m_browserWindowIndex = browserWindowIndex;
     m_enabledCheckBox = enabledCheckBox;
@@ -303,10 +307,10 @@ FiberSamplesOpenGLWidget::paintGL()
 //              0.7);
 
     const float rgba[4] = {
-        0.7,
-        0.7,
-        0.7,
-        1.0
+        0.7f,
+        0.7f,
+        0.7f,
+        1.0f
     };
     m_sphereBig->draw(rgba);
     
@@ -679,6 +683,10 @@ FiberSamplesOpenGLWidget::mouseMoveEvent(QMouseEvent* me)
     
     me->accept();
     
-    updateGL();
+#ifdef WORKBENCH_USE_QT5_QOPENGL_WIDGET
+    this->update();
+#else
+    this->updateGL();
+#endif
 }
 

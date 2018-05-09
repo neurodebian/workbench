@@ -4,15 +4,18 @@
 PROJECT (Files)
 
 #
-# Need XML from Qt
-#
-SET(QT_DONT_USE_QTGUI)
-SET(QT_USE_QTNETWORK TRUE)
-
-#
 # Add QT for includes
 #
-INCLUDE (${QT_USE_FILE})
+if(Qt5_FOUND)
+    include_directories(${Qt5Core_INCLUDE_DIRS})
+    include_directories(${Qt5Gui_INCLUDE_DIRS})
+    include_directories(${Qt5Network_INCLUDE_DIRS})
+endif()
+IF (QT4_FOUND)
+    SET(QT_DONT_USE_QTGUI)
+    SET(QT_USE_QTNETWORK TRUE)
+    INCLUDE(${QT_USE_FILE})
+ENDIF ()
 
 #
 # Files Library
@@ -32,7 +35,9 @@ BorderTracingHelper.h
 BrainordinateRegionOfInterest.h
 CaretDataFile.h
 CaretDataFileHelper.h
+CaretDataFileSelectionModel.h
 CaretMappableDataFile.h
+CaretMappableDataFileAndMapSelectionModel.h
 CaretSparseFile.h
 CaretVolumeExtension.h
 ChartableLineSeriesBrainordinateInterface.h
@@ -41,6 +46,11 @@ ChartableLineSeriesRowColumnInterface.h
 ChartableMatrixInterface.h
 ChartableMatrixParcelInterface.h
 ChartableMatrixSeriesInterface.h
+ChartableTwoFileDelegate.h
+ChartableTwoFileBaseChart.h
+ChartableTwoFileHistogramChart.h
+ChartableTwoFileLineSeriesChart.h
+ChartableTwoFileMatrixChart.h
 CiftiBrainordinateDataSeriesFile.h
 CiftiBrainordinateLabelFile.h
 CiftiBrainordinateScalarFile.h
@@ -62,6 +72,8 @@ CiftiParcelScalarFile.h
 CiftiScalarDataSeriesFile.h
 ConnectivityDataLoaded.h
 ControlPointFile.h
+EventCaretDataFilesGet.h
+EventCaretMappableDataFileMapsViewedInOverlays.h
 EventCaretMappableDataFilesGet.h
 EventChartMatrixParcelYokingValidation.h
 EventGetDisplayedDataFiles.h
@@ -115,6 +127,7 @@ StudyMetaDataLink.h
 StudyMetaDataLinkSet.h
 StudyMetaDataLinkSetSaxReader.h
 SurfaceFile.h
+SurfacePlaneIntersectionToContour.h
 SurfaceProjectedItem.h
 SurfaceProjectedItemSaxReader.h
 SurfaceProjection.h
@@ -153,11 +166,20 @@ BorderTracingHelper.cxx
 BrainordinateRegionOfInterest.cxx
 CaretDataFile.cxx
 CaretDataFileHelper.cxx
+CaretDataFileSelectionModel.cxx
 CaretMappableDataFile.cxx
+CaretMappableDataFileAndMapSelectionModel.cxx
 CaretSparseFile.cxx
 CaretVolumeExtension.cxx
 ChartableLineSeriesInterface.cxx
 ChartableMatrixInterface.cxx
+
+ChartableTwoFileDelegate.cxx
+ChartableTwoFileBaseChart.cxx
+ChartableTwoFileHistogramChart.cxx
+ChartableTwoFileLineSeriesChart.cxx
+ChartableTwoFileMatrixChart.cxx
+
 CiftiBrainordinateDataSeriesFile.cxx
 CiftiBrainordinateLabelFile.cxx
 CiftiBrainordinateScalarFile.cxx
@@ -179,6 +201,8 @@ CiftiParcelScalarFile.cxx
 CiftiScalarDataSeriesFile.cxx
 ConnectivityDataLoaded.cxx
 ControlPointFile.cxx
+EventCaretDataFilesGet.cxx
+EventCaretMappableDataFileMapsViewedInOverlays.cxx
 EventCaretMappableDataFilesGet.cxx
 EventChartMatrixParcelYokingValidation.cxx
 EventGetDisplayedDataFiles.cxx
@@ -232,6 +256,7 @@ StudyMetaDataLink.cxx
 StudyMetaDataLinkSet.cxx
 StudyMetaDataLinkSetSaxReader.cxx
 SurfaceFile.cxx
+SurfacePlaneIntersectionToContour.cxx
 SurfaceProjectedItem.cxx
 SurfaceProjectedItemSaxReader.cxx
 SurfaceProjection.cxx
@@ -258,6 +283,7 @@ XmlStreamReaderHelper.cxx
 XmlStreamWriterHelper.cxx
 )
 
+TARGET_LINK_LIBRARIES(Files ${CARET_QT5_LINK})
 
 #
 # Find Headers
@@ -267,6 +293,7 @@ ${CMAKE_SOURCE_DIR}/Annotations
 ${CMAKE_SOURCE_DIR}/Charting
 ${CMAKE_SOURCE_DIR}/Files
 ${CMAKE_SOURCE_DIR}/FilesBase
+${CMAKE_SOURCE_DIR}/Graphics
 ${CMAKE_SOURCE_DIR}/Cifti
 ${CMAKE_SOURCE_DIR}/Palette
 ${CMAKE_SOURCE_DIR}/Gifti

@@ -28,7 +28,6 @@
 
 namespace caret {
 
-    class Palette;
     class VolumeFile;
     
     class VolumeFileVoxelColorizer : public CaretObject {
@@ -38,10 +37,7 @@ namespace caret {
         
         virtual ~VolumeFileVoxelColorizer();
         
-        void assignVoxelColorsForMap(const int32_t mapIndex,
-                                     const Palette* palette,
-                                     const VolumeFile* thresholdVolume,
-                                     const int32_t thresholdVolumeMapIndex);
+        void assignVoxelColorsForMap(const int32_t mapIndex);
         
         int64_t getVoxelColorsForSliceInMap(const int32_t mapIndex,
                                             const int64_t firstVoxelIJK[3],
@@ -65,7 +61,7 @@ namespace caret {
                                             const int64_t sliceIndex,
                                             const int64_t firstCornerVoxelIndex[3],
                                             const int64_t lastCornerVoxelIndex[3],
-                                            const int64_t voxelCountIJK[3],
+                                            const int64_t* voxelCountIJK,
                                             const DisplayGroupEnum::Enum displayGroup,
                                             const int32_t tabIndex,
                                             uint8_t* rgbaOut) const;

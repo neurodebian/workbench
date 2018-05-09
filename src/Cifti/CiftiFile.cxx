@@ -42,7 +42,8 @@ namespace
         CiftiXML m_xml;//because we need to parse it to set up the dimensions anyway
     public:
         CiftiOnDiskImpl(const QString& filename);//read-only
-        CiftiOnDiskImpl(const QString& filename, const CiftiXML& xml, const CiftiVersion& version, const bool& swapEndian);//make new empty file with read/write
+        CiftiOnDiskImpl(const QString& filename, const CiftiXML& xml, const CiftiVersion& version, const bool& swapEndian,
+                        const int16_t& datatype, const bool& rescale, const double& minval, const double& maxval);//make new empty file with read/write
         void getRow(float* dataOut, const std::vector<int64_t>& indexSelect, const bool& tolerateShortRead) const;
         void getColumn(float* dataOut, const int64_t& index) const;
         const CiftiXML& getCiftiXML() const { return m_xml; }
@@ -50,6 +51,7 @@ namespace
         bool isSwapped() const { return m_nifti.getHeader().isSwapped(); }
         void setRow(const float* dataIn, const std::vector<int64_t>& indexSelect);
         void setColumn(const float* dataIn, const int64_t& index);
+        void close();
     };
     
     class CiftiMemoryImpl : public CiftiFile::WriteImplInterface
@@ -108,14 +110,13 @@ CiftiFile::WriteImplInterface::~WriteImplInterface()
 CiftiFile::CiftiFile(const QString& fileName)
 {
     m_endianPref = NATIVE;
+    setWritingDataTypeNoScaling();//default argument is float32
     openFile(fileName);
 }
 
 void CiftiFile::openFile(const QString& fileName)
 {
-    m_writingImpl.grabNew(NULL);
-    m_readingImpl.grabNew(NULL);//to make sure it closes everything first, even if the open throws
-    m_dims.clear();
+    close();//to make sure it closes everything first, even if the open throws
     CaretPointer<CiftiOnDiskImpl> newRead(new CiftiOnDiskImpl(FileInformation(fileName).getAbsoluteFilePath()));//this constructor opens existing file read-only
     m_readingImpl = newRead;//it should be noted that if the constructor throws (if the file isn't readable), new guarantees the memory allocated for the object will be freed
     m_xml = newRead->getCiftiXML();
@@ -126,9 +127,7 @@ void CiftiFile::openFile(const QString& fileName)
 
 void CiftiFile::openURL(const QString& url, const QString& user, const QString& pass)
 {
-    m_writingImpl.grabNew(NULL);
-    m_readingImpl.grabNew(NULL);//to make sure it closes everything first, even if the open throws
-    m_dims.clear();
+    close();//to make sure it closes everything first, even if the open throws
     CaretPointer<CiftiXnatImpl> newRead(new CiftiXnatImpl(url, user, pass));
     m_readingImpl = newRead;
     m_xml = newRead->getCiftiXML();
@@ -138,9 +137,7 @@ void CiftiFile::openURL(const QString& url, const QString& user, const QString& 
 
 void CiftiFile::openURL(const QString& url)
 {
-    m_writingImpl.grabNew(NULL);
-    m_readingImpl.grabNew(NULL);//to make sure it closes everything first, even if the open throws
-    m_dims.clear();
+    close();//to make sure it closes everything first, even if the open throws
     CaretPointer<CiftiXnatImpl> newRead(new CiftiXnatImpl(url));
     m_readingImpl = newRead;
     m_xml = newRead->getCiftiXML();
@@ -155,6 +152,24 @@ void CiftiFile::setWritingFile(const QString& fileName, const CiftiVersion& writ
     m_onDiskVersion = writingVersion;//so that we can do on-disk writing with the old version
     m_fileName = fileName;
     m_endianPref = endian;
+}
+
+void CiftiFile::setWritingDataTypeNoScaling(const int16_t& type)
+{
+    m_writingDataType = type;//could do some validation here
+    m_doWriteScaling = false;
+    m_minScalingVal = -1.0;
+    m_maxScalingVal = 1.0;
+    m_writingImpl.grabNew(NULL);//prevent writing to previous writing implementation, let the next set...() set up for writing
+}
+
+void CiftiFile::setWritingDataTypeAndScaling(const int16_t& type, const double& minval, const double& maxval)
+{
+    m_writingDataType = type;//could do some validation here
+    m_doWriteScaling = true;
+    m_minScalingVal = minval;
+    m_maxScalingVal = maxval;
+    m_writingImpl.grabNew(NULL);//prevent writing to previous writing implementation, let the next set...() set up for writing
 }
 
 void CiftiFile::writeFile(const QString& fileName, const CiftiVersion& writingVersion, const ENDIAN& endian)
@@ -174,7 +189,8 @@ void CiftiFile::writeFile(const QString& fileName, const CiftiVersion& writingVe
         m_readingImpl = tempMemory;//we are about to make the old reading impl very unhappy, replace it so that if we get an error while writing, we hang onto the memory version
         m_writingImpl.grabNew(NULL);//and make it re-magic the writing implementation again if data is set
     }
-    CaretPointer<WriteImplInterface> tempWrite(new CiftiOnDiskImpl(myInfo.getAbsoluteFilePath(), m_xml, writingVersion, writeSwapped));
+    CaretPointer<WriteImplInterface> tempWrite(new CiftiOnDiskImpl(myInfo.getAbsoluteFilePath(), m_xml, writingVersion, writeSwapped,
+                                                                   m_writingDataType, m_doWriteScaling, m_minScalingVal, m_maxScalingVal));
     copyImplData(m_readingImpl, tempWrite, m_dims);
     if (collision)//if we rewrote the file, we need the handle to the new file, and to dump the temporary in-memory version
     {
@@ -186,6 +202,23 @@ void CiftiFile::writeFile(const QString& fileName, const CiftiVersion& writingVe
         }
     }
     m_xml.clearMutablesModified();
+}
+
+void CiftiFile::close()
+{
+    if (m_writingImpl != NULL)
+    {
+        m_writingImpl->close();//only writing implementations should ever throw errors on close, and specifically only on-disk
+    }
+    m_writingImpl.grabNew(NULL);
+    m_readingImpl.grabNew(NULL);
+    m_dims.clear();
+    m_xml = CiftiXML();
+    m_writingFile = "";
+    m_fileName = "";
+    m_onDiskVersion = CiftiVersion();//for completeness, it gets reset on open anyway
+    m_endianPref = NATIVE;//reset things to defaults
+    setWritingDataTypeNoScaling();//default argument is float32
 }
 
 void CiftiFile::convertToInMemory()
@@ -226,9 +259,14 @@ void CiftiFile::getColumn(float* dataOut, const int64_t& index) const
 
 void CiftiFile::setCiftiXML(const CiftiXML& xml, const bool useOldMetadata)
 {
+    if (xml.getNumberOfDimensions() == 0) throw DataFileException("setCiftiXML called with 0-dimensional CiftiXML");
+    vector<int64_t> xmlDims = xml.getDimensions();
+    for (size_t i = 0; i < xmlDims.size(); ++i)
+    {
+        if (xmlDims[i] < 1) throw DataFileException("cifti xml dimensions must be greater than zero");
+    }
     m_readingImpl.grabNew(NULL);//drop old implementation, as it is now invalid due to XML (and therefore matrix size) change
     m_writingImpl.grabNew(NULL);
-    if (xml.getNumberOfDimensions() == 0) throw DataFileException("setCiftiXML called with 0-dimensional CiftiXML");
     if (useOldMetadata)
     {
         const GiftiMetaData* oldmd = m_xml.getFileMetaData();
@@ -248,11 +286,7 @@ void CiftiFile::setCiftiXML(const CiftiXML& xml, const bool useOldMetadata)
     } else {
         m_xml = xml;
     }
-    m_dims = m_xml.getDimensions();
-    for (size_t i = 0; i < m_dims.size(); ++i)
-    {
-        if (m_dims[i] < 1) throw DataFileException("cifti xml dimensions must be greater than zero");
-    }
+    m_dims = xmlDims;
 }
 
 void CiftiFile::setCiftiXML(const CiftiXMLOld& xml, const bool useOldMetadata)
@@ -261,12 +295,12 @@ void CiftiFile::setCiftiXML(const CiftiXMLOld& xml, const bool useOldMetadata)
     xml.writeXML(xmlText);
     CiftiXML tempXML;//so that we can use the same code path
     tempXML.readXML(xmlText);
-    if (tempXML.getDimensionLength(CiftiXML::ALONG_ROW) < 1)
+    if (tempXML.getDimensionLength(CiftiXML::ALONG_ROW) < 0)
     {
         CiftiSeriesMap& tempMap = tempXML.getSeriesMap(CiftiXML::ALONG_ROW);
         tempMap.setLength(xml.getDimensionLength(CiftiXMLOld::ALONG_ROW));
     }
-    if (tempXML.getDimensionLength(CiftiXML::ALONG_COLUMN) < 1)
+    if (tempXML.getDimensionLength(CiftiXML::ALONG_COLUMN) < 0)
     {
         CiftiSeriesMap& tempMap = tempXML.getSeriesMap(CiftiXML::ALONG_COLUMN);
         tempMap.setLength(xml.getDimensionLength(CiftiXMLOld::ALONG_COLUMN));
@@ -351,7 +385,8 @@ void CiftiFile::verifyWriteImpl()
                 }
             }
         }
-        m_writingImpl.grabNew(new CiftiOnDiskImpl(m_writingFile, m_xml, m_onDiskVersion, shouldSwap(m_endianPref)));//this constructor makes new file for writing
+        m_writingImpl.grabNew(new CiftiOnDiskImpl(m_writingFile, m_xml, m_onDiskVersion, shouldSwap(m_endianPref),
+                                                  m_writingDataType, m_doWriteScaling, m_minScalingVal, m_maxScalingVal));//this constructor makes new file for writing
         if (m_readingImpl != NULL)
         {
             copyImplData(m_readingImpl, m_writingImpl, m_dims);
@@ -469,7 +504,7 @@ CiftiOnDiskImpl::CiftiOnDiskImpl(const QString& filename)
     if (m_xml.getNumberOfDimensions() + 4 != (int)dimCheck.size()) throw DataFileException("XML does not match number of nifti dimensions in file " + filename + "'");
     for (int i = 4; i < (int)dimCheck.size(); ++i)
     {
-        if (m_xml.getDimensionLength(i - 4) < 1)//CiftiXML will only let this happen with cifti-1
+        if (m_xml.getDimensionLength(i - 4) < 0)//CiftiXML will only let this happen with cifti-1
         {
             m_xml.getSeriesMap(i - 4).setLength(dimCheck[i]);//and only in a series map
         } else {
@@ -489,10 +524,19 @@ namespace
         int32_t intent_code = myXML.getIntentInfo(CiftiVersion(), junk);//use default writing version to check file extension, older version is missing some intent codes
         switch (intent_code)
         {
+            default:
+                CaretLogWarning("unhandled cifti type in extension warning check, tell the developers what you just tried to do");
+                CaretAssert(0);//yes, let it fall through to "unknown" in release so that it at least looks for .nii
             case 3000://unknown
                 if (!filename.contains(QRegExp("\\.[^.]*\\.nii$")))
                 {
-                    CaretLogWarning("cifti file of nonstandard mapping combination '" + filename + "' should be saved ending in .<something>.nii, see wb_command -cifti-help");
+                    CaretLogWarning("cifti file of nonstandard mapping combination '" + filename + "' should be saved ending in .<something>.nii, "
+                                    + "but not an already used extension (don't use dtseries, dscalar, etc).");
+                }
+                if (filename.contains(QRegExp("\\.(dconn|dtseries|pconn|ptseries|dscalar|dfan|fiberTEMP|dlabel|pscalar|pdconn|dpconn|pconnseries|pconnscalar)\\.nii$")))
+                {
+                    CaretLogWarning("cifti file of nonstandard mapping combination '" + filename + "' should NOT be saved using an already-used cifti extension, "
+                                    + "please choose a different, reasonable cifti extension ending in .<something>.nii");
                 }
                 break;
             case 3001:
@@ -562,18 +606,25 @@ namespace
                     CaretLogWarning("parcels by parcels by scalar cifti file '" + filename + "' should be saved ending in .pconnscalar.nii, see wb_command -cifti-help");
                 }
                 break;
-            default:
-                CaretAssert(0);
-                throw CaretException("internal error, tell the developers what you just tried to do");
         }
     }
 }
 
-CiftiOnDiskImpl::CiftiOnDiskImpl(const QString& filename, const CiftiXML& xml, const CiftiVersion& version, const bool& swapEndian)
+CiftiOnDiskImpl::CiftiOnDiskImpl(const QString& filename, const CiftiXML& xml, const CiftiVersion& version, const bool& swapEndian,
+                                 const int16_t& datatype, const bool& rescale, const double& minval, const double& maxval)
 {//starts writing new file
     warnForBadExtension(filename, xml);
     NiftiHeader outHeader;
-    outHeader.setDataType(NIFTI_TYPE_FLOAT32);//actually redundant currently, default is float32
+    if (rescale)
+    {
+        outHeader.setDataTypeAndScaleRange(datatype, minval, maxval);
+    } else {
+        outHeader.setDataType(datatype);
+    }
+    if (outHeader.getNumComponents() != 1)
+    {
+        throw DataFileException("cifti cannot be written with multi-component nifti datatypes (i.e., complex, RGB)");
+    }
     char intentName[16];
     int32_t intentCode = xml.getIntentInfo(version, intentName);
     outHeader.setIntent(intentCode, intentName);
@@ -606,6 +657,12 @@ CiftiOnDiskImpl::CiftiOnDiskImpl(const QString& filename, const CiftiXML& xml, c
     }
     m_xml = xml;
 }
+
+void CiftiOnDiskImpl::close()
+{
+    m_nifti.close();//lets this throw when there is a writing problem
+}//don't bother resetting m_xml, this instance is about to be destroyed
+
 
 void CiftiOnDiskImpl::getRow(float* dataOut, const vector<int64_t>& indexSelect, const bool& tolerateShortRead) const
 {

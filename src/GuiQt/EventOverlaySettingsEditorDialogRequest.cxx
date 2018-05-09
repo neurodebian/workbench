@@ -30,27 +30,65 @@ using namespace caret;
 
 /**
  * Constructor.
+ *
+ * @param mode
+ *    The mode.
  * @param browserWindowIndex
  *    Index of browser window.
  * @param overlay
  *    Overlay for map editor.
  * @param mapFile
  *    Caret Mappable Data File.
- * @param mapIndex
- *    Map index in mapFile.
+ * @param selectedIndex
+ *    Selected index in mapFile.
  */
 EventOverlaySettingsEditorDialogRequest::EventOverlaySettingsEditorDialogRequest(const Mode mode,
                                                                                  const int32_t browserWindowIndex,
                                                                                  Overlay* overlay,
                                                                                  CaretMappableDataFile* mapFile,
-                                                                                 const int32_t mapIndex)
+                                                                                 const int32_t selectedIndex)
 : Event(EventTypeEnum::EVENT_OVERLAY_SETTINGS_EDITOR_SHOW),
 m_mode(mode)
 {
     m_browserWindowIndex = browserWindowIndex;
     m_overlay = overlay;
+    m_chartOverlay = NULL;
     m_mapFile = mapFile;
-    m_mapIndex = mapIndex;
+    m_chartSelectedIndexType = ChartTwoOverlay::SelectedIndexType::INVALID;
+    m_selectedIndex = selectedIndex;
+}
+
+/**
+ * Constructor.
+ *
+ * @param mode
+ *    The mode.
+ * @param browserWindowIndex
+ *    Index of browser window.
+ * @param overlay
+ *    Overlay for map editor.
+ * @param mapFile
+ *    Caret Mappable Data File.
+ * @param selectedIndexType
+ *    Type of index selected in chart.
+ * @param selectedIndex
+ *    Selected index in mapFile.
+ */
+EventOverlaySettingsEditorDialogRequest::EventOverlaySettingsEditorDialogRequest(const Mode mode,
+                                                                                 const int32_t browserWindowIndex,
+                                                                                 ChartTwoOverlay* chartOverlay,
+                                                                                 CaretMappableDataFile* mapFile,
+                                                                                 ChartTwoOverlay::SelectedIndexType selectedIndexType,
+                                                                                 const int32_t selectedIndex)
+: Event(EventTypeEnum::EVENT_OVERLAY_SETTINGS_EDITOR_SHOW),
+m_mode(mode)
+{
+    m_browserWindowIndex = browserWindowIndex;
+    m_overlay = NULL;
+    m_chartOverlay = chartOverlay;
+    m_mapFile = mapFile;
+    m_chartSelectedIndexType = selectedIndexType;
+    m_selectedIndex = selectedIndex;
 }
 
 /*

@@ -21,6 +21,7 @@
  */
 /*LICENSE_END*/
 
+#include <QDateTime>
 
 #include <AString.h>
 
@@ -44,6 +45,8 @@ namespace caret {
         DataFile(const DataFile& s);
 
         DataFile& operator=(const DataFile&);
+        
+        void setFileNameProtected(const AString& filename);
         
     public:
         virtual AString getFileName() const;
@@ -90,17 +93,33 @@ namespace caret {
         
         void checkFileWritability(const AString& filename);
         
+        bool exists() const;
+        
+        void addFileReadWarning(const AString& warning);
+        
+        AString getFileReadWarnings() const;
+        
+        bool isModifiedSinceTimeOfLastReadOrWrite() const;
+        
     private:
         void copyHelperDataFile(const DataFile& df);
         
         void initializeMembersDataFile();
         
+        void setTimeOfLastReadOrWrite();
+        
+        QDateTime getLastModifiedTime() const;
+        
         /** name of data file */
-        AString filename;
+        AString m_filename;
+        
+        /** warnings set when file was read */
+        mutable AString m_fileReadWarnings;
         
         /** modification status */
-        bool modifiedFlag;
+        bool m_modifiedFlag;
         
+        QDateTime m_timeOfLastReadOrWrite;
     };
     
 } // namespace

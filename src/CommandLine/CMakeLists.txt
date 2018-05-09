@@ -6,17 +6,19 @@ PROJECT (CommandLine)
 
 #cmake_policy(SET CMP0015 OLD) 
 
-#
-# Need XML from Qt
-#
-#SET(QT_DONT_USE_QTGUI TRUE)
-SET(QT_USE_QTXML TRUE)
-SET(QT_USE_QTNETWORK TRUE)
 
 #
 # Add QT for includes
 #
-INCLUDE (${QT_USE_FILE})
+if(Qt5_FOUND)
+    include_directories(${Qt5Core_INCLUDE_DIRS})
+#    include_directories(${Qt5Network_INCLUDE_DIRS})
+endif()
+IF (QT4_FOUND)
+    SET(QT_USE_QTXML TRUE)
+    SET(QT_USE_QTNETWORK TRUE)
+    INCLUDE(${QT_USE_FILE})
+ENDIF ()
 
 #
 # Name of executable
@@ -26,7 +28,14 @@ set (EXE_NAME wb_command)
 #
 # Resources
 #
-QT4_ADD_RESOURCES(IMAGE_RCS_SRCS ../Resources/GeneralResources/general_resources.qrc)
+SET (RESOURCES_QRC_FILE ../Resources/General/general_resources.qrc)
+IF (Qt5_FOUND)
+    QT5_ADD_RESOURCES(IMAGE_RCS_SRCS ${RESOURCES_QRC_FILE})
+ELSE (Qt5_FOUND)
+    IF (QT4_FOUND)
+        QT4_ADD_RESOURCES(IMAGE_RCS_SRCS ${RESOURCES_QRC_FILE})
+    ENDIF()
+ENDIF (Qt5_FOUND)
 
 #
 # Create the executable
@@ -46,10 +55,37 @@ ELSE (APPLE)
 ENDIF (APPLE)
 
 
+if(Qt5_FOUND)
+    set(QT5_LINK_LIBS
+        Qt5::Concurrent
+        Qt5::Core
+        Qt5::Gui
+        Qt5::Network
+#        Qt5::OpenGL
+#        Qt5::PrintSupport
+        Qt5::Test
+#        Qt5::Widgets
+        Qt5::Xml)
+endif()
+
+SET (MESA_OR_OPENGL_LIBRARIES "")
+IF (OSMESA_FOUND)
+    SET(MESA_OR_OPENGL_LIBRARIES
+        ${OSMESA_OFFSCREEN_LIBRARY}
+        ${OSMESA_GL_LIBRARY}
+        ${OSMESA_GLU_LIBRARY})
+ELSE()
+    IF (OPENGL_FOUND)
+        SET(MESA_OR_OPENGL_LIBRARIES ${OPENGL_LIBRARIES})
+    ELSE()
+        MESSAGE(SEND_ERROR "Must have either OpenGL or Mesa3D for command line")
+    ENDIF()
+ENDIF()
+
 #
 # Libraries that are linked
-# Note: OSMESA library variables will be empty and have no effect
-# if OSMESA is not available
+# Note: GLEW_LIBRARIES and OSMESA library variables will be empty and
+# have no effect if not available
 #
 TARGET_LINK_LIBRARIES(${EXE_NAME}
 Commands
@@ -57,8 +93,9 @@ Operations
 Algorithms
 OperationsBase
 Brain
-${FTGL_LIBRARIES}
 Files
+Graphics
+${FTGL_LIBRARIES}
 Annotations
 Palette
 Gifti
@@ -72,15 +109,17 @@ Common
 ${QUAZIP_LIBRARIES}
 ${FREETYPE_LIBRARIES}
 ${QT_LIBRARIES}
-${OSMESA_OFFSCREEN_LIBRARY}
-${OSMESA_GL_LIBRARY}
-${OSMESA_GLU_LIBRARY}
+${QT5_LINK_LIBS}
+${GLEW_LIBRARIES}
+${MESA_OR_OPENGL_LIBRARIES}
 ${ZLIB_LIBRARIES}
 ${LIBS})
 
-INSTALL(TARGETS ${EXE_NAME} DESTINATION bin)
-INSTALL(PROGRAMS wb_shortcuts DESTINATION bin)
-INSTALL(PROGRAMS bashcomplete_wb_command DESTINATION /usr/share/bash-completion/completions RENAME wb_command)
+INCLUDE(GNUInstallDirs)
+
+INSTALL(TARGETS ${EXE_NAME} DESTINATION ${CMAKE_INSTALL_BINDIR})
+INSTALL(PROGRAMS wb_shortcuts DESTINATION ${CMAKE_INSTALL_BINDIR})
+INSTALL(FILES bashcomplete_wb_command DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/bash-completion/completions RENAME wb_command)
 
 #
 # Find Headers

@@ -34,6 +34,7 @@ class QAction;
 namespace caret {
 
     class Brain;
+    class BrainOpenGLViewportContent;
     class BrainOpenGLWidget;
     class BrowserTabContent;
     class CaretMappableDataFile;
@@ -49,8 +50,8 @@ namespace caret {
         Q_OBJECT
 
     public:
-        UserInputModeViewContextMenu(SelectionManager* selectionManager,
-                                     BrowserTabContent* browserTabContent,
+        UserInputModeViewContextMenu(BrainOpenGLViewportContent* viewportContent,
+                                     SelectionManager* selectionManager,
                                      BrainOpenGLWidget* parentOpenGLWidget);
         
         virtual ~UserInputModeViewContextMenu();
@@ -89,6 +90,8 @@ namespace caret {
         void borderCiftiConnectivitySelected();
 
         void borderDataSeriesSelected();
+        
+        void editChartLabelSelected();
         
     private:
         class ParcelConnectivity {
@@ -144,9 +147,14 @@ namespace caret {
         
         void addBorderRegionOfInterestActions();
         
+        void addChartActions();
+        
         void addFociActions();
         
         void addLabelRegionOfInterestActions();
+        
+        void addSubMenuToMenu(QMenu* menu,
+                              const bool addSeparatorBeforeMenu);
         
         void addActionsToMenu(QList<QAction*>& actionsToAdd,
                               const bool addSeparatorBeforeActions);
@@ -154,6 +162,8 @@ namespace caret {
         BrainOpenGLWidget* parentOpenGLWidget;
 
         std::vector<ParcelConnectivity*> parcelConnectivities;
+        
+        BrainOpenGLViewportContent* viewportContent;
         
         SelectionManager* selectionManager;
         

@@ -25,6 +25,8 @@
 #include "BrainBrowserWindowToolBarComponent.h"
 
 class QActionGroup;
+class QMenu;
+class QPixmap;
 
 namespace caret {
 
@@ -46,13 +48,27 @@ namespace caret {
         void volumePlaneActionGroupTriggered(QAction*);
         void volumePlaneResetToolButtonTriggered(bool checked);
         
+        void viewAllSliceLayoutMenuTriggered(QAction* action);
 
+        void volumeAxisCrosshairsTriggered(bool checked);
+        void volumeAxisCrosshairLabelsTriggered(bool checked);
+        
     private:
         BrainBrowserWindowToolBarSlicePlane(const BrainBrowserWindowToolBarSlicePlane&);
 
         BrainBrowserWindowToolBarSlicePlane& operator=(const BrainBrowserWindowToolBarSlicePlane&);
         
+        QMenu* createViewAllSlicesLayoutMenu();
+        
+        void updateViewAllSlicesLayoutMenu(BrowserTabContent* browserTabContent);
+        
+        QPixmap createCrosshairsIcon(const QWidget* widget);
+        
+        QPixmap createCrosshairLabelsIcon(const QWidget* widget);
+        
         BrainBrowserWindowToolBar* m_parentToolBar;
+        
+        std::vector<QAction*> m_viewAllSliceLayoutMenuActions;
         
         WuQWidgetObjectGroup* m_volumePlaneWidgetGroup;
         
@@ -61,6 +77,8 @@ namespace caret {
         QAction* m_volumePlaneAxialToolButtonAction;
         QAction* m_volumePlaneAllToolButtonAction;
         QAction* m_volumePlaneResetToolButtonAction;
+        QAction* m_volumeAxisCrosshairsToolButtonAction;
+        QAction* m_volumeAxisCrosshairLabelsToolButtonAction;
         
         QActionGroup* m_volumePlaneActionGroup;
         

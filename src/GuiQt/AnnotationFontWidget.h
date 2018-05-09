@@ -28,6 +28,7 @@
 
 #include "AnnotationWidgetParentEnum.h"
 #include "CaretColorEnum.h"
+#include "EventListenerInterface.h"
 
 class QToolButton;
 
@@ -38,9 +39,9 @@ namespace caret {
     class AnnotationText;
     class CaretColorEnumMenu;
     class EnumComboBoxTemplate;
-    class WuQSpecialIncrementDoubleSpinBox;
+    class WuQDoubleSpinBox;
     
-    class AnnotationFontWidget : public QWidget {
+    class AnnotationFontWidget : public QWidget, public EventListenerInterface {
         
         Q_OBJECT
 
@@ -53,6 +54,8 @@ namespace caret {
 
         void updateContent(std::vector<AnnotationFontAttributesInterface*>& annotations);
 
+        virtual void receiveEvent(Event* event) override;
+        
         // ADD_NEW_METHODS_HERE
         
     private slots:
@@ -74,11 +77,20 @@ namespace caret {
         AnnotationFontWidget& operator=(const AnnotationFontWidget&);
         
         void updateFontSizeSpinBox(const float value,
-                                   const bool haveMultipleValuesFlag);
+                                   const bool haveMultipleValuesFlag,
+                                   const bool tooSmallFontFlag);
         
         void updateTextColorButton();
         
+        void updateFontNameControls();
+        
+        void updateFontSizeControls();
+        
+        void updateFontStyleControls();
+        
         float getSurfaceMontageRowCount() const;
+        
+        static std::vector<Annotation*> convertToAnnotations(const std::vector<AnnotationFontAttributesInterface*>& fontInterfaces);
         
         const AnnotationWidgetParentEnum::Enum m_parentWidgetType;
         
@@ -86,7 +98,11 @@ namespace caret {
         
         EnumComboBoxTemplate* m_fontNameComboBox;
 
-        WuQSpecialIncrementDoubleSpinBox* m_fontSizeSpinBox;
+        WuQDoubleSpinBox* m_fontSizeSpinBox;
+        
+        QPalette m_fontSizeSpinBoxDefaultPalette;
+        
+        QPalette m_fontSizeSpinBoxRedTextPalette;
         
         QToolButton* m_textColorToolButton;
         
@@ -100,11 +116,17 @@ namespace caret {
         
         QAction* m_underlineFontAction;
         
-        /** Contains annotations */
-        std::vector<Annotation*> m_annotations;
+        /** Contains annotations supporting font name */
+        std::vector<AnnotationFontAttributesInterface*> m_annotationsFontName;
         
-        /** Contains annotations with type as font style */
+        /** Contains annotations supporting font style */
+        std::vector<AnnotationFontAttributesInterface*> m_annotationsFontSize;
+        
+        /** Contains annotations supporting font style */
         std::vector<AnnotationFontAttributesInterface*> m_annotationsFontStyle;
+        
+        /** Contains annotations supporting font color */
+        std::vector<AnnotationFontAttributesInterface*> m_annotationsFontColor;
         
         // ADD_NEW_MEMBERS_HERE
 

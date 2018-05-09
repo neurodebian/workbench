@@ -32,8 +32,10 @@
 #include "SceneableInterface.h"
 #include "StructureEnum.h"
 #include "VolumeSliceDrawingTypeEnum.h"
+#include "VolumeSliceInterpolationEdgeEffectsMaskingEnum.h"
 #include "VolumeSliceProjectionTypeEnum.h"
 #include "VolumeSliceViewPlaneEnum.h"
+#include "VolumeSliceViewAllPlanesLayoutEnum.h"
 #include "YokingGroupEnum.h"
 
 namespace caret {
@@ -42,9 +44,12 @@ namespace caret {
     class BrainOpenGLViewportContent;
     class CaretDataFile;
     class CaretMappableDataFile;
+    class ChartTwoMatrixDisplayProperties;
+    class ChartTwoOverlaySet;
     class ClippingPlaneGroup;
     class Matrix4x4;
     class ModelChart;
+    class ModelChartTwo;
     class ModelSurface;
     class ModelSurfaceMontage;
     class ModelSurfaceSelector;
@@ -92,6 +97,10 @@ namespace caret {
         
         const OverlaySet* getOverlaySet() const;
         
+        ChartTwoOverlaySet* getChartTwoOverlaySet();
+        
+        const ChartTwoOverlaySet* getChartTwoOverlaySet() const;
+        
         int32_t getTabNumber() const;
         
         ModelTypeEnum::Enum getSelectedModelType() const;
@@ -102,9 +111,13 @@ namespace caret {
         
         Model* getModelForDisplay();
         
-        ModelChart* getDisplayedChartModel();
+        ModelChart* getDisplayedChartOneModel();
         
-        const ModelChart* getDisplayedChartModel() const;
+        const ModelChart* getDisplayedChartOneModel() const;
+        
+        ModelChartTwo* getDisplayedChartTwoModel();
+        
+        const ModelChartTwo* getDisplayedChartTwoModel() const;
         
         ModelSurface* getDisplayedSurfaceModel();
         
@@ -128,7 +141,9 @@ namespace caret {
         
         bool isCerebellumDisplayed() const;
         
-        bool isChartDisplayed() const;
+        bool isChartOneDisplayed() const;
+        
+        bool isChartTwoDisplayed() const;
         
         bool isFlatSurfaceDisplayed() const;
         
@@ -140,7 +155,9 @@ namespace caret {
         
         void update(const std::vector<Model*> models);
         
-        bool isChartModelValid() const;
+        bool isChartOneModelValid() const;
+        
+        bool isChartTwoModelValid() const;
         
         bool isSurfaceModelValid() const;
         
@@ -270,9 +287,17 @@ namespace caret {
         
         void setTransformationsFromModelTransform(const ModelTransform& modelTransform);
         
+        ChartTwoMatrixDisplayProperties* getChartTwoMatrixDisplayProperties();
+
+        const ChartTwoMatrixDisplayProperties* getChartTwoMatrixDisplayProperties() const;
+        
         VolumeSliceViewPlaneEnum::Enum getSliceViewPlane() const;
         
         void setSliceViewPlane(VolumeSliceViewPlaneEnum::Enum sliceAxisMode);
+        
+        VolumeSliceViewAllPlanesLayoutEnum::Enum getSlicePlanesAllViewLayout() const;
+        
+        void setSlicePlanesAllViewLayout(const VolumeSliceViewAllPlanesLayoutEnum::Enum slicePlanesAllViewLayout);
         
         VolumeSliceDrawingTypeEnum::Enum getSliceDrawingType() const;
         
@@ -281,6 +306,10 @@ namespace caret {
         VolumeSliceProjectionTypeEnum::Enum getSliceProjectionType() const;
         
         void setSliceProjectionType(const VolumeSliceProjectionTypeEnum::Enum sliceProjectionType);
+        
+        VolumeSliceInterpolationEdgeEffectsMaskingEnum::Enum getVolumeSliceInterpolationEdgeEffectsMaskingType() const;
+        
+        void setVolumeSliceInterpolationEdgeEffectsMaskingType(const VolumeSliceInterpolationEdgeEffectsMaskingEnum::Enum maskingType);
         
         int32_t getMontageNumberOfColumns() const;
         
@@ -345,15 +374,41 @@ namespace caret {
         
         void setIdentificationUpdatesVolumeSlices(const bool status);
 
+        bool isVolumeAxesCrosshairsDisplayed() const;
+        
+        void setVolumeAxesCrosshairsDisplayed(const bool displayed);
+        
+        bool isVolumeAxesCrosshairLabelsDisplayed() const;
+        
+        void setVolumeAxesCrosshairLabelsDisplayed(const bool displayed);
+        
+        bool isVolumeMontageAxesCoordinatesDisplayed() const;
+        
+        void setVolumeMontageAxesCoordinatesDisplayed(const bool displayed);
+
+        int32_t getVolumeMontageCoordinatePrecision() const;
+        
+        void setVolumeMontageCoordinatePrecision(const int32_t volumeMontageCoordinatePrecision);
+        
+        bool isLightingEnabled() const;
+        
+        void setLightingEnabled(const bool lightingEnabled);
+        
         void reset();
 
-        void updateYokedBrowserTabs();
+        void updateChartModelYokedBrowserTabs();
         
-        bool isYoked() const;
+        bool isBrainModelYoked() const;
         
-        YokingGroupEnum::Enum getYokingGroup() const;
+        bool isChartModelYoked() const;
         
-        void setYokingGroup(const YokingGroupEnum::Enum yokingType);
+        YokingGroupEnum::Enum getBrainModelYokingGroup() const;
+        
+        void setBrainModelYokingGroup(const YokingGroupEnum::Enum brainModelYokingType);
+        
+        YokingGroupEnum::Enum getChartModelYokingGroup() const;
+        
+        void setChartModelYokingGroup(const YokingGroupEnum::Enum chartModelYokingType);
         
         bool isWholeBrainLeftEnabled() const;
         
@@ -401,14 +456,18 @@ namespace caret {
         
         BrowserTabContent& operator=(const BrowserTabContent&);
         
-        VolumeSliceViewPlaneEnum::Enum getSliceViewPlaneForVolumeAllSliceView(const int viewport[4],
-                                                                  const int32_t mousePressX,
-                                                                  const int32_t mousePressY,
-                                                                              int sliceViewportOut[4]) const;
+//        VolumeSliceViewPlaneEnum::Enum getSliceViewPlaneForVolumeAllSliceView(const int viewport[4],
+//                                                                  const int32_t mousePressX,
+//                                                                  const int32_t mousePressY,
+//                                                                              int sliceViewportOut[4]) const;
         
         ViewingTransformations* getViewingTransformation();
         
         const ViewingTransformations* getViewingTransformation() const;
+        
+        void updateBrainModelYokedBrowserTabs();
+        
+        void updateYokedModelBrowserTabs();
         
         AString getDefaultName() const;
         
@@ -436,6 +495,9 @@ namespace caret {
         /** The chart model */
         ModelChart* m_chartModel;
         
+        /** The chart two model */
+        ModelChartTwo* m_chartTwoModel;
+        
         /** 
          * Name requested by user interface - reflects contents 
          * such as Surface, Volume Slices, etc
@@ -457,8 +519,11 @@ namespace caret {
          */
         Matrix4x4* m_obliqueVolumeRotationMatrix;
         
-        /** Yoking group */
-        YokingGroupEnum::Enum m_yokingGroup;
+        /** Brain Model Yoking group */
+        YokingGroupEnum::Enum m_brainModelYokingGroup;
+        
+        /** Chart Model Yoking group */
+        YokingGroupEnum::Enum m_chartModelYokingGroup;
         
         /** Volume Surface Outlines */
         VolumeSurfaceOutlineSetModel* m_volumeSurfaceOutlineSetModel;
@@ -478,6 +543,12 @@ namespace caret {
         /** Transformation for volume slices viewing */
         ViewingTransformationsVolume* m_volumeSliceViewingTransformation;
 
+        /** Transformation for matrix chart two viewing */
+        ViewingTransformations* m_chartTwoMatrixViewingTranformation;
+        
+        /** Display properties for chart two matrix */
+        ChartTwoMatrixDisplayProperties* m_chartTwoMatrixDisplayProperties;
+        
         /** Volume slice settings for volume slices */
         VolumeSliceSettings* m_volumeSliceSettings;
         
@@ -495,6 +566,21 @@ namespace caret {
          *  of the identification operation.
          */
         bool m_identificationUpdatesVolumeSlices;
+        
+        /** display crosshairs on volume slices */
+        bool m_displayVolumeAxesCrosshairs;
+        
+        /** display crosshair labels on volume slices */
+        bool m_displayVolumeAxesCrosshairLabels;
+        
+        /** display coordinates on montage */
+        bool m_displayVolumeMontageAxesCoordinates;
+        
+        /** precision for coordinate on montage */
+        int32_t m_volumeMontageCoordinatePrecision;
+        
+        /** enable lighting (shading) added 29 March 2018 */
+        bool m_lightingEnabled;
         
         /*
          * True if constructing an instance

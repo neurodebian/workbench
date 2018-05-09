@@ -87,13 +87,15 @@ DisplayPropertiesAnnotation::updateForNewAnnotation(const Annotation* annotation
     CaretAssert(annotation);
     
     switch (annotation->getCoordinateSpace()) {
-        case AnnotationCoordinateSpaceEnum::PIXELS:
+        case AnnotationCoordinateSpaceEnum::CHART:
             break;
         case AnnotationCoordinateSpaceEnum::STEREOTAXIC:
             break;
         case AnnotationCoordinateSpaceEnum::SURFACE:
             break;
         case AnnotationCoordinateSpaceEnum::TAB:
+            break;
+        case AnnotationCoordinateSpaceEnum::VIEWPORT:
             break;
         case AnnotationCoordinateSpaceEnum::WINDOW:
             setDisplayWindowAnnotationsInSingleTabViews(annotation->getWindowIndex(),
@@ -133,7 +135,7 @@ DisplayPropertiesAnnotation::resetPrivate()
         m_displayWindowAnnotationsInSingleTabViews[i] = true;
     }
     for (int32_t i = 0; i < BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_TABS; i++) {
-        m_displayGroup[i] = DisplayGroupEnum::getDefaultValue();
+        m_displayGroup[i] = DisplayGroupEnum::DISPLAY_GROUP_TAB;
     }
 }
 
@@ -362,10 +364,6 @@ DisplayPropertiesAnnotation::restoreVersionOne(const SceneClass* sceneClass)
         surfaceStatusInTab[i] = true;
         tabStatusInTab[i]     = true;
     }
-    bool windowStatusInTab[BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_WINDOWS];
-    for (int32_t i = 0; i < BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_WINDOWS; i++) {
-        windowStatusInTab[i] = true;
-    }
     
     /*
      * Look for version one selections in the scene
@@ -414,8 +412,8 @@ DisplayPropertiesAnnotation::restoreVersionOne(const SceneClass* sceneClass)
          annIter++) {
         Annotation* ann = *annIter;
         switch (ann->getCoordinateSpace()) {
-            case AnnotationCoordinateSpaceEnum::PIXELS:
-                CaretAssert(0);
+            case AnnotationCoordinateSpaceEnum::CHART:
+                CaretAssertMessage(0, "This should never happen as CHART SPACE was never available in a version one scene");
                 break;
             case AnnotationCoordinateSpaceEnum::STEREOTAXIC:
             if (stereoAnnDisplay != NULL) {
@@ -457,6 +455,12 @@ DisplayPropertiesAnnotation::restoreVersionOne(const SceneClass* sceneClass)
                                                 triStatus);
                 }
             }
+                break;
+            case AnnotationCoordinateSpaceEnum::VIEWPORT:
+                /*
+                 * Ignore annotations in viewport space.  These are usually text annotations
+                 * in the graphics region such as chart labels.
+                 */
                 break;
             case AnnotationCoordinateSpaceEnum::WINDOW:
             if (numWindowStatus) {

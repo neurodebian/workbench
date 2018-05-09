@@ -34,6 +34,7 @@
 #include "CaretLogger.h"
 #include "EventAlertUser.h"
 #include "EventListenerInterface.h"
+#include "SystemUtilities.h"
 
 using namespace caret;
 /**
@@ -175,12 +176,6 @@ EventManager::addEventListener(EventListenerInterface* eventListener,
 #else
     INTENTIONAL_COMPILER_ERROR_MISSING_CONTAINER_TYPE
 #endif
-    
-    //std::cout << "Adding listener from class "
-    //<< typeid(*eventListener).name()
-    //<< " for "
-    //<< EventTypeEnum::toName(listenForEventType)
-    //<< std::endl;
 }
 
 /**
@@ -205,12 +200,6 @@ EventManager::addProcessedEventListener(EventListenerInterface* eventListener,
 #else
     INTENTIONAL_COMPILER_ERROR_MISSING_CONTAINER_TYPE
 #endif
-    
-    //std::cout << "Adding listener from class "
-    //<< typeid(*eventListener).name()
-    //<< " for "
-    //<< EventTypeEnum::toName(listenForEventType)
-    //<< std::endl;
 }
 
 /**
@@ -248,59 +237,6 @@ EventManager::removeEventFromListener(EventListenerInterface* eventListener,
     if (processedEventIter != processedListeners.end()) {
         processedListeners.erase(processedEventIter);
     }
-    
-//    EVENT_LISTENER_CONTAINER listeners = m_eventListeners[listenForEventType];
-//    
-//    /*
-//     * Remove the listener by creating a new container
-//     * of non-matching listeners.
-//     */
-//    EVENT_LISTENER_CONTAINER updatedListeners;
-//    for (EVENT_LISTENER_CONTAINER_ITERATOR iter = listeners.begin();
-//         iter != listeners.end();
-//         iter++) {
-//        if (*iter == eventListener) {
-//            //std::cout << "Removing listener from class "
-//            //<< typeid(*eventListener).name()
-//            //<< " for "
-//            //<< EventTypeEnum::toName(listenForEventType)
-//            //<< std::endl;
-//        }
-//        else {
-//            updatedListeners.push_back(*iter);
-//        }
-//    }
-//    
-//    if (updatedListeners.size() != listeners.size()) {
-//        m_eventListeners[listenForEventType] = updatedListeners;
-//    }
-//    
-//    
-//    EVENT_LISTENER_CONTAINER processedListeners = m_eventProcessedListeners[listenForEventType];
-//    
-//    /*
-//     * Remove the listener by creating a new container
-//     * of non-matching listeners.
-//     */
-//    EVENT_LISTENER_CONTAINER updatedProcessedListeners;
-//    for (EVENT_LISTENER_CONTAINER_ITERATOR iter = processedListeners.begin();
-//         iter != processedListeners.end();
-//         iter++) {
-//        if (*iter == eventListener) {
-//            //std::cout << "Removing listener from class "
-//            //<< typeid(*eventListener).name()
-//            //<< " for "
-//            //<< EventTypeEnum::toName(listenForEventType)
-//            //<< std::endl;
-//        }
-//        else {
-//            updatedProcessedListeners.push_back(*iter);
-//        }
-//    }
-//    
-//    if (updatedProcessedListeners.size() != processedListeners.size()) {
-//        m_eventProcessedListeners[listenForEventType] = updatedProcessedListeners;
-//    }
 #elif CONTAINER_HASH_SET
     m_eventListeners[listenForEventType].erase(eventListener);
     m_eventProcessedListeners[listenForEventType].erase(eventListener);
@@ -374,11 +310,6 @@ EventManager::sendEvent(Event* event)
         
         const AString eventNumberString = AString::number(m_eventIssuedCounter);
         
-        // Too many prints (JWH)
-        //AString msg = (eventMessagePrefix + " SENT.");
-        //CaretLogFiner(msg);
-        //std::cout << msg << std::endl;
-        
         /*
          * Send event to each of the listeners.
          */
@@ -386,14 +317,7 @@ EventManager::sendEvent(Event* event)
              iter != listeners.end();
              iter++) {
             EventListenerInterface* listener = *iter;
-            
-            //std::cout << "Sending event from class "
-            //<< typeid(*listener).name()
-            //<< " for "
-            //<< EventTypeEnum::toName(eventType)
-            //<< std::endl;
-            
-            
+
             listener->receiveEvent(event);
             
             if (event->isError()) {
@@ -414,14 +338,6 @@ EventManager::sendEvent(Event* event)
                  iter != processedListeners.end();
                  iter++) {
                 EventListenerInterface* listener = *iter;
-                
-                //std::cout << "Sending event from class "
-                //<< typeid(*listener).name()
-                //<< " for "
-                //<< EventTypeEnum::toName(eventType)
-                //<< std::endl;
-                
-                
                 listener->receiveEvent(event);
                 
                 if (event->isError()) {
@@ -431,7 +347,6 @@ EventManager::sendEvent(Event* event)
             }
         }
         else {
-            // Too many prints (JWH) CaretLogFine("Event " + eventNumberString + " not processed: " + event->toString());
         }
 
         m_eventIssuedCounter++;
@@ -469,6 +384,7 @@ EventManager::sendSimpleEvent(const EventTypeEnum::Enum eventType)
             break;
         case EventTypeEnum::EVENT_ALERT_USER:
         case EventTypeEnum::EVENT_ANNOTATION_ADD_TO_REMOVE_FROM_FILE:
+        case EventTypeEnum::EVENT_ANNOTATION_CHART_LABEL_GET:
         case EventTypeEnum::EVENT_ANNOTATION_COLOR_BAR_GET:
         case EventTypeEnum::EVENT_ANNOTATION_CREATE_NEW_TYPE:
         case EventTypeEnum::EVENT_ANNOTATION_GET_DRAWN_IN_WINDOW:
@@ -482,13 +398,21 @@ EventManager::sendSimpleEvent(const EventTypeEnum::Enum eventType)
         case EventTypeEnum::EVENT_BROWSER_TAB_GET_ALL_VIEWED:
         case EventTypeEnum::EVENT_BROWSER_TAB_INDICES_GET_ALL:
         case EventTypeEnum::EVENT_BROWSER_TAB_NEW:
-        case EventTypeEnum::EVENT_BROWSER_WINDOW_CONTENT_GET:
+        case EventTypeEnum::EVENT_BROWSER_WINDOW_CONTENT:
         case EventTypeEnum::EVENT_BROWSER_WINDOW_CREATE_TABS:
+        case EventTypeEnum::EVENT_BROWSER_WINDOW_DRAWING_CONTENT_GET:
         case EventTypeEnum::EVENT_BROWSER_WINDOW_GRAPHICS_HAVE_BEEN_REDRAWN:
         case EventTypeEnum::EVENT_BROWSER_WINDOW_NEW:
+        case EventTypeEnum::EVENT_BROWSER_WINDOW_TILE_TAB_OPERATION:
+        case EventTypeEnum::EVENT_CARET_DATA_FILES_GET:
         case EventTypeEnum::EVENT_CARET_MAPPABLE_DATA_FILES_GET:
         case EventTypeEnum::EVENT_CARET_MAPPABLE_DATA_FILE_MAPS_VIEWED_IN_OVERLAYS:
+        case EventTypeEnum::EVENT_CARET_PREFERENCES_GET:
         case EventTypeEnum::EVENT_CHART_MATRIX_YOKING_VALIDATION:
+        case EventTypeEnum::EVENT_CHART_OVERLAY_VALIDATE:
+        case EventTypeEnum::EVENT_CHART_TWO_ATTRIBUTES_CHANGED:
+        case EventTypeEnum::EVENT_CHART_TWO_AXIS_GET_DATA_RANGE:
+        case EventTypeEnum::EVENT_CHART_TWO_LOAD_LINE_SERIES_DATA:
         case EventTypeEnum::EVENT_DATA_FILE_ADD:
         case EventTypeEnum::EVENT_DATA_FILE_DELETE:
         case EventTypeEnum::EVENT_DATA_FILE_READ:
@@ -498,6 +422,10 @@ EventManager::sendSimpleEvent(const EventTypeEnum::Enum eventType)
         case EventTypeEnum::EVENT_GET_OR_SET_USER_INPUT_MODE:
         case EventTypeEnum::EVENT_GET_TEXT_RENDERER_FOR_WINDOW:
         case EventTypeEnum::EVENT_GET_VIEWPORT_SIZE:
+        case EventTypeEnum::EVENT_GRAPHICS_OPENGL_CREATE_BUFFER_OBJECT:
+        case EventTypeEnum::EVENT_GRAPHICS_OPENGL_CREATE_TEXTURE_NAME:
+        case EventTypeEnum::EVENT_GRAPHICS_OPENGL_DELETE_BUFFER_OBJECT:
+        case EventTypeEnum::EVENT_GRAPHICS_OPENGL_DELETE_TEXTURE_NAME:
         case EventTypeEnum::EVENT_GRAPHICS_UPDATE_ALL_WINDOWS:
         case EventTypeEnum::EVENT_GRAPHICS_UPDATE_ONE_WINDOW:
         case EventTypeEnum::EVENT_HELP_VIEWER_DISPLAY:
@@ -511,14 +439,16 @@ EventManager::sendSimpleEvent(const EventTypeEnum::Enum eventType)
         case EventTypeEnum::EVENT_MODEL_ADD:
         case EventTypeEnum::EVENT_MODEL_DELETE:
         case EventTypeEnum::EVENT_MODEL_GET_ALL:
+        case EventTypeEnum::EVENT_MODEL_GET_ALL_DISPLAYED:
         case EventTypeEnum::EVENT_MODEL_SURFACE_GET:
         case EventTypeEnum::EVENT_NODE_IDENTIFICATION_COLORS_GET_FROM_CHARTS:
-        case EventTypeEnum::EVENT_OPENGL_TEXTURE:
+        case EventTypeEnum::EVENT_OPENGL_OBJECT_TO_WINDOW_TRANSFORM:
         case EventTypeEnum::EVENT_OPERATING_SYSTEM_REQUEST_OPEN_DATA_FILE:
         case EventTypeEnum::EVENT_OVERLAY_SETTINGS_EDITOR_SHOW:
         case EventTypeEnum::EVENT_OVERLAY_VALIDATE:
         case EventTypeEnum::EVENT_PALETTE_COLOR_MAPPING_EDITOR_SHOW:
         case EventTypeEnum::EVENT_PALETTE_GET_BY_NAME:
+        case EventTypeEnum::EVENT_SHOW_FILE_DATA_READ_WARNING_DIALOG:
         case EventTypeEnum::EVENT_SPEC_FILE_READ_DATA_FILES:
         case EventTypeEnum::EVENT_SURFACE_COLORING_INVALIDATE:
         case EventTypeEnum::EVENT_SURFACES_GET:
@@ -527,8 +457,8 @@ EventManager::sendSimpleEvent(const EventTypeEnum::Enum eventType)
         case EventTypeEnum::EVENT_USER_INTERFACE_UPDATE:
         case EventTypeEnum::EVENT_PROGRESS_UPDATE:
         case EventTypeEnum::EVENT_UPDATE_INFORMATION_WINDOWS:
-        case EventTypeEnum::EVENT_UPDATE_YOKED_WINDOWS:
         case EventTypeEnum::EVENT_UPDATE_VOLUME_EDITING_TOOLBAR:
+        case EventTypeEnum::EVENT_UPDATE_YOKED_WINDOWS:
         {
             const AString msg(EventTypeEnum::toName(eventType)
                               + " has an special subclass of class Event and should never be sent as an event.");
@@ -597,6 +527,37 @@ int64_t
 EventManager::getEventIssuedCounter() const
 {
     return m_eventIssuedCounter;
+}
+
+/**
+ * Verify that all listeners have been removed from the given event listener.
+ *
+ * @param eventListener
+ *     The event listener.
+ */
+void
+EventManager::verifyAllListenersRemoved(EventListenerInterface* eventListener)
+{
+    AString eventNames;
+    
+    for (int32_t i = 0; i < EventTypeEnum::EVENT_COUNT; i++) {
+        const EventTypeEnum::Enum eventType = static_cast<EventTypeEnum::Enum>(i);
+        if ((m_eventListeners[eventType].find(eventListener) != m_eventListeners[eventType].end())
+            || (m_eventProcessedListeners[eventType].find(eventListener) != m_eventProcessedListeners[eventType].end())) {
+            eventNames.appendWithNewLine("    "
+                                  + EventTypeEnum::toName(eventType));
+        }
+    }
+    
+    if ( ! eventNames.isEmpty()) {
+        SystemBacktrace myBacktrace;
+        SystemUtilities::getBackTrace(myBacktrace);
+        
+        CaretLogSevere("Failed to remove events from class instance.  Event names:\n"
+                       + eventNames
+                       + ":\n"
+                       + myBacktrace.toSymbolString());
+    }
 }
 
 

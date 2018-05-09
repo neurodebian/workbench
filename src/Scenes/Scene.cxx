@@ -231,14 +231,16 @@ SomeClass::restoreFromScene(const SceneAttributes* sceneAttributes,
  *    Type of scene.
  */
 Scene::Scene(const SceneTypeEnum::Enum sceneType)
-: CaretObject()
+:CaretObjectTracksModification()
 {
-    m_sceneAttributes = new SceneAttributes(sceneType);
+    m_sceneAttributes = new SceneAttributes(sceneType,
+                                            this);
     m_hasFilesWithRemotePaths = false;
     m_sceneInfo = new SceneInfo();
 }
 
-Scene::Scene(const Scene& rhs) : CaretObject()
+Scene::Scene(const Scene& rhs)
+:CaretObjectTracksModification()
 {
     m_sceneAttributes = new SceneAttributes(*(rhs.m_sceneAttributes));
     m_hasFilesWithRemotePaths = rhs.m_hasFilesWithRemotePaths;
@@ -266,6 +268,28 @@ Scene::~Scene()
 }
 
 /**
+ * @return All descendant SceneClasses (children, grandchildren, etc.) of this instance.
+ */
+std::vector<SceneObject*>
+Scene::getDescendants() const
+{
+    std::vector<SceneObject*> descendants;
+    
+    const int32_t numberOfSceneClasses = this->getNumberOfClasses();
+    for (int32_t i = 0; i < numberOfSceneClasses; i++) {
+        SceneObject* object = m_sceneClasses[i];
+        descendants.push_back(object);
+        
+        std::vector<SceneObject*> objectDescendants = object->getDescendants();
+        descendants.insert(descendants.end(),
+                           objectDescendants.begin(),
+                           objectDescendants.end());
+    }
+    
+    return descendants;
+}
+
+/**
  * @return Attributes of the scene
  */
 const SceneAttributes*
@@ -288,6 +312,7 @@ Scene::addClass(SceneClass* sceneClass)
 {
     if (sceneClass != NULL) {
         m_sceneClasses.push_back(sceneClass);
+        setModified();
     }
 }
 
@@ -311,6 +336,7 @@ const SceneClass*
 Scene::getClassAtIndex(const int32_t indx) const
 {
     CaretAssertVectorIndex(m_sceneClasses, indx);
+    m_sceneClasses[indx]->setRestored(true);
     return m_sceneClasses[indx];
 }
 
@@ -326,6 +352,7 @@ Scene::getClassWithName(const AString& sceneClassName) const
     const int32_t numberOfSceneClasses = this->getNumberOfClasses();
     for (int32_t i = 0; i < numberOfSceneClasses; i++) {
         if (m_sceneClasses[i]->getName() == sceneClassName) {
+            m_sceneClasses[i]->setRestored(true);
             return m_sceneClasses[i];
         }
     }
@@ -469,6 +496,33 @@ Scene::setSceneInfo(SceneInfo* sceneInfo)
         delete m_sceneInfo;
     }
     m_sceneInfo = sceneInfo;
+    setModified();
+}
+
+/**
+ * @return True if this scene is modified.
+ */
+bool
+Scene::isModified() const
+{
+    if (CaretObjectTracksModification::isModified()) {
+        return true;
+    }
+    if (m_sceneInfo->isModified()) {
+        return true;
+    }
+    
+    return false;
+}
+
+/**
+ * Clear the modified status of this scene.
+ */
+void
+Scene::clearModified()
+{
+    CaretObjectTracksModification::clearModified();
+    m_sceneInfo->clearModified();
 }
 
 

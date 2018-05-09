@@ -124,7 +124,12 @@ Annotation::copyHelperAnnotation(const Annotation& obj)
     m_coordinateSpace     = obj.m_coordinateSpace;
     m_tabIndex            = obj.m_tabIndex;
     m_windowIndex         = obj.m_windowIndex;
-    m_lineWidth = obj.m_lineWidth;
+    m_viewportCoordinateSpaceViewport[0] = obj.m_viewportCoordinateSpaceViewport[0];
+    m_viewportCoordinateSpaceViewport[1] = obj.m_viewportCoordinateSpaceViewport[1];
+    m_viewportCoordinateSpaceViewport[2] = obj.m_viewportCoordinateSpaceViewport[2];
+    m_viewportCoordinateSpaceViewport[3] = obj.m_viewportCoordinateSpaceViewport[3];
+    m_lineWidthPixels = obj.m_lineWidthPixels;
+    m_lineWidthPercentage = obj.m_lineWidthPercentage;
     m_colorLine           = obj.m_colorLine;
     m_colorBackground     = obj.m_colorBackground;
     m_customColorBackground[0]  = obj.m_customColorBackground[0];
@@ -136,6 +141,8 @@ Annotation::copyHelperAnnotation(const Annotation& obj)
     m_customColorLine[2]  = obj.m_customColorLine[2];
     m_customColorLine[3]  = obj.m_customColorLine[3];
 
+    m_properties = obj.m_properties;
+    
     *m_displayGroupAndTabItemHelper = *obj.m_displayGroupAndTabItemHelper;
     
     /*
@@ -210,6 +217,13 @@ Annotation::clone() const
                     myClone = new AnnotationPercentSizeText(*pctText);
                 }
                     break;
+                case AnnotationTextFontSizeTypeEnum::PERCENTAGE_OF_VIEWPORT_WIDTH:
+                {
+                    const AnnotationPercentSizeText* pctText = dynamic_cast<const AnnotationPercentSizeText*>(text);
+                    CaretAssert(pctText);
+                    myClone = new AnnotationPercentSizeText(*pctText);
+                }
+                    break;
                 case AnnotationTextFontSizeTypeEnum::POINTS:
                 {
                     const AnnotationPointSizeText* pointText = dynamic_cast<const AnnotationPointSizeText*>(text);
@@ -252,17 +266,20 @@ Annotation::replaceWithCopyOfAnnotation(const Annotation* annotation)
 }
 
 /**
- * @return Is this annotation deletable?  This method may be overridden
- * by annotations (such as colorbars) that cannot be deleted.
+ * Set this instance modified.
  */
-bool
-Annotation::isDeletable() const
+void
+Annotation::setModified()
 {
-    return true;
+    /*
+     * While this method does not need to be overridden, 
+     * doing so enables debugging of invalid modification status.
+     */
+    CaretObjectTracksModification::setModified();
 }
 
 /**
- * @return Is this annotation requiring that it be kept in a fixed 
+ * @return Is this annotation requiring that it be kept in a fixed
  * aspect ratio?  By default, this is false.  This method may be 
  * overridden by annotations that require a fixed aspect ratio
  * (such as an image annotaiton).
@@ -299,7 +316,8 @@ Annotation::applyColoringFromOther(const Annotation* otherAnnotation)
 
     m_colorBackground     = otherAnnotation->m_colorBackground;
     m_colorLine     = otherAnnotation->m_colorLine;
-    m_lineWidth = otherAnnotation->m_lineWidth;
+    m_lineWidthPixels = otherAnnotation->m_lineWidthPixels;
+    m_lineWidthPercentage = otherAnnotation->m_lineWidthPercentage;
     
     for (int32_t i = 0; i < 4; i++) {
         m_customColorBackground[i] = otherAnnotation->m_customColorBackground[i];
@@ -366,6 +384,10 @@ Annotation::initializeAnnotationMembers()
     
     m_tabIndex    = -1;
     m_windowIndex = -1;
+    m_viewportCoordinateSpaceViewport[0] = 0;
+    m_viewportCoordinateSpaceViewport[1] = 0;
+    m_viewportCoordinateSpaceViewport[2] = 0;
+    m_viewportCoordinateSpaceViewport[3] = 0;
     
     m_displayGroupAndTabItemHelper = new DisplayGroupAndTabItemHelper();
     
@@ -383,7 +405,8 @@ Annotation::initializeAnnotationMembers()
     
     switch (m_attributeDefaultType) {
         case AnnotationAttributesDefaultTypeEnum::NORMAL:
-            m_lineWidth = 3.0;
+            m_lineWidthPixels = 3.0;
+            m_lineWidthPercentage = 1.0;
             
             m_colorBackground = CaretColorEnum::NONE;
             m_colorLine = CaretColorEnum::WHITE;
@@ -418,7 +441,8 @@ Annotation::initializeAnnotationMembers()
             break;
         case AnnotationAttributesDefaultTypeEnum::USER:
         {
-            m_lineWidth = s_userDefaultLineWidth;
+            m_lineWidthPixels = s_userDefaultLineWidthPixelsObsolete;
+            m_lineWidthPercentage = s_userDefaultLineWidthPercentage;
             
             m_colorBackground = s_userDefaultColorBackground;
             m_colorLine = s_userDefaultColorLine;
@@ -510,6 +534,12 @@ Annotation::initializeAnnotationMembers()
         }
     }
     
+    initializeProperties();
+    
+    if (m_coordinateSpace == AnnotationCoordinateSpaceEnum::VIEWPORT) {
+        setPropertiesForSpecializedUsage(PropertiesSpecializedUsage::VIEWPORT_ANNOTATION);
+    }
+    
     /*
      * Note: The 'const' members are not saved to the scene as they 
      * are set by constructor.
@@ -523,7 +553,7 @@ Annotation::initializeAnnotationMembers()
     m_sceneAssistant->add("m_displayGroupAndTabItemHelper",
                           "DisplayGroupAndTabItemHelper",
                           m_displayGroupAndTabItemHelper);
-    if (m_type == AnnotationTypeEnum::COLOR_BAR) {
+    if (testProperty(Property::SCENE_CONTAINS_ATTRIBUTES)) {
         m_sceneAssistant->add<AnnotationCoordinateSpaceEnum, AnnotationCoordinateSpaceEnum::Enum>("m_coordinateSpace",
                                                                                                   &m_coordinateSpace);
         m_sceneAssistant->add<CaretColorEnum, CaretColorEnum::Enum>("m_colorBackground",
@@ -629,6 +659,8 @@ Annotation::setCoordinateSpace(const AnnotationCoordinateSpaceEnum::Enum coordin
 {
     if (m_coordinateSpace != coordinateSpace) {
         m_coordinateSpace = coordinateSpace;
+        CaretAssertMessage((m_coordinateSpace != AnnotationCoordinateSpaceEnum::VIEWPORT),
+                           "Annotation coordinate space should never change to VIEWPORT space.");
         setModified();
     }
 }
@@ -680,6 +712,41 @@ Annotation::setWindowIndex(const int32_t windowIndex)
 }
 
 /**
+ * Get the viewport used by an annotation in viewport coordinate space.
+ *
+ * @param viewportOut
+ *     Ouput with the viewport.
+ */
+void
+Annotation::getViewportCoordinateSpaceViewport(int viewportOut[4]) const
+{
+    viewportOut[0] = m_viewportCoordinateSpaceViewport[0];
+    viewportOut[1] = m_viewportCoordinateSpaceViewport[1];
+    viewportOut[2] = m_viewportCoordinateSpaceViewport[2];
+    viewportOut[3] = m_viewportCoordinateSpaceViewport[3];
+}
+
+/**
+ * Set the viewport used by an annotation in viewport coordinate space.
+ *
+ * @param viewport
+ *     Input with the viewport.
+ */
+void
+Annotation::setViewportCoordinateSpaceViewport(const int viewport[4])
+{
+    if ((m_viewportCoordinateSpaceViewport[0] != viewport[0])
+        || (m_viewportCoordinateSpaceViewport[1] != viewport[1])
+        || (m_viewportCoordinateSpaceViewport[2] != viewport[2])
+        || (m_viewportCoordinateSpaceViewport[3] != viewport[3])) {
+        m_viewportCoordinateSpaceViewport[0] = viewport[0];
+        m_viewportCoordinateSpaceViewport[1] = viewport[1];
+        m_viewportCoordinateSpaceViewport[2] = viewport[2];
+        m_viewportCoordinateSpaceViewport[3] = viewport[3];
+    }
+}
+
+/**
  * Get a description of this object's content.
  * @return String describing this object's content.
  */
@@ -700,53 +767,81 @@ Annotation::toString() const
 }
 
 /**
- * @return The line width.
+ * Convert the annotation's obsolete line width that was in pixels to a percentage of viewport height.
+ * Prior to late July, 2017, a line was specified in pixels.
+ *
+ * First, the annotation's percentage width is examined.  If it is valid (greater than zero), then
+ * no conversion is needed.  Otherwise, use the viewport height to convert the pixel width to a
+ * percentage and set the annotation's percentage line width.
+ *
+ * Note that even though this method is 'const' it may cause the modification status to change
+ * to modified.
+ *
+ * @param viewportHeight
+ *     The height of the viewport in pixels.
+ */
+void
+Annotation::convertObsoleteLineWidthPixelsToPercentageWidth(const float viewportHeight) const
+{
+    if (m_lineWidthPercentage > 0.0f) {
+        return;
+    }
+    
+    float percentWidth = 1.0f;
+    if (viewportHeight > 0.0f) {
+        percentWidth = (m_lineWidthPixels / viewportHeight) * 100.0f;
+    }
+    
+    const_cast<Annotation*>(this)->setLineWidthPercentage(percentWidth);
+}
+
+
+/**
+ * @return The line width in pixels.
  */
 float
-Annotation::getLineWidth() const
+Annotation::getLineWidthPixelsObsolete() const
 {
-    return m_lineWidth;
+    return m_lineWidthPixels;
 }
 
 /**
- * Set the line width.
+ * Set the line width in pixels.
  *
  * @param lineWidth
  *    New value for line width.
  */
 void
-Annotation::setLineWidth(const float lineWidth)
+Annotation::setLineWidthPixelsObsolete(const float lineWidth)
 {
-    if (lineWidth != m_lineWidth) {
-        m_lineWidth = lineWidth;
+    if (lineWidth != m_lineWidthPixels) {
+        m_lineWidthPixels = lineWidth;
         setModified();
     }
 }
 
 /**
- * @return Is line width supported?
- * Most annotations support a line width.
- * Annotations that do not support a line width
- * must override this method and return a value of false.
+ * @return The line width percentage.
  */
-bool
-Annotation::isLineWidthSupported() const
+float
+Annotation::getLineWidthPercentage() const
 {
-    return true;
+    return m_lineWidthPercentage;
 }
 
 /**
- * @return Is background color supported?
- * Most annotations support a background color.
- * Annotations that do not support a background color
- * must override this method and return a value of false.
+ * Set the line width percentage.
+ *
+ * @param lineWidthPercentage
+ *    New value for line width percentage.
  */
-bool
-Annotation::isBackgroundColorSupported() const
+void
+Annotation::setLineWidthPercentage(const float lineWidthPercentage)
 {
-    return true;
+    if (lineWidthPercentage != m_lineWidthPercentage) {
+        m_lineWidthPercentage = lineWidthPercentage;
+    }
 }
-
 
 /**
  * @return The line color.
@@ -808,7 +903,7 @@ Annotation::getLineColorRGBA(float rgbaOut[4]) const
         case CaretColorEnum::TEAL:
         case CaretColorEnum::WHITE:
         case CaretColorEnum::YELLOW:
-            CaretColorEnum::toRGBFloat(m_colorLine,
+            CaretColorEnum::toRGBAFloat(m_colorLine,
                                        rgbaOut);
             rgbaOut[3] = 1.0;
             break;
@@ -894,7 +989,7 @@ Annotation::getBackgroundColorRGBA(float rgbaOut[4]) const
         case CaretColorEnum::TEAL:
         case CaretColorEnum::WHITE:
         case CaretColorEnum::YELLOW:
-            CaretColorEnum::toRGBFloat(m_colorBackground,
+            CaretColorEnum::toRGBAFloat(m_colorBackground,
                                        rgbaOut);
             rgbaOut[3] = 1.0;
             break;
@@ -1051,6 +1146,242 @@ Annotation::setCustomBackgroundColor(const uint8_t rgba[4])
         }
     }
 }
+
+/**
+ * Initialize properties.
+ */
+void
+Annotation::initializeProperties()
+{
+    /*
+     * Initialize all properties on/supported
+     */
+    CaretAssert(m_properties.size() >= static_cast<std::underlying_type<Property>::type>(Property::COUNT_FOR_BITSET));
+    m_properties.set();
+    
+    bool colorBarFlag = false;
+    bool fillColorFlag = true;
+    bool lineArrowsFlag = false;
+    bool textFlag = false;
+    switch (m_type) {
+        case AnnotationTypeEnum::BOX:
+            break;
+        case AnnotationTypeEnum::COLOR_BAR:
+            colorBarFlag = true;
+            break;
+        case AnnotationTypeEnum::IMAGE:
+            fillColorFlag = false;
+            break;
+        case AnnotationTypeEnum::LINE:
+            fillColorFlag = false;
+            lineArrowsFlag = true;
+            break;
+        case AnnotationTypeEnum::OVAL:
+            break;
+        case AnnotationTypeEnum::TEXT:
+            textFlag = true;
+            break;
+    }
+    
+    setProperty(Property::FILL_COLOR, fillColorFlag);
+    setProperty(Property::LINE_ARROWS, lineArrowsFlag);
+    setProperty(Property::TEXT_ALIGNMENT, textFlag);
+    setProperty(Property::TEXT_EDIT, textFlag);
+    setProperty(Property::TEXT_COLOR, textFlag);
+    setProperty(Property::TEXT_FONT_NAME, colorBarFlag | textFlag);
+    setProperty(Property::TEXT_FONT_SIZE, colorBarFlag | textFlag);
+    setProperty(Property::TEXT_FONT_STYLE, textFlag);
+    setProperty(Property::TEXT_ORIENTATION, textFlag);
+    
+    resetProperty(Property::SCENE_CONTAINS_ATTRIBUTES);
+    
+    /*
+     * These are not valid properties 
+     */
+    resetProperty(Property::INVALID);
+    resetProperty(Property::COUNT_FOR_BITSET);
+    
+    if (colorBarFlag) {
+        resetProperty(Property::ARRANGE);
+        resetProperty(Property::COPY_CUT_PASTE);
+        resetProperty(Property::DELETION);
+        resetProperty(Property::DISPLAY_GROUP);
+        resetProperty(Property::GROUP);
+        resetProperty(Property::LINE_COLOR);
+        resetProperty(Property::LINE_THICKNESS);
+        resetProperty(Property::TEXT_COLOR);
+        resetProperty(Property::TEXT_EDIT);
+        
+        setProperty(Property::SCENE_CONTAINS_ATTRIBUTES);
+    }
+}
+
+/**
+ * Set the properties for specialized usage of annotations.  This is typically used
+ * for annotations that are not stored in an annotation file but instead are a 
+ * property of some entity (such as chart labels).
+ *
+ * @param specializedUsage
+ *     The specialized usage.
+ */
+void
+Annotation::setPropertiesForSpecializedUsage(const PropertiesSpecializedUsage specializedUsage)
+{
+    initializeProperties();
+
+    bool chartLabelTitleFlag = false;
+    bool viewportFlag = false;
+    switch (specializedUsage) {
+        case PropertiesSpecializedUsage::CHART_LABEL:
+            chartLabelTitleFlag = true;
+            break;
+        case PropertiesSpecializedUsage::CHART_TITLE:
+            chartLabelTitleFlag = true;
+            break;
+        case PropertiesSpecializedUsage::VIEWPORT_ANNOTATION:
+            viewportFlag = true;
+            break;
+    }
+
+    if (chartLabelTitleFlag) {
+        resetProperty(Property::ARRANGE);
+        resetProperty(Property::COORDINATE);
+        resetProperty(Property::COPY_CUT_PASTE);
+        resetProperty(Property::DELETION);
+        resetProperty(Property::DISPLAY_GROUP);
+        resetProperty(Property::GROUP);
+        resetProperty(Property::LINE_COLOR);
+        resetProperty(Property::LINE_THICKNESS);
+        resetProperty(Property::ROTATION);
+        resetProperty(Property::TEXT_ALIGNMENT);
+        resetProperty(Property::TEXT_COLOR);
+        resetProperty(Property::TEXT_ORIENTATION);
+        
+        setProperty(Property::SCENE_CONTAINS_ATTRIBUTES);
+    }
+    
+    if (viewportFlag) {
+        resetProperty(Property::ARRANGE);
+        resetProperty(Property::COORDINATE);
+        resetProperty(Property::COPY_CUT_PASTE);
+        resetProperty(Property::DELETION);
+        resetProperty(Property::DISPLAY_GROUP);
+        resetProperty(Property::GROUP);
+        resetProperty(Property::ROTATION);
+        
+        setProperty(Property::SCENE_CONTAINS_ATTRIBUTES);
+    }
+}
+
+/**
+ * Test a property.
+ * 
+ * @param property
+ *     Property for testing.
+ * @return
+ *     True if property is on, else false.
+ */
+bool
+Annotation::testProperty(const Property property) const
+{
+    /*
+     * Text connect to brainordiante property is valid only
+     * for a a text annotation in surface space
+    
+     */
+    if (property == Property::TEXT_CONNECT_TO_BRAINORDINATE) {
+        if (m_type == AnnotationTypeEnum::TEXT) {
+            if (m_coordinateSpace == AnnotationCoordinateSpaceEnum::SURFACE) {
+                return true;
+            }
+        }
+        return false;
+    }
+    
+    const int32_t propertyIndex = static_cast<std::underlying_type<Property>::type>(property);
+    return m_properties.test(propertyIndex);
+    
+}
+
+/**
+ * Test for any of the properties are set.
+ *
+ * @param propertyOne
+ *     First property for testing.
+ * @param propertyTwo
+ *     Two property for testing.
+ * @param propertyThree
+ *     Three property for testing.
+ * @param propertyFour
+ *     Four property for testing.
+ * @param propertyFive
+ *     Five property for testing.
+ * @return
+ *     True if property is on, else false.
+ */
+bool
+Annotation::testPropertiesAny(const Property propertyOne,
+                       const Property propertyTwo,
+                       const Property propertyThree,
+                       const Property propertyFour,
+                       const Property propertyFive) const
+{
+    if (testProperty(propertyOne)) {
+        return true;
+    }
+    if (testProperty(propertyTwo)) {
+        return true;
+    }
+    if (propertyThree != Property::INVALID) {
+        if (testProperty(propertyThree)) {
+            return true;
+        }
+    }
+    if (propertyFour != Property::INVALID) {
+        if (testProperty(propertyFour)) {
+            return true;
+        }
+    }
+    if (propertyFive != Property::INVALID) {
+        if (testProperty(propertyFive)) {
+            return true;
+        }
+    }
+    
+    return false;
+}
+
+
+/**
+ * Set a property.
+ *
+ * @param property
+ *     Property for testing.
+ * @param value
+ *     New on/off status for property (optional argument defaults to true).
+ */
+void
+Annotation::setProperty(const Property property,
+                        const bool value)
+{
+    const int32_t propertyIndex = static_cast<std::underlying_type<Property>::type>(property);
+    m_properties.set(propertyIndex,
+                     value);
+}
+
+/**
+ * Reset (turn off) a property.
+ *
+ * @param property
+ *     Property for testing.
+ */
+void
+Annotation::resetProperty(const Property property)
+{
+    const int32_t propertyIndex = static_cast<std::underlying_type<Property>::type>(property);
+    m_properties.reset(propertyIndex);
+}
+
 
 /**
  * @return The key to the annotation group that owns this annotation.
@@ -1633,12 +1964,19 @@ TriStateSelectionStatusEnum::Enum
 Annotation::getItemDisplaySelected(const DisplayGroupEnum::Enum displayGroup,
                             const int32_t tabIndex) const
 {
-    if (m_coordinateSpace == AnnotationCoordinateSpaceEnum::WINDOW) {
-        return m_displayGroupAndTabItemHelper->getSelectedInWindow(m_windowIndex);
+    if (testProperty(Annotation::Property::DISPLAY_GROUP)) {
+        if (m_coordinateSpace == AnnotationCoordinateSpaceEnum::WINDOW) {
+            return m_displayGroupAndTabItemHelper->getSelectedInWindow(m_windowIndex);
+        }
+        
+        return m_displayGroupAndTabItemHelper->getSelected(displayGroup,
+                                                           tabIndex);
     }
     
-    return m_displayGroupAndTabItemHelper->getSelected(displayGroup,
-                                                       tabIndex);
+    /*
+     * Annotations that do not support a "display group" are always displayed
+     */
+    return TriStateSelectionStatusEnum::SELECTED;
 }
 
 /**
@@ -1767,13 +2105,14 @@ Annotation::setUserDefaultCustomBackgroundColor(const float rgba[4])
 }
 
 /**
- * Set the default value for line width
+ * Set the default value for line width percentage
  *
- * @param lineWidth
+ * @param lineWidthPercentage
  *     Default for newly created annotations.
  */
 void
-Annotation::setUserDefaultLineWidth(const float lineWidth)
+Annotation::setUserDefaultLineWidthPercentage(const float lineWidthPercentage)
 {
-    s_userDefaultLineWidth = lineWidth;
+    s_userDefaultLineWidthPercentage = lineWidthPercentage;
 }
+

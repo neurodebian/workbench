@@ -135,7 +135,7 @@ DataFileContentCopyMoveDialog::createOptionsWidget()
     QObject::connect(m_closeSourceFileCheckBox, SIGNAL(toggled(bool)),
                      this, SLOT(closeSourceFileCheckBoxToggled(bool)));
     
-    m_copySelectedAnnotationsOnlyCheckBox = new QCheckBox("Copy Only Selected Annotations");
+    m_copySelectedAnnotationsOnlyCheckBox = new QCheckBox("Copy Only Annotations SELECTED FOR EDITING");
     m_copySelectedAnnotationsOnlyCheckBox->setChecked(false);
     
     QGroupBox* groupBox = new QGroupBox("Options");
@@ -194,8 +194,8 @@ DataFileContentCopyMoveDialog::createDestinationWidget()
     newDestinationFileToolButton->setText("New File Name...");
     m_newDestinationFileNameLabel = new QLabel("                          ");
     m_newDestinatonFileButtonGroupIndex = m_destinationButtonGroup->buttons().size();
-    QRadioButton* newFileRadioButton = new QRadioButton("");
-    m_destinationButtonGroup->addButton(newFileRadioButton,
+    m_newDestinationFileRadioButton = new QRadioButton("");
+    m_destinationButtonGroup->addButton(m_newDestinationFileRadioButton,
                                         m_newDestinatonFileButtonGroupIndex);
 
     
@@ -210,7 +210,7 @@ DataFileContentCopyMoveDialog::createDestinationWidget()
     while (buttonIter.hasNext()) {
         const int row = layout->rowCount();
         QAbstractButton* button = buttonIter.next();
-        if (button == newFileRadioButton) {
+        if (button == m_newDestinationFileRadioButton) {
             layout->addWidget(button,
                               row, 0);
             layout->addWidget(newDestinationFileToolButton,
@@ -242,6 +242,7 @@ DataFileContentCopyMoveDialog::newDestinationFileToolButtonClicked()
         m_newDestinationFileName = fileName;
         FileInformation fileInfo(fileName);
         m_newDestinationFileNameLabel->setText(fileInfo.getFileName());
+        m_newDestinationFileRadioButton->setChecked(true);
     }
 }
 
@@ -261,8 +262,7 @@ DataFileContentCopyMoveDialog::okButtonClicked()
                 if (m_newDestinationFileName.isEmpty()) {
                     throw DataFileException("New file name is empty.");
                 }
-                const CaretDataFile* caretDataFile = dynamic_cast<const CaretDataFile*>(m_sourceDataFileInterface);
-                CaretAssert(caretDataFile);
+                CaretAssert(dynamic_cast<const CaretDataFile*>(m_sourceDataFileInterface));
                 destinationFile = m_sourceDataFileInterface->newInstanceOfDataFile();
                 if (destinationFile == NULL) {
                     throw DataFileException("Failed to created new file.");

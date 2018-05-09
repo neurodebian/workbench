@@ -29,6 +29,7 @@
 #include <QLabel>
 #include <QMenu>
 #include <QPainter>
+#include <QSignalBlocker>
 #include <QToolButton>
 #include <QVBoxLayout>
 
@@ -38,6 +39,8 @@
 #include "AnnotationMenuFileSelection.h"
 #include "AnnotationRedoUndoCommand.h"
 #include "Brain.h"
+#include "BrainBrowserWindow.h"
+#include "BrowserTabContent.h"
 #include "CaretAssert.h"
 #include "CaretUndoStack.h"
 #include "DisplayPropertiesAnnotation.h"
@@ -46,6 +49,7 @@
 #include "EventUserInterfaceUpdate.h"
 #include "EventManager.h"
 #include "GuiManager.h"
+#include "Model.h"
 #include "WuQMessageBox.h"
 #include "WuQtUtilities.h"
 
@@ -72,16 +76,39 @@ AnnotationInsertNewWidget::AnnotationInsertNewWidget(const int32_t browserWindow
 : QWidget(parent),
 m_browserWindowIndex(browserWindowIndex)
 {
-    QToolButton* shapeBoxToolButton   = createShapeToolButton(AnnotationTypeEnum::BOX);
-    QToolButton* shapeImageToolButton = createShapeToolButton(AnnotationTypeEnum::IMAGE);
-    QToolButton* shapeLineToolButton  = createShapeToolButton(AnnotationTypeEnum::LINE);
-    QToolButton* shapeOvalToolButton  = createShapeToolButton(AnnotationTypeEnum::OVAL);
-    QToolButton* shapeTextToolButton  = createShapeToolButton(AnnotationTypeEnum::TEXT);
+    /*
+     * Shape buttons
+     */
+    m_shapeActionGroup = new QActionGroup(this);
+    QToolButton* shapeBoxToolButton   = createShapeToolButton(AnnotationTypeEnum::BOX,
+                                                              m_shapeActionGroup);
+    QToolButton* shapeImageToolButton = createShapeToolButton(AnnotationTypeEnum::IMAGE,
+                                                              m_shapeActionGroup);
+    QToolButton* shapeLineToolButton  = createShapeToolButton(AnnotationTypeEnum::LINE,
+                                                              m_shapeActionGroup);
+    QToolButton* shapeOvalToolButton  = createShapeToolButton(AnnotationTypeEnum::OVAL,
+                                                              m_shapeActionGroup);
+    QToolButton* shapeTextToolButton  = createShapeToolButton(AnnotationTypeEnum::TEXT,
+                                                              m_shapeActionGroup);
+    QObject::connect(m_shapeActionGroup, SIGNAL(triggered(QAction*)),
+                     this, SLOT(spaceOrShapeActionTriggered()));
     
-    QToolButton* tabSpaceToolButton = createSpaceToolButton(AnnotationCoordinateSpaceEnum::TAB);
-    QToolButton* stereotaxicSpaceToolButton = createSpaceToolButton(AnnotationCoordinateSpaceEnum::STEREOTAXIC);
-    QToolButton* surfaceSpaceToolButton = createSpaceToolButton(AnnotationCoordinateSpaceEnum::SURFACE);
-    QToolButton* windowSpaceToolButton = createSpaceToolButton(AnnotationCoordinateSpaceEnum::WINDOW);
+    /*
+     * Space buttons
+     */
+    m_spaceActionGroup = new QActionGroup(this);
+    QToolButton* chartSpaceToolButton = createSpaceToolButton(AnnotationCoordinateSpaceEnum::CHART,
+                                                              m_spaceActionGroup);
+    QToolButton* tabSpaceToolButton = createSpaceToolButton(AnnotationCoordinateSpaceEnum::TAB,
+                                                            m_spaceActionGroup);
+    QToolButton* stereotaxicSpaceToolButton = createSpaceToolButton(AnnotationCoordinateSpaceEnum::STEREOTAXIC,
+                                                                    m_spaceActionGroup);
+    QToolButton* surfaceSpaceToolButton = createSpaceToolButton(AnnotationCoordinateSpaceEnum::SURFACE,
+                                                                m_spaceActionGroup);
+    QToolButton* windowSpaceToolButton = createSpaceToolButton(AnnotationCoordinateSpaceEnum::WINDOW,
+                                                               m_spaceActionGroup);
+    QObject::connect(m_spaceActionGroup, SIGNAL(triggered(QAction*)),
+                     this, SLOT(spaceOrShapeActionTriggered()));
     
     const bool smallButtonsFlag = false;
     if (smallButtonsFlag) {
@@ -94,31 +121,14 @@ m_browserWindowIndex(browserWindowIndex)
         shapeOvalToolButton->setMaximumSize(mw, mh);
         shapeTextToolButton->setMaximumSize(mw, mh);
 
+        chartSpaceToolButton->setMaximumSize(mw, mh);
         tabSpaceToolButton->setMaximumSize(mw, mh);
         stereotaxicSpaceToolButton->setMaximumSize(mw, mh);
         surfaceSpaceToolButton->setMaximumSize(mw, mh);
         windowSpaceToolButton->setMaximumSize(mw, mh);
     }
     
-    m_spaceActionGroup = new QActionGroup(this);
-    m_spaceActionGroup->addAction(tabSpaceToolButton->defaultAction());
-    m_spaceActionGroup->addAction(stereotaxicSpaceToolButton->defaultAction());
-    m_spaceActionGroup->addAction(surfaceSpaceToolButton->defaultAction());
-    m_spaceActionGroup->addAction(windowSpaceToolButton->defaultAction());
-    QObject::connect(m_spaceActionGroup, SIGNAL(triggered(QAction*)),
-                     this, SLOT(spaceOrShapeActionTriggered()));
-    
-    m_shapeActionGroup = new QActionGroup(this);
-    m_shapeActionGroup->addAction(shapeBoxToolButton->defaultAction());
-    m_shapeActionGroup->addAction(shapeImageToolButton->defaultAction());
-    m_shapeActionGroup->addAction(shapeLineToolButton->defaultAction());
-    m_shapeActionGroup->addAction(shapeOvalToolButton->defaultAction());
-    m_shapeActionGroup->addAction(shapeTextToolButton->defaultAction());
-    QObject::connect(m_shapeActionGroup, SIGNAL(triggered(QAction*)),
-                     this, SLOT(spaceOrShapeActionTriggered()));
-    
     QToolButton* fileSelectionToolButton = createFileSelectionToolButton();
-    
     
     QLabel* fileLabel  = new QLabel("File");
     QLabel* spaceLabel = new QLabel("Space");
@@ -149,14 +159,16 @@ m_browserWindowIndex(browserWindowIndex)
         
         gridLayout->addWidget(spaceLabel,
                               1, 2, Qt::AlignLeft);
-        gridLayout->addWidget(stereotaxicSpaceToolButton,
+        gridLayout->addWidget(chartSpaceToolButton,
                               1, 3);
-        gridLayout->addWidget(surfaceSpaceToolButton,
+        gridLayout->addWidget(stereotaxicSpaceToolButton,
                               1, 4);
-        gridLayout->addWidget(tabSpaceToolButton,
+        gridLayout->addWidget(surfaceSpaceToolButton,
                               1, 5);
-        gridLayout->addWidget(windowSpaceToolButton,
+        gridLayout->addWidget(tabSpaceToolButton,
                               1, 6);
+        gridLayout->addWidget(windowSpaceToolButton,
+                              1, 7);
 
         gridLayout->setRowMinimumHeight(2, 2);
         
@@ -193,14 +205,16 @@ m_browserWindowIndex(browserWindowIndex)
         
         gridLayout->addWidget(spaceLabel,
                               1, 2, Qt::AlignLeft);
-        gridLayout->addWidget(stereotaxicSpaceToolButton,
+        gridLayout->addWidget(chartSpaceToolButton,
                               1, 3);
-        gridLayout->addWidget(surfaceSpaceToolButton,
+        gridLayout->addWidget(stereotaxicSpaceToolButton,
                               1, 4);
-        gridLayout->addWidget(tabSpaceToolButton,
+        gridLayout->addWidget(surfaceSpaceToolButton,
                               1, 5);
-        gridLayout->addWidget(windowSpaceToolButton,
+        gridLayout->addWidget(tabSpaceToolButton,
                               1, 6);
+        gridLayout->addWidget(windowSpaceToolButton,
+                              1, 7);
         
         QSpacerItem* rowSpaceItem = new QSpacerItem(5, 5,
                                                     QSizePolicy::Fixed,
@@ -253,6 +267,7 @@ AnnotationInsertNewWidget::~AnnotationInsertNewWidget()
 void
 AnnotationInsertNewWidget::updateContent()
 {
+    enableDisableSpaceActions();
     itemSelectedFromFileSelectionMenu();
 }
 
@@ -267,6 +282,109 @@ AnnotationInsertNewWidget::itemSelectedFromFileSelectionMenu()
      */
     m_fileSelectionToolButtonAction->setText(m_fileSelectionMenu->getSelectedNameForToolButton());
 }
+
+/**
+ * Enable/disable space action based upon model in window.
+ */
+void
+AnnotationInsertNewWidget::enableDisableSpaceActions()
+{
+    QSignalBlocker signalBlocker(m_spaceActionGroup);
+    
+    /*
+     * Window will be invalid when this widget is being created as part of window being created
+     */
+    BrainBrowserWindow* window = GuiManager::get()->getBrowserWindowByWindowIndex(m_browserWindowIndex);
+    if (window == NULL) {
+        return;
+    }
+    BrowserTabContent* tabContent = window->getBrowserTabContent();
+    if (tabContent == NULL) {
+        return;
+    }
+    Model* model = tabContent->getModelForDisplay();
+    if (model == NULL) {
+        return;
+    }
+    const ModelTypeEnum::Enum modelType = model->getModelType();
+    
+    bool chartSpaceValidFlag       = false;
+    bool surfaceSpaceValidFlag     = false;
+    bool stereotaxicSpaceValidFlag = false;
+    
+    switch (modelType) {
+        case ModelTypeEnum::MODEL_TYPE_CHART:
+            break;
+        case ModelTypeEnum::MODEL_TYPE_CHART_TWO:
+            chartSpaceValidFlag = true;
+            break;
+        case ModelTypeEnum::MODEL_TYPE_INVALID:
+            break;
+        case ModelTypeEnum::MODEL_TYPE_SURFACE:
+            stereotaxicSpaceValidFlag = true;
+            surfaceSpaceValidFlag = true;
+            break;
+        case ModelTypeEnum::MODEL_TYPE_SURFACE_MONTAGE:
+            stereotaxicSpaceValidFlag = true;
+            surfaceSpaceValidFlag = true;
+            break;
+        case ModelTypeEnum::MODEL_TYPE_VOLUME_SLICES:
+            stereotaxicSpaceValidFlag = true;
+            break;
+        case ModelTypeEnum::MODEL_TYPE_WHOLE_BRAIN:
+            stereotaxicSpaceValidFlag = true;
+            surfaceSpaceValidFlag = true;
+            break;
+    }
+    
+    QAction* selectedAction = m_spaceActionGroup->checkedAction();
+    QAction* tabSpaceAction = NULL;
+    QListIterator<QAction*> actionsIterator(m_spaceActionGroup->actions());
+    while (actionsIterator.hasNext()) {
+        QAction* action = actionsIterator.next();
+        const int spaceInt = action->data().toInt();
+        bool spaceValidFlag = false;
+        AnnotationCoordinateSpaceEnum::Enum annSpace = AnnotationCoordinateSpaceEnum::fromIntegerCode(spaceInt,
+                                                                                                      &spaceValidFlag);
+        CaretAssert(spaceValidFlag);
+        
+        bool enableSpaceFlag = false;
+        switch (annSpace) {
+            case AnnotationCoordinateSpaceEnum::CHART:
+                enableSpaceFlag = chartSpaceValidFlag;
+                break;
+            case AnnotationCoordinateSpaceEnum::STEREOTAXIC:
+                enableSpaceFlag = stereotaxicSpaceValidFlag;
+                break;
+            case AnnotationCoordinateSpaceEnum::SURFACE:
+                enableSpaceFlag = surfaceSpaceValidFlag;
+                break;
+            case AnnotationCoordinateSpaceEnum::TAB:
+                tabSpaceAction = action;
+                enableSpaceFlag = true;
+                break;
+            case AnnotationCoordinateSpaceEnum::VIEWPORT:
+                break;
+            case AnnotationCoordinateSpaceEnum::WINDOW:
+                enableSpaceFlag = true;
+                break;
+        }
+        
+        action->setEnabled(enableSpaceFlag);
+        
+        if (action == selectedAction) {
+            if ( ! action->isEnabled()) {
+                selectedAction = NULL;
+            }
+        }
+    }
+    
+    if (selectedAction == NULL) {
+        CaretAssert(tabSpaceAction);
+        tabSpaceAction->setChecked(true);
+    }
+}
+
 
 /**
  * @return Create a file selection/menu toolbutton.
@@ -286,6 +404,7 @@ AnnotationInsertNewWidget::createFileSelectionToolButton()
     QToolButton* fileSelectionToolButton = new QToolButton();
     fileSelectionToolButton->setDefaultAction(m_fileSelectionToolButtonAction);
     fileSelectionToolButton->setFixedWidth(fileSelectionToolButton->sizeHint().width());
+    WuQtUtilities::setToolButtonStyleForQt5Mac(fileSelectionToolButton);
     
     return fileSelectionToolButton;
 }
@@ -295,9 +414,12 @@ AnnotationInsertNewWidget::createFileSelectionToolButton()
  * 
  * @param annotationType
  *     The annotation type.
+ * @param actionGroup
+ *     Action group to which button is added to make button exclusive.
  */
 QToolButton*
-AnnotationInsertNewWidget::createShapeToolButton(const AnnotationTypeEnum::Enum annotationType)
+AnnotationInsertNewWidget::createShapeToolButton(const AnnotationTypeEnum::Enum annotationType,
+                                                 QActionGroup* actionGroup)
 {
     const QString typeGuiName = AnnotationTypeEnum::toGuiName(annotationType);
     QToolButton* toolButton = new QToolButton();
@@ -316,6 +438,13 @@ AnnotationInsertNewWidget::createShapeToolButton(const AnnotationTypeEnum::Enum 
     action->setChecked(false);
     
     toolButton->setDefaultAction(action);
+    
+    /*
+     * Must set style AFTER button is added to action group
+     * so that checked property is enabled for button
+     */
+    actionGroup->addAction(action);
+    WuQtUtilities::setToolButtonStyleForQt5Mac(toolButton);
     
     return toolButton;
 }
@@ -470,19 +599,24 @@ AnnotationInsertNewWidget::createShapePixmap(const QWidget* widget,
  *
  * @param annotationSpace
  *     The annotation space
+ * @param actionGroup
+ *     Action group to which button is added to make button exclusive.
  */
 QToolButton*
-AnnotationInsertNewWidget::createSpaceToolButton(const AnnotationCoordinateSpaceEnum::Enum annotationSpace)
+AnnotationInsertNewWidget::createSpaceToolButton(const AnnotationCoordinateSpaceEnum::Enum annotationSpace,
+                                                 QActionGroup* actionGroup)
 {
     switch (annotationSpace) {
-        case AnnotationCoordinateSpaceEnum::PIXELS:
-            CaretAssertMessage(0, "Annotations in pixel space not supported.");
+        case AnnotationCoordinateSpaceEnum::CHART:
             break;
         case AnnotationCoordinateSpaceEnum::STEREOTAXIC:
             break;
         case AnnotationCoordinateSpaceEnum::SURFACE:
             break;
         case AnnotationCoordinateSpaceEnum::TAB:
+            break;
+        case AnnotationCoordinateSpaceEnum::VIEWPORT:
+            CaretAssertMessage(0, "Annotations in viewport space not supported.");
             break;
         case AnnotationCoordinateSpaceEnum::WINDOW:
             break;
@@ -504,10 +638,17 @@ AnnotationInsertNewWidget::createSpaceToolButton(const AnnotationCoordinateSpace
 
     action->setData((int)AnnotationCoordinateSpaceEnum::toIntegerCode(annotationSpace));
     action->setToolTip(AnnotationCoordinateSpaceEnum::toToolTip(annotationSpace));
-    toolButton->setDefaultAction(action);
-    
     action->setCheckable(true);
     action->setChecked(false);
+    
+    toolButton->setDefaultAction(action);
+    
+    /*
+     * Must set style AFTER button is added to action group
+     * so that checked property is enabled for button
+     */
+    actionGroup->addAction(action);
+    WuQtUtilities::setToolButtonStyleForQt5Mac(toolButton);
     
     return toolButton;
 }
@@ -544,14 +685,16 @@ AnnotationInsertNewWidget::createSpacePixmap(const QWidget* widget,
      * NOTE: ORIGIN is in TOP LEFT corner of pixmap.
      */
     switch (annotationSpace) {
-        case AnnotationCoordinateSpaceEnum::PIXELS:
-            CaretAssertMessage(0, "Annotations in pixel space not supported.");
+        case AnnotationCoordinateSpaceEnum::CHART:
             break;
         case AnnotationCoordinateSpaceEnum::STEREOTAXIC:
             break;
         case AnnotationCoordinateSpaceEnum::SURFACE:
             break;
         case AnnotationCoordinateSpaceEnum::TAB:
+            break;
+        case AnnotationCoordinateSpaceEnum::VIEWPORT:
+            CaretAssertMessage(0, "Annotations in viewport space not supported.");
             break;
         case AnnotationCoordinateSpaceEnum::WINDOW:
             break;

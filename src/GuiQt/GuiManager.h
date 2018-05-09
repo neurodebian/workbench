@@ -45,6 +45,7 @@ namespace caret {
     class BrainBrowserWindow;
     class BrowserTabContent;
     class BugReportDialog;
+    class ChartTwoLineSeriesHistoryDialog;
     class ClippingPlanesDialog;
     class CursorManager;
     class CustomViewDialog;
@@ -104,9 +105,6 @@ namespace caret {
         
         void processShowSaveManageFilesDialog(BrainBrowserWindow* browserWindow);
         
-        QString applicationName() const;
-        
-        //BrainOpenGL* getBrainOpenGL();
         
         BrowserTabContent* getBrowserTabContentForBrowserWindow(const int32_t browserWindowIndex,
                                                                 const bool allowInvalidBrowserWindowIndex);
@@ -174,8 +172,10 @@ namespace caret {
         enum TestModifiedMode {
             /** Testing when user is exiting Workbench */
             TEST_FOR_MODIFIED_FILES_MODE_FOR_EXIT,
-            /** Testing when a scene is added */
-            TEST_FOR_MODIFIED_FILES_MODE_FOR_SCENE_ADD,
+            /** Testing when a scene is added for modified but not palette modified */
+            TEST_FOR_MODIFIED_FILES_EXCLUDING_PALETTES_MODE_FOR_SCENE_ADD,
+            /** Testing when a scene is added for modified palettes only */
+            TEST_FOR_MODIFIED_FILES_PALETTE_ONLY_MODE_FOR_SCENE_ADD,
             /** Testing when a scene is shown */
             TEST_FOR_MODIFIED_FILES_MODE_FOR_SCENE_SHOW
         };
@@ -214,8 +214,10 @@ namespace caret {
         void initializeGuiManager();
         
         BrainBrowserWindow* newBrainBrowserWindow(QWidget* parent,
+                                                  const int32_t useWindowIndex,
                                                   BrowserTabContent* browserTabContent,
-                                                  const bool createDefaultTabs);
+                                                  const bool createDefaultTabs,
+                                                  AString& errorMessageOut);
         
         void reparentNonModalDialogs(BrainBrowserWindow* closingBrainBrowserWindow);
         
@@ -223,11 +225,7 @@ namespace caret {
                                  BrainBrowserWindow* parentBrainBrowserWindow);
         
         void showHideHelpDialog(const bool status,
-                                BrainBrowserWindow* parentBrainBrowserWindow);
-        
-//        void processShowHelpViewerDialog(BrainBrowserWindow* browserWindow,
-//                                         const AString& helpPageName);
-        
+                                const BrainBrowserWindow* parentBrainBrowserWindow);
         
         void addNonModalDialog(QWidget* dialog);
         
@@ -236,27 +234,19 @@ namespace caret {
         /** One instance of the GuiManager */
         static GuiManager* singletonGuiManager;
         
-        /** 
-         * Contains pointers to Brain Browser windows
-         * As BrainBrowser windows are closed, some of
-         * the elements may be NULL.
-         */
+        /** Contains pointers to Brain Browser windows */
         std::vector<BrainBrowserWindow*> m_brainBrowserWindows;
-        
-        /** Name of application */
-        QString nameOfApplication;
         
         /** Skips confirmation of browser window closing when all tabs are moved to one window */
         bool allowBrowserWindowsToCloseWithoutConfirmation;
-        
-        /* Performs OpenGL drawing commands */
-        //BrainOpenGL* brainOpenGL;
         
         /* Editor for overlay settings. */
         std::set<OverlaySettingsEditorDialog*> m_overlaySettingsEditors;
         
         /** Editor for palette color mapping editing */
         PaletteColorMappingEditorDialog* m_paletteColorMappingEditor;
+        
+        ChartTwoLineSeriesHistoryDialog* m_chartTwoLineSeriesHistoryDialog;
         
         TileTabsConfigurationDialog* m_tileTabsConfigurationDialog;
         

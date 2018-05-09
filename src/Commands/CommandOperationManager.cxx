@@ -43,6 +43,7 @@
 #include "AlgorithmCiftiFindClusters.h"
 #include "AlgorithmCiftiGradient.h"
 #include "AlgorithmCiftiLabelAdjacency.h"
+#include "AlgorithmCiftiLabelProbability.h"
 #include "AlgorithmCiftiLabelToBorder.h"
 #include "AlgorithmCiftiLabelToROI.h"
 #include "AlgorithmCiftiMergeDense.h"
@@ -68,6 +69,7 @@
 #include "AlgorithmLabelDilate.h"
 #include "AlgorithmLabelErode.h"
 #include "AlgorithmLabelModifyKeys.h"
+#include "AlgorithmLabelProbability.h"
 #include "AlgorithmLabelResample.h"
 #include "AlgorithmLabelToBorder.h"
 #include "AlgorithmLabelToVolumeMapping.h"
@@ -113,6 +115,7 @@
 #include "AlgorithmVolumeAffineResample.h"
 #include "AlgorithmVolumeAllLabelsToROIs.h"
 #include "AlgorithmVolumeDilate.h"
+#include "AlgorithmVolumeDistortion.h"
 #include "AlgorithmVolumeErode.h"
 #include "AlgorithmVolumeEstimateFWHM.h"
 #include "AlgorithmVolumeExtrema.h"
@@ -132,6 +135,7 @@
 #include "AlgorithmVolumeTFCE.h"
 #include "AlgorithmVolumeToSurfaceMapping.h"
 #include "AlgorithmVolumeVectorOperation.h"
+#include "AlgorithmVolumeWarpfieldAffineRegression.h"
 #include "AlgorithmVolumeWarpfieldResample.h"
 
 #include "OperationAddToSpecFile.h"
@@ -205,6 +209,7 @@
 #include "OperationSurfaceGeodesicROIs.h"
 #include "OperationSurfaceInformation.h"
 #include "OperationSurfaceNormals.h"
+#include "OperationSurfaceSetCoordinates.h"
 #include "OperationSurfaceVertexAreas.h"
 #include "OperationVolumeCapturePlane.h"
 #include "OperationVolumeCopyExtensions.h"
@@ -241,6 +246,7 @@
 #include "StructureEnum.h"
 
 #include <iostream>
+#include <map>
 
 using namespace caret;
 using namespace std;
@@ -297,6 +303,7 @@ CommandOperationManager::CommandOperationManager()
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmCiftiFindClusters()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmCiftiGradient()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmCiftiLabelAdjacency()));
+    this->commandOperations.push_back(new CommandParser(new AutoAlgorithmCiftiLabelProbability()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmCiftiLabelToBorder()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmCiftiLabelToROI()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmCiftiMergeDense()));
@@ -323,6 +330,7 @@ CommandOperationManager::CommandOperationManager()
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmLabelDilate()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmLabelErode()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmLabelModifyKeys()));
+    this->commandOperations.push_back(new CommandParser(new AutoAlgorithmLabelProbability()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmLabelResample()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmLabelToBorder()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmLabelToVolumeMapping()));
@@ -368,6 +376,7 @@ CommandOperationManager::CommandOperationManager()
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmVolumeAffineResample()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmVolumeAllLabelsToROIs()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmVolumeDilate()));
+    this->commandOperations.push_back(new CommandParser(new AutoAlgorithmVolumeDistortion()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmVolumeErode()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmVolumeEstimateFWHM()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmVolumeExtrema()));
@@ -387,6 +396,7 @@ CommandOperationManager::CommandOperationManager()
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmVolumeTFCE()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmVolumeToSurfaceMapping()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmVolumeVectorOperation()));
+    this->commandOperations.push_back(new CommandParser(new AutoAlgorithmVolumeWarpfieldAffineRegression()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmVolumeWarpfieldResample()));
     
     this->commandOperations.push_back(new CommandParser(new AutoOperationAddToSpecFile()));
@@ -455,6 +465,7 @@ CommandOperationManager::CommandOperationManager()
     this->commandOperations.push_back(new CommandParser(new AutoOperationSurfaceGeodesicROIs()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationSurfaceInformation()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationSurfaceNormals()));
+    this->commandOperations.push_back(new CommandParser(new AutoOperationSurfaceSetCoordinates()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationSurfaceVertexAreas()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationVolumeCapturePlane()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationVolumeCopyExtensions()));
@@ -509,6 +520,32 @@ CommandOperationManager::~CommandOperationManager()
     this->deprecatedOperations.clear();
 }
 
+namespace
+{
+    //quick hack to convert type argument to internal integer
+    int16_t stringToCiftiType(const AString& input)
+    {
+        map<AString, int16_t> nameToCode;
+        nameToCode["INT8"] = NIFTI_TYPE_INT8;
+        nameToCode["UINT8"] = NIFTI_TYPE_UINT8;
+        nameToCode["INT16"] = NIFTI_TYPE_INT16;
+        nameToCode["UINT16"] = NIFTI_TYPE_UINT16;
+        nameToCode["INT32"] = NIFTI_TYPE_INT32;
+        nameToCode["UINT32"] = NIFTI_TYPE_UINT32;
+        nameToCode["INT64"] = NIFTI_TYPE_INT64;
+        nameToCode["UINT64"] = NIFTI_TYPE_UINT64;
+        nameToCode["FLOAT32"] = NIFTI_TYPE_FLOAT32;
+        nameToCode["FLOAT64"] = NIFTI_TYPE_FLOAT64;
+        nameToCode["FLOAT128"] = NIFTI_TYPE_FLOAT128;
+        map<AString, int16_t>::iterator iter = nameToCode.find(input);
+        if (iter == nameToCode.end())
+        {
+            throw CommandException("Unrecognized cifti datatype: '" + input + "'");
+        }
+        return iter->second;
+    }
+}
+
 /**
  * Run a command.
  * 
@@ -540,6 +577,22 @@ CommandOperationManager::runCommand(ProgramParameters& parameters)
             CaretLogWarning("SIMD type '" + DotSIMDEnum::toName(impl) + "' not supported (could be cpu, compiler, or build options), using '" + DotSIMDEnum::toName(retval) + "'");
         }
     }
+    int16_t ciftiDType = NIFTI_TYPE_FLOAT32;
+    bool ciftiScale = false;
+    double ciftiMin = -1.0, ciftiMax = -1.0;
+    if (getGlobalOption(parameters, "-cifti-output-datatype", 1, globalOptionArgs))
+    {
+        ciftiDType = stringToCiftiType(globalOptionArgs[0]);
+    }
+    if (getGlobalOption(parameters, "-cifti-output-range", 2, globalOptionArgs))
+    {
+        ciftiScale = true;
+        bool valid = false;
+        ciftiMin = globalOptionArgs[0].toDouble(&valid);
+        if (!valid) throw CommandException("non-numeric option to -cifti-output-range: '" + globalOptionArgs[0] + "'");
+        ciftiMax = globalOptionArgs[1].toDouble(&valid);
+        if (!valid) throw CommandException("non-numeric option to -cifti-output-range: '" + globalOptionArgs[1] + "'");
+    }
 
     const uint64_t numberOfCommands = this->commandOperations.size();
     const uint64_t numberOfDeprecated = this->deprecatedOperations.size();
@@ -552,15 +605,21 @@ CommandOperationManager::runCommand(ProgramParameters& parameters)
     AString commandSwitch;
     commandSwitch = fixUnicode(parameters.nextString("Command Name"), false);
     
+    //hardcode program name, instead of taking it from the parameters, so that it doesn't include path or show wrapper script details
+    const AString myProgramName = "wb_command";
     if (commandSwitch == "-help")
     {
         printHelpInfo();
     } else if (commandSwitch == "-arguments-help") {
-        printArgumentsHelp("wb_command");
+        printArgumentsHelp(myProgramName);
+    } else if (commandSwitch == "-global-options") {
+        printGlobalOptions();
     } else if (commandSwitch == "-cifti-help") {
-        printCiftiHelp("wb_command");
+        printCiftiHelp();
     } else if (commandSwitch == "-gifti-help") {
-        printGiftiHelp("wb_command");
+        printGiftiHelp();
+    } else if (commandSwitch == "-parallel-help") {
+        printParallelHelp(myProgramName);
     } else if (commandSwitch == "-version") {
         printVersionInfo();
     } else if (commandSwitch == "-list-commands") {
@@ -568,7 +627,7 @@ CommandOperationManager::runCommand(ProgramParameters& parameters)
     } else if (commandSwitch == "-list-deprecated-commands") {
         printDeprecatedCommands();
     } else if (commandSwitch == "-all-commands-help") {
-        printAllCommandsHelpInfo("wb_command");
+        printAllCommandsHelpInfo(myProgramName);
     } else {
         
         CommandOperation* operation = NULL;
@@ -603,8 +662,14 @@ CommandOperationManager::runCommand(ProgramParameters& parameters)
         } else {
             if (!parameters.hasNext() && operation->takesParameters())
             {
-                cout << operation->getHelpInformation("wb_command") << endl;
+                cout << operation->getHelpInformation(myProgramName) << endl;
             } else {
+                if (ciftiScale)
+                {
+                    operation->setCiftiOutputDTypeAndScale(ciftiDType, ciftiMin, ciftiMax);
+                } else {
+                    operation->setCiftiOutputDTypeNoScale(ciftiDType);
+                }
                 operation->execute(parameters, preventProvenance);
             }
         }
@@ -641,12 +706,22 @@ AString CommandOperationManager::doCompletion(ProgramParameters& parameters, con
         }
         return ret;
     }
-    ret = "wordlist -disable-provenance\\ -logging\\ -simd";//we could prevent suggesting an already-provided global option, but that would be a bit surprising
+    OptionInfo ciftiDTypeInfo = parseGlobalOption(parameters, "-cifti-output-datatype", 1, globalOptionArgs, true);
+    if (ciftiDTypeInfo.specified && !ciftiDTypeInfo.complete)
+    {
+        return "wordlist INT8 UINT8 INT16 UINT16 INT32 UINT32 INT64 UINT64 FLOAT32 FLOAT64 FLOAT128";
+    }
+    OptionInfo ciftiRangeInfo = parseGlobalOption(parameters, "-cifti-output-range", 2, globalOptionArgs, true);
+    if (ciftiRangeInfo.specified && !ciftiRangeInfo.complete)
+    {//can't tab complete a literal number
+        return "";
+    }
+    ret = "wordlist -disable-provenance\\ -logging\\ -simd\\ -cifti-output-datatype\\ -cifti-output-range";//we could prevent suggesting an already-provided global option, but that would be a bit surprising
     const uint64_t numberOfCommands = this->commandOperations.size();
     const uint64_t numberOfDeprecated = this->deprecatedOperations.size();
     if (!parameters.hasNext())
     {//suggest all commands, including deprecated and informational (order doesn't matter, bash sorts them before displaying)
-        ret += "\\ -help\\ -arguments-help\\ -cifti-help\\ -gifti-help\\ -version\\ -list-commands\\ -list-deprecated-commands\\ -all-commands-help";
+        ret += "\\ -help\\ -arguments-help\\ -cifti-help\\ -gifti-help\\ -parallel-help\\ -version\\ -list-commands\\ -list-deprecated-commands\\ -all-commands-help";
         for (uint64_t i = 0; i < numberOfCommands; i++)
         {
             ret += "\\ " + commandOperations[i]->getCommandLineSwitch();
@@ -893,6 +968,8 @@ void CommandOperationManager::printHelpInfo()
     cout << endl << "Information options:" << endl;
     cout << "   -help                       show this help info" << endl;
     cout << "   -arguments-help             explain the format of subcommand help info" << endl;
+    cout << "   -global-options             display options that can be added to any command" << endl;
+    cout << "   -parallel-help              details on how wb_command uses parallelization" << endl;
     cout << "   -cifti-help                 explain the cifti file format and related terms" << endl;
     cout << "   -gifti-help                 explain the gifti file format (metric, surface)" << endl;
     cout << "   -version                    show extended version information" << endl;
@@ -900,27 +977,6 @@ void CommandOperationManager::printHelpInfo()
     cout << "   -list-deprecated-commands   list deprecated subcommands" << endl;
     cout << "   -all-commands-help          show all processing subcommands and their help" << endl;
     cout << "                                  info - VERY LONG" << endl;
-    cout << endl << "Global options (can be added to any command):" << endl;
-    cout << "   -disable-provenance         don't generate provenance info in output files" << endl;
-    cout << "   -logging <level>            set the logging level, valid values are:" << endl;
-    vector<LogLevelEnum::Enum> logLevels;
-    LogLevelEnum::getAllEnums(logLevels);
-    for (vector<LogLevelEnum::Enum>::iterator iter = logLevels.begin();
-         iter != logLevels.end();
-         iter++) {
-        cout << "            " << LogLevelEnum::toName(*iter) << endl;
-    }
-    cout << endl;//add a line after the logging types for readability
-    //guide for wrap, assuming 80 columns:                                                  |
-    cout << "   -simd <type>                set the SIMD implementation to use (currently" << endl;
-    cout << "                                  used only for correlation, default AUTO which" << endl;
-    cout << "                                  selects fastest supported), valid values are:" << endl;
-    vector<DotSIMDEnum::Enum> simdTypes = DotSIMDEnum::getAllEnums();
-    for (vector<DotSIMDEnum::Enum>::iterator iter = simdTypes.begin();
-         iter != simdTypes.end();
-         iter++) {
-        cout << "         " << DotSIMDEnum::toName(*iter) << endl;
-    }
     cout << endl;
     cout << "To get the help information of a processing subcommand, run it without any" << endl;
     cout << "   additional arguments." << endl;
@@ -948,7 +1004,7 @@ void CommandOperationManager::printArgumentsHelp(const AString& programName)
     cout << "      [-fixnan] - replace NaN results with a value" << endl;
     cout << "         <replace> - value to replace NaN with" << endl;
     cout << endl;//guide for wrap, assuming 80 columns:                                     |
-    cout << "      [-var] (repeatable) - repeatable - a volume file to use as a variable" << endl;
+    cout << "      [-var] - repeatable - a volume file to use as a variable" << endl;
     cout << "         <name> - the name of the variable, as used in the expression" << endl;
     cout << "         <volume> - the volume file to use as this variable" << endl;
     cout << endl;//guide for wrap, assuming 80 columns:                                     |
@@ -960,7 +1016,7 @@ void CommandOperationManager::printArgumentsHelp(const AString& programName)
     cout << endl;//guide for wrap, assuming 80 columns:                                     |
     cout << "   '<expression>' and '<volume-out>' denote mandatory parameters.  '[-fixnan]'" << endl;
     cout << "   denotes an option taking one mandatory parameter '<replace>', and" << endl;
-    cout << "   '[-var] (repeatable)' denotes a repeatable option with mandatory parameters" << endl;
+    cout << "   '[-var] - repeatable' denotes a repeatable option with mandatory parameters" << endl;
     cout << "   '<name>' and '<volume>', and two suboptions: '[-subvolume]', which has a" << endl;
     cout << "   mandatory parameter '<subvol>', and '[-repeat]', which takes no parameters." << endl;
     cout << "   Commands also provide additional help info below the section in the example." << endl;
@@ -991,17 +1047,71 @@ void CommandOperationManager::printArgumentsHelp(const AString& programName)
     cout << endl;
 }
 
-void CommandOperationManager::printCiftiHelp(const AString& /*programName*/)
+void CommandOperationManager::printGlobalOptions()
+{
+    cout << "Global options (can be added to any command):" << endl;
+    cout << endl;
+    //guide for wrap, assuming 80 columns:                                                  |
+    cout << "   -disable-provenance               don't generate provenance info in output" << endl;
+    cout << "                                        files" << endl;
+    cout << endl;
+    cout << "   -cifti-output-datatype <type>     write cifti output with the given" << endl;
+    cout << "                                        datatype (default FLOAT32), note that" << endl;
+    cout << "                                        calculation precision is only float32," << endl;
+    cout << "                                        valid values are:" << endl;
+    cout << "                          INT8" << endl;
+    cout << "                          UINT8" << endl;
+    cout << "                          INT16" << endl;
+    cout << "                          UINT16" << endl;
+    cout << "                          INT32" << endl;
+    cout << "                          UINT32" << endl;
+    cout << "                          INT64" << endl;
+    cout << "                          UINT64" << endl;
+    cout << "                          FLOAT32" << endl;
+    cout << "                          FLOAT64" << endl;
+    cout << "                          FLOAT128" << endl;
+    cout << endl;
+    //guide for wrap, assuming 80 columns:                                                  |
+    cout << "   -cifti-output-range <min> <max>   write cifti output with scaling and offset" << endl;
+    cout << "                                        header fields such that <min> and <max>" << endl;
+    cout << "                                        are the most extreme values that can be" << endl;
+    cout << "                                        represented, mostly useful with integer" << endl;
+    cout << "                                        output datatypes (see above)" << endl;
+    cout << endl;
+    cout << "   -logging <level>                  set the logging level, valid values are:" << endl;
+    vector<LogLevelEnum::Enum> logLevels;
+    LogLevelEnum::getAllEnums(logLevels);
+    for (vector<LogLevelEnum::Enum>::iterator iter = logLevels.begin();
+         iter != logLevels.end();
+         iter++) {
+        cout << "            " << LogLevelEnum::toName(*iter) << endl;
+    }
+    cout << endl;//add a line after the logging types for readability
+    //guide for wrap, assuming 80 columns:                                                  |
+    cout << "   -simd <type>                      set the SIMD implementation to use" << endl;
+    cout << "                                        (currently used only for correlation," << endl;
+    cout << "                                        default AUTO which selects fastest" << endl;
+    cout << "                                        supported), valid values are:" << endl;
+    vector<DotSIMDEnum::Enum> simdTypes = DotSIMDEnum::getAllEnums();
+    for (vector<DotSIMDEnum::Enum>::iterator iter = simdTypes.begin();
+         iter != simdTypes.end();
+         iter++) {
+        cout << "         " << DotSIMDEnum::toName(*iter) << endl;
+    }
+    cout << endl;
+}
+
+void CommandOperationManager::printCiftiHelp()
 {
     //guide for wrap, assuming 80 columns:                                                  |
     cout << "   The CIFTI format is a new data file format intended to make it easier to" << endl;
     cout << "   work with data from multiple disjoint structures at the same time - often" << endl;
     cout << "   this means both hemispheres of cortex as surface data, and other structures" << endl;
-    cout << "   as voxel data (amygdala, thalamus, hippocampus, etc).  Additionally, it" << endl;
-    cout << "   can exclude locations that are uninteresting for the task at hand (medial" << endl;
-    cout << "   wall, white matter, csf), preventing them from taking up room in the data of" << endl;
-    cout << "   the file.  The set of structures and the locations in them that are used in" << endl;
-    cout << "   a cifti file is referred to as 'brainordinates', or for the specific case of" << endl;
+    cout << "   as voxel data (amygdala, thalamus, putamen, etc).  Additionally, it can" << endl;
+    cout << "   exclude locations that are uninteresting for the task at hand (medial wall," << endl;
+    cout << "   white matter, csf), preventing them from taking up room in the data of the" << endl;
+    cout << "   file.  The set of structures and the locations in them that are used in a" << endl;
+    cout << "   cifti file are referred to as 'brainordinates', or for the specific case of" << endl;
     cout << "   'all gray matter locations', 'grayordinates'." << endl;
     cout << endl;//guide for wrap, assuming 80 columns:                                     |
     cout << "   However, to explain the cifti format, it is easiest to work from the" << endl;
@@ -1009,17 +1119,18 @@ void CommandOperationManager::printCiftiHelp(const AString& /*programName*/)
     cout << "   single rectangular data matrix (usually 2 dimensions, but supports 3, and" << endl;
     cout << "   may support more in the future), where each dimension is labeled with what" << endl;
     cout << "   we call a 'mapping', each of which uses one of (currently) five possible" << endl;
-    cout << "   'mapping types'.  It is these mapping types that give rise to the diverse" << endl;
-    cout << "   types of cifti files.  A single mapping of type 'brain models' (also known" << endl;
-    cout << "   as 'dense') can represent both hemispheres and all subcortical structures" << endl;
-    cout << "   simultaneously, meaning that only a single dimension is used to represent" << endl;
-    cout << "   over a dozen structures, both surface-based and voxel-based.  The mapping" << endl;
-    cout << "   contains all information needed to figure out what every index along the" << endl;
-    cout << "   dimension means.  By putting a dense mapping along both dimensions in a 2D" << endl;
-    cout << "   cifti file, you get a brainordinates by brainordinates matrix, frequently" << endl;
-    cout << "   used for connectivity measures.  Notably, even if two dimensions use the" << endl;
-    cout << "   same mapping *type*, they can have different information in them, for" << endl;
-    cout << "   example a connectivity matrix between two different parcellations." << endl;
+    cout << "   'mapping types'.  It is the combinations of these mapping types that give" << endl;
+    cout << "   rise to the diverse types of cifti files.  A single mapping of type 'brain" << endl;
+    cout << "   models' (also known as 'dense') can represent both hemispheres and all" << endl;
+    cout << "   subcortical structures simultaneously, meaning that only a single matrix" << endl;
+    cout << "   dimension is used to represent over a dozen structures, both surface-based" << endl;
+    cout << "   and voxel-based.  Each mapping contains all information needed to figure out" << endl;
+    cout << "   what every index along the matrix dimension means.  By putting a dense" << endl;
+    cout << "   mapping along both dimensions in a 2D cifti file, you get a brainordinates" << endl;
+    cout << "   by brainordinates matrix, which is used for connectivity measures.  Notably," << endl;
+    cout << "   even if two dimensions use the same mapping *type*, they can have different" << endl;
+    cout << "   information in them, for example a connectivity matrix between two different" << endl;
+    cout << "   parcellations." << endl;
     cout << endl;//guide for wrap, assuming 80 columns:                                     |
     cout << "   The other mapping types that currently may be used in a cifti file are:" << endl;
     cout << "      Parcels: each index refers to a named subset of the brainordinates (i.e." << endl;
@@ -1055,7 +1166,7 @@ void CommandOperationManager::printCiftiHelp(const AString& /*programName*/)
     cout << endl;//guide for wrap, assuming 80 columns:                                     |
 }
 
-void CommandOperationManager::printGiftiHelp(const AString& /*programName*/)
+void CommandOperationManager::printGiftiHelp()
 {
     //guide for wrap, assuming 80 columns:                                                  |
     cout << "   The GIFTI format is an established data file format intended for use with" << endl;
@@ -1076,6 +1187,32 @@ void CommandOperationManager::printGiftiHelp(const AString& /*programName*/)
     cout << endl;//guide for wrap, assuming 80 columns:                                     |
     cout << "   For the full details of the GIFTI format, see" << endl;
     cout << "      http://www.nitrc.org/projects/gifti/" << endl;
+    cout << endl;//guide for wrap, assuming 80 columns:                                     |
+}
+
+void CommandOperationManager::printParallelHelp(const AString& programName)
+{
+    //guide for wrap, assuming 80 columns:                                                  |
+    cout << "   Many processing commands make use of multithreading so that scripts can" << endl;
+    cout << "   finish more quickly.  By default, these commands will use all available" << endl;
+    cout << "   cores on the system.  Because we use OpenMP for the parallelization, this" << endl;
+    cout << "   behavior can be controlled through various environment variables.  In" << endl;
+    cout << "   particular, 'OMP_NUM_THREADS' will set the maximum number of threads it will" << endl;
+    cout << "   use, when exported as an environment variable.  Additionally, some shells," << endl;
+    cout << "   such as bash, have syntax that allows you to set an environment variable for" << endl;
+    cout << "   a single command or script, for instance:" << endl;
+    cout << endl;//guide for wrap, assuming 80 columns:                                     |
+    cout << "$ OMP_NUM_THREADS=4 "<< programName << " -volume-smoothing input.nii.gz 4 output.nii.gz" << endl;
+    cout << endl;//guide for wrap, assuming 80 columns:                                     |
+    cout << "   If you have a multi-socket system, be aware that the parallelization can be" << endl;
+    cout << "   much slower when threads are on different sockets, and this interacts badly" << endl;
+    cout << "   with the default behavior of using all available cores.  It is advisable to" << endl;
+    cout << "   use other tools to restrict the entire script to execute on a single socket," << endl;
+    cout << "   especially if a queueing system is involved." << endl;
+    cout << endl;//guide for wrap, assuming 80 columns:                                     |
+    cout << "   Also note that wb_view contains a few features that use multithreading" << endl;
+    cout << "   (dynamic connectivity, border optimize), which can be controlled by setting" << endl;
+    cout << "   the same environment variables before launching wb_view." << endl;
     cout << endl;//guide for wrap, assuming 80 columns:                                     |
 }
 

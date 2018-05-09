@@ -9,44 +9,17 @@ PROJECT (Brain)
 SET(QT_DONT_USE_QTGUI)
 
 #
-# Use OpenGL from QT
-#
-#SET(QT_USE_QTOPENGL TRUE)
-
-#
-# Need network
-#
-SET(QT_USE_QTNETWORK TRUE)
-
-#
 # Add QT for includes
 #
-INCLUDE (${QT_USE_FILE})
-
-#
-# Need OpenGL
-#
-FIND_PACKAGE(OpenGL REQUIRED)
-IF (OPENGL_FOUND)
-   #
-   # Need help finding includes on Apple
-   #
-   IF (APPLE) 
-      # When searching for the include directory, find the location
-      # for the OpenGL framework rather than an individual header file.
-      FIND_PATH(OPENGL_INCLUDE_DIR OpenGL.framework
-        /System/Library/Frameworks
-        /Library/Frameworks
-        ~/Library/Frameworks
-      )
-   ENDIF (APPLE)
-   #
-   # OpenGL Include Directory
-   #
-   INCLUDE_DIRECTORIES(${OPENGL_INCLUDE_DIR})
-ELSE (OPENGL_FOUND)
-   MESSAGE(FATAL_ERROR "OpenGL Libraries were not found")
-ENDIF (OPENGL_FOUND)
+if(Qt5_FOUND)
+    include_directories(${Qt5Core_INCLUDE_DIRS})
+    include_directories(${Qt5Network_INCLUDE_DIRS})
+    include_directories(${Qt5Gui_INCLUDE_DIRS})
+endif()
+IF (QT4_FOUND)
+    SET(QT_USE_QTNETWORK TRUE)
+    INCLUDE(${QT_USE_FILE})
+ENDIF ()
 
 #
 # Create the brain library
@@ -61,6 +34,8 @@ BrainOpenGL.h
 BrainOpenGLAnnotationDrawingFixedPipeline.h
 BrainOpenGLChartDrawingInterface.h
 BrainOpenGLChartDrawingFixedPipeline.h
+BrainOpenGLChartTwoDrawingFixedPipeline.h
+BrainOpenGLChartTwoDrawingInterface.h
 BrainOpenGLFixedPipeline.h
 BrainOpenGLPrimitiveDrawing.h
 BrainOpenGLShape.h
@@ -68,19 +43,19 @@ BrainOpenGLShapeCone.h
 BrainOpenGLShapeCube.h
 BrainOpenGLShapeCylinder.h
 BrainOpenGLShapeRing.h
-BrainOpenGLShapeRingOutline.h
 BrainOpenGLShapeSphere.h
 BrainOpenGLTextRenderInterface.h
-BrainOpenGLTextureManager.h
 BrainOpenGLViewportContent.h
 BrainOpenGLVolumeObliqueSliceDrawing.h
 BrainOpenGLVolumeSliceDrawing.h
+BrainOpenGLWindowContent.h
 BrainStructure.h
 BrainStructureNodeAttributes.h
 BrowserTabContent.h
-CaretDataFileSelectionModel.h
-CaretMappableDataFileAndMapSelectionModel.h
-CaretOpenGLInclude.h
+BrowserWindowContent.h
+ChartTwoOverlay.h
+ChartTwoOverlaySet.h
+ChartTwoOverlaySetArray.h
 ChartingDataManager.h
 CiftiConnectivityMatrixDataFileManager.h
 CiftiFiberTrajectoryManager.h
@@ -101,12 +76,12 @@ DummyFontTextRenderer.h
 EventAnnotationColorBarGet.h
 EventBrainReset.h
 EventBrainStructureGetAll.h
-EventBrowserTabDelete.h
 EventBrowserTabGet.h
 EventBrowserTabGetAll.h
 EventBrowserTabGetAllViewed.h
 EventBrowserTabNew.h
-EventCaretMappableDataFileMapsViewedInOverlays.h
+EventBrowserWindowContent.h
+EventChartOverlayValidate.h
 EventDataFileAdd.h
 EventDataFileDelete.h
 EventDataFileRead.h
@@ -116,6 +91,7 @@ EventIdentificationHighlightLocation.h
 EventModelAdd.h
 EventModelDelete.h
 EventModelGetAll.h
+EventModelGetAllDisplayed.h
 EventModelSurfaceGet.h
 EventNodeDataFilesGet.h
 EventNodeIdentificationColorsGetFromCharts.h
@@ -139,6 +115,7 @@ IdentifiedItemVoxel.h
 ImageDepthPositionEnum.h
 Model.h
 ModelChart.h
+ModelChartTwo.h
 ModelSurface.h
 ModelSurfaceMontage.h
 ModelSurfaceSelector.h
@@ -157,6 +134,10 @@ SelectionItemChartDataSeries.h
 SelectionItemChartFrequencySeries.h
 SelectionItemChartMatrix.h
 SelectionItemChartTimeSeries.h
+SelectionItemChartTwoHistogram.h
+SelectionItemChartTwoLabel.h
+SelectionItemChartTwoLineSeries.h
+SelectionItemChartTwoMatrix.h
 SelectionItemCiftiConnectivityMatrixRowColumn.h
 SelectionItemFocusSurface.h
 SelectionItemFocusVolume.h
@@ -185,7 +166,9 @@ ViewingTransformations.h
 ViewingTransformationsCerebellum.h
 ViewingTransformationsVolume.h
 VolumeSliceDrawingTypeEnum.h
+VolumeSliceInterpolationEdgeEffectsMaskingEnum.h
 VolumeSliceSettings.h
+VolumeSliceViewAllPlanesLayoutEnum.h
 VolumeSurfaceOutlineColorOrTabModel.h
 VolumeSurfaceOutlineModel.h
 VolumeSurfaceOutlineSetModel.h
@@ -200,6 +183,7 @@ Brain.cxx
 BrainOpenGL.cxx
 BrainOpenGLAnnotationDrawingFixedPipeline.cxx
 BrainOpenGLChartDrawingFixedPipeline.cxx
+BrainOpenGLChartTwoDrawingFixedPipeline.cxx
 BrainOpenGLFixedPipeline.cxx
 BrainOpenGLPrimitiveDrawing.cxx
 BrainOpenGLShape.cxx
@@ -207,18 +191,19 @@ BrainOpenGLShapeCone.cxx
 BrainOpenGLShapeCube.cxx
 BrainOpenGLShapeCylinder.cxx
 BrainOpenGLShapeRing.cxx
-BrainOpenGLShapeRingOutline.cxx
 BrainOpenGLShapeSphere.cxx
 BrainOpenGLTextRenderInterface.cxx
-BrainOpenGLTextureManager.cxx
 BrainOpenGLViewportContent.cxx
 BrainOpenGLVolumeObliqueSliceDrawing.cxx
 BrainOpenGLVolumeSliceDrawing.cxx
+BrainOpenGLWindowContent.cxx
 BrainStructure.cxx
 BrainStructureNodeAttributes.cxx
 BrowserTabContent.cxx
-CaretDataFileSelectionModel.cxx
-CaretMappableDataFileAndMapSelectionModel.cxx
+BrowserWindowContent.cxx
+ChartTwoOverlay.cxx
+ChartTwoOverlaySet.cxx
+ChartTwoOverlaySetArray.cxx
 ChartingDataManager.cxx
 CiftiConnectivityMatrixDataFileManager.cxx
 CiftiFiberTrajectoryManager.cxx
@@ -238,12 +223,12 @@ DummyFontTextRenderer.cxx
 EventAnnotationColorBarGet.cxx
 EventBrainReset.cxx
 EventBrainStructureGetAll.cxx
-EventBrowserTabDelete.cxx
 EventBrowserTabGet.cxx
 EventBrowserTabGetAll.cxx
 EventBrowserTabGetAllViewed.cxx
 EventBrowserTabNew.cxx
-EventCaretMappableDataFileMapsViewedInOverlays.cxx
+EventBrowserWindowContent.cxx
+EventChartOverlayValidate.cxx
 EventDataFileAdd.cxx
 EventDataFileDelete.cxx
 EventDataFileRead.cxx
@@ -253,6 +238,7 @@ EventIdentificationHighlightLocation.cxx
 EventModelAdd.cxx
 EventModelDelete.cxx
 EventModelGetAll.cxx
+EventModelGetAllDisplayed.cxx
 EventModelSurfaceGet.cxx
 EventNodeDataFilesGet.cxx
 EventNodeIdentificationColorsGetFromCharts.cxx
@@ -275,6 +261,7 @@ IdentifiedItemVoxel.cxx
 ImageDepthPositionEnum.cxx
 Model.cxx
 ModelChart.cxx
+ModelChartTwo.cxx
 ModelSurface.cxx
 ModelSurfaceMontage.cxx
 ModelSurfaceSelector.cxx
@@ -293,6 +280,10 @@ SelectionItemChartDataSeries.cxx
 SelectionItemChartFrequencySeries.cxx
 SelectionItemChartMatrix.cxx
 SelectionItemChartTimeSeries.cxx
+SelectionItemChartTwoHistogram.cxx
+SelectionItemChartTwoLabel.cxx
+SelectionItemChartTwoLineSeries.cxx
+SelectionItemChartTwoMatrix.cxx
 SelectionItemCiftiConnectivityMatrixRowColumn.cxx
 SelectionItemFocusSurface.cxx
 SelectionItemFocusVolume.cxx
@@ -321,13 +312,17 @@ ViewingTransformations.cxx
 ViewingTransformationsCerebellum.cxx
 ViewingTransformationsVolume.cxx
 VolumeSliceDrawingTypeEnum.cxx
+VolumeSliceInterpolationEdgeEffectsMaskingEnum.cxx
 VolumeSliceSettings.cxx
+VolumeSliceViewAllPlanesLayoutEnum.cxx
 VolumeSurfaceOutlineColorOrTabModel.cxx
 VolumeSurfaceOutlineModel.cxx
 VolumeSurfaceOutlineSetModel.cxx
 WholeBrainSurfaceSettings.cxx
 WholeBrainVoxelDrawingMode.cxx
 ) 
+
+TARGET_LINK_LIBRARIES(Brain ${CARET_QT5_LINK})
 
 #
 # Find Headers
@@ -339,6 +334,7 @@ ${CMAKE_SOURCE_DIR}/Charting
 ${CMAKE_SOURCE_DIR}/Cifti
 ${CMAKE_SOURCE_DIR}/FilesBase
 ${CMAKE_SOURCE_DIR}/Files
+${CMAKE_SOURCE_DIR}/Graphics
 ${CMAKE_SOURCE_DIR}/Palette
 ${CMAKE_SOURCE_DIR}/Gifti
 ${CMAKE_SOURCE_DIR}/Nifti

@@ -232,6 +232,29 @@ WuQDialog::setStandardButtonText(QDialogButtonBox::StandardButton button,
 }
 
 /**
+ * Set the enabled status of a standard button.
+ * If the button is invalid, a sever message is logged.
+ *
+ * @param button
+ *    Standard button enum identifying button.
+ * @param enabled
+ *    New enabled status for button.
+ */
+void
+WuQDialog::setStandardButtonEnabled(QDialogButtonBox::StandardButton button,
+                                    const bool enabled)
+{
+    QPushButton* pushButton = this->buttonBox->button(button);
+    if (pushButton != NULL) {
+        pushButton->setEnabled(enabled);
+    }
+    else {
+        CaretLogSevere("PROGRAM ERROR: Attempted to set enabled status for an invalid Dialog Standard Button, id="
+                       + AString::number((int)button));
+    }
+}
+
+/**
  * called to capture image after timeout so nothing obscures window.
  */
 void 
@@ -322,7 +345,7 @@ WuQDialog::keyPressEvent(QKeyEvent* e)
     //   Calls reject() if Escape is pressed. Simulates a button
     //   click for the default button if Enter is pressed. Move focus
     //   for the arrow keys. Ignore the rest.
-#ifdef Q_WS_MAC
+#ifdef Q_OS_MAC
     if(e->modifiers() == Qt::ControlModifier && e->key() == Qt::Key_Period) {
     } else 
 #endif
@@ -549,8 +572,16 @@ WuQDialog::helpButtonClicked()
  *     The focus event.
  */
 void
-WuQDialog::focusInEvent(QFocusEvent* /*event*/)
+WuQDialog::focusInEvent(QFocusEvent* event)
 {
+    if (event->reason() == Qt::PopupFocusReason) {
+        /*
+         * This occurs when a combo box is popped up Mac,
+         * causes a problem, and can be ignored.
+         */
+        return;
+    }
+    
     focusGained();
 }
 

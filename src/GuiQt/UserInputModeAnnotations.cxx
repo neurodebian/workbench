@@ -94,7 +94,7 @@ m_annotationBeingDragged(NULL)
     m_annotationUnderMouseSizeHandleType = AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_NONE;
     
     m_modeNewAnnotationFileSpaceAndType.grabNew(new NewAnnotationFileSpaceAndType(NULL,
-                                                                                  AnnotationCoordinateSpaceEnum::PIXELS,
+                                                                                  AnnotationCoordinateSpaceEnum::VIEWPORT,
                                                                                   AnnotationTypeEnum::LINE));
     m_newAnnotationCreatingWithMouseDrag.grabNew(NULL);
     
@@ -404,16 +404,19 @@ UserInputModeAnnotations::keyPressEvent(const KeyEvent& keyEvent)
                 bool changeCoordFlag  = false;
                 bool moveOnePixelFlag = false;
                 switch (selectedAnnotation->getCoordinateSpace()) {
-                    case AnnotationCoordinateSpaceEnum::STEREOTAXIC:
+                    case AnnotationCoordinateSpaceEnum::CHART:
                         changeCoordFlag = true;
                         break;
-                    case AnnotationCoordinateSpaceEnum::PIXELS:
+                    case AnnotationCoordinateSpaceEnum::STEREOTAXIC:
+                        changeCoordFlag = true;
                         break;
                     case AnnotationCoordinateSpaceEnum::SURFACE:
                         break;
                     case AnnotationCoordinateSpaceEnum::TAB:
                         changeCoordFlag  = true;
                         moveOnePixelFlag = true;
+                        break;
+                    case AnnotationCoordinateSpaceEnum::VIEWPORT:
                         break;
                     case AnnotationCoordinateSpaceEnum::WINDOW:
                         changeCoordFlag  = true;
@@ -465,14 +468,16 @@ UserInputModeAnnotations::keyPressEvent(const KeyEvent& keyEvent)
                     {
                             bool surfaceFlag = false;
                             switch (selectedAnnotation->getCoordinateSpace()) {
-                                case AnnotationCoordinateSpaceEnum::STEREOTAXIC:
+                                case AnnotationCoordinateSpaceEnum::CHART:
                                     break;
-                                case AnnotationCoordinateSpaceEnum::PIXELS:
+                                case AnnotationCoordinateSpaceEnum::STEREOTAXIC:
                                     break;
                                 case AnnotationCoordinateSpaceEnum::SURFACE:
                                     surfaceFlag = true;
                                     break;
                                 case AnnotationCoordinateSpaceEnum::TAB:
+                                    break;
+                                case AnnotationCoordinateSpaceEnum::VIEWPORT:
                                     break;
                                 case AnnotationCoordinateSpaceEnum::WINDOW:
                                     break;
@@ -585,7 +590,7 @@ UserInputModeAnnotations::mouseLeftDrag(const MouseEvent& mouseEvent)
             break;
     }
     
-    AnnotationCoordinateSpaceEnum::Enum draggingCoordinateSpace = AnnotationCoordinateSpaceEnum::PIXELS;
+    AnnotationCoordinateSpaceEnum::Enum draggingCoordinateSpace = AnnotationCoordinateSpaceEnum::VIEWPORT;
     
     std::vector<Annotation*> selectedAnnotations = annotationManager->getAnnotationsSelectedForEditing(m_browserWindowIndex);
     const int32_t numSelectedAnnotations = static_cast<int32_t>(selectedAnnotations.size());
@@ -612,6 +617,25 @@ UserInputModeAnnotations::mouseLeftDrag(const MouseEvent& mouseEvent)
         }
     }
     
+    switch (draggingCoordinateSpace) {
+        case AnnotationCoordinateSpaceEnum::CHART:
+            break;
+        case AnnotationCoordinateSpaceEnum::STEREOTAXIC:
+            break;
+        case AnnotationCoordinateSpaceEnum::SURFACE:
+            break;
+        case AnnotationCoordinateSpaceEnum::TAB:
+            break;
+        case AnnotationCoordinateSpaceEnum::VIEWPORT:
+            /*
+             * No dragging in viewport space
+             */
+            draggingValid = false;
+            break;
+        case AnnotationCoordinateSpaceEnum::WINDOW:
+            break;
+    }
+    
     if (draggingValid) {
         BrainOpenGLViewportContent* vpContent = mouseEvent.getViewportContent();
         if (vpContent == NULL) {
@@ -632,6 +656,24 @@ UserInputModeAnnotations::mouseLeftDrag(const MouseEvent& mouseEvent)
         float spaceHeight = 0.0;
         
         switch (draggingCoordinateSpace) {
+            case AnnotationCoordinateSpaceEnum::CHART:
+            {
+                /*
+                 * Want viewport within montage that contains the surface
+                 */
+                Matrix4x4 projectionMatrix;
+                Matrix4x4 modelviewMatrix;
+                int32_t chartVP[4];
+                if (vpContent->getChartDataMatricesAndViewport(projectionMatrix,
+                                                               modelviewMatrix,
+                                                               chartVP)) {
+                    spaceOriginX = chartVP[0];
+                    spaceOriginY = chartVP[1];
+                    spaceWidth   = chartVP[2];
+                    spaceHeight  = chartVP[3];
+                }
+            }
+                break;
             case AnnotationCoordinateSpaceEnum::STEREOTAXIC:
             {
                 /*
@@ -645,16 +687,6 @@ UserInputModeAnnotations::mouseLeftDrag(const MouseEvent& mouseEvent)
                 spaceOriginY = montVP[1];
                 spaceWidth   = montVP[2];
                 spaceHeight  = montVP[3];
-            }
-                break;
-            case AnnotationCoordinateSpaceEnum::PIXELS:
-            {
-                int viewport[4];
-                vpContent->getWindowViewport(viewport);
-                spaceOriginX = viewport[0];
-                spaceOriginY = viewport[1];
-                spaceWidth   = viewport[2];
-                spaceHeight  = viewport[3];
             }
                 break;
             case AnnotationCoordinateSpaceEnum::SURFACE:
@@ -698,6 +730,9 @@ UserInputModeAnnotations::mouseLeftDrag(const MouseEvent& mouseEvent)
                 spaceWidth   = viewport[2];
                 spaceHeight  = viewport[3];
             }
+                break;
+            case AnnotationCoordinateSpaceEnum::VIEWPORT:
+                CaretAssert(0);
                 break;
             case AnnotationCoordinateSpaceEnum::WINDOW:
             {
@@ -743,7 +778,26 @@ UserInputModeAnnotations::mouseLeftDrag(const MouseEvent& mouseEvent)
                                                                 coordInfo.m_modelXYZ[2]);
             }
             
+            if (coordInfo.m_chartXYZValid) {
+                annSpatialMod.setChartCoordinateAtMouseXY(coordInfo.m_chartXYZ[0],
+                                                          coordInfo.m_chartXYZ[1],
+                                                          coordInfo.m_chartXYZ[2]);
+            }
             
+            if ((dx != 0.0)
+                || (dy != 0.0)) {
+                AnnotationCoordinateInformation previousMouseXYCoordInfo;
+                AnnotationCoordinateInformation::createCoordinateInformationFromXY(mouseEvent.getOpenGLWidget(),
+                                                                                   mouseEvent.getViewportContent(),
+                                                                                   mouseEvent.getX() - dx,
+                                                                                   mouseEvent.getY() - dy,
+                                                                                   previousMouseXYCoordInfo);
+                if (previousMouseXYCoordInfo.m_chartXYZValid) {
+                    annSpatialMod.setChartCoordinateAtPreviousMouseXY(previousMouseXYCoordInfo.m_chartXYZ[0],
+                                                                      previousMouseXYCoordInfo.m_chartXYZ[1],
+                                                                      previousMouseXYCoordInfo.m_chartXYZ[2]);
+                }
+            }
             
             std::vector<Annotation*> annotationsBeforeMoveAndResize;
             std::vector<Annotation*> annotationsAfterMoveAndResize;
@@ -953,6 +1007,11 @@ UserInputModeAnnotations::setAnnotationUnderMouse(const MouseEvent& mouseEvent,
     }
     
     openGLWidget->updateCursor();
+#if BRAIN_OPENGL_INFO_SUPPORTS_DISPLAY_LISTS
+    openGLWidget->updateGL();
+#else
+    openGLWidget->update();
+#endif
 }
 
 /**
@@ -1326,7 +1385,7 @@ UserInputModeAnnotations::showContextMenu(const MouseEvent& mouseEvent,
     
     UserInputModeAnnotationsContextMenu contextMenu(this,
                                                     mouseEvent,
-                                                    NULL, //idManager,
+                                                    NULL,
                                                     tabContent,
                                                     openGLWidget);
     if (contextMenu.actions().size() > 0) {
@@ -1566,29 +1625,37 @@ UserInputModeAnnotations::getEnabledEditMenuItems(std::vector<BrainBrowserWindow
         /*
          * Copy, Cut, and Delete disabled if ANY colorbar is selected.
          */
-        bool noColorBarsSelectedFlag = true;
+        bool allAllowCopyCutPasteFlag = true;
+        bool allAllowDeleteFlag       = true;
+        bool allAllowSelectFlag       = true;
         for (std::vector<Annotation*>::const_iterator iter = allSelectedAnnotations.begin();
              iter != allSelectedAnnotations.end();
              iter++) {
             const Annotation* ann = *iter;
-            if (ann->getType() == AnnotationTypeEnum::COLOR_BAR) {
-                noColorBarsSelectedFlag = false;
+            if ( ! ann->testProperty(Annotation::Property::COPY_CUT_PASTE)) {
+                allAllowCopyCutPasteFlag = false;
+            }
+            if ( ! ann->testProperty(Annotation::Property::DELETION)) {
+                allAllowDeleteFlag = false;
             }
         }
         
-        if (noColorBarsSelectedFlag) {
-            const bool anySelectedFlag = ( ! allSelectedAnnotations.empty());
-            const bool oneSelectedFlag = (allSelectedAnnotations.size() == 1);
-            
+        const bool anySelectedFlag = ( ! allSelectedAnnotations.empty());
+        const bool oneSelectedFlag = (allSelectedAnnotations.size() == 1);
+        if (allAllowCopyCutPasteFlag) {
             if (oneSelectedFlag) {
                 enabledEditMenuItemsOut.push_back(BrainBrowserWindowEditMenuItemEnum::COPY);
                 enabledEditMenuItemsOut.push_back(BrainBrowserWindowEditMenuItemEnum::CUT);
             }
-            
+        }
+        
+        if (allAllowDeleteFlag) {
             if (anySelectedFlag) {
                 enabledEditMenuItemsOut.push_back(BrainBrowserWindowEditMenuItemEnum::DELETER);
             }
-            
+        }
+        
+        if (allAllowSelectFlag) {
             enabledEditMenuItemsOut.push_back(BrainBrowserWindowEditMenuItemEnum::SELECT_ALL);
         }
         

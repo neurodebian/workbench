@@ -94,15 +94,18 @@ AnnotationTextOrientationWidget::~AnnotationTextOrientationWidget()
 /**
  * Update with the given annotation.
  *
- * @param annotation.
+ * @param annotationTextsIn.
  */
 void
-AnnotationTextOrientationWidget::updateContent(std::vector<AnnotationText*>& annotationTexts)
+AnnotationTextOrientationWidget::updateContent(std::vector<AnnotationText*>& annotationTextsIn)
 {
     m_annotations.clear();
-    m_annotations.insert(m_annotations.end(),
-                         annotationTexts.begin(),
-                         annotationTexts.end());
+    m_annotations.reserve(annotationTextsIn.size());
+    for (auto a : annotationTextsIn) {
+        if (a->testProperty(Annotation::Property::TEXT_ORIENTATION)) {
+            m_annotations.push_back(a);
+        }
+    }
     
     {
         /*
@@ -114,8 +117,8 @@ AnnotationTextOrientationWidget::updateContent(std::vector<AnnotationText*>& ann
          * If multiple annotations are selected, the may have different orientation.
          */
         std::set<AnnotationTextOrientationEnum::Enum> selectedOrientations;
-        for (std::vector<AnnotationText*>::iterator iter = annotationTexts.begin();
-             iter != annotationTexts.end();
+        for (std::vector<AnnotationText*>::iterator iter = m_annotations.begin();
+             iter != m_annotations.end();
              iter++) {
             const AnnotationText* annText = *iter;
             CaretAssert(annText);
@@ -161,7 +164,7 @@ AnnotationTextOrientationWidget::updateContent(std::vector<AnnotationText*>& ann
         m_orientationActionGroup->blockSignals(false);
     }
     
-    setEnabled( ! annotationTexts.empty());
+    setEnabled( ! m_annotations.empty());
 }
 
 /**
@@ -180,8 +183,10 @@ AnnotationTextOrientationWidget::orientationActionSelected(QAction* action)
                                                                                                          &valid);
     if (valid) {
         AnnotationRedoUndoCommand* undoCommand = new AnnotationRedoUndoCommand();
+        std::vector<Annotation*> annotations(m_annotations.begin(),
+                                             m_annotations.end());
         undoCommand->setModeTextOrientation(actionOrientation,
-                                            m_annotations);
+                                            annotations);
         AnnotationManager* annMan = GuiManager::get()->getBrain()->getAnnotationManager();
         AString errorMessage;
         if ( ! annMan->applyCommand(undoCommand,
@@ -228,6 +233,7 @@ AnnotationTextOrientationWidget::createOrientationToolButton(const AnnotationTex
     action->setIcon(QIcon(pixmap));
     toolButton->setDefaultAction(action);
     toolButton->setIconSize(pixmap.size());
+    WuQtUtilities::setToolButtonStyleForQt5Mac(toolButton);
     
     return toolButton;
 }
@@ -254,7 +260,7 @@ AnnotationTextOrientationWidget::createHorizontalAlignmentPixmap(const QWidget* 
      * the foreground color around the pixmap's perimeter.
      */
     float width  = 24.0;
-    float height = 24.0;
+    float height = 30.0;
     QPixmap pixmap(static_cast<int>(width),
                    static_cast<int>(height));
     QSharedPointer<QPainter> painter = WuQtUtilities::createPixmapWidgetPainter(widget,
@@ -269,7 +275,7 @@ AnnotationTextOrientationWidget::createHorizontalAlignmentPixmap(const QWidget* 
             break;
         case AnnotationTextOrientationEnum::STACKED:
             painter->drawText(pixmap.rect(),
-                             (Qt::AlignHCenter | Qt::AlignTop),
+                             (Qt::AlignCenter),
                              "a\nb");
             break;
     }

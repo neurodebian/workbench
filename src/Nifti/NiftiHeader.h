@@ -60,6 +60,8 @@ namespace caret
         int32_t getIntentCode() const { return m_header.intent_code; }
         const char* getIntentName() const { return m_header.intent_name; }//NOTE: 16 BYTES, MAY NOT HAVE A NULL TERMINATOR
         bool getDataScaling(double& mult, double& offset) const;//returns false if scaling not needed
+        int getNumComponents() const;
+        bool hasGoodSpatialInformation() const;
         QString toString() const;
         
         void setDimensions(const std::vector<int64_t>& dimsIn);
@@ -68,12 +70,19 @@ namespace caret
         void setDataType(const int16_t& type);
         void clearDataScaling();
         void setDataScaling(const double& mult, const double& offset);
+        void setDataTypeAndScaleRange(const int16_t& type, const double& minval, const double& maxval);
+        
         ///get the FSL "scale" space
         std::vector<std::vector<float> > getFSLSpace() const;
         
         bool operator==(const NiftiHeader& rhs) const;//for testing purposes
         bool operator!=(const NiftiHeader& rhs) const { return !((*this) == rhs); }
     private:
+        struct Quirks
+        {
+            bool no_extender;
+            Quirks() { no_extender = false; }
+        };
         nifti_2_header m_header;//storage for header values regardless of version
         int m_version;
         bool m_isSwapped;
@@ -81,8 +90,8 @@ namespace caret
         static void swapHeaderBytes(nifti_2_header &header);
         void prepareHeader(nifti_1_header& header) const;//transform internal state into ready to write header struct
         void prepareHeader(nifti_2_header& header) const;
-        void setupFrom(const nifti_1_header& header);//error check provided header, and populate members from it
-        void setupFrom(const nifti_2_header& header);
+        Quirks setupFrom(const nifti_1_header& header, const AString& filename);//error check provided header, and populate members from it
+        Quirks setupFrom(const nifti_2_header& header, const AString& filename);
         static int typeToNumBits(const int64_t& type);
         int64_t computeVoxOffset(const int& version) const;
     };

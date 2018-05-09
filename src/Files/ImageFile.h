@@ -29,7 +29,6 @@ class QImage;
 namespace caret {
     class ControlPointFile;
     class ControlPoint3D;
-    class PaletteFile;
     class VolumeFile;
     
 /// File for images
@@ -184,7 +183,7 @@ public:
     void getImageInByteArray(QByteArray& byteArrayOut,
                              const AString& format) const;
     
-    void setImageFromByteArray(const QByteArray& byteArray,
+    bool setImageFromByteArray(const QByteArray& byteArray,
                                const AString& format);
     
     void combinePreservingAspectAndFillIfNeeded(const std::vector<ImageFile*>& imageFiles,
@@ -198,7 +197,6 @@ public:
                                     AString& defaultFilter);
 
     VolumeFile* convertToVolumeFile(const CONVERT_TO_VOLUME_COLOR_MODE colorMode,
-                                    const PaletteFile* paletteFile,
                                     AString& errorMessageOut) const;
 
     ControlPointFile* getControlPointFile();

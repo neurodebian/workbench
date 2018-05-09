@@ -30,6 +30,9 @@
 #include "Vector3D.h"
 #include "VolumeFile.h"
 
+#include "AlgorithmSurfaceToSurface3dDistance.h"
+#include "AlgorithmCreateSignedDistanceVolume.h"
+
 #include <cmath>
 #include <fstream>
 
@@ -68,6 +71,9 @@ OperationParameters* AlgorithmVolumeToSurfaceMapping::getParameters()
     roiVol->addVolumeParameter(1, "roi-volume", "the volume file");
     OptionalParameter* ribbonSubdiv = ribbonOpt->createOptionalParameter(4, "-voxel-subdiv", "voxel divisions while estimating voxel weights");
     ribbonSubdiv->addIntegerParameter(1, "subdiv-num", "number of subdivisions, default 3");
+    ribbonOpt->createOptionalParameter(7, "-thin-columns", "use non-overlapping polyhedra");
+    OptionalParameter* gaussianOpt = ribbonOpt->createOptionalParameter(8, "-gaussian", "reduce weight to voxels that aren't near <surface>");
+    gaussianOpt->addDoubleParameter(1, "scale", "value to multiply the local thickness by, to get the gaussian sigma");
     OptionalParameter* ribbonWeights = ribbonOpt->createOptionalParameter(5, "-output-weights", "write the voxel weights for a vertex to a volume file");
     ribbonWeights->addIntegerParameter(1, "vertex", "the vertex number to get the voxel weights for, 0-based");
     ribbonWeights->addVolumeOutputParameter(2, "weights-out", "volume to write the weights to");
@@ -78,6 +84,7 @@ OperationParameters* AlgorithmVolumeToSurfaceMapping::getParameters()
     myelinStyleOpt->addVolumeParameter(1, "ribbon-roi", "an roi volume of the cortical ribbon for this hemisphere");
     myelinStyleOpt->addMetricParameter(2, "thickness", "a metric file of cortical thickness");
     myelinStyleOpt->addDoubleParameter(3, "sigma", "gaussian kernel in mm for weighting voxels within range");
+    myelinStyleOpt->createOptionalParameter(4, "-legacy-bug", "emulate old v1.2.3 and earlier code that didn't follow a cylinder cutoff");
     
     OptionalParameter* subvolumeSelect = ret->createOptionalParameter(7, "-subvol-select", "select a single subvolume to map");
     subvolumeSelect->addStringParameter(1, "subvol", "the subvolume number or name");
@@ -87,13 +94,18 @@ OperationParameters* AlgorithmVolumeToSurfaceMapping::getParameters()
         "linear interpolation based on the voxels immediately on each side of the vertex's position.\n\n" +
         "The ribbon mapping method constructs a polyhedron from the vertex's neighbors on each " +
         "surface, and estimates the amount of this polyhedron's volume that falls inside any nearby voxels, to use as the weights for sampling.  " +
+        "If -thin-columns is specified, the polyhedron uses the edge midpoints and triangle centroids, so that neighboring vertices do not have overlapping polyhedra.  " +
+        "This may require increasing -voxel-subdiv to get enough samples in each voxel to reliably land inside these smaller polyhedra.  " +
         "The volume ROI is useful to exclude partial volume effects of voxels the surfaces pass through, and will cause the mapping to ignore " +
         "voxels that don't have a positive value in the mask.  The subdivision number specifies how it approximates the amount of the volume the polyhedron " +
         "intersects, by splitting each voxel into NxNxN pieces, and checking whether the center of each piece is inside the polyhedron.  If you have very large " +
-        "voxels, consider increasing this if you get zeros in your output.\n\n" +
-        "The myelin style method uses part of the caret5 myelin mapping command to do the mapping: for each surface vertex, take all voxels closer than the thickness at the vertex " +
-        "that are within the ribbon ROI, and less than half the thickness value away from the vertex along the direction of the surface normal, and apply a gaussian kernel " +
-        "with the specified sigma to them to get the weights to use."
+        "voxels, consider increasing this if you get zeros in your output.  " +
+        "The -gaussian option makes it act more like the myelin method, where the distance of a voxel from <surface> is used to downweight the voxel.\n\n" +
+        "The myelin style method uses part of the caret5 myelin mapping command to do the mapping: for each surface vertex, take all voxels that are in a cylinder " +
+        "with width and height equal to cortical thickness, centered on the vertex and aligned with the surface normal, and that are also within the ribbon ROI, " +
+        "and apply a gaussian kernel with the specified sigma to them to get the weights to use.  " +
+        "The -legacy-bug flag reverts to the unintended behavior present from the initial implementation up to and including v1.2.3, which had only the tangential cutoff " +
+        "and a bounding box intended to be larger than where the cylinder cutoff should have been."
     );
     return ret;
 }
@@ -196,6 +208,14 @@ void AlgorithmVolumeToSurfaceMapping::useParameters(OperationParameters* myParam
                     throw AlgorithmException("invalid number of subdivisions specified");
                 }
             }
+            bool thinColumns = ribbonOpt->getOptionalParameter(7)->m_present;
+            float gaussScale = -1.0f;
+            OptionalParameter* gaussianOpt = ribbonOpt->getOptionalParameter(8);
+            if (gaussianOpt->m_present)
+            {
+                gaussScale = (float)gaussianOpt->getDouble(1);
+                if (!(gaussScale > 0.0f)) throw AlgorithmException("gaussian scale must be positive");
+            }
             int weightsOutVertex = -1;
             VolumeFile* weightsOut = NULL;
             OptionalParameter* ribbonWeights = ribbonOpt->getOptionalParameter(5);
@@ -204,7 +224,8 @@ void AlgorithmVolumeToSurfaceMapping::useParameters(OperationParameters* myParam
                 weightsOutVertex = (int)ribbonWeights->getInteger(1);
                 weightsOut = ribbonWeights->getOutputVolume(2);
             }
-            AlgorithmVolumeToSurfaceMapping(myProgObj, myVolume, mySurface, myMetricOut, innerSurf, outerSurf, myRoiVol, subdivisions, mySubVol, weightsOutVertex, weightsOut);
+            AlgorithmVolumeToSurfaceMapping(myProgObj, myVolume, mySurface, myMetricOut, innerSurf, outerSurf, myRoiVol, subdivisions, thinColumns,
+                                            mySubVol, gaussScale, weightsOutVertex, weightsOut);
             OptionalParameter* ribbonWeightsText = ribbonOpt->getOptionalParameter(6);
             if (ribbonWeightsText->m_present)
             {//do this after the algorithm, to let it do the error condition checking
@@ -213,7 +234,7 @@ void AlgorithmVolumeToSurfaceMapping::useParameters(OperationParameters* myParam
                 vector<vector<VoxelWeight> > myWeights;
                 const float* roiFrame = NULL;
                 if (myRoiVol != NULL) roiFrame = myRoiVol->getFrame();
-                RibbonMappingHelper::computeWeightsRibbon(myWeights, myVolume->getVolumeSpace(), innerSurf, outerSurf, roiFrame, subdivisions);
+                AlgorithmVolumeToSurfaceMapping::precomputeWeightsRibbon(myWeights, myVolume->getVolumeSpace(), innerSurf, outerSurf, roiFrame, subdivisions, thinColumns, mySurface, gaussScale);
                 for (int i = 0; i < (int)myWeights.size(); ++i)
                 {
                     outFile << i << ", " << myWeights[i].size();
@@ -235,7 +256,8 @@ void AlgorithmVolumeToSurfaceMapping::useParameters(OperationParameters* myParam
             VolumeFile* roi = myelinStyleOpt->getVolume(1);
             MetricFile* thickness = myelinStyleOpt->getMetric(2);
             float sigma = (float)myelinStyleOpt->getDouble(3);
-            AlgorithmVolumeToSurfaceMapping(myProgObj, myVolume, mySurface, myMetricOut, roi, thickness, sigma, mySubVol);
+            bool oldCutoffBug = myelinStyleOpt->getOptionalParameter(4)->m_present;
+            AlgorithmVolumeToSurfaceMapping(myProgObj, myVolume, mySurface, myMetricOut, roi, thickness, sigma, mySubVol, oldCutoffBug);
             break;
         }
         default:
@@ -340,7 +362,8 @@ AlgorithmVolumeToSurfaceMapping::AlgorithmVolumeToSurfaceMapping(ProgressObject*
 //ribbon mapping
 AlgorithmVolumeToSurfaceMapping::AlgorithmVolumeToSurfaceMapping(ProgressObject* myProgObj, const VolumeFile* myVolume, const SurfaceFile* mySurface, MetricFile* myMetricOut,
                                                                  const SurfaceFile* innerSurf, const SurfaceFile* outerSurf, const VolumeFile* roiVol,
-                                                                 const int32_t& subdivisions, const int64_t& mySubVol, const int& weightsOutVertex, VolumeFile* weightsOut) : AbstractAlgorithm(myProgObj)
+                                                                 const int32_t& subdivisions, const bool& thinColumns, const int64_t& mySubVol, const float& gaussScale,
+                                                                 const int& weightsOutVertex, VolumeFile* weightsOut) : AbstractAlgorithm(myProgObj)
 {
     LevelProgress myProgress(myProgObj);
     vector<int64_t> myVolDims;
@@ -377,7 +400,7 @@ AlgorithmVolumeToSurfaceMapping::AlgorithmVolumeToSurfaceMapping(ProgressObject*
     vector<vector<VoxelWeight> > myWeights;
     const float* roiFrame = NULL;
     if (roiVol != NULL) roiFrame = roiVol->getFrame();
-    RibbonMappingHelper::computeWeightsRibbon(myWeights, myVolume->getVolumeSpace(), innerSurf, outerSurf, roiFrame, subdivisions);
+    precomputeWeightsRibbon(myWeights, myVolume->getVolumeSpace(), innerSurf, outerSurf, roiFrame, subdivisions, thinColumns, mySurface, gaussScale);
     if (weightsOut != NULL)
     {
         weightsOut->setValueAllVoxels(0.0f);
@@ -461,9 +484,40 @@ AlgorithmVolumeToSurfaceMapping::AlgorithmVolumeToSurfaceMapping(ProgressObject*
     }
 }
 
+void AlgorithmVolumeToSurfaceMapping::precomputeWeightsRibbon(vector<vector<VoxelWeight> >& myWeights, const VolumeSpace& volSpace,
+                                                              const SurfaceFile* innerSurf, const SurfaceFile* outerSurf, const float* roiFrame,
+                                                              const int& subdivisions, const bool& thinColumns, const SurfaceFile* gaussSurf, const float& gaussScale)
+{
+    RibbonMappingHelper::computeWeightsRibbon(myWeights, volSpace, innerSurf, outerSurf, roiFrame, subdivisions, thinColumns);
+    if (gaussScale > 0.0f)
+    {
+        VolumeFile signedDistVol;
+        MetricFile thickness;
+        AlgorithmSurfaceToSurface3dDistance(NULL, innerSurf, outerSurf, &thickness);
+        int numNodes = innerSurf->getNumberOfNodes();
+        float maxThick = thickness.getValue(0, 0);
+        for (int i = 1; i < numNodes; ++i)
+        {
+            float thisThick = thickness.getValue(i, 0);
+            if (thisThick > maxThick) maxThick = thisThick;
+        }
+        signedDistVol.reinitialize(volSpace);
+        AlgorithmCreateSignedDistanceVolume(NULL, gaussSurf, &signedDistVol, NULL, maxThick * gaussScale * 3.0f, maxThick * gaussScale * 3.0f);//if we somehow have a voxel really far away compared to thickness, treat it as at least 3 sigma
+        for (int i = 0; i < numNodes; ++i)
+        {//modify the weights from the ribbon helper
+            vector<VoxelWeight>& nodeWeights = myWeights[i];
+            for (int j = 0; j < (int)nodeWeights.size(); ++j)
+            {
+                float toSquare = signedDistVol.getValue(nodeWeights[j].ijk) / (thickness.getValue(i, 0) * gaussScale);//negatives are fine, we are going to square it
+                nodeWeights[j].weight *= exp(-toSquare * toSquare / 2);
+            }
+        }
+    }
+}
+
 //myelin style mapping
 AlgorithmVolumeToSurfaceMapping::AlgorithmVolumeToSurfaceMapping(ProgressObject* myProgObj, const VolumeFile* myVolume, const SurfaceFile* mySurface, MetricFile* myMetricOut,
-                                                                 const VolumeFile* roiVol, const MetricFile* thickness, const float& sigma, const int64_t& mySubVol): AbstractAlgorithm(myProgObj)
+                                                                 const VolumeFile* roiVol, const MetricFile* thickness, const float& sigma, const int64_t& mySubVol, const bool& oldCutoffBug): AbstractAlgorithm(myProgObj)
 {
     LevelProgress myProgress(myProgObj);
     vector<int64_t> myVolDims;
@@ -487,7 +541,7 @@ AlgorithmVolumeToSurfaceMapping::AlgorithmVolumeToSurfaceMapping(ProgressObject*
     myMetricOut->setNumberOfNodesAndColumns(numNodes, numColumns);
     myMetricOut->setStructure(mySurface->getStructure());
     vector<vector<VoxelWeight> > myWeights;
-    precomputeWeightsMyelin(myWeights, mySurface, roiVol, thickness, sigma);
+    precomputeWeightsMyelin(myWeights, mySurface, roiVol, thickness, sigma, oldCutoffBug);
     vector<float> myScratch(numNodes);
     if (mySubVol == -1)
     {
@@ -501,7 +555,7 @@ AlgorithmVolumeToSurfaceMapping::AlgorithmVolumeToSurfaceMapping(ProgressObject*
                 {
                     metricLabel += " component " + AString::number(j);
                 }
-                metricLabel += " ribbon constrained";
+                metricLabel += " myelin style";
                 myMetricOut->setColumnName(thisCol, metricLabel);
 #pragma omp CARET_PARFOR schedule(dynamic)
                 for (int64_t node = 0; node < numNodes; ++node)
@@ -525,7 +579,7 @@ AlgorithmVolumeToSurfaceMapping::AlgorithmVolumeToSurfaceMapping(ProgressObject*
             {
                 metricLabel += " component " + AString::number(j);
             }
-            metricLabel += " ribbon constrained";
+            metricLabel += " myelin style";
             int64_t thisCol = j;
             myMetricOut->setColumnName(thisCol, metricLabel);
 #pragma omp CARET_PARFOR schedule(dynamic)
@@ -545,7 +599,7 @@ AlgorithmVolumeToSurfaceMapping::AlgorithmVolumeToSurfaceMapping(ProgressObject*
 }
 
 void AlgorithmVolumeToSurfaceMapping::precomputeWeightsMyelin(vector<vector<VoxelWeight> >& myWeights, const SurfaceFile* mySurface, const VolumeFile* roiVol,
-                                                              const MetricFile* thickness, const float& sigma)
+                                                              const MetricFile* thickness, const float& sigma, const bool& oldCutoffBug)
 {
     int64_t numNodes = mySurface->getNumberOfNodes();
     myWeights.clear();
@@ -573,12 +627,17 @@ void AlgorithmVolumeToSurfaceMapping::precomputeWeightsMyelin(vector<vector<Voxe
         Vector3D nodeCoord = mySurface->getCoordinate(node), nodeIndices, nodenormal = normals + (node * 3);
         roiVol->spaceToIndex(nodeCoord, nodeIndices);
         float nodeThick = thicknessData[node];
+        float cylinderCorner = nodeThick * sqrt(5.0f) / 2.0f;
+        if (oldCutoffBug)
+        {
+            cylinderCorner = nodeThick;//old code didn't use a large enough box to always cover the cylinder corner
+        }
         int64_t min[3], max[3];
         for (int i = 0; i < 3; ++i)
         {
-            min[i] = (int)ceil(nodeIndices[i] - range[i] * nodeThick);
+            min[i] = (int)ceil(nodeIndices[i] - range[i] * cylinderCorner);
             if (min[i] < 0) min[i] = 0;
-            max[i] = (int)floor(nodeIndices[i] + range[i] * nodeThick) + 1;
+            max[i] = (int)floor(nodeIndices[i] + range[i] * cylinderCorner) + 1;
             if (max[i] > myDims[i]) max[i] = myDims[i];
         }
         double weightTotal = 0.0;
@@ -592,8 +651,8 @@ void AlgorithmVolumeToSurfaceMapping::precomputeWeightsMyelin(vector<vector<Voxe
                     Vector3D voxelCoord;
                     roiVol->indexToSpace(ijk, voxelCoord);
                     Vector3D delta = voxelCoord - nodeCoord;
-                    if (abs(nodenormal.dot(delta)) < 0.5f * nodeThick && roiVol->getValue(ijk) > 0.0f)
-                    {
+                    if (abs(nodenormal.dot(delta)) < 0.5f * nodeThick && (oldCutoffBug || nodenormal.cross(delta).length() < nodeThick) && roiVol->getValue(ijk) > 0.0f)
+                    {//old code ignored the tangential distance, only using the box edge
                         float weight = exp(delta.lengthsquared() * invnegsigmasquaredx2);
                         myWeights[node].push_back(VoxelWeight(weight, ijk));
                         weightTotal += weight;

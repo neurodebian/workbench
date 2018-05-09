@@ -677,3 +677,23 @@ GiftiMetaData::isModified() const
     return this->modifiedFlag;
 }
 
+/**
+ * Is the metadata empty (no metadata)?
+ */
+bool
+GiftiMetaData::isEmpty() const
+{
+    return this->metadata.empty();
+}
+
+/**
+ * @return Number of metadata
+ */
+int32_t
+GiftiMetaData::getNumberOfMetaData() const
+{
+    return this->metadata.size();
+}
+
+
+

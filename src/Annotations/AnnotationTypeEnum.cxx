@@ -113,7 +113,7 @@ AnnotationTypeEnum::initialize()
     enumData.push_back(AnnotationTypeEnum(COLOR_BAR,
                                           "COLOR_BAR",
                                           "Color Bar"));
-
+    
     enumData.push_back(AnnotationTypeEnum(IMAGE,
                                           "IMAGE",
                                           "Image"));

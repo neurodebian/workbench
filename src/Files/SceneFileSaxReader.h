@@ -44,7 +44,8 @@ namespace caret {
     
     class SceneFileSaxReader : public CaretObject, public XmlSaxParserHandlerInterface {
     public:
-        SceneFileSaxReader(SceneFile* sceneFile);
+        SceneFileSaxReader(SceneFile* sceneFile,
+                           const AString& sceneFileName);
         
         virtual ~SceneFileSaxReader();
         
@@ -83,8 +84,14 @@ namespace caret {
             STATE_SCENE_INFO_DIRECTORY,
             /// processing scene info Balsa Study ID tag
             STATE_SCENE_INFO_BALSA_STUDY_ID,
+            /// processing scene info Balsa Study Title tag
+            STATE_SCENE_INFO_BALSA_STUDY_TITLE,
             /// processing scene info Base Directory tag
-            STATE_SCENE_INFO_BASE_DIRECTORY,
+            STATE_SCENE_INFO_BALSA_BASE_DIRECTORY,
+            /// processing scene info Balsa Extract to Directory
+            STATE_SCENE_INFO_BALSA_EXTRACT_TO_DIRECTORY,
+            /// processing base path type
+            STATE_SCENE_INFO_BASE_PATH_TYPE,
             /// processing SceneInfo tag
             STATE_SCENE_INFO,
             /// processing Scene tag
@@ -106,6 +113,9 @@ namespace caret {
         /// scene that is being read
         Scene* m_scene;
         
+        /// name of scene file being read
+        AString m_sceneFileName;
+        
         /// scene info that is being read
         SceneInfo* m_sceneInfo;
         
@@ -126,6 +136,8 @@ namespace caret {
         
         /// map that stores scene info by index
         std::map<int32_t, SceneInfo*> m_sceneInfoMap;
+        
+        bool m_baseBathTypeWasFoundFlag = false;
     };
 
 } // namespace

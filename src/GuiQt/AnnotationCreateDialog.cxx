@@ -211,7 +211,8 @@ AnnotationCreateDialog::newAnnotationFromSpaceTypeAndCoords(const Mode mode,
             needToLaunchDialogFlag = true;
         }
         else {
-            Annotation* newAnn = createAnnotation(newInfo, annotationSpace);
+            AString errorMessage;
+            Annotation* newAnn = createAnnotation(newInfo, annotationSpace, errorMessage);
             if (newAnn != NULL) {
                 DisplayPropertiesAnnotation* dpa = GuiManager::get()->getBrain()->getDisplayPropertiesAnnotation();
                 dpa->updateForNewAnnotation(newAnn);
@@ -220,8 +221,12 @@ AnnotationCreateDialog::newAnnotationFromSpaceTypeAndCoords(const Mode mode,
             
                 return newAnn;
             }
+            if ( ! errorMessage.isEmpty()) {
+                WuQMessageBox::errorOk(mouseEvent.getOpenGLWidget(),
+                                       errorMessage);
+                return NULL;
+            }
             
-            delete newAnn;
             needToLaunchDialogFlag = true;
         }
     }
@@ -251,11 +256,18 @@ AnnotationCreateDialog::newAnnotationFromSpaceTypeAndCoords(const Mode mode,
  *     Information about the new annotation.
  * @param annotationSpace
  *     Coordinate space for new annotaiton.
+ * @param errorMessageOut
+ *     Output with error message.
+ * @return
+ *     Pointer to new annotation or NULL if creating annotation failed.
  */
 Annotation*
 AnnotationCreateDialog::createAnnotation(NewAnnotationInfo& newAnnotationInfo,
-                                         const AnnotationCoordinateSpaceEnum::Enum annotationSpace)
+                                         const AnnotationCoordinateSpaceEnum::Enum annotationSpace,
+                                         AString& errorMessageOut)
 {
+    errorMessageOut.clear();
+    
     Annotation* newAnnotation = NULL;
     if (newAnnotationInfo.m_annotationType == AnnotationTypeEnum::TEXT) {
         newAnnotation = new AnnotationPercentSizeText(AnnotationAttributesDefaultTypeEnum::USER);
@@ -265,7 +277,8 @@ AnnotationCreateDialog::createAnnotation(NewAnnotationInfo& newAnnotationInfo,
          */
         bool adjustTextPctSizeFlag = false;
         switch (annotationSpace) {
-            case AnnotationCoordinateSpaceEnum::PIXELS:
+            case AnnotationCoordinateSpaceEnum::CHART:
+                adjustTextPctSizeFlag = true;
                 break;
             case AnnotationCoordinateSpaceEnum::STEREOTAXIC:
                 adjustTextPctSizeFlag = true;
@@ -274,6 +287,9 @@ AnnotationCreateDialog::createAnnotation(NewAnnotationInfo& newAnnotationInfo,
                 adjustTextPctSizeFlag = true;
                 break;
             case AnnotationCoordinateSpaceEnum::TAB:
+                break;
+            case AnnotationCoordinateSpaceEnum::VIEWPORT:
+                CaretAssert(0);
                 break;
             case AnnotationCoordinateSpaceEnum::WINDOW:
                 break;
@@ -312,6 +328,49 @@ AnnotationCreateDialog::createAnnotation(NewAnnotationInfo& newAnnotationInfo,
     if (newAnnotationInfo.m_coordTwoInfoValid) {
         coordTwo = &newAnnotationInfo.m_coordTwoInfo;
     }
+    else {
+        bool threeDimSpaceFlag = false;
+        switch (annotationSpace) {
+            case AnnotationCoordinateSpaceEnum::CHART:
+                threeDimSpaceFlag = true;
+                break;
+            case AnnotationCoordinateSpaceEnum::STEREOTAXIC:
+                threeDimSpaceFlag = true;
+                break;
+            case AnnotationCoordinateSpaceEnum::SURFACE:
+                threeDimSpaceFlag = true;
+                break;
+            case AnnotationCoordinateSpaceEnum::TAB:
+                break;
+            case AnnotationCoordinateSpaceEnum::VIEWPORT:
+                CaretAssert(0);
+                break;
+            case AnnotationCoordinateSpaceEnum::WINDOW:
+                break;
+        }
+        if (threeDimSpaceFlag) {
+            switch (newAnnotationInfo.m_annotationType) {
+                case AnnotationTypeEnum::BOX:
+                    break;
+                case AnnotationTypeEnum::COLOR_BAR:
+                    break;
+                case AnnotationTypeEnum::IMAGE:
+                    break;
+                case AnnotationTypeEnum::LINE:
+                    delete newAnnotation;
+                    newAnnotation = NULL;
+                    errorMessageOut = ("A line annotation cannot be created from a mouse click in "
+                                       + AnnotationCoordinateSpaceEnum::toGuiName(annotationSpace)
+                                       + " coordinate space.   Hold the mouse down, drag the mouse, and then release the mouse.");
+                    return NULL;
+                    break;
+                case AnnotationTypeEnum::OVAL:
+                    break;
+                case AnnotationTypeEnum::TEXT:
+                    break;
+            }
+        }
+    }
     const bool validFlag = AnnotationCoordinateInformation::setAnnotationCoordinatesForSpace(newAnnotation,
                                                                                              annotationSpace,
                                                                                              &newAnnotationInfo.m_coordOneInfo,
@@ -328,7 +387,8 @@ AnnotationCreateDialog::createAnnotation(NewAnnotationInfo& newAnnotationInfo,
         
         finishAnnotationCreation(newAnnotationInfo.m_annotationFile,
                                  newAnnotation,
-                                 newAnnotationInfo.m_mouseEvent.getBrowserWindowIndex());
+                                 newAnnotationInfo.m_mouseEvent.getBrowserWindowIndex(),
+                                 newAnnotationInfo.m_coordOneInfo.m_tabIndex);
         return newAnnotation;
     }
     
@@ -648,11 +708,17 @@ AnnotationCreateDialog::okButtonClicked()
     CaretPointer<Annotation> annotation;
     annotation.grabNew(NULL);
     
-    annotation.grabNew(createAnnotation(m_newAnnotationInfo, space));
+    annotation.grabNew(createAnnotation(m_newAnnotationInfo, space, errorMessage));
     if (annotation == NULL) {
-        WuQMessageBox::errorOk(this,
-                               "Failed to create annotation in space: "
-                               + AnnotationCoordinateSpaceEnum::toGuiName(space));
+        if (errorMessage.isEmpty()) {
+            WuQMessageBox::errorOk(this,
+                                   "Failed to create annotation in space: "
+                                   + AnnotationCoordinateSpaceEnum::toGuiName(space));
+        }
+        else {
+            WuQMessageBox::errorOk(this,
+                                   errorMessage);
+        }
         return;
     }
     
@@ -693,11 +759,14 @@ AnnotationCreateDialog::okButtonClicked()
  *     Annotation that was created.
  * @param browserWindowIndex
  *     Index of window in which annotation was created.
+ * @param tabIndex
+ *     Index of tab in which annotation was created.
  */
 void
 AnnotationCreateDialog::finishAnnotationCreation(AnnotationFile* annotationFile,
                                                  Annotation* annotation,
-                                                 const int32_t browswerWindowIndex)
+                                                 const int32_t browswerWindowIndex,
+                                                 const int32_t tabIndex)
 {
     AnnotationManager* annotationManager = GuiManager::get()->getBrain()->getAnnotationManager();
     
@@ -720,8 +789,81 @@ AnnotationCreateDialog::finishAnnotationCreation(AnnotationFile* annotationFile,
                                         AnnotationManager::SELECTION_MODE_SINGLE,
                                         false,
                                         annotation);
+    
+    /*
+     * A new chart annotation is displayed only in the tab in which it was created
+     */
+    if (annotation->getCoordinateSpace() == AnnotationCoordinateSpaceEnum::CHART) {
+        
+        //annotation->setItemDisplaySelectedInNoDisplayGroups();
+        annotation->setItemDisplaySelectedInOneTab(tabIndex);
+        annotation->setItemDisplaySelected(DisplayGroupEnum::DISPLAY_GROUP_TAB,
+                                           tabIndex,
+                                           TriStateSelectionStatusEnum::SELECTED);
+    }
+    
 }
 
+///**
+// * Constructor for information used to create a new annotation.
+// *
+// * @param mouseEvent
+// *     The mouse event.
+// * @param selectedSpace
+// *     The space selected by the user.
+// * @param annotationType
+// *     The annotation type.
+// * @param useBothCoordinatesFromMouseFlag
+// *     Use both coords (X/Y and pressed X/Y)
+// * @param annotationFile
+// *     File to which annotation is added.
+// */
+//AnnotationCreateDialog::NewAnnotationInfo::NewAnnotationInfo(const MouseEvent& mouseEvent,
+//                                                             const AnnotationCoordinateSpaceEnum::Enum selectedSpace,
+//                                                             const AnnotationTypeEnum::Enum annotationType,
+//                                                             const bool useBothCoordinatesFromMouseFlag,
+//                                                             AnnotationFile* annotationFile)
+//: m_mouseEvent(mouseEvent),
+//m_selectedSpace(selectedSpace),
+//m_annotationType(annotationType),
+//m_annotationFile(annotationFile)
+//{
+//    CaretAssert(annotationFile);
+//    
+//    m_validSpaces.clear();
+//    m_coordOneInfo.reset();
+//    m_coordTwoInfo.reset();
+//    m_coordTwoInfoValid = false;
+//    m_percentageWidth  = -1;
+//    m_percentageHeight = -1;
+//    
+//    AnnotationCoordinateInformation::createCoordinateInformationFromXY(mouseEvent,
+//                                                                       mouseEvent.getX(),
+//                                                                       mouseEvent.getY(),
+//                                                                       m_coordOneInfo);
+//    
+//    if (useBothCoordinatesFromMouseFlag) {
+//        AnnotationCoordinateInformation::createCoordinateInformationFromXY(mouseEvent,
+//                                                                           mouseEvent.getPressedX(),
+//                                                                           mouseEvent.getPressedY(),
+//                                                                           m_coordTwoInfo);
+//        
+//        AnnotationCoordinateInformation::getValidCoordinateSpaces(&m_coordOneInfo,
+//                                                                  &m_coordTwoInfo,
+//                                                                  m_validSpaces);
+//        
+//        if (isValid()) {
+//            m_coordTwoInfoValid = true;
+//            
+//            processTwoCoordInfo();
+//        }
+//    }
+//    else {
+//        AnnotationCoordinateInformation::getValidCoordinateSpaces(&m_coordOneInfo,
+//                                                                  NULL,
+//                                                                  m_validSpaces);
+//    }
+//}
 /**
  * Constructor for information used to create a new annotation.
  *
@@ -755,16 +897,16 @@ m_annotationFile(annotationFile)
     m_percentageWidth  = -1;
     m_percentageHeight = -1;
     
-    AnnotationCoordinateInformation::createCoordinateInformationFromXY(mouseEvent,
-                                                                       mouseEvent.getX(),
-                                                                       mouseEvent.getY(),
-                                                                       m_coordOneInfo);
     
     if (useBothCoordinatesFromMouseFlag) {
         AnnotationCoordinateInformation::createCoordinateInformationFromXY(mouseEvent,
+                                                                           mouseEvent.getX(),
+                                                                           mouseEvent.getY(),
+                                                                           m_coordTwoInfo);
+        AnnotationCoordinateInformation::createCoordinateInformationFromXY(mouseEvent,
                                                                            mouseEvent.getPressedX(),
                                                                            mouseEvent.getPressedY(),
-                                                                           m_coordTwoInfo);
+                                                                           m_coordOneInfo);
         
         AnnotationCoordinateInformation::getValidCoordinateSpaces(&m_coordOneInfo,
                                                                   &m_coordTwoInfo,
@@ -777,6 +919,35 @@ m_annotationFile(annotationFile)
         }
     }
     else {
+        AnnotationCoordinateInformation::createCoordinateInformationFromXY(mouseEvent,
+                                                                           mouseEvent.getX(),
+                                                                           mouseEvent.getY(),
+                                                                           m_coordOneInfo);
+        
+        /*
+         * For one-dimensional annotations (line), we need a second coordinate
+         */
+        bool addSecondCoordFlag = true;
+        switch (annotationType) {
+            case AnnotationTypeEnum::BOX:
+                break;
+            case AnnotationTypeEnum::COLOR_BAR:
+                break;
+            case AnnotationTypeEnum::IMAGE:
+                break;
+            case AnnotationTypeEnum::LINE:
+                addSecondCoordFlag = true;
+                break;
+            case AnnotationTypeEnum::OVAL:
+                break;
+            case AnnotationTypeEnum::TEXT:
+                break;
+        }
+        
+        if (addSecondCoordFlag) {
+            
+        }
+        
         AnnotationCoordinateInformation::getValidCoordinateSpaces(&m_coordOneInfo,
                                                                   NULL,
                                                                   m_validSpaces);
@@ -847,8 +1018,7 @@ AnnotationCreateDialog::NewAnnotationInfo::processTwoCoordInfo()
                     float viewportWidth  = 0.0;
                     float viewportHeight = 0.0;
                     switch (m_selectedSpace) {
-                        case AnnotationCoordinateSpaceEnum::PIXELS:
-                            break;
+                        case AnnotationCoordinateSpaceEnum::CHART:
                         case AnnotationCoordinateSpaceEnum::STEREOTAXIC:
                         case AnnotationCoordinateSpaceEnum::SURFACE:
                         {
@@ -879,6 +1049,9 @@ AnnotationCreateDialog::NewAnnotationInfo::processTwoCoordInfo()
                             viewportWidth = viewport[2];
                             viewportHeight = viewport[3];
                         }
+                            break;
+                        case AnnotationCoordinateSpaceEnum::VIEWPORT:
+                            CaretAssert(0);
                             break;
                         case AnnotationCoordinateSpaceEnum::WINDOW:
                         {

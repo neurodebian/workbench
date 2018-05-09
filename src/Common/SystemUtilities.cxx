@@ -21,10 +21,15 @@
 #include <cstdlib>
 #include <iostream>
 #include <sstream>
+#ifdef CARET_OS_WINDOWS
+#include <windows.h>
+#else
 #include <unistd.h>
+#endif
 
 #include <QDateTime>
 #include <QDir>
+#include <QHostInfo>
 #include <QThread>
 #include <QUuid>
 
@@ -648,4 +653,38 @@ SystemUtilities::getWorkbenchHome()
     
     return workbenchHomeDirectory  = QDir::toNativeSeparators(workbenchHomeDirectory);    
 }
+
+/**
+ * @return The fully qualifed domain name for the local host.
+ *
+ *         If failure, an empty string is returned and a message
+ *         is sent to the logger.
+ * 
+ *         If the address is a "loopback" (127.0.0.1) it typically 
+ *         indicates that there is not a valid network connection
+ *         and an empty string is returned and a message is logged.
+ */
+AString
+SystemUtilities::getLocalHostName()
+{
+    QString hostName;
+    
+    QHostInfo hostInfo = QHostInfo::fromName(QHostInfo::localHostName());
+    if (hostInfo.error() == QHostInfo::NoError) {
+        for (auto address : hostInfo.addresses()) {
+            if (address.isLoopback()) {
+                CaretLogFine("Lookup of host found loopback address (localhost).  May not have valid network connection");
+                return "";
+            }
+        }
+        hostName = hostInfo.hostName();
+    }
+    else {
+        CaretLogWarning("Lookup of local host name failed: "
+                        + hostInfo.errorString());
+    }
+    
+    return hostName;
+}
+
 

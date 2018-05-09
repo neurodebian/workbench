@@ -42,6 +42,69 @@ namespace caret {
     class Annotation : public CaretObjectTracksModification, public DisplayGroupAndTabItemInterface, public SceneableInterface {
         
     public:
+        /**
+         * Properties supported by an annotation
+         */
+        enum class Property : int32_t {
+            /** Invalid (for internal use only) */
+            INVALID,
+            /** Annotation can be arranged by user */
+            ARRANGE,
+            /** Annotation can be moved by user */
+            COORDINATE,
+            /** Annotation allows cut, copy, and paste by user*/
+            COPY_CUT_PASTE,
+            /** Annotation may be deleted by user (note 'DELETE' will not compile on windows) */
+            DELETION,
+            /** Annotation display controlled by Display Group and Tab */
+            DISPLAY_GROUP,
+            /** Annotation has fill (background) color */
+            FILL_COLOR,
+            /** Annotation can be grouped by user */
+            GROUP,
+            /** Annotation has arrows at its line endpoints */
+            LINE_ARROWS,
+            /** Annotation has a line color */
+            LINE_COLOR,
+            /** Annotation has line thickness */
+            LINE_THICKNESS,
+            /** Annotation can be rotated by user */
+            ROTATION,
+            /** 
+             * Annotation's attributes are saved to and restored from scene.
+             * Typically used for special annotation that are saved to a scene
+             * and NOT saved in a file.
+             */
+            SCENE_CONTAINS_ATTRIBUTES,
+            /** Annotation is selectable */
+            SELECT,
+            /** Annotation has alignment of text */
+            TEXT_ALIGNMENT,
+            /** Annotation allows connection to brainordinate */
+            TEXT_CONNECT_TO_BRAINORDINATE,
+            /** Annotation allows editing of its text by user */
+            TEXT_EDIT,
+            /** Annotation has text color */
+            TEXT_COLOR,
+            /** Annotation has font name */
+            TEXT_FONT_NAME,
+            /** Annotation has font size*/
+            TEXT_FONT_SIZE,
+            /** Annotation has font style */
+            TEXT_FONT_STYLE,
+            /** Annotation has orientation of text */
+            TEXT_ORIENTATION,
+            /** Count of properties MUST BE LAST */
+            COUNT_FOR_BITSET
+        };
+        
+        /** Identifies properities for specialized uses of annotations */
+        enum class PropertiesSpecializedUsage  {
+            CHART_LABEL,
+            CHART_TITLE,
+            VIEWPORT_ANNOTATION
+        };
+        
         Annotation(const AnnotationTypeEnum::Enum type,
                    const AnnotationAttributesDefaultTypeEnum::Enum attributeDefaultType);
         
@@ -56,6 +119,23 @@ namespace caret {
         
         Annotation* clone() const;
         
+        bool testProperty(const Property property) const;
+        
+        bool testPropertiesAny(const Property propertyOne,
+                               const Property propertyTwo,
+                               const Property propertyThree = Property::INVALID,
+                               const Property propertyFour  = Property::INVALID,
+                               const Property propertyFive  = Property::INVALID) const;
+        
+        void setProperty(const Property property,
+                         const bool value = true);
+        
+        void resetProperty(const Property property);
+        
+        void setPropertiesForSpecializedUsage(const PropertiesSpecializedUsage specializedUsage);
+        
+        virtual void setModified();
+
         AnnotationGroupKey getAnnotationGroupKey() const;
         
         int32_t getUniqueKey() const;
@@ -82,6 +162,10 @@ namespace caret {
         int32_t getWindowIndex() const;
         
         void setWindowIndex(const int32_t windowIndex);
+        
+        void getViewportCoordinateSpaceViewport(int viewportOut[4]) const;
+        
+        void setViewportCoordinateSpaceViewport(const int viewport[4]);
         
         CaretColorEnum::Enum getLineColor() const;
 
@@ -115,13 +199,11 @@ namespace caret {
         
         void setCustomBackgroundColor(const uint8_t rgba[4]);
         
-        float getLineWidth() const;
+        void convertObsoleteLineWidthPixelsToPercentageWidth(const float viewportHeight) const;
         
-        void setLineWidth(const float lineWidth);
+        float getLineWidthPercentage() const;
         
-        virtual bool isLineWidthSupported() const;
-        
-        virtual bool isBackgroundColorSupported() const;
+        void setLineWidthPercentage(const float lineWidthPercentage);
         
         bool isSelectedForEditing(const int32_t windowIndex) const;
         
@@ -137,9 +219,7 @@ namespace caret {
         
         static void setUserDefaultCustomBackgroundColor(const float rgba[4]);
         
-        static void setUserDefaultLineWidth(const float lineWidth);
-        
-        virtual bool isDeletable() const;
+        static void setUserDefaultLineWidthPercentage(const float lineWidthPercentage);
         
         virtual bool isFixedAspectRatio() const;
         
@@ -244,6 +324,8 @@ namespace caret {
 
         void initializeAnnotationMembers();
         
+        void initializeProperties();
+        
         // private - AnnotationManager handles selection and allowing
         // public access to this method could cause improper selection status
         void setSelectedForEditing(const int32_t windowIndex,
@@ -263,6 +345,10 @@ namespace caret {
         void clearDrawnInWindowStatusForAllWindows();
         
     private:
+        float getLineWidthPixelsObsolete() const;
+        
+        void setLineWidthPixelsObsolete(const float lineWidthPixels);
+        
         void setAnnotationGroupKey(const AnnotationGroupKey& annotationGroupKey);
 
         void invalidateAnnotationGroupKey();
@@ -279,6 +365,8 @@ namespace caret {
         
         int32_t m_windowIndex;
         
+        int32_t m_viewportCoordinateSpaceViewport[4];
+        
         CaretColorEnum::Enum m_colorLine;
         
         CaretColorEnum::Enum m_colorBackground;
@@ -287,8 +375,10 @@ namespace caret {
         
         float m_customColorBackground[4];
         
-        float m_lineWidth;
+        float m_lineWidthPixels;
 
+        float m_lineWidthPercentage = -1.0f;
+        
         AString m_name;
         
         int32_t m_uniqueKey;
@@ -301,11 +391,15 @@ namespace caret {
          * Selection (NOT DISPLAY) status in each window.
          *
          * Number of elements must be same as Constants::MAXIMUM_NUMBER_OF_BROWSER_WINDOWS
-         * An assertion will fail in the if number of elements differs.
+         * An assertion will fail in cxx file the if number of elements differs.
          */
         mutable std::bitset<10> m_selectedForEditingInWindowFlag;
         
-        // defaults
+        /**
+         * Contains annotation properties.  In the cxx file, an assertion will fail
+         * if the number of elements is insufficient.
+         */
+        std::bitset<32> m_properties;
         
         static CaretColorEnum::Enum s_userDefaultColorLine;
         
@@ -319,12 +413,15 @@ namespace caret {
         
         static float s_userDefaultCustomColorBackground[4];
         
-        static float s_userDefaultLineWidth;
+        static float s_userDefaultLineWidthPixelsObsolete;
+        
+        static float s_userDefaultLineWidthPercentage;
         
         // ADD_NEW_MEMBERS_HERE
 
         friend class AnnotationFile;
         friend class AnnotationFileXmlReader;
+        friend class AnnotationFileXmlWriter;
         friend class AnnotationGroup;
         friend class AnnotationManager;
     };
@@ -342,7 +439,9 @@ namespace caret {
     
     float Annotation::s_userDefaultCustomColorBackground[4] = { 0.0, 0.0, 0.0, 1.0 };
     
-    float Annotation::s_userDefaultLineWidth = 3.0;
+    float Annotation::s_userDefaultLineWidthPixelsObsolete = 3.0f;
+    
+    float Annotation::s_userDefaultLineWidthPercentage = 1.0f;
 #endif // __ANNOTATION_DECLARE__
 
 } // namespace

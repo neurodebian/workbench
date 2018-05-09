@@ -31,7 +31,6 @@
 #include "StructureEnum.h"
 #include "GiftiMetaData.h"
 #include "BoundingBox.h"
-#include "PaletteFile.h"
 #include "VolumeFileVoxelColorizer.h"
 #include "VoxelIJK.h"
 
@@ -62,13 +61,14 @@ namespace caret {
         {//TODO: prune this once statistics gets straightened out
             CaretPointer<FastStatistics> m_fastStatistics;
             CaretPointer<Histogram> m_histogram;
+            int32_t m_histogramNumberOfBuckets = 100;
             CaretPointer<Histogram> m_histogramLimitedValues;
+            int32_t m_histogramLimitedValuesNumberOfBuckets = 100;
             float m_histogramLimitedValuesMostPositiveValueInclusive;
             float m_histogramLimitedValuesLeastPositiveValueInclusive;
             float m_histogramLimitedValuesLeastNegativeValueInclusive;
             float m_histogramLimitedValuesMostNegativeValueInclusive;
             bool m_histogramLimitedValuesIncludeZeroValues;
-            CaretPointer<GiftiMetaData> m_metadata;//NOTE: does not get saved currently!
         };
         
         mutable std::vector<BrickAttributes> m_brickAttributes;//because statistics and metadata construct lazily
@@ -81,9 +81,12 @@ namespace caret {
         /** Histogram used when statistics computed on all data in file */
         CaretPointer<Histogram> m_fileHistogram;
         
+        int32_t m_fileHistogramNumberOfBuckets = 100;
+        
         /** Histogram with limited values used when statistics computed on all data in file */
         CaretPointer<Histogram> m_fileHistorgramLimitedValues;
         
+        int32_t m_fileHistogramLimitedValuesNumberOfBuckets;
         float m_fileHistogramLimitedValuesMostPositiveValueInclusive;
         float m_fileHistogramLimitedValuesLeastPositiveValueInclusive;
         float m_fileHistogramLimitedValuesLeastNegativeValueInclusive;
@@ -186,13 +189,15 @@ namespace caret {
 
         bool isEmpty() const { return VolumeBase::isEmpty(); }
         
+        bool hasGoodSpatialInformation() const;
+        
         virtual void setModified();
         
         virtual void clearModified();
         
         virtual bool isModifiedExcludingPaletteColorMapping() const;
         
-        void getVoxelSpaceBoundingBox(BoundingBox& boundingBoxOut) const;
+        void getVoxelSpaceBoundingBox(BoundingBox& boundingBoxOut) const override;
         
         /**
          * @return The structure for this file.
@@ -209,12 +214,12 @@ namespace caret {
         /**
          * @return Get access to the file's metadata.
          */
-        GiftiMetaData* getFileMetaData() { return NULL; }//doesn't seem to be a spot for generic metadata in the nifti caret extension
+        GiftiMetaData* getFileMetaData();
         
         /**
          * @return Get access to unmodifiable file's metadata.
          */
-        const GiftiMetaData* getFileMetaData() const { return NULL; }
+        const GiftiMetaData* getFileMetaData() const;
         
         bool isSurfaceMappable() const { return false; }
         
@@ -259,7 +264,7 @@ namespace caret {
         
         bool isMappedWithPalette() const;
         
-        virtual void getPaletteNormalizationModesSupported(std::vector<PaletteNormalizationModeEnum::Enum>& modesSupportedOut);
+        virtual void getPaletteNormalizationModesSupported(std::vector<PaletteNormalizationModeEnum::Enum>& modesSupportedOut) const;
         
         PaletteColorMapping* getMapPaletteColorMapping(const int32_t mapIndex);
         
@@ -281,8 +286,7 @@ namespace caret {
         
         AString getMapUniqueID(const int32_t mapIndex) const;
         
-        void updateScalarColoringForMap(const int32_t mapIndex,
-                                     const PaletteFile* paletteFile);
+        void updateScalarColoringForMap(const int32_t mapIndex) override;
         
         virtual int64_t getVoxelColorsForSliceInMap(const int32_t mapIndex,
                                             const int64_t firstVoxelIJK[3],
@@ -292,17 +296,17 @@ namespace caret {
                                             const int64_t numberOfColumns,
                                             const DisplayGroupEnum::Enum displayGroup,
                                             const int32_t tabIndex,
-                                            uint8_t* rgbaOut) const;
+                                            uint8_t* rgbaOut) const override;
         
-        virtual int64_t getVoxelColorsForSliceInMap(const PaletteFile* paletteFile,
+        virtual int64_t getVoxelColorsForSliceInMap(
                                          const int32_t mapIndex,
                                          const VolumeSliceViewPlaneEnum::Enum slicePlane,
                                          const int64_t sliceIndex,
                                          const DisplayGroupEnum::Enum displayGroup,
                                          const int32_t tabIndex,
-                                         uint8_t* rgbaOut) const;
+                                         uint8_t* rgbaOut) const override;
 
-        virtual int64_t getVoxelColorsForSubSliceInMap(const PaletteFile* paletteFile,
+        virtual int64_t getVoxelColorsForSubSliceInMap(
                                                     const int32_t mapIndex,
                                                     const VolumeSliceViewPlaneEnum::Enum slicePlane,
                                                     const int64_t sliceIndex,
@@ -311,21 +315,20 @@ namespace caret {
                                                     const int64_t voxelCountIJK[3],
                                                     const DisplayGroupEnum::Enum displayGroup,
                                                     const int32_t tabIndex,
-                                                    uint8_t* rgbaOut) const;
+                                                    uint8_t* rgbaOut) const override;
         
         void getVoxelValuesForSliceInMap(const int32_t mapIndex,
                                          const VolumeSliceViewPlaneEnum::Enum slicePlane,
                                          const int64_t sliceIndex,
                                          float* sliceValues) const;
         
-        void getVoxelColorInMap(const PaletteFile* paletteFile,
-                                const int64_t i,
+        void getVoxelColorInMap(const int64_t i,
                                 const int64_t j,
                                 const int64_t k,
                                 const int64_t mapIndex,
                                 const DisplayGroupEnum::Enum displayGroup,
                                 const int32_t tabIndex,
-                                uint8_t rgbaOut[4]) const;
+                                uint8_t rgbaOut[4]) const override;
         
         void clearVoxelColoringForMap(const int64_t mapIndex);
         
@@ -354,8 +357,12 @@ namespace caret {
         virtual ChartDataCartesian* loadLineSeriesChartDataForVoxelAtCoordinate(const float xyz[3]);
         
         
-        virtual void getSupportedLineSeriesChartDataTypes(std::vector<ChartDataTypeEnum::Enum>& chartDataTypesOut) const;
+        virtual void getSupportedLineSeriesChartDataTypes(std::vector<ChartOneDataTypeEnum::Enum>& chartDataTypesOut) const;
         
+        virtual void getDataForSelector(const MapFileDataSelector& mapFileDataSelector,
+                                        std::vector<float>& dataOut) const override;
+        
+        virtual BrainordinateMappingMatch getBrainordinateMappingMatch(const CaretMappableDataFile* mapFile) const override;
     };
 
 }

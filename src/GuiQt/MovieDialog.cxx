@@ -20,7 +20,11 @@
 
 #include <QDir>
 #include <QFileDialog>
+#ifdef CARET_OS_WINDOWS
+#include <windows.h>
+#else
 #include <unistd.h>
+#endif
 
 #include "MovieDialog.h"
 #include "ui_MovieDialog.h"
@@ -252,7 +256,7 @@ void MovieDialog::on_recordButton_toggled(bool checked)
                                                + fileName);
             CaretLogFine("running " + command);
 
-            system(command.toAscii().data());
+            system(command.toLatin1().data());
             CaretLogFine("Finished rendering " + fileName);
 
         }

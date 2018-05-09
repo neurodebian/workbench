@@ -11,7 +11,13 @@ SET(QT_DONT_USE_QTGUI)
 #
 # Add QT for includes
 #
-INCLUDE (${QT_USE_FILE})
+if(Qt5_FOUND)
+    include_directories(${Qt5Core_INCLUDE_DIRS})
+endif()
+IF (QT4_FOUND)
+    INCLUDE(${QT_USE_FILE})
+ENDIF ()
+
 
 #
 # Create the brain library
@@ -43,6 +49,8 @@ CommandOperationManager.cxx
 CommandParser.cxx
 CommandUnitTest.cxx
 )
+
+TARGET_LINK_LIBRARIES(Commands ${CARET_QT5_LINK})
 
 #
 # Find Headers

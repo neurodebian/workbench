@@ -56,7 +56,7 @@ namespace caret {
         operator std::string () {return this->toStdString(); }
         
         //char * compatibility
-        operator const char* () {return this->toAscii(); }
+        operator const char* () {return this->toLatin1(); }
         
         //double compatiblity
         operator double () {return this->toDouble(); }
@@ -131,6 +131,17 @@ namespace caret {
         AString replaceHtmlSpecialCharactersWithEscapeCharacters() const;
         
         AString fixUnicodeHyphens(bool* hyphenReplaced = NULL, bool* hadOtherNonAscii = NULL, const bool& quiet = false) const;
+        
+        static AString findLongestCommonPrefix(const std::vector<AString>& v);
+        
+        static std::vector<AString> stringListToVector(const QStringList& stringList);
+        
+        static AString join(const std::vector<AString>& elements,
+                            const AString& separator);
+        
+        static int32_t matchingCount(const std::vector<AString>& v1,
+                                     const std::vector<AString>& v2);
+        
     };
 }
 

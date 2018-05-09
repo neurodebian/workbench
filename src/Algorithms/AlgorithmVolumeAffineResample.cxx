@@ -95,7 +95,9 @@ void AlgorithmVolumeAffineResample::useParameters(OperationParameters* myParams,
     FloatMatrix affMat = FloatMatrix(myAffine.getMatrix());
     NiftiIO refSpaceIO;
     refSpaceIO.openRead(refSpaceName);
-    AlgorithmVolumeAffineResample(myProgObj, inVol, affMat, refSpaceIO.getDimensions().data(), refSpaceIO.getHeader().getSForm(), myMethod, outVol);
+    vector<int64_t> refDims = refSpaceIO.getDimensions();
+    if (refDims.size() < 3) refDims.resize(3, 1);
+    AlgorithmVolumeAffineResample(myProgObj, inVol, affMat, refDims.data(), refSpaceIO.getHeader().getSForm(), myMethod, outVol);
 }
 
 AlgorithmVolumeAffineResample::AlgorithmVolumeAffineResample(ProgressObject* myProgObj, const VolumeFile* inVol, const FloatMatrix& myAffine,
@@ -134,6 +136,10 @@ AlgorithmVolumeAffineResample::AlgorithmVolumeAffineResample(ProgressObject* myP
         {
             *(outVol->getMapLabelTable(i)) = *(inVol->getMapLabelTable(i));
         }
+    }
+    for (int64_t i = 0; i < numMaps; ++i)
+    {
+        outVol->setMapName(i, inVol->getMapName(i));
     }
     for (int64_t c = 0; c < numComponents; ++c)
     {

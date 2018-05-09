@@ -136,27 +136,27 @@ ChartLinesSelectionViewController::updateSelectionViewController()
     }
     const int32_t browserTabIndex = browserTabContent->getTabNumber();
 
-    ChartDataTypeEnum::Enum chartDataType = ChartDataTypeEnum::CHART_DATA_TYPE_INVALID;
+    ChartOneDataTypeEnum::Enum chartDataType = ChartOneDataTypeEnum::CHART_DATA_TYPE_INVALID;
     ModelChart* modelChart = brain->getChartModel();
     if (modelChart != NULL) {
-        chartDataType = modelChart->getSelectedChartDataType(browserTabIndex);
+        chartDataType = modelChart->getSelectedChartOneDataType(browserTabIndex);
     }
     
     bool validFlag = false;
     switch (chartDataType) {
-        case ChartDataTypeEnum::CHART_DATA_TYPE_INVALID:
+        case ChartOneDataTypeEnum::CHART_DATA_TYPE_INVALID:
             break;
-        case ChartDataTypeEnum::CHART_DATA_TYPE_MATRIX_LAYER:
+        case ChartOneDataTypeEnum::CHART_DATA_TYPE_MATRIX_LAYER:
             break;
-        case ChartDataTypeEnum::CHART_DATA_TYPE_MATRIX_SERIES:
+        case ChartOneDataTypeEnum::CHART_DATA_TYPE_MATRIX_SERIES:
             break;
-        case ChartDataTypeEnum::CHART_DATA_TYPE_LINE_DATA_SERIES:
+        case ChartOneDataTypeEnum::CHART_DATA_TYPE_LINE_DATA_SERIES:
             validFlag = true;
             break;
-        case ChartDataTypeEnum::CHART_DATA_TYPE_LINE_FREQUENCY_SERIES:
+        case ChartOneDataTypeEnum::CHART_DATA_TYPE_LINE_FREQUENCY_SERIES:
             validFlag = true;
             break;
-        case ChartDataTypeEnum::CHART_DATA_TYPE_LINE_TIME_SERIES:
+        case ChartOneDataTypeEnum::CHART_DATA_TYPE_LINE_TIME_SERIES:
             validFlag = true;
             break;
     }
@@ -164,7 +164,7 @@ ChartLinesSelectionViewController::updateSelectionViewController()
     if (validFlag) {
         std::vector<ChartableLineSeriesInterface*> chartableLineSeriesFilesVector;
         
-        const ChartDataTypeEnum::Enum chartDataType = modelChart->getSelectedChartDataType(browserTabIndex);
+        const ChartOneDataTypeEnum::Enum chartDataType = modelChart->getSelectedChartOneDataType(browserTabIndex);
         
         brain->getAllChartableLineSeriesDataFilesForChartDataType(chartDataType,
                                                                   chartableLineSeriesFilesVector);

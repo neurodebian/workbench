@@ -731,7 +731,7 @@ CiftiFiberTrajectoryFile::getMapLabelTable(const int32_t /*mapIndex*/) const
  *     vector is assumed to be the default mode.
  */
 void
-CiftiFiberTrajectoryFile::getPaletteNormalizationModesSupported(std::vector<PaletteNormalizationModeEnum::Enum>& modesSupportedOut)
+CiftiFiberTrajectoryFile::getPaletteNormalizationModesSupported(std::vector<PaletteNormalizationModeEnum::Enum>& modesSupportedOut) const
 {
     modesSupportedOut.clear();
 }
@@ -749,8 +749,7 @@ CiftiFiberTrajectoryFile::getPaletteNormalizationModesSupported(std::vector<Pale
  *    Palette file containing palettes.
  */
 void
-CiftiFiberTrajectoryFile::updateScalarColoringForMap(const int32_t /*mapIndex*/,
-                                                  const PaletteFile* /*paletteFile*/)
+CiftiFiberTrajectoryFile::updateScalarColoringForMap(const int32_t /*mapIndex*/)
 {
 }
 
@@ -1902,4 +1901,50 @@ CiftiFiberTrajectoryFile::addToDataFileContentInformation(DataFileContentInforma
     
 
 }
+
+bool CiftiFiberTrajectoryFile::hasCiftiXML() const
+{
+    return true;
+}
+
+const CiftiXML CiftiFiberTrajectoryFile::getCiftiXML() const
+{
+    if (m_sparseFile != NULL)
+    {
+        return m_sparseFile->getCiftiXML();
+    }
+    return CiftiXML();
+}
+
+/**
+ * Get data from the file as requested in the given map file data selector.
+ *
+ * @param mapFileDataSelector
+ *     Specifies selection of data.
+ * @param dataOut
+ *     Output with data.  Will be empty if data does not support the map file data selector.
+ */
+void
+CiftiFiberTrajectoryFile::getDataForSelector(const MapFileDataSelector& /*mapFileDataSelector*/,
+                                             std::vector<float>& dataOut) const
+{
+    dataOut.clear();
+}
+
+/**
+ * Are all brainordinates in this file also in the given file?
+ * That is, the brainordinates are equal to or a subset of the brainordinates
+ * in the given file.
+ *
+ * @param mapFile
+ *     The given map file.
+ * @return
+ *     True if brainordinates in this file are subset or equal to the given file, else false.
+ */
+CaretMappableDataFile::BrainordinateMappingMatch
+CiftiFiberTrajectoryFile::getBrainordinateMappingMatch(const CaretMappableDataFile* /*mapFile*/) const
+{
+    return BrainordinateMappingMatch::NO;
+}
+
 

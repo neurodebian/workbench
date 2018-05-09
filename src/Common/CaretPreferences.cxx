@@ -614,6 +614,10 @@ CaretPreferences::setUserBackgroundAndForegroundColors(const BackgroundAndForegr
     writeUnsignedByteArray(NAME_COLOR_CHART_MATRIX_GRID_LINES,
                            this->userColors.m_colorChartMatrixGridLines,
                            3);
+    
+    writeUnsignedByteArray(NAME_COLOR_CHART_HISTOGRAM_THRESHOLD,
+                           this->userColors.m_colorChartHistogramThreshold,
+                           3);
 }
 
 /**
@@ -1065,6 +1069,29 @@ CaretPreferences::setRemoteFileUserNameAndPassword(const AString& userName,
 }
 
 /**
+ * @return The BALSA username
+ */
+AString
+CaretPreferences::getBalsaUserName() const
+{
+    return this->balsaUserName;
+}
+
+/**
+ * Set the BALSA username
+ *
+ * @param userName
+ *     New value for BALSA username.
+ */
+void
+CaretPreferences::setBalsaUserName(const AString& userName)
+{
+    this->balsaUserName = userName;
+    this->setString(NAME_BALSA_USER_NAME,
+                    userName);
+}
+
+/**
  * @return  Are axes crosshairs displayed?
  */
 bool 
@@ -1386,6 +1413,12 @@ CaretPreferences::readPreferences()
                           3);
     userColors.setColorChartMatrixGridLines(colorRGB);
     
+    userColors.getColorChartHistogramThreshold(colorRGB);
+    readUnsignedByteArray(NAME_COLOR_CHART_HISTOGRAM_THRESHOLD,
+                          colorRGB,
+                          3);
+    userColors.setColorChartHistogramThreshold(colorRGB);
+    
     this->previousSpecFiles.clear();    
     const int numPrevSpec = this->qSettings->beginReadArray(NAME_PREVIOUS_SPEC_FILES);
     for (int i = 0; i < numPrevSpec; i++) {
@@ -1486,6 +1519,8 @@ CaretPreferences::readPreferences()
     this->remoteFilePassword = this->getString(NAME_REMOTE_FILE_PASSWORD);
     this->remoteFileLoginSaved = this->getBoolean(NAME_REMOTE_FILE_LOGIN_SAVED,
                                                   false);
+    
+    this->balsaUserName = this->getString(NAME_BALSA_USER_NAME);
     
     this->showSurfaceIdentificationSymbols = this->getBoolean(NAME_SHOW_SURFACE_IDENTIFICATION_SYMBOLS,
                                                               true);

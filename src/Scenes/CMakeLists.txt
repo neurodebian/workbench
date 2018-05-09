@@ -15,14 +15,19 @@ PROJECT (Scenes)
 #ADD_DEFINITIONS(-DCARET_SCENE_DEBUG)
 
 #
-# Use XML from Qt but not GUI.
-#
-SET(QT_DONT_USE_QTGUI TRUE)
-
-#
 # QT include files
 #
-INCLUDE(${QT_USE_FILE})
+SET(CARET_QT_LINK_MODULES "")
+if(Qt5_FOUND)
+    include_directories(${Qt5Core_INCLUDE_DIRS})
+    #include_directories(${Qt5Network_INCLUDE_DIRS})
+    include_directories(${Qt5Xml_INCLUDE_DIRS})
+    SET(CARET_QT_LINK_MODULES "Qt5::Core")
+endif()
+IF (QT4_FOUND)
+    SET(QT_DONT_USE_QTGUI TRUE)
+    INCLUDE(${QT_USE_FILE})
+ENDIF ()
 
 #
 # Create a Library
@@ -39,6 +44,7 @@ SceneClassArray.h
 SceneClassAssistant.h
 SceneEnumeratedTypeArray.h
 SceneEnumeratedType.h
+SceneFileBasePathTypeEnum.h
 SceneFloat.h
 SceneFloatArray.h
 SceneInfo.h
@@ -75,6 +81,7 @@ SceneClassArray.cxx
 SceneClassAssistant.cxx
 SceneEnumeratedTypeArray.cxx
 SceneEnumeratedType.cxx
+SceneFileBasePathTypeEnum.cxx
 SceneFloat.cxx
 SceneFloatArray.cxx
 SceneInfo.cxx
@@ -97,6 +104,8 @@ SceneUnsignedByte.cxx
 SceneUnsignedByteArray.cxx
 SceneWriterXml.cxx
 )
+
+TARGET_LINK_LIBRARIES(Scenes ${CARET_QT5_LINK})
 
 #
 # Find headers

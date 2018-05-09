@@ -26,6 +26,7 @@
 #include "CiftiXML.h"
 #include "CiftiXMLOld.h"
 #include "MultiDimIterator.h"
+#include "nifti1.h"
 
 #include <QString>
 
@@ -45,13 +46,18 @@ namespace caret
             BIG
         };
 
-        CiftiFile() { m_endianPref = NATIVE; }
+        CiftiFile()
+        {
+            m_endianPref = NATIVE;
+            setWritingDataTypeNoScaling();//default argument is float32
+        }
         explicit CiftiFile(const QString &fileName);//calls openFile
         void openFile(const QString& fileName);//starts on-disk reading
         void openURL(const QString& url, const QString& user, const QString& pass);//open from XNAT
         void openURL(const QString& url);//same, without user/pass (or curently, reusing existing auth if the server matches
         void setWritingFile(const QString& fileName, const CiftiVersion& writingVersion = CiftiVersion(), const ENDIAN& endian = NATIVE);//starts on-disk writing
         void writeFile(const QString& fileName, const CiftiVersion& writingVersion = CiftiVersion(), const ENDIAN& endian = ANY);//leaves current state as-is, rewrites if already writing to that filename and version mismatch
+        void close();//closes the underlying file to flush it, so that exceptions can be thrown
         void convertToInMemory();
         QString getFileName() const { return m_fileName; }
         
@@ -68,6 +74,10 @@ namespace caret
         void setCiftiXML(const CiftiXMLOld &xml, const bool useOldMetadata = true);//set xml from old implementation
         void setRow(const float* dataIn, const std::vector<int64_t>& indexSelect);
         void setColumn(const float* dataIn, const int64_t& index);//for 2D only, will be slow if on disk!
+        
+        ///data type and scaling options - should be set before setRow, etc, to avoid rewriting of file
+        void setWritingDataTypeNoScaling(const int16_t& type = NIFTI_TYPE_FLOAT32);
+        void setWritingDataTypeAndScaling(const int16_t& type, const double& minval, const double& maxval);
         
         void getRow(float* dataOut, const int64_t& index, const bool& tolerateShortRead) const;//backwards compatibility for old CiftiFile/CiftiInterface
         void getRow(float* dataOut, const int64_t& index) const;
@@ -90,6 +100,7 @@ namespace caret
         public:
             virtual void setRow(const float* dataIn, const std::vector<int64_t>& indexSelect) = 0;
             virtual void setColumn(const float* dataIn, const int64_t& index) = 0;
+            virtual void close() {}
             virtual ~WriteImplInterface();
         };
     private:
@@ -100,6 +111,9 @@ namespace caret
         //CiftiXML m_xml;//uncomment when we drop CiftiInterface
         CiftiVersion m_onDiskVersion;
         ENDIAN m_endianPref;
+        bool m_doWriteScaling;
+        int16_t m_writingDataType;
+        double m_minScalingVal, m_maxScalingVal;
         
         void verifyWriteImpl();
         static void copyImplData(const ReadImplInterface* from, WriteImplInterface* to, const std::vector<int64_t>& dims);

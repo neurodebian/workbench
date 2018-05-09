@@ -147,10 +147,19 @@ void
 CaretFileDialog::initializeCaretFileDialog()
 {
     /*
-     * Create a proxy model that hides files that do not match the file filter.
-     * On Macs, Qt shows files that do not match the file filter as disabled
-     * but we don't want them displayed.  The dialog will take ownership of 
-     * the proxy model so it does not need to be deleted by this instance.
+     * We MUST use a non-native dialog.
+     * Otherwise, the file filter proxy model 
+     * will not work.
+     */
+    setOption(QFileDialog::DontUseNativeDialog);
+    
+    /*
+     * Create a proxy model for filtering the data files.
+     * The proxy is used to limit the displayed files to 
+     * only those with the proper file extension.  In addition,
+     * since CIFTI and NIFTI files end in ".nii", filtering is
+     * performed so that CIFTI files are not displayed when
+     * the user selectes Volume files.
      */
     m_filterFilesProxyModel = new FilterFilesProxyModel();
     this->setProxyModel(m_filterFilesProxyModel);
@@ -179,7 +188,7 @@ void
 CaretFileDialog::setVisible(bool visible)
 {
     if (visible) {
-        fileFilterWasChanged(selectedFilter());
+        fileFilterWasChanged(selectedNameFilter());
     }
     
     QFileDialog::setVisible(visible);
@@ -239,8 +248,54 @@ CaretFileDialog::getOpenFileNameDialog(QWidget *parent,
                         dir,
                         filter);
     if (selectedFilter != 0) {
-        cfd.selectFilter(*selectedFilter);
+        cfd.selectNameFilter(*selectedFilter);
     }
+    cfd.setOptions(options);
+    cfd.setAcceptMode(CaretFileDialog::AcceptOpen);
+    cfd.setFileMode(CaretFileDialog::AnyFile);
+    
+    if (cfd.exec() == CaretFileDialog::Accepted) {
+        QStringList selectedFiles = cfd.selectedFiles();
+        if (selectedFiles.size() > 0) {
+            return selectedFiles[0];
+        }
+    }
+    
+    return QString();
+}
+
+
+/**
+ * Like QFileDialog::getOpenFileName() except that this
+ * NEVER uses the native file dialog thus providing
+ * a consistent user-interface across platforms.
+ *
+ * @param dataFileType
+ *    Type of Workbench data file
+ * @param parent
+ *    Parent on which this dialog is displayed.
+ * @param caption
+ *    Caption for dialog (if not provided a default caption is shown)
+ * @param dir
+ *    Directory show by dialog (Brain's current directory if empty string)
+ * @param options
+ *    Options (see QFileDialog).
+ * @return
+ *    Name of file selected or empty string if user cancelled.
+ */
+QString
+CaretFileDialog::getOpenFileNameDialog(const DataFileTypeEnum::Enum dataFileType,
+                                       QWidget* parent,
+                                       const QString& caption,
+                                       const QString& dir,
+                                       Options options)
+{
+    
+    CaretFileDialog cfd(parent,
+                        caption,
+                        dir,
+                        DataFileTypeEnum::toQFileDialogFilter(dataFileType));
+    cfd.selectNameFilter(DataFileTypeEnum::toQFileDialogFilter(dataFileType));
     cfd.setOptions(options);
     cfd.setAcceptMode(CaretFileDialog::AcceptOpen);
     cfd.setFileMode(CaretFileDialog::AnyFile);
@@ -288,7 +343,7 @@ CaretFileDialog::getSaveFileNameDialog(QWidget *parent,
                         dir,
                         filter);
     if (selectedFilter != 0) {
-        cfd.selectFilter(*selectedFilter);
+        cfd.selectNameFilter(*selectedFilter);
     }
     cfd.setOptions(options);
     cfd.setAcceptMode(QFileDialog::AcceptSave);
@@ -338,7 +393,7 @@ CaretFileDialog::getSaveFileNameDialog(const DataFileTypeEnum::Enum dataFileType
                         caption,
                         dir,
                         DataFileTypeEnum::toQFileDialogFilter(dataFileType));
-    cfd.selectFilter(DataFileTypeEnum::toQFileDialogFilter(dataFileType));
+    cfd.selectNameFilter(DataFileTypeEnum::toQFileDialogFilter(dataFileType));
     cfd.setOptions(options);
     cfd.setAcceptMode(QFileDialog::AcceptSave);
     cfd.setFileMode(CaretFileDialog::AnyFile);
@@ -387,8 +442,10 @@ CaretFileDialog::getChooseFileNameDialog(const DataFileTypeEnum::Enum dataFileTy
                                          QWidget *parent)
 {
     CaretFileDialog fd(parent);
-    fd.setFilter(DataFileTypeEnum::toQFileDialogFilter(dataFileType));
-    fd.selectFilter(DataFileTypeEnum::toQFileDialogFilter(dataFileType));
+    if (dataFileType != DataFileTypeEnum::UNKNOWN) {
+        fd.setNameFilter(DataFileTypeEnum::toQFileDialogFilter(dataFileType));
+    }
+    fd.selectNameFilter(DataFileTypeEnum::toQFileDialogFilter(dataFileType));
     fd.setAcceptMode(CaretFileDialog::AcceptSave);
     fd.setFileMode(CaretFileDialog::AnyFile);
     fd.setViewMode(CaretFileDialog::List);
@@ -497,7 +554,7 @@ CaretFileDialog::getOpenFileNamesDialog(QWidget *parent,
                         dir,
                         filter);
     if (selectedFilter != 0) {
-        cfd.selectFilter(*selectedFilter);
+        cfd.selectNameFilter(*selectedFilter);
     }
     cfd.setOptions(options);
     cfd.setAcceptMode(CaretFileDialog::AcceptOpen);
@@ -559,12 +616,12 @@ CaretFileDialog::restoreDialogSettings(const AString& settingsName)
             setDirectory(previousSettings.m_directoryName);
         }
         
-        QStringList dialogFilters = filters();
+        QStringList dialogFilters = nameFilters();
         QStringListIterator filterIter(dialogFilters);
         while (filterIter.hasNext()) {
             const AString filterName = filterIter.next();
             if (filterName == previousSettings.m_fileFilterName) {
-                selectFilter(previousSettings.m_fileFilterName);
+                selectNameFilter(previousSettings.m_fileFilterName);
                 break;
             }
         }

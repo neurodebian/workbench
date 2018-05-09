@@ -18,6 +18,9 @@
  */
 /*LICENSE_END*/
 
+#include <QFileInfo>
+
+#include "CaretLogger.h"
 #include "DataFile.h"
 #include "DataFileContentInformation.h"
 #include "DataFileException.h"
@@ -78,8 +81,10 @@ DataFile::operator=(const DataFile& df)
 void 
 DataFile::copyHelperDataFile(const DataFile& df)
 {
-    this->filename = df.filename;
-    modifiedFlag = false;
+    m_filename = df.m_filename;
+    m_fileReadWarnings = df.m_fileReadWarnings;
+    m_modifiedFlag = false;
+    m_timeOfLastReadOrWrite = QDateTime();
 }
 
 /**
@@ -88,8 +93,10 @@ DataFile::copyHelperDataFile(const DataFile& df)
 void 
 DataFile::initializeMembersDataFile()
 {
-    this->filename = "";
-    modifiedFlag = false;
+    m_filename = "";
+    m_fileReadWarnings.clear();
+    m_modifiedFlag = false;
+    m_timeOfLastReadOrWrite = QDateTime();
 }
 
 /**
@@ -107,7 +114,7 @@ DataFile::clear()
 AString 
 DataFile::getFileName() const
 {
-    return this->filename;
+    return m_filename;
 }
 
 /**
@@ -116,12 +123,14 @@ DataFile::getFileName() const
 AString 
 DataFile::getFileNameNoPath() const
 {
-    FileInformation fileInfo(this->filename);
+    FileInformation fileInfo(m_filename);
     return fileInfo.getFileName();
 }
 
 /**
  * Set the name of the data file.
+ * This method is virtual so NEVER call it from
+ * a constructor.  Instead, use setFileNameProtected().
  *
  * @param filename
  *     New name of data file.
@@ -129,8 +138,22 @@ DataFile::getFileNameNoPath() const
 void 
 DataFile::setFileName(const AString& filename)
 {
-    if (this->filename != filename) {
-        this->filename = filename;
+    setFileNameProtected(filename);
+}
+
+/**
+ * Set the name of the data file.
+ * This method is NOT virtual so it may be called
+ * from a constructor.
+ *
+ * @param filename
+ *     New name of data file.
+ */
+void
+DataFile::setFileNameProtected(const AString& filename)
+{
+    if (m_filename != filename) {
+        m_filename = filename;
         this->setModified();
     }
 }
@@ -153,7 +176,7 @@ DataFile::addToDataFileContentInformation(DataFileContentInformation& dataFileIn
 void 
 DataFile::setModified()
 {
-    this->modifiedFlag = true;
+    m_modifiedFlag = true;
 }
 
 /**
@@ -162,7 +185,13 @@ DataFile::setModified()
 void 
 DataFile::clearModified()
 {
-    this->modifiedFlag = false;
+    m_modifiedFlag = false;
+    
+    /*
+     * This method, clearModified(), is called by all file
+     * types at the conclusion of readFile() and writeFile().
+     */
+    setTimeOfLastReadOrWrite();
 }
 
 /**
@@ -172,7 +201,17 @@ DataFile::clearModified()
 bool 
 DataFile::isModified() const
 {
-    return this->modifiedFlag;
+    return m_modifiedFlag;
+}
+
+/**
+ * @return True if a file with the current file name exists, else false.
+ */
+bool
+DataFile::exists() const
+{
+    FileInformation fileInfo(getFileName());
+    return fileInfo.exists();
 }
 
 /**
@@ -263,4 +302,115 @@ DataFile::checkFileWritability(const AString& filename)
         }
     }
 }
+
+/**
+ * Add a warning (non-fatal) message about some issue while reading file file.
+ *
+ * @param warning
+ *     Warning message about some issue.
+ */
+void
+DataFile::addFileReadWarning(const AString& warning)
+{
+    m_fileReadWarnings.appendWithNewLine(warning);
+}
+
+/**
+ * @return Any warning message from reading the data file.
+ *
+ * NOTE: When this method is called, the warning message
+ * is cleared for this file.
+ */
+AString
+DataFile::getFileReadWarnings() const
+{
+    const AString warningMessage = m_fileReadWarnings;
+    m_fileReadWarnings.clear();
+    return warningMessage;
+}
+
+/**
+ * Set the time this file was last read or written to the current time.
+ */
+void
+DataFile::setTimeOfLastReadOrWrite()
+{
+    m_timeOfLastReadOrWrite = getLastModifiedTime();
+}
+
+/**
+ * @return True if this file been modified since it was last read or written.
+ * (modified by an external program)?
+ *
+ * If any of these conditions are met, false is returned:
+ * (1) The name is empty; (2) The file is on the network;
+ * (3) The file does not exist; (4) The modified time
+ * from the file system is invalid; (5) The last time this
+ * file was read or written is invalid.
+ */
+bool
+DataFile::isModifiedSinceTimeOfLastReadOrWrite() const
+{
+    const QDateTime lastModTime = getLastModifiedTime();
+    
+    if (lastModTime.isNull()) {
+        return false;
+    }
+    
+    if (m_timeOfLastReadOrWrite.isNull()) {
+        return false;
+    }
+    
+    CaretLogFine("Testing reload of "
+                 + getFileNameNoPath()
+                 + " last read/write: "
+                 + m_timeOfLastReadOrWrite.toString(Qt::ISODate)
+                 + " last modified: "
+                 + lastModTime.toString(Qt::ISODate)
+                 + ((m_timeOfLastReadOrWrite == lastModTime) ? " EQUAL" : " NOT EQUAL"));
+    
+    /*
+     * If last modified time is newer than
+     * time of file read or written
+     */
+    if (lastModTime != m_timeOfLastReadOrWrite) {
+        return true;
+    }
+    
+    return false;
+}
+
+/**
+ * @return True if this file been modified since it was last read or written.
+ * (modified by an external program)?
+ *
+ * If any of these conditions are met, a null (.isNull()) is returned:
+ * (1) The name is empty; (2) The file is on the network;
+ * (3) The file does not exist; (4) The modified time
+ * from the file system is invalid.
+ */
+QDateTime
+DataFile::getLastModifiedTime() const
+{
+    QDateTime lastModTime;
+    
+    const AString name = getFileName();
+    if (name.isEmpty()) {
+        return lastModTime;
+    }
+    
+    if (isFileOnNetwork(name)) {
+        return lastModTime;
+    }
+    
+    QFileInfo fileInfo(name);
+    if ( ! fileInfo.exists()) {
+        return lastModTime;
+    }
+    
+    lastModTime = fileInfo.lastModified();
+    
+    return lastModTime;
+}
+
 

@@ -95,6 +95,7 @@ OverlayViewController::OverlayViewController(const Qt::Orientation orientation,
         minComboBoxWidth = 50;
         maxComboBoxWidth = 100000;
     }
+    const QComboBox::SizeAdjustPolicy comboSizePolicy = QComboBox::AdjustToContentsOnFirstShow; //QComboBox::AdjustToContents;
 
     /*
      * Enabled Check Box
@@ -114,6 +115,7 @@ OverlayViewController::OverlayViewController(const Qt::Orientation orientation,
     QObject::connect(this->fileComboBox, SIGNAL(activated(int)),
                      this, SLOT(fileComboBoxSelected(int)));
     this->fileComboBox->setToolTip("Selects file for this overlay");
+    this->fileComboBox->setSizeAdjustPolicy(comboSizePolicy);
     
     /*
      * Map Index Spin Box
@@ -132,6 +134,7 @@ OverlayViewController::OverlayViewController(const Qt::Orientation orientation,
     QObject::connect(this->mapNameComboBox, SIGNAL(activated(int)),
                      this, SLOT(mapNameComboBoxSelected(int)));
     this->mapNameComboBox->setToolTip("Select map by its name");
+    this->mapNameComboBox->setSizeAdjustPolicy(comboSizePolicy);
     
     /*
      * Opacity double spin box
@@ -363,7 +366,6 @@ OverlayViewController::fileComboBoxSelected(int indx)
 
     updateOverlaySettingsEditor();
     updateViewController(this->overlay);
-    updateGraphicsWindow();
     
     if (file != NULL) {
         if (file->isVolumeMappable()) {
@@ -373,6 +375,8 @@ OverlayViewController::fileComboBoxSelected(int indx)
             EventManager::get()->sendEvent(EventUserInterfaceUpdate().setWindowIndex(browserWindowIndex).addToolBar().getPointer());
         }
     }
+    
+    updateGraphicsWindow();
 }
 
 /**
@@ -838,9 +842,9 @@ OverlayViewController::createConstructionMenu(QWidget* parent)
     
     menu->addSeparator();
     
-    menu->addAction("Copy Path and File Name to Clipboard",
-                    this,
-                    SLOT(menuCopyFileNameToClipBoard()));
+    m_copyPathAndFileNameToClipboardAction = menu->addAction("Copy Path and File Name to Clipboard",
+                                                             this,
+                                                             SLOT(menuCopyFileNameToClipBoard()));
     
     menu->addAction("Copy Map Name to Clipboard",
                     this,
@@ -861,7 +865,7 @@ OverlayViewController::menuConstructionAboutToShow()
         int32_t mapIndex = -1;
         this->overlay->getSelectionData(caretDataFile,
                                         mapIndex);
-        
+    
         QString menuText = "Reload Selected File";
         if (caretDataFile != NULL) {
             if (caretDataFile->isModified()) {
@@ -873,7 +877,12 @@ OverlayViewController::menuConstructionAboutToShow()
                 }
                 menuText += suffix;
             }
+            
+            const bool notDynConnFileFlag = (caretDataFile->getDataFileType() != DataFileTypeEnum::CONNECTIVITY_DENSE_DYNAMIC);
+            m_constructionReloadFileAction->setEnabled(notDynConnFileFlag);
+            m_copyPathAndFileNameToClipboardAction->setEnabled(notDynConnFileFlag);
         }
+        
         m_constructionReloadFileAction->setText(menuText);
     }
 }

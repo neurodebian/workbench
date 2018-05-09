@@ -39,6 +39,8 @@
 #include "BrainOpenGLWidget.h"
 #include "BrowserTabContent.h"
 #include "CaretAssert.h"
+#include "DisplayPropertiesAnnotation.h"
+#include "EventBrowserTabGetAll.h"
 #include "EventGraphicsUpdateAllWindows.h"
 #include "EventManager.h"
 #include "EventUserInterfaceUpdate.h"
@@ -90,46 +92,60 @@ m_newAnnotationCreatedByContextMenu(NULL)
     const int32_t browserWindexIndex = m_mouseEvent.getBrowserWindowIndex();
     std::vector<std::pair<Annotation*, AnnotationFile*> > selectedAnnotations;
     AnnotationManager* annotationManager = GuiManager::get()->getBrain()->getAnnotationManager();
-    annotationManager->getAnnotationsSelectedForEditing(browserWindexIndex,
-                                              selectedAnnotations);
+    annotationManager->getAnnotationsSelectedForEditingIncludingLabels(browserWindexIndex,
+                                                                       selectedAnnotations);
     
     m_annotationFile = NULL;
     m_annotation     = NULL;
     
-    m_stereotaxicAndSurfaceAnnotations.clear();
+    bool allSelectedAnnotationsDeletableFlag = true;
+    if (selectedAnnotations.empty()) {
+        allSelectedAnnotationsDeletableFlag = false;
+    }
+    
+    m_threeDimCoordAnnotations.clear();
     for (std::vector<std::pair<Annotation*, AnnotationFile*> >::iterator iter = selectedAnnotations.begin();
          iter != selectedAnnotations.end();
          iter++) {
         Annotation* ann = iter->first;
         CaretAssert(ann);
         
-        bool stereoOrSurfaceSpaceFlag = false;
+        bool threeDimCoordFlag = false;
         switch (ann->getCoordinateSpace()) {
-            case AnnotationCoordinateSpaceEnum::PIXELS:
+            case AnnotationCoordinateSpaceEnum::CHART:
+                threeDimCoordFlag = true;
                 break;
             case AnnotationCoordinateSpaceEnum::STEREOTAXIC:
-                stereoOrSurfaceSpaceFlag = true;
+                threeDimCoordFlag = true;
                 break;
             case AnnotationCoordinateSpaceEnum::SURFACE:
-                stereoOrSurfaceSpaceFlag = true;
+                threeDimCoordFlag = true;
                 break;
             case AnnotationCoordinateSpaceEnum::TAB:
+                break;
+            case AnnotationCoordinateSpaceEnum::VIEWPORT:
                 break;
             case AnnotationCoordinateSpaceEnum::WINDOW:
                 break;
         }
-        if (stereoOrSurfaceSpaceFlag) {
-            m_stereotaxicAndSurfaceAnnotations.push_back(ann);
+        if (threeDimCoordFlag) {
+            m_threeDimCoordAnnotations.push_back(ann);
+        }
+        
+        if ( ! ann->testProperty(Annotation::Property::DELETION)) {
+            allSelectedAnnotationsDeletableFlag = false;
         }
     }
-    const bool haveStereotaxicAnnotationsFlag = ( ! m_stereotaxicAndSurfaceAnnotations.empty());
+    const bool haveThreeDimCoordAnnotationsFlag = ( ! m_threeDimCoordAnnotations.empty());
 
-    bool oneAnnotationSelectedFlag = false;
+    bool oneDeletableAnnotationSelectedFlag = false;
     if (selectedAnnotations.size() == 1) {
         CaretAssertVectorIndex(selectedAnnotations, 0);
         m_annotationFile = selectedAnnotations[0].second;
         m_annotation     = selectedAnnotations[0].first;
-        oneAnnotationSelectedFlag = true;
+        if (m_annotation->testProperty(Annotation::Property::DELETION)) {
+            oneDeletableAnnotationSelectedFlag = true;
+        }
     }
     
     m_textAnnotation = NULL;
@@ -153,21 +169,29 @@ m_newAnnotationCreatedByContextMenu(NULL)
      */
     QAction* cutAction = addAction(BrainBrowserWindowEditMenuItemEnum::toGuiName(BrainBrowserWindowEditMenuItemEnum::CUT),
                                    this, SLOT(cutAnnnotation()));
-    cutAction->setEnabled(oneAnnotationSelectedFlag);
+    cutAction->setEnabled(oneDeletableAnnotationSelectedFlag);
     
     /*
      * Copy
      */
     QAction* copyAction = addAction(BrainBrowserWindowEditMenuItemEnum::toGuiName(BrainBrowserWindowEditMenuItemEnum::COPY),
                                     this, SLOT(copyAnnotationToAnnotationClipboard()));
-    copyAction->setEnabled(oneAnnotationSelectedFlag);
+    copyAction->setEnabled(oneDeletableAnnotationSelectedFlag);
 
     /*
      * Delete
      */
     QAction* deleteAction = addAction(BrainBrowserWindowEditMenuItemEnum::toGuiName(BrainBrowserWindowEditMenuItemEnum::DELETER),
                                       this, SLOT(deleteAnnotations()));
-    deleteAction->setEnabled( ! selectedAnnotations.empty());
+    deleteAction->setEnabled(allSelectedAnnotationsDeletableFlag);
+    
+    /*
+     * Duplicate tab space annotation
+     */
+    QMenu* duplicateMenu = createDuplicateTabSpaceAnnotationMenu();
+    if (duplicateMenu != NULL) {
+        addMenu(duplicateMenu);
+    }
     
     /*
      * Paste
@@ -213,23 +237,32 @@ m_newAnnotationCreatedByContextMenu(NULL)
     addSeparator();
     
     /*
-     * Turn on/off display in tabs
+     * Turn off display in tabs
      */
-    QAction* turnOffTabDisplayAction = addAction("Turn Off Stereotaxic/Surface Annotation Display in Other Tabs",
+    QAction* turnOffTabDisplayAction = addAction("Turn Off Chart/Stereotaxic/Surface Annotation Display in Other Tabs",
                                               this, SLOT(turnOffDisplayInOtherTabs()));
-    QAction* turnOnTabDisplayAction = addAction("Turn On Stereotaxic/Surface Annotation Display in All Tabs",
+
+    /*
+     * Separator
+     */
+    addSeparator();
+    
+    /*
+     * Turn on display in tabs
+     */
+    QAction* turnOnTabDisplayAction = addAction("Turn On Chart/Stereotaxic/Surface Annotation Display in All Tabs",
                                               this, SLOT(turnOnDisplayInAllTabs()));
-    turnOffTabDisplayAction->setEnabled(haveStereotaxicAnnotationsFlag);
-    turnOnTabDisplayAction->setEnabled(haveStereotaxicAnnotationsFlag);
+    turnOffTabDisplayAction->setEnabled(haveThreeDimCoordAnnotationsFlag);
+    turnOnTabDisplayAction->setEnabled(haveThreeDimCoordAnnotationsFlag);
     
     /*
      * Turn on/off display in groups
      */
-    QAction* turnOnGroupDisplayAction = addAction("Turn On Stereotaxic/Surface Annotation Display in All Groups",
+    QAction* turnOnGroupDisplayAction = addAction("Turn On Chart/Stereotaxic/Surface Annotation Display in All Groups",
                                                 this, SLOT(turnOnDisplayInAllGroups()));
-    turnOnGroupDisplayAction->setEnabled(haveStereotaxicAnnotationsFlag);
+    turnOnGroupDisplayAction->setEnabled(haveThreeDimCoordAnnotationsFlag);
     QMenu* turnOnInDisplayGroupMenu = createTurnOnInDisplayGroupMenu();
-    turnOnInDisplayGroupMenu->setEnabled(haveStereotaxicAnnotationsFlag);
+    turnOnInDisplayGroupMenu->setEnabled(haveThreeDimCoordAnnotationsFlag);
     addMenu(turnOnInDisplayGroupMenu);
 
     /*
@@ -379,8 +412,8 @@ UserInputModeAnnotationsContextMenu::setAnnotationText()
 void
 UserInputModeAnnotationsContextMenu::turnOffDisplayInOtherTabs()
 {
-    for (std::vector<Annotation*>::iterator iter = m_stereotaxicAndSurfaceAnnotations.begin();
-         iter != m_stereotaxicAndSurfaceAnnotations.end();
+    for (std::vector<Annotation*>::iterator iter = m_threeDimCoordAnnotations.begin();
+         iter != m_threeDimCoordAnnotations.end();
          iter++) {
         (*iter)->setItemDisplaySelectedInOneTab(m_browserTabContent->getTabNumber());
     }
@@ -395,8 +428,8 @@ UserInputModeAnnotationsContextMenu::turnOffDisplayInOtherTabs()
 void
 UserInputModeAnnotationsContextMenu::turnOnDisplayInAllTabs()
 {
-    for (std::vector<Annotation*>::iterator iter = m_stereotaxicAndSurfaceAnnotations.begin();
-         iter != m_stereotaxicAndSurfaceAnnotations.end();
+    for (std::vector<Annotation*>::iterator iter = m_threeDimCoordAnnotations.begin();
+         iter != m_threeDimCoordAnnotations.end();
          iter++) {
         (*iter)->setItemDisplaySelectedInAllTabs();
     }
@@ -411,8 +444,8 @@ UserInputModeAnnotationsContextMenu::turnOnDisplayInAllTabs()
 void
 UserInputModeAnnotationsContextMenu::turnOnDisplayInAllGroups()
 {
-    for (std::vector<Annotation*>::iterator iter = m_stereotaxicAndSurfaceAnnotations.begin();
-         iter != m_stereotaxicAndSurfaceAnnotations.end();
+    for (std::vector<Annotation*>::iterator iter = m_threeDimCoordAnnotations.begin();
+         iter != m_threeDimCoordAnnotations.end();
          iter++) {
         (*iter)->setItemDisplaySelectedInAllGroups();
     }
@@ -444,8 +477,8 @@ UserInputModeAnnotationsContextMenu::turnOnDisplayInGroup(QAction* action)
         return;
     }
     
-    for (std::vector<Annotation*>::iterator iter = m_stereotaxicAndSurfaceAnnotations.begin();
-         iter != m_stereotaxicAndSurfaceAnnotations.end();
+    for (std::vector<Annotation*>::iterator iter = m_threeDimCoordAnnotations.begin();
+         iter != m_threeDimCoordAnnotations.end();
          iter++) {
         (*iter)->setItemDisplaySelectedInOneGroup(displayGroup);
     }
@@ -454,10 +487,13 @@ UserInputModeAnnotationsContextMenu::turnOnDisplayInGroup(QAction* action)
     EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
 }
 
+/**
+ * @return New menu for turning on in display group
+ */
 QMenu*
 UserInputModeAnnotationsContextMenu::createTurnOnInDisplayGroupMenu()
 {
-    QMenu* menu = new QMenu("Turn On Stereotaxic/Surface Annotation Only in Group");
+    QMenu* menu = new QMenu("Turn On Chart/Stereotaxic/Surface Annotation Only in Group");
     QObject::connect(menu, SIGNAL(triggered(QAction*)),
                      this, SLOT(turnOnDisplayInGroup(QAction*)));
     
@@ -473,6 +509,88 @@ UserInputModeAnnotationsContextMenu::createTurnOnInDisplayGroupMenu()
     }
     
     return menu;
+}
+
+/**
+ * @return New menu for duplicating a tab annotation.
+ *         NULL is returned if no other tabs.
+ */
+QMenu*
+UserInputModeAnnotationsContextMenu::createDuplicateTabSpaceAnnotationMenu()
+{
+    if (m_annotation == NULL) {
+        return NULL;
+    }
+    
+    EventBrowserTabGetAll tabIndicesEvent;
+    EventManager::get()->sendEvent(tabIndicesEvent.getPointer());
+    const std::vector<BrowserTabContent*> allTabs = tabIndicesEvent.getAllBrowserTabs();
+    
+    bool menuValidFlag = false;
+    if (m_annotation->getCoordinateSpace() == AnnotationCoordinateSpaceEnum::TAB) {
+        if (allTabs.size() > 1) {
+            menuValidFlag = true;
+        }
+    }
+    
+    QMenu* menu = new QMenu("Duplicate to Tab");
+    QObject::connect(menu, SIGNAL(triggered(QAction*)),
+                     this, SLOT(duplicateAnnotationSelected(QAction*)));
+    
+    if (menuValidFlag) {
+        for (BrowserTabContent* tabContent : allTabs) {
+            if (tabContent->getTabNumber() != m_annotation->getTabIndex()) {
+                QAction* action = menu->addAction(tabContent->getName());
+                action->setData((int)tabContent->getTabNumber());
+            }
+        }
+    }
+    else {
+        menu->setEnabled(false);
+    }
+    
+    return menu;
+}
+
+/**
+ * Gets called when a selection is made from Duplicate Tab Annotation menu
+ *
+ * @param action
+ *     Action selected from Duplicate menu
+ */
+void
+UserInputModeAnnotationsContextMenu::duplicateAnnotationSelected(QAction* action)
+{
+    CaretAssert(action);
+    CaretAssert(m_annotationFile);
+    CaretAssert(m_annotation);
+    
+    AnnotationManager* annotationManager = GuiManager::get()->getBrain()->getAnnotationManager();
+    
+    const int32_t tabIndex = action->data().toInt();
+    
+    Annotation* annCopy = m_annotation->clone();
+    annCopy->setTabIndex(tabIndex);
+    
+    DisplayPropertiesAnnotation* dpa = GuiManager::get()->getBrain()->getDisplayPropertiesAnnotation();
+    dpa->updateForNewAnnotation(annCopy);
+
+    AnnotationRedoUndoCommand* undoCommand = new AnnotationRedoUndoCommand();
+    undoCommand->setModeDuplicateAnnotation(m_annotationFile,
+                                            annCopy);
+    AString errorMessage;
+    if ( ! annotationManager->applyCommand(undoCommand,
+                                           errorMessage)) {
+        WuQMessageBox::errorOk(this,
+                               errorMessage);
+    }
+    annotationManager->selectAnnotationForEditing(m_mouseEvent.getBrowserWindowIndex(),
+                                                  AnnotationManager::SELECTION_MODE_SINGLE,
+                                                  false,
+                                                  annCopy);
+    
+    EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+    EventManager::get()->sendEvent(EventUserInterfaceUpdate().getPointer());
 }
 
 /**

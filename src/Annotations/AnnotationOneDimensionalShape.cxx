@@ -116,6 +116,14 @@ AnnotationOneDimensionalShape::initializeMembersAnnotationOneDimensionalShape()
     m_endCoordinate.grabNew(new AnnotationCoordinate());
     
     m_sceneAssistant.grabNew(new SceneClassAssistant());
+    if (testProperty(Property::SCENE_CONTAINS_ATTRIBUTES)) {
+        m_sceneAssistant->add("m_startCoordinate",
+                              "AnnotationCoordinate",
+                              m_startCoordinate);
+        m_sceneAssistant->add("m_endCoordinate",
+                              "AnnotationCoordinate",
+                              m_endCoordinate);
+    }
 }
 
 /**
@@ -282,14 +290,14 @@ AnnotationOneDimensionalShape::setRotationAngle(const float viewportWidth,
     getEndCoordinate()->getViewportXY(viewportWidth, viewportHeight, annTwoX, annTwoY);
     
     const float midPointXYZ[3] = {
-        (annOneX + annTwoX) / 2.0,
-        (annOneY + annTwoY) / 2.0,
-        0.0
+        (annOneX + annTwoX) / 2.0f,
+        (annOneY + annTwoY) / 2.0f,
+        0.0f
     };
     
-    const float vpOneXYZ[3] = { annOneX, annOneY, 0.0 };
+    const float vpOneXYZ[3] = { annOneX, annOneY, 0.0f };
     const float lengthMidToOne = MathFunctions::distance3D(midPointXYZ, vpOneXYZ);
-    const float newRotationAngle = 180.0 - rotationAngle;
+    const float newRotationAngle = 180.0f - rotationAngle;
     
     const float angleRadians = MathFunctions::toRadians(newRotationAngle);
     const float dy = lengthMidToOne * std::sin(angleRadians);
@@ -315,23 +323,21 @@ AnnotationOneDimensionalShape::setRotationAngle(const float viewportWidth,
 bool
 AnnotationOneDimensionalShape::isSizeHandleValid(const AnnotationSizingHandleTypeEnum::Enum sizingHandle) const
 {
-    bool pixelsFlag      = false;
+    bool chartFlag       = false;
     bool tabWindowFlag   = false;
-    bool stereotaxicFlag = false;
-    bool surfaceFlag     = false;
     
     switch (getCoordinateSpace()) {
-        case AnnotationCoordinateSpaceEnum::PIXELS:
-            pixelsFlag = true;
+        case AnnotationCoordinateSpaceEnum::CHART:
+            chartFlag = true;
             break;
         case AnnotationCoordinateSpaceEnum::STEREOTAXIC:
-            stereotaxicFlag = true;
             break;
         case AnnotationCoordinateSpaceEnum::SURFACE:
-            surfaceFlag = true;
             break;
         case AnnotationCoordinateSpaceEnum::TAB:
             tabWindowFlag = true;
+            break;
+        case AnnotationCoordinateSpaceEnum::VIEWPORT:
             break;
         case AnnotationCoordinateSpaceEnum::WINDOW:
             tabWindowFlag = true;
@@ -340,41 +346,40 @@ AnnotationOneDimensionalShape::isSizeHandleValid(const AnnotationSizingHandleTyp
     
     bool validFlag = false;
     
-    if ( ! pixelsFlag) {
-        switch (sizingHandle) {
-            case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_BOX_BOTTOM:
-                break;
-            case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_BOX_BOTTOM_LEFT:
-                break;
-            case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_BOX_BOTTOM_RIGHT:
-                break;
-            case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_BOX_LEFT:
-                break;
-            case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_BOX_RIGHT:
-                break;
-            case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_BOX_TOP:
-                break;
-            case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_BOX_TOP_LEFT:
-                break;
-            case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_BOX_TOP_RIGHT:
-                break;
-            case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_LINE_END:
+    switch (sizingHandle) {
+        case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_BOX_BOTTOM:
+            break;
+        case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_BOX_BOTTOM_LEFT:
+            break;
+        case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_BOX_BOTTOM_RIGHT:
+            break;
+        case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_BOX_LEFT:
+            break;
+        case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_BOX_RIGHT:
+            break;
+        case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_BOX_TOP:
+            break;
+        case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_BOX_TOP_LEFT:
+            break;
+        case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_BOX_TOP_RIGHT:
+            break;
+        case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_LINE_END:
+            validFlag = true;
+            break;
+        case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_LINE_START:
+            validFlag = true;
+            break;
+        case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_NONE:
+            if (chartFlag
+                || tabWindowFlag) {
                 validFlag = true;
-                break;
-            case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_LINE_START:
+            }
+            break;
+        case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_ROTATION:
+            if (tabWindowFlag) {
                 validFlag = true;
-                break;
-            case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_NONE:
-                if (tabWindowFlag) {
-                    validFlag = true;
-                }
-                break;
-            case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_ROTATION:
-                if (tabWindowFlag) {
-                    validFlag = true;
-                }
-                break;
-        }
+            }
+            break;
     }
     
     return validFlag;
@@ -485,12 +490,12 @@ AnnotationOneDimensionalShape::applySpatialModificationTabOrWindowSpace(const An
     float newX2 = xyz2[0];
     float newY2 = xyz2[1];
     
-    const float spaceDX = 100.0 * ((spatialModification.m_viewportWidth != 0.0)
+    const float spaceDX = 100.0f * ((spatialModification.m_viewportWidth != 0.0f)
                                    ? (spatialModification.m_mouseDX / spatialModification.m_viewportWidth)
-                                   : 0.0);
-    const float spaceDY = 100.0 * ((spatialModification.m_viewportHeight != 0.0)
+                                   : 0.0f);
+    const float spaceDY = 100.0f * ((spatialModification.m_viewportHeight != 0.0f)
                                    ? (spatialModification.m_mouseDY / spatialModification.m_viewportHeight)
-                                   : 0.0);
+                                   : 0.0f);
     bool validFlag = false;
     switch (spatialModification.m_sizingHandleType) {
         case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_BOX_BOTTOM:
@@ -540,9 +545,9 @@ AnnotationOneDimensionalShape::applySpatialModificationTabOrWindowSpace(const An
                                      vpTwoXYZ);
             
             float vpXYZ[3] = {
-                (vpOneXYZ[0] + vpTwoXYZ[0]) / 2.0,
-                (vpOneXYZ[1] + vpTwoXYZ[1]) / 2.0,
-                (vpOneXYZ[2] + vpTwoXYZ[2]) / 2.0
+                (vpOneXYZ[0] + vpTwoXYZ[0]) / 2.0f,
+                (vpOneXYZ[1] + vpTwoXYZ[1]) / 2.0f,
+                (vpOneXYZ[2] + vpTwoXYZ[2]) / 2.0f
             };
             
             /*
@@ -597,6 +602,71 @@ AnnotationOneDimensionalShape::applySpatialModificationTabOrWindowSpace(const An
         else {
             validFlag = false;
         }
+    }
+    
+    return validFlag;
+}
+
+/**
+ * Apply a spatial modification to an annotation in chart space.
+ *
+ * @param spatialModification
+ *     Contains information about the spatial modification.
+ * @return
+ *     True if the annotation was modified, else false.
+ */
+bool
+AnnotationOneDimensionalShape::applySpatialModificationChartSpace(const AnnotationSpatialModification& spatialModification)
+{
+    bool validFlag = false;
+    
+    switch (spatialModification.m_sizingHandleType) {
+        case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_BOX_BOTTOM:
+            break;
+        case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_BOX_BOTTOM_LEFT:
+            break;
+        case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_BOX_BOTTOM_RIGHT:
+            break;
+        case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_BOX_LEFT:
+            break;
+        case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_BOX_RIGHT:
+            break;
+        case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_BOX_TOP:
+            break;
+        case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_BOX_TOP_LEFT:
+            break;
+        case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_BOX_TOP_RIGHT:
+            break;
+        case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_LINE_END:
+            if (spatialModification.m_chartCoordAtMouseXY.m_chartXYZValid) {
+                m_endCoordinate->setXYZ(spatialModification.m_chartCoordAtMouseXY.m_chartXYZ);
+                validFlag = true;
+            }
+            break;
+        case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_LINE_START:
+            if (spatialModification.m_chartCoordAtMouseXY.m_chartXYZValid) {
+                m_startCoordinate->setXYZ(spatialModification.m_chartCoordAtMouseXY.m_chartXYZ);
+                validFlag = true;
+            }
+            break;
+        case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_NONE:
+            if (spatialModification.m_chartCoordAtMouseXY.m_chartXYZValid
+                && spatialModification.m_chartCoordAtPreviousMouseXY.m_chartXYZValid) {
+                const float dx = spatialModification.m_chartCoordAtMouseXY.m_chartXYZ[0] - spatialModification.m_chartCoordAtPreviousMouseXY.m_chartXYZ[0];
+                const float dy = spatialModification.m_chartCoordAtMouseXY.m_chartXYZ[1] - spatialModification.m_chartCoordAtPreviousMouseXY.m_chartXYZ[1];
+                const float dz = spatialModification.m_chartCoordAtMouseXY.m_chartXYZ[2] - spatialModification.m_chartCoordAtPreviousMouseXY.m_chartXYZ[2];
+                
+                m_startCoordinate->addToXYZ(dx, dy, dz);
+                m_endCoordinate->addToXYZ(dx, dy, dz);
+                validFlag = true;
+            }
+            break;
+        case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_ROTATION:
+            break;
+    }
+    
+    if (validFlag) {
+        setModified();
     }
     
     return validFlag;
@@ -673,7 +743,8 @@ AnnotationOneDimensionalShape::applySpatialModification(const AnnotationSpatialM
     }
     
     switch (getCoordinateSpace()) {
-        case AnnotationCoordinateSpaceEnum::PIXELS:
+        case AnnotationCoordinateSpaceEnum::CHART:
+            return applySpatialModificationChartSpace(spatialModification);
             break;
         case AnnotationCoordinateSpaceEnum::STEREOTAXIC:
             return applySpatialModificationStereotaxicSpace(spatialModification);
@@ -683,6 +754,8 @@ AnnotationOneDimensionalShape::applySpatialModification(const AnnotationSpatialM
             break;
         case AnnotationCoordinateSpaceEnum::TAB:
             return applySpatialModificationTabOrWindowSpace(spatialModification);
+            break;
+        case AnnotationCoordinateSpaceEnum::VIEWPORT:
             break;
         case AnnotationCoordinateSpaceEnum::WINDOW:
             return applySpatialModificationTabOrWindowSpace(spatialModification);
