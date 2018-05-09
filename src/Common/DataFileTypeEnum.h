@@ -112,7 +112,7 @@ public:
     
     static AString toGuiName(Enum enumValue);
     
-    static Enum fromGuiName(const AString& guiName, bool* isValidOut);
+    static AString toShortGuiName(Enum enumValue);
     
     static AString toOverlayTypeName(Enum enumValue);
     

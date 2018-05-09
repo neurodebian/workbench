@@ -24,7 +24,8 @@
 #undef __ANNOTATION_IMAGE_DECLARE__
 
 #include "CaretAssert.h"
-#include "DrawnWithOpenGLTextureInfo.h"
+#include "CaretLogger.h"
+#include "GraphicsPrimitiveV3fT3f.h"
 #include "SceneClass.h"
 #include "SceneClassAssistant.h"
 
@@ -46,8 +47,7 @@ using namespace caret;
  */
 AnnotationImage::AnnotationImage(const AnnotationAttributesDefaultTypeEnum::Enum attributeDefaultType)
 : AnnotationTwoDimensionalShape(AnnotationTypeEnum::IMAGE,
-                                attributeDefaultType),
-DrawnWithOpenGLTextureInterface()
+                                attributeDefaultType)
 {
     initializeMembersAnnotationImage();
     
@@ -67,8 +67,7 @@ AnnotationImage::~AnnotationImage()
  *    Object that is copied.
  */
 AnnotationImage::AnnotationImage(const AnnotationImage& obj)
-: AnnotationTwoDimensionalShape(obj),
-DrawnWithOpenGLTextureInterface()
+: AnnotationTwoDimensionalShape(obj)
 {
     initializeMembersAnnotationImage();
     this->copyHelperAnnotationImage(obj);
@@ -102,7 +101,6 @@ AnnotationImage::copyHelperAnnotationImage(const AnnotationImage& obj)
     m_imageBytesRGBA         = obj.m_imageBytesRGBA;
     m_imageWidth             = obj.m_imageWidth;
     m_imageHeight            = obj.m_imageHeight;
-    m_drawnWithOpenGLTextureInfo = obj.m_drawnWithOpenGLTextureInfo;
 }
 
 /**
@@ -188,33 +186,8 @@ AnnotationImage::initializeMembersAnnotationImage()
     m_imageHeight = 0;
     
     m_sceneAssistant = new SceneClassAssistant();
-    
-    /* Texture info not saved to scenes */
-    m_drawnWithOpenGLTextureInfo.grabNew(new DrawnWithOpenGLTextureInfo);
-}
-
-/**
- * @return Is foreground line width supported?
- * Most annotations support a foreground line width.
- * Annotations that do not support a foreground line width
- * must override this method and return a value of false.
- */
-bool
-AnnotationImage::isLineWidthSupported() const
-{
-    return true;
-}
-
-/**
- * @return Is background color supported?
- * Most annotations support a background color.
- * Annotations that do not support a background color
- * must override this method and return a value of false.
- */
-bool
-AnnotationImage::isBackgroundColorSupported() const
-{
-    return false;
+    if (testProperty(Property::SCENE_CONTAINS_ATTRIBUTES)) {
+    }
 }
 
 /**
@@ -251,23 +224,60 @@ AnnotationImage::getFixedAspectRatio() const
 }
 
 /**
- * @return The OpenGL texture information used for managing
- * texture resources.
+ * @return The graphics primitive for drawing the image as a texture.
  */
-DrawnWithOpenGLTextureInfo*
-AnnotationImage::getDrawWithOpenGLTextureInfo()
+GraphicsPrimitiveV3fT3f*
+AnnotationImage::getGraphicsPrimitive() const
 {
-    return m_drawnWithOpenGLTextureInfo;
+    if (m_graphicsPrimitive == NULL) {
+        if ( ! m_imageBytesRGBA.empty()) {
+            GraphicsPrimitiveV3fT3f* primitive = GraphicsPrimitive::newPrimitiveV3fT3f(GraphicsPrimitive::PrimitiveType::OPENGL_TRIANGLE_STRIP,
+                                                                                       &m_imageBytesRGBA[0],
+                                                                                       m_imageWidth,
+                                                                                       m_imageHeight);
+            /*
+             * A Triangle Strip (consisting of two triangles) is used
+             * for drawing the image.  At this time, the XYZ coordinates
+             * do not matter and they will be updated when the annotation
+             * is drawn by a call to ::setVertexBounds().
+             * The order of the vertices in the triangle strip is
+             * Top Left, Bottom Left, Top Right, Bottom Right.  If this
+             * order changes, ::setVertexBounds must be updated.
+             *
+             * Zeros are used for the X- and Y-coordinates.
+             * The third and fourth parameters are the texture
+             * S and T coordinates.
+             */
+            primitive->addVertex(0, 0, 0, 1);  /* Top Left */
+            primitive->addVertex(0, 0, 0, 0);  /* Bottom Left */
+            primitive->addVertex(0, 0, 1, 1);  /* Top Right */
+            primitive->addVertex(0, 0, 1, 0);  /* Bottom Right */
+
+            m_graphicsPrimitive.reset(primitive);
+            
+            
+//            create triangles above and add method to set the vertex coordintes (bottom left, bottom right, etc)
+        }
+    }
+    
+    return m_graphicsPrimitive.get();
 }
 
-/**
- * @return The OpenGL texture information used for managing
- * texture resources (const method)
- */
-const DrawnWithOpenGLTextureInfo*
-AnnotationImage::getDrawWithOpenGLTextureInfo() const
+void
+AnnotationImage::setVertexBounds(const float bottomLeft[3],
+                                 const float bottomRight[3],
+                                 const float topRight[3],
+                                 const float topLeft[3])
 {
-    return m_drawnWithOpenGLTextureInfo;
+    GraphicsPrimitiveV3fT3f* primitive = getGraphicsPrimitive();
+    CaretAssert(primitive);
+    
+    CaretAssert(primitive->getNumberOfVertices() == 4);
+
+    primitive->replaceVertexFloatXYZ(0, topLeft);
+    primitive->replaceVertexFloatXYZ(1, bottomLeft);
+    primitive->replaceVertexFloatXYZ(2, topRight);
+    primitive->replaceVertexFloatXYZ(3, bottomRight);
 }
 
 /**

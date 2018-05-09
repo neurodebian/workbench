@@ -36,44 +36,53 @@ infoLine=`echo "$initialText" | grep -n Information | cut -f1 -d:`
 #include -help line as plain text
 echo -n "$initialText" | head -n $((infoLine + 1)) >> "$outDir/$startPage"
 #-arguments-help
+make_basic_command_page "-arguments-help"
 echo -n '<a href="'`command_to_page_name -arguments-help`'">' >> "$outDir/$startPage"
 echo "$initialText" | grep -- -arguments-help >> "$outDir/$startPage"
 echo -n '</a>' >> "$outDir/$startPage"
+#-global-options
+make_basic_command_page "-global-options"
+echo -n '<a href="'`command_to_page_name -global-options`'">' >> "$outDir/$startPage"
+echo "$initialText" | grep -- -global-options >> "$outDir/$startPage"
+echo -n '</a>' >> "$outDir/$startPage"
+#-parallel-help
+make_basic_command_page "-parallel-help"
+echo -n '<a href="'`command_to_page_name -parallel-help`'">' >> "$outDir/$startPage"
+echo "$initialText" | grep -- -parallel-help >> "$outDir/$startPage"
+echo -n '</a>' >> "$outDir/$startPage"
 #-cifti-help
+make_basic_command_page "-cifti-help"
 echo -n '<a href="'`command_to_page_name -cifti-help`'">' >> "$outDir/$startPage"
 echo "$initialText" | grep -- -cifti-help >> "$outDir/$startPage"
 echo -n '</a>' >> "$outDir/$startPage"
 #-gifti-help
+make_basic_command_page "-gifti-help"
 echo -n '<a href="'`command_to_page_name -gifti-help`'">' >> "$outDir/$startPage"
 echo "$initialText" | grep -- -gifti-help >> "$outDir/$startPage"
 echo -n '</a>' >> "$outDir/$startPage"
 #-version
 echo "$initialText" | grep -- -version >> "$outDir/$startPage"
 #-list-commands
+#special code to make page below
 echo -n '<a href="'`command_to_page_name -list-commands`'">' >> "$outDir/$startPage"
 echo "$initialText" | grep -- -list-commands >> "$outDir/$startPage"
 echo -n '</a>' >> "$outDir/$startPage"
 #-list-deprecated-commands
+#again, special code below
 echo -n '<a href="'`command_to_page_name -list-deprecated-commands`'">' >> "$outDir/$startPage"
 echo "$initialText" | grep -- -list-deprecated-commands >> "$outDir/$startPage"
 echo -n '</a>' >> "$outDir/$startPage"
 #-all-commands-help - takes 2 lines!
+make_basic_command_page "-all-commands-help"
 echo -n '<a href="'`command_to_page_name -all-commands-help`'">' >> "$outDir/$startPage"
 echo "$initialText" | grep -A 1 -- -all-commands-help >> "$outDir/$startPage"
 echo -n '</a>' >> "$outDir/$startPage"
 #remainder of help info
 allCommandsLine=`echo "$initialText" | grep -n -- -all-commands-help | cut -f1 -d:`
 echo "$initialText" | tail -n +$((allCommandsLine+2)) >> "$outDir/$startPage"
-#end page
+#end main page
 echo '</pre></BODY>' >> "$outDir/$startPage"
 echo '</HTML>' >> "$outDir/$startPage"
-
-#-arguments-help page
-make_basic_command_page "-arguments-help"
-#-cifti-help page
-make_basic_command_page "-cifti-help"
-#-cifti-help page
-make_basic_command_page "-gifti-help"
 
 #-list-commands page, and its subpages
 outPage="$outDir/`command_to_page_name -list-commands`"
@@ -90,6 +99,9 @@ do
     make_basic_command_page "$thisCommand"
     echo '<a href="'"`command_to_page_name $thisCommand`"'">'"${lines[$i]}"'</a>' >> "$outPage"
 done
+#end -list-commands page
+echo '</pre></BODY>' >> "$outPage"
+echo '</HTML>' >> "$outPage"
 
 #-list-deprecated-commands page, and its subpages
 outPage="$outDir/`command_to_page_name -list-deprecated-commands`"
@@ -106,11 +118,6 @@ do
     make_basic_command_page "$thisCommand"
     echo '<a href="'"`command_to_page_name $thisCommand`"'">'"${lines[$i]}"'</a>' >> "$outPage"
 done
-
-#end main page
+#end -list-deprecated-commands page
 echo '</pre></BODY>' >> "$outPage"
 echo '</HTML>' >> "$outPage"
-
-#-all-commands-help page
-make_basic_command_page "-all-commands-help"
-

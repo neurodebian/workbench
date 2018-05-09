@@ -28,6 +28,7 @@
 
 namespace caret {
     class Brain;
+    class ChartTwoOverlaySet;
     class OverlaySet;
     class PlainTextStringBuilder;
     
@@ -66,6 +67,10 @@ namespace caret {
         
         virtual const OverlaySet* getOverlaySet(const int tabIndex) const = 0;
         
+        virtual ChartTwoOverlaySet* getChartTwoOverlaySet(const int tabIndex);
+        
+        virtual const ChartTwoOverlaySet* getChartTwoOverlaySet(const int tabIndex) const;
+        
         virtual void initializeSelectedSurfaces();
 
         virtual SceneClass* saveToScene(const SceneAttributes* sceneAttributes,
@@ -81,6 +86,10 @@ namespace caret {
         
         virtual void copyTabContent(const int32_t sourceTabIndex,
                                     const int32_t destinationTabIndex);
+        
+        bool isRestoredFromScene() const;
+        
+        void setRestoredFromScene(const bool restoredStatus);
         
     protected:
         virtual void saveModelSpecificInformationToScene(const SceneAttributes* sceneAttributes,
@@ -110,6 +119,8 @@ namespace caret {
         ModelTypeEnum::Enum m_modelType;
         
         std::vector<OldSceneTransformation> m_oldSceneTransformations;
+        
+        bool m_restoredFromSceneFlag = false;
     };
 
 } // namespace

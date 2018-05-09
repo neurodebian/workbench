@@ -9,17 +9,23 @@ PROJECT(Desktop)
 set (EXE_NAME wb_view)
 
 #
-#  QT Libraries
-#
-SET(QT_USE_QTXML TRUE)
-SET(QT_USE_QTOPENGL TRUE)
-SET(QT_USE_QTNETWORK TRUE)
-#SET(QT_USE_QTWEBKIT TRUE)
-
-#
 # QT Include directories
 #
-INCLUDE (${QT_USE_FILE})
+if(Qt5_FOUND)
+    include_directories(${Qt5Core_INCLUDE_DIRS})
+    include_directories(${Qt5Network_INCLUDE_DIRS})
+    if(Qt5OpenGL_FOUND)
+        include_directories(${Qt5OpenGL_INCLUDE_DIRS})
+    endif()
+    include_directories(${Qt5Widgets_INCLUDE_DIRS})
+endif()
+IF (QT4_FOUND)
+    SET(QT_USE_QTXML TRUE)
+    SET(QT_USE_QTOPENGL TRUE)
+    SET(QT_USE_QTNETWORK TRUE)
+    INCLUDE(${QT_USE_FILE})
+ENDIF ()
+
 
 #
 # Added by JWH to eliminate OpenGL linking errors in Ubuntu Linux
@@ -33,7 +39,17 @@ ENDIF (UNIX)
 #
 # Resources
 #
-QT4_ADD_RESOURCES(IMAGE_RCS_SRCS ../Resources/GeneralResources/general_resources.qrc ../Resources/GuiResources/gui_resources.qrc)
+SET (RESOURCES_QRC_FILE
+     ../Resources/General/general_resources.qrc
+     ../Resources/Gui/gui_resources.qrc
+     ../Resources/Help/help_resources.qrc)
+IF (Qt5_FOUND)
+    QT5_ADD_RESOURCES(IMAGE_RCS_SRCS ${RESOURCES_QRC_FILE})
+ELSE (Qt5_FOUND)
+    IF (QT4_FOUND)
+        QT4_ADD_RESOURCES(IMAGE_RCS_SRCS ${RESOURCES_QRC_FILE})
+    ENDIF()
+ENDIF (Qt5_FOUND)
 
 #
 # Create the executable
@@ -81,6 +97,22 @@ IF (NOT APPLE)
     ENDIF (UNIX)
 ENDIF (NOT APPLE)
 
+if(Qt5OpenGL_FOUND)
+    set(QT5_OPENGL_LIB_NAME Qt5::OpenGL)
+endif()
+if(Qt5_FOUND)
+    set(QT5_LINK_LIBS
+        Qt5::Concurrent
+        Qt5::Core
+        Qt5::Gui
+        Qt5::Network
+        ${QT5_OPENGL_LIB_NAME}
+        Qt5::PrintSupport
+        Qt5::Test
+        Qt5::Widgets
+        Qt5::Xml)
+endif()
+
 #
 # Libraries that are linked
 #
@@ -93,8 +125,9 @@ OperationsBase
 ${Qwt_LIBRARIES}
 OSMesaDummy
 Brain
-${FTGL_LIBRARIES}
 Files
+Graphics
+${FTGL_LIBRARIES}
 Annotations
 Charting
 Palette
@@ -105,14 +138,18 @@ FilesBase
 Scenes
 Xml
 Common
+${GLEW_LIBRARIES}
 ${QUAZIP_LIBRARIES}
 ${FREETYPE_LIBRARIES}
 ${QT_LIBRARIES}
+${QT5_LINK_LIBS}
 ${ZLIB_LIBRARIES}
 #${LIBS}
 )
 
-INSTALL(TARGETS ${EXE_NAME} DESTINATION bin)
+INCLUDE(GNUInstallDirs)
+
+INSTALL(TARGETS ${EXE_NAME} DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 IF(WIN32)
     TARGET_LINK_LIBRARIES(${EXE_NAME}
@@ -161,6 +198,7 @@ ${CMAKE_SOURCE_DIR}/Algorithms
 ${CMAKE_SOURCE_DIR}/Commands
 ${CMAKE_SOURCE_DIR}/GuiQt
 ${CMAKE_SOURCE_DIR}/Brain
+${CMAKE_SOURCE_DIR}/Graphics
 ${CMAKE_SOURCE_DIR}/FilesBase
 ${CMAKE_SOURCE_DIR}/Files
 ${CMAKE_SOURCE_DIR}/Palette
@@ -180,7 +218,6 @@ ${CMAKE_SOURCE_DIR}/Common
 # Apple needs framework
 #
 IF (APPLE)
-    MESSAGE("EXE: " ${CMAKE_BUILD_DIR} " " ${EXE_NAME})
         ADD_CUSTOM_COMMAND(
             TARGET ${EXE_NAME}
             POST_BUILD

@@ -27,6 +27,7 @@
 #include <QMutexLocker>
 
 #include "CaretAssert.h"
+#include "CaretLogger.h"
 #include "EventManager.h"
 #include "EventProgressUpdate.h"
 #include "ProgressReportingFromEvent.h"
@@ -148,3 +149,22 @@ ProgressReportingDialog::runEvent(Event* event,
     
     prd.setValue(prd.maximum());
 }
+
+/**
+ * Set event receiving enabled.  This method is used to enable
+ * and disable the receiving of EventProgressUpdate events.
+ * The default is true.
+ *
+ * @param enabled
+ *     New status for receiving the events.
+ */
+void
+ProgressReportingDialog::setEventReceivingEnabled(bool status)
+{
+    ProgressReportingFromEvent* progFromEvent = dynamic_cast<ProgressReportingFromEvent*>(m_progressReporter);
+    if (progFromEvent != NULL) {
+        progFromEvent->setEventReceivingEnabled(status);
+    }
+}
+
+

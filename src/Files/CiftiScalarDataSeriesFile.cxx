@@ -141,6 +141,8 @@ CiftiScalarDataSeriesFile::receiveEvent(Event* event)
         
         selectMapEvent->setEventProcessed();
     }
+    
+    CiftiMappableDataFile::receiveEvent(event);
 }
 
 /**
@@ -183,7 +185,7 @@ CiftiScalarDataSeriesFile::setMatrixRowColumnMapYokingGroup(const int32_t tabInd
  *     Selected map index in the given tab.
  */
 int32_t 
-CiftiScalarDataSeriesFile::getSelectedMapIndex(const int32_t tabIndex)
+CiftiScalarDataSeriesFile::getSelectedMapIndex(const int32_t tabIndex) const
 {
     CaretAssertArrayIndex(m_selectedMapIndices, BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_TABS, tabIndex);
     return m_selectedMapIndices[tabIndex];
@@ -198,11 +200,16 @@ CiftiScalarDataSeriesFile::getSelectedMapIndex(const int32_t tabIndex)
  *    New value for selected map index.
  */
 void
-CiftiScalarDataSeriesFile::setSelectedMapIndex(const int32_t tabIndex,
+CiftiScalarDataSeriesFile::setSelectedMapIndex(const int32_t /*tabIndex*/,
                                  const int32_t mapIndex)
 {
-    CaretAssertArrayIndex(m_selectedMapIndices, BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_TABS, tabIndex);
-    m_selectedMapIndices[tabIndex] = mapIndex;
+    /*
+     * One map selection for all tabs
+     */
+    for (int32_t i = 0; i < BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_TABS; i++) {
+        CaretAssertArrayIndex(m_selectedMapIndices, BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_TABS, i);
+        m_selectedMapIndices[i] = mapIndex;
+    }
 }
 
 
@@ -307,11 +314,6 @@ CiftiScalarDataSeriesFile::getMatrixCellAttributes(const int32_t rowIndex,
         columnNameOut = (AString::number(time, 'f', 3)
                          + " "
                          + timeUnitsString);
-//        columnNameOut = (AString::number(time, 'f', 3)
-//                         + " "
-//                         + NiftiTimeUnitsEnum::toGuiName(getMapIntervalUnits())
-//                         + " Map Name: "
-//                         + getMapName(columnIndex));
         
         const int32_t numberOfElementsInRow = m_ciftiFile->getNumberOfColumns();
         std::vector<float> rowData(numberOfElementsInRow);
@@ -372,10 +374,10 @@ CiftiScalarDataSeriesFile::setMatrixChartingEnabled(const int32_t tabIndex,
  *    Chart types supported by this file.
  */
 void
-CiftiScalarDataSeriesFile::getSupportedMatrixChartDataTypes(std::vector<ChartDataTypeEnum::Enum>& chartDataTypesOut) const
+CiftiScalarDataSeriesFile::getSupportedMatrixChartDataTypes(std::vector<ChartOneDataTypeEnum::Enum>& chartDataTypesOut) const
 {
     chartDataTypesOut.clear();
-    chartDataTypesOut.push_back(ChartDataTypeEnum::CHART_DATA_TYPE_MATRIX_SERIES);
+    chartDataTypesOut.push_back(ChartOneDataTypeEnum::CHART_DATA_TYPE_MATRIX_SERIES);
 }
 
 /**
@@ -442,11 +444,11 @@ CiftiScalarDataSeriesFile::loadLineSeriesChartDataForRow(const int32_t rowIndex)
                 const CiftiXML& ciftiXML = m_ciftiFile->getCiftiXML();
                 const CiftiSeriesMap& seriesMap = ciftiXML.getSeriesMap(CiftiXML::ALONG_ROW);
                 
-                ChartDataTypeEnum::Enum chartDataType = ChartDataTypeEnum::CHART_DATA_TYPE_INVALID;
+                ChartOneDataTypeEnum::Enum chartDataType = ChartOneDataTypeEnum::CHART_DATA_TYPE_INVALID;
                 AString timeUnitsString;
                 switch (seriesMap.getUnit()) {
                     case CiftiSeriesMap::HERTZ:
-                        chartDataType = ChartDataTypeEnum::CHART_DATA_TYPE_LINE_FREQUENCY_SERIES;
+                        chartDataType = ChartOneDataTypeEnum::CHART_DATA_TYPE_LINE_FREQUENCY_SERIES;
                         break;
                     case CiftiSeriesMap::METER:
                         CaretLogWarning("CIFTI Units METER not implemented");
@@ -455,11 +457,11 @@ CiftiScalarDataSeriesFile::loadLineSeriesChartDataForRow(const int32_t rowIndex)
                         CaretLogWarning("CIFTI Units RADIAN not implemented");
                         break;
                     case CiftiSeriesMap::SECOND:
-                        chartDataType = ChartDataTypeEnum::CHART_DATA_TYPE_LINE_TIME_SERIES;
+                        chartDataType = ChartOneDataTypeEnum::CHART_DATA_TYPE_LINE_TIME_SERIES;
                         break;
                 }
                 
-                if (chartDataType != ChartDataTypeEnum::CHART_DATA_TYPE_INVALID) {
+                if (chartDataType != ChartOneDataTypeEnum::CHART_DATA_TYPE_INVALID) {
                     chartData = new ChartDataCartesian(chartDataType,
                                                        ChartAxisUnitsEnum::CHART_AXIS_UNITS_NONE,
                                                        ChartAxisUnitsEnum::CHART_AXIS_UNITS_NONE);
@@ -528,7 +530,7 @@ CiftiScalarDataSeriesFile::isLineSeriesChartingSupported() const
  *    Chart types supported by this file.
  */
 void
-CiftiScalarDataSeriesFile::getSupportedLineSeriesChartDataTypes(std::vector<ChartDataTypeEnum::Enum>& chartDataTypesOut) const
+CiftiScalarDataSeriesFile::getSupportedLineSeriesChartDataTypes(std::vector<ChartOneDataTypeEnum::Enum>& chartDataTypesOut) const
 {
     chartDataTypesOut.clear();
     
@@ -541,7 +543,7 @@ CiftiScalarDataSeriesFile::getSupportedLineSeriesChartDataTypes(std::vector<Char
         const CiftiSeriesMap& seriesMap = ciftiXML.getSeriesMap(CiftiXML::ALONG_ROW);
         switch (seriesMap.getUnit()) {
             case CiftiSeriesMap::HERTZ:
-                chartDataTypesOut.push_back(ChartDataTypeEnum::CHART_DATA_TYPE_LINE_FREQUENCY_SERIES);
+                chartDataTypesOut.push_back(ChartOneDataTypeEnum::CHART_DATA_TYPE_LINE_FREQUENCY_SERIES);
                 break;
             case CiftiSeriesMap::METER:
                 CaretLogWarning("CIFTI Units METER not implemented");
@@ -550,7 +552,7 @@ CiftiScalarDataSeriesFile::getSupportedLineSeriesChartDataTypes(std::vector<Char
                 CaretLogWarning("CIFTI Units RADIAN not implemented");
                 break;
             case CiftiSeriesMap::SECOND:
-                chartDataTypesOut.push_back(ChartDataTypeEnum::CHART_DATA_TYPE_LINE_TIME_SERIES);
+                chartDataTypesOut.push_back(ChartOneDataTypeEnum::CHART_DATA_TYPE_LINE_TIME_SERIES);
                 break;
         }
     }
@@ -592,6 +594,9 @@ void
 CiftiScalarDataSeriesFile::saveFileDataToScene(const SceneAttributes* sceneAttributes,
                                                              SceneClass* sceneClass)
 {
+    CiftiMappableDataFile::saveFileDataToScene(sceneAttributes,
+                                               sceneClass);
+    
     m_sceneAssistant->saveMembers(sceneAttributes,
                                   sceneClass);
     /*
@@ -630,6 +635,9 @@ void
 CiftiScalarDataSeriesFile::restoreFileDataFromScene(const SceneAttributes* sceneAttributes,
                                                                   const SceneClass* sceneClass)
 {
+    CiftiMappableDataFile::restoreFileDataFromScene(sceneAttributes,
+                                                    sceneClass);
+    
     m_sceneAssistant->restoreMembers(sceneAttributes,
                                      sceneClass);
     

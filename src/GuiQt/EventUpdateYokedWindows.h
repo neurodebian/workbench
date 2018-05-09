@@ -31,15 +31,22 @@ namespace caret {
         
     public:
         EventUpdateYokedWindows(const int32_t browserWindowIndexThatIssuedEvent,
-                                const YokingGroupEnum::Enum yokingGroup);
+                                const YokingGroupEnum::Enum brainModelYokingGroup,
+                                const YokingGroupEnum::Enum chartModelYokingGroup);
         
-        EventUpdateYokedWindows(const YokingGroupEnum::Enum yokingGroup);
+        EventUpdateYokedWindows(const YokingGroupEnum::Enum brainModelYokingGroup,
+                                const YokingGroupEnum::Enum chartModelYokingGroup);
         
         virtual ~EventUpdateYokedWindows();
         
         int32_t getBrowserWindowIndexThatIssuedEvent() const;
         
-        YokingGroupEnum::Enum getYokingGroup() const;
+        bool isBrainModelYoking(const YokingGroupEnum::Enum brainModelYokingGroup) const;
+        
+        bool isChartModelYoking(const YokingGroupEnum::Enum chartModelYokingGroup) const;
+        
+        bool isBrainOrChartModelYoking(const YokingGroupEnum::Enum brainModelYokingGroup,
+                                       const YokingGroupEnum::Enum chartModelYokingGroup) const;
         
     private:
         EventUpdateYokedWindows(const EventUpdateYokedWindows&);
@@ -54,7 +61,9 @@ namespace caret {
 
         const int32_t m_browserWindowIndexThatIssuedEvent;
         
-        const YokingGroupEnum::Enum m_yokingGroup;
+        const YokingGroupEnum::Enum m_brainModelYokingGroup;
+        
+        const YokingGroupEnum::Enum m_chartModelYokingGroup;
         
         
         // ADD_NEW_MEMBERS_HERE

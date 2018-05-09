@@ -34,6 +34,16 @@ void NiftiIO::openRead(const QString& filename)
         throw DataFileException("file uses the binary datatype, which is unsupported: " + filename);
     }
     m_dims = m_header.getDimensions();
+    int64_t filesize = m_file.size();//returns -1 if it can't efficiently determine size
+    int64_t elemCount = getNumComponents();
+    for (int i = 0; i < (int)m_dims.size(); ++i)
+    {
+        elemCount *= m_dims[i];
+    }
+    if (filesize >= 0 && filesize < m_header.getDataOffset() + numBytesPerElem() * elemCount)
+    {
+        throw DataFileException("nifti file is truncated: " + filename);
+    }
 }
 
 void NiftiIO::writeNew(const QString& filename, const NiftiHeader& header, const int& version, const bool& withRead, const bool& swapEndian)
@@ -61,33 +71,7 @@ void NiftiIO::close()
 
 int NiftiIO::getNumComponents() const
 {
-    switch (m_header.getDataType())
-    {
-        case NIFTI_TYPE_RGB24:
-            return 3;
-            break;
-        case NIFTI_TYPE_COMPLEX64:
-        case NIFTI_TYPE_COMPLEX128:
-        case NIFTI_TYPE_COMPLEX256:
-            return 2;
-            break;
-        case NIFTI_TYPE_INT8:
-        case NIFTI_TYPE_UINT8:
-        case NIFTI_TYPE_INT16:
-        case NIFTI_TYPE_UINT16:
-        case NIFTI_TYPE_INT32:
-        case NIFTI_TYPE_UINT32:
-        case NIFTI_TYPE_FLOAT32:
-        case NIFTI_TYPE_INT64:
-        case NIFTI_TYPE_UINT64:
-        case NIFTI_TYPE_FLOAT64:
-        case NIFTI_TYPE_FLOAT128:
-            return 1;
-            break;
-        default:
-            CaretAssert(0);
-            throw DataFileException("internal error, report what you did to the developers");
-    }
+    return m_header.getNumComponents();
 }
 
 int NiftiIO::numBytesPerElem()

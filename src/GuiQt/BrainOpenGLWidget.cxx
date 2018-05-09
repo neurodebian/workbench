@@ -18,25 +18,27 @@
  */
 /*LICENSE_END*/
 
+#define __BRAIN_OPENGL_WIDGET_DEFINE__
+#include "BrainOpenGLWidget.h"
+#undef __BRAIN_OPENGL_WIDGET_DEFINE__
+
 #include <algorithm>
 #include <cmath>
 
 #include <QContextMenuEvent>
 #include <QKeyEvent>
 #include <QMouseEvent>
+#ifdef WORKBENCH_USE_QT5_QOPENGL_WIDGET
+#endif
+#include <QOpenGLContext>
 #include <QToolTip>
 #include <QWheelEvent>
-
-#define __BRAIN_OPENGL_WIDGET_DEFINE__
-#include "BrainOpenGLWidget.h"
-#undef __BRAIN_OPENGL_WIDGET_DEFINE__
 
 #include "Border.h"
 #include "Brain.h"
 #include "BrainBrowserWindow.h"
 #include "BrainOpenGLFixedPipeline.h"
 #include "BrainOpenGLShape.h"
-#include "BrainOpenGLTextureManager.h"
 #include "BrainOpenGLViewportContent.h"
 #include "BrainStructure.h"
 #include "BrowserTabContent.h"
@@ -49,14 +51,12 @@
 #include "EventImageCapture.h"
 #include "EventModelGetAll.h"
 #include "EventManager.h"
-#include "EventBrowserWindowContentGet.h"
+#include "EventBrowserWindowDrawingContent.h"
 #include "EventBrowserWindowGraphicsRedrawn.h"
-#include "EventGetBrainOpenGLTextRenderer.h"
 #include "EventGraphicsUpdateAllWindows.h"
 #include "EventGraphicsUpdateOneWindow.h"
 #include "EventGetOrSetUserInputModeProcessor.h"
 #include "EventIdentificationRequest.h"
-#include "EventOpenGLTexture.h"
 #include "EventUserInterfaceUpdate.h"
 #include "FtglFontTextRenderer.h"
 #include "GuiManager.h"
@@ -65,7 +65,7 @@
 #include "Matrix4x4.h"
 #include "Model.h"
 #include "MouseEvent.h"
-#include "QGLWidgetTextRenderer.h"
+#include "OffScreenOpenGLRenderer.h"
 #include "SelectionManager.h"
 #include "SelectionItemAnnotation.h"
 #include "SelectionItemSurfaceNode.h"
@@ -79,7 +79,7 @@
 #include "UserInputModeImage.h"
 #include "UserInputModeView.h"
 #include "UserInputModeVolumeEdit.h"
-
+#include "WuQMessageBox.h"
 
 using namespace caret;
 
@@ -95,12 +95,16 @@ using namespace caret;
  *   The parent widget.
  */
 BrainOpenGLWidget::BrainOpenGLWidget(QWidget* parent,
+                                     const BrainOpenGLWidget* shareWidget,
                                      const int32_t windowIndex)
-: QGLWidget(parent),
-windowIndex(windowIndex),
-m_textRenderer(NULL)
+#ifdef WORKBENCH_USE_QT5_QOPENGL_WIDGET
+: QOpenGLWidget(parent),
+#else
+: QGLWidget(parent,
+            shareWidget),
+#endif
+windowIndex(windowIndex)
 {
-    this->openGL = NULL;
     this->borderBeingDrawn = new Border();
     
     m_mousePositionValid = false;
@@ -142,10 +146,46 @@ m_textRenderer(NULL)
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_GRAPHICS_UPDATE_ALL_WINDOWS);
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_GRAPHICS_UPDATE_ONE_WINDOW);
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_GET_OR_SET_USER_INPUT_MODE);
-    EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_GET_TEXT_RENDERER_FOR_WINDOW);
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_IDENTIFICATION_REQUEST);
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_IMAGE_CAPTURE);
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_USER_INTERFACE_UPDATE);
+    
+    m_openGLContextSharingValid = true;
+#ifdef WORKBENCH_USE_QT5_QOPENGL_WIDGET
+    /*
+     * Default format is set by desktop.cxx call to initializeDefaultGLFormat().
+     */
+    setFormat(QSurfaceFormat::defaultFormat());
+#else
+    /*
+     * Test to see if OpenGL context sharing is valid.
+     * If there is no sharingWidget, then this is the
+     * first window opened.
+     */
+    if (shareWidget != NULL) {
+        if ( ! isSharing()) {
+            m_openGLContextSharingValid = false;
+        }
+    }
+#endif
+    
+//    std::cout << "Share widget: " << std::hex << (uint64_t)shareWidget
+//    << ", Context Pointer: " << std::hex << (uint64_t)context()
+//    << ", Share Group: " << std::hex << (uint64_t)context()->contextHandle()->shareGroup()
+//    << ", Sharing enabled: " << (isSharing() ? "Yes" : "No")
+//    << std::endl;
+    
+#ifdef WORKBENCH_USE_QT5_QOPENGL_WIDGET
+    /* Context is not yet valid for QOpenGLWidget */
+    m_contextShareGroupPointer = NULL;
+#else
+    CaretAssert(context());
+    CaretAssert(context()->contextHandle());
+    m_contextShareGroupPointer = context()->contextHandle()->shareGroup();
+    CaretAssert(m_contextShareGroupPointer);
+#endif
+    
+    s_brainOpenGLWidgets.insert(this);
 }
 
 /**
@@ -155,27 +195,40 @@ BrainOpenGLWidget::~BrainOpenGLWidget()
 {
     makeCurrent();
     
-    /** DO NOT delete since not owned by this */
-    m_textRenderer = NULL;
-    
     this->clearDrawingViewportContents();
     
-    if (this->openGL != NULL) {
-        delete this->openGL;
-        this->openGL = NULL;
-    }
     delete this->userInputViewModeProcessor;
     delete this->userInputAnnotationsModeProcessor;
     delete this->userInputBordersModeProcessor;
     delete this->userInputFociModeProcessor;
     delete this->userInputImageModeProcessor;
     delete this->userInputVolumeEditModeProcessor;
-    this->selectedUserInputProcessor = NULL; // DO NOT DELETE since it does not own the object to which it points
+    this->selectedUserInputProcessor = NULL; /* DO NOT DELETE since it does not own the object to which it points */
     
     delete this->borderBeingDrawn;
     
     EventManager::get()->removeAllEventsFromListener(this);
+    
+    s_brainOpenGLWidgets.erase(this);
+    if (s_brainOpenGLWidgets.empty()) {
+        if (s_singletonOpenGL != NULL) {
+            delete s_singletonOpenGL;
+            s_singletonOpenGL = NULL;
+        }
+    }
 }
+
+/**
+ * @return True if OpenGL Context Sharing is valid among
+ * multiple graphics windows.
+ * Note: If there is one window, we declare sharing valid.
+ */
+bool
+BrainOpenGLWidget::isOpenGLContextSharingValid() const
+{
+    return m_openGLContextSharingValid;
+}
+
 
 /**
  * Initializes graphics.
@@ -183,24 +236,27 @@ BrainOpenGLWidget::~BrainOpenGLWidget()
 void 
 BrainOpenGLWidget::initializeGL()
 {
-    if (this->openGL == NULL) {
-        this->openGL = new BrainOpenGLFixedPipeline(this->windowIndex,
-                                                    createTextRenderer());
-    }
-    else {
+    if (s_singletonOpenGL == NULL) {
         /*
-         * You would think Qt would need to call initializedGL() only once.
-         * However, if QGLWidget::renderPixmap() is called, it calls
-         * this method since it needs to create a new OpenGL context.
-         * Since the OpenGL context contains textures (and the font
-         * rendering may use textures), The text renderer must be
-         * recreated.  Otherwise, fonts will be garbage in the
-         * image produced by QGLWidget::renderPixmap().
+         * OpenGL drawing will take ownership of the text renderer
+         * and handle deletion of the text renderer.
          */
-        this->openGL->setTextRenderer(createTextRenderer());
+        BrainOpenGLTextRenderInterface* textRenderer = new FtglFontTextRenderer();
+        if (! textRenderer->isValid()) {
+            delete textRenderer;
+            textRenderer = NULL;
+            CaretLogWarning("Unable to create FTGL Font Renderer.\n"
+                            "No text will be available in graphics window.");
+        }
+        if (textRenderer == NULL) {
+            textRenderer = new DummyFontTextRenderer();
+        }
+        CaretAssert(textRenderer);
+        
+        s_singletonOpenGL = new BrainOpenGLFixedPipeline(textRenderer);
     }
     
-    this->openGL->initializeOpenGL();
+    s_singletonOpenGL->initializeOpenGL();
     
     this->lastMouseX = 0;
     this->lastMouseY = 0;
@@ -212,7 +268,7 @@ BrainOpenGLWidget::initializeGL()
     CaretLogConfig(getOpenGLInformation());
     
     if (s_defaultGLFormatInitialized == false) {
-        CaretLogSevere("PROGRAM ERROR: The default QGLFormat has not been set.\n"
+        CaretLogSevere("PROGRAM ERROR: The default OpenGL has not been set.\n"
                        "Need to call BrainOpenGLWidget::initializeDefaultGLFormat() prior to "
                        "instantiating an instance of this class.");
     }
@@ -225,9 +281,63 @@ QString
 BrainOpenGLWidget::getOpenGLInformation()
 {
     AString info;
+#if QT_VERSION >= 0x050000
+#ifdef WORKBENCH_USE_QT5_QOPENGL_WIDGET
+    info += ("Rendering with Qt5 QOpenGLWidget.\n");
+#else
+    info += ("Rendering with Qt5 QGLWidget (deprecated).\n");
+#endif
+    info += ("\n");
+#endif
     
+#ifdef WORKBENCH_USE_QT5_QOPENGL_WIDGET
+    QSurfaceFormat format = this->format();
+    AString swapInfo("Swap Behavior: ");
+    switch (format.swapBehavior()) {
+        case QSurfaceFormat::DefaultSwapBehavior:
+            swapInfo += ("DefaultSwapBehavior");
+            break;
+        case QSurfaceFormat::SingleBuffer:
+            swapInfo += ("SingleBuffer");
+            break;
+        case QSurfaceFormat::DoubleBuffer:
+            swapInfo += ("DoubleBuffer");
+            break;
+        case QSurfaceFormat::TripleBuffer:
+            swapInfo += ("TripleBuffer");
+            break;
+    }
+
+    info += ("QOpenGLWidget Context:"
+             "\n   Alpha: " + AString::fromBool(format.hasAlpha())
+             + "\n   Alpha size: " + AString::number(format.alphaBufferSize())
+             + "\n   Depth size: " + AString::number(format.depthBufferSize())
+             + "\n   Red size: " + AString::number(format.redBufferSize())
+             + "\n   Green size: " + AString::number(format.greenBufferSize())
+             + "\n   Blue size: " + AString::number(format.blueBufferSize())
+             + "\n   Samples size: " + AString::number(format.samples())
+             + "\n   Stencil size: " + AString::number(format.stencilBufferSize())
+             + "\n   " + swapInfo
+             + "\n   Swap Interval: " + AString::number(format.swapInterval())
+             + "\n   Stereo: " + AString::fromBool(format.stereo())
+             + "\n   Major Version: " + AString::number(format.majorVersion())
+             + "\n   Minor Version: " + AString::number(format.minorVersion()));
+    
+    switch (format.profile()) {
+        case QSurfaceFormat::NoProfile:
+            info += ("\nOpenGL NoProfile - OpenGL version is lower than 3.2. For 3.2 and newer this is same as CoreProfile.");
+            break;
+        case QSurfaceFormat::CoreProfile:
+            info += ("\nOpenGL CoreProfile - Functionality deprecated in OpenGL version 3.0 is not available.");
+            break;
+        case QSurfaceFormat::CompatibilityProfile:
+            info += ("\nOpenGL CompatibilityProfile - Functionality from earlier OpenGL versions is available.");
+            break;
+    }
+    
+#else
     QGLFormat format = this->format();
-    info += ("OpenGL Context:"
+    info += ("QGLWidget Context:"
              "\n   Accum: " + AString::fromBool(format.accum())
              + "\n   Accum size: " + AString::number(format.accumBufferSize())
              + "\n   Alpha: " + AString::fromBool(format.alpha())
@@ -248,8 +358,9 @@ BrainOpenGLWidget::getOpenGLInformation()
              + "\n   Stereo: " + AString::fromBool(format.stereo())
              + "\n   Major Version: " + AString::number(format.majorVersion())
              + "\n   Minor Version: " + AString::number(format.minorVersion()));
+#endif
     
-    info += ("\n\n" + this->openGL->getOpenGLInformation());
+    info += ("\n\n" + s_singletonOpenGL->getOpenGLInformation());
     
 #if BRAIN_OPENGL_INFO_SUPPORTS_DISPLAY_LISTS
     int32_t numDisplayLists = 0;
@@ -262,63 +373,9 @@ BrainOpenGLWidget::getOpenGLInformation()
              + AString::number(numDisplayLists)
              + " display lists are allocated in first OpenGL context.");
 #endif // BRAIN_OPENGL_INFO_SUPPORTS_DISPLAY_LISTS
-#ifdef BRAIN_OPENGL_INFO_SUPPORTS_VERTEX_BUFFERS
-    int32_t numVertexBuffers = 0;
-    for (GLuint iBuff = 1; iBuff < 1000; iBuff++) {
-        if (glIsBuffer(iBuff)) {
-            numVertexBuffers++;
-        }
-    }
-    info += ("\nAt least "
-             + AString::number(numVertexBuffers)
-             + " vertex buffers are allocated");
-#endif // BRAIN_OPENGL_INFO_SUPPORTS_VERTEX_BUFFERS
     info += "\n";
     
     return info;
-}
-
-/**
- * @return A new text renderer.
- */
-BrainOpenGLTextRenderInterface*
-BrainOpenGLWidget::createTextRenderer()
-{
-    BrainOpenGLTextRenderInterface* textRendererOut = NULL;
-    
-    /*
-     * Create a FTGL font renderer
-     */
-    if (textRendererOut == NULL){
-        textRendererOut = new FtglFontTextRenderer();
-        if ( ! textRendererOut->isValid()) {
-            CaretLogWarning("Failed to create FTGL text renderer.");
-            delete textRendererOut;
-            textRendererOut = NULL;
-        }
-    }
-    
-    /*
-     * Create a Qt text renderer
-     */
-    if (textRendererOut == NULL) {
-        textRendererOut = new QGLWidgetTextRenderer(this);
-        if ( ! textRendererOut->isValid()) {
-            CaretLogWarning("Failed to create Qt text renderer.");
-            delete textRendererOut;
-            textRendererOut = NULL;
-        }
-    }
-    
-    if (textRendererOut == NULL) {
-        CaretLogSevere("Unable to create a text renderer for OpenGL.  "
-                       "No text will be drawn (dummy text renderer).");
-        textRendererOut = new DummyFontTextRenderer();
-    }
-    
-    m_textRenderer = textRendererOut;
-    
-    return textRendererOut;
 }
 
 /**
@@ -346,11 +403,7 @@ BrainOpenGLWidget::getBorderBeingDrawn()
 void 
 BrainOpenGLWidget::clearDrawingViewportContents()
 {
-    const int32_t num = static_cast<int32_t>(this->drawingViewportContents.size());
-    for (int32_t i = 0; i < num; i++) {
-        delete this->drawingViewportContents[i];
-    }
-    this->drawingViewportContents.clear();
+    m_windowContent.clear();
 }
 
 /**
@@ -369,32 +422,93 @@ BrainOpenGLWidget::updateCursor()
 }
 
 /**
- * Paints the graphics.
+ * Perform experimental off screen image capture.
  */
-void 
-BrainOpenGLWidget::paintGL()
+QImage
+BrainOpenGLWidget::performOffScreenImageCapture(const int32_t imageWidth,
+                                                const int32_t imageHeight)
 {
-    updateCursor();
+    makeCurrent();
     
-    this->clearDrawingViewportContents();
+    QImage image;
     
-    int windowViewport[4] = {
-        0,
-        0,
-        this->windowWidth[this->windowIndex],
-        this->windowHeight[this->windowIndex]
-    };
+    OffScreenOpenGLRenderer offscreen(this,
+                                      imageWidth,
+                                      imageHeight);
+    if (offscreen.isError()) {
+        WuQMessageBox::errorOk(this,
+                               offscreen.getErrorMessage());
+        doneCurrent();
+        return image;
+    }
+
+    const int32_t viewport[4] = { 0, 0, imageWidth, imageHeight };
+    
+    BrainOpenGLWindowContent windowContent;
+    getDrawingWindowContent(viewport,
+                            windowContent);
+    
+    s_singletonOpenGL->drawModels(this->windowIndex,
+                                  GuiManager::get()->getBrain(),
+                                  m_contextShareGroupPointer,
+                                  windowContent.getAllTabViewports());
+    
+    if (offscreen.isError()) {
+        WuQMessageBox::errorOk(this,
+                               offscreen.getErrorMessage());
+        doneCurrent();
+        return image;
+    }
+    
+    return offscreen.getImage();
+}
+
+/**
+ * Get the content for drawing the window.
+ * 
+ * @param windowViewport
+ *     Viewport of the window.
+ * @param windowContent
+ *     Window content that is updated with window and its tabs.
+ */
+void
+BrainOpenGLWidget::getDrawingWindowContent(const int32_t windowViewportIn[4],
+                                           BrainOpenGLWindowContent& windowContent) const
+{
+    windowContent.clear();
     
     BrainBrowserWindow* bbw = GuiManager::get()->getBrowserWindowByWindowIndex(this->windowIndex);
     
-    EventBrowserWindowContentGet getModelEvent(this->windowIndex);
+    /*
+     * When restoring scene, the first browser window may get closed.
+     * This occurs when the user creates a scene that does not contain
+     * the first browser window.  The close() method in QWindow may not execute
+     * destruction of the window so this widget may still be valid but
+     * GuiManager no longer has a pointer to the window since it is being closed.
+     * In this case, the window will be NULL.
+     *
+     * This problem is related to the moving window properties to the SessionManager,
+     * in Feb 2018.
+     */
+    if (bbw == NULL) {
+        return;
+    }
+    
+    EventBrowserWindowDrawingContent getModelEvent(this->windowIndex);
     EventManager::get()->sendEvent(getModelEvent.getPointer());
     
     if (getModelEvent.isError()) {
         return;
     }
     
-    if (bbw->isAspectRatioLocked()) {
+    int32_t windowViewport[4] = {
+        windowViewportIn[0],
+        windowViewportIn[1],
+        windowViewportIn[2],
+        windowViewportIn[3]
+    };
+    
+    if (bbw->isWindowAspectRatioLocked()) {
         const float aspectRatio = bbw->getAspectRatio();
         if (aspectRatio > 0.0) {
             BrainOpenGLViewportContent::adjustViewportForAspectRatio(windowViewport,
@@ -405,22 +519,21 @@ BrainOpenGLWidget::paintGL()
     /*
      * Highlighting of border points
      */
-    this->openGL->setDrawHighlightedEndPoints(false);
+    s_singletonOpenGL->setDrawHighlightedEndPoints(false);
     if (this->selectedUserInputProcessor == this->userInputBordersModeProcessor) {
-        this->openGL->setDrawHighlightedEndPoints(this->userInputBordersModeProcessor->isHighlightBorderEndPoints());
+        s_singletonOpenGL->setDrawHighlightedEndPoints(this->userInputBordersModeProcessor->isHighlightBorderEndPoints());
     }
     
     const GapsAndMargins* gapsAndMargins = GuiManager::get()->getBrain()->getGapsAndMargins();
     
-    const int32_t numToDraw = getModelEvent.getNumberOfItemsToDraw();
-    if (numToDraw == 1) {
-        BrainOpenGLViewportContent* vc = BrainOpenGLViewportContent::createViewportForSingleTab(getModelEvent.getTabContentToDraw(0),
-                                                                        gapsAndMargins,
-                                                                        this->windowIndex,
-                                                                        windowViewport);
-        this->drawingViewportContents.push_back(vc);
+    const int32_t numberOfTabs = getModelEvent.getNumberOfBrowserTabs();
+    std::vector<BrowserTabContent*> allTabs;
+    for (int32_t i = 0; i < numberOfTabs; i++) {
+        allTabs.push_back(getModelEvent.getBrowserTab(i));
     }
-    else if (numToDraw > 1) {
+
+    if (getModelEvent.isTileTabsSelected()
+        && (numberOfTabs > 1)) {
         const int32_t windowWidth  = windowViewport[2];
         const int32_t windowHeight = windowViewport[3];
         
@@ -436,43 +549,91 @@ BrainOpenGLWidget::paintGL()
         /*
          * Get the sizes of the tab tiles from the tile tabs configuration
          */
-        if ( ! tileTabsConfiguration->getRowHeightsAndColumnWidthsForWindowSize(windowWidth,
-                                                                                windowHeight,
-                                                                                numToDraw,
-                                                                                rowHeights,
-                                                                                columnsWidths)) {
+        if (tileTabsConfiguration->getRowHeightsAndColumnWidthsForWindowSize(windowWidth,
+                                                                             windowHeight,
+                                                                             numberOfTabs,
+                                                                             rowHeights,
+                                                                             columnsWidths)) {
+            
+            /*
+             * Create the viewport drawing contents for all tabs
+             */
+            
+            std::vector<BrainOpenGLViewportContent*> tabViewportContent = BrainOpenGLViewportContent::createViewportContentForTileTabs(allTabs,
+                                                                                                                                       tileTabsConfiguration,
+                                                                                                                                       gapsAndMargins,
+                                                                                                                                       windowIndex,
+                                                                                                                                       windowViewport,
+                                                                                                                                       getModelEvent.getTabIndexForTileTabsHighlighting());
+            for (auto tabvp : tabViewportContent) {
+                windowContent.addTabViewport(tabvp);
+            }
+        }
+        else {
             CaretLogSevere("Tile Tabs Row/Column sizing failed !!!");
-            return;
         }
-        
-        /*
-         * Create the viewport drawing contents for all tabs
-         */
-        std::vector<BrowserTabContent*> allTabs;
-        for (int32_t i = 0; i < getModelEvent.getNumberOfItemsToDraw(); i++) {
-            allTabs.push_back(getModelEvent.getTabContentToDraw(i));
-        }
-        
-        this->drawingViewportContents = BrainOpenGLViewportContent::createViewportContentForTileTabs(allTabs,
-                                                                                                     tileTabsConfiguration,
-                                                                                                     gapsAndMargins,
-                                                                                                     windowIndex,
-                                                                                                     windowViewport,
-                                                                                                     getModelEvent.getTabIndexForTileTabsHighlighting());
+    }
+    else if (numberOfTabs >= 1) {
+        BrainOpenGLViewportContent* vc = BrainOpenGLViewportContent::createViewportForSingleTab(allTabs,
+                                                                                                getModelEvent.getSelectedBrowserTabContent(),
+                                                                                                gapsAndMargins,
+                                                                                                this->windowIndex,
+                                                                                                windowViewport);
+        windowContent.addTabViewport(vc);
     }
     
+    std::vector<BrowserTabContent*> emptyTabVector;
+    BrainOpenGLViewportContent* windowViewportContent = BrainOpenGLViewportContent::createViewportForSingleTab(emptyTabVector,
+                                                                                                               NULL,
+                                                                                                               gapsAndMargins,
+                                                                                                               windowIndex,
+                                                                                                               windowViewport);
+    windowContent.setWindowViewport(windowViewportContent);
+}
+
+
+/**
+ * Paints the graphics.
+ */
+void
+BrainOpenGLWidget::paintGL()
+{
+#ifdef WORKBENCH_USE_QT5_QOPENGL_WIDGET
+    if (m_contextShareGroupPointer == NULL) {
+        m_contextShareGroupPointer = context()->shareGroup();
+        CaretAssert(m_contextShareGroupPointer);
+    }
+#endif
+    
+    updateCursor();
+    
+    this->clearDrawingViewportContents();
+    
+    const int windowViewport[4] = {
+        0,
+        0,
+        this->windowWidth[this->windowIndex],
+        this->windowHeight[this->windowIndex]
+    };
+    
+    getDrawingWindowContent(windowViewport,
+                            m_windowContent);
+    
     if (this->selectedUserInputProcessor == userInputBordersModeProcessor) {
-        this->openGL->setBorderBeingDrawn(this->borderBeingDrawn);
+        s_singletonOpenGL->setBorderBeingDrawn(this->borderBeingDrawn);
     }
     else {
-        this->openGL->setBorderBeingDrawn(NULL);
+        s_singletonOpenGL->setBorderBeingDrawn(NULL);
     }
-    this->openGL->drawModels(GuiManager::get()->getBrain(),
-                             this->drawingViewportContents);
+    s_singletonOpenGL->drawModels(this->windowIndex,
+                                  GuiManager::get()->getBrain(),
+                                  m_contextShareGroupPointer,
+                                  m_windowContent.getAllTabViewports());
     
     /*
      * Issue browser window redrawn event
      */
+    BrainBrowserWindow* bbw = GuiManager::get()->getBrowserWindowByWindowIndex(this->windowIndex);
     if (bbw != NULL) {
         EventManager::get()->sendEvent(EventBrowserWindowGraphicsRedrawn(bbw).getPointer());
     }
@@ -516,7 +677,11 @@ BrainOpenGLWidget::event(QEvent* event)
         }
     }
     
+#ifdef WORKBENCH_USE_QT5_QOPENGL_WIDGET
+    return QOpenGLWidget::event(event);
+#else
     return QGLWidget::event(event);
+#endif
 }
 
 
@@ -531,7 +696,7 @@ BrainOpenGLWidget::contextMenuEvent(QContextMenuEvent* contextMenuEvent)
     const int mouseX = contextMenuEvent->x();
     const int mouseY = this->height() - contextMenuEvent->y();
     
-    BrainOpenGLViewportContent* viewportContent = this->getViewportContentAtXY(mouseX,
+    const BrainOpenGLViewportContent* viewportContent = this->getViewportContentAtXY(mouseX,
                                                                                mouseY);
     if (viewportContent != NULL) {
         MouseEvent mouseEvent(viewportContent,
@@ -573,7 +738,7 @@ BrainOpenGLWidget::wheelEvent(QWheelEvent* we)
      * out of its viewport without releasing the mouse
      * button.
      */
-    BrainOpenGLViewportContent* viewportContent = this->getViewportContentAtXY(wheelX,
+    const BrainOpenGLViewportContent* viewportContent = this->getViewportContentAtXY(wheelX,
                                                                                wheelY);
     if (viewportContent != NULL) {
         MouseEvent mouseEvent(viewportContent,
@@ -724,7 +889,7 @@ BrainOpenGLWidget::mousePressEvent(QMouseEvent* me)
             this->isMousePressedNearToolBox = true;
         }
 
-        BrainOpenGLViewportContent* viewportContent = this->getViewportContentAtXY(mouseX,
+        const BrainOpenGLViewportContent* viewportContent = this->getViewportContentAtXY(mouseX,
                                                                                    mouseY);
         if (viewportContent != NULL) {
             MouseEvent mouseEvent(viewportContent,
@@ -742,7 +907,7 @@ BrainOpenGLWidget::mousePressEvent(QMouseEvent* me)
                 this->selectedUserInputProcessor->mouseLeftPress(mouseEvent);
             }
             else if (keyModifiers == Qt::ShiftModifier) {
-                // not implemented  this->selectedUserInputProcessor->mouseLeftPressWithShift(mouseEvent);
+                /* not implemented  this->selectedUserInputProcessor->mouseLeftPressWithShift(mouseEvent); */
             }
         }
     }
@@ -789,7 +954,7 @@ BrainOpenGLWidget::mouseReleaseEvent(QMouseEvent* me)
             /*
              * Mouse button RELEASE event
              */
-            BrainOpenGLViewportContent* viewportContent = this->getViewportContentAtXY(mouseX,
+            const BrainOpenGLViewportContent* viewportContent = this->getViewportContentAtXY(mouseX,
                                                                                        mouseY);
             if (viewportContent != NULL) {
                 MouseEvent mouseEvent(viewportContent,
@@ -812,7 +977,7 @@ BrainOpenGLWidget::mouseReleaseEvent(QMouseEvent* me)
          * out of its viewport without releasing the mouse
          * button.
          */
-        BrainOpenGLViewportContent* viewportContent = this->getViewportContentAtXY(this->mousePressX,
+        const BrainOpenGLViewportContent* viewportContent = this->getViewportContentAtXY(this->mousePressX,
                                                                                    this->mousePressY);
         if (viewportContent != NULL) {
             if ((absDX <= BrainOpenGLWidget::MOUSE_MOVEMENT_TOLERANCE)
@@ -877,7 +1042,7 @@ BrainOpenGLWidget::mouseDoubleClickEvent(QMouseEvent* me)
              * out of its viewport without releasing the mouse
              * button.
              */
-            BrainOpenGLViewportContent* viewportContent = this->getViewportContentAtXY(mouseX,
+            const BrainOpenGLViewportContent* viewportContent = this->getViewportContentAtXY(mouseX,
                                                                                        mouseY);
             if (viewportContent != NULL) {
                 MouseEvent mouseEvent(viewportContent,
@@ -924,24 +1089,21 @@ BrainOpenGLWidget::leaveEvent(QEvent* /*e*/)
  * @param y
  *    Y-coordinate.
  */
-BrainOpenGLViewportContent* 
+const BrainOpenGLViewportContent*
 BrainOpenGLWidget::getViewportContentAtXY(const int x,
                                           const int y)
 {
-    BrainOpenGLViewportContent* viewportContent = NULL;
-    const int32_t num = static_cast<int32_t>(this->drawingViewportContents.size());
-    for (int32_t i = 0; i < num; i++) {
-        int viewport[4];
-        this->drawingViewportContents[i]->getTabViewportBeforeApplyingMargins(viewport);
-        if ((x >= viewport[0])
-            && (x < (viewport[0] + viewport[2]))
-            && (y >= viewport[1])
-            && (y < (viewport[1] + viewport[3]))) {
-            viewportContent = this->drawingViewportContents[i];
-            break;
-        }
+    const BrainOpenGLViewportContent* tabViewportContent = m_windowContent.getTabViewportWithLockAspectXY(x, y);
+    if (tabViewportContent != NULL) {
+        return tabViewportContent;
     }
-    return viewportContent;
+    
+    /*
+     * If not in a tab, then use the window viewport information.
+     * This allows selection of annotations in window space that are not
+     * within a tab (tab may be small in height due to lock aspect).
+     */
+    return m_windowContent.getWindowViewport();
 }
 
 /**
@@ -954,8 +1116,7 @@ BrainOpenGLWidget::getViewportContentAtXY(const int x,
 std::vector<const BrainOpenGLViewportContent*>
 BrainOpenGLWidget::getViewportContent() const
 {
-    std::vector<const BrainOpenGLViewportContent*> contentOut(this->drawingViewportContents.begin(),
-                                                              this->drawingViewportContents.end());
+    std::vector<const BrainOpenGLViewportContent*> contentOut = m_windowContent.getAllTabViewports();
     
     return contentOut;
 }
@@ -982,7 +1143,7 @@ BrainOpenGLWidget::performIdentification(const int x,
                                          const int y,
                                          const bool applySelectionBackgroundFiltering)
 {
-    BrainOpenGLViewportContent* idViewport = this->getViewportContentAtXY(x, y);
+    const BrainOpenGLViewportContent* idViewport = this->getViewportContentAtXY(x, y);
 
     this->makeCurrent();
     CaretLogFine("Performing selection");
@@ -992,12 +1153,31 @@ BrainOpenGLWidget::performIdentification(const int x,
     idManager->getVoxelEditingIdentification()->setEnabledForSelection(false);
     
     if (idViewport != NULL) {
-        this->openGL->selectModel(GuiManager::get()->getBrain(),
+        s_singletonOpenGL->selectModel(this->windowIndex,
+                                  GuiManager::get()->getBrain(),
+                                  m_contextShareGroupPointer,
                                   idViewport,
                                   x, 
                                   y,
                                   applySelectionBackgroundFiltering);
     }
+    
+#ifdef WORKBENCH_USE_QT5_QOPENGL_WIDGET
+    /*
+     * Note: The QOpenGLWidget always renders in a
+     * frame buffer object (see its documentation) so 
+     * there is no "back" or "front buffer".  Since
+     * identification is encoded in the framebuffer,
+     * it is necessary to repaint (udpates graphics
+     * immediately) to redraw the models.  Otherwise,
+     * the graphics flash with strange looking drawing.
+     */
+    this->repaint();
+    this->doneCurrent();
+#else
+    this->repaint();
+#endif
+    
     return idManager;
 }
 
@@ -1018,7 +1198,7 @@ SelectionItemAnnotation*
 BrainOpenGLWidget::performIdentificationAnnotations(const int x,
                                                     const int y)
 {
-    BrainOpenGLViewportContent* idViewport = this->getViewportContentAtXY(x, y);
+    const BrainOpenGLViewportContent* idViewport = this->getViewportContentAtXY(x, y);
     
     this->makeCurrent();
     CaretLogFine("Performing selection");
@@ -1037,12 +1217,30 @@ BrainOpenGLWidget::performIdentificationAnnotations(const int x,
          const int idX = x - vp[0];
          const int idY = y - vp[1];
          */
-        this->openGL->selectModel(GuiManager::get()->getBrain(),
+        s_singletonOpenGL->selectModel(this->windowIndex,
+                                  GuiManager::get()->getBrain(),
+                                  m_contextShareGroupPointer,
                                   idViewport,
                                   x,
                                   y,
                                   true);
     }
+
+#ifdef WORKBENCH_USE_QT5_QOPENGL_WIDGET
+    /*
+     * Note: The QOpenGLWidget always renders in a
+     * frame buffer object (see its documentation) so
+     * there is no "back" or "front buffer".  Since
+     * identification is encoded in the framebuffer,
+     * it is necessary to repaint (udpates graphics
+     * immediately) to redraw the models.  Otherwise,
+     * the graphics flash with strange looking drawing.
+     */
+    this->repaint();
+    this->doneCurrent();
+#else
+    this->repaint();
+#endif
     
     return annotationID;
 }
@@ -1065,7 +1263,7 @@ BrainOpenGLWidget::performIdentificationVoxelEditing(VolumeFile* editingVolumeFi
                                                      const int x,
                                                      const int y)
 {
-    BrainOpenGLViewportContent* idViewport = this->getViewportContentAtXY(x, y);
+    const BrainOpenGLViewportContent* idViewport = this->getViewportContentAtXY(x, y);
     
     this->makeCurrent();
     CaretLogFine("Performing selection");
@@ -1085,12 +1283,31 @@ BrainOpenGLWidget::performIdentificationVoxelEditing(VolumeFile* editingVolumeFi
          const int idX = x - vp[0];
          const int idY = y - vp[1];
          */
-        this->openGL->selectModel(GuiManager::get()->getBrain(),
+        s_singletonOpenGL->selectModel(this->windowIndex,
+                                  GuiManager::get()->getBrain(),
+                                  m_contextShareGroupPointer,
                                   idViewport,
                                   x,
                                   y,
                                   true);
     }
+    
+#ifdef WORKBENCH_USE_QT5_QOPENGL_WIDGET
+    /*
+     * Note: The QOpenGLWidget always renders in a
+     * frame buffer object (see its documentation) so
+     * there is no "back" or "front buffer".  Since
+     * identification is encoded in the framebuffer,
+     * it is necessary to repaint (udpates graphics
+     * immediately) to redraw the models.  Otherwise,
+     * the graphics flash with strange looking drawing.
+     */
+    this->repaint();
+    this->doneCurrent();
+#else
+    this->repaint();
+#endif
+    
     return idManager;
 }
 
@@ -1109,26 +1326,34 @@ BrainOpenGLWidget::performProjection(const int x,
                                      const int y,
                                      SurfaceProjectedItem& projectionOut)
 {
-    BrainOpenGLViewportContent* projectionViewport = this->getViewportContentAtXY(x, y);
+    const BrainOpenGLViewportContent* projectionViewport = this->getViewportContentAtXY(x, y);
     
     this->makeCurrent();
     CaretLogFine("Performing projection");
     
     if (projectionViewport != NULL) {
-        /*
-         * ID coordinate needs to be relative to the viewport
-         *
-         int vp[4];
-         idViewport->getViewport(vp);
-         const int idX = x - vp[0];
-         const int idY = y - vp[1];
-         */
-        this->openGL->projectToModel(GuiManager::get()->getBrain(),
+        s_singletonOpenGL->projectToModel(this->windowIndex,
+                                     GuiManager::get()->getBrain(),
+                                     m_contextShareGroupPointer,
                                      projectionViewport,
                                      x,
                                      y,
                                      projectionOut);
     }
+    
+#ifdef WORKBENCH_USE_QT5_QOPENGL_WIDGET
+    /*
+     * Note: The QOpenGLWidget always renders in a
+     * frame buffer object (see its documentation) so
+     * there is no "back" or "front buffer".  Since
+     * identification is encoded in the framebuffer,
+     * it is necessary to repaint (udpates graphics
+     * immediately) to redraw the models.  Otherwise,
+     * the graphics flash with strange looking drawing.
+     */
+    this->repaint();
+    this->doneCurrent();
+#endif
 }
 
 /**
@@ -1173,7 +1398,7 @@ BrainOpenGLWidget::mouseMoveEvent(QMouseEvent* me)
                  * out of its viewport without releasing the mouse
                  * button.
                  */
-                BrainOpenGLViewportContent* viewportContent = this->getViewportContentAtXY(this->mousePressX,
+                const BrainOpenGLViewportContent* viewportContent = this->getViewportContentAtXY(this->mousePressX,
                                                                                            this->mousePressY);
                 if (viewportContent != NULL) {
                     MouseEvent mouseEvent(viewportContent,
@@ -1212,7 +1437,7 @@ BrainOpenGLWidget::mouseMoveEvent(QMouseEvent* me)
             this->lastMouseY = mouseY;
         }
         else if (mouseButtons == Qt::NoButton) {
-            BrainOpenGLViewportContent* viewportContent = this->getViewportContentAtXY(mouseX,
+            const BrainOpenGLViewportContent* viewportContent = this->getViewportContentAtXY(mouseX,
                                                                                        mouseY);
             if (viewportContent != NULL) {
                 MouseEvent mouseEvent(viewportContent,
@@ -1237,7 +1462,7 @@ BrainOpenGLWidget::mouseMoveEvent(QMouseEvent* me)
         }
     }
     
-    BrainOpenGLViewportContent* viewportContent = this->getViewportContentAtXY(mouseX,
+    const BrainOpenGLViewportContent* viewportContent = this->getViewportContentAtXY(mouseX,
                                                                                mouseY);
     if (viewportContent != NULL) {
         m_mousePositionEvent.grabNew(new MouseEvent(viewportContent,
@@ -1278,15 +1503,6 @@ BrainOpenGLWidget::receiveEvent(Event* event)
         
         brainResetEvent->setEventProcessed();
     }
-    else if (event->getEventType() == EventTypeEnum::EVENT_GET_TEXT_RENDERER_FOR_WINDOW) {
-        EventGetBrainOpenGLTextRenderer* textRenderEvent = dynamic_cast<EventGetBrainOpenGLTextRenderer*>(event);
-        CaretAssert(textRenderEvent);
-        
-        if (this->windowIndex == textRenderEvent->getWindowIndex()) {
-            textRenderEvent->setTextRenderer(m_textRenderer);
-            textRenderEvent->setEventProcessed();
-        }
-    }
     else if (event->getEventType() == EventTypeEnum::EVENT_GRAPHICS_UPDATE_ALL_WINDOWS) {
         EventGraphicsUpdateAllWindows* updateAllEvent =
             dynamic_cast<EventGraphicsUpdateAllWindows*>(event);
@@ -1298,7 +1514,11 @@ BrainOpenGLWidget::receiveEvent(Event* event)
             this->repaint();
         }
         else {
+#ifdef WORKBENCH_USE_QT5_QOPENGL_WIDGET
+            this->update();
+#else
             this->updateGL();
+#endif
         }
     }
     else if (event->getEventType() == EventTypeEnum::EVENT_GRAPHICS_UPDATE_ONE_WINDOW) {
@@ -1309,13 +1529,17 @@ BrainOpenGLWidget::receiveEvent(Event* event)
         if (updateOneEvent->getWindowIndex() == this->windowIndex) {
             updateOneEvent->setEventProcessed();
             
+#ifdef WORKBENCH_USE_QT5_QOPENGL_WIDGET
+            this->update();
+#else
             this->updateGL();
+#endif
         }
         else {
             /*
              * If a window is yoked, update its graphics.
              */
-            EventBrowserWindowContentGet getModelEvent(this->windowIndex);
+            EventBrowserWindowDrawingContent getModelEvent(this->windowIndex);
             EventManager::get()->sendEvent(getModelEvent.getPointer());
             
             if (getModelEvent.isError()) {
@@ -1324,7 +1548,11 @@ BrainOpenGLWidget::receiveEvent(Event* event)
             
             bool needUpdate = false;
             if (needUpdate) {
+#ifdef WORKBENCH_USE_QT5_QOPENGL_WIDGET
+                this->update();
+#else
                 this->updateGL();
+#endif
             }
         }
     }
@@ -1423,12 +1651,30 @@ BrainOpenGLWidget::captureImage(EventImageCapture* imageCaptureEvent)
      * Note that a size of zero indicates capture graphics in its
      * current size.
      */
-    const int captureOffsetX    = imageCaptureEvent->getCaptureOffsetX();
-    const int captureOffsetY    = imageCaptureEvent->getCaptureOffsetY();
-    const int captureWidth      = imageCaptureEvent->getCaptureWidth();
-    const int captureHeight     = imageCaptureEvent->getCaptureHeight();
-    const int outputImageWidth  = imageCaptureEvent->getOutputWidth();
-    const int outputImageHeight = imageCaptureEvent->getOutputHeight();
+    int captureOffsetX    = imageCaptureEvent->getCaptureOffsetX();
+    int captureOffsetY    = imageCaptureEvent->getCaptureOffsetY();
+    int captureWidth      = imageCaptureEvent->getCaptureWidth();
+    int captureHeight     = imageCaptureEvent->getCaptureHeight();
+    int outputImageWidth  = imageCaptureEvent->getOutputWidth();
+    int outputImageHeight = imageCaptureEvent->getOutputHeight();
+    
+    if ((outputImageWidth <= 0)
+        || (outputImageHeight <= 0)) {
+        BrainBrowserWindow* browserWindow = GuiManager::get()->getBrowserWindowByWindowIndex(this->windowIndex);
+        
+        if (browserWindow != NULL) {
+            int32_t widgetWidth(0), widgetHeight(0);
+            browserWindow->getGraphicsWidgetSize(captureOffsetX,
+                                                 captureOffsetY,
+                                                 captureWidth,
+                                                 captureHeight,
+                                                 widgetWidth,
+                                                 widgetHeight,
+                                                 true); /* true => apply lock aspect ratio */
+            outputImageWidth  = captureWidth;
+            outputImageHeight = captureHeight;
+        }
+    }
     
     /*
      * Force immediate mode since problems with display lists
@@ -1451,49 +1697,36 @@ BrainOpenGLWidget::captureImage(EventImageCapture* imageCaptureEvent)
              * update() is a scheduled update).
              */
             repaint();
+#ifdef WORKBENCH_USE_QT5_QOPENGL_WIDGET
+            image = grabFramebuffer();
+#else
             image = grabFrameBuffer();
-            
-            if ((captureOffsetX > 0)
-                || (captureOffsetY > 0)) {
-                if ((captureWidth > 0)
-                    && (captureHeight > 0)) {
-                    image = image.copy(captureOffsetX,
-                                       captureOffsetY,
-                                       captureWidth,
-                                       captureHeight);
-                }
+#endif
+            if ((captureWidth > 0)
+                && (captureHeight > 0)) {
+                image = image.copy(captureOffsetX,
+                                   captureOffsetY,
+                                   captureWidth,
+                                   captureHeight);
             }
             
-            /*
-             * If image was captured successfully and the caller has 
-             * requested that the image be a specific size, scale
-             * the image to the requested size.
-             */
-            if ((image.width() > 0)
-                && (image.height() > 0)) {
-                if ((outputImageWidth > 0)
-                    && (outputImageHeight > 0)) {
-                    if ((image.width() != outputImageWidth)
-                        || (image.height() != outputImageHeight)) {
-                        image = image.scaled(outputImageWidth,
-                                             outputImageHeight,
-                                             Qt::IgnoreAspectRatio,
-                                             Qt::SmoothTransformation);
-                    }
-                }
+            if ((outputImageWidth != image.width())
+                || (outputImageHeight != image.height())) {
+                image = image.scaled(outputImageWidth,
+                                     outputImageHeight,
+                                     Qt::IgnoreAspectRatio,
+                                     Qt::SmoothTransformation);
             }
+            
         }
             break;
         case ImageCaptureMethodEnum::IMAGE_CAPTURE_WITH_RENDER_PIXMAP:
         {
+#ifdef WORKBENCH_USE_QT5_QOPENGL_WIDGET
+            WuQMessageBox::errorOk(this, "Render PixMap not implemented with Qt5");
+#else
             /*
-             * Note 1: QGLWidget::renderPixmap() creates a new OpenGL
-             * Context which destroys any textures in the existing
-             * OpenGL context.  So, after execution of 
-             * QGLWidget::renderPixmap(), we need to create a
-             * new text renderer.
-             *
-             * Note 2: When the user chooses to exclude regions
+             * When the user chooses to exclude regions
              * caused by locking of tab/window aspect ratio,
              * the pixmap is rendered to the output width and
              * height and in the correct aspect ratio so when
@@ -1501,15 +1734,18 @@ BrainOpenGLWidget::captureImage(EventImageCapture* imageCaptureEvent)
              * region caused by aspect locking that needs to 
              * be excluded.
              */
-            BrainOpenGLTextureManager* textureManager = this->openGL->getTextureManager();
-            CaretAssert(textureManager);
-            textureManager->deleteAllTexturesForWindow(this->windowIndex);
             
             QPixmap pixmap = this->renderPixmap(outputImageWidth,
-                                                outputImageHeight);
+                                                outputImageHeight,
+                                                true);
             image = pixmap.toImage();
-            textureManager->deleteAllTexturesForWindow(this->windowIndex);
-            this->openGL->setTextRenderer(createTextRenderer());
+#endif
+        }
+            break;
+        case ImageCaptureMethodEnum::IMAGE_CAPTURE_WITH_OFFSCREEN_FRAME_BUFFER:
+        {
+            image = performOffScreenImageCapture(outputImageWidth,
+                                                 outputImageHeight);
         }
             break;
     }
@@ -1522,7 +1758,7 @@ BrainOpenGLWidget::captureImage(EventImageCapture* imageCaptureEvent)
         imageCaptureEvent->setImage(image);
         
         uint8_t backgroundColor[3];
-        this->openGL->getBackgroundColor(backgroundColor);
+        s_singletonOpenGL->getBackgroundColor(backgroundColor);
         imageCaptureEvent->setBackgroundColor(backgroundColor);
     }
 
@@ -1540,6 +1776,23 @@ BrainOpenGLWidget::captureImage(EventImageCapture* imageCaptureEvent)
 void
 BrainOpenGLWidget::initializeDefaultGLFormat()
 {
+#ifdef WORKBENCH_USE_QT5_QOPENGL_WIDGET
+    QSurfaceFormat glfmt;
+    glfmt.setAlphaBufferSize(8);
+    glfmt.setBlueBufferSize(8);
+    glfmt.setDepthBufferSize(24);
+    glfmt.setGreenBufferSize(8);
+    glfmt.setProfile(QSurfaceFormat::CompatibilityProfile);
+    glfmt.setRedBufferSize(8);
+    glfmt.setRenderableType(QSurfaceFormat::OpenGL);
+    glfmt.setSamples(6);
+    glfmt.setStereo(false);
+    glfmt.setSwapBehavior(QSurfaceFormat::DoubleBuffer);
+    
+    glfmt.setMajorVersion(2);
+    glfmt.setMinorVersion(1);
+    QSurfaceFormat::setDefaultFormat(glfmt);
+#else
     QGLFormat glfmt;
     glfmt.setAccum(false);
     glfmt.setAlpha(true);
@@ -1549,7 +1802,9 @@ BrainOpenGLWidget::initializeDefaultGLFormat()
     glfmt.setDirectRendering(true);
     glfmt.setDoubleBuffer(true);
     glfmt.setOverlay(false);
-    glfmt.setSampleBuffers(false);
+    glfmt.setProfile(QGLFormat::CompatibilityProfile);
+    glfmt.setVersion(2, 1);
+    glfmt.setSampleBuffers(true);
     glfmt.setStencil(false);
     glfmt.setStereo(false);
     
@@ -1558,6 +1813,7 @@ BrainOpenGLWidget::initializeDefaultGLFormat()
     glfmt.setGreenBufferSize(8);
     glfmt.setBlueBufferSize(8);
     QGLFormat::setDefaultFormat(glfmt);
+#endif
     
     s_defaultGLFormatInitialized = true;
 }

@@ -18,11 +18,19 @@
  */
 /*LICENSE_END*/
 
+/*
+ * When GLEW is used, CaretOpenGLInclude.h will include "Gl/glew.h".
+ * Gl/glew.h MUST BE BEFORE Gl/gl.h and Gl/gl.h is included by
+ * some Qt classes so, we must include CaretOpenGL.h first.
+ */
+#include "CaretOpenGLInclude.h"
 
 #include <QApplication>
 #include <QDesktopWidget>
 #include <QLabel>
+#ifndef WORKBENCH_USE_QT5_QOPENGL_WIDGET
 #include <QGLPixelBuffer>
+#endif
 #include <QSplashScreen>
 #include <QStyleFactory>
 #include <QThread>
@@ -33,6 +41,7 @@
 
 #include "ApplicationInformation.h"
 #include "BrainBrowserWindow.h"
+#include "BrainOpenGL.h"
 #include "BrainOpenGLWidget.h"
 #include "CaretAssert.h"
 #include "CaretCommandLine.h"
@@ -57,11 +66,125 @@ static bool caretLoggerIsValid = false;
 using namespace caret;
 using namespace std;
 
+#if QT_VERSION >= 0x050000
 /**
- * Handles message produced by Qt.
+ * Handles message produced by Qt 5
  */
 static void
-messageHandlerForQt(QtMsgType type, const char* msg)
+messageHandlerForQt5(QtMsgType type, const QMessageLogContext& context, const QString& msg)
+{
+    const AString backtrace = SystemUtilities::getBackTrace();
+    
+    const AString contextInfo = ("   Context Info File ("
+                                 + QString(context.file)
+                                 + ") Function (" + QString(context.function)
+                                 + ") Line (" + QString::number(context.line)
+                                 + ") Version (" + QString::number(context.version)
+                                 + ") Category (" + QString(context.category)
+                                 + ")");
+    const AString message = (AString(msg) + "\n"
+                             + contextInfo + "\n"
+                             + backtrace);
+    
+    if (caretLoggerIsValid) {
+        bool abortFlag = false;
+        bool displayedFlag = false;
+        switch (type) {
+            case QtDebugMsg:
+                CaretLogInfo(message);
+                displayedFlag = CaretLogger::getLogger()->isInfo();
+                break;
+            case QtWarningMsg:
+                CaretLogWarning(message);
+                displayedFlag = CaretLogger::getLogger()->isWarning();
+                break;
+            case QtCriticalMsg:
+                CaretLogSevere(message);
+                displayedFlag = CaretLogger::getLogger()->isSevere();
+                break;
+            case QtFatalMsg:
+                cerr << "Qt Fatal: " << message << endl;
+                abortFlag = true;//fatal will cause an abort, so always display it, bypassing logger entirely
+                displayedFlag = true;
+                break;
+#if QT_VERSION >= 0x050500
+            case QtInfoMsg:
+                CaretLogInfo(message);
+                displayedFlag = CaretLogger::getLogger()->isInfo();
+                break;
+#endif
+        }
+        
+        /*
+         * Beep to alert user about an error!!!
+         */
+        if (displayedFlag && (type != QtDebugMsg))//don't beep for debug
+        {
+            GuiManager::beep();
+        }
+#ifndef NDEBUG
+        if (!displayedFlag)
+        {
+            cerr << "DEBUG: Qt ";
+            switch (type)
+            {
+                case QtDebugMsg:
+                    cerr << "Debug ";
+                    break;
+                case QtWarningMsg:
+                    cerr << "Warning ";
+                    break;
+                case QtCriticalMsg:
+                    cerr << "Critical ";
+                    break;
+                case QtFatalMsg:
+                    cerr << "FATAL (?!?) ";//should never happen
+                    break;
+#if QT_VERSION >= 0x050500
+                case QtInfoMsg:
+                    std::cerr << "Info ";
+                    break;
+#endif
+            }
+            cerr << "message hidden" << endl;
+        }
+#endif
+        
+        if (abortFlag) {
+            std::abort();
+        }
+    }
+    else {
+        switch (type) {
+            case QtDebugMsg:
+                std::cerr << "Qt Debug: " << message << std::endl;
+                break;
+            case QtWarningMsg:
+                std::cerr << "Qt Warning: " << message << std::endl;
+                break;
+            case QtCriticalMsg:
+                std::cerr << "Qt Critical: " << message << std::endl;
+                break;
+            case QtFatalMsg:
+                std::cerr << "Qt Fatal: " << message << std::endl;
+                std::abort();
+                break;
+#if QT_VERSION >= 0x050500
+            case QtInfoMsg:
+                std::cerr << "Qt Info: " << message << std::endl;
+                break;
+#endif
+        }
+    }
+}
+
+#else // QT_VERSION
+
+/**
+ * Handles message produced by Qt 4.
+ */
+static void
+messageHandlerForQt4(QtMsgType type, const char* msg)
 {
     const AString backtrace = SystemUtilities::getBackTrace();
     
@@ -143,15 +266,19 @@ messageHandlerForQt(QtMsgType type, const char* msg)
     }
 }
 
+#endif // QT_VERSION
+
 //struct for communicating stuff back to main from parseCommandLine
 struct ProgramState
 {
     vector<AString> fileList;
-    int specLoadType;
     int windowSizeXY[2];
     int windowPosXY[2];
     int graphicsSizeXY[2];
     bool showSplash;
+    
+    AString specFileNameLoadWithDialog;
+    AString specFileNameLoadAll;
     
     AString sceneFileName;
     AString sceneNameOrNumber;
@@ -160,89 +287,6 @@ struct ProgramState
 };
 
 
-/*
-// maximum mumber of lines the output console should have
-
-static const WORD MAX_CONSOLE_LINES = 500;
-#include <windows.h>
-#include <stdio.h>
-#include <fcntl.h>
-#include <io.h>
-#include <iostream>
-#include <fstream>
-
-void RedirectIOToConsole()
-{
-
-    int hConHandle;
-
-    long lStdHandle;
-
-    CONSOLE_SCREEN_BUFFER_INFO coninfo;
-
-    FILE *fp;
-
-    // allocate a console for this app
-
-    AllocConsole();
-
-    // set the screen buffer to be big enough to let us scroll text
-
-    GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE),
-
-    &coninfo);
-
-    coninfo.dwSize.Y = MAX_CONSOLE_LINES;
-
-    SetConsoleScreenBufferSize(GetStdHandle(STD_OUTPUT_HANDLE),
-
-    coninfo.dwSize);
-
-    // redirect unbuffered STDOUT to the console
-
-    lStdHandle = (long)GetStdHandle(STD_OUTPUT_HANDLE);
-
-    hConHandle = _open_osfhandle(lStdHandle, _O_TEXT);
-
-    fp = _fdopen( hConHandle, "w" );
-
-    *stdout = *fp;
-
-    setvbuf( stdout, NULL, _IONBF, 0 );
-
-    // redirect unbuffered STDIN to the console
-
-    lStdHandle = (long)GetStdHandle(STD_INPUT_HANDLE);
-
-    hConHandle = _open_osfhandle(lStdHandle, _O_TEXT);
-
-    fp = _fdopen( hConHandle, "r" );
-
-    *stdin = *fp;
-
-    setvbuf( stdin, NULL, _IONBF, 0 );
-
-    // redirect unbuffered STDERR to the console
-
-    lStdHandle = (long)GetStdHandle(STD_ERROR_HANDLE);
-
-    hConHandle = _open_osfhandle(lStdHandle, _O_TEXT);
-
-    fp = _fdopen( hConHandle, "w" );
-
-    *stderr = *fp;
-
-    setvbuf( stderr, NULL, _IONBF, 0 );
-
-    // make cout, wcout, cin, wcin, wcerr, cerr, wclog and clog
-
-    // point to console as well
-
-    ios::sync_with_stdio();
-
-}*/
-//#pragma comment(linker, "/SUBSYSTEM:windows /ENTRY:mainCRTStartup")
-
 //declare the functions associated with command line
 void printHelp(const AString& progName);
 void parseCommandLine(const AString& progName, ProgramParameters* myParams, ProgramState& myState);
@@ -250,8 +294,6 @@ int
 main(int argc, char* argv[])
 {
     srand(time(NULL));
-    //MS Windows code to allocate a new console, will have a preference to set this up
-    //RedirectIOToConsole();
     int result;
     {
         /*
@@ -282,9 +324,20 @@ main(int argc, char* argv[])
         */
         CaretLogFine("Running: " + caret_global_commandLine);
         
+        /*
+         * Setup OpenGL if using Qt 5's QOpenGLWidget.
+         * QOpenGLWidget's documentation indicates that
+         * default format must be initizlied before
+         * QApplication is created.
+         */
+#ifdef WORKBENCH_USE_QT5_QOPENGL_WIDGET
+        QCoreApplication::setAttribute(Qt::AA_ShareOpenGLContexts);
+        BrainOpenGLWidget::initializeDefaultGLFormat();
+#endif
+        
         //change the default graphics system on mac to avoid rendering performance issues with qwtplotter
 #ifdef CARET_OS_MACOSX
-        QApplication::setGraphicsSystem("raster");
+        // Qt-Deprecated: QApplication::setGraphicsSystem("raster");
         MacApplication app(argc, argv);
 #else //CARET_OS_MACOSX        
         QApplication app(argc, argv);
@@ -308,52 +361,44 @@ main(int argc, char* argv[])
         /*
         * Make sure OpenGL is available.
         */
-        if (QGLFormat::hasOpenGL() == false) {
-            QString msg = "This computer does not support OpenGL (3D graphics system).\n"
-            "You will need to install OpenGL to run Workbench.\n"
-            "Please see your system administrator.";
+        const QString noOpenGLMessage("OpenGL (3D Graphics System) is not available.  "
+                                      "This may be caused by missing or outdated OpenGL libraries."
+        
+#ifdef CARET_OS_LINUX
+                                      "On Linux, this may be caused by a missing plugin "
+                                      "library <plugins-path>/xcbglintegrations/libqxcb-glx-integration.so."
+#endif
+                                      );
+        
+                                      
+#ifndef WORKBENCH_USE_QT5_QOPENGL_WIDGET
+        if ( ! QGLFormat::hasOpenGL()) {
             app.processEvents();
             WuQMessageBox::errorOk(NULL,
-                                   msg);
+                                   noOpenGLMessage);
             app.processEvents();
             
             return -1;
         }
+#endif
             
         /*
-        * Setup OpenGL
+        * Setup OpenGL if NOT using Qt 5's QOpenGLWidget
         */
+#ifndef WORKBENCH_USE_QT5_QOPENGL_WIDGET
         BrainOpenGLWidget::initializeDefaultGLFormat();
+#endif
         
-        qInstallMsgHandler(messageHandlerForQt);//this handler uses CaretLogger and GuiManager, so we must install it after the logger is available and the application is created
+#if QT_VERSION >= 0x050000
+        qInstallMessageHandler(messageHandlerForQt5);//this handler uses CaretLogger and GuiManager, so we must install it after the logger is available and the application is created
+#else // QT_VERSION
+        qInstallMsgHandler(messageHandlerForQt4);//this handler uses CaretLogger and GuiManager, so we must install it after the logger is available and the application is created
+#endif // QT_VERSION
         /*
          * Log debug status
          */
         CaretLogConfig(applicationInformation.getCompiledWithDebugStatus());
-        
-        //sanity check command line
-        bool haveSpec = false;
-        bool haveFiles = false;
-        for (int i = 0; i < (int)myState.fileList.size(); ++i)
-        {
-            if (myState.fileList[i].endsWith(".spec"))
-            {
-                if (haveSpec)
-                {
-                    cerr << "error, cannot load multiple spec files at this time" << endl;
-                    return -1;
-                }
-                haveSpec = true;
-            } else {
-                haveFiles = true;
-            }
-        }
-        //if error to have both data and spec files
-        /*if (haveFiles && haveSpec)
-        {
-            cerr << "error, cannot specify both spec files and data files on the command line" << endl;
-            return -1;
-        }//*/
+
         
         /*
          * Enabled the desired splash screen based upon user preferences
@@ -362,14 +407,8 @@ main(int argc, char* argv[])
          */ 
         CaretPreferences* preferences = SessionManager::get()->getCaretPreferences();
         bool showSelectionSplashScreen = preferences->isSplashScreenEnabled();
-        if (myState.fileList.empty() == false) {
-            showSelectionSplashScreen = false;
-        }
-        if (myState.sceneFileName.isEmpty() == false) {
-            showSelectionSplashScreen = false;
-        }
         bool showImageSplashScreen = (! showSelectionSplashScreen);
-        if (myState.showSplash == false) {
+        if ( ! myState.showSplash) {
             showSelectionSplashScreen = false;
             showImageSplashScreen = false;
         }
@@ -407,20 +446,16 @@ main(int argc, char* argv[])
         
         /*
          * Now that events have processed, see if there was a request for
-         * a data file to open
+         * a data file to open.
          */
         const AString dataFileNameFromOS = GuiManager::get()->getNameOfDataFileToOpenAfterStartup();
-        if (dataFileNameFromOS.isEmpty() == false) {
-            myState.fileList.push_back(dataFileNameFromOS);
+        if ( ! dataFileNameFromOS.isEmpty()) {
             showSelectionSplashScreen = false;
             if (dataFileNameFromOS.endsWith(DataFileTypeEnum::toFileExtension(DataFileTypeEnum::SPECIFICATION))) {
-                haveSpec  = true;
-                haveFiles = false;
-                myState.specLoadType = 0;
+                myState.specFileNameLoadWithDialog = dataFileNameFromOS;
             }
             else {
-                haveSpec  = false;
-                haveFiles = true;
+                myState.fileList.push_back(dataFileNameFromOS);
             }
         }
         
@@ -439,15 +474,11 @@ main(int argc, char* argv[])
                 const QString dataFileName = splashScreen.getSelectedDataFileName();
                 if ( ! dataFileName.isEmpty()) {
                     myState.fileList.clear();
-                    myState.fileList.push_back(dataFileName);
-                    if (dataFileName.endsWith(DataFileTypeEnum::SPECIFICATION)) {
-                        myState.specLoadType = 0; // which means use BrainBrowserWindow::LOAD_SPEC_FILE_WITH_DIALOG_VIA_COMMAND_LINE;
-                        haveSpec  = true;
-                        haveFiles = false;
+                    if (dataFileName.endsWith(DataFileTypeEnum::toFileExtension(DataFileTypeEnum::SPECIFICATION))) {
+                        myState.specFileNameLoadWithDialog = dataFileName;
                     }
                     else {
-                        haveSpec  = false;
-                        haveFiles = true;
+                        myState.fileList.push_back(dataFileName);
                     }
                 }
             }
@@ -464,8 +495,55 @@ main(int argc, char* argv[])
         EventManager::get()->sendEvent(newBrowserWindow.getPointer());
         splashScreen.close();
 
-        BrainBrowserWindow* myWindow = GuiManager::get()->getBrowserWindowByWindowIndex(0);
         
+        BrainBrowserWindow* myWindow = GuiManager::get()->getBrowserWindowByWindowIndex(0);
+        if ( ! myWindow->hasValidOpenGL()) {
+            app.processEvents();
+            WuQMessageBox::errorOk(NULL,
+                                   noOpenGLMessage);
+            app.processEvents();
+            
+            return -1;
+        }
+        
+        /**
+         * Test for the required OpenGL version is available.
+         */
+        AString requiredOpenGLMessage;
+        if ( ! BrainOpenGL::testForRequiredOpenGLVersion(requiredOpenGLMessage)) {
+            app.processEvents();
+            if ( ! WuQMessageBox::warningAcceptReject(NULL,
+                                                      requiredOpenGLMessage,
+                                                      "Continue",
+                                                      "Exit")) {
+                return -1;
+            }
+        }
+        
+        /*
+         * Initialize GLEW if it is being used
+         */
+        AString glewErrorMessage;
+#ifdef HAVE_GLEW
+        GLenum err = glewInit();
+        if (GLEW_OK != err) {
+            /* Problem: glewInit failed, something is seriously wrong. */
+            
+            glewErrorMessage = ("GLEW failed to initialize.\n"
+                                + AString(reinterpret_cast<const char*>(glewGetErrorString(err))));
+            CaretLogSevere(glewErrorMessage);
+        }
+        CaretLogInfo("Status: Using GLEW version "
+                     + AString(reinterpret_cast<const char*>(glewGetString(GLEW_VERSION))));
+#endif /* HAVE_GLEW */
+        if ( ! glewErrorMessage.isEmpty()) {
+            app.processEvents();
+            WuQMessageBox::errorOk(NULL,
+                                   glewErrorMessage);
+            app.processEvents();
+            
+            return -1;
+        }
         
         if ((myState.windowSizeXY[0] > 0) && (myState.windowSizeXY[1] > 0))
         {
@@ -491,38 +569,34 @@ main(int argc, char* argv[])
             myWindow->setGraphicsWidgetFixedSize(myState.graphicsSizeXY[0], myState.graphicsSizeXY[1]);
         }
         
-        //use command line
-        if (haveFiles)
-        {
-            myWindow->loadFilesFromCommandLine(myState.fileList, BrainBrowserWindow::LOAD_SPEC_FILE_WITH_DIALOG);//second parameter unused in this case
+        if ( ! myState.specFileNameLoadAll.isEmpty()) {
+            myWindow->loadFilesFromCommandLine({ myState.specFileNameLoadAll },
+                                               BrainBrowserWindow::LOAD_SPEC_FILE_CONTENTS_VIA_COMMAND_LINE);
         }
-        if (haveSpec)
-        {
-            switch (myState.specLoadType)
-            {
-                case 0://dialog
-                    myWindow->loadFilesFromCommandLine(myState.fileList, BrainBrowserWindow::LOAD_SPEC_FILE_WITH_DIALOG_VIA_COMMAND_LINE);
-                    break;
-                case 1://load all
-                    myWindow->loadFilesFromCommandLine(myState.fileList, BrainBrowserWindow::LOAD_SPEC_FILE_CONTENTS_VIA_COMMAND_LINE);
-                    break;
-                default:
-                    CaretAssert(false);
-            }
+        else if ( ! myState.specFileNameLoadWithDialog.isEmpty()) {
+            myWindow->loadFilesFromCommandLine({ myState.specFileNameLoadWithDialog },
+                                               BrainBrowserWindow::LOAD_SPEC_FILE_WITH_DIALOG_VIA_COMMAND_LINE);
         }
         
-        if (myState.sceneFileName.isEmpty() == false) {
+        if (! myState.fileList.empty()) {
+            myWindow->loadFilesFromCommandLine(myState.fileList,
+                                               BrainBrowserWindow::LOAD_SPEC_FILE_WITH_DIALOG);
+        }
+        
+        if ( ! myState.sceneFileName.isEmpty()) {
             myWindow->loadSceneFromCommandLine(myState.sceneFileName,
                                                myState.sceneNameOrNumber);
         }
         
+#ifndef WORKBENCH_USE_QT5_QOPENGL_WIDGET
         if (QGLPixelBuffer::hasOpenGLPbuffers()) {
             CaretLogConfig("OpenGL PBuffers are supported");
         }
         else {
             CaretLogConfig("OpenGL PBuffers are NOT supported");
         }
-        
+#endif
+    
         /*
          * Log local (language, country)
          */
@@ -659,10 +733,6 @@ void printHelp(const AString& progName)
          iter++) {
         cout << "           " << qPrintable(LogLevelEnum::toName(*iter)) << endl;
     }
-//    foreach (LogLevelEnum::Enum level , logLevels) {
-//    for (LogLevelEnum::Enum level : logLevels) {
-//        cout << "           " << qPrintable(LogLevelEnum::toName(level)) << endl;
-//    }
     
     cout
     << endl
@@ -706,6 +776,8 @@ void printHelp(const AString& progName)
 void parseCommandLine(const AString& progName, ProgramParameters* myParams, ProgramState& myState)
 {
     bool hasFatalError = false;
+    
+    const AString moreThanOneSpecFileErrorMessage("More than one spec file is NOT allowed in options");
     
     try {
         while (myParams->hasNext())
@@ -758,7 +830,16 @@ void parseCommandLine(const AString& progName, ProgramParameters* myParams, Prog
                         hasFatalError = true;
                     }
                 } else if (thisParam == "-spec-load-all") {
-                    myState.specLoadType = 1;
+                    if ( ! myState.specFileNameLoadAll.isEmpty()) {
+                        cerr << qPrintable(moreThanOneSpecFileErrorMessage) << endl;
+                    }
+                    else if (myParams->hasNext()) {
+                        myState.specFileNameLoadAll = myParams->nextString("Spec File Name");
+                    }
+                    else {
+                        cerr << "Missing spec file name for \"-spec\" option" << endl;
+                        hasFatalError = true;
+                    }
                 } else if (thisParam == "-graphics-size") {
                     if (myParams->hasNext()) {
                         myState.graphicsSizeXY[0] = myParams->nextInt("Graphics Size X");
@@ -819,13 +900,33 @@ void parseCommandLine(const AString& progName, ProgramParameters* myParams, Prog
                      * http://stackoverflow.com/questions/10242115/os-x-strange-psn-command-line-parameter-when-launched-from-finder
                      * http://trac.wxwidgets.org/ticket/15432
                      */
+                } else if (thisParam == "-NSDocumentRevisionsDebugMode") {
+                    /*
+                     * When wb_view is started within Apple's XCode, these parameters are added
+                     * so ignore them:
+                     *    -NSDocumentRevisionsDebugMode YES
+                     */
+                    if (myParams->hasNext()) {
+                        myParams->nextString("Argument to -NSDocumentRevisionsDebugMode");
+                    }
                 } else {
                     cerr << "unrecognized option \"" << thisParam << "\"" << endl;
                     printHelp(progName);
                     hasFatalError = true;
                 }
             } else {
-                myState.fileList.push_back(thisParam);
+                if (thisParam.endsWith(DataFileTypeEnum::toFileExtension(DataFileTypeEnum::SPECIFICATION))) {
+                    if ( ! myState.specFileNameLoadWithDialog.isEmpty()) {
+                        cerr << qPrintable(moreThanOneSpecFileErrorMessage) << endl;
+                        hasFatalError = true;
+                    }
+                    else {
+                        myState.specFileNameLoadWithDialog = thisParam;
+                    }
+                }
+                else {
+                    myState.fileList.push_back(thisParam);
+                }
             }
         }
     }
@@ -834,8 +935,30 @@ void parseCommandLine(const AString& progName, ProgramParameters* myParams, Prog
         hasFatalError = true;
     }
     
+    if ( ( ! myState.specFileNameLoadWithDialog.isEmpty())
+        && ( ! myState.specFileNameLoadAll.isEmpty())) {
+        cerr << qPrintable(moreThanOneSpecFileErrorMessage) << endl;
+        hasFatalError = true;
+    }
+    
     if (hasFatalError) {
         exit(-1);
+    }
+    
+    /*
+     * If any files are listed, disable splash screen
+     */
+    if ( ! myState.fileList.empty()) {
+        myState.showSplash = false;
+    }
+    if ( ! myState.sceneFileName.isEmpty()) {
+        myState.showSplash = false;
+    }
+    if ( ! myState.specFileNameLoadWithDialog.isEmpty()) {
+        myState.showSplash = false;
+    }
+    if ( ! myState.specFileNameLoadAll.isEmpty()) {
+        myState.showSplash = false;
     }
 }
 
@@ -843,7 +966,6 @@ ProgramState::ProgramState()
 {
     sceneFileName = "";
     sceneNameOrNumber = "";
-    specLoadType = 0;//0: use spec window, 1: all
     windowSizeXY[0] = -1;
     windowSizeXY[1] = -1;
     windowPosXY[0] = -1;

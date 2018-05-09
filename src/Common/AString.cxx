@@ -21,6 +21,7 @@
 #include <QTextStream>
 
 #include "AString.h"
+#include "CaretAssert.h"
 #include "CaretLogger.h"
 #include <iostream>
 
@@ -714,7 +715,7 @@ AString::replaceHtmlSpecialCharactersWithEscapeCharacters() const
     const int64_t length = this->count();
     for (int64_t i = 0; i < length; i++) {
         const QChar ch = this->at(i);
-        switch (ch.toAscii()) {
+        switch (ch.toLatin1()) {
             case '&':
                 htmlString.append("&amp;");
                 break;
@@ -913,4 +914,158 @@ AString::countMatchingCharactersFromEnd(const AString& rhs) const
     return matchCount;
 }
 
+/**
+ * Find the longest common prefix in the given vector of strings.
+ *
+ * @param v
+ *     A vector of strings
+ * @return
+ *     Longest common prefix found (may be an empty string).
+ */
+AString
+AString::findLongestCommonPrefix(const std::vector<AString>& stringVector)
+{
+    AString longestPrefix;
+    
+    const int32_t numStrings = static_cast<int32_t>(stringVector.size());
+    if (numStrings == 1) {
+        CaretAssertVectorIndex(stringVector, 0);
+        longestPrefix = stringVector[0];
+    }
+    else if (numStrings > 1) {
+        /*
+         * Find string with shortest name
+         */
+        CaretAssertVectorIndex(stringVector, 0);
+        AString shortestString = stringVector[0];
+        for (const auto name : stringVector) {
+            if (name.length() < shortestString.length()) {
+                shortestString = name;
+            }
+        }
+        
+        /*
+         * Loop through each character in the shortest string
+         * until a character does not match in any strings
+         */
+        const int32_t numChars = static_cast<int32_t>(shortestString.length());
+        for (int32_t ich = 0; ich < numChars; ich++) {
+            const QChar character = shortestString.at(ich);
+            
+            bool allMatchFlag = true;
+            for (const auto name : stringVector) {
+                CaretAssert(ich  < name.length());
+                if (name.at(ich) != character) {
+                    allMatchFlag = false;
+                }
+            }
+            
+            if (allMatchFlag) {
+                longestPrefix.append(character);
+            }
+            else {
+                break;
+            }
+        }
+    }
+    
+    /*
+     * If the last character is a '/', remove it
+     */
+    if (longestPrefix.length() > 1) {
+        if (longestPrefix.endsWith('/')) {
+            longestPrefix.resize(longestPrefix.length() - 1);
+        }
+    }
+    
+    const bool debugFlag = false;
+    if (debugFlag) {
+        std::cout << "Longest prefix: " << longestPrefix << std::endl;
+        for (const auto name : stringVector) {
+            std::cout << "   " << name << std::endl;
+        }
+    }
+    
+    return longestPrefix;
+}
+
+/**
+ * Convert a QStringList to an std::vector of AStrings.
+ *
+ * @param stringList
+ *     The QStringList
+ * @return
+ *     Vector with elements copied from the string list.
+ */
+std::vector<AString>
+AString::stringListToVector(const QStringList& stringList)
+{
+    std::vector<AString> sv(stringList.begin(),
+                            stringList.end());
+    return sv;
+}
+
+/**
+ * Join the elements from the string vector adding 'separator'
+ * between each of the elements.
+ *
+ * @param elements
+ *     Elements joined to form a string.
+ * @param separtor
+ *     Characters added between each pair of elements.
+ */
+AString
+AString::join(const std::vector<AString>& elements,
+              const AString& separator)
+{
+    AString joinedString;
+    
+    const int32_t numElements = static_cast<int32_t>(elements.size());
+    for (int32_t i = 0; i < numElements; i++) {
+        if (i > 0) {
+            joinedString.append(separator);
+        }
+        CaretAssertVectorIndex(elements, i);
+        joinedString.append(elements[i]);
+    }
+    
+    return joinedString;
+}
+
+/**
+ * Count the number of corresponding matching elements from the two vectors.
+ * Compares first element in each, second element in each, etc and stops
+ * when the elements at the same index are different or no more
+ * elements in one of the vectors.
+ *
+ * @param v1
+ *     The first vector.
+ * @param v2
+ *     The second vector.
+ * @return
+ *     Number of matching elements.
+ */
+int32_t
+AString::matchingCount(const std::vector<AString>& v1,
+                       const std::vector<AString>& v2)
+{
+    const int32_t count = std::min(v1.size(),
+                                   v2.size());
+    if (count <= 0) {
+        return 0;
+    }
+    
+    int32_t matchCount = count;
+
+    for (int32_t i = 0; i < count; i++) {
+        CaretAssertVectorIndex(v1, i);
+        CaretAssertVectorIndex(v2, i);
+        if (v1[i] != v2[i]) {
+            matchCount = i;
+            break;
+        }
+    }
+    
+    return matchCount;
+}
 

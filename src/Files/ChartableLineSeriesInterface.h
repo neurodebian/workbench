@@ -21,7 +21,7 @@
  */
 /*LICENSE_END*/
 
-#include "ChartDataTypeEnum.h"
+#include "ChartOneDataTypeEnum.h"
 #include "StructureEnum.h"
 
 namespace caret {
@@ -76,9 +76,9 @@ namespace caret {
          * @param chartDataTypesOut
          *    Chart types supported by this file.
          */
-        virtual void getSupportedLineSeriesChartDataTypes(std::vector<ChartDataTypeEnum::Enum>& chartDataTypesOut) const = 0;
+        virtual void getSupportedLineSeriesChartDataTypes(std::vector<ChartOneDataTypeEnum::Enum>& chartDataTypesOut) const = 0;
         
-        bool isLineSeriesChartDataTypeSupported(const ChartDataTypeEnum::Enum chartDataType) const;
+        bool isLineSeriesChartDataTypeSupported(const ChartOneDataTypeEnum::Enum chartDataType) const;
 
     private:
 //        ChartableLineSeriesInterface(const ChartableLineSeriesInterface&);

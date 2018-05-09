@@ -21,23 +21,28 @@
  */
 /*LICENSE_END*/
 
+#include <memory>
 
 #include "CaretDataFile.h"
-#include "ChartDataTypeEnum.h"
+#include "CaretMappableDataFileAndMapSelectionModel.h"
+#include "ChartOneDataTypeEnum.h"
 #include "CaretPointer.h"
+#include "CiftiXML.h"
 #include "NiftiEnums.h"
+#include "PaletteModifiedStatusEnum.h"
 #include "PaletteNormalizationModeEnum.h"
 
 namespace caret {
 
     class ChartDataCartesian;
+    class ChartableTwoFileDelegate;
     class FastStatistics;
     class GiftiMetaData;
     class GiftiLabelTable;
     class Histogram;
     class LabelDrawingProperties;
+    class MapFileDataSelector;
     class PaletteColorMapping;
-    class PaletteFile;
     
     /**
      * \class caret::CaretMappableDataFile 
@@ -57,6 +62,18 @@ namespace caret {
     class CaretMappableDataFile : public CaretDataFile {
         
     public:
+        /**
+         * Result for brainordinate mapping match
+         */
+        enum class BrainordinateMappingMatch {
+            /** Both files map to exact same brainordinates */
+            EQUAL,
+            /** File do not match to same brainordinates */
+            NO,
+            /** File matches to a subset of the other file's brainordinates **/
+            SUBSET
+        };
+        
         CaretMappableDataFile(const DataFileTypeEnum::Enum dataFileType);
         
         virtual ~CaretMappableDataFile();
@@ -201,6 +218,8 @@ namespace caret {
          */
         virtual bool isMappedWithPalette() const = 0;
         
+        virtual bool isOnePaletteUsedForAllMaps() const;
+        
         /**
          * @return The estimated size of data after it is uncompressed
          * and loaded into RAM.  A negative value indicates that the
@@ -268,6 +287,7 @@ namespace caret {
          *    not mapped using a palette).
          */
         virtual const FastStatistics* getFileFastStatistics() = 0;
+        
         /**
          * Get histogram describing the distribution of data
          * mapped with a color palette for all data within
@@ -304,6 +324,10 @@ namespace caret {
                                                    const float mostNegativeValueInclusive,
                                                   const bool includeZeroValues) = 0;
 
+        int32_t getFileHistogramNumberOfBuckets() const;
+        
+        void setFileHistogramNumberOfBuckets(const int32_t numberOfBuckets);
+        
         /**
          * Get the palette color mapping for the map at the given index.
          *
@@ -371,7 +395,7 @@ namespace caret {
          *     is more than one suppported mode, the first mode in the
          *     vector is assumed to be the default mode.
          */
-        virtual void getPaletteNormalizationModesSupported(std::vector<PaletteNormalizationModeEnum::Enum>& modesSupportedOut) = 0;
+        virtual void getPaletteNormalizationModesSupported(std::vector<PaletteNormalizationModeEnum::Enum>& modesSupportedOut) const = 0;
         
         /**
          * @return The palette normalization mode for the file.
@@ -392,7 +416,7 @@ namespace caret {
          * @param paletteFile
          *    Palette file containing palettes.
          */
-        virtual void updateScalarColoringForAllMaps(const PaletteFile* paletteFile);
+        virtual void updateScalarColoringForAllMaps();
         
         /**
          * Update coloring for a map.
@@ -402,10 +426,15 @@ namespace caret {
          * @param paletteFile
          *    Palette file containing palettes.
          */
-        virtual void updateScalarColoringForMap(const int32_t mapIndex,
-                                          const PaletteFile* paletteFile) = 0;
+        virtual void updateScalarColoringForMap(const int32_t mapIndex) = 0;
         
-        virtual bool isPaletteColorMappingEqualForAllMaps() const;
+        void invalidateHistogramChartColoring();
+        
+        void applyPaletteColorMappingToAllMaps(const int32_t mapIndex);
+        
+        bool isApplyPaletteColorMappingToAllMaps() const;
+        
+        void setApplyPaletteColorMappingToAllMaps(const bool selected);
         
         /**
          * @return The units for the 'interval' between two consecutive maps.
@@ -437,11 +466,52 @@ namespace caret {
         virtual bool isModifiedPaletteColorMapping() const;
         
         /* documented in cxx file. */
-        bool isModified() const;
+        virtual PaletteModifiedStatusEnum::Enum getPaletteColorMappingModifiedStatus() const;
+        
+        /**
+         * Check whether the file contains Cifti XML (all cifti types and also wbsparse have it)
+         */
+        virtual bool hasCiftiXML() const;
+        
+        /**
+         * Get the Cifti XML, if the file has it
+         * This could be faster if it returned a reference, but then it would have to throw when there is no xml object
+         */
+        virtual const CiftiXML getCiftiXML() const;
+        
+        /* documented in cxx file. */
+        virtual bool isModified() const override final;
+        
+        virtual void clearModified() override;
+        
+        virtual void clear();
+        
+        void initializeCaretMappableDataFileInstance(const DataFileTypeEnum::Enum dataFileType);
         
         LabelDrawingProperties* getLabelDrawingProperties();
         
         const LabelDrawingProperties* getLabelDrawingProperties() const;
+        
+        ChartableTwoFileDelegate* getChartingDelegate();
+        
+        const ChartableTwoFileDelegate* getChartingDelegate() const;
+        
+        virtual void getDataForSelector(const MapFileDataSelector& mapFileDataSelector,
+                                        std::vector<float>& dataOut) const = 0;
+        
+        CaretMappableDataFileAndMapSelectionModel* getMapThresholdFileSelectionModel(const int32_t mapIndex);
+        
+        /**
+         * Are all brainordinates in this file also in the given file?  
+         * That is, the brainordinates are equal to or a subset of the brainordinates
+         * in the given file.
+         *
+         * @param mapFile
+         *     The given map file.
+         * @return 
+         *     Match status.
+         */
+        virtual BrainordinateMappingMatch getBrainordinateMappingMatch(const CaretMappableDataFile* mapFile) const = 0;
         
     protected:
         CaretMappableDataFile(const CaretMappableDataFile&);
@@ -450,7 +520,9 @@ namespace caret {
         
         ChartDataCartesian* helpCreateCartesianChartData(const std::vector<float>& data);
         
-        void helpGetSupportedLineSeriesChartDataTypes(std::vector<ChartDataTypeEnum::Enum>& chartDataTypesOut) const;
+        void helpGetSupportedLineSeriesChartDataTypes(std::vector<ChartOneDataTypeEnum::Enum>& chartDataTypesOut) const;
+        
+        void updateAfterFileDataChanges();
         
         virtual void saveFileDataToScene(const SceneAttributes* sceneAttributes,
                                          SceneClass* sceneClass);
@@ -462,9 +534,21 @@ namespace caret {
         
         void copyCaretMappableDataFile(const CaretMappableDataFile&);
         
-        CaretPointer<LabelDrawingProperties> m_labelDrawingProperties;
+        bool isPaletteColorMappingEqualForAllMaps() const;
+        
+        void updateMapThresholdFileSelectionModels();
+        
+        std::unique_ptr<LabelDrawingProperties> m_labelDrawingProperties;
 
-        PaletteNormalizationModeEnum::Enum m_paletteNormalizationMode;
+        mutable std::unique_ptr<ChartableTwoFileDelegate> m_chartingDelegate;
+        
+        std::vector<std::unique_ptr<CaretMappableDataFileAndMapSelectionModel>> m_mapThresholdFileSelectionModels;
+        
+        /** 
+         * Added by WB-781 Apply to All Maps for ColorBar.
+         * This value is saved to scenes but NOT to the data file.
+         */
+        bool m_applyToAllMapsSelected = false;
     };
 
 #ifdef __CARET_MAPPABLE_DATA_FILE_DECLARE__

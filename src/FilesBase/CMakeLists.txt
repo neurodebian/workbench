@@ -11,7 +11,12 @@ SET(QT_DONT_USE_QTGUI)
 #
 # Add QT for includes
 #
-INCLUDE (${QT_USE_FILE})
+if(Qt5_FOUND)
+    include_directories(${Qt5Core_INCLUDE_DIRS})
+endif()
+IF (QT4_FOUND)
+    INCLUDE(${QT_USE_FILE})
+ENDIF ()
 
 
 #
@@ -43,6 +48,8 @@ VolumeMappableInterface.cxx
 VolumeSliceViewPlaneEnum.cxx
 VolumeSpace.cxx
 )
+
+TARGET_LINK_LIBRARIES(FilesBase ${CARET_QT5_LINK})
 
 #
 # Find Headers

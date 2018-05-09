@@ -4,44 +4,15 @@
 PROJECT (Ftgl)
 
 #
-# Need XML from Qt
-#
-SET(QT_DONT_USE_QTGUI)
-
-#
-# Use OpenGL from QT
-#
-#SET(QT_USE_QTOPENGL TRUE)
-
-#
 # Add QT for includes
 #
-INCLUDE (${QT_USE_FILE})
-
-#
-# Need OpenGL
-#
-FIND_PACKAGE(OpenGL REQUIRED)
-IF (OPENGL_FOUND)
-   #
-   # Need help finding includes on Apple
-   #
-   IF (APPLE) 
-      # When searching for the include directory, find the location
-      # for the OpenGL framework rather than an individual header file.
-      FIND_PATH(OPENGL_INCLUDE_DIR OpenGL.framework
-        /System/Library/Frameworks
-        /Library/Frameworks
-        ~/Library/Frameworks
-      )
-   ENDIF (APPLE)
-   #
-   # OpenGL Include Directory
-   #
-   INCLUDE_DIRECTORIES(${OPENGL_INCLUDE_DIR})
-ELSE (OPENGL_FOUND)
-   MESSAGE(FATAL_ERROR "OpenGL Libraries were not found")
-ENDIF (OPENGL_FOUND)
+if(Qt5_FOUND)
+    include_directories(${Qt5Core_INCLUDE_DIRS})
+endif()
+IF (QT4_FOUND)
+    SET(QT_DONT_USE_QTGUI)
+    INCLUDE(${QT_USE_FILE})
+ENDIF ()
 
 #
 # Create the brain library
@@ -138,6 +109,7 @@ FTVectoriser.cpp
 #
 INCLUDE_DIRECTORIES(
 ${CMAKE_SOURCE_DIR}/Common
+${CMAKE_SOURCE_DIR}/Graphics
 ${FREETYPE_INCLUDE_DIR_ft2build}
 ${FREETYPE_INCLUDE_DIR_freetype2}
 ${CMAKE_SOURCE_DIR}/FtglFont

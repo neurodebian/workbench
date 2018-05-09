@@ -21,8 +21,10 @@
  */
 /*LICENSE_END*/
 
-
 #include "CaretObject.h"
+#include "Matrix4x4.h"
+#include "VolumeSliceViewPlaneEnum.h"
+#include "VolumeSliceViewAllPlanesLayoutEnum.h"
 
 namespace caret {
 
@@ -38,6 +40,14 @@ namespace caret {
         BrainOpenGLViewportContent(const BrainOpenGLViewportContent& obj);
         
         BrainOpenGLViewportContent& operator=(const BrainOpenGLViewportContent& obj);
+        
+        bool getChartDataMatricesAndViewport(Matrix4x4& chartDataProjectionMatrixOut,
+                                          Matrix4x4& chartDataModelViewMatrixOut,
+                                          int chartViewportOut[4]) const;
+        
+        void setChartDataMatricesAndViewport(const Matrix4x4& chartDataProjectionMatrix,
+                                          const Matrix4x4& chartDataModelViewMatrix,
+                                             const int chartViewport[4]) const;
         
         void getModelViewport(int modelViewportOut[4]) const;
         
@@ -71,11 +81,22 @@ namespace caret {
                                                                                          const int32_t windowViewport[4],
                                                                                          const int32_t highlightTabIndex);
         
-        static BrainOpenGLViewportContent* createViewportForSingleTab(BrowserTabContent* browserTabContent,
+        static BrainOpenGLViewportContent* createViewportForSingleTab(std::vector<BrowserTabContent*>& allTabContents,
+                                                                      BrowserTabContent* selectedTabContent,
                                                                       const GapsAndMargins* gapsAndMargins,
                                                                       const int32_t windowIndex,
                                                                       const int32_t windowViewport[4]);
         
+        static void getSliceAllViewViewport(const int32_t tabViewport[4],
+                                            const VolumeSliceViewPlaneEnum::Enum sliceViewPlane,
+                                            const VolumeSliceViewAllPlanesLayoutEnum::Enum allPlanesLayout,
+                                            int32_t viewportOut[4]);
+        
+        static VolumeSliceViewPlaneEnum::Enum getSliceViewPlaneForVolumeAllSliceView(const int viewport[4],
+                                                                                     const VolumeSliceViewAllPlanesLayoutEnum::Enum allPlanesLayout,
+                                                                                     const int32_t mousePressX,
+                                                                                     const int32_t mousePressY,
+                                                                                     int sliceViewportOut[4]);
     private:
         /**
          * Assists with creation of the tile tab viewports
@@ -122,6 +143,9 @@ namespace caret {
                                         const GapsAndMargins* gapsAndMargins,
                                         int modelViewportOut[4]);
         
+        void updateTabLockedAspectRatios(const int32_t windowIndex,
+                                         const int32_t windowViewport[4]);
+
         const int m_windowIndex;
         
         const bool m_highlightTab;
@@ -134,6 +158,21 @@ namespace caret {
         int m_tabWidth;
         /** Tab viewport's Height */
         int m_tabHeight;
+        
+        /** Chart data viewport's X-coordinate */
+        mutable int m_chartDataX;
+        /** Chart data viewport's Y-coordinate */
+        mutable int m_chartDataY;
+        /** Chart data viewport's Width */
+        mutable int m_chartDataWidth;
+        /** Chart data viewport's Height */
+        mutable int m_chartDataHeight;
+        /** Chart data viewport's validity */
+        mutable bool m_chartDataViewportValidFlag = false;
+        /** Chart data transformation matrix */
+        mutable Matrix4x4 m_chartDataModelViewMatrix;
+        /** Chart data transformation matrix */
+        mutable Matrix4x4 m_chartDataProjectionMatrix;
         
         /** Model viewport's X-coordinate */
         int m_modelX;

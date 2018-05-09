@@ -7,7 +7,9 @@ PROJECT(OSMesaDummy)
 #
 # Need Qt for reading from resource file.
 #
-INCLUDE(${QT_USE_FILE})
+IF (QT4_FOUND)
+    INCLUDE(${QT_USE_FILE})
+ENDIF ()
 
 #
 # Create a library
@@ -17,10 +19,12 @@ OSMesaDummy.h
 OSMesaDummy.c
 )
 
+TARGET_LINK_LIBRARIES(OSMesaDummy ${CARET_QT5_LINK})
+
 #
 # Include directories
 #
 INCLUDE_DIRECTORIES(
-${CMAKE_SOURCE_DIR}/Brain
+${CMAKE_SOURCE_DIR}/Graphics
 ${CMAKE_SOURCE_DIR}/OSMesaDummy
 )

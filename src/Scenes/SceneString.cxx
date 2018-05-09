@@ -88,6 +88,7 @@ SceneString::setValue(const AString& value)
 bool 
 SceneString::booleanValue() const
 {
+    m_restoredFlag = true;
     const bool b = m_value.toBool();
     return b;
 }
@@ -100,6 +101,7 @@ SceneString::booleanValue() const
 float
 SceneString::floatValue() const
 {
+    m_restoredFlag = true;
     bool isValid = false;
     float f = m_value.toFloat(&isValid);
     if (isValid == false) {
@@ -116,6 +118,7 @@ SceneString::floatValue() const
 int32_t 
 SceneString::integerValue() const
 {
+    m_restoredFlag = true;
     bool isValid = false;
     int32_t i = m_value.toInt(&isValid);
     if (isValid == false) {
@@ -130,6 +133,7 @@ SceneString::integerValue() const
 AString 
 SceneString::stringValue() const
 {
+    m_restoredFlag = true;
     return m_value;
 }
 
@@ -142,19 +146,23 @@ SceneString::stringValue() const
 uint8_t
 SceneString::unsignedByteValue() const
 {
+    m_restoredFlag = true;
     bool isValid = false;
     const uint32_t i = m_value.toUInt(&isValid);
     if ( ! isValid) {
         return 0;
     }
     
+    /*
+     * Note since "i" is unsigned there is no need
+     * to compare with std::numeric_limits<uint8_t>::min()
+     * since it is zero.
+     */
     if (i > std::numeric_limits<uint8_t>::max()) {
         return std::numeric_limits<uint8_t>::max();
-    }
-    else if (i < std::numeric_limits<uint8_t>::min()) {
-        return std::numeric_limits<uint8_t>::min();
     }
     
     const uint8_t b = static_cast<uint8_t>(i);
     return b;
 }
+

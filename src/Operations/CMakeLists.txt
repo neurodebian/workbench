@@ -4,14 +4,16 @@
 PROJECT (Operations)
 
 #
-# Need XML from Qt
-#
-SET(QT_DONT_USE_QTGUI)
-
-#
 # Add QT for includes
 #
-INCLUDE (${QT_USE_FILE})
+if(Qt5_FOUND)
+    include_directories(${Qt5Core_INCLUDE_DIRS})
+    include_directories(${Qt5Gui_INCLUDE_DIRS})
+endif()
+IF (QT4_FOUND)
+    SET(QT_DONT_USE_QTGUI)
+    INCLUDE(${QT_USE_FILE})
+ENDIF ()
 
 #
 # Create the helper library
@@ -88,6 +90,7 @@ OperationSurfaceGeodesicDistance.h
 OperationSurfaceGeodesicROIs.h
 OperationSurfaceInformation.h
 OperationSurfaceNormals.h
+OperationSurfaceSetCoordinates.h
 OperationSurfaceVertexAreas.h
 OperationVolumeCapturePlane.h
 OperationVolumeCopyExtensions.h
@@ -176,6 +179,7 @@ OperationSurfaceGeodesicDistance.cxx
 OperationSurfaceGeodesicROIs.cxx
 OperationSurfaceInformation.cxx
 OperationSurfaceNormals.cxx
+OperationSurfaceSetCoordinates.cxx
 OperationSurfaceVertexAreas.cxx
 OperationVolumeCapturePlane.cxx
 OperationVolumeCopyExtensions.cxx
@@ -194,6 +198,8 @@ OperationZipSceneFile.cxx
 OperationZipSpecFile.cxx
 )
 
+TARGET_LINK_LIBRARIES(Operations ${CARET_QT5_LINK})
+
 #
 # Find Headers
 #
@@ -208,6 +214,7 @@ ${CMAKE_SOURCE_DIR}/Palette
 ${CMAKE_SOURCE_DIR}/FilesBase
 ${CMAKE_SOURCE_DIR}/Files
 ${CMAKE_SOURCE_DIR}/Gifti
+${CMAKE_SOURCE_DIR}/Graphics
 ${CMAKE_SOURCE_DIR}/Cifti
 ${CMAKE_SOURCE_DIR}/Nifti
 ${QUAZIP_INCLUDE_DIRS}

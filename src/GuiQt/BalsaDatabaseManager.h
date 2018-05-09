@@ -21,12 +21,18 @@
  */
 /*LICENSE_END*/
 
-#include "CaretObject.h"
+#include <map>
 
+#include "BalsaStudyInformation.h"
+#include "CaretObject.h"
 #include "EventListenerInterface.h"
+
+class QJsonValue;
 
 namespace caret {
 
+    class BalsaUserRoles;
+    struct CaretHttpResponse;
     class SceneFile;
     
     class BalsaDatabaseManager : public CaretObject, public EventListenerInterface {
@@ -36,36 +42,39 @@ namespace caret {
         
         virtual ~BalsaDatabaseManager();
         
-        bool uploadZippedSceneFile(const AString& databaseURL,
-                   const AString& username,
-                   const AString& password,
-                   const SceneFile* sceneFile,
-                   const AString& zipFileName,
-                   const AString& extractToDirectoryName,
-                   AString& errorMessageOut);
-        
-        bool login(const AString& loginURL,
+        bool login(const AString& databaseURL,
                    const AString& username,
                    const AString& password,
                    AString& errorMessageOut);
-
-        AString getJSessionIdCookie() const;
         
-        bool uploadFile(const AString& uploadURL,
-                        const AString& fileName,
-                        const AString& httpContentTypeName,
-                        AString& responseContentOut,
-                        AString& errorMessageOut);
+        void logout();
         
-        bool processUploadedFile(const AString& processUploadURL,
-                                 const AString& httpContentTypeName,
-                                 AString& responseContentOut,
-                                 AString& errorMessageOut);
+        bool getAllStudyInformation(std::vector<BalsaStudyInformation>& studyInformationOut,
+                                    AString& errorMessageOut);
+        
+        bool getUserRoles(BalsaUserRoles& userRolesOut,
+                          AString& errorMessageOut);
+        
+        bool getStudyIDFromStudyTitle(const AString& studyTitle,
+                                      AString& studyIdOut,
+                                      AString& errorMessageOut);
+        
+        bool getSceneIDs(const int32_t numberOfSceneIDs,
+                             std::vector<AString>& sceneIDsOut,
+                             AString& errorMessageOut);
+        
+        bool updateSceneIDs(SceneFile* sceneFile,
+                            AString& errorMessageOut);
+        
+        bool uploadZippedSceneFile(SceneFile* sceneFile,
+                                   const AString& zipFileName,
+                                   const AString& extractToDirectoryName,
+                                   AString& errorMessageOut);
         
         static bool zipSceneAndDataFiles(const SceneFile* sceneFile,
-                                  const AString& extractDirectory,
-                                  const AString& zipFileName,
-                                  AString& errorMessageOut);
+                                         const AString& extractDirectory,
+                                         const AString& zipFileName,
+                                         AString& errorMessageOut);
         
         // ADD_NEW_METHODS_HERE
 
@@ -74,9 +83,46 @@ namespace caret {
         virtual void receiveEvent(Event* event);
 
     private:
+        class SceneFileIdentifiers {
+        public:
+            SceneFileIdentifiers(const bool debugFlag,
+                                 const QJsonValue& jsonValue);
+            
+            bool isValid() const;
+            
+            AString getErrorMessage() const;
+            
+            const bool m_debugFlag;
+            
+            AString m_errorMessage;
+            
+            AString m_sceneFileName;
+            
+            std::map<int32_t, AString> m_sceneIndexAndIDsMap;
+        };
+        
         BalsaDatabaseManager(const BalsaDatabaseManager&);
 
         BalsaDatabaseManager& operator=(const BalsaDatabaseManager&);
+        
+        AString getJSessionIdCookie() const;
+        
+        bool uploadFile(const AString& uploadURL,
+                        const AString& fileName,
+                        const AString& httpContentTypeName,
+                        AString& responseContentOut,
+                        AString& errorMessageOut);
+        
+        bool processUploadedFile(SceneFile* sceneFile,
+                                 const AString& processUploadURL,
+                                 const AString& httpContentTypeName,
+                                 const bool updateSceneIDsFromResponseFlag,
+                                 AString& errorMessageOut);
+        
+        bool requestStudyID(const AString& databaseURL,
+                            const AString& studyTitle,
+                            AString& studyIDOut,
+                            AString& errorMessageOut);
         
         bool uploadFileWithCaretHttpManager(const AString& uploadURL,
                         const AString& fileName,
@@ -84,17 +130,20 @@ namespace caret {
                         AString& responseContentOut,
                         AString& errorMessageOut);
         
-        bool uploadFileWithHttpCommunicator(const AString& uploadURL,
-                                            const AString& fileName,
-                                            const AString& httpContentTypeName,
-                                            AString& responseContentOut,
-                                            AString& errorMessageOut);
-        
-        
-        bool processUploadResponse(const std::map<AString, AString>& responseHeaders,
+        bool verifyUploadFileResponse(const std::map<AString, AString>& responseHeaders,
                                    const AString& responseContent,
                                    const int32_t responseHttpCode,
                                    AString& errorMessageOut) const;
+        
+        AString getHeaderValue(const CaretHttpResponse& httpResponse,
+                               const AString& headerName) const;
+        
+        bool updateSceneIdsFromProcessUploadResponse(SceneFile* sceneFile,
+                                                     const AString& jsonContent,
+                                                     AString& errorMessageOut);
+        
+        AString m_databaseURL;
+        
         AString m_username;
         
         AString m_password;

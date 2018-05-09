@@ -25,7 +25,7 @@
 #include <stdint.h>
 
 #include "CaretObject.h"
-#include "ChartDataTypeEnum.h"
+#include "ChartOneDataTypeEnum.h"
 #include "DataFileTypeEnum.h"
 #include "DisplayGroupEnum.h"
 #include "EventListenerInterface.h"
@@ -47,6 +47,7 @@ namespace caret {
     class BrainStructure;
     class CaretDataFile;
     class CaretMappableDataFile;
+    class CaretPreferences;
     class ChartingDataManager;
     class ChartableLineSeriesBrainordinateInterface;
     class ChartableMatrixInterface;
@@ -84,6 +85,7 @@ namespace caret {
     class LabelFile;
     class MetricFile;
     class ModelChart;
+    class ModelChartTwo;
     class ModelSurfaceMontage;
     class ModelVolume;
     class ModelWholeBrain;
@@ -101,7 +103,7 @@ namespace caret {
     class Brain : public CaretObject, public EventListenerInterface, public SceneableInterface {
 
     public:
-        Brain();
+        Brain(const CaretPreferences* caretPreferences);
         
         ~Brain();
         
@@ -194,6 +196,10 @@ namespace caret {
         ModelChart* getChartModel();
         
         const ModelChart* getChartModel() const;
+        
+        ModelChartTwo* getChartTwoModel();
+        
+        const ModelChartTwo* getChartTwoModel() const;
         
         ChartingDataManager* getChartingDataManager();
         
@@ -321,14 +327,14 @@ namespace caret {
         
         void getAllChartableLineSeriesDataFiles(std::vector<ChartableLineSeriesInterface*>& chartableDataFilesOut) const;
         
-        void getAllChartableLineSeriesDataFilesForChartDataType(const ChartDataTypeEnum::Enum chartDataType,
+        void getAllChartableLineSeriesDataFilesForChartDataType(const ChartOneDataTypeEnum::Enum chartDataType,
                                                       std::vector<ChartableLineSeriesInterface*>& chartableDataFilesOut) const;
         
         void getAllChartableBrainordinateDataFilesWithChartingEnabled(std::vector<ChartableLineSeriesBrainordinateInterface*>& chartableDataFilesOut) const;
         
         void getAllChartableMatrixDataFiles(std::vector<ChartableMatrixInterface*>& chartableDataFilesOut) const;
         
-        void getAllChartableMatrixDataFilesForChartDataType(const ChartDataTypeEnum::Enum chartDataType,
+        void getAllChartableMatrixDataFilesForChartDataType(const ChartOneDataTypeEnum::Enum chartDataType,
                                                                    std::vector<ChartableMatrixInterface*>& chartableDataFilesOut) const;
         
         AString getCurrentDirectory() const;
@@ -401,6 +407,10 @@ namespace caret {
         
         virtual void restoreFromScene(const SceneAttributes* sceneAttributes,
                                       const SceneClass* sceneClass);
+        
+        void restoreModelChartOneToModelChartTwo();
+        
+        void loadMatrixChartingFileDefaultRowOrColumn(CaretDataFile* caretDataFile);
         
         IdentificationManager* getIdentificationManager();
 
@@ -477,6 +487,8 @@ namespace caret {
                           const StructureEnum::Enum structure,
                           const AString& dataFileName,
                           const bool markDataFileAsModified);
+        
+        void createModelChartTwo();
         
         /**
          * Is the data file with the given name already loaded?
@@ -691,6 +703,8 @@ namespace caret {
         
         void updateSurfaceMontageModel();
         
+        void updateBrainStructures();
+        
         void updateFiberTrajectoryMatchingFiberOrientationFiles();
         
         void validateCiftiMappableDataFile(const CiftiMappableDataFile* ciftiMapFile) const;
@@ -750,6 +764,8 @@ namespace caret {
         std::vector<VolumeFile*> m_volumeFiles;
         
         ModelChart* m_modelChart;
+        
+        ModelChartTwo* m_modelChartTwo;
         
         ModelVolume* m_volumeSliceModel;
         

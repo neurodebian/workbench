@@ -21,7 +21,7 @@
 #  TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 #  SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#put this file in (or link to it from) /etc/bash_completion.d or copy contents to ~/.bash_completion
+#put this file in (or link to it from) /etc/bash_completion.d or /usr/share/bash-completion/completions or copy contents to ~/.bash_completion
 
 function _wb_command()
 {
@@ -64,10 +64,10 @@ function _wb_command()
             fileglob)
                 #bash_completion itself uses -f -X for file extension matching
                 #using -G requires manually adding $cur before the pattern
-                COMPREPLY+=(`compgen -f -X "!${exereply[$((i + 1))]}" -- "$cur"`)
+                COMPREPLY+=(`compgen -o plusdirs -f -X "!${exereply[$((i + 1))]}" -- "$cur"`)
             ;;
             wordlist)
-                #for the things accepted as bool, maybe other uses - happens to function like "option" for now
+                #for the things accepted as bool, logging levels, maybe other uses
                 COMPREPLY+=(`compgen -W "${exereply[$((i + 1))]}" -- "$cur"`)
             ;;
         esac
@@ -94,7 +94,8 @@ function _wb_shortcuts ()
     fi
     local -a switches
     readarray -t switches < <(wb_shortcuts -list-functions | awk '{print $1}')
-    COMPREPLY=(`compgen -W "${switches[*]}" -- "$cur"`)
+    local infoswitches=(-help -version -list-functions -all-functions-help)
+    COMPREPLY=(`compgen -W "${switches[*]} ${infoswitches[*]}" -- "$cur"`)
 }
 
 complete -o filenames -o bashdefault -o default -F _wb_shortcuts wb_shortcuts

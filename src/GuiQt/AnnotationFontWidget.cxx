@@ -42,11 +42,12 @@
 #include "CaretAssert.h"
 #include "CaretColorEnumMenu.h"
 #include "EnumComboBoxTemplate.h"
+#include "EventBrowserWindowGraphicsRedrawn.h"
 #include "EventGraphicsUpdateAllWindows.h"
 #include "EventManager.h"
 #include "GuiManager.h"
 #include "ModelSurfaceMontage.h"
-#include "WuQSpecialIncrementDoubleSpinBox.h"
+#include "WuQDoubleSpinBox.h"
 #include "WuQMessageBox.h"
 #include "WuQtUtilities.h"
 
@@ -59,19 +60,6 @@ using namespace caret;
  * \brief Widget for annotation font selection
  * \ingroup GuiQt
  */
-
-/**
- * Processes increment and decrements for double spin box.
- */
-class FontSizeFunctionObject : public WuQSpecialIncrementDoubleSpinBox::StepFunctionObject {
-public:
-    double getNewValue(const double currentValue,
-                       const int steps) const {
-        const double stepAmount = 0.1;
-        const double outputValue = currentValue + (stepAmount * steps);
-        return outputValue;
-    }
-};
 
 /**
  * Constructor.
@@ -106,16 +94,37 @@ m_browserWindowIndex(browserWindowIndex)
     /*
      * Combo box for font size
      */
-    m_fontSizeSpinBox = new WuQSpecialIncrementDoubleSpinBox(new FontSizeFunctionObject);
-    m_fontSizeSpinBox->setRange(0.0, 1000.0);
-    m_fontSizeSpinBox->setDecimals(1);
-    m_fontSizeSpinBox->setSingleStep(0.1);
-    m_fontSizeSpinBox->setSuffix("%");
+    const AString fontSizeToolTop("<html>"
+                                  "Adjusts font height (size), as a percentage of the viewport height, that is  "
+                                  "converted to a pixel height when the text is drawn.  "
+                                  "<p>"
+                                  "The numeric value in this control will be <font color=\"red\">RED</font> "
+                                  "when the pixel height is estimated to be <i>too small</i> and some or all "
+                                  "characters may not be drawn.  "
+                                  "Reducing the height of the text and/or the height of the window may cause "
+                                  "<i>too small</i> text.  "
+                                  "</html>");
+    m_fontSizeSpinBox = new WuQDoubleSpinBox(this);
+    m_fontSizeSpinBox->setRangePercentage(0.0, 100.0);
     QObject::connect(m_fontSizeSpinBox, SIGNAL(valueChanged(double)),
                      this, SLOT(fontSizeChanged()));
-    WuQtUtilities::setToolTipAndStatusTip(m_fontSizeSpinBox,
-                                          "Change font size (height) as percentage, zero to one-hundred, of viewport height");
+    WuQtUtilities::setToolTipAndStatusTip(m_fontSizeSpinBox->getWidget(),
+                                          fontSizeToolTop);
     
+    /*
+     * Default palette for size spin box
+     */
+    m_fontSizeSpinBoxDefaultPalette = m_fontSizeSpinBox->getWidget()->palette();
+    
+    /*
+     * Palette for spin box that colors text in red when the font height is "too small"
+     */
+    m_fontSizeSpinBoxRedTextPalette = m_fontSizeSpinBoxDefaultPalette;
+    QBrush brush = m_fontSizeSpinBoxRedTextPalette.brush(QPalette::Active, QPalette::Text);
+    brush.setColor(Qt::red);
+    m_fontSizeSpinBoxRedTextPalette.setBrush(QPalette::Active, QPalette::Text, brush);
+    m_fontSizeSpinBoxRedTextPalette.setBrush(QPalette::Active, QPalette::WindowText, brush);
+    m_fontSizeSpinBoxRedTextPalette.setBrush(QPalette::Active, QPalette::HighlightedText, brush);
 
     /*
      * Text color menu
@@ -136,6 +145,7 @@ m_browserWindowIndex(browserWindowIndex)
     m_textColorToolButton = new QToolButton();
     m_textColorToolButton->setDefaultAction(m_textColorAction);
     m_textColorToolButton->setIconSize(toolButtonSize);
+    WuQtUtilities::setToolButtonStyleForQt5Mac(m_textColorToolButton);
     
     QToolButton* boldFontToolButton      = NULL;
     QToolButton* italicFontToolButton    = NULL;
@@ -149,12 +159,13 @@ m_browserWindowIndex(browserWindowIndex)
             /*
              * Bold Font
              */
-            m_boldFontAction = WuQtUtilities::createAction("B", //boldFontText.toStringWithHtmlBody(),
+            m_boldFontAction = WuQtUtilities::createAction("B",
                                                            "Enable/disable bold styling",
                                                            this, this, SLOT(fontBoldChanged()));
             m_boldFontAction->setCheckable(true);
             boldFontToolButton = new QToolButton();
             boldFontToolButton->setDefaultAction(m_boldFontAction);
+            WuQtUtilities::setToolButtonStyleForQt5Mac(boldFontToolButton);
             
             /*
              * Change the bold toolbutton's font to bold.
@@ -171,6 +182,7 @@ m_browserWindowIndex(browserWindowIndex)
             m_italicFontAction->setCheckable(true);
             italicFontToolButton = new QToolButton();
             italicFontToolButton->setDefaultAction(m_italicFontAction);
+            WuQtUtilities::setToolButtonStyleForQt5Mac(italicFontToolButton);
             
             /*
              * Change the italic toolbutton's font to italic.
@@ -187,6 +199,7 @@ m_browserWindowIndex(browserWindowIndex)
             m_underlineFontAction->setCheckable(true);
             underlineFontToolButton = new QToolButton();
             underlineFontToolButton->setDefaultAction(m_underlineFontAction);
+            WuQtUtilities::setToolButtonStyleForQt5Mac(underlineFontToolButton);
             
             /*
              * Change the underline toolbutton's font to underline.
@@ -213,7 +226,6 @@ m_browserWindowIndex(browserWindowIndex)
             
             QHBoxLayout* stylesLayout = new QHBoxLayout();
             WuQtUtilities::setLayoutSpacingAndMargins(stylesLayout, 0, 0);
-            //stylesLayout->addStretch();
             stylesLayout->addWidget(boldFontToolButton);
             stylesLayout->addWidget(italicFontToolButton);
             stylesLayout->addWidget(underlineFontToolButton);
@@ -229,7 +241,7 @@ m_browserWindowIndex(browserWindowIndex)
             fontNameSizeLayout->addWidget(m_fontNameComboBox->getWidget(),
                                           0, 1, 1, 3);
             fontNameSizeLayout->addWidget(sizeLabel, 1, 0);
-            fontNameSizeLayout->addWidget(m_fontSizeSpinBox,
+            fontNameSizeLayout->addWidget(m_fontSizeSpinBox->getWidget(),
                                           1, 1);
             fontNameSizeLayout->addWidget(styleLabel, 2, 0);
             fontNameSizeLayout->addLayout(stylesLayout, 2, 1);
@@ -245,6 +257,8 @@ m_browserWindowIndex(browserWindowIndex)
     
     setSizePolicy(QSizePolicy::Fixed,
                   QSizePolicy::Fixed);
+
+    EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_BROWSER_WINDOW_GRAPHICS_HAVE_BEEN_REDRAWN);
 }
 
 /**
@@ -252,6 +266,28 @@ m_browserWindowIndex(browserWindowIndex)
  */
 AnnotationFontWidget::~AnnotationFontWidget()
 {
+    EventManager::get()->removeAllEventsFromListener(this);
+}
+
+/**
+ * Receive an event.
+ *
+ * @param event
+ *     The event that the receive can respond to.
+ */
+void
+AnnotationFontWidget::receiveEvent(Event* event)
+{
+    if (event->getEventType() == EventTypeEnum::EVENT_BROWSER_WINDOW_GRAPHICS_HAVE_BEEN_REDRAWN) {
+        EventBrowserWindowGraphicsRedrawn* redrawEvent = dynamic_cast<EventBrowserWindowGraphicsRedrawn*>(event);
+        CaretAssert(redrawEvent);
+        
+        if (m_browserWindowIndex == redrawEvent->getBrowserWindowIndex()) {
+            if (isVisible()) {
+                updateFontSizeControls();
+            }
+        }
+    }
 }
 
 /**
@@ -263,38 +299,99 @@ AnnotationFontWidget::~AnnotationFontWidget()
 void
 AnnotationFontWidget::updateContent(std::vector<AnnotationFontAttributesInterface*>& annotations)
 {
-    m_annotationsFontStyle = annotations;
-    m_annotations.clear();
+    m_annotationsFontColor.clear();
+    m_annotationsFontColor.reserve(annotations.size());
+    m_annotationsFontName.clear();
+    m_annotationsFontName.reserve(annotations.size());
+    m_annotationsFontSize.clear();
+    m_annotationsFontSize.reserve(annotations.size());
+    m_annotationsFontStyle.clear();
+    m_annotationsFontStyle.reserve(annotations.size());
+
+    for (auto a : annotations) {
+        Annotation* ann = dynamic_cast<Annotation*>(a);
+        if (ann->testProperty(Annotation::Property::TEXT_FONT_NAME)) {
+            m_annotationsFontName.push_back(a);
+        }
+        if (ann->testProperty(Annotation::Property::TEXT_FONT_SIZE)) {
+            m_annotationsFontSize.push_back(a);
+        }
+        if (ann->testProperty(Annotation::Property::TEXT_FONT_STYLE)) {
+            m_annotationsFontStyle.push_back(a);
+        }
+        if (ann->testProperty(Annotation::Property::TEXT_COLOR)) {
+            m_annotationsFontColor.push_back(a);
+        }
+    }
     
-    if ( ! m_annotationsFontStyle.empty()) {
-        bool boldOnFlag        = true;
-        bool italicOnFlag      = true;
-        bool underlineOnFlag   = true;
-        int32_t stylesEnabledCount = 0;
-        
+    updateFontNameControls();
+    updateFontSizeControls();
+    updateFontStyleControls();
+    updateTextColorButton();
+    
+    setEnabled((m_annotationsFontColor.size()
+                + m_annotationsFontName.size()
+                + m_annotationsFontSize.size()
+                + m_annotationsFontStyle.size()) > 0);
+}
+
+/**
+ * Update the font name controls.
+ */
+void
+AnnotationFontWidget::updateFontNameControls()
+{
+    if ( ! m_annotationsFontName.empty()) {
         AnnotationTextFontNameEnum::Enum fontName = AnnotationTextFontNameEnum::VERA;
-        bool fontNameValid = true;
+        //bool fontNameValid = true;
+        
+        const int32_t numAnn = static_cast<int32_t>(m_annotationsFontName.size());
+        for (int32_t i = 0; i < numAnn; i++) {
+            CaretAssertVectorIndex(m_annotationsFontName, i);
+            AnnotationFontAttributesInterface* annText = m_annotationsFontName[i];
+            CaretAssert(annText);
+            
+            if (i == 0) {
+                fontName = annText->getFont();
+            }
+            else {
+                if (annText->getFont() != fontName) {
+                    //fontNameValid = false;
+                }
+            }
+        }
+        
+        m_fontNameComboBox->setSelectedItem<AnnotationTextFontNameEnum,AnnotationTextFontNameEnum::Enum>(fontName);
+        
+        AnnotationText::setUserDefaultFont(fontName);
+    }
+}
+
+/**
+ * Update the font size controls.
+ */
+void
+AnnotationFontWidget::updateFontSizeControls()
+{
+    if ( ! m_annotationsFontSize.empty()) {
         float fontSizeValue = 5.0;
         bool haveMultipleFontSizeValues = false;
         
         const float surfaceMontageRowCount = getSurfaceMontageRowCount();
         
-        const int32_t numAnn = static_cast<int32_t>(m_annotationsFontStyle.size());
+        bool tooSmallFlag = false;
+        const int32_t numAnn = static_cast<int32_t>(m_annotationsFontSize.size());
         for (int32_t i = 0; i < numAnn; i++) {
-            CaretAssertVectorIndex(m_annotationsFontStyle, i);
-            AnnotationFontAttributesInterface* annText = m_annotationsFontStyle[i];
+            CaretAssertVectorIndex(m_annotationsFontSize, i);
+            AnnotationFontAttributesInterface* annText = m_annotationsFontSize[i];
             CaretAssert(annText);
-            
-            Annotation* annotation = dynamic_cast<Annotation*>(annText);
-            CaretAssert(annotation);
-            m_annotations.push_back(annotation);
             
             float sizeValue = annText->getFontPercentViewportSize();
             
             Annotation* ann = dynamic_cast<Annotation*>(annText);
             CaretAssert(ann);
             switch (ann->getCoordinateSpace()) {
-                case AnnotationCoordinateSpaceEnum::PIXELS:
+                case AnnotationCoordinateSpaceEnum::CHART:
                     break;
                 case AnnotationCoordinateSpaceEnum::STEREOTAXIC:
                     sizeValue /= surfaceMontageRowCount;
@@ -304,18 +401,16 @@ AnnotationFontWidget::updateContent(std::vector<AnnotationFontAttributesInterfac
                     break;
                 case AnnotationCoordinateSpaceEnum::TAB:
                     break;
+                case AnnotationCoordinateSpaceEnum::VIEWPORT:
+                    break;
                 case  AnnotationCoordinateSpaceEnum::WINDOW:
                     break;
             }
             
             if (i == 0) {
-                fontName = annText->getFont();
                 fontSizeValue = sizeValue;
             }
             else {
-                if (annText->getFont() != fontName) {
-                    fontNameValid = false;
-                }
                 if (fontSizeValue != sizeValue) {
                     haveMultipleFontSizeValues = true;
                     fontSizeValue = std::min(fontSizeValue,
@@ -323,7 +418,46 @@ AnnotationFontWidget::updateContent(std::vector<AnnotationFontAttributesInterfac
                 }
             }
             
-            if (annText->isStylesSupported()) {
+            if (annText->isFontTooSmallWhenLastDrawn()) {
+                tooSmallFlag = true;
+            }
+//            const AnnotationText* textAnnotation = dynamic_cast<AnnotationText*>(annText);
+//            if (textAnnotation != NULL) {
+//                if (textAnnotation->isFontTooSmallWhenLastDrawn()) {
+//                    tooSmallFlag = true;
+//                }
+//            }
+        }
+        
+        updateFontSizeSpinBox(fontSizeValue,
+                              haveMultipleFontSizeValues,
+                              tooSmallFlag);
+        
+        AnnotationText::setUserDefaultFontPercentViewportSize(fontSizeValue);
+    }
+}
+
+/**
+ * Update the font style controls.
+ */
+void
+AnnotationFontWidget::updateFontStyleControls()
+{
+    if ( ! m_annotationsFontStyle.empty()) {
+        bool boldOnFlag        = true;
+        bool italicOnFlag      = true;
+        bool underlineOnFlag   = true;
+        int32_t stylesEnabledCount = 0;
+        
+        const int32_t numAnn = static_cast<int32_t>(m_annotationsFontStyle.size());
+        for (int32_t i = 0; i < numAnn; i++) {
+            CaretAssertVectorIndex(m_annotationsFontStyle, i);
+            AnnotationFontAttributesInterface* annText = m_annotationsFontStyle[i];
+            CaretAssert(annText);
+            
+            Annotation* annotation = dynamic_cast<Annotation*>(annText);
+            CaretAssert(annotation);
+            if (annotation->testProperty(Annotation::Property::TEXT_FONT_STYLE)) {
                 if ( ! annText->isBoldStyleEnabled()) {
                     boldOnFlag = false;
                 }
@@ -338,11 +472,6 @@ AnnotationFontWidget::updateContent(std::vector<AnnotationFontAttributesInterfac
             }
         }
         
-        m_fontNameComboBox->setSelectedItem<AnnotationTextFontNameEnum,AnnotationTextFontNameEnum::Enum>(fontName);
-        
-        updateFontSizeSpinBox(fontSizeValue,
-                              haveMultipleFontSizeValues);
-        
         /*
          * Font styles are ON only if all selected
          * text annotations have the style enabled
@@ -351,28 +480,21 @@ AnnotationFontWidget::updateContent(std::vector<AnnotationFontAttributesInterfac
         
         m_boldFontAction->setEnabled(stylesEnabledFlag);
         m_boldFontAction->setChecked(boldOnFlag && stylesEnabledFlag);
-
+        
         m_italicFontAction->setEnabled(stylesEnabledFlag);
         m_italicFontAction->setChecked(italicOnFlag && stylesEnabledFlag);
         
         m_underlineFontAction->setEnabled(stylesEnabledFlag);
         m_underlineFontAction->setChecked(underlineOnFlag && stylesEnabledFlag);
         
-        AnnotationText::setUserDefaultFont(fontName);
-        AnnotationText::setUserDefaultFontPercentViewportSize(fontSizeValue);
         if (stylesEnabledFlag) {
             AnnotationText::setUserDefaultBoldEnabled(boldOnFlag);
             AnnotationText::setUserDefaultItalicEnabled(italicOnFlag);
             AnnotationText::setUserDefaultUnderlineEnabled(underlineOnFlag);
         }
     }
-    
-    CaretAssert(m_annotations.size() == m_annotationsFontStyle.size());
-    
-    updateTextColorButton();
-    
-    setEnabled( ! m_annotations.empty());
 }
+
 
 /**
  * Update the font size spin box.
@@ -382,19 +504,39 @@ AnnotationFontWidget::updateContent(std::vector<AnnotationFontAttributesInterfac
  * @param haveMultipleValuesFlag
  *     If true, there are multiple font size values so indicate
  *     this with a '+' sign as a suffix
+ * @param tooSmallFontFlag
+ *     If true, the font may be too small as detected by the
+ *     graphics drawing code.
  */
 void
 AnnotationFontWidget::updateFontSizeSpinBox(const float value,
-                                            const bool haveMultipleValuesFlag)
+                                            const bool haveMultipleValuesFlag,
+                                            const bool tooSmallFontFlag)
 {
-    m_fontSizeSpinBox->blockSignals(true);
+    QSignalBlocker blocker(m_fontSizeSpinBox->getWidget());
     m_fontSizeSpinBox->setValue(value);
-    m_fontSizeSpinBox->blockSignals(false);
+
+    if (tooSmallFontFlag) {
+        m_fontSizeSpinBox->getWidget()->setPalette(m_fontSizeSpinBoxRedTextPalette);
+    }
+    else {
+        m_fontSizeSpinBox->getWidget()->setPalette(m_fontSizeSpinBoxDefaultPalette);
+    }
+
     QString fontSizeSuffix("%");
     if (haveMultipleValuesFlag) {
         fontSizeSuffix = "%+";
     }
+    m_fontSizeSpinBox->setValue(value);
     m_fontSizeSpinBox->setSuffix(fontSizeSuffix);
+    
+//    if (tooSmallFontFlag) {
+//        m_fontSizeSpinBox->getWidget()->setPalette(m_fontSizeSpinBoxRedTextPalette);
+//    }
+//    else {
+//        m_fontSizeSpinBox->getWidget()->setPalette(m_fontSizeSpinBoxDefaultPalette);
+//    }
+//    m_fontSizeSpinBox->setValue(value);
 }
 
 /**
@@ -406,9 +548,9 @@ AnnotationFontWidget::updateFontSizeSpinBox(const float value,
 void
 AnnotationFontWidget::textColorSelected(const CaretColorEnum::Enum caretColor)
 {
-    if ( ! m_annotationsFontStyle.empty()) {
+    if ( ! m_annotationsFontColor.empty()) {
         float rgba[4];
-        m_annotationsFontStyle[0]->getTextColorRGBA(rgba);
+        m_annotationsFontColor[0]->getTextColorRGBA(rgba);
         
         if (caretColor == CaretColorEnum::CUSTOM) {
             QColor color;
@@ -441,7 +583,7 @@ AnnotationFontWidget::textColorSelected(const CaretColorEnum::Enum caretColor)
                 AnnotationRedoUndoCommand* undoCommand = new AnnotationRedoUndoCommand();
                 undoCommand->setModeTextColor(caretColor,
                                               rgba,
-                                              m_annotations);
+                                              convertToAnnotations(m_annotationsFontColor));
                 AnnotationManager* annMan = GuiManager::get()->getBrain()->getAnnotationManager();
                 AString errorMessage;
                 if ( ! annMan->applyCommand(undoCommand,
@@ -480,7 +622,7 @@ AnnotationFontWidget::updateTextColorButton()
 {
     CaretColorEnum::Enum colorEnum = CaretColorEnum::NONE;
     float rgba[4];
-    CaretColorEnum::toRGBFloat(colorEnum, rgba);
+    CaretColorEnum::toRGBAFloat(colorEnum, rgba);
     rgba[3] = 1.0;
     
     bool colorButtonValidFlag = false;
@@ -488,20 +630,20 @@ AnnotationFontWidget::updateTextColorButton()
     switch (m_parentWidgetType) {
         case AnnotationWidgetParentEnum::ANNOTATION_TOOL_BAR_WIDGET:
         {
-            const int32_t numAnnotations = static_cast<int32_t>(m_annotationsFontStyle.size());
+            const int32_t numAnnotations = static_cast<int32_t>(m_annotationsFontColor.size());
             if (numAnnotations > 0) {
                 bool firstColorSupportFlag = true;
                 bool allSameColorFlag = true;
                 
                 for (int32_t i = 0; i < numAnnotations; i++) {
                     if (firstColorSupportFlag) {
-                        m_annotationsFontStyle[i]->getTextColorRGBA(rgba);
+                        m_annotationsFontColor[i]->getTextColorRGBA(rgba);
                         firstColorSupportFlag = false;
                         colorButtonValidFlag = true;
                     }
                     else {
                         float colorRGBA[4];
-                        m_annotationsFontStyle[i]->getTextColorRGBA(colorRGBA);
+                        m_annotationsFontColor[i]->getTextColorRGBA(colorRGBA);
                         for (int32_t iColor = 0; iColor < 4; iColor++) {
                             if (rgba[iColor] != colorRGBA[iColor]) {
                                 allSameColorFlag = false;
@@ -516,11 +658,11 @@ AnnotationFontWidget::updateTextColorButton()
                 }
                 
                 if (allSameColorFlag) {
-                    colorEnum = m_annotationsFontStyle[0]->getTextColor();
-                    m_annotationsFontStyle[0]->getTextColorRGBA(rgba);
+                    colorEnum = m_annotationsFontColor[0]->getTextColor();
+                    m_annotationsFontColor[0]->getTextColorRGBA(rgba);
                     
                     float customRGBA[4];
-                    m_annotationsFontStyle[0]->getCustomTextColor(customRGBA);
+                    m_annotationsFontColor[0]->getCustomTextColor(customRGBA);
                     m_textColorMenu->setCustomIconColor(customRGBA);
                     
                     switch (m_parentWidgetType) {
@@ -547,6 +689,7 @@ AnnotationFontWidget::updateTextColorButton()
     m_textColorAction->setIcon(QIcon(pm));
     m_textColorMenu->setSelectedColor(colorEnum);
     
+    m_textColorToolButton->setEnabled(colorButtonValidFlag);
     if (colorButtonValidFlag) {
         
     }
@@ -560,7 +703,7 @@ AnnotationFontWidget::fontBoldChanged()
 {
     AnnotationRedoUndoCommand* command = new AnnotationRedoUndoCommand();
     command->setModeTextFontBold(m_boldFontAction->isChecked(),
-                                 m_annotations);
+                                 convertToAnnotations(m_annotationsFontStyle));
     AnnotationManager* annMan = GuiManager::get()->getBrain()->getAnnotationManager();
     AString errorMessage;
     if ( ! annMan->applyCommand(command,
@@ -588,7 +731,7 @@ AnnotationFontWidget::fontItalicChanged()
 {
     AnnotationRedoUndoCommand* command = new AnnotationRedoUndoCommand();
     command->setModeTextFontItalic(m_italicFontAction->isChecked(),
-                                   m_annotations);
+                                   convertToAnnotations(m_annotationsFontStyle));
     AnnotationManager* annMan = GuiManager::get()->getBrain()->getAnnotationManager();
     AString errorMessage;
     if ( ! annMan->applyCommand(command,
@@ -618,7 +761,7 @@ AnnotationFontWidget::fontNameChanged()
     
     AnnotationRedoUndoCommand* command = new AnnotationRedoUndoCommand();
     command->setModeTextFontName(fontName,
-                                 m_annotations);
+                                 convertToAnnotations(m_annotationsFontName));
     AnnotationManager* annMan = GuiManager::get()->getBrain()->getAnnotationManager();
     AString errorMessage;
     if ( ! annMan->applyCommand(command,
@@ -650,7 +793,7 @@ AnnotationFontWidget::fontSizeChanged()
     
     AnnotationRedoUndoCommand* command = new AnnotationRedoUndoCommand();
     command->setModeTextFontPercentSize(fontPercentSize,
-                                        m_annotations,
+                                        convertToAnnotations(m_annotationsFontSize),
                                         getSurfaceMontageRowCount());
     AnnotationManager* annMan = GuiManager::get()->getBrain()->getAnnotationManager();
     AString errorMessage;
@@ -672,6 +815,11 @@ AnnotationFontWidget::fontSizeChanged()
     
     EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
     
+    /*
+     * "Font too small" status is set while drawing so need
+     * to update the size spin box AFTER the graphics update
+     */
+    updateFontSizeControls();
 }
 
 /**
@@ -706,7 +854,7 @@ AnnotationFontWidget::fontUnderlineChanged()
 {
     AnnotationRedoUndoCommand* command = new AnnotationRedoUndoCommand();
     command->setModeTextFontUnderline(m_underlineFontAction->isChecked(),
-                                      m_annotations);
+                                      convertToAnnotations(m_annotationsFontStyle));
     AnnotationManager* annMan = GuiManager::get()->getBrain()->getAnnotationManager();
     AString errorMessage;
     if ( ! annMan->applyCommand(command,
@@ -726,4 +874,27 @@ AnnotationFontWidget::fontUnderlineChanged()
             break;
     }
 }
+
+/**
+ * Convert the font style interfade annotations to annotations
+ *
+ * @param fontInterfaces
+ *     Input font interface annotations.
+ * @return
+ *     Vector with input converted to Annotation class.
+ */
+std::vector<Annotation*>
+AnnotationFontWidget::convertToAnnotations(const std::vector<AnnotationFontAttributesInterface*>& fontInterfaces)
+{
+    std::vector<Annotation*> annotationsOut;
+    
+    for (auto f : fontInterfaces) {
+        Annotation* a = dynamic_cast<Annotation*>(f);
+        CaretAssert(a);
+        annotationsOut.push_back(a);
+    }
+    
+    return annotationsOut;
+}
+
 

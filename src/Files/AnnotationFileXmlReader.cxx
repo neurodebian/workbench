@@ -252,6 +252,13 @@ AnnotationFileXmlReader::readVersionOne(AnnotationFile* annotationFile)
                                          annotation);
             annotationFile->addAnnotationDuringFileVersionOneReading(annotation.releasePointer());
         }
+        else if (elementName == ELEMENT_PERCENT_WIDTH_SIZE_TEXT) {
+            CaretPointer<AnnotationText> annotation(new AnnotationPercentSizeText(AnnotationAttributesDefaultTypeEnum::NORMAL,
+                                                                                  AnnotationTextFontSizeTypeEnum::PERCENTAGE_OF_VIEWPORT_WIDTH));
+            readTwoDimensionalAnnotation(ELEMENT_PERCENT_WIDTH_SIZE_TEXT,
+                                         annotation);
+            annotationFile->addAnnotationDuringFileVersionOneReading(annotation.releasePointer());
+        }
         else if (elementName == ELEMENT_POINT_SIZE_TEXT) {
             CaretPointer<AnnotationText> annotation(new AnnotationPointSizeText(AnnotationAttributesDefaultTypeEnum::NORMAL));
             readTwoDimensionalAnnotation(ELEMENT_POINT_SIZE_TEXT,
@@ -534,9 +541,20 @@ AnnotationFileXmlReader::readAnnotationAttributes(Annotation* annotation,
     /*
      * Foreground line width
      */
-    annotation->setLineWidth(m_streamHelper->getRequiredAttributeFloatValue(attributes,
+    annotation->setLineWidthPixelsObsolete(m_streamHelper->getRequiredAttributeFloatValue(attributes,
                                                                       annotationElementName,
-                                                                      ATTRIBUTE_FOREGROUND_LINE_WIDTH));
+                                                                      ATTRIBUTE_FOREGROUND_LINE_WIDTH_PIXELS));
+
+    /*
+     * Line width percentage added on July 26, 2017.
+     * A "negative value" indicates it is missing and the percentage width
+     * may be set by graphics code that attempts to set the percentage using
+     * the obsolete pixel width and viewport height.
+     */
+    annotation->setLineWidthPercentage(m_streamHelper->getOptionalAttributeFloatValue(attributes,
+                                                                                    annotationElementName,
+                                                                                    ATTRIBUTE_FOREGROUND_LINE_WIDTH_PERCENTAGE,
+                                                                                    -1.0f));
     /*
      * Tab Index
      */
@@ -612,7 +630,7 @@ AnnotationFileXmlReader::readGroup(AnnotationFile* annotationFile)
     /*
      * Coordinate space
      */
-    AnnotationCoordinateSpaceEnum::Enum coordSpace = AnnotationCoordinateSpaceEnum::PIXELS;
+    AnnotationCoordinateSpaceEnum::Enum coordSpace = AnnotationCoordinateSpaceEnum::VIEWPORT;
     {
         const QString valueString = m_streamHelper->getRequiredAttributeStringValue(attributes,
                                                                                     ELEMENT_GROUP,
@@ -691,6 +709,12 @@ AnnotationFileXmlReader::readGroup(AnnotationFile* annotationFile)
             readTwoDimensionalAnnotation(ELEMENT_PERCENT_SIZE_TEXT,
                                          annotation);
             annotations.push_back(annotation.releasePointer());
+        }
+        else if (elementName == ELEMENT_PERCENT_WIDTH_SIZE_TEXT) {
+            CaretPointer<AnnotationText> annotation(new AnnotationPercentSizeText(AnnotationAttributesDefaultTypeEnum::NORMAL));
+            readTwoDimensionalAnnotation(ELEMENT_PERCENT_WIDTH_SIZE_TEXT,
+                                         annotation);
+            annotationFile->addAnnotationDuringFileVersionOneReading(annotation.releasePointer());
         }
         else if (elementName == ELEMENT_POINT_SIZE_TEXT) {
             CaretPointer<AnnotationText> annotation(new AnnotationPointSizeText(AnnotationAttributesDefaultTypeEnum::NORMAL));
@@ -836,7 +860,7 @@ AnnotationFileXmlReader::readImageDataElement(AnnotationImage* imageAnnotation)
                                                + m_stream->errorString());
     }
     
-    QByteArray imageBytes = QByteArray::fromBase64(imageChars.toAscii());
+    QByteArray imageBytes = QByteArray::fromBase64(imageChars.toLatin1());
     if (imageBytes.size() == numberOfBytes) {
         const uint8_t* imageBytesPointer = (const uint8_t*)(imageBytes.data());
         imageAnnotation->setImageBytesRGBA(imageBytesPointer,
@@ -1001,7 +1025,8 @@ AnnotationFileXmlReader::readTextDataElement(AnnotationText *textAnnotation,
         }
     }
     
-    if (annotationTextElementName != ELEMENT_PERCENT_SIZE_TEXT) {
+    if ((annotationTextElementName != ELEMENT_PERCENT_SIZE_TEXT)
+        && (annotationTextElementName != ELEMENT_PERCENT_WIDTH_SIZE_TEXT)) {
         const QString valueString = m_streamHelper->getRequiredAttributeStringValue(attributes,
                                                                                     ELEMENT_TEXT_DATA,
                                                                                     ATTRIBUTE_TEXT_FONT_POINT_SIZE,
@@ -1079,6 +1104,11 @@ AnnotationFileXmlReader::readTextDataElement(AnnotationText *textAnnotation,
                                                                                                   ELEMENT_TEXT_DATA,
                                                                                                   ATTRIBUTE_TEXT_FONT_PERCENT_VIEWPORT_SIZE));
     }
+    else if (annotationTextElementName == ELEMENT_PERCENT_WIDTH_SIZE_TEXT) {
+        textAnnotation->setFontPercentViewportSizeProtected(m_streamHelper->getRequiredAttributeFloatValue(attributes,
+                                                                                                           ELEMENT_TEXT_DATA,
+                                                                                                           ATTRIBUTE_TEXT_FONT_PERCENT_VIEWPORT_SIZE));
+    }
     else {
         textAnnotation->setFontPercentViewportSizeProtected(m_streamHelper->getOptionalAttributeFloatValue(attributes,
                                                                                                   ELEMENT_TEXT_DATA,
@@ -1095,6 +1125,12 @@ AnnotationFileXmlReader::readTextDataElement(AnnotationText *textAnnotation,
          */
         textAnnotation->setFontPercentViewportSizeProtected(textAnnotation->getFontPercentViewportSizeProtected());
     }
+    else if (annotationTextElementName == ELEMENT_PERCENT_WIDTH_SIZE_TEXT) {
+        /*
+         * Will cause warning or assertion failure if invalid value
+         */
+        textAnnotation->setFontPercentViewportSizeProtected(textAnnotation->getFontPercentViewportSizeProtected());
+    }
     else if (annotationTextElementName == ELEMENT_POINT_SIZE_TEXT) {
         
     }
@@ -1103,6 +1139,8 @@ AnnotationFileXmlReader::readTextDataElement(AnnotationText *textAnnotation,
                                                + annotationTextElementName
                                                + "\" expected "
                                                + ELEMENT_PERCENT_SIZE_TEXT
+                                               + " or "
+                                               + ELEMENT_PERCENT_WIDTH_SIZE_TEXT
                                                + " or "
                                                + ELEMENT_POINT_SIZE_TEXT);
     }

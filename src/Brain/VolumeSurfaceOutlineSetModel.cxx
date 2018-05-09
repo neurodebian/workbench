@@ -64,7 +64,7 @@ VolumeSurfaceOutlineSetModel::VolumeSurfaceOutlineSetModel()
     for (int32_t i = 0; i < BrainConstants::MAXIMUM_NUMBER_OF_VOLUME_SURFACE_OUTLINES; i++) {
         m_outlineModels[i] = new VolumeSurfaceOutlineModel();
     }
-    m_numberOfDisplayedVolumeSurfaceOutlines = 6; //BrainConstants::MINIMUM_NUMBER_OF_VOLUME_SURFACE_OUTLINES;
+    m_numberOfDisplayedVolumeSurfaceOutlines = 6; 
     
     m_sceneAssistant = new SceneClassAssistant();
     m_sceneAssistant->add("m_numberOfDisplayedVolumeSurfaceOutlines",
@@ -233,40 +233,34 @@ VolumeSurfaceOutlineSetModel::selectSurfacesAfterSpecFileLoaded(Brain* brain,
     
     for (int32_t i = 0; i < BrainConstants::MAXIMUM_NUMBER_OF_VOLUME_SURFACE_OUTLINES; i++) {
         m_outlineModels[i]->getColorOrTabModel()->setColor(CaretColorEnum::BLACK);
-        m_outlineModels[i]->setThickness(VolumeSurfaceOutlineModel::DEFAULT_LINE_THICKNESS);
+        m_outlineModels[i]->setThicknessPixelsObsolete(VolumeSurfaceOutlineModel::DEFAULT_LINE_THICKNESS_PIXELS_OBSOLETE);
     }
     
     int nextOutlineIndex = 0;
     
     addSurfaceOutline(leftMidThickSurface,
-                      VolumeSurfaceOutlineModel::DEFAULT_LINE_THICKNESS,
                       leftTabIndex,
                       CaretColorEnum::BLACK,
                       nextOutlineIndex);
     addSurfaceOutline(rightMidThickSurface,
-                      VolumeSurfaceOutlineModel::DEFAULT_LINE_THICKNESS,
                       rightTabIndex,
                       CaretColorEnum::BLACK,
                       nextOutlineIndex);
     
     addSurfaceOutline(leftWhiteSurface,
-                      VolumeSurfaceOutlineModel::DEFAULT_LINE_THICKNESS,
                       -1,
                       CaretColorEnum::LIME,
                       nextOutlineIndex);
     addSurfaceOutline(rightWhiteSurface,
-                      VolumeSurfaceOutlineModel::DEFAULT_LINE_THICKNESS,
                       -1,
                       CaretColorEnum::LIME,
                       nextOutlineIndex);
     
     addSurfaceOutline(leftPialSurface,
-                      VolumeSurfaceOutlineModel::DEFAULT_LINE_THICKNESS,
                       -1,
                       CaretColorEnum::BLUE,
                       nextOutlineIndex);
     addSurfaceOutline(rightPialSurface,
-                      VolumeSurfaceOutlineModel::DEFAULT_LINE_THICKNESS,
                       -1,
                       CaretColorEnum::BLUE,
                       nextOutlineIndex);
@@ -278,8 +272,6 @@ VolumeSurfaceOutlineSetModel::selectSurfacesAfterSpecFileLoaded(Brain* brain,
  *
  * @param surface
  *    Surface that is added.  If NULL, no action is taken.
- * @param thickness
- *    Thickness for surface outline.
  * @param browserTabIndex
  *    If greater than or equal to zero, the color source
  *    is set to this tab index.
@@ -294,7 +286,6 @@ VolumeSurfaceOutlineSetModel::selectSurfacesAfterSpecFileLoaded(Brain* brain,
  */
 void 
 VolumeSurfaceOutlineSetModel::addSurfaceOutline(Surface* surface,
-                                           const float thickness,
                                            const int32_t browserTabIndex,
                                            const CaretColorEnum::Enum color,
                                            int32_t& outlineIndex)
@@ -304,7 +295,8 @@ VolumeSurfaceOutlineSetModel::addSurfaceOutline(Surface* surface,
             if (outlineIndex < BrainConstants::MAXIMUM_NUMBER_OF_VOLUME_SURFACE_OUTLINES) {
                 VolumeSurfaceOutlineModel* vsos = m_outlineModels[outlineIndex];
                 vsos->getSurfaceSelectionModel()->setSurface(surface);
-                vsos->setThickness(thickness);
+                vsos->setThicknessPixelsObsolete(VolumeSurfaceOutlineModel::DEFAULT_LINE_THICKNESS_PIXELS_OBSOLETE);
+                vsos->setThicknessPercentageViewportHeight(VolumeSurfaceOutlineModel::DEFAULT_LINE_THICKNESS_PERCENTAGE_VIEWPORT_HEIGHT);
                 if (browserTabIndex >= 0) {
                     vsos->getColorOrTabModel()->setBrowserTabIndex(browserTabIndex);
                 }
@@ -336,7 +328,7 @@ VolumeSurfaceOutlineSetModel::saveToScene(const SceneAttributes* sceneAttributes
 {
     SceneClass* sceneClass = new SceneClass(instanceName,
                                             "VolumeSurfaceOutlineSetModel",
-                                            1);
+                                            2);
     m_sceneAssistant->saveMembers(sceneAttributes, 
                                   sceneClass);
     
@@ -371,6 +363,8 @@ VolumeSurfaceOutlineSetModel::restoreFromScene(const SceneAttributes* sceneAttri
         return;
     }
     
+    const int32_t version = sceneClass->getVersionNumber();
+    
     m_sceneAssistant->restoreMembers(sceneAttributes, 
                                      sceneClass);
     
@@ -381,6 +375,20 @@ VolumeSurfaceOutlineSetModel::restoreFromScene(const SceneAttributes* sceneAttri
         for (int32_t i = 0; i < maxNum; i++) {
             m_outlineModels[i]->restoreFromScene(sceneAttributes,
                                                  outlineModelsArrayClass->getClassAtIndex(i));
+        }
+        
+        /*
+         * In older scenes, last was drawn on top.
+         * Now, zero is drawn on top so need to reverse
+         * the order of the volume surface outlines
+         */
+        if (version < 2) {
+            if (maxNum > 1) {
+                const int32_t numDisplayed = getNumberOfDislayedVolumeSurfaceOutlines();
+                CaretAssertArrayIndex(m_outlineModels, BrainConstants::MAXIMUM_NUMBER_OF_VOLUME_SURFACE_OUTLINES, numDisplayed - 1);
+                std::reverse(m_outlineModels,
+                             m_outlineModels + numDisplayed);
+            }
         }
     }
 }

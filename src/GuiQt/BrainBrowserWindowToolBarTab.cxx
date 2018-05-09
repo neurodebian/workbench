@@ -24,8 +24,9 @@
 #undef __BRAIN_BROWSER_WINDOW_TOOL_BAR_TAB_DECLARE__
 
 #include <QAction>
-#include <QLabel>
 #include <QCheckBox>
+#include <QDoubleSpinBox>
+#include <QLabel>
 #include <QToolButton>
 #include <QVBoxLayout>
 
@@ -39,6 +40,8 @@
 #include "WuQtUtilities.h"
 #include "WuQWidgetObjectGroup.h"
 #include "YokingGroupEnum.h"
+#include "WuQDataEntryDialog.h"
+#include "WuQtUtilities.h"
 
 using namespace caret;
     
@@ -53,21 +56,18 @@ using namespace caret;
  *
  * @param browserWindowIndex
  *     Index of browser window.
- * @param windowAspectRatioLockedAction
- *     Action for locking window aspect ratio.
- * @param tabAspectRatioLockedAction
- *     Action for locking tab aspect ratio.
+ * @param toolBarLockWindowAndAllTabAspectRatioButton
+ *     Button for locking window and all tab aspect ratio.
  * @param parentToolBar
  *     Parent toolbar.
  */
 BrainBrowserWindowToolBarTab::BrainBrowserWindowToolBarTab(const int32_t browserWindowIndex,
-                                                           QAction* windowAspectRatioLockedAction,
-                                                           QAction* tabAspectRatioLockedAction,
+                                                           QToolButton* toolBarLockWindowAndAllTabAspectRatioButton,
                                                            BrainBrowserWindowToolBar* parentToolBar)
 : BrainBrowserWindowToolBarComponent(parentToolBar),
 m_browserWindowIndex(browserWindowIndex),
 m_parentToolBar(parentToolBar),
-m_tabAspectRatioLockedAction(tabAspectRatioLockedAction)
+m_lockWindowAndAllTabAspectButton(toolBarLockWindowAndAllTabAspectRatioButton)
 {
     m_yokingGroupComboBox = new EnumComboBoxTemplate(this);
     m_yokingGroupComboBox->setup<YokingGroupEnum, YokingGroupEnum::Enum>();
@@ -77,26 +77,28 @@ m_tabAspectRatioLockedAction(tabAspectRatioLockedAction)
                                                     "Surface Yoking is applied to Surface, Surface Montage\n"
                                                     "and Whole Brain.  Volume Yoking is applied to Volumes."));
     
-    QLabel* yokeToLabel = new QLabel("Yoking:");
+    m_yokeToLabel = new QLabel("Yoking:");
     QObject::connect(m_yokingGroupComboBox, SIGNAL(itemActivated()),
                      this, SLOT(yokeToGroupComboBoxIndexChanged()));
     
-    QToolButton* windowAspectRatioLockedToolButton = new QToolButton();
-    windowAspectRatioLockedToolButton->setDefaultAction(windowAspectRatioLockedAction);
-    
-    QToolButton* tabAspectRatioLockedToolButton = new QToolButton();
-    tabAspectRatioLockedToolButton->setDefaultAction(tabAspectRatioLockedAction);
+    const AString lightToolTip = WuQtUtilities::createWordWrappedToolTipText("Enables shading on surfaces.  Shading affects "
+                                                                             "palette colors (but not by much) and in rare circumstances it "
+                                                                             "may be helpful to turn shading off.");
+    m_lightingEnabledCheckBox = new QCheckBox("Shading");
+    m_lightingEnabledCheckBox->setToolTip(lightToolTip);
+    QObject::connect(m_lightingEnabledCheckBox, &QCheckBox::toggled,
+                     this, &BrainBrowserWindowToolBarTab::lightingEnabledCheckBoxToggled);
     
     QVBoxLayout* layout = new QVBoxLayout(this);
     WuQtUtilities::setLayoutSpacingAndMargins(layout, 4, 0);
-    layout->addWidget(yokeToLabel);
+    layout->addWidget(m_yokeToLabel);
     layout->addWidget(m_yokingGroupComboBox->getWidget());
-    layout->addSpacing(15);
-    layout->addWidget(windowAspectRatioLockedToolButton);
-    layout->addWidget(tabAspectRatioLockedToolButton);
+    layout->addWidget(m_lockWindowAndAllTabAspectButton);
+    layout->addWidget(m_lightingEnabledCheckBox);
     
-    addToWidgetGroup(yokeToLabel);
+    addToWidgetGroup(m_yokeToLabel);
     addToWidgetGroup(m_yokingGroupComboBox->getWidget());
+    addToWidgetGroup(m_lightingEnabledCheckBox);
 }
 
 /**
@@ -115,14 +117,62 @@ BrainBrowserWindowToolBarTab::~BrainBrowserWindowToolBarTab()
 void
 BrainBrowserWindowToolBarTab::updateContent(BrowserTabContent* browserTabContent)
 {
+    if (browserTabContent == NULL) {
+        return;
+    }
+    
     blockAllSignals(true);
     
-    m_yokingGroupComboBox->setSelectedItem<YokingGroupEnum, YokingGroupEnum::Enum>(browserTabContent->getYokingGroup());
-    m_tabAspectRatioLockedAction->blockSignals(true);
-    m_tabAspectRatioLockedAction->setChecked(browserTabContent->isAspectRatioLocked());
-    m_tabAspectRatioLockedAction->blockSignals(false);
+    bool chartFlag = false;
+    switch (browserTabContent->getSelectedModelType()) {
+        case ModelTypeEnum::MODEL_TYPE_CHART:
+            chartFlag = true;
+            break;
+        case ModelTypeEnum::MODEL_TYPE_CHART_TWO:
+            chartFlag = true;
+            break;
+        case ModelTypeEnum::MODEL_TYPE_INVALID:
+            break;
+        case ModelTypeEnum::MODEL_TYPE_SURFACE:
+            break;
+        case ModelTypeEnum::MODEL_TYPE_SURFACE_MONTAGE:
+            break;
+        case ModelTypeEnum::MODEL_TYPE_VOLUME_SLICES:
+            break;
+        case ModelTypeEnum::MODEL_TYPE_WHOLE_BRAIN:
+            break;
+    }
+    
+    if (chartFlag) {
+        m_yokeToLabel->setText("Chart Yoking:");
+        m_yokingGroupComboBox->setSelectedItem<YokingGroupEnum, YokingGroupEnum::Enum>(browserTabContent->getChartModelYokingGroup());
+    }
+    else {
+        m_yokeToLabel->setText("Yoking:");
+        m_yokingGroupComboBox->setSelectedItem<YokingGroupEnum, YokingGroupEnum::Enum>(browserTabContent->getBrainModelYokingGroup());
+    }
+    
+    m_lightingEnabledCheckBox->setChecked(browserTabContent->isLightingEnabled());
     
     blockAllSignals(false);
+}
+
+/**
+ * Called when lighting checkbox is toggled by user
+ *
+ * @param checked
+ *     New status of lighting.
+ */
+void
+BrainBrowserWindowToolBarTab::lightingEnabledCheckBoxToggled(bool checked)
+{
+    BrowserTabContent* browserTabContent = this->getTabContentFromSelectedTab();
+    if (browserTabContent == NULL) {
+        return;
+    }
+    
+    browserTabContent->setLightingEnabled(checked);
+    this->updateGraphicsWindow();
 }
 
 /**
@@ -136,8 +186,33 @@ BrainBrowserWindowToolBarTab::yokeToGroupComboBoxIndexChanged()
         return;
     }
     
+    bool chartFlag = false;
+    switch (browserTabContent->getSelectedModelType()) {
+        case ModelTypeEnum::MODEL_TYPE_CHART:
+            chartFlag = true;
+            break;
+        case ModelTypeEnum::MODEL_TYPE_CHART_TWO:
+            chartFlag = true;
+            break;
+        case ModelTypeEnum::MODEL_TYPE_INVALID:
+            break;
+        case ModelTypeEnum::MODEL_TYPE_SURFACE:
+            break;
+        case ModelTypeEnum::MODEL_TYPE_SURFACE_MONTAGE:
+            break;
+        case ModelTypeEnum::MODEL_TYPE_VOLUME_SLICES:
+            break;
+        case ModelTypeEnum::MODEL_TYPE_WHOLE_BRAIN:
+            break;
+    }
+    
     YokingGroupEnum::Enum yokingGroup = m_yokingGroupComboBox->getSelectedItem<YokingGroupEnum, YokingGroupEnum::Enum>();
-    browserTabContent->setYokingGroup(yokingGroup);
+    if (chartFlag) {
+        browserTabContent->setChartModelYokingGroup(yokingGroup);
+    }
+    else {
+        browserTabContent->setBrainModelYokingGroup(yokingGroup);
+    }
     
     m_parentToolBar->updateToolBarComponents(browserTabContent);
 

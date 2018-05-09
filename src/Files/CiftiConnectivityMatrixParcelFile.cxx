@@ -35,7 +35,6 @@
 #include "NodeAndVoxelColoring.h"
 #include "Palette.h"
 #include "PaletteColorMapping.h"
-#include "PaletteFile.h"
 #include "SceneAttributes.h"
 #include "SceneClass.h"
 #include "SceneClassArray.h"
@@ -58,7 +57,8 @@ using namespace caret;
  * Constructor.
  */
 CiftiConnectivityMatrixParcelFile::CiftiConnectivityMatrixParcelFile()
-: CiftiMappableConnectivityMatrixDataFile(DataFileTypeEnum::CONNECTIVITY_PARCEL)
+: CiftiMappableConnectivityMatrixDataFile(DataFileTypeEnum::CONNECTIVITY_PARCEL),
+ChartableMatrixParcelInterface()
 {
     for (int32_t i = 0; i < BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_TABS; i++) {
         m_chartingEnabledForTab[i] = false;
@@ -168,6 +168,8 @@ CiftiConnectivityMatrixParcelFile::receiveEvent(Event* event)
             }
         }
     }
+    
+    CiftiMappableConnectivityMatrixDataFile::receiveEvent(event);
 }
 
 /**
@@ -325,10 +327,10 @@ CiftiConnectivityMatrixParcelFile::setMatrixChartingEnabled(const int32_t tabInd
  *    Chart types supported by this file.
  */
 void
-CiftiConnectivityMatrixParcelFile::getSupportedMatrixChartDataTypes(std::vector<ChartDataTypeEnum::Enum>& chartDataTypesOut) const
+CiftiConnectivityMatrixParcelFile::getSupportedMatrixChartDataTypes(std::vector<ChartOneDataTypeEnum::Enum>& chartDataTypesOut) const
 {
     chartDataTypesOut.clear();
-    chartDataTypesOut.push_back(ChartDataTypeEnum::CHART_DATA_TYPE_MATRIX_LAYER);
+    chartDataTypesOut.push_back(ChartOneDataTypeEnum::CHART_DATA_TYPE_MATRIX_LAYER);
 }
 
 /**

@@ -21,14 +21,20 @@
  */
 /*LICENSE_END*/
 
+#include <set>
+
 #include <AString.h>
 
 #include "CaretObject.h"
 
 #include "AnnotationColorBarNumericText.h"
+#include "CaretColorEnum.h"
 #include "NumericFormatModeEnum.h"
 #include "PaletteColorBarValuesModeEnum.h"
 #include "PaletteEnums.h"
+#include "PaletteHistogramRangeModeEnum.h"
+#include "PaletteInvertModeEnum.h"
+#include "PaletteModifiedStatusEnum.h"
 #include "PaletteThresholdRangeModeEnum.h"
 #include "XmlException.h"
 
@@ -36,6 +42,7 @@ namespace caret {
 
     class AnnotationColorBar;
     class FastStatistics;
+    class Palette;
     class XmlWriter;
     
     /**
@@ -43,7 +50,7 @@ namespace caret {
      */
     class PaletteColorMapping : public CaretObject {
         
-    public:
+    public:        
         PaletteColorMapping();
         
         PaletteColorMapping(const PaletteColorMapping& o);
@@ -56,10 +63,12 @@ namespace caret {
         
         virtual ~PaletteColorMapping();
         
-        void copy(const PaletteColorMapping& pcm);
+        void copy(const PaletteColorMapping& pcm,
+                  const bool copyHistogramAttributesFlag);
         
     private:
-        void copyHelper(const PaletteColorMapping& o);
+        void copyHelper(const PaletteColorMapping& o,
+                        const bool copyHistogramAttributesFlag);
         
         void initializeMembersPaletteColorMapping();
         
@@ -116,6 +125,10 @@ namespace caret {
         
         void setInterpolatePaletteFlag(const bool interpolatePaletteFlag);
         
+        PaletteInvertModeEnum::Enum getInvertedMode() const;
+        
+        void setInvertedMode(const PaletteInvertModeEnum::Enum invertedMode);
+        
         PaletteScaleModeEnum::Enum getScaleMode() const;
         
         void setScaleMode(const PaletteScaleModeEnum::Enum scaleMode);
@@ -123,6 +136,8 @@ namespace caret {
         AString getSelectedPaletteName() const;
         
         void setSelectedPaletteName(const AString& selectedPaletteName);
+        
+        const Palette* getPalette() const;
         
         void setSelectedPaletteToPsych();
         
@@ -206,25 +221,53 @@ namespace caret {
         
         void setThresholdNegMinPosMaxLinked(const bool linked);
         
-        NumericFormatModeEnum::Enum getNumericFormatMode() const;
+        PaletteHistogramRangeModeEnum::Enum getHistogramRangeMode() const;
         
-        int32_t getPrecisionDigits() const;
+        void setHistogramRangeMode(const PaletteHistogramRangeModeEnum::Enum histogramRangeMode);
         
-        int32_t getNumericSubdivisionCount() const;
+        bool isHistogramBarsVisible() const;
         
-        void setNumericFormatMode(const NumericFormatModeEnum::Enum numericFormatMode);
+        void setHistogramBarsVisible(const bool histogramBarsVisible);
         
-        void setPrecisionDigits(const int32_t precisionDigits);
+        bool isHistogramEnvelopeVisible() const;
         
-        void setNumericSubdivisionCount(const int32_t numericSubdivisionCount);
+        void setHistogramEnvelopeVisible(const bool histogramEnvelopeVisible);
+        
+        CaretColorEnum::Enum getHistogramBarsColor() const;
+        
+        void setHistogramBarsColor(const CaretColorEnum::Enum histogramBarsColor);
+        
+        CaretColorEnum::Enum getHistogramEnvelopeColor() const;
+        
+        void setHistogramEnvelopeColor(const CaretColorEnum::Enum histogramEnvelopeColor);
+        
+        float getHistogramEnvelopeLineWidthPercentage() const;
+        
+        void setHistogramEnvelopeLineWidthPercentage(const float lineWidthPercentage);
+        
+        int32_t getHistogramNumberOfBuckets() const;
+        
+        void setHistogramNumberOfBuckets(const int32_t histogramNumberOfBuckets);
+    
+        NumericFormatModeEnum::Enum getColorBarNumericFormatMode() const;
+        
+        int32_t getColorBarPrecisionDigits() const;
+        
+        int32_t getColorBarNumericSubdivisionCount() const;
+        
+        void setColorBarNumericFormatMode(const NumericFormatModeEnum::Enum colorBarNumericFormatMode);
+        
+        void setColorBarPrecisionDigits(const int32_t colorBarPrecisionDigits);
+        
+        void setColorBarNumericSubdivisionCount(const int32_t colroBarNumericSubdivisionCount);
         
         PaletteColorBarValuesModeEnum::Enum getColorBarValuesMode() const;
         
         void setColorBarValuesMode(const PaletteColorBarValuesModeEnum::Enum colorBarValuesMode);
         
-        bool isShowTickMarksSelected() const;
+        bool isColorBarShowTickMarksSelected() const;
         
-        void setShowTickMarksSelected(const bool selected);
+        void setColorBarShowTickMarksSelected(const bool selected);
         
         void setModified();
         
@@ -232,13 +275,14 @@ namespace caret {
         
         bool isModified() const;
         
+        void setSceneModified();
+        
+        PaletteModifiedStatusEnum::Enum getModifiedStatus() const;
+        
         void mapDataToPaletteNormalizedValues(const FastStatistics* statistics,
                                               const float* dataValues,
                                               float* normalizedValuesOut,
                                               const int64_t numberOfData) const;
-        
-        void getPaletteColorBarScaleText(const FastStatistics* statistics,
-                                         std::vector<std::pair<float, AString> >& normalizedPositionAndTextOut) const;
         
         void getPaletteColorBarScaleText(const FastStatistics* statistics,
                                          std::vector<AnnotationColorBarNumericText*>& colorBarNumericTextOut) const;
@@ -249,7 +293,12 @@ namespace caret {
         /** A negative value near zero - may be zero! */
         static const float SMALL_NEGATIVE;
         
+        /** TSC: the excluded zone of normalization is a separate issue to zero detection in the data
+          * specifically, it is a HACK, in order for palettes to be able to specify a special color for data that is 0, which is not involved in color interpolation */
+        static const float PALETTE_ZERO_COLOR_ZONE;
     private:
+        bool isZeroNumericText(const AString& numericText) const;
+        
         PaletteScaleModeEnum::Enum scaleMode;
         
         float autoScalePercentageNegativeMaximum;
@@ -275,6 +324,8 @@ namespace caret {
         AString selectedPaletteName;
         
         bool interpolatePaletteFlag;
+        
+        PaletteInvertModeEnum::Enum invertedMode = PaletteInvertModeEnum::OFF;
         
         bool displayPositiveDataFlag;
         
@@ -306,24 +357,42 @@ namespace caret {
         
         bool thresholdNegMinPosMaxLinked;
         
-        NumericFormatModeEnum::Enum numericFormatMode;
+        PaletteHistogramRangeModeEnum::Enum histogramRangeMode;
         
-        int32_t precisionDigits;
+        bool histogramBarsVisible;
+
+        bool histogramEnvelopeVisible;
         
-        int32_t numericSubdivisionCount;
+        CaretColorEnum::Enum histogramBarsColor;
+        
+        CaretColorEnum::Enum histogramEnvelopeColor;
+        
+        float histogramEnvelopeLineWidthPercentage;
+        
+        int32_t histogramNumberOfBuckets;
+        
+        NumericFormatModeEnum::Enum colorBarNumericFormatMode;
+        
+        int32_t colorBarPrecisionDigits;
+        
+        int32_t colorBarNumericSubdivisionCount;
         
         PaletteColorBarValuesModeEnum::Enum colorBarValuesMode;
     
-        bool showTickMarksSelected;
+        bool colorBarShowTickMarksSelected;
         
         /**Tracks modification, DO NOT copy */
-        bool modifiedFlag;
+        PaletteModifiedStatusEnum::Enum modifiedStatus;
         
+        /** keeps missing palettes from being logged more than once */
+        static std::set<AString> s_missingPaletteNames;
     };
 
 #ifdef __PALETTE_COLOR_MAPPING_DECLARE__
-    const float PaletteColorMapping::SMALL_POSITIVE = 0.0;  // JWH 24 April 2015  0.00001;
-    const float PaletteColorMapping::SMALL_NEGATIVE = 0.0;  // JWH 24 April 2015 -0.00001;
+    const float PaletteColorMapping::SMALL_POSITIVE = 0.0;
+    const float PaletteColorMapping::SMALL_NEGATIVE = 0.0;
+    const float PaletteColorMapping::PALETTE_ZERO_COLOR_ZONE = 0.00001f;
+    std::set<AString> PaletteColorMapping::s_missingPaletteNames;
 #endif // __PALETTE_COLOR_MAPPING_DECLARE__
     
 } // namespace

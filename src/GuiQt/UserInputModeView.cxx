@@ -20,6 +20,7 @@
 /*LICENSE_END*/
 
 #include <QMessageBox>
+#include <QLineEdit>
 
 #define __USER_INPUT_MODE_VIEW_DECLARE__
 #include "UserInputModeView.h"
@@ -29,12 +30,19 @@
 #include "BrainOpenGLViewportContent.h"
 #include "BrainOpenGLWidget.h"
 #include "BrowserTabContent.h"
+#include "ChartTwoCartesianAxis.h"
+#include "ChartTwoOverlaySet.h"
 #include "EventGraphicsUpdateOneWindow.h"
+#include "EventGraphicsUpdateAllWindows.h"
 #include "EventUpdateYokedWindows.h"
+#include "EventUserInterfaceUpdate.h"
 #include "EventManager.h"
 #include "GuiManager.h"
 #include "MouseEvent.h"
+#include "SelectionItemChartTwoLabel.h"
+#include "SelectionManager.h"
 #include "UserInputModeViewContextMenu.h"
+#include "WuQDataEntryDialog.h"
 
 using namespace caret;
 
@@ -160,6 +168,50 @@ AString
 UserInputModeView::toString() const
 {
     return "UserInputModeView";
+}
+
+/**
+ * Process a mouse left double-click event.
+ *
+ * @param mouseEvent
+ *     Mouse event information.
+ */
+void
+UserInputModeView::mouseLeftDoubleClick(const MouseEvent& mouseEvent)
+{
+    const bool allowDoubleClickToEditChartLabel = false;
+    if (allowDoubleClickToEditChartLabel) {
+        const int32_t mouseX = mouseEvent.getX();
+        const int32_t mouseY = mouseEvent.getY();
+        
+        BrainOpenGLWidget* openGLWidget = mouseEvent.getOpenGLWidget();
+        SelectionManager* idManager = openGLWidget->performIdentification(mouseX,
+                                                                          mouseY,
+                                                                          false);
+        CaretAssert(idManager);
+        SelectionItemChartTwoLabel* labelID = idManager->getChartTwoLabelIdentification();
+        if (labelID->isValid()) {
+            ChartTwoCartesianAxis* axis = labelID->getChartTwoCartesianAxis();
+            ChartTwoOverlaySet* chartOverlaySet = labelID->getChartOverlaySet();
+            if ((axis != NULL)
+                && (chartOverlaySet != NULL)) {
+                WuQDataEntryDialog newNameDialog("Axis Label",
+                                                 openGLWidget);
+                QLineEdit* lineEdit = newNameDialog.addLineEditWidget("Label");
+                lineEdit->setText(chartOverlaySet->getAxisLabel(axis));
+                if (newNameDialog.exec() == WuQDataEntryDialog::Accepted) {
+                    const AString name = lineEdit->text().trimmed();
+                    chartOverlaySet->setAxisLabel(axis,
+                                                  name);
+                    
+                    /*
+                     * Update graphics.
+                     */
+                    updateGraphics(mouseEvent);
+                }
+            }
+        }
+    }
 }
 
 /**
@@ -332,13 +384,11 @@ UserInputModeView::showContextMenu(const MouseEvent& mouseEvent,
                                                                       mouseY,
                                                                       false);
     
-    UserInputModeViewContextMenu contextMenu(idManager,
-                                             tabContent,
+    UserInputModeViewContextMenu contextMenu(viewportContent,
+                                             idManager,
                                              openGLWidget);
     contextMenu.exec(menuPosition);
 }
-
-
 
 /**
  * If this windows is yoked, issue an event to update other
@@ -353,10 +403,23 @@ UserInputModeView::updateGraphics(const MouseEvent& mouseEvent)
         const int32_t browserWindowIndex = mouseEvent.getBrowserWindowIndex();
         EventManager::get()->sendEvent(EventGraphicsUpdateOneWindow(browserWindowIndex).getPointer());
         
+        YokingGroupEnum::Enum brainYokingGroup = YokingGroupEnum::YOKING_GROUP_OFF;
+        YokingGroupEnum::Enum chartYokingGroup = YokingGroupEnum::YOKING_GROUP_OFF;
+        
         if (browserTabContent != NULL) {
-            if (browserTabContent->isYoked()) {
+            if (browserTabContent->isBrainModelYoked()) {
+                brainYokingGroup = browserTabContent->getBrainModelYokingGroup();
                 issuedYokeEvent = true;
-                EventManager::get()->sendEvent(EventUpdateYokedWindows(browserTabContent->getYokingGroup()).getPointer());
+            }
+            if (browserTabContent->isChartModelYoked()) {
+                chartYokingGroup = browserTabContent->getChartModelYokingGroup();
+                issuedYokeEvent = true;
+            }
+            
+            if (issuedYokeEvent) {
+                EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+                EventManager::get()->sendEvent(EventUpdateYokedWindows(brainYokingGroup,
+                                                                       chartYokingGroup).getPointer());
             }
         }
     }
@@ -364,9 +427,8 @@ UserInputModeView::updateGraphics(const MouseEvent& mouseEvent)
     /*
      * If not yoked, just need to update graphics.
      */
-    if (issuedYokeEvent == false) {
+    if ( ! issuedYokeEvent) {
         EventManager::get()->sendEvent(EventGraphicsUpdateOneWindow(mouseEvent.getBrowserWindowIndex()).getPointer());
     }
 }
-
 

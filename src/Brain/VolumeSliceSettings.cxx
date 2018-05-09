@@ -40,6 +40,8 @@ using namespace caret;
  * \ingroup Brain
  */
 
+const static VolumeSliceInterpolationEdgeEffectsMaskingEnum::Enum defaultVolumeSliceInterpolationEdgeMaskType =
+                                                    VolumeSliceInterpolationEdgeEffectsMaskingEnum::LOOSE;
 /**
  * Constructor.
  */
@@ -47,8 +49,11 @@ VolumeSliceSettings::VolumeSliceSettings()
 : CaretObject()
 {
     m_sliceViewPlane         = VolumeSliceViewPlaneEnum::AXIAL;
+    m_slicePlanesAllViewLayout = VolumeSliceViewAllPlanesLayoutEnum::GRID_LAYOUT;
     m_sliceDrawingType       = VolumeSliceDrawingTypeEnum::VOLUME_SLICE_DRAW_SINGLE;
     m_sliceProjectionType    = VolumeSliceProjectionTypeEnum::VOLUME_SLICE_PROJECTION_ORTHOGONAL;
+    m_volumeSliceInterpolationEdgeEffectsMaskingType = defaultVolumeSliceInterpolationEdgeMaskType;
+    
     m_montageNumberOfColumns = 6; // was 3;
     m_montageNumberOfRows    = 4;
     m_montageSliceSpacing    = 5;
@@ -61,15 +66,18 @@ VolumeSliceSettings::VolumeSliceSettings()
     m_sliceEnabledParasagittal = true;
     m_initializedFlag = false;
     
-    //m_lastVolumeFile = NULL;
-
+    
     m_sceneAssistant = new SceneClassAssistant();
     m_sceneAssistant->add<VolumeSliceViewPlaneEnum,VolumeSliceViewPlaneEnum::Enum>("m_sliceViewPlane",
                                                                                    &m_sliceViewPlane);
+    m_sceneAssistant->add<VolumeSliceViewAllPlanesLayoutEnum, VolumeSliceViewAllPlanesLayoutEnum::Enum>("m_slicePlanesAllViewLayout",
+                                                                                                        &m_slicePlanesAllViewLayout);
     m_sceneAssistant->add<VolumeSliceDrawingTypeEnum,VolumeSliceDrawingTypeEnum::Enum>("m_sliceDrawingType",
                                                                                    &m_sliceDrawingType);
     m_sceneAssistant->add<VolumeSliceProjectionTypeEnum,VolumeSliceProjectionTypeEnum::Enum>("m_sliceProjectionType",
                                                                                  &m_sliceProjectionType);
+    m_sceneAssistant->add<VolumeSliceInterpolationEdgeEffectsMaskingEnum,VolumeSliceInterpolationEdgeEffectsMaskingEnum::Enum>("m_volumeSliceInterpolationEdgeEffectsMaskingType",
+                                                                                             &m_volumeSliceInterpolationEdgeEffectsMaskingType);
     m_sceneAssistant->add("m_montageNumberOfColumns",
                           &m_montageNumberOfColumns);
     m_sceneAssistant->add("m_montageNumberOfRows",
@@ -130,8 +138,10 @@ void
 VolumeSliceSettings::copyHelperVolumeSliceSettings(const VolumeSliceSettings& obj)
 {
     m_sliceViewPlane         = obj.m_sliceViewPlane;
+    m_slicePlanesAllViewLayout = obj.m_slicePlanesAllViewLayout;
     m_sliceDrawingType       = obj.m_sliceDrawingType;
     m_sliceProjectionType    = obj.m_sliceProjectionType;
+    m_volumeSliceInterpolationEdgeEffectsMaskingType = obj.m_volumeSliceInterpolationEdgeEffectsMaskingType;
     
     m_montageNumberOfColumns = obj.m_montageNumberOfColumns;
     m_montageNumberOfRows    = obj.m_montageNumberOfRows;
@@ -173,6 +183,8 @@ VolumeSliceSettings::getDescriptionOfContent(const ModelTypeEnum::Enum modelType
     
     switch (modelType) {
         case ModelTypeEnum::MODEL_TYPE_CHART:
+            break;
+        case ModelTypeEnum::MODEL_TYPE_CHART_TWO:
             break;
         case ModelTypeEnum::MODEL_TYPE_INVALID:
             break;
@@ -256,7 +268,29 @@ VolumeSliceSettings::setSliceViewPlane(const VolumeSliceViewPlaneEnum::Enum slic
     m_sliceViewPlane = slicePlane;
 }
 
-/** 
+/**
+ * @return The layout for all slices view (grid, row, column)
+ */
+VolumeSliceViewAllPlanesLayoutEnum::Enum
+VolumeSliceSettings::getSlicePlanesAllViewLayout() const
+{
+    return m_slicePlanesAllViewLayout;
+}
+
+/**
+ * Set the layout for all slices view (grid, row, column)
+ *
+ * @param slicePlanesAllViewLayout
+ *     New value for layout.
+ */
+void
+VolumeSliceSettings::setSlicePlanesAllViewLayout(const VolumeSliceViewAllPlanesLayoutEnum::Enum slicePlanesAllViewLayout)
+{
+    m_slicePlanesAllViewLayout = slicePlanesAllViewLayout;
+}
+
+
+/**
  * @return Type of slice drawing (single/montage)
  */
 VolumeSliceDrawingTypeEnum::Enum
@@ -277,8 +311,29 @@ VolumeSliceSettings::setSliceDrawingType(const VolumeSliceDrawingTypeEnum::Enum 
     m_sliceDrawingType = sliceDrawingType;
 }
 
-/** 
- * @return Type of slice projection (oblique/orthogonal) 
+/**
+ * @return The masking used when drawing an oblique volume slice
+ */
+VolumeSliceInterpolationEdgeEffectsMaskingEnum::Enum
+VolumeSliceSettings::getVolumeSliceInterpolationEdgeEffectsMaskingType() const
+{
+    return m_volumeSliceInterpolationEdgeEffectsMaskingType;
+}
+
+/**
+ * Set the masking used when drawing an oblique volume slice.
+ *
+ * @param maskingType
+ *     Type of masking.
+ */
+void
+VolumeSliceSettings::setVolumeSliceInterpolationEdgeEffectsMaskingType(const VolumeSliceInterpolationEdgeEffectsMaskingEnum::Enum maskingType)
+{
+    m_volumeSliceInterpolationEdgeEffectsMaskingType = maskingType;
+}
+
+/**
+ * @return Type of slice projection (oblique/orthogonal)
  */
 VolumeSliceProjectionTypeEnum::Enum
 VolumeSliceSettings::getSliceProjectionType() const
@@ -488,10 +543,13 @@ VolumeSliceSettings::setSliceIndexAxial(const VolumeMappableInterface* volumeFil
                                                    const int64_t sliceIndexAxial)
 {
     CaretAssert(volumeFile);
-    float xyz[3];
-    volumeFile->indexToSpace(0, 0, sliceIndexAxial, xyz);
     
-    m_sliceCoordinateAxial = xyz[2];
+    float xyz[3];
+    volumeFile->indexToSpace(getSliceIndexParasagittal(volumeFile),
+                                getSliceIndexCoronal(volumeFile),
+                                sliceIndexAxial,
+                                xyz);
+    selectSlicesAtCoordinate(xyz);
 }
 
 /**
@@ -546,10 +604,13 @@ VolumeSliceSettings::setSliceIndexCoronal(const VolumeMappableInterface* volumeF
                                                      const int64_t sliceIndexCoronal)
 {
     CaretAssert(volumeFile);
-    float xyz[3];
-    volumeFile->indexToSpace(0, sliceIndexCoronal, 0, xyz);
     
-    m_sliceCoordinateCoronal = xyz[1];
+    float xyz[3];
+    volumeFile->indexToSpace(getSliceIndexParasagittal(volumeFile),
+                                sliceIndexCoronal,
+                                getSliceIndexAxial(volumeFile),
+                                xyz);
+    selectSlicesAtCoordinate(xyz);
 }
 
 /**
@@ -601,10 +662,13 @@ VolumeSliceSettings::setSliceIndexParasagittal(const VolumeMappableInterface* vo
                                                           const int64_t sliceIndexParasagittal)
 {
     CaretAssert(volumeFile);
-    float xyz[3];
-    volumeFile->indexToSpace(sliceIndexParasagittal, 0, 0, xyz);
     
-    m_sliceCoordinateParasagittal = xyz[0];
+    float xyz[3];
+    volumeFile->indexToSpace(sliceIndexParasagittal,
+                                getSliceIndexCoronal(volumeFile),
+                                getSliceIndexAxial(volumeFile),
+                                xyz);
+    selectSlicesAtCoordinate(xyz);
 }
 
 /**
@@ -777,10 +841,11 @@ VolumeSliceSettings::restoreFromScene(const SceneAttributes* sceneAttributes,
     }
     
     /*
-     * Added in scene version 2
+     * Added in scene version 2 or later
      */
     m_sliceDrawingType       = VolumeSliceDrawingTypeEnum::VOLUME_SLICE_DRAW_SINGLE;
     m_sliceProjectionType    = VolumeSliceProjectionTypeEnum::VOLUME_SLICE_PROJECTION_ORTHOGONAL;
+    m_volumeSliceInterpolationEdgeEffectsMaskingType = defaultVolumeSliceInterpolationEdgeMaskType;
     
     m_sceneAssistant->restoreMembers(sceneAttributes,
                                      sceneClass);

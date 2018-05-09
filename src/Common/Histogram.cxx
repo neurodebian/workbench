@@ -73,6 +73,9 @@ void Histogram::reset()
         m_cumulative[i] = 0;
         m_display[i] = 0.0f;
     }
+    m_displayHeightMax = 0.0;
+    m_bucketMin = 0.0;
+    m_bucketMax = 0.0;
 }
 
 void Histogram::update(const int& numBuckets, const float* data, const int64_t& dataCount)
@@ -170,10 +173,25 @@ void Histogram::update(const float* data, const int64_t& dataCount)
         ++m_buckets[bucket];
     }
     computeCumulative();
+    m_displayHeightMax = 0.0;
     for (int i = 0; i < numBuckets; ++i)
     {//compute display values by normalizing by bucket size
         m_display[i] = m_buckets[i] / bucketsize;
+        if (m_display[i] > m_displayHeightMax) {
+            m_displayHeightMax = m_display[i];
+        }
     }
+}
+
+void Histogram::update(const int32_t& numBuckets,
+                       const float* data, const int64_t& dataCount, float mostPositiveValueInclusive,
+                       float leastPositiveValueInclusive, float leastNegativeValueInclusive,
+                       float mostNegativeValueInclusive, const bool& includeZeroValues)
+{
+    resize(numBuckets);
+    update(data, dataCount, mostPositiveValueInclusive,
+           leastPositiveValueInclusive, leastNegativeValueInclusive,
+           mostNegativeValueInclusive, includeZeroValues);
 }
 
 void Histogram::update(const float* data, const int64_t& dataCount, float mostPositiveValueInclusive,
@@ -298,9 +316,13 @@ void Histogram::update(const float* data, const int64_t& dataCount, float mostPo
         ++m_buckets[bucket];
     }
     computeCumulative();
+    m_displayHeightMax = 0.0;
     for (int i = 0; i < numBuckets; ++i)
     {//compute display values by normalizing by bucket size
         m_display[i] = m_buckets[i] / bucketsize;
+        if (m_display[i] > m_displayHeightMax) {
+            m_displayHeightMax = m_display[i];
+        }
     }
 }
 
@@ -313,4 +335,50 @@ void Histogram::computeCumulative()
         accum += m_buckets[i];
         m_cumulative[i] = accum;
     }
+}
+
+/**
+ * Get the data value and height for the histogram's bucket index.
+ *
+ * @param bucketIndex
+ *     The bucket index.
+ * @param bucketDataValueOut
+ *     Output with data value at the bucket (x-axis)
+ * @param bucketHeightOut
+ *     Output with height of bucket (y-axis)
+ * @return
+ *     True if output values are positive, else false.
+ */
+bool
+Histogram::getHistogramDisplayBucketDataValueAndHeight( const int32_t bucketIndex,
+                                                       float& bucketDataValueOut,
+                                                       float& bucketHeightOut) const
+{
+    bucketDataValueOut = 0.0;
+    bucketHeightOut    = 0.0;
+    
+    const std::vector<float>& buckets = getHistogramDisplay();
+    const int32_t numberOfBuckets = static_cast<int32_t>(buckets.size());
+    if ((bucketIndex >= 0)
+        && (bucketIndex < numberOfBuckets)) {
+        CaretAssertVectorIndex(buckets,
+                               bucketIndex);
+        
+        float rangeMin = 0.0;
+        float rangeMax = 0.0;
+        getRange(rangeMin, rangeMax);
+        bucketDataValueOut = rangeMin;
+        if (rangeMax > rangeMin) {
+            const float range = rangeMax - rangeMin;
+            const float bucketWidth = range / numberOfBuckets;
+            bucketDataValueOut = (rangeMin
+                                  + (bucketIndex * bucketWidth));
+        }
+        
+        bucketHeightOut = buckets[bucketIndex];
+        
+        return true;
+    }
+    
+    return false;
 }

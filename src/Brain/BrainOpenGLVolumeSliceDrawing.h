@@ -24,8 +24,10 @@
 #include "BrainOpenGLFixedPipeline.h"
 #include "CaretObject.h"
 #include "DisplayGroupEnum.h"
+#include "ModelTypeEnum.h"
 #include "VolumeSliceProjectionTypeEnum.h"
 #include "VolumeSliceDrawingTypeEnum.h"
+#include "VolumeSliceViewAllPlanesLayoutEnum.h"
 #include "VolumeSliceViewPlaneEnum.h"
 
 
@@ -37,9 +39,9 @@ namespace caret {
     class Matrix4x4;
     class ModelVolume;
     class ModelWholeBrain;
-    class PaletteFile;
     class Plane;
     class VolumeMappableInterface;
+    class VolumeSurfaceOutlineSetModel;
     
     class BrainOpenGLVolumeSliceDrawing : public CaretObject {
         
@@ -178,6 +180,7 @@ namespace caret {
         void drawVolumeSliceViewPlane(const VolumeSliceDrawingTypeEnum::Enum sliceDrawingType,
                                       const VolumeSliceProjectionTypeEnum::Enum sliceProjectionType,
                                       const VolumeSliceViewPlaneEnum::Enum sliceViewPlane,
+                                      const VolumeSliceViewAllPlanesLayoutEnum::Enum allPlanesLayout,
                                       const int32_t viewport[4]);
         
         void drawVolumeSliceViewType(const VolumeSliceDrawingTypeEnum::Enum sliceDrawingType,
@@ -236,7 +239,10 @@ namespace caret {
                         const Plane& slicePlane,
                         const float sliceCoordinates[3]);
         
-        void drawSurfaceOutline(const Plane& plane);
+        static void drawSurfaceOutline(const ModelTypeEnum::Enum modelType,
+                                       const Plane& plane,
+                                       VolumeSurfaceOutlineSetModel* outlineSet,
+                                       BrainOpenGLFixedPipeline* fixedPipelineDrawing);
         
         void drawVolumeSliceFoci(const Plane& plane);
         
@@ -324,6 +330,8 @@ namespace caret {
         
         void resetIdentification();
         
+        ModelTypeEnum::Enum m_modelType;
+        
         ModelVolume* m_modelVolume;
         
         ModelWholeBrain* m_modelWholeBrain;
@@ -340,8 +348,6 @@ namespace caret {
         
         BrowserTabContent* m_browserTabContent;
         
-        PaletteFile* m_paletteFile;
-        
         DisplayGroupEnum::Enum m_displayGroup;
         
         int32_t m_tabIndex;
@@ -357,6 +363,8 @@ namespace caret {
         bool m_identificationModeFlag;
         
         static const int32_t IDENTIFICATION_INDICES_PER_VOXEL;
+        
+        friend class BrainOpenGLVolumeObliqueSliceDrawing;
         
         // ADD_NEW_MEMBERS_HERE
     };

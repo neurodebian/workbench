@@ -18,6 +18,7 @@
  */
 /*LICENSE_END*/
 
+#include <deque>
 #include <limits>
 
 #include "CaretAssert.h"
@@ -107,13 +108,14 @@ Palette::toString() const
 {
     AString s;
     
-    s += "[name=" + this->name + ", ";
+    s += "name=" + this->name + "\n";
     uint64_t num = this->paletteScalars.size();
     for (uint64_t i = 0; i < num; i++) {
-        if (i > 0) s += ",";
-        s += this->paletteScalars[i]->toString();
+        s += ("    "
+              + this->paletteScalars[i]->toString()
+              + "\n");
     }    
-    s += "]";
+    s += "\n";
     
     return s;
 }
@@ -446,46 +448,36 @@ Palette::getPaletteColor(
                         }
                     }
                 }
-                
-                //                    if (paletteIndex != binaryPaletteIndex) {
-                //                        std::cout << "FAILED palette indices correct="
-                //                        << paletteIndex << " binary-index=" << binaryPaletteIndex << std::endl;
-                //                    }
-                
-//                /*
-//                 * Always interpolate if there are only two colors
-//                 */
-//                if (numScalarColors == 2) {
-//                    interpolateColorFlag = true;
-//                }
             }
         }
         if (paletteIndex >= 0) {
             const PaletteScalarAndColor* psac = this->getScalarAndColor(paletteIndex);
-            psac->getColor(rgbaOut);
-            if (interpolateColorFlag &&
-                (paletteIndex < (numScalarColors - 1))) {
-                const PaletteScalarAndColor* psacBelow = this->getScalarAndColor(paletteIndex + 1);
-                float totalDiff = psac->getScalar() - psacBelow->getScalar();
-                if (totalDiff != 0.0) {
-                    float offset = scalar - psacBelow->getScalar();
-                    float percentAbove = offset / totalDiff;
-                    float percentBelow = 1.0f - percentAbove;
-                    if ( ! psacBelow->isNoneColor()) {
-                        const float* rgbaAbove = psac->getColor();
-                        const float* rgbaBelow = psacBelow->getColor();
-                        
-                        rgbaOut[0] = (percentAbove * rgbaAbove[0]
-                                      + percentBelow * rgbaBelow[0]);
-                        rgbaOut[1] = (percentAbove * rgbaAbove[1]
-                                      + percentBelow * rgbaBelow[1]);
-                        rgbaOut[2] = (percentAbove * rgbaAbove[2]
-                                      + percentBelow * rgbaBelow[2]);
+            if (psac->isNoneColor()) {
+                rgbaOut[3] = 0.0;
+            }
+            else {
+                psac->getColor(rgbaOut); // color assigned here
+                if (interpolateColorFlag &&
+                    (paletteIndex < (numScalarColors - 1))) {
+                    const PaletteScalarAndColor* psacBelow = this->getScalarAndColor(paletteIndex + 1);
+                    float totalDiff = psac->getScalar() - psacBelow->getScalar();
+                    if (totalDiff != 0.0) {
+                        float offset = scalar - psacBelow->getScalar();
+                        float percentAbove = offset / totalDiff;
+                        float percentBelow = 1.0f - percentAbove;
+                        if ( ! psacBelow->isNoneColor()) {
+                            const float* rgbaAbove = psac->getColor();
+                            const float* rgbaBelow = psacBelow->getColor();
+                            
+                            rgbaOut[0] = (percentAbove * rgbaAbove[0]
+                                          + percentBelow * rgbaBelow[0]);
+                            rgbaOut[1] = (percentAbove * rgbaAbove[1]
+                                          + percentBelow * rgbaBelow[1]);
+                            rgbaOut[2] = (percentAbove * rgbaAbove[2]
+                                          + percentBelow * rgbaBelow[2]);
+                        }
                     }
                 }
-            }
-            else if (psac->isNoneColor()) {
-                rgbaOut[3] = 0.0f;
             }
         }
     }
@@ -523,4 +515,294 @@ Palette::isModified() const
 {
     return this->modifiedFlag;
 }
+
+/**
+ * @return An sign separate inverted version of this palette.  
+ * The positive and negative sections are separately inverted.
+ *
+ * For the POSITIVE region, the conversion formula is:
+ *    IS = -S + (Min + Max)
+ * Where:
+ *    IS => Inverted Scalar
+ *    S  => Scalar
+ *    Min => Minimum positive value
+ *    Max => Maximum positive value
+ *
+ * The formula was derived by charting:
+ *    Plot (x=Min, y=Max) and (x=Max, y=Min)
+ *    The slope is negative one [dx = (max - min); dy = (min-max)]
+ *    So Y = -(dy/dx) * X + C
+ *       Y = -X + C
+ *       C = X + Y
+ *       C = (Min + Max)
+ * And finally:
+ *       Y = -X + (Min + Max)
+ *
+ * Example: (1.0, Red), (0.4, Yellow), (0, Black), (-0.3, Green), (-1.0, Blue)
+ * becomes  (1.0, Black), (0.6, Yellow), (1.0, Red), (0, Blue), (-0.7, Green), (-1.0, Black)
+ */
+const Palette*
+Palette::getSignSeparateInvertedPalette() const
+{
+    if ( ! m_signSeparateInvertedPalette) {
+        
+        m_signSeparateInvertedPalette.reset(createSignSeparateInvertedPalette());
+    }
+    
+    return m_signSeparateInvertedPalette.get();
+}
+
+/**
+ * @return New instance of sign separate palette
+ */
+Palette*
+Palette::createSignSeparateInvertedPalette() const
+{
+    float leastPositiveScalar =  1000.0f;
+    float mostPositiveScalar  = -1000.0f;
+    float leastNegativeScalar = -1000.0f;
+    float mostNegativeScalar  =  1000.0f;
+    bool havePositivesFlag = false;
+    bool haveNegativesFlag = false;
+    for (const auto ps : paletteScalars) {
+        const float scalar = ps->getScalar();
+        
+        if (scalar >= 0.0) {
+            if (scalar > mostPositiveScalar)  mostPositiveScalar  = scalar;
+            if (scalar < leastPositiveScalar) leastPositiveScalar = scalar;
+            if (scalar > 0.0) {
+                havePositivesFlag = true;
+            }
+        }
+        
+        if (scalar <= 0.0) {
+            if (scalar > leastNegativeScalar) leastNegativeScalar = scalar;
+            if (scalar < mostNegativeScalar)  mostNegativeScalar  = scalar;
+            if (scalar < 0.0) {
+                haveNegativesFlag = true;
+            }
+        }
+    }
+    
+    std::deque<PaletteScalarAndColor*> positives;
+    std::deque<PaletteScalarAndColor*> negatives;
+    
+    for (const auto ps : paletteScalars) {
+        const float scalar = ps->getScalar();
+        if (havePositivesFlag) {
+            if (scalar >= 0.0) {
+                PaletteScalarAndColor* psc = new PaletteScalarAndColor(*ps);
+                psc->setScalar((leastPositiveScalar + mostPositiveScalar) - scalar);
+                positives.push_front(psc);
+            }
+        }
+        if (haveNegativesFlag) {
+            if (scalar <= 0.0) {
+                PaletteScalarAndColor* psc = new PaletteScalarAndColor(*ps);
+                psc->setScalar((leastNegativeScalar + mostNegativeScalar) - scalar);
+                negatives.push_front(psc);
+            }
+        }
+    }
+    
+    Palette* palette = new Palette();
+    palette->setName(getName());
+    palette->paletteScalars.insert(palette->paletteScalars.end(),
+                                   positives.begin(), positives.end());
+    
+    palette->paletteScalars.insert(palette->paletteScalars.end(),
+                                   negatives.begin(), negatives.end());
+    
+    palette->clearModified();
+    
+    return palette;
+}
+
+
+
+
+/**
+ * @return An inverted version of this palette.  An inverted
+ * palette may be useful when data is all negative and the
+ * palette is for positive data.
+ *
+ * Example: (1.0, Red), (0.4, Yellow), (-0.3, Green), (-1.0, Blue)
+ * becomes  (1.0, Blue), (0.3, Green), (-0.4, Yellow), (-1.0, Red)
+ */
+const Palette*
+Palette::getInvertedPalette() const
+{
+    if ( ! m_invertedPalette) {
+        Palette* palette = new Palette(*this);
+        std::reverse(palette->paletteScalars.begin(), palette->paletteScalars.end());
+        
+        /*
+         * Reverse colors and then flip sign of scalars so
+         * that it is still negative to positive
+         */
+        for (auto scalar : palette->paletteScalars) {
+            scalar->setScalar( - scalar->getScalar());
+        }
+        
+        palette->clearModified();
+        
+        m_invertedPalette.reset(palette);
+    }
+    
+    return m_invertedPalette.get();
+}
+
+/**
+ * @return Name of the default palette.
+ */
+AString
+Palette::getDefaultPaletteName()
+{
+    return ROY_BIG_BL_PALETTE_NAME;
+}
+
+
+/**
+ * @return An NONE separate inverted version of this palette.
+ * The positive and negative sections are separately inverted
+ * around the NONE color.  If the palette contains zero it MUST 
+ * be the NONE color.
+ *
+ * If the palette DOES NOT have NONE or if it has both
+ * NONE and zero, the sign separate palette is created and returned.
+ *
+ * For the POSITIVE region, the conversion formula is:
+ *    IS = -S + (Min + Max)
+ * Where:
+ *    IS => Inverted Scalar
+ *    S  => Scalar
+ *    Min => Minimum positive value
+ *    Max => Maximum positive value
+ *
+ * The formula was derived by charting:
+ *    Plot (x=Min, y=Max) and (x=Max, y=Min)
+ *    The slope is negative one [dx = (max - min); dy = (min-max)]
+ *    So Y = -(dy/dx) * X + C
+ *       Y = -X + C
+ *       C = X + Y
+ *       C = (Min + Max)
+ * And finally:
+ *       Y = -X + (Min + Max)
+ *
+ * Example: (1.0, Red), (0.4, Yellow), (0, Black), (-0.3, Green), (-1.0, Blue)
+ * becomes  (1.0, Black), (0.6, Yellow), (1.0, Red), (0, Blue), (-0.7, Green), (-1.0, Black)
+ */
+const Palette*
+Palette::getNoneSeparateInvertedPalette() const
+{
+    if ( ! m_noneSeparateInvertedPalette) {
+        float leastPositiveScalar =  1000.0f;
+        float mostPositiveScalar  = -1000.0f;
+        float leastNegativeScalar = -1000.0f;
+        float mostNegativeScalar  =  1000.0f;
+        int32_t noneColorIndex = -1;
+        int32_t zeroIndex = -1;
+        
+        const int32_t numScalars = static_cast<int32_t>(this->paletteScalars.size());
+        for (int32_t i = 0; i < numScalars; i++) {
+            CaretAssertVectorIndex(this->paletteScalars, i);
+            const float scalar = this->paletteScalars[i]->getScalar();
+            
+            if (this->paletteScalars[i]->isNoneColor()) {
+                noneColorIndex = i;
+            }
+            else {
+                if (scalar == 0.0) {
+                    zeroIndex = i;
+                }
+                if (scalar >= 0.0) {
+                    if (scalar > mostPositiveScalar)  mostPositiveScalar  = scalar;
+                    if (scalar < leastPositiveScalar) leastPositiveScalar = scalar;
+                }
+                if (scalar <= 0.0) {
+                    if (scalar > leastNegativeScalar) leastNegativeScalar = scalar;
+                    if (scalar < mostNegativeScalar)  mostNegativeScalar  = scalar;
+                }
+                
+            }
+        }
+        
+        bool badNoneLocationFlag = false;
+        if (noneColorIndex >= 0) {
+            CaretAssertVectorIndex(this->paletteScalars, noneColorIndex);
+            const float noneValue = this->paletteScalars[noneColorIndex]->getScalar();
+            if ((noneValue >= leastPositiveScalar)
+                && (noneValue <= mostPositiveScalar)) {
+                badNoneLocationFlag = true;
+            }
+            else if ((noneValue >= mostNegativeScalar)
+                     && (noneValue <= leastNegativeScalar)) {
+                badNoneLocationFlag = true;
+            }
+        }
+        
+        bool validNoneInvertFlag = true;
+        if (badNoneLocationFlag) {
+            const AString msg("Palette named " + getName()
+                              + " has NONE within the positive or negative range.");
+            CaretAssertMessage(0, msg);
+            validNoneInvertFlag = false;
+        }
+        else if (noneColorIndex < 0) {
+            /* no NONE so same as sign separate palette */
+            validNoneInvertFlag = false;
+        }
+        else if (zeroIndex >= 0) {
+            /* both none and zero not allowed */
+            const AString msg("Palette named " + getName()
+                              + " has both NONE and zero so NONE separated palette cannot be created.");
+            CaretAssertMessage(0, msg);
+             validNoneInvertFlag = false;
+        }
+        if ( ! validNoneInvertFlag) {
+            m_noneSeparateInvertedPalette.reset(createSignSeparateInvertedPalette());
+            return m_noneSeparateInvertedPalette.get();
+        }
+        
+        std::deque<PaletteScalarAndColor*> positives;
+        std::deque<PaletteScalarAndColor*> negatives;
+
+        for (int32_t i = 0; i < numScalars; i++) {
+            CaretAssertVectorIndex(this->paletteScalars, i);
+            const PaletteScalarAndColor* ps = this->paletteScalars[i];
+            const float scalar = ps->getScalar();
+            
+            if (i < noneColorIndex) {
+                PaletteScalarAndColor* psc = new PaletteScalarAndColor(*ps);
+                psc->setScalar((leastPositiveScalar + mostPositiveScalar) - scalar);
+                positives.push_front(psc);
+            }
+            else if (i > noneColorIndex) {
+                PaletteScalarAndColor* psc = new PaletteScalarAndColor(*ps);
+                psc->setScalar((leastNegativeScalar + mostNegativeScalar) - scalar);
+                negatives.push_front(psc);
+            }
+        }
+        
+        
+        Palette* palette = new Palette();
+        palette->setName(getName());
+        palette->paletteScalars.insert(palette->paletteScalars.end(),
+                                       positives.begin(), positives.end());
+        
+        CaretAssertVectorIndex(this->paletteScalars, noneColorIndex);
+        palette->paletteScalars.push_back(new PaletteScalarAndColor(*this->paletteScalars[noneColorIndex]));
+        
+        palette->paletteScalars.insert(palette->paletteScalars.end(),
+                                       negatives.begin(), negatives.end());
+    
+        palette->clearModified();
+        
+        m_noneSeparateInvertedPalette.reset(palette);
+    }
+    
+    return m_noneSeparateInvertedPalette.get();
+}
+
+
 

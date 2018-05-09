@@ -110,10 +110,10 @@ AnnotationCoordinateSpaceEnum::initialize()
     }
     initializedFlag = true;
 
-    enumData.push_back(AnnotationCoordinateSpaceEnum(PIXELS,
-                                                     "PIXELS",
-                                                     "Pixels",
-                                                     "P"));
+    enumData.push_back(AnnotationCoordinateSpaceEnum(CHART,
+                                                     "CHART",
+                                                     "Chart",
+                                                     "Ch"));
     
     enumData.push_back(AnnotationCoordinateSpaceEnum(STEREOTAXIC,
                                                      "STEREOTAXIC",
@@ -129,6 +129,11 @@ AnnotationCoordinateSpaceEnum::initialize()
                                                      "TAB",
                                                      "Tab",
                                                      "T"));
+    
+    enumData.push_back(AnnotationCoordinateSpaceEnum(VIEWPORT,
+                                                     "VIEWPORT",
+                                                     "Viewport",
+                                                     "V"));
     
     enumData.push_back(AnnotationCoordinateSpaceEnum(WINDOW,
                                                      "WINDOW",
@@ -299,8 +304,8 @@ AnnotationCoordinateSpaceEnum::toToolTip(Enum enumValue)
     AString text;
     
     switch (enumValue) {
-        case PIXELS:
-            text = "New annotation is drawn at an XY pixel coordinate";
+        case CHART:
+            text = "New annotation is drawn at a chart data XYZ coordinate";
             break;
         case STEREOTAXIC:
             text = "New annotation is drawn at a surface/volume XYZ coordinate";
@@ -310,6 +315,9 @@ AnnotationCoordinateSpaceEnum::toToolTip(Enum enumValue)
             break;
         case TAB:
             text = "New annotation is drawn at an XY coordinate in the tab";
+            break;
+        case VIEWPORT:
+            text = "New annotation is drawn at an XY coordinate in the viewport";
             break;
         case WINDOW:
             text = "New annotation is drawn at an XY coordinate in the window";

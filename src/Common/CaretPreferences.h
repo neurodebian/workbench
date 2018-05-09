@@ -159,6 +159,10 @@ namespace caret {
         void setRemoteFileUserNameAndPassword(const AString& userName,
                                               const AString& password);
         
+        AString getBalsaUserName() const;
+        
+        void setBalsaUserName(const AString& userName);
+        
         static void byteRgbToFloatRgb(const uint8_t byteRGB[3],
                                       float floatRGB[3]);
 
@@ -287,9 +291,12 @@ namespace caret {
         AString remoteFilePassword;
         bool remoteFileLoginSaved;
         
+        AString balsaUserName;
+        
         SpecFileDialogViewFilesTypeEnum::Enum manageFilesViewFileType;
         
         static const AString NAME_ANIMATION_START_TIME;
+        static const AString NAME_BALSA_USER_NAME;
         static const AString NAME_VOLUME_AXES_CROSSHAIRS;
         static const AString NAME_VOLUME_AXES_LABELS;
         static const AString NAME_VOLUME_AXES_COORDINATE;
@@ -306,6 +313,7 @@ namespace caret {
         static const AString NAME_COLOR_BACKGROUND_VOLUME;
         static const AString NAME_COLOR_FOREGROUND_VOLUME;
         static const AString NAME_COLOR_CHART_MATRIX_GRID_LINES;
+        static const AString NAME_COLOR_CHART_HISTOGRAM_THRESHOLD;
         static const AString NAME_DEVELOP_MENU;
         static const AString NAME_DYNAMIC_CONNECTIVITY_ON;
         static const AString NAME_IMAGE_CAPTURE_METHOD;
@@ -330,6 +338,7 @@ namespace caret {
     
 #ifdef __CARET_PREFERENCES_DECLARE__
     const AString CaretPreferences::NAME_ANIMATION_START_TIME = "animationStartTime";
+    const AString CaretPreferences::NAME_BALSA_USER_NAME = "balsaUserName";
     const AString CaretPreferences::NAME_VOLUME_AXES_CROSSHAIRS = "volumeAxesCrosshairs";
     const AString CaretPreferences::NAME_VOLUME_AXES_LABELS     = "volumeAxesLabels";
     const AString CaretPreferences::NAME_VOLUME_AXES_COORDINATE     = "volumeAxesCoordinates";
@@ -346,6 +355,7 @@ namespace caret {
     const AString CaretPreferences::NAME_COLOR_BACKGROUND_VOLUME     = "colorBackgroundVolume";
     const AString CaretPreferences::NAME_COLOR_FOREGROUND_VOLUME     = "colorForegroundVolume";
     const AString CaretPreferences::NAME_COLOR_CHART_MATRIX_GRID_LINES = "colorChartMatrixGridLines";
+    const AString CaretPreferences::NAME_COLOR_CHART_HISTOGRAM_THRESHOLD = "colorChartHistogramThreshold";
     const AString CaretPreferences::NAME_DEVELOP_MENU     = "developMenu";
     const AString CaretPreferences::NAME_DYNAMIC_CONNECTIVITY_ON = "dynamicConnectivityDefaultedOn";
     const AString CaretPreferences::NAME_IMAGE_CAPTURE_METHOD = "imageCaptureMethod";

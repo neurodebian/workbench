@@ -121,19 +121,19 @@ ChartToolBoxViewController::receiveEvent(Event* event)
             if (chartModel != NULL) {
                 
                 switch (chartModel->getChartDataType()) {
-                    case ChartDataTypeEnum::CHART_DATA_TYPE_INVALID:
+                    case ChartOneDataTypeEnum::CHART_DATA_TYPE_INVALID:
                         break;
-                    case ChartDataTypeEnum::CHART_DATA_TYPE_MATRIX_LAYER:
+                    case ChartOneDataTypeEnum::CHART_DATA_TYPE_MATRIX_LAYER:
                         break;
-                    case ChartDataTypeEnum::CHART_DATA_TYPE_MATRIX_SERIES:
+                    case ChartOneDataTypeEnum::CHART_DATA_TYPE_MATRIX_SERIES:
                         break;
-                    case ChartDataTypeEnum::CHART_DATA_TYPE_LINE_DATA_SERIES:
+                    case ChartOneDataTypeEnum::CHART_DATA_TYPE_LINE_DATA_SERIES:
                         historyWidgetValid = true;
                         break;
-                    case ChartDataTypeEnum::CHART_DATA_TYPE_LINE_FREQUENCY_SERIES:
+                    case ChartOneDataTypeEnum::CHART_DATA_TYPE_LINE_FREQUENCY_SERIES:
                         historyWidgetValid = true;
                         break;
-                    case ChartDataTypeEnum::CHART_DATA_TYPE_LINE_TIME_SERIES:
+                    case ChartOneDataTypeEnum::CHART_DATA_TYPE_LINE_TIME_SERIES:
                         historyWidgetValid = true;
                         break;
                 }
@@ -170,20 +170,20 @@ ChartToolBoxViewController::getSelectedChartModel()
     ModelChart* modelChart = brain->getChartModel();
     if (modelChart != NULL) {
         const int32_t browserTabIndex = browserTabContent->getTabNumber();
-        switch (modelChart->getSelectedChartDataType(browserTabIndex)) {
-            case ChartDataTypeEnum::CHART_DATA_TYPE_INVALID:
+        switch (modelChart->getSelectedChartOneDataType(browserTabIndex)) {
+            case ChartOneDataTypeEnum::CHART_DATA_TYPE_INVALID:
                 break;
-            case ChartDataTypeEnum::CHART_DATA_TYPE_MATRIX_LAYER:
+            case ChartOneDataTypeEnum::CHART_DATA_TYPE_MATRIX_LAYER:
                 break;
-            case ChartDataTypeEnum::CHART_DATA_TYPE_MATRIX_SERIES:
+            case ChartOneDataTypeEnum::CHART_DATA_TYPE_MATRIX_SERIES:
                 break;
-            case ChartDataTypeEnum::CHART_DATA_TYPE_LINE_DATA_SERIES:
+            case ChartOneDataTypeEnum::CHART_DATA_TYPE_LINE_DATA_SERIES:
                 chartModel = modelChart->getSelectedDataSeriesChartModel(browserTabIndex);
                 break;
-            case ChartDataTypeEnum::CHART_DATA_TYPE_LINE_FREQUENCY_SERIES:
+            case ChartOneDataTypeEnum::CHART_DATA_TYPE_LINE_FREQUENCY_SERIES:
                 chartModel = modelChart->getSelectedFrequencySeriesChartModel(browserTabIndex);
                 break;
-            case ChartDataTypeEnum::CHART_DATA_TYPE_LINE_TIME_SERIES:
+            case ChartOneDataTypeEnum::CHART_DATA_TYPE_LINE_TIME_SERIES:
                 chartModel = modelChart->getSelectedTimeSeriesChartModel(browserTabIndex);
                 break;
         }

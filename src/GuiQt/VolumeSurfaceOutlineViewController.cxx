@@ -23,7 +23,6 @@
 
 #include <QCheckBox>
 #include <QComboBox>
-#include <QDoubleSpinBox>
 #include <QGridLayout>
 #include <QHBoxLayout>
 #include <QVBoxLayout>
@@ -38,6 +37,7 @@
 #include "SurfaceSelectionViewController.h"
 #include "VolumeSurfaceOutlineColorOrTabViewController.h"
 #include "VolumeSurfaceOutlineModel.h"
+#include "WuQDoubleSpinBox.h"
 #include "WuQFactory.h"
 #include "WuQGridLayoutGroup.h"
 #include "WuQtUtilities.h"
@@ -78,17 +78,13 @@ VolumeSurfaceOutlineViewController::VolumeSurfaceOutlineViewController(const Qt:
     this->colorOrTabSelectionControl->getWidget()->setToolTip("Select coloring for surface outline.\n"
                                                               "If tab, coloring assigned to selected surface\n"
                                                               "in the selected tab is used.\n");
-    const float minLineWidth = 0.1;
-    const float maxLineWidth = 100.0;
-    const float stepSize = 0.5;
-    this->thicknessSpinBox = WuQFactory::newDoubleSpinBox();
-    this->thicknessSpinBox->setRange(minLineWidth, 
-                               maxLineWidth);
-    this->thicknessSpinBox->setSingleStep(stepSize);
-    this->thicknessSpinBox->setFixedWidth(100);
-    QObject::connect(this->thicknessSpinBox, SIGNAL(valueChanged(double)),
-                     this, SLOT(thicknessSpinBoxValueChanged(double)));
-    this->thicknessSpinBox->setToolTip("Thickness of surface outline");
+    this->thicknessSpinBox = new WuQDoubleSpinBox(this);
+    this->thicknessSpinBox->setRange(0.0, 100.0);
+    this->thicknessSpinBox->setSingleStep(0.10);
+    this->thicknessSpinBox->setSuffix("%");
+    QObject::connect(this->thicknessSpinBox, static_cast<void (WuQDoubleSpinBox::*)(double)>(&WuQDoubleSpinBox::valueChanged),
+                     this, &VolumeSurfaceOutlineViewController::thicknessSpinBoxValueChanged);
+    this->thicknessSpinBox->setToolTip("Thickness of surface outline as percentage of viewport height");
     
     
     if (orientation == Qt::Horizontal) {
@@ -97,7 +93,7 @@ VolumeSurfaceOutlineViewController::VolumeSurfaceOutlineViewController(const Qt:
         int row = this->gridLayoutGroup->rowCount();
         this->gridLayoutGroup->addWidget(this->enabledCheckBox, row, 0);
         this->gridLayoutGroup->addWidget(this->colorOrTabSelectionControl->getWidget(), row, 1);        
-        this->gridLayoutGroup->addWidget(this->thicknessSpinBox, row, 2);
+        this->gridLayoutGroup->addWidget(this->thicknessSpinBox->getWidget(), row, 2);
         this->gridLayoutGroup->addWidget(this->surfaceSelectionViewController->getWidget(), row, 3);
     }
     else {
@@ -113,7 +109,7 @@ VolumeSurfaceOutlineViewController::VolumeSurfaceOutlineViewController(const Qt:
         this->gridLayoutGroup->addWidget(this->surfaceSelectionViewController->getWidget(), row, 1, 1, 2);
         row++;
         this->gridLayoutGroup->addWidget(this->colorOrTabSelectionControl->getWidget(), row, 1);        
-        this->gridLayoutGroup->addWidget(this->thicknessSpinBox, row, 2, Qt::AlignLeft);
+        this->gridLayoutGroup->addWidget(this->thicknessSpinBox->getWidget(), row, 2, Qt::AlignLeft);
         row++;
         this->gridLayoutGroup->addWidget(bottomHorizontalLineWidget, row, 0, 1, -1);
     }
@@ -185,7 +181,7 @@ void
 VolumeSurfaceOutlineViewController::thicknessSpinBoxValueChanged(double value)
 {
     if (this->outlineModel != NULL) {
-        this->outlineModel->setThickness(value);
+        this->outlineModel->setThicknessPercentageViewportHeight(value);
     }
     this->updateGraphics();
 }
@@ -208,10 +204,14 @@ VolumeSurfaceOutlineViewController::updateViewController(VolumeSurfaceOutlineMod
         this->enabledCheckBox->setCheckState(state);
         
         this->thicknessSpinBox->blockSignals(true);
-        this->thicknessSpinBox->setValue(outlineModel->getThickness());
+        float thickness = outlineModel->getThicknessPercentageViewportHeight();
+        if (thickness < 0.0f) {
+            /* old scenes will have negative for mm thickness */
+            thickness = VolumeSurfaceOutlineModel::DEFAULT_LINE_THICKNESS_PERCENTAGE_VIEWPORT_HEIGHT;
+        }
+        this->thicknessSpinBox->setValue(thickness);
         this->thicknessSpinBox->blockSignals(false);
         this->surfaceSelectionViewController->updateControl(outlineModel->getSurfaceSelectionModel());
-        //this->surfaceSelectionViewController->setSurface(outlineModel->getSurface());
         this->colorOrTabSelectionControl->updateViewController(outlineModel->getColorOrTabModel());
     }
 }

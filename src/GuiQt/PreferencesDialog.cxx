@@ -43,6 +43,7 @@
 #include "EnumComboBoxTemplate.h"
 #include "EventGraphicsUpdateAllWindows.h"
 #include "EventManager.h"
+#include "EventSurfaceColoringInvalidate.h"
 #include "GuiManager.h"
 #include "ImageCaptureMethodEnum.h"
 #include "OpenGLDrawingMethodEnum.h"
@@ -98,10 +99,10 @@ PreferencesDialog::PreferencesDialog(QWidget* parent)
                       "ID");
     tabWidget->addTab(createMiscellaneousWidget(),
                       "Misc");
+    tabWidget->addTab(createTabDefaltsWidget(),
+                      "New Tabs");
     tabWidget->addTab(createOpenGLWidget(),
                       "OpenGL");
-    tabWidget->addTab(createVolumeWidget(),
-                      "Volume");
     setCentralWidget(tabWidget,
                            WuQDialog::SCROLL_AREA_NEVER);
     
@@ -171,6 +172,10 @@ PreferencesDialog::addColorButtonAndSwatch(QGridLayout* gridLayout,
             buttonText = "Chart Grid Lines";
             m_chartMatrixGridLinesColorWidget = colorSwatchWidget;
             break;
+        case PREF_COLOR_CHART_THRESHOLD:
+            buttonText = "Chart Threshold";
+            m_chartHistogramThresholdColorWidget = colorSwatchWidget;
+            break;
         case NUMBER_OF_PREF_COLORS:
             CaretAssert(0);
             break;
@@ -218,7 +223,9 @@ PreferencesDialog::createColorsWidget()
     addColorButtonAndSwatch(gridLayout,
                             PREF_COLOR_CHART_MATRIX_GRID_LINES,
                             colorSignalMapper);
-    
+    addColorButtonAndSwatch(gridLayout,
+                            PREF_COLOR_CHART_THRESHOLD,
+                            colorSignalMapper);
     addColorButtonAndSwatch(gridLayout,
                             PREF_COLOR_FOREGROUND_SURFACE,
                             colorSignalMapper);
@@ -300,6 +307,10 @@ PreferencesDialog::updateColorWidget(CaretPreferences* prefs)
                 colors.getColorChartMatrixGridLines(rgb);
                 colorSwatchWidget = m_chartMatrixGridLinesColorWidget;
                 break;
+            case PREF_COLOR_CHART_THRESHOLD:
+                colors.getColorChartHistogramThreshold(rgb);
+                colorSwatchWidget = m_chartHistogramThresholdColorWidget;
+                break;
             case NUMBER_OF_PREF_COLORS:
                 CaretAssert(0);
                 break;
@@ -330,6 +341,8 @@ PreferencesDialog::createMiscellaneousWidget()
     QObject::connect(m_dynamicConnectivityComboBox, SIGNAL(statusChanged(bool)),
                      this, SLOT(miscDynamicConnectivityComboBoxChanged(bool)));
     m_allWidgets->add(m_dynamicConnectivityComboBox);
+    m_dynamicConnectivityComboBox->setToolTip("Sets default (checked or unchecked) for dynamic connectivity files "
+                                              "on the Overlay ToolBox --> Connectivity tab.");
     
     /*
      * Logging Level
@@ -359,16 +372,6 @@ PreferencesDialog::createMiscellaneousWidget()
     m_allWidgets->add(m_miscSplashScreenShowAtStartupComboBox);
     
     /*
-     * Yoking
-     */
-    m_yokingDefaultComboBox = new WuQTrueFalseComboBox("On",
-                                                       "Off",
-                                                       this);
-    QObject::connect(m_yokingDefaultComboBox, SIGNAL(statusChanged(bool)),
-                     this, SLOT(yokingComboBoxToggled(bool)));
-    m_allWidgets->add(m_yokingDefaultComboBox);
-    
-    /*
      * Developer Menu
      */
     m_miscDevelopMenuEnabledComboBox = new WuQTrueFalseComboBox("On",
@@ -389,7 +392,7 @@ PreferencesDialog::createMiscellaneousWidget()
     
     QGridLayout* gridLayout = new QGridLayout();
     addWidgetToLayout(gridLayout,
-                      "Show Dynconn By Default: ",
+                      "Dynconn As Layer Default: ",
                       m_dynamicConnectivityComboBox->getWidget());
     addWidgetToLayout(gridLayout,
                       "Logging Level: ",
@@ -397,9 +400,6 @@ PreferencesDialog::createMiscellaneousWidget()
     addWidgetToLayout(gridLayout,
                       "Save/Manage View Files: ",
                       m_miscSpecFileDialogViewFilesTypeEnumComboBox->getWidget());
-    addWidgetToLayout(gridLayout,
-                      "New Tabs Yoked to Group A: ",
-                      m_yokingDefaultComboBox->getWidget());
     addWidgetToLayout(gridLayout,
                       "Show Develop Menu in Menu Bar: ",
                       m_miscDevelopMenuEnabledComboBox->getWidget());
@@ -447,21 +447,27 @@ PreferencesDialog::updateMiscellaneousWidget(CaretPreferences* prefs)
 QWidget*
 PreferencesDialog::createIdentificationSymbolWidget()
 {
-    QLabel* surfaceLabel = new QLabel("Show Surface ID Symbols");
+    QLabel* infoLabel = new QLabel("These are defaults for Information Properties");
+    infoLabel->setWordWrap(true);
+    
     m_surfaceIdentificationSymbolComboBox = new WuQTrueFalseComboBox("On", "Off", this);
     QObject::connect(m_surfaceIdentificationSymbolComboBox, SIGNAL(statusChanged(bool)),
                      this, SLOT(identificationSymbolToggled()));
     
-    QLabel* volumeLabel = new QLabel("Show Volume ID Symbols");
     m_volumeIdentificationSymbolComboBox = new WuQTrueFalseComboBox("On", "Off", this);
     QObject::connect(m_volumeIdentificationSymbolComboBox, SIGNAL(statusChanged(bool)),
                      this, SLOT(identificationSymbolToggled()));
     
     QGridLayout* gridLayout = new QGridLayout();
-    gridLayout->addWidget(surfaceLabel, 0, 0);
-    gridLayout->addWidget(m_surfaceIdentificationSymbolComboBox->getWidget(), 0, 1);
-    gridLayout->addWidget(volumeLabel, 1, 0);
-    gridLayout->addWidget(m_volumeIdentificationSymbolComboBox->getWidget(), 1, 1);
+    int row = gridLayout->rowCount();
+    gridLayout->addWidget(infoLabel,
+                          row, 0, 1, 2);
+    addWidgetToLayout(gridLayout,
+                      "Show Surface ID Symbols: ",
+                      m_surfaceIdentificationSymbolComboBox->getWidget());
+    addWidgetToLayout(gridLayout,
+                      "Show Volume ID Symbols: ",
+                      m_volumeIdentificationSymbolComboBox->getWidget());
 
     QWidget* widget = new QWidget();
     QVBoxLayout* layout = new QVBoxLayout(widget);
@@ -566,8 +572,18 @@ PreferencesDialog::updateOpenGLWidget(CaretPreferences* prefs)
  * @return The volume widget.
  */
 QWidget*
-PreferencesDialog::createVolumeWidget()
+PreferencesDialog::createTabDefaltsWidget()
 {
+    /*
+     * Yoking
+     */
+    m_yokingDefaultComboBox = new WuQTrueFalseComboBox("On",
+                                                       "Off",
+                                                       this);
+    QObject::connect(m_yokingDefaultComboBox, SIGNAL(statusChanged(bool)),
+                     this, SLOT(yokingComboBoxToggled(bool)));
+    m_allWidgets->add(m_yokingDefaultComboBox);
+    
     /*
      * Crosshairs On/Off
      */
@@ -600,34 +616,36 @@ PreferencesDialog::createVolumeWidget()
                      this, SLOT(volumeAxesMontageCoordinatesComboBoxToggled(bool)));
     m_allWidgets->add(m_volumeAxesMontageCoordinatesComboBox);
     
-//    /*
-//     * Montage Slice Gap
-//     */
-//    m_volumeMontageGapSpinBox = WuQFactory::newSpinBoxWithMinMaxStepSignalInt(0,
-//                                                                                  100000,
-//                                                                                  1,
-//                                                                                  this,
-//                                                                                  SLOT(volumeMontageGapValueChanged(int)));
-//    m_allWidgets->add(m_volumeMontageGapSpinBox);
-    
     /*
      * Montage Slice Coordinate Precision
      */
     m_volumeMontageCoordinatePrecisionSpinBox = WuQFactory::newSpinBoxWithMinMaxStepSignalInt(0,
-                                                                                                  5,
-                                                                                                  1,
-                                                                                                  this,
-                                                                                                  SLOT(volumeMontageCoordinatePrecisionChanged(int)));
+                                                                                              5,
+                                                                                              1,
+                                                                                              this,
+                                                                                              SLOT(volumeMontageCoordinatePrecisionChanged(int)));
     m_allWidgets->add(m_volumeMontageCoordinatePrecisionSpinBox);
     
     m_allWidgets->add(m_volumeAxesCrosshairsComboBox);
     m_allWidgets->add(m_volumeAxesLabelsComboBox);
     m_allWidgets->add(m_volumeAxesMontageCoordinatesComboBox);
-//    m_allWidgets->add(m_volumeMontageGapSpinBox);
     m_allWidgets->add(m_volumeMontageCoordinatePrecisionSpinBox);
     
     QGridLayout* gridLayout = new QGridLayout();
     
+    QLabel* infoLabel = new QLabel("<html>"
+                                   "These are the <b>default settings</b> for new Tabs.  If "
+                                   "Yoked to Group A is on, the volume settings are overriden "
+                                   "by the yoked Tabs."
+                                   "</html>");
+    infoLabel->setWordWrap(true);
+    
+    gridLayout->addWidget(infoLabel,
+                          0, 0, 1, 2);
+    
+    addWidgetToLayout(gridLayout,
+                      "Yoked to Group A: ",
+                      m_yokingDefaultComboBox->getWidget());
     addWidgetToLayout(gridLayout,
                       "Volume Axes Crosshairs: ",
                       m_volumeAxesCrosshairsComboBox->getWidget());
@@ -635,14 +653,11 @@ PreferencesDialog::createVolumeWidget()
                       "Volume Axes Labels: ",
                       m_volumeAxesLabelsComboBox->getWidget());
     addWidgetToLayout(gridLayout,
-                      "Volume Identification For New Tabs: ",
+                      "Volume ID Moves Slice Selection: ",
                       m_volumeIdentificationComboBox->getWidget());
     addWidgetToLayout(gridLayout,
                       "Volume Montage Slice Coord: ",
                       m_volumeAxesMontageCoordinatesComboBox->getWidget());
-//    addWidgetToLayout(gridLayout,
-//                      "Volume Montage Gap: ",
-//                      m_volumeMontageGapSpinBox);
     addWidgetToLayout(gridLayout,
                       "Volume Montage Precision: ",
                       m_volumeMontageCoordinatePrecisionSpinBox);
@@ -667,7 +682,6 @@ PreferencesDialog::updateVolumeWidget(CaretPreferences* prefs)
     m_volumeAxesLabelsComboBox->setStatus(prefs->isVolumeAxesLabelsDisplayed());
     m_volumeAxesMontageCoordinatesComboBox->setStatus(prefs->isVolumeMontageAxesCoordinatesDisplayed());
     m_volumeIdentificationComboBox->setStatus(prefs->isVolumeIdentificationDefaultedOn());
-//    m_volumeMontageGapSpinBox->setValue(prefs->getVolumeMontageGap());
     m_volumeMontageCoordinatePrecisionSpinBox->setValue(prefs->getVolumeMontageCoordinatePrecision());
 }
 
@@ -791,6 +805,10 @@ PreferencesDialog::updateColorWithDialog(const PREF_COLOR prefColor)
             colors.getColorChartMatrixGridLines(rgb);
             prefColorName = "Chart Matrix Grid Lines";
             break;
+        case PREF_COLOR_CHART_THRESHOLD:
+            colors.getColorChartHistogramThreshold(rgb);
+            prefColorName = "Chart Histogram Threshold";
+            break;
         case NUMBER_OF_PREF_COLORS:
             CaretAssert(0);
             break;
@@ -801,9 +819,9 @@ PreferencesDialog::updateColorWithDialog(const PREF_COLOR prefColor)
                               rgb[2]);
     
     QColorDialog colorDialog(this);
-    colorDialog.setCurrentColor(initialColor);
     colorDialog.setOption(QColorDialog::DontUseNativeDialog);
     colorDialog.setWindowTitle(prefColorName);
+    colorDialog.setCurrentColor(initialColor);
     
     if (colorDialog.exec() == QColorDialog::Accepted) {
         const QColor newColor = colorDialog.currentColor();
@@ -841,6 +859,9 @@ PreferencesDialog::updateColorWithDialog(const PREF_COLOR prefColor)
             case PREF_COLOR_CHART_MATRIX_GRID_LINES:
                 colors.setColorChartMatrixGridLines(rgb);
                 break;
+            case PREF_COLOR_CHART_THRESHOLD:
+                colors.setColorChartHistogramThreshold(rgb);
+                break;
             case NUMBER_OF_PREF_COLORS:
                 CaretAssert(0);
                 break;
@@ -851,6 +872,7 @@ PreferencesDialog::updateColorWithDialog(const PREF_COLOR prefColor)
         
         updateColorWidget(prefs);
         
+        EventManager::get()->sendEvent(EventSurfaceColoringInvalidate().getPointer());
         EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
     }
 }
@@ -950,17 +972,6 @@ PreferencesDialog::volumeAxesMontageCoordinatesComboBoxToggled(bool value)
     prefs->setVolumeMontageAxesCoordinatesDisplayed(value);
     EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
 }
-
-///**
-// * Called when volume montage gap value is changed.
-// */
-//void
-//PreferencesDialog::volumeMontageGapValueChanged(int value)
-//{
-//    CaretPreferences* prefs = SessionManager::get()->getCaretPreferences();
-//    prefs->setVolumeMontageGap(value);
-//    EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
-//}
 
 /**
  * Called when volume montage coordinate precision value is changed.

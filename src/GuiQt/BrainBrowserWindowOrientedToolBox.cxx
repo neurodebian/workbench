@@ -38,10 +38,12 @@
 #include "CaretDataFile.h"
 #include "CaretPreferences.h"
 #include "ChartableLineSeriesBrainordinateInterface.h"
+#include "ChartTwoOverlaySetViewController.h"
 #include "ChartableMatrixInterface.h"
 #include "ChartToolBoxViewController.h"
 #include "CiftiConnectivityMatrixViewController.h"
-#include "EventBrowserWindowContentGet.h"
+#include "DeveloperFlagsEnum.h"
+#include "EventBrowserWindowDrawingContent.h"
 #include "EventManager.h"
 #include "EventUserInterfaceUpdate.h"
 #include "FiberOrientationSelectionViewController.h"
@@ -116,6 +118,7 @@ BrainBrowserWindowOrientedToolBox::BrainBrowserWindowOrientedToolBox(const int32
     
     m_annotationViewController         = NULL;
     m_borderSelectionViewController    = NULL;
+    m_chartOverlaySetViewController    = NULL;
     m_chartToolBoxViewController       = NULL;
     m_connectivityMatrixViewController = NULL;
     m_fiberOrientationViewController   = NULL;
@@ -129,6 +132,7 @@ BrainBrowserWindowOrientedToolBox::BrainBrowserWindowOrientedToolBox(const int32
     
     m_annotationTabIndex = -1;
     m_borderTabIndex = -1;
+    m_chartOverlayTabIndex = -1;
     m_chartTabIndex = -1;
     m_connectivityTabIndex = -1;
     m_fiberOrientationTabIndex = -1;
@@ -144,6 +148,13 @@ BrainBrowserWindowOrientedToolBox::BrainBrowserWindowOrientedToolBox(const int32
                                                                       this);  
         m_overlayTabIndex = addToTabWidget(m_overlaySetViewController,
                        "Layers");
+    }
+    if (isOverlayToolBox) {
+        m_chartOverlaySetViewController = new ChartTwoOverlaySetViewController(orientation,
+                                                                         browserWindowIndex,
+                                                                         this);
+        m_chartOverlayTabIndex = addToTabWidget(m_chartOverlaySetViewController,
+                                                "Chart Layers");
     }
     if (isOverlayToolBox) {
         m_chartToolBoxViewController = new ChartToolBoxViewController(orientation,
@@ -462,7 +473,15 @@ BrainBrowserWindowOrientedToolBox::restoreFromScene(const SceneAttributes* scene
                              sceneClass->getClass("geometry"));
     }
     else {
+        const SceneClass* geometryClass = sceneClass->getClass("geometry");
+        if (geometryClass != NULL) {
+            /* is restored only when floating and visible. */
+            geometryClass->setDescendantsRestored(true);
+        }
+#if QT_VERSION < 0x050000
         /*
+         * Do this for Qt4 only.  Qt5 restores size in BrainBrowserWindow.
+         *
          * From http://stackoverflow.com/questions/2722939/c-resize-a-docked-qt-qdockwidget-programmatically
          *
          * Set the minimum and maximum sizes and restore them later.
@@ -487,6 +506,7 @@ BrainBrowserWindowOrientedToolBox::restoreFromScene(const SceneAttributes* scene
                                this,
                                SLOT(restoreMinimumAndMaximumSizesAfterSceneRestored()));
         }
+#endif
     }
 }
 
@@ -630,8 +650,9 @@ BrainBrowserWindowOrientedToolBox::receiveEvent(Event* event)
         int defaultTabIndex = -1;
         bool enableLayers = true;
         bool enableVolumeSurfaceOutline = false;
-        bool enableCharts = false;
-        EventBrowserWindowContentGet browserContentEvent(m_browserWindowIndex);
+        bool enableChartOne = false;
+        bool enableChartTwo = false;
+        EventBrowserWindowDrawingContent browserContentEvent(m_browserWindowIndex);
         EventManager::get()->sendEvent(browserContentEvent.getPointer());
         BrowserTabContent* windowContent = browserContentEvent.getSelectedBrowserTabContent();
             if (windowContent != NULL) {
@@ -656,13 +677,23 @@ BrainBrowserWindowOrientedToolBox::receiveEvent(Event* event)
                         break;
                     case ModelTypeEnum::MODEL_TYPE_CHART:
                         defaultTabIndex = m_chartTabIndex;
+                        enableChartOne = true;
                         enableLayers = false;
                         enableVolumeSurfaceOutline = false;
                         haveBorders = false;
                         haveFibers  = false;
                         haveFoci    = false;
                         haveLabels  = false;
-                        enableCharts = true;
+                        break;
+                    case ModelTypeEnum::MODEL_TYPE_CHART_TWO:
+                        defaultTabIndex = m_chartOverlayTabIndex;
+                        enableChartTwo = true;
+                        enableLayers = false;
+                        enableVolumeSurfaceOutline = false;
+                        haveBorders = false;
+                        haveFibers  = false;
+                        haveFoci    = false;
+                        haveLabels  = false;
                         break;
                 }
             }
@@ -680,7 +711,8 @@ BrainBrowserWindowOrientedToolBox::receiveEvent(Event* event)
          * NOTE: Order is important so that overlay tab is 
          * automatically selected.
          */
-        if (m_chartTabIndex >= 0) m_tabWidget->setTabEnabled(m_chartTabIndex, enableCharts);
+        if (m_chartTabIndex >= 0) m_tabWidget->setTabEnabled(m_chartTabIndex, enableChartOne);
+        if (m_chartOverlayTabIndex >= 0) m_tabWidget->setTabEnabled(m_chartOverlayTabIndex, enableChartTwo);
         if (m_connectivityTabIndex >= 0) m_tabWidget->setTabEnabled(m_connectivityTabIndex, haveConnFiles);
         if (m_volumeSurfaceOutlineTabIndex >= 0) m_tabWidget->setTabEnabled(m_volumeSurfaceOutlineTabIndex, enableVolumeSurfaceOutline);
         

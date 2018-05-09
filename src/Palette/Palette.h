@@ -21,6 +21,7 @@
  */
 /*LICENSE_END*/
 
+#include <memory>
 #include <stdint.h>
 #include <vector>
 
@@ -102,6 +103,14 @@ namespace caret {
         
         bool isModified() const;
         
+        const Palette* getInvertedPalette() const;
+        
+        const Palette* getSignSeparateInvertedPalette() const;
+        
+        const Palette* getNoneSeparateInvertedPalette() const;
+        
+        static AString getDefaultPaletteName();
+        
     public:
         /**Name of gray interpolate palette */
         static  const AString GRAY_INTERP_PALETTE_NAME;
@@ -116,6 +125,8 @@ namespace caret {
         static const AString ROY_BIG_BL_PALETTE_NAME;
         
     private:
+        Palette* createSignSeparateInvertedPalette() const;
+        
         /**has this object been modified. (DO NOT CLONE) */
         bool modifiedFlag;
         
@@ -125,6 +136,14 @@ namespace caret {
         /**The scalars in the palette. */
         std::vector<PaletteScalarAndColor*> paletteScalars;
         
+        /** The inverted palette is lazily initialized */
+        mutable std::unique_ptr<Palette> m_invertedPalette;
+        
+        /** The inverted palette with negative inverted separate from positive */
+        mutable std::unique_ptr<Palette> m_signSeparateInvertedPalette;
+        
+        /** The inverted palette with negative inverted separate from positive */
+        mutable std::unique_ptr<Palette> m_noneSeparateInvertedPalette;
     };
 
     

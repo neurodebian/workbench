@@ -40,14 +40,18 @@ using namespace caret;
  *
  * @param browserWindowIndexThatIssuedEvent
  *     Index of browser window that issued event.
- * @param yokingGroup
- *     Yoking group that is selected.
+ * @param brainModelYokingGroup
+ *     brain model yoking group that is selected.
+ * @param chartModelYokingGroup
+ *     chart model yoking group that is selected.
  */
 EventUpdateYokedWindows::EventUpdateYokedWindows(const int32_t browserWindowIndexThatIssuedEvent,
-                                                 const YokingGroupEnum::Enum yokingGroup)
+                                                 const YokingGroupEnum::Enum brainModelYokingGroup,
+                                                 const YokingGroupEnum::Enum chartModelYokingGroup)
 : Event(EventTypeEnum::EVENT_UPDATE_YOKED_WINDOWS),
 m_browserWindowIndexThatIssuedEvent(browserWindowIndexThatIssuedEvent),
-m_yokingGroup(yokingGroup)
+m_brainModelYokingGroup(brainModelYokingGroup),
+m_chartModelYokingGroup(chartModelYokingGroup)
 {
 }
 
@@ -56,13 +60,17 @@ m_yokingGroup(yokingGroup)
  *
  * @param browserWindowIndexThatIssuedEvent
  *     Index of browser window that issued event.
- * @param yokingGroup
- *     Yoking group that is selected.
+ * @param brainModelYokingGroup
+ *     brain model yoking group that is selected.
+ * @param chartModelYokingGroup
+ *     chart model yoking group that is selected.
  */
-EventUpdateYokedWindows::EventUpdateYokedWindows(const YokingGroupEnum::Enum yokingGroup)
+EventUpdateYokedWindows::EventUpdateYokedWindows(const YokingGroupEnum::Enum brainModelYokingGroup,
+                                                 const YokingGroupEnum::Enum chartModelYokingGroup)
 : Event(EventTypeEnum::EVENT_UPDATE_YOKED_WINDOWS),
 m_browserWindowIndexThatIssuedEvent(-1),
-m_yokingGroup(yokingGroup)
+m_brainModelYokingGroup(brainModelYokingGroup),
+m_chartModelYokingGroup(chartModelYokingGroup)
 {
 }
 
@@ -84,10 +92,51 @@ EventUpdateYokedWindows::getBrowserWindowIndexThatIssuedEvent() const
 }
 
 /**
- * @return The yoking group that should be updated.
+ * @return Is the given brain model yoking group needing an update?
+ *
+ * @param brainModelYokingGroup
+ *     The brain model yoking group.
  */
-YokingGroupEnum::Enum
-EventUpdateYokedWindows::getYokingGroup() const
+bool
+EventUpdateYokedWindows::isBrainModelYoking(const YokingGroupEnum::Enum brainModelYokingGroup) const
 {
-    return m_yokingGroup;
+    if (m_brainModelYokingGroup == YokingGroupEnum::YOKING_GROUP_OFF) {
+        return false;
+    }
+    
+    return (m_brainModelYokingGroup == brainModelYokingGroup);
 }
+
+/**
+ * @return Is the given chart model yoking group needing an update?
+ *
+ * @param chartModelYokingGroup
+ *     The chart model yoking group.
+ */
+bool
+EventUpdateYokedWindows::isChartModelYoking(const YokingGroupEnum::Enum chartModelYokingGroup) const
+{
+    if (m_chartModelYokingGroup == YokingGroupEnum::YOKING_GROUP_OFF) {
+        return false;
+    }
+    
+    return (m_chartModelYokingGroup == chartModelYokingGroup);
+}
+
+
+/**
+ * @return Is the given brain OR chart model yoking group needing an update?
+ *
+ * @param brainModelYokingGroup
+ *     The brain model yoking group.
+ * @param chartModelYokingGroup
+ *     The chart model yoking group.
+ */
+bool
+EventUpdateYokedWindows::isBrainOrChartModelYoking(const YokingGroupEnum::Enum brainModelYokingGroup,
+                                                   const YokingGroupEnum::Enum chartModelYokingGroup) const
+{
+    return (isBrainModelYoking(brainModelYokingGroup)
+            || isChartModelYoking(chartModelYokingGroup));
+}
+

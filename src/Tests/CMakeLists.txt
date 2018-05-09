@@ -4,16 +4,17 @@
 PROJECT (Tests)
 
 #
-# Need XML from Qt
-#
-# needed QImage and it is from GUI:   SET(QT_DONT_USE_QTGUI TRUE)
-SET(QT_USE_QTXML TRUE)
-SET(QT_USE_QTNETWORK TRUE)
-
-#
 # Add QT for includes
 #
-INCLUDE (${QT_USE_FILE})
+if(Qt5_FOUND)
+    include_directories(${Qt5Core_INCLUDE_DIRS})
+    include_directories(${Qt5Network_INCLUDE_DIRS})
+endif()
+IF (QT4_FOUND)
+    SET(QT_USE_QTXML TRUE)
+    SET(QT_USE_QTNETWORK TRUE)
+    INCLUDE(${QT_USE_FILE})
+ENDIF ()
 
 #
 #The individual tests
@@ -58,6 +59,7 @@ VolumeFileTest.cxx
 XnatTest.cxx
 )
 
+TARGET_LINK_LIBRARIES(Tests ${CARET_QT5_LINK})
 
 #
 # Create the test1 executable
@@ -78,6 +80,19 @@ ELSE (APPLE)
    )
 ENDIF (APPLE)
 
+if(Qt5_FOUND)
+    set(QT5_LINK_LIBS
+        Qt5::Concurrent
+        Qt5::Core
+        Qt5::Gui
+        Qt5::Network
+#        Qt5::OpenGL
+#        Qt5::PrintSupport
+        Qt5::Test
+#        Qt5::Widgets
+        Qt5::Xml)
+endif()
+
 #
 # Libraries that are linked
 #
@@ -90,6 +105,7 @@ GuiQt
 Brain
 Files
 Annotations
+Graphics
 Cifti
 Gifti
 Nifti
@@ -99,13 +115,19 @@ Palette
 Scenes
 Xml
 Common
+${QT5_LINK_LIBS}
 ${QT_LIBRARIES}
+${GLEW_LIBRARIES}
+${OSMESA_OFFSCREEN_LIBRARY}
+${OSMESA_GL_LIBRARY}
+${OSMESA_GLU_LIBRARY}
 ${ZLIB_LIBRARIES}
 #${LIBS}
 )
 
 IF(WIN32)
     TARGET_LINK_LIBRARIES(test_driver
+    ${GLEW_LIBRARIES}
     opengl32
     glu32
     )

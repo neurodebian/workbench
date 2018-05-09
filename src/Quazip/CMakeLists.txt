@@ -3,18 +3,33 @@
 #
 PROJECT(Quazip)
 
+IF(Qt5_FOUND)
+    include_directories(${Qt5Core_INCLUDE_DIRS})
+ENDIF()
+IF (QT4_FOUND)
+    SET(QT_DONT_USE_QTGUI TRUE)
+    INCLUDE(${QT_USE_FILE})
+ENDIF ()
+
 #
-# QT include files
+# With AUTOMOC, do not need to specify files
+# that contain Q_OBJECT macro for Qt to process with 'moc'
+# (meta-object compiler).
 #
-SET(QT_DONT_USE_QTGUI TRUE)
+IF(WORKBENCH_USE_CMAKE_AUTOMOC)
+    SET(CMAKE_AUTOMOC ON)
+ELSE()
+    SET(MOC_INPUT_HEADER_FILES
+        quazipfile.h
+    )
 
-INCLUDE(${QT_USE_FILE})
-
-SET(MOC_INPUT_HEADER_FILES
-quazipfile.h
-)
-
-QT4_WRAP_CPP(MOC_SOURCE_FILES ${MOC_INPUT_HEADER_FILES})
+    IF(Qt5_FOUND)
+        QT5_WRAP_CPP(MOC_SOURCE_FILES ${MOC_INPUT_HEADER_FILES})
+    ENDIF()
+    IF (QT4_FOUND)
+        QT4_WRAP_CPP(MOC_SOURCE_FILES ${MOC_INPUT_HEADER_FILES})
+    ENDIF ()
+ENDIF()
 
 #
 # Prevents dll linkage errors on windows
@@ -66,6 +81,8 @@ quazipnewinfo.cpp
 unzip.c
 zip.c
 )
+
+TARGET_LINK_LIBRARIES(Quazip ${CARET_QT5_LINK})
 
 SET(QUAZIP_LIBRARIES Quazip PARENT_SCOPE)
 SET(QUAZIP_INCLUDE_DIRS ${CMAKE_CURRENT_SOURCE_DIR} PARENT_SCOPE)

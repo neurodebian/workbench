@@ -81,6 +81,7 @@ OverlaySetViewController::OverlaySetViewController(const Qt::Orientation orienta
         gridLayout->setColumnStretch(4, 0);
         gridLayout->setColumnStretch(5, 100);
         gridLayout->setColumnStretch(6, 0);
+        gridLayout->setColumnStretch(7, 0);
         gridLayout->setColumnStretch(8, 100);
         
         QLabel* onLabel       = new QLabel("On");
@@ -135,15 +136,24 @@ OverlaySetViewController::OverlaySetViewController(const Qt::Orientation orienta
         verticalLayout->addStretch();
     }
     else {
-        QVBoxLayout* verticalLayout = new QVBoxLayout();
+        /*
+         * Resolve WB-649
+         */
+        QVBoxLayout* verticalLayout = new QVBoxLayout(this);
         WuQtUtilities::setLayoutSpacingAndMargins(verticalLayout, 1, 1);
         verticalLayout->addWidget(gridWidget);
         verticalLayout->addStretch();
         
-        QHBoxLayout* horizontalLayout = new QHBoxLayout(this);
-        WuQtUtilities::setLayoutSpacingAndMargins(horizontalLayout, 1, 1);
-        horizontalLayout->addLayout(verticalLayout);
-        horizontalLayout->addStretch();
+        
+//        QVBoxLayout* verticalLayout = new QVBoxLayout();
+//        WuQtUtilities::setLayoutSpacingAndMargins(verticalLayout, 1, 1);
+//        verticalLayout->addWidget(gridWidget);
+//        verticalLayout->addStretch();
+//        
+//        QHBoxLayout* horizontalLayout = new QHBoxLayout(this);
+//        WuQtUtilities::setLayoutSpacingAndMargins(horizontalLayout, 1, 1);
+//        horizontalLayout->addLayout(verticalLayout);
+//        horizontalLayout->addStretch();
     }
     
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_USER_INTERFACE_UPDATE);

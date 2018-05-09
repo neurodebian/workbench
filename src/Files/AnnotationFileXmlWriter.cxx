@@ -317,8 +317,8 @@ AnnotationFileXmlWriter::writeImage(const AnnotationImage* image)
     QByteArray byteArray((const char*)imageBytesRGBA,
                          numberOfBytes);
     QByteArray byteArrayBase64(byteArray.toBase64());
-    const QString stringBase64(QString::fromAscii(byteArrayBase64.constData(),
-                                                  byteArrayBase64.size()));
+    const QString stringBase64(QString::fromLatin1(byteArrayBase64.constData(),
+                                                   byteArrayBase64.size()));
 
     QXmlStreamAttributes attributes;
     getTwoDimAnnotationPropertiesAsAttributes(image,
@@ -427,6 +427,9 @@ AnnotationFileXmlWriter::writeText(const AnnotationText* text)
         case AnnotationTextFontSizeTypeEnum::PERCENTAGE_OF_VIEWPORT_HEIGHT:
             annotationElementName = ELEMENT_PERCENT_SIZE_TEXT;
             break;
+        case AnnotationTextFontSizeTypeEnum::PERCENTAGE_OF_VIEWPORT_WIDTH:
+            annotationElementName = ELEMENT_PERCENT_WIDTH_SIZE_TEXT;
+            break;
         case AnnotationTextFontSizeTypeEnum::POINTS:
             annotationElementName = ELEMENT_POINT_SIZE_TEXT;
             break;
@@ -485,8 +488,11 @@ AnnotationFileXmlWriter::getAnnotationPropertiesAsAttributes(const Annotation* a
     attributes.append(ATTRIBUTE_FOREGROUND_CUSTOM_RGBA,
                       realArrayToString(rgba, 4));
     
-    attributes.append(ATTRIBUTE_FOREGROUND_LINE_WIDTH,
-                      QString::number(annotation->getLineWidth()));
+    attributes.append(ATTRIBUTE_FOREGROUND_LINE_WIDTH_PIXELS,
+                      QString::number(annotation->getLineWidthPixelsObsolete()));
+    
+    attributes.append(ATTRIBUTE_FOREGROUND_LINE_WIDTH_PERCENTAGE,
+                      QString::number(annotation->getLineWidthPercentage()));
     
     attributes.append(ATTRIBUTE_TAB_INDEX,
                       QString::number(annotation->getTabIndex()));

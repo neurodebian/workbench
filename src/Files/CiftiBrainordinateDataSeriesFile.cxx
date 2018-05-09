@@ -23,6 +23,8 @@
 #include "CiftiBrainordinateDataSeriesFile.h"
 #undef __CIFTI_BRAINORDINATE_DATA_SERIES_FILE_DECLARE__
 
+#include <array>
+
 #include "CaretLogger.h"
 #include "ChartDataCartesian.h"
 #include "CiftiConnectivityMatrixDenseDynamicFile.h"
@@ -106,7 +108,7 @@ CiftiBrainordinateDataSeriesFile::initializeDenseDynamicFile()
         GiftiMetaData* fileMetaData = m_ciftiFile->getCiftiXML().getFileMetaData();
         const AString encodedPaletteColorMappingString = fileMetaData->get(s_paletteColorMappingNameInMetaData);
         if ( ! encodedPaletteColorMappingString.isEmpty()) {
-            if (m_lazyInitializedDenseDynamicFile-getNumberOfMaps() > 0) {
+            if (m_lazyInitializedDenseDynamicFile->getNumberOfMaps() > 0) {
                 PaletteColorMapping* pcm = m_lazyInitializedDenseDynamicFile->getMapPaletteColorMapping(0);
                 CaretAssert(pcm);
                 pcm->decodeFromStringXML(encodedPaletteColorMappingString);
@@ -171,7 +173,7 @@ CiftiBrainordinateDataSeriesFile::writeFile(const AString& ciftiMapFileName)
     if (m_lazyInitializedDenseDynamicFile != NULL) {
         GiftiMetaData* fileMetaData = m_ciftiFile->getCiftiXML().getFileMetaData();
         CaretAssert(fileMetaData);
-        if (m_lazyInitializedDenseDynamicFile-getNumberOfMaps() > 0) {
+        if (m_lazyInitializedDenseDynamicFile->getNumberOfMaps() > 0) {
             fileMetaData->set(s_paletteColorMappingNameInMetaData,
                               m_lazyInitializedDenseDynamicFile->getMapPaletteColorMapping(0)->encodeInXML());
         }
@@ -297,7 +299,7 @@ CiftiBrainordinateDataSeriesFile::loadLineSeriesChartDataForVoxelAtCoordinate(co
  *    Chart types supported by this file.
  */
 void
-CiftiBrainordinateDataSeriesFile::getSupportedLineSeriesChartDataTypes(std::vector<ChartDataTypeEnum::Enum>& chartDataTypesOut) const
+CiftiBrainordinateDataSeriesFile::getSupportedLineSeriesChartDataTypes(std::vector<ChartOneDataTypeEnum::Enum>& chartDataTypesOut) const
 {
     helpGetSupportedLineSeriesChartDataTypes(chartDataTypesOut);
 }
@@ -428,6 +430,45 @@ CiftiBrainordinateDataSeriesFile::isModifiedPaletteColorMapping() const
     }
     
     return false;
+}
+
+/**
+ * @return The modified status for aall palettes in this file.
+ * Note that 'modified' overrides any 'modified by show scene'.
+ */
+PaletteModifiedStatusEnum::Enum
+CiftiBrainordinateDataSeriesFile::getPaletteColorMappingModifiedStatus() const
+{
+    const std::array<PaletteModifiedStatusEnum::Enum, 2> fileModStatus = { {
+        CiftiMappableDataFile::getPaletteColorMappingModifiedStatus(),
+        ((m_lazyInitializedDenseDynamicFile != NULL)
+         ? m_lazyInitializedDenseDynamicFile->getPaletteColorMappingModifiedStatus()
+         : PaletteModifiedStatusEnum::UNMODIFIED)
+    } };
+    
+    PaletteModifiedStatusEnum::Enum modStatus = PaletteModifiedStatusEnum::UNMODIFIED;
+    for (auto status : fileModStatus) {
+        switch (status) {
+            case PaletteModifiedStatusEnum::MODIFIED:
+                modStatus = PaletteModifiedStatusEnum::MODIFIED;
+                break;
+            case PaletteModifiedStatusEnum::MODIFIED_BY_SHOW_SCENE:
+                modStatus = PaletteModifiedStatusEnum::MODIFIED_BY_SHOW_SCENE;
+                break;
+            case PaletteModifiedStatusEnum::UNMODIFIED:
+                break;
+        }
+
+        if (modStatus == PaletteModifiedStatusEnum::MODIFIED) {
+            /*
+             * 'MODIFIED' overrides 'MODIFIED_BY_SHOW_SCENE'
+             * so no need to continue loop
+             */
+            break;
+        }
+    }
+    
+    return modStatus;
 }
 
 

@@ -438,20 +438,20 @@ ChartHistoryViewController::getSelectedChartModelAndTab(ChartModel* &chartModelO
     
     ModelChart* modelChart = brain->getChartModel();
     if (modelChart != NULL) {
-        switch (modelChart->getSelectedChartDataType(tabIndexOut)) {
-            case ChartDataTypeEnum::CHART_DATA_TYPE_INVALID:
+        switch (modelChart->getSelectedChartOneDataType(tabIndexOut)) {
+            case ChartOneDataTypeEnum::CHART_DATA_TYPE_INVALID:
                 break;
-            case ChartDataTypeEnum::CHART_DATA_TYPE_MATRIX_LAYER:
+            case ChartOneDataTypeEnum::CHART_DATA_TYPE_MATRIX_LAYER:
                 break;
-            case ChartDataTypeEnum::CHART_DATA_TYPE_MATRIX_SERIES:
+            case ChartOneDataTypeEnum::CHART_DATA_TYPE_MATRIX_SERIES:
                 break;
-            case ChartDataTypeEnum::CHART_DATA_TYPE_LINE_DATA_SERIES:
+            case ChartOneDataTypeEnum::CHART_DATA_TYPE_LINE_DATA_SERIES:
                 chartModelOut = modelChart->getSelectedDataSeriesChartModel(tabIndexOut);
                 break;
-            case ChartDataTypeEnum::CHART_DATA_TYPE_LINE_FREQUENCY_SERIES:
+            case ChartOneDataTypeEnum::CHART_DATA_TYPE_LINE_FREQUENCY_SERIES:
                 chartModelOut = modelChart->getSelectedFrequencySeriesChartModel(tabIndexOut);
                 break;
-            case ChartDataTypeEnum::CHART_DATA_TYPE_LINE_TIME_SERIES:
+            case ChartOneDataTypeEnum::CHART_DATA_TYPE_LINE_TIME_SERIES:
                 chartModelOut = modelChart->getSelectedTimeSeriesChartModel(tabIndexOut);
                 break;
         }

@@ -90,7 +90,11 @@ namespace caret {
         virtual ChartDataCartesian* loadLineSeriesChartDataForVoxelAtCoordinate(const float xyz[3]);
         
         
-        virtual void getSupportedLineSeriesChartDataTypes(std::vector<ChartDataTypeEnum::Enum>& chartDataTypesOut) const;
+        virtual void getSupportedLineSeriesChartDataTypes(std::vector<ChartOneDataTypeEnum::Enum>& chartDataTypesOut) const;
+        
+        void getDataForSelector(const MapFileDataSelector& mapFileDataSelector,
+                                std::vector<float>& dataOut) const override;
+        
         
         //override writeFile in order to check filename against type of file
         virtual void writeFile(const AString& filename);

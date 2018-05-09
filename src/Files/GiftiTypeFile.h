@@ -146,7 +146,7 @@ namespace caret {
         
         virtual bool isMappedWithPalette() const;
         
-        virtual void getPaletteNormalizationModesSupported(std::vector<PaletteNormalizationModeEnum::Enum>& modesSupportedOut);
+        virtual void getPaletteNormalizationModesSupported(std::vector<PaletteNormalizationModeEnum::Enum>& modesSupportedOut) const;
 
         virtual PaletteColorMapping* getMapPaletteColorMapping(const int32_t mapIndex);
         
@@ -163,8 +163,13 @@ namespace caret {
         virtual int32_t getMapIndexFromUniqueID(const AString& uniqueID) const;
         
         
-        virtual void updateScalarColoringForMap(const int32_t mapIndex,
-                                             const PaletteFile* paletteFile);
+        virtual void updateScalarColoringForMap(const int32_t mapIndex) override;
+        
+        virtual void getDataForSelector(const MapFileDataSelector& mapFileDataSelector,
+                                        std::vector<float>& dataOut) const override;
+        
+        virtual BrainordinateMappingMatch getBrainordinateMappingMatch(const CaretMappableDataFile* mapFile) const override;
+        
     private:
         void copyHelperGiftiTypeFile(const GiftiTypeFile& gtf);
         
@@ -176,9 +181,12 @@ namespace caret {
         /** Histogram used when statistics computed on all data in file */
         CaretPointer<Histogram> m_fileHistogram;
         
+        int32_t m_histogramNumberOfBuckets = 100;
+        
         /** Histogram with limited values used when statistics computed on all data in file */
         CaretPointer<Histogram> m_fileHistorgramLimitedValues;
         
+        int32_t m_fileHistogramLimitedValuesNumberOfBuckets = 100;
         float m_fileHistogramLimitedValuesMostPositiveValueInclusive;
         float m_fileHistogramLimitedValuesLeastPositiveValueInclusive;
         float m_fileHistogramLimitedValuesLeastNegativeValueInclusive;

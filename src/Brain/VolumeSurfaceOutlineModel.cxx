@@ -52,16 +52,27 @@ VolumeSurfaceOutlineModel::VolumeSurfaceOutlineModel()
     validSurfaceTypes.push_back(SurfaceTypeEnum::VERY_INFLATED);
     
     m_displayed = false;
-    m_thickness = VolumeSurfaceOutlineModel::DEFAULT_LINE_THICKNESS;
+    m_thicknessPixelsObsolete = VolumeSurfaceOutlineModel::DEFAULT_LINE_THICKNESS_PIXELS_OBSOLETE;
     m_surfaceSelectionModel = new SurfaceSelectionModel(validSurfaceTypes);
     m_colorOrTabModel = new VolumeSurfaceOutlineColorOrTabModel();
     
     m_sceneAssistant = new SceneClassAssistant();
     m_sceneAssistant->add("m_displayed", &m_displayed);
-    m_sceneAssistant->add("m_thickness", &m_thickness);
+    m_sceneAssistant->add("m_thickness", &m_thicknessPixelsObsolete); // NOTE: "m_thickness" is OLD name
     m_sceneAssistant->add("m_surfaceSelectionModel", "SurfaceSelectionModel", m_surfaceSelectionModel);
     m_sceneAssistant->add("m_colorOrTabModel", "VolumeSurfaceOutlineColorOrTabModel", m_colorOrTabModel);
     
+    /*
+     * Percentage viewport height thickness was added in Feb 2, 2017.
+     * So, we set the perentage thickness to -1.0f so that when an older
+     * scene is restored, the value will be -1.0f.  The code that draws
+     * the volume surface outline see this negative value and convert
+     * the old pixel thickness to this new percentage thickness.
+     * After adding to the scene assistant, default the percentage thickness.
+     */
+    m_thicknessPercentageViewportHeight = -1.0f;
+    m_sceneAssistant->add("m_thicknessPercentageViewportHeight", &m_thicknessPercentageViewportHeight);
+    m_thicknessPercentageViewportHeight = VolumeSurfaceOutlineModel::DEFAULT_LINE_THICKNESS_PERCENTAGE_VIEWPORT_HEIGHT;
 }
 
 /**
@@ -84,7 +95,8 @@ void
 VolumeSurfaceOutlineModel::copyVolumeSurfaceOutlineModel(VolumeSurfaceOutlineModel* modelToCopy)
 {
     m_displayed = modelToCopy->m_displayed;
-    m_thickness = modelToCopy->m_thickness;
+    m_thicknessPixelsObsolete = modelToCopy->m_thicknessPixelsObsolete;
+    m_thicknessPercentageViewportHeight = modelToCopy->m_thicknessPercentageViewportHeight;
     m_surfaceSelectionModel->setSurface(modelToCopy->getSurface());
     
     VolumeSurfaceOutlineColorOrTabModel* colorTabToCopy = modelToCopy->getColorOrTabModel();
@@ -122,23 +134,41 @@ VolumeSurfaceOutlineModel::setDisplayed(const bool displayed)
 }
 
 /**
- * @return Thickness for drawing surface.
+ * @return Thickness for drawing surface outline
  */
-float 
-VolumeSurfaceOutlineModel::getThickness() const
+float
+VolumeSurfaceOutlineModel::getThicknessPercentageViewportHeight() const
 {
-    return m_thickness;
+    return m_thicknessPercentageViewportHeight;
 }
 
 /**
- * Set the thickness for drawing the surface.
+ * Set the thickness for drawing surface outline
+ */
+void
+VolumeSurfaceOutlineModel::setThicknessPercentageViewportHeight(const float thickness)
+{
+    m_thicknessPercentageViewportHeight = thickness;
+}
+
+/**
+ * @return Thickness for drawing surface (OBSOLETE)
+ */
+float 
+VolumeSurfaceOutlineModel::getThicknessPixelsObsolete() const
+{
+    return m_thicknessPixelsObsolete;
+}
+
+/**
+ * Set the thickness for drawing the surface (OBSOLETE)
  * @param thickness
  *    New value for thickness.
  */
 void 
-VolumeSurfaceOutlineModel::setThickness(const float thickness)
+VolumeSurfaceOutlineModel::setThicknessPixelsObsolete(const float thickness)
 {
-    m_thickness = thickness;
+    m_thicknessPixelsObsolete = thickness;
 }
 
 /**

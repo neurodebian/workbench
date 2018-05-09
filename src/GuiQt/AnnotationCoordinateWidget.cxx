@@ -23,6 +23,10 @@
 #include "AnnotationCoordinateWidget.h"
 #undef __ANNOTATION_COORDINATE_WIDGET_DECLARE__
 
+#include <algorithm>
+#include <cmath>
+#include <limits>
+
 #include <QDoubleSpinBox>
 #include <QLabel>
 #include <QHBoxLayout>
@@ -37,12 +41,19 @@
 #include "AnnotationRedoUndoCommand.h"
 #include "AnnotationTwoDimensionalShape.h"
 #include "Brain.h"
+#include "BrainBrowserWindow.h"
+#include "BrowserTabContent.h"
 #include "CaretAssert.h"
+#include "ChartTwoCartesianAxis.h"
+#include "ChartTwoOverlaySet.h"
 #include "EnumComboBoxTemplate.h"
+#include "EventBrowserWindowContent.h"
 #include "EventGraphicsUpdateAllWindows.h"
 #include "EventManager.h"
 #include "EventOverlaySettingsEditorDialogRequest.h"
 #include "GuiManager.h"
+#include "MathFunctions.h"
+#include "ModelChartTwo.h"
 #include "StructureEnumComboBox.h"
 #include "WuQFactory.h"
 #include "WuQMessageBox.h"
@@ -143,6 +154,11 @@ m_browserWindowIndex(browserWindowIndex)
                                          "         0.0% => Toward's viewer\n"
                                          "       100.0% => Away from viewer\n");
 
+    const float spinBoxMaximumWidth = 80.0f;
+    m_xCoordSpinBox->setMaximumWidth(spinBoxMaximumWidth);
+    m_yCoordSpinBox->setMaximumWidth(spinBoxMaximumWidth);
+    m_zCoordSpinBox->setMaximumWidth(spinBoxMaximumWidth);
+    
     m_surfaceOffsetVectorTypeComboBox = new EnumComboBoxTemplate(this);
     m_surfaceOffsetVectorTypeComboBox->setup<AnnotationSurfaceOffsetVectorTypeEnum,AnnotationSurfaceOffsetVectorTypeEnum::Enum>();
     QObject::connect(m_surfaceOffsetVectorTypeComboBox, SIGNAL(itemActivated()),
@@ -160,7 +176,7 @@ m_browserWindowIndex(browserWindowIndex)
     QToolButton* setCoordinateToolButton = NULL;
     switch (m_parentWidgetType) {
         case AnnotationWidgetParentEnum::ANNOTATION_TOOL_BAR_WIDGET:
-            // disabled as change space cause grouping problems.   setCoordinateToolButton = new QToolButton();
+            /** disabled as change space cause grouping problems.   setCoordinateToolButton = new QToolButton(); */
             break;
         case AnnotationWidgetParentEnum::PARENT_ENUM_FOR_LATER_USE:
             CaretAssert(0);
@@ -175,6 +191,7 @@ m_browserWindowIndex(browserWindowIndex)
                                                                    this,
                                                                    SLOT(setCoordinateActionTriggered()));
         setCoordinateToolButton->setDefaultAction(setCoordinateAction);
+        WuQtUtilities::setToolButtonStyleForQt5Mac(setCoordinateToolButton);
     }
     
     m_surfaceWidget = new QWidget();
@@ -255,7 +272,12 @@ AnnotationCoordinateWidget::getCoordinate()
 void
 AnnotationCoordinateWidget::updateContent(Annotation* annotation)
 {
-    m_annotation = annotation;
+    m_annotation = NULL;
+    if (annotation != NULL) {
+        if (annotation->testProperty(Annotation::Property::COORDINATE)) {
+            m_annotation = annotation;
+        }
+    }
     
     m_surfaceStructureComboBox->listOnlyValidStructures();
     
@@ -264,59 +286,181 @@ AnnotationCoordinateWidget::updateContent(Annotation* annotation)
     bool surfaceFlag    = false;
     
     if (coordinate != NULL) {
-        double xyMin =  0.0;
-        double xyMax =  100.0;
-        double zMin  = -100.0;
-        double zMax  =  100.0;
-        double xyzStep = 0.1;
-        QString suffix("%");
+        float xyz[3];
+        coordinate->getXYZ(xyz);
+        
+        bool viewportSpaceFlag = false;
+        const double percentageMinimum =   0.0;
+        const double percentageMaximum = 100.0;
+        const double zDepthMinimum =       0.0;
+        const double zDepthMaximum =     100.0;
+        const double coordinateMinimum = -std::numeric_limits<float>::max();
+        const double coordinateMaximum =  std::numeric_limits<float>::max();
+        double xMin =  0.0;
+        double xMax =  0.0;
+        double yMin =  0.0;
+        double yMax =  0.0;
+        double zMin  = 0.0;
+        double zMax  = 0.0;
+        double xStep = 0.1;
+        double yStep = 0.1;
+        double zStep = 0.1;
+        QString suffix;
+        int32_t digitsRightOfDecimalX = 2;
+        int32_t digitsRightOfDecimalY = 2;
+        int32_t digitsRightOfDecimalZ = 2;
         switch (m_annotation->getCoordinateSpace()) {
-            case AnnotationCoordinateSpaceEnum::STEREOTAXIC:
-                xyMax = 10000.0;
-                xyMin = -xyMax;
-                zMin = xyMin;
-                zMax = xyMax;
-                xyzStep = 1.0;
-                suffix.clear();
+            case AnnotationCoordinateSpaceEnum::CHART:
+            {
+                xMin = coordinateMinimum;
+                xMax = coordinateMaximum;
+                yMin = coordinateMinimum;
+                yMax = coordinateMaximum;
+                zMin = coordinateMinimum;
+                zMax = coordinateMaximum;
+                digitsRightOfDecimalX = 3;
+                digitsRightOfDecimalX = 3;
+                xStep = 1.0;
+                yStep = 1.0;
+
+                BrainBrowserWindow* bbw = GuiManager::get()->getBrowserWindowByWindowIndex(m_browserWindowIndex);
+                CaretAssert(bbw);
+                BrowserTabContent* browserTabContent = bbw->getBrowserTabContent();
+                if (browserTabContent != NULL) {
+                    ModelChartTwo* modelChartTwo = browserTabContent->getDisplayedChartTwoModel();
+                    const int32_t tabIndex = browserTabContent->getTabNumber();
+                    if (modelChartTwo != NULL) {
+                        ChartTwoOverlaySet* chartOverlaySet = NULL;
+                        switch (modelChartTwo->getSelectedChartTwoDataType(tabIndex)) {
+                            case ChartTwoDataTypeEnum::CHART_DATA_TYPE_INVALID:
+                                break;
+                            case ChartTwoDataTypeEnum::CHART_DATA_TYPE_HISTOGRAM:
+                                chartOverlaySet = modelChartTwo->getChartTwoOverlaySet(tabIndex);
+                                break;
+                            case ChartTwoDataTypeEnum::CHART_DATA_TYPE_LINE_SERIES:
+                                chartOverlaySet = modelChartTwo->getChartTwoOverlaySet(tabIndex);
+                                break;
+                            case ChartTwoDataTypeEnum::CHART_DATA_TYPE_MATRIX:
+                                break;
+                        }
+                        
+                        if (chartOverlaySet != NULL) {
+                            float xAxisMin =  std::numeric_limits<float>::max();
+                            float xAxisMax = -std::numeric_limits<float>::max();
+                            float yAxisMin =  std::numeric_limits<float>::max();
+                            float yAxisMax = -std::numeric_limits<float>::max();
+                            
+                            std::vector<ChartTwoCartesianAxis*> axes;
+                            chartOverlaySet->getDisplayedChartAxes(axes);
+                            const int32_t numAxes = static_cast<int32_t>(axes.size());
+                            for (int32_t i = 0; i < numAxes; i++) {
+                                float rangeMin(0), rangeMax(0);
+                                axes[i]->getDataRange(rangeMin, rangeMax);
+                                
+                                if (rangeMax > rangeMin) {
+                                    const ChartAxisLocationEnum::Enum axisLocation = axes[i]->getAxisLocation();
+                                    switch (axisLocation) {
+                                        case ChartAxisLocationEnum::CHART_AXIS_LOCATION_BOTTOM:
+                                        case ChartAxisLocationEnum::CHART_AXIS_LOCATION_TOP:
+                                            xAxisMin = std::min(xAxisMin, rangeMin);
+                                            xAxisMax = std::max(xAxisMax, rangeMax);
+                                            break;
+                                        case ChartAxisLocationEnum::CHART_AXIS_LOCATION_LEFT:
+                                        case ChartAxisLocationEnum::CHART_AXIS_LOCATION_RIGHT:
+                                            yAxisMin = std::min(yAxisMin, rangeMin);
+                                            yAxisMax = std::max(yAxisMax, rangeMax);
+                                            break;
+                                    }
+                                }
+                            }
+                            
+                            if (xAxisMax > xAxisMin) {
+                                const float range(xAxisMax - xAxisMin);
+                                int32_t digits = 6 - static_cast<int32_t>(std::round(std::log10(range)));
+                                digitsRightOfDecimalX = MathFunctions::clamp(digits, 3, 6);
+                                xStep = range * 0.001f;
+                            }
+                            if (yAxisMax > yAxisMin) {
+                                const float range(yAxisMax - yAxisMin);
+                                int32_t digits = 6 - static_cast<int32_t>(std::round(std::log10(range)));
+                                digitsRightOfDecimalY = MathFunctions::clamp(digits, 3, 6);
+                                yStep = range * 0.001f;
+                            }
+                        }
+                    }
+                }
+            }
                 break;
-            case AnnotationCoordinateSpaceEnum::PIXELS:
+            case AnnotationCoordinateSpaceEnum::STEREOTAXIC:
+                xMin = coordinateMinimum;
+                xMax = coordinateMaximum;
+                yMin = coordinateMinimum;
+                yMax = coordinateMaximum;
+                zMin = coordinateMinimum;
+                zMax = coordinateMaximum;
+                xStep = 1.0;
+                yStep = 1.0;
                 break;
             case AnnotationCoordinateSpaceEnum::SURFACE:
                 surfaceFlag = true;
                 break;
             case AnnotationCoordinateSpaceEnum::TAB:
-                zMin = 0.0;
+                xMin = percentageMinimum;
+                xMax = percentageMaximum;
+                yMin = percentageMinimum;
+                yMax = percentageMaximum;
+                zMin = zDepthMinimum;
+                zMax = zDepthMaximum;
+                suffix = "%";
+                break;
+            case AnnotationCoordinateSpaceEnum::VIEWPORT:
+                /*
+                 * Cannot move
+                 */
+                xMin = xyz[0];
+                xMax = xyz[0];
+                yMin = xyz[1];
+                yMax = xyz[1];
+                zMin = xyz[2];
+                zMax = xyz[2];
+                viewportSpaceFlag = true;
                 break;
             case AnnotationCoordinateSpaceEnum::WINDOW:
-                zMin = 0.0;
+                xMin = percentageMinimum;
+                xMax = percentageMaximum;
+                yMin = percentageMinimum;
+                yMax = percentageMaximum;
+                zMin = zDepthMinimum;
+                zMax = zDepthMaximum;
+                suffix = "%";
                 break;
         }
         
-        float xyz[3];
-        coordinate->getXYZ(xyz);
-        
         m_xCoordSpinBox->blockSignals(true);
-        m_xCoordSpinBox->setRange(xyMin,
-                                  xyMax);
-        m_xCoordSpinBox->setSingleStep(xyzStep);
+        m_xCoordSpinBox->setRange(xMin,
+                                  xMax);
+        m_xCoordSpinBox->setSingleStep(xStep);
         m_xCoordSpinBox->setSuffix(suffix);
         m_xCoordSpinBox->setValue(xyz[0]);
+        m_xCoordSpinBox->setDecimals(digitsRightOfDecimalX);
         m_xCoordSpinBox->blockSignals(false);
         
         m_yCoordSpinBox->blockSignals(true);
-        m_yCoordSpinBox->setRange(xyMin,
-                                  xyMax);
-        m_yCoordSpinBox->setSingleStep(xyzStep);
+        m_yCoordSpinBox->setRange(yMin,
+                                  yMax);
+        m_yCoordSpinBox->setSingleStep(yStep);
         m_yCoordSpinBox->setSuffix(suffix);
         m_yCoordSpinBox->setValue(xyz[1]);
+        m_yCoordSpinBox->setDecimals(digitsRightOfDecimalY);
         m_yCoordSpinBox->blockSignals(false);
         
         m_zCoordSpinBox->blockSignals(true);
         m_zCoordSpinBox->setRange(zMin,
                                   zMax);
-        m_zCoordSpinBox->setSingleStep(xyzStep);
+        m_zCoordSpinBox->setSingleStep(zStep);
         m_zCoordSpinBox->setSuffix(suffix);
         m_zCoordSpinBox->setValue(xyz[2]);
+        m_zCoordSpinBox->setDecimals(digitsRightOfDecimalZ);
         m_zCoordSpinBox->blockSignals(false);
         
         if (surfaceFlag) {
@@ -342,7 +486,12 @@ AnnotationCoordinateWidget::updateContent(Annotation* annotation)
             m_surfaceOffsetLengthSpinBox->blockSignals(false);
         }
         
-        setEnabled(true);
+        if (viewportSpaceFlag) {
+            setEnabled(false);
+        }
+        else {
+            setEnabled(true);
+        }
     }
     else {
         setEnabled(false);
@@ -363,14 +512,16 @@ AnnotationCoordinateWidget::valueChanged()
         && (coordinate != NULL)) {
         bool surfaceFlag = false;
         switch (m_annotation->getCoordinateSpace()) {
-            case AnnotationCoordinateSpaceEnum::STEREOTAXIC:
+            case AnnotationCoordinateSpaceEnum::CHART:
                 break;
-            case AnnotationCoordinateSpaceEnum::PIXELS:
+            case AnnotationCoordinateSpaceEnum::STEREOTAXIC:
                 break;
             case AnnotationCoordinateSpaceEnum::SURFACE:
                 surfaceFlag = true;
                 break;
             case AnnotationCoordinateSpaceEnum::TAB:
+                break;
+            case AnnotationCoordinateSpaceEnum::VIEWPORT:
                 break;
             case AnnotationCoordinateSpaceEnum::WINDOW:
                 break;
@@ -406,9 +557,9 @@ AnnotationCoordinateWidget::valueChanged()
                 }
                 else {
                     float xyz[3] = {
-                        m_xCoordSpinBox->value(),
-                        m_yCoordSpinBox->value(),
-                        m_zCoordSpinBox->value()
+                        (float)m_xCoordSpinBox->value(),
+                        (float)m_yCoordSpinBox->value(),
+                        (float)m_zCoordSpinBox->value()
                     };
                     coordinateCopy.setXYZ(xyz);
                 }
@@ -454,7 +605,7 @@ AnnotationCoordinateWidget::valueChanged()
                     EventManager::get()->sendEvent(EventOverlaySettingsEditorDialogRequest(EventOverlaySettingsEditorDialogRequest::MODE_UPDATE_ALL,
                                                                                            m_browserWindowIndex,
                                                                                            NULL,
-                                                                                           NULL,
+                                                                                           (CaretMappableDataFile*)NULL,
                                                                                            -1).getPointer());
                 }
             }

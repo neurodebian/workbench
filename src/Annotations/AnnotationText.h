@@ -36,13 +36,22 @@ namespace caret {
     class AnnotationText : public AnnotationTwoDimensionalShape, public AnnotationFontAttributesInterface {
         
     public:
+        /**
+         * @return The "too small" text size.
+         *
+         * When the text is smaller than this font height, either all of the
+         * text string may not be drawn or just particular characters
+         */
+        static uint32_t getTooSmallTextHeight() { return 8; }
+        
         virtual ~AnnotationText();
         
         AnnotationText(const AnnotationText& obj);
 
         AnnotationText& operator=(const AnnotationText& obj);
         
-        AString getFontRenderingEncodedName(const float drawingViewportHeight) const;
+        AString getFontRenderingEncodedName(const float drawingViewportWidth,
+                                            const float drawingViewportHeight) const;
         
         AString getText() const;
         
@@ -68,7 +77,12 @@ namespace caret {
         
         void setOrientation(const AnnotationTextOrientationEnum::Enum orientation);
         
-        int32_t getFontSizeForDrawing(const int32_t drawingViewportHeight) const;
+        int32_t getFontSizeForDrawing(const int32_t drawingViewportWidth,
+                                      const int32_t drawingViewportHeight) const;
+
+        bool isFontTooSmallWhenLastDrawn() const override;
+        
+        void setFontTooSmallWhenLastDrawn(const bool tooSmallFontFlag) const override;
         
         AnnotationTextFontSizeTypeEnum::Enum getFontSizeType() const;
         
@@ -88,8 +102,6 @@ namespace caret {
         
         virtual void setCustomTextColor(const uint8_t rgba[4]);
         
-        virtual bool isStylesSupported() const;
-        
         virtual bool isBoldStyleEnabled() const;
         
         virtual void setBoldStyleEnabled(const bool enabled);
@@ -107,8 +119,6 @@ namespace caret {
         void setConnectToBrainordinate(const AnnotationTextConnectTypeEnum::Enum connectToBrainordinate);
         
         bool isConnectToBrainordinateValid() const;
-        
-        virtual bool isLineWidthSupported() const;
         
         virtual bool applySpatialModification(const AnnotationSpatialModification& spatialModification);
         
@@ -156,6 +166,10 @@ namespace caret {
         AnnotationText(const AnnotationAttributesDefaultTypeEnum::Enum attributeDefaultType,
                        const AnnotationTextFontSizeTypeEnum::Enum fontSizeType);
         
+        AnnotationText(const AnnotationTypeEnum::Enum type,
+                       const AnnotationAttributesDefaultTypeEnum::Enum attributeDefaultType,
+                       const AnnotationTextFontSizeTypeEnum::Enum fontSizeType);
+        
         virtual void saveSubClassDataToScene(const SceneAttributes* sceneAttributes,
                                              SceneClass* sceneClass);
 
@@ -181,7 +195,7 @@ namespace caret {
         /* Not saved to scene since it is set by sub-class constructor. */
         const AnnotationTextFontSizeTypeEnum::Enum m_fontSizeType;
         
-        CaretPointer<SceneClassAssistant> m_sceneAssistant;
+        CaretPointer<SceneClassAssistant> m_attributesAssistant;
 
         AString m_text;
         
@@ -208,6 +222,8 @@ namespace caret {
         bool m_italicEnabled;
         
         bool m_underlineEnabled;
+        
+        mutable bool m_fontTooSmallWhenLastDrawnFlag = false;
         
         // Defaults
         static AnnotationTextAlignHorizontalEnum::Enum  s_userDefaultAlignmentHorizontal;
@@ -241,9 +257,9 @@ namespace caret {
     };
     
 #ifdef __ANNOTATION_TEXT_DECLARE__
-    AnnotationTextAlignHorizontalEnum::Enum  AnnotationText::s_userDefaultAlignmentHorizontal = AnnotationTextAlignHorizontalEnum::LEFT;
+    AnnotationTextAlignHorizontalEnum::Enum  AnnotationText::s_userDefaultAlignmentHorizontal = AnnotationTextAlignHorizontalEnum::CENTER;
     
-    AnnotationTextAlignVerticalEnum::Enum  AnnotationText::s_userDefaultAlignmentVertical = AnnotationTextAlignVerticalEnum::TOP;
+    AnnotationTextAlignVerticalEnum::Enum  AnnotationText::s_userDefaultAlignmentVertical = AnnotationTextAlignVerticalEnum::MIDDLE;
     
     AnnotationTextFontNameEnum::Enum AnnotationText::s_userDefaultFont = AnnotationTextFontNameEnum::VERA;
     

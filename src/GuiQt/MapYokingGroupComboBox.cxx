@@ -25,6 +25,7 @@
 
 #include "CaretAssert.h"
 #include "CaretMappableDataFile.h"
+#include "ChartTwoOverlay.h"
 #include "ChartableMatrixSeriesInterface.h"
 #include "CiftiScalarDataSeriesFile.h"
 #include "EnumComboBoxTemplate.h"
@@ -196,6 +197,55 @@ MapYokingGroupComboBox::validateYokingChange(Overlay* overlay)
 }
 
 /**
+ * Validate a change in yoking for a chart overlay.
+ *
+ * @param chartOverlay
+ *    Chart overlay whose yoking changes.
+ */
+void
+MapYokingGroupComboBox::validateYokingChange(ChartTwoOverlay* chartOverlay)
+{
+    const MapYokingGroupEnum::Enum previousMapYokingGroup = chartOverlay->getMapYokingGroup();
+    const MapYokingGroupEnum::Enum newYokingGroup = getMapYokingGroup();
+    CaretMappableDataFile* mapFile = NULL;
+    ChartTwoOverlay::SelectedIndexType selectedIndexType = ChartTwoOverlay::SelectedIndexType::INVALID;
+    int32_t selectedIndex = -1;
+    chartOverlay->getSelectionData(mapFile,
+                                     selectedIndexType,
+                                     selectedIndex);
+    bool selectionStatus = chartOverlay->isEnabled();
+    
+    if ((mapFile != NULL)
+        && chartOverlay->isMapYokingSupported()) {
+        if (mapFile->getNumberOfMaps() > 0) {
+            if (selectedIndex < 0) {
+                selectedIndex = 0;
+            }
+        }
+        const YokeValidationResult result = validateYoking(mapFile,
+                                                           selectedIndex,
+                                                           selectionStatus);
+        
+        switch (result) {
+            case YOKE_VALIDATE_RESULT_ACCEPT:
+                chartOverlay->setEnabled(selectionStatus);
+                chartOverlay->setSelectionData(mapFile,
+                                               selectedIndex);
+                chartOverlay->setMapYokingGroup(newYokingGroup);
+                break;
+            case YOKE_VALIDATE_RESULT_OFF:
+                chartOverlay->setMapYokingGroup(MapYokingGroupEnum::MAP_YOKING_GROUP_OFF);
+                break;
+            case YOKE_VALIDATE_RESULT_PREVIOUS:
+                chartOverlay->setMapYokingGroup(previousMapYokingGroup);
+                break;
+        }
+        
+        setMapYokingGroup(chartOverlay->getMapYokingGroup());
+    }
+}
+
+/**
  * Validate yoking when a new file is added to a yoking group.
  *
  * @param previousMapYokingGroup
@@ -267,7 +317,6 @@ MapYokingGroupComboBox::validateYoking(CaretMappableDataFile* selectedFile,
                      * the map index and status from the yoking group.
                      */
                     selectedMapIndexInOut = MapYokingGroupEnum::getSelectedMapIndex(newYokingGroup);
-                    //selectionStatusInOut  = MapYokingGroupEnum::isEnabled(newYokingGroup);
                 }
                 else {
                     /*
@@ -277,8 +326,6 @@ MapYokingGroupComboBox::validateYoking(CaretMappableDataFile* selectedFile,
                      */
                     MapYokingGroupEnum::setSelectedMapIndex(newYokingGroup,
                                                             selectedMapIndexInOut);
-                    //MapYokingGroupEnum::setEnabled(newYokingGroup,
-                    //                               selectionStatusInOut);
                 }
             }
         }
@@ -286,79 +333,4 @@ MapYokingGroupComboBox::validateYoking(CaretMappableDataFile* selectedFile,
     
     return yokeResult;
 }
-
-
-//void
-//MapYokingGroupComboBox::validateYokingChange(const MapYokingGroupEnum::Enum previousMapYokingGroup,
-//                                             CaretMappableDataFile* selectedFile,
-//                                             const int32_t selectedMapIndex,
-//                                             ChartableMatrixSeriesInterface* chartableMatrixSeriesInterface,
-//                                             Overlay* overlay)
-//{
-//    MapYokingGroupEnum::Enum yokingGroup = getMapYokingGroup();
-//    if (yokingGroup != MapYokingGroupEnum::MAP_YOKING_GROUP_OFF) {
-//        CaretMappableDataFile* selectedFile = NULL;
-//        if ((selectedFile != NULL)
-//            && (selectedMapIndex >= 0)) {
-//            /*
-//             * Get info on yoking selections
-//             */
-//            EventMapYokingValidation validateEvent(yokingGroup);
-//            EventManager::get()->sendEvent(validateEvent.getPointer());
-//
-//            const int32_t numOverlaysYoked = yokedOverlaysEvent.getNumberOfYokedOverlays();
-//            
-//            /*
-//             * Check compatibility based (number of maps in yoked files)
-//             * and warn use if there is an incompatibility.
-//             */
-//            AString message;
-//            if ( ! validateEvent.validateCompatibility(selectedFile,
-//                                                         message)) {
-//                message.appendWithNewLine("");
-//                message.appendWithNewLine("Allow yoking?");
-//                
-//                message = WuQtUtilities::createWordWrappedToolTipText(message);
-//                
-//                WuQMessageBox::YesNoCancelResult result =
-//                WuQMessageBox::warningYesNoCancel(m_comboBox->getWidget(),
-//                                                  message,
-//                                                  "");
-//                switch (result) {
-//                    case WuQMessageBox::RESULT_YES:
-//                        break;
-//                    case WuQMessageBox::RESULT_NO:
-//                        yokingGroup = MapYokingGroupEnum::MAP_YOKING_GROUP_OFF;
-//                        break;
-//                    case WuQMessageBox::RESULT_CANCEL:
-//                        yokingGroup = previousMapYokingGroup;
-//                        break;
-//                }
-//            }
-//            
-//            if (overlay != NULL) {
-//                
-//            }
-//            overlay->setYokingGroup(yokingGroup);
-//            if (yokingGroup != MapYokingGroupEnum::MAP_YOKING_GROUP_OFF) {
-//                if (numOverlaysYoked <= 0) {
-//                    OverlayYokingGroupEnum::setSelectedMapIndex(yokingGroup,
-//                                                                selectedMapIndex);
-//                    const bool enabledStatus = overlay->isEnabled();
-//                    OverlayYokingGroupEnum::setEnabled(yokingGroup,
-//                                                       enabledStatus);
-//                }
-//            }
-//        }
-//    }
-//    else {
-//        overlay->setYokingGroup(yokingGroup);
-//    }
-//    
-//    updateViewController(overlay);
-//    
-//    this->updateUserInterfaceAndGraphicsWindow();
-//    
-//}
-//
 

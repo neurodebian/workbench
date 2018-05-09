@@ -27,17 +27,24 @@
 
 #include "CaretLogger.h"
 #include "ChartDataCartesian.h"
+#include "ChartableTwoFileDelegate.h"
+#include "ChartableTwoFileHistogramChart.h"
 #include "CiftiMappableConnectivityMatrixDataFile.h"
+#include "CiftiXML.h"
 #include "DataFileContentInformation.h"
+#include "EventManager.h"
 #include "FastStatistics.h"
 #include "FileInformation.h"
 #include "GiftiLabelTable.h"
+#include "GiftiMetaDataXmlElements.h"
 #include "Histogram.h"
 #include "LabelDrawingProperties.h"
+#include "NodeAndVoxelColoring.h"
 #include "PaletteColorMapping.h"
 #include "SceneClass.h"
 #include "SceneClassArray.h"
 #include "SceneAttributes.h"
+#include "ScenePrimitive.h"
 #include "StringTableModel.h"
 #include "VolumeFile.h"
 
@@ -51,9 +58,7 @@ using namespace caret;
 CaretMappableDataFile::CaretMappableDataFile(const DataFileTypeEnum::Enum dataFileType)
 : CaretDataFile(dataFileType)
 {
-    m_labelDrawingProperties.grabNew(new LabelDrawingProperties());
-    
-    m_paletteNormalizationMode = PaletteNormalizationModeEnum::NORMALIZATION_SELECTED_MAP_DATA;
+    initializeCaretMappableDataFileInstance(dataFileType);
 }
 
 /**
@@ -72,11 +77,13 @@ CaretMappableDataFile::~CaretMappableDataFile()
 CaretMappableDataFile::CaretMappableDataFile(const CaretMappableDataFile& cmdf)
 : CaretDataFile(cmdf)
 {
+    initializeCaretMappableDataFileInstance(cmdf.getDataFileType());
+    
     this->copyCaretMappableDataFile(cmdf);
 }
 
 /**
- * Constructor.
+ * Assignment operator.
  * @param cmdf
  *   Instance that is assigned to this.
  * @return
@@ -93,12 +100,27 @@ CaretMappableDataFile::operator=(const CaretMappableDataFile& cmdf)
 }
 
 /**
+ * Initialize a new instance.
+ *
+ * @param dataFileType
+ *     Type of data file.
+ */
+void
+CaretMappableDataFile::initializeCaretMappableDataFileInstance(const DataFileTypeEnum::Enum /*dataFileType*/)
+{
+    m_labelDrawingProperties = std::unique_ptr<LabelDrawingProperties>(new LabelDrawingProperties());
+    m_applyToAllMapsSelected = false;
+}
+
+
+/**
  * Assists with copying instances of this class.
  */
 void 
 CaretMappableDataFile::copyCaretMappableDataFile(const CaretMappableDataFile& cmdf)
 {
-    m_paletteNormalizationMode = cmdf.m_paletteNormalizationMode;
+    *m_labelDrawingProperties = *cmdf.m_labelDrawingProperties;
+    m_mapThresholdFileSelectionModels.clear();
 }
 
 // note: method is documented in header file
@@ -183,13 +205,14 @@ CaretMappableDataFile::getMapIndexFromUniqueID(const AString& uniqueID) const
 
 // note: method is documented in header file
 void
-CaretMappableDataFile::updateScalarColoringForAllMaps(const PaletteFile* paletteFile)
+CaretMappableDataFile::updateScalarColoringForAllMaps()
 {
     const int32_t numMaps = getNumberOfMaps();
     for (int32_t iMap = 0; iMap < numMaps; iMap++) {
-        updateScalarColoringForMap(iMap,
-                             paletteFile);
+        updateScalarColoringForMap(iMap);
     }
+    
+    invalidateHistogramChartColoring();
 }
 
 /**
@@ -235,6 +258,43 @@ CaretMappableDataFile::isPaletteColorMappingEqualForAllMaps() const
     }
 
     return true;
+}
+
+/**
+ * Apply palette coloring from the given map to all other maps in the file.
+ *
+ * @param mapIndex
+ *     Index of the map.
+ */
+void
+CaretMappableDataFile::applyPaletteColorMappingToAllMaps(const int32_t mapIndex)
+{
+    if ( ! isMappedWithPalette()) {
+        return;
+    }
+    
+    const int32_t numMaps = getNumberOfMaps();
+    if (numMaps <= 1) {
+        return;
+    }
+    
+    const PaletteColorMapping* mapColoring = getMapPaletteColorMapping(mapIndex);
+    for (int32_t i = 0; i < numMaps; i++) {
+        if (i != mapIndex) {
+            PaletteColorMapping* pcm = getMapPaletteColorMapping(i);
+                pcm->copy(*mapColoring,
+                          false);
+        }
+    }
+}
+
+/**
+ * Invalidate all histogram coloring for this file.
+ */
+void
+CaretMappableDataFile::invalidateHistogramChartColoring()
+{
+    getChartingDelegate()->getHistogramCharting()->invalidateAllColoring();
 }
 
 // note: method is documented in header file
@@ -301,9 +361,32 @@ CaretMappableDataFile::saveFileDataToScene(const SceneAttributes* sceneAttribute
     sceneClass->addClass(m_labelDrawingProperties->saveToScene(sceneAttributes,
                                                                "m_labelDrawingProperties"));
     
+    
+    if (m_chartingDelegate != NULL) {
+        SceneClass* chartDelegateScene = m_chartingDelegate->saveToScene(sceneAttributes,
+                                                                         "m_chartingDelegate");
+        if (chartDelegateScene != NULL) {
+            sceneClass->addClass(chartDelegateScene);
+        }
+    }
+    
     if (isMappedWithPalette()) {
-        sceneClass->addEnumeratedType<PaletteNormalizationModeEnum, PaletteNormalizationModeEnum::Enum>("m_paletteNormalizationMode",
-                                                                                                        m_paletteNormalizationMode);
+        /*
+         * 03 March 2017
+         * Note: Palette (m_paletteNormalizationMode) normalization is no 
+         * longer added to scenes since the palette normalization is a file 
+         * property stored in the file's metadata.
+         */
+        /*
+         * WB-690 request normalization mode be saved to scenes
+         * so adding it back in.
+         */
+        sceneClass->addEnumeratedType<PaletteNormalizationModeEnum,
+            PaletteNormalizationModeEnum::Enum>("m_paletteNormalizationMode",
+                                                getPaletteNormalizationMode());
+        
+        sceneClass->addBoolean("m_applyToAllMapsSelected",
+                               m_applyToAllMapsSelected);
         
         if (sceneAttributes->isModifiedPaletteSettingsSavedToScene()) {
             std::vector<SceneClass*> pcmClassVector;
@@ -311,7 +394,18 @@ CaretMappableDataFile::saveFileDataToScene(const SceneAttributes* sceneAttribute
             const int32_t numMaps = getNumberOfMaps();
             for (int32_t i = 0; i < numMaps; i++) {
                 const PaletteColorMapping* pcmConst = getMapPaletteColorMapping(i);
-                if (pcmConst->isModified()) {
+                bool savePaletteFlag = false;
+                switch (pcmConst->getModifiedStatus()) {
+                    case PaletteModifiedStatusEnum::MODIFIED:
+                        savePaletteFlag = true;
+                        break;
+                    case PaletteModifiedStatusEnum::MODIFIED_BY_SHOW_SCENE:
+                        savePaletteFlag = true;
+                        break;
+                    case PaletteModifiedStatusEnum::UNMODIFIED:
+                        break;
+                }
+                if (savePaletteFlag) {
                     PaletteColorMapping* pcm = const_cast<PaletteColorMapping*>(pcmConst);
                     
                     try {
@@ -348,6 +442,29 @@ CaretMappableDataFile::saveFileDataToScene(const SceneAttributes* sceneAttribute
                 sceneClass->addChild(pcmArray);
             }
         }
+        
+        {
+            /*
+             * Save thresholds for each map
+             */
+            SceneObjectMapIntegerKey* sceneThreshMap = new SceneObjectMapIntegerKey("m_mapThresholdFileSelectionModels",
+                                                                                    SceneObjectDataTypeEnum::SCENE_CLASS);
+            const int32_t numMaps = getNumberOfMaps();
+            for (int32_t iMap = 0; iMap < numMaps; iMap++) {
+                CaretMappableDataFileAndMapSelectionModel* threshSel = getMapThresholdFileSelectionModel(iMap);
+                if ((threshSel->getSelectedFile() != this)
+                    || (threshSel->getSelectedMapIndex() != iMap)) {
+                    sceneThreshMap->addClass(iMap, threshSel->saveToScene(sceneAttributes, "threshSelElement"));
+                }
+            }
+            
+            if (sceneThreshMap->isEmpty()) {
+                delete sceneThreshMap;
+            }
+            else {
+                sceneClass->addChild(sceneThreshMap);
+            }
+        }
     }
 }
 
@@ -374,14 +491,45 @@ CaretMappableDataFile::restoreFileDataFromScene(const SceneAttributes* sceneAttr
     
     m_labelDrawingProperties->restoreFromScene(sceneAttributes,
                                                sceneClass->getClass("m_labelDrawingProperties"));
+    const SceneClass* chartingDelegateClass = sceneClass->getClass("m_chartingDelegate");
+    ChartableTwoFileDelegate* chartDelegate = getChartingDelegate();
+    chartDelegate->updateAfterFileChanged();
+    if (chartingDelegateClass != NULL) {
+        CaretAssert(chartDelegate);
+        chartDelegate->restoreFromScene(sceneAttributes,
+                                             chartingDelegateClass);
+    }
     
     if (isMappedWithPalette()) {
+        /*
+         * Palette normalization was no longer saved to scenes after 
+         * palette normalization was saved in mappable files's metadata.
+         */
         std::vector<PaletteNormalizationModeEnum::Enum> paletteNormalizationModes;
         getPaletteNormalizationModesSupported(paletteNormalizationModes);
         if ( ! paletteNormalizationModes.empty()) {
-            const PaletteNormalizationModeEnum::Enum defValue = paletteNormalizationModes[0];
-            m_paletteNormalizationMode = sceneClass->getEnumeratedTypeValue<PaletteNormalizationModeEnum, PaletteNormalizationModeEnum::Enum>("m_paletteNormalizationMode",
-                                                                                                                                              defValue);
+            const AString paletteNormStringValue = sceneClass->getEnumeratedTypeValueAsString("m_paletteNormalizationMode");
+            if ( ! paletteNormStringValue.isEmpty()) {
+                bool validFlag = false;
+                const PaletteNormalizationModeEnum::Enum palNormValue = PaletteNormalizationModeEnum::fromName(paletteNormStringValue,
+                                                                                                           &validFlag);
+                if (validFlag) {
+                    if (std::find(paletteNormalizationModes.begin(),
+                                  paletteNormalizationModes.end(),
+                                  palNormValue) != paletteNormalizationModes.end()) {
+                        /*
+                         * Do not allow the metadata's modification status
+                         * to change or else many files will have a modified
+                         * status after restoration of the scene.
+                         */
+                        const bool metadataModFlag = getFileMetaData()->isModified();
+                        setPaletteNormalizationMode(palNormValue);
+                        if ( ! metadataModFlag) {
+                            getFileMetaData()->clearModified();
+                        }
+                    }
+                }
+            }
         }
         
         const int32_t numMaps = getNumberOfMaps();
@@ -463,14 +611,15 @@ CaretMappableDataFile::restoreFileDataFromScene(const SceneAttributes* sceneAttr
                         pcm.decodeFromStringXML(pcmString);
                         
                         PaletteColorMapping* pcmMap = getMapPaletteColorMapping(restoreMapIndex);
-                        pcmMap->copy(pcm);
+                        pcmMap->copy(pcm,
+                                     true);
                         pcmMap->clearModified();
                         
                         /*
                          * WB-522 When palette loaded from scene,
                          * mark it as modified.
                          */
-                        pcmMap->setModified();
+                        pcmMap->setSceneModified();
                         
                         /*
                          * Volume file needs it's map coloring updated since
@@ -478,8 +627,7 @@ CaretMappableDataFile::restoreFileDataFromScene(const SceneAttributes* sceneAttr
                          */
                         VolumeFile* volumeFile = dynamic_cast<VolumeFile*>(this);
                         if (volumeFile != NULL) {
-                            volumeFile->updateScalarColoringForMap(restoreMapIndex,
-                                                                   NULL);
+                            volumeFile->updateScalarColoringForMap(restoreMapIndex);
                         }
                     }
                     catch (const XmlException& e) {
@@ -504,6 +652,54 @@ CaretMappableDataFile::restoreFileDataFromScene(const SceneAttributes* sceneAttr
                 }
             }
         }
+        
+        {
+            m_mapThresholdFileSelectionModels.clear();
+            
+            const SceneObjectMapIntegerKey* sceneThreshMap = sceneClass->getMapIntegerKey("m_mapThresholdFileSelectionModels");
+            if (sceneThreshMap != NULL) {
+                const std::vector<int32_t> keys = sceneThreshMap->getKeys();
+                for (auto mapIndex : keys) {
+                    CaretAssert(mapIndex < getNumberOfMaps());
+                    const SceneClass* threshSel = dynamic_cast<const SceneClass*>(sceneThreshMap->getObject(mapIndex));
+                    CaretAssert(threshSel);
+                    getMapThresholdFileSelectionModel(mapIndex)->restoreFromScene(sceneAttributes,
+                                                                                  threshSel);
+                }
+            }
+        }
+        
+        updateAfterFileDataChanges();
+        
+        /*
+         * Must restore after call to updateAfterFileDataChanges() to since
+         * that method initializes 'm_applyToAllMapsSelected'.
+         *
+         * This was added by WB-781 Apply to All Maps for ColorBar so that 
+         * the 'apply to all maps' status is saved to and restored from scenes.
+         */
+        const ScenePrimitive* applyToAllMapsPrimitive = sceneClass->getPrimitive("m_applyToAllMapsSelected");
+        if (applyToAllMapsPrimitive != NULL) {
+            m_applyToAllMapsSelected = applyToAllMapsPrimitive->booleanValue();
+        }
+        
+        /*
+         * README ABOUT IMPORTANCE OF MODIFIED COLOR PALLETTE MAPPING STATUS MUST REMAIN ON
+         *
+         * (1) The user may modify the palette color mapping for a map/file.  This modified palette
+         * color mapping is saved to the scene so that the user does not need to save the actual
+         * data file.  When the scene is restored, the palette color mapping is restored from the
+         * scene and applied to the file.  As a result, the file will contain a 'modified palette
+         * color mapping status'.
+         *
+         * (2) This 'modified palette color mapping status' must remain ON so that if the user
+         * saves a scene, the modified status is added to the scene and will be restored from
+         * the scene at a later time.  As a result, the scene will display correctly.
+         *
+         * (3) If the 'modified palette color mapping status' was NOT left on and the user 
+         * saved a scene, the scene would not display correctly due to the palette color mapping
+         * no longer being added to the scene.
+         */
     }
 }
 
@@ -748,6 +944,40 @@ CaretMappableDataFile::addToDataFileContentInformation(DataFileContentInformatio
 }
 
 /**
+ * @return File histogram number of buckets.
+ */
+int32_t
+CaretMappableDataFile::getFileHistogramNumberOfBuckets() const
+{
+    /*
+     * Metadata returns zero if integer value not found
+     */
+    const GiftiMetaData* metadata = getFileMetaData();
+    CaretAssert(metadata);
+    int32_t numBuckets = metadata->getInt(GiftiMetaDataXmlElements::HISTOGRAM_NUMBER_OF_BUCKETS);
+    if (numBuckets <= 0) {
+        numBuckets = 100;
+    }
+    return numBuckets;
+}
+
+/**
+ * Set the file histogram number of buckets.
+ *
+ * @param numberOfBuckets
+ *     Number of buckets.
+ */
+void
+CaretMappableDataFile::setFileHistogramNumberOfBuckets(const int32_t numberOfBuckets)
+{
+    GiftiMetaData* metadata = getFileMetaData();
+    CaretAssert(metadata);
+    metadata->setInt(GiftiMetaDataXmlElements::HISTOGRAM_NUMBER_OF_BUCKETS,
+                     numberOfBuckets);
+}
+
+
+/**
  * @return True if any of the maps in this file contain a
  * color mapping that possesses a modified status.
  */
@@ -765,6 +995,42 @@ CaretMappableDataFile::isModifiedPaletteColorMapping() const
     }
     
     return false;
+}
+
+/**
+ * @return The modified status for aall palettes in this file.
+ * Note that 'modified' overrides any 'modified by show scene'.
+ */
+PaletteModifiedStatusEnum::Enum
+CaretMappableDataFile::getPaletteColorMappingModifiedStatus() const
+{
+    PaletteModifiedStatusEnum::Enum modStatus = PaletteModifiedStatusEnum::UNMODIFIED;
+    
+    if (isMappedWithPalette()) {
+        const int32_t numMaps = getNumberOfMaps();
+        for (int32_t i = 0; i < numMaps; i++) {
+            switch (getMapPaletteColorMapping(i)->getModifiedStatus()) {
+                case PaletteModifiedStatusEnum::MODIFIED:
+                    modStatus = PaletteModifiedStatusEnum::MODIFIED;
+                    break;
+                case PaletteModifiedStatusEnum::MODIFIED_BY_SHOW_SCENE:
+                    modStatus = PaletteModifiedStatusEnum::MODIFIED_BY_SHOW_SCENE;
+                    break;
+                case PaletteModifiedStatusEnum::UNMODIFIED:
+                    break;
+            }
+            
+            if (modStatus == PaletteModifiedStatusEnum::MODIFIED) {
+                /*
+                 * 'MODIFIED' overrides 'MODIFIED_BY_SHOW_SCENE'
+                 * so no need to continue loop
+                 */
+                break;
+            }
+        }
+    }
+    
+    return modStatus;
 }
 
 /**
@@ -803,6 +1069,32 @@ CaretMappableDataFile::isModified() const
     }
     
     return false;
+}
+
+/**
+ * Clear data in this file.
+ */
+void
+CaretMappableDataFile::clear()
+{
+    CaretDataFile::clear();
+    
+    m_chartingDelegate.reset();
+    
+    m_mapThresholdFileSelectionModels.clear();
+}
+
+/**
+ * Clear the modified status of this file.
+ */
+void
+CaretMappableDataFile::clearModified()
+{
+    CaretDataFile::clearModified();
+    
+    if (m_chartingDelegate != NULL) {
+        m_chartingDelegate->clearModified();
+    }
 }
 
 /**
@@ -848,12 +1140,12 @@ CaretMappableDataFile::helpCreateCartesianChartData(const std::vector<float>& da
     ChartDataCartesian* chartData = NULL;
     
     if (timeSeriesFlag) {
-        chartData = new ChartDataCartesian(ChartDataTypeEnum::CHART_DATA_TYPE_LINE_TIME_SERIES,
+        chartData = new ChartDataCartesian(ChartOneDataTypeEnum::CHART_DATA_TYPE_LINE_TIME_SERIES,
                                            ChartAxisUnitsEnum::CHART_AXIS_UNITS_TIME_SECONDS,
                                            ChartAxisUnitsEnum::CHART_AXIS_UNITS_NONE);
     }
     else {
-        chartData = new ChartDataCartesian(ChartDataTypeEnum::CHART_DATA_TYPE_LINE_DATA_SERIES,
+        chartData = new ChartDataCartesian(ChartOneDataTypeEnum::CHART_DATA_TYPE_LINE_DATA_SERIES,
                                            ChartAxisUnitsEnum::CHART_AXIS_UNITS_NONE,
                                            ChartAxisUnitsEnum::CHART_AXIS_UNITS_NONE);
     }
@@ -903,29 +1195,29 @@ CaretMappableDataFile::helpCreateCartesianChartData(const std::vector<float>& da
  *    Chart types supported by this file.
  */
 void
-CaretMappableDataFile::helpGetSupportedLineSeriesChartDataTypes(std::vector<ChartDataTypeEnum::Enum>& chartDataTypesOut) const
+CaretMappableDataFile::helpGetSupportedLineSeriesChartDataTypes(std::vector<ChartOneDataTypeEnum::Enum>& chartDataTypesOut) const
 {
     chartDataTypesOut.clear();
     
     switch (getMapIntervalUnits()) {
         case NiftiTimeUnitsEnum::NIFTI_UNITS_HZ:
-            chartDataTypesOut.push_back(ChartDataTypeEnum::CHART_DATA_TYPE_LINE_FREQUENCY_SERIES);
+            chartDataTypesOut.push_back(ChartOneDataTypeEnum::CHART_DATA_TYPE_LINE_FREQUENCY_SERIES);
             break;
         case NiftiTimeUnitsEnum::NIFTI_UNITS_MSEC:
-            chartDataTypesOut.push_back(ChartDataTypeEnum::CHART_DATA_TYPE_LINE_TIME_SERIES);
+            chartDataTypesOut.push_back(ChartOneDataTypeEnum::CHART_DATA_TYPE_LINE_TIME_SERIES);
             break;
         case NiftiTimeUnitsEnum::NIFTI_UNITS_PPM:
             CaretLogSevere("Units - PPM not supported");
             CaretAssertMessage(0, "Units - PPM not supported");
             break;
         case NiftiTimeUnitsEnum::NIFTI_UNITS_SEC:
-            chartDataTypesOut.push_back(ChartDataTypeEnum::CHART_DATA_TYPE_LINE_TIME_SERIES);
+            chartDataTypesOut.push_back(ChartOneDataTypeEnum::CHART_DATA_TYPE_LINE_TIME_SERIES);
             break;
         case NiftiTimeUnitsEnum::NIFTI_UNITS_UNKNOWN:
-            chartDataTypesOut.push_back(ChartDataTypeEnum::CHART_DATA_TYPE_LINE_DATA_SERIES);
+            chartDataTypesOut.push_back(ChartOneDataTypeEnum::CHART_DATA_TYPE_LINE_DATA_SERIES);
             break;
         case NiftiTimeUnitsEnum::NIFTI_UNITS_USEC:
-            chartDataTypesOut.push_back(ChartDataTypeEnum::CHART_DATA_TYPE_LINE_TIME_SERIES);
+            chartDataTypesOut.push_back(ChartOneDataTypeEnum::CHART_DATA_TYPE_LINE_TIME_SERIES);
             break;
     }
 }
@@ -963,7 +1255,7 @@ CaretMappableDataFile::isMedialWallLabelInMapLabelTable(const int32_t mapIndex) 
 LabelDrawingProperties*
 CaretMappableDataFile::getLabelDrawingProperties()
 {
-    return m_labelDrawingProperties;
+    return m_labelDrawingProperties.get();
 }
 
 /**
@@ -973,7 +1265,117 @@ CaretMappableDataFile::getLabelDrawingProperties()
 const LabelDrawingProperties*
 CaretMappableDataFile::getLabelDrawingProperties() const
 {
-    return m_labelDrawingProperties;
+    return m_labelDrawingProperties.get();
+}
+
+/**
+ * @return The charting delegate for this file.  Pointer
+ * will never be NULL, even if file does not support charting.
+ */
+ChartableTwoFileDelegate*
+CaretMappableDataFile::getChartingDelegate()
+{
+    if (m_chartingDelegate == NULL) {
+        m_chartingDelegate = std::unique_ptr<ChartableTwoFileDelegate>(new ChartableTwoFileDelegate(this));
+        
+        m_chartingDelegate->updateAfterFileChanged();
+    }
+    return m_chartingDelegate.get();
+}
+
+/*
+ * @return The charting delegate for this file.  Pointer
+ * will never be NULL, even if file does not support charting.
+ */
+const ChartableTwoFileDelegate*
+CaretMappableDataFile::getChartingDelegate() const
+{
+    if (m_chartingDelegate == NULL) {
+        CaretMappableDataFile* thisFile = const_cast<CaretMappableDataFile*>(this);
+        m_chartingDelegate = std::unique_ptr<ChartableTwoFileDelegate>(new ChartableTwoFileDelegate(thisFile));
+
+        m_chartingDelegate->updateAfterFileChanged();
+    }
+    return m_chartingDelegate.get();
+}
+
+/**
+ * Update the map threshold file selection models.
+ */
+void
+CaretMappableDataFile::updateMapThresholdFileSelectionModels()
+{
+    const int32_t numMaps = getNumberOfMaps();
+    const int32_t numThresh = static_cast<int32_t>(m_mapThresholdFileSelectionModels.size());
+    if (numMaps > numThresh) {
+        for (int32_t i = numThresh; i < numMaps; i++) {
+            std::unique_ptr<CaretMappableDataFileAndMapSelectionModel> threshSel(new CaretMappableDataFileAndMapSelectionModel(this));
+            threshSel->setSelectedFile(this);
+            threshSel->setSelectedMapIndex(i);
+            m_mapThresholdFileSelectionModels.push_back(std::move(threshSel));
+        }
+    }
+    else if (numThresh > numMaps) {
+        m_mapThresholdFileSelectionModels.resize(numMaps);
+    }
+}
+
+/**
+ * @return The thresholding file selection model for the given map index.
+ */
+CaretMappableDataFileAndMapSelectionModel*
+CaretMappableDataFile::getMapThresholdFileSelectionModel(const int32_t mapIndex)
+{
+    updateMapThresholdFileSelectionModels();
+    
+    CaretAssertVectorIndex(m_mapThresholdFileSelectionModels, mapIndex);
+    return m_mapThresholdFileSelectionModels[mapIndex].get();
+}
+
+/**
+ * Update the charting delegate after changes (add a row/column, etc.)
+ * are made to the data file.
+ */
+void
+CaretMappableDataFile::updateAfterFileDataChanges()
+{
+    if (m_chartingDelegate) {
+        m_chartingDelegate->updateAfterFileChanged();
+    }
+
+    m_applyToAllMapsSelected = isPaletteColorMappingEqualForAllMaps();
+}
+
+/**
+ * @return Is apply palette color mapping to all maps selected.
+ */
+bool
+CaretMappableDataFile::isApplyPaletteColorMappingToAllMaps() const
+{
+    return m_applyToAllMapsSelected;
+}
+
+/**
+ * Set apply palette color mapping to all maps.  Only sets the status,
+ * it does not change any palette color mapping.
+ *
+ * @param selected
+ *     New selected status.
+ */
+void
+CaretMappableDataFile::setApplyPaletteColorMappingToAllMaps(const bool selected)
+{
+    m_applyToAllMapsSelected = selected;
+}
+
+/**
+ * @return True if file is mapped with a palette and one
+ * palette is used for all maps.
+ */
+bool
+CaretMappableDataFile::isOnePaletteUsedForAllMaps() const
+{
+    return false;
 }
 
 /**
@@ -983,7 +1385,26 @@ CaretMappableDataFile::getLabelDrawingProperties() const
 PaletteNormalizationModeEnum::Enum
 CaretMappableDataFile::getPaletteNormalizationMode() const
 {
-    return m_paletteNormalizationMode;
+    PaletteNormalizationModeEnum::Enum modeValue = PaletteNormalizationModeEnum::NORMALIZATION_SELECTED_MAP_DATA;
+    
+    const AString textValue = getFileMetaData()->get(GiftiMetaDataXmlElements::METADATA_PALETTE_NORMALIZATION_MODE);
+    bool validFlag = false;
+    modeValue = PaletteNormalizationModeEnum::fromName(textValue, &validFlag);
+    
+    if ( ! validFlag) {
+        std::vector<PaletteNormalizationModeEnum::Enum> validModes;
+        getPaletteNormalizationModesSupported(validModes);
+        
+        if ( ! validModes.empty()) {
+            CaretAssertVectorIndex(validModes, 0);
+            modeValue = validModes[0];
+        }
+        else {
+            modeValue = PaletteNormalizationModeEnum::NORMALIZATION_SELECTED_MAP_DATA;
+        }
+    }
+    
+    return modeValue;
 }
 
 /**
@@ -995,7 +1416,8 @@ CaretMappableDataFile::getPaletteNormalizationMode() const
 void
 CaretMappableDataFile::setPaletteNormalizationMode(const PaletteNormalizationModeEnum::Enum mode)
 {
-    m_paletteNormalizationMode = mode;
+    getFileMetaData()->set(GiftiMetaDataXmlElements::METADATA_PALETTE_NORMALIZATION_MODE,
+                           PaletteNormalizationModeEnum::toName(mode));
 }
 
 /**
@@ -1008,5 +1430,13 @@ CaretMappableDataFile::isMappedWithRGBA() const
     return false;
 }
 
+bool CaretMappableDataFile::hasCiftiXML() const
+{
+    return false;
+}
 
+const CiftiXML CaretMappableDataFile::getCiftiXML() const
+{
+    return CiftiXML();
+}
 

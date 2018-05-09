@@ -30,6 +30,7 @@
 #include <cmath>
 #include <cstring>
 #include <limits>
+#include "stdint.h"
 
 using namespace std;
 using namespace caret;
@@ -244,7 +245,7 @@ vector<vector<float> > NiftiHeader::getSForm() const
             {
                 for (int j = 0; j < 3; ++j)
                 {
-                    rotmat[i][j] *= m_header.pixdim[i + 1];
+                    rotmat[i][j] *= m_header.pixdim[j + 1];
                 }
             }
             if (m_header.pixdim[0] < 0.0f)//left handed coordinate system, flip the kvec
@@ -264,7 +265,7 @@ vector<vector<float> > NiftiHeader::getSForm() const
             ret[1][3] = m_header.qoffset_y;
             ret[2][3] = m_header.qoffset_z;
         } else {
-            CaretLogWarning("found quaternion with length greater than 1 in nifti header");
+            CaretLogWarning("found quaternion with length greater than 1 in nifti header, using ANALYZE coordinates!");
             ret[0][0] = m_header.pixdim[1];
             ret[1][1] = m_header.pixdim[2];
             ret[2][2] = m_header.pixdim[3];
@@ -350,6 +351,16 @@ QString NiftiHeader::toString() const
         ret += "qoffset_x: " + QString::number(m_header.qoffset_x) + "\n";
         ret += "qoffset_y: " + QString::number(m_header.qoffset_y) + "\n";
         ret += "qoffset_z: " + QString::number(m_header.qoffset_z) + "\n";
+    }
+    ret += "effective sform:\n";
+    vector<vector<float> > tempSform = getSForm();
+    for (int i = 0; i < 3; ++i)
+    {
+        for (int j = 0; j < 4; ++j)
+        {
+            ret += " " + QString::number(tempSform[i][j]);
+        }
+        ret += "\n";
     }
     ret += "xyzt_units: " + QString::number(m_header.xyzt_units) + "\n";
     ret += "intent_code: " + QString::number(m_header.intent_code) + "\n";
@@ -438,9 +449,9 @@ void NiftiHeader::setSForm(const vector<vector<float> >& sForm)
         kvec = -kvec;//because to nifti, "left handed" apparently means "up is down", not "left is right"
     }
     float rotmat[3][3];
-    rotmat[0][0] = ivec[0]; rotmat[1][0] = jvec[0]; rotmat[2][0] = kvec[0];
-    rotmat[0][1] = ivec[1]; rotmat[1][1] = jvec[1]; rotmat[2][1] = kvec[1];
-    rotmat[0][2] = ivec[2]; rotmat[1][2] = jvec[2]; rotmat[2][2] = kvec[2];
+    rotmat[0][0] = ivec[0]; rotmat[1][0] = ivec[1]; rotmat[2][0] = ivec[2];
+    rotmat[0][1] = jvec[0]; rotmat[1][1] = jvec[1]; rotmat[2][1] = jvec[2];
+    rotmat[0][2] = kvec[0]; rotmat[1][2] = kvec[1]; rotmat[2][2] = kvec[2];
     float quat[4];
     if (!MathFunctions::matrixToQuatern(rotmat, quat))
     {
@@ -474,6 +485,145 @@ void NiftiHeader::setDataScaling(const double& mult, const double& offset)
     m_header.scl_inter = offset;
 }
 
+namespace
+{
+    template<typename T>
+    struct Scaling
+    {
+        double mult, offset;
+        Scaling(const double& minval, const double& maxval)
+        {
+            typedef std::numeric_limits<T> mylimits;
+            double mymin = mylimits::lowest();
+            mult = (maxval - minval) / ((double)mylimits::max() - mymin);//multiplying is the first step of decoding (after byteswap), so start with the range
+            offset = minval - mymin * mult;//offset is added after multiplying the encoded value by mult
+        }
+    };
+}
+
+void NiftiHeader::setDataTypeAndScaleRange(const int16_t& type, const double& minval, const double& maxval)
+{
+    setDataType(type);
+    switch (type)
+    {
+        case NIFTI_TYPE_RGB24:
+            clearDataScaling();//RGB ignores scaling fields
+            break;
+        case DT_BINARY://currently not supported in read/write functions anyway
+            setDataScaling(maxval - minval, minval);//make the two possible decoded values equal to the min and max
+            break;
+        case NIFTI_TYPE_INT8:
+        {
+            Scaling<int8_t> myscale(minval, maxval);
+            setDataScaling(myscale.mult, myscale.offset);
+            break;
+        }
+        case NIFTI_TYPE_UINT8:
+        {
+            Scaling<uint8_t> myscale(minval, maxval);
+            setDataScaling(myscale.mult, myscale.offset);
+            break;
+        }
+        case NIFTI_TYPE_INT16:
+        {
+            Scaling<int16_t> myscale(minval, maxval);
+            setDataScaling(myscale.mult, myscale.offset);
+            break;
+        }
+        case NIFTI_TYPE_UINT16:
+        {
+            Scaling<uint16_t> myscale(minval, maxval);
+            setDataScaling(myscale.mult, myscale.offset);
+            break;
+        }
+        case NIFTI_TYPE_INT32:
+        {
+            Scaling<int32_t> myscale(minval, maxval);
+            setDataScaling(myscale.mult, myscale.offset);
+            break;
+        }
+        case NIFTI_TYPE_UINT32:
+        {
+            Scaling<uint32_t> myscale(minval, maxval);
+            setDataScaling(myscale.mult, myscale.offset);
+            break;
+        }
+        case NIFTI_TYPE_INT64:
+        {
+            Scaling<int64_t> myscale(minval, maxval);
+            setDataScaling(myscale.mult, myscale.offset);
+            break;
+        }
+        case NIFTI_TYPE_UINT64:
+        {
+            Scaling<uint64_t> myscale(minval, maxval);
+            setDataScaling(myscale.mult, myscale.offset);
+            break;
+        }
+        case NIFTI_TYPE_FLOAT32:
+        case NIFTI_TYPE_COMPLEX64:
+        {
+            Scaling<float> myscale(minval, maxval);
+            setDataScaling(myscale.mult, myscale.offset);
+            break;
+        }
+        case NIFTI_TYPE_FLOAT64:
+        case NIFTI_TYPE_COMPLEX128:
+        {
+            Scaling<double> myscale(minval, maxval);
+            setDataScaling(myscale.mult, myscale.offset);
+            break;
+        }
+        case NIFTI_TYPE_FLOAT128:
+        case NIFTI_TYPE_COMPLEX256:
+        {
+            Scaling<long double> myscale(minval, maxval);
+            setDataScaling(myscale.mult, myscale.offset);
+            break;
+        }
+        default:
+            CaretAssert(0);
+            throw CaretException("internal error, report what you did to the developers");
+    }
+}
+
+int NiftiHeader::getNumComponents() const
+{
+    switch (getDataType())
+    {
+        case NIFTI_TYPE_RGB24:
+            return 3;
+            break;
+        case NIFTI_TYPE_COMPLEX64:
+        case NIFTI_TYPE_COMPLEX128:
+        case NIFTI_TYPE_COMPLEX256:
+            return 2;
+            break;
+        case DT_BINARY:
+        case NIFTI_TYPE_INT8:
+        case NIFTI_TYPE_UINT8:
+        case NIFTI_TYPE_INT16:
+        case NIFTI_TYPE_UINT16:
+        case NIFTI_TYPE_INT32:
+        case NIFTI_TYPE_UINT32:
+        case NIFTI_TYPE_FLOAT32:
+        case NIFTI_TYPE_INT64:
+        case NIFTI_TYPE_UINT64:
+        case NIFTI_TYPE_FLOAT64:
+        case NIFTI_TYPE_FLOAT128:
+            return 1;
+            break;
+        default:
+            CaretAssert(0);
+            throw CaretException("internal error, report what you did to the developers");
+    }
+}
+
+bool NiftiHeader::hasGoodSpatialInformation() const
+{
+    return (m_header.sform_code != 0 || m_header.qform_code != 0);
+}
+
 void NiftiHeader::read(CaretBinaryFile& inFile)
 {
     nifti_1_header buffer1;
@@ -481,6 +631,7 @@ void NiftiHeader::read(CaretBinaryFile& inFile)
     inFile.read(&buffer1, sizeof(nifti_1_header));
     int version = NIFTI2_VERSION(buffer1);
     bool swapped = false;
+    Quirks myquirks;
     try
     {
         if (version == 2)
@@ -492,14 +643,14 @@ void NiftiHeader::read(CaretBinaryFile& inFile)
                 swapped = true;
                 swapHeaderBytes(buffer2);
             }
-            setupFrom(buffer2);
+            myquirks = setupFrom(buffer2, inFile.getFilename());
         } else if (version == 1) {
             if (NIFTI2_NEEDS_SWAP(buffer1))//yes, this works on nifti-1 also
             {
                 swapped = true;
                 swapHeaderBytes(buffer1);
             }
-            setupFrom(buffer1);
+            myquirks = setupFrom(buffer1, inFile.getFilename());
         } else {
             throw DataFileException(inFile.getFilename() + " is not a valid NIfTI file");
         }
@@ -507,58 +658,74 @@ void NiftiHeader::read(CaretBinaryFile& inFile)
         throw DataFileException("error reading NIfTI file " + inFile.getFilename() + ": " + e.whatString());
     }
     m_extensions.clear();
-    char extender[4];
-    inFile.read(extender, 4);
-    int extensions = 0;//if it has extensions in a format we don't know about, don't try to read them
-    if (version == 1 && extender[0] != 0) extensions = 1;//sadly, this is the only thing nifti-1 says about the extender bytes
-    if (version == 2 && extender[0] == 1 && extender[1] == 0 && extender[2] == 0 && extender[3] == 0) extensions = 1;//from http://nifti.nimh.nih.gov/nifti-2 as of 4/4/2014:
-    if (extensions == 1)//"extentions match those of NIfTI-1.1 when the extender bytes are 1 0 0 0"
+    if (myquirks.no_extender)
     {
-        int64_t extStart;
-        if (version == 1)
+        int min_offset = 352;
+        if (version == 2) min_offset = 544;
+        CaretLogWarning("in file '" + inFile.getFilename() + "', vox_offset is " + AString::number(m_header.vox_offset) +
+        ", nifti standard specifies that it should be at least " + AString::number(min_offset) + ", assuming malformed file with no extender");
+    } else {
+        char extender[4];
+        inFile.read(extender, 4);
+        int extensions = 0;//if it has extensions in a format we don't know about, don't try to read them
+        if (version == 1 && extender[0] != 0) extensions = 1;//sadly, this is the only thing nifti-1 says about the extender bytes
+        if (version == 2 && extender[0] == 1 && extender[1] == 0 && extender[2] == 0 && extender[3] == 0) extensions = 1;//from http://nifti.nimh.nih.gov/nifti-2 as of 4/4/2014:
+        if (extensions == 1)//"extentions match those of NIfTI-1.1 when the extender bytes are 1 0 0 0"
         {
-            extStart = 352;
-        } else {
-            CaretAssert(version == 2);
-            extStart = 544;
-        }
-        CaretAssert(inFile.pos() == extStart);
-        while(extStart + 2 * sizeof(int32_t) <= (size_t)m_header.vox_offset)
-        {
-            int32_t esize, ecode;
-            inFile.read(&esize, sizeof(int32_t));
-            if (swapped) ByteSwapping::swap(esize);
-            inFile.read(&ecode, sizeof(int32_t));
-            if (swapped) ByteSwapping::swap(ecode);
-            if (esize < 8 || esize + extStart > m_header.vox_offset) break;
-            CaretPointer<NiftiExtension> tempExtension(new NiftiExtension());
-            if ((size_t)esize > 2 * sizeof(int32_t))//don't try to read 0 bytes
+            int64_t extStart;
+            if (version == 1)
             {
-                tempExtension->m_bytes.resize(esize - 2 * sizeof(int32_t));
-                inFile.read(tempExtension->m_bytes.data(), esize - 2 * sizeof(int32_t));
+                extStart = 352;
+            } else {
+                CaretAssert(version == 2);
+                extStart = 544;
             }
-            tempExtension->m_ecode = ecode;
-            m_extensions.push_back(tempExtension);
-            extStart += esize;//esize includes the two int32_ts
+            CaretAssert(inFile.pos() == extStart);
+            while(extStart + 2 * sizeof(int32_t) <= (size_t)m_header.vox_offset)
+            {
+                int32_t esize, ecode;
+                inFile.read(&esize, sizeof(int32_t));
+                if (swapped) ByteSwapping::swap(esize);
+                inFile.read(&ecode, sizeof(int32_t));
+                if (swapped) ByteSwapping::swap(ecode);
+                if (esize < 8 || esize + extStart > m_header.vox_offset) break;
+                CaretPointer<NiftiExtension> tempExtension(new NiftiExtension());
+                if ((size_t)esize > 2 * sizeof(int32_t))//don't try to read 0 bytes
+                {
+                    tempExtension->m_bytes.resize(esize - 2 * sizeof(int32_t));
+                    inFile.read(tempExtension->m_bytes.data(), esize - 2 * sizeof(int32_t));
+                }
+                tempExtension->m_ecode = ecode;
+                m_extensions.push_back(tempExtension);
+                extStart += esize;//esize includes the two int32_ts
+            }
         }
     }
     m_isSwapped = swapped;//now that we know there were no errors (because they throw), complete the internal state
     m_version = version;
 }
 
-void NiftiHeader::setupFrom(const nifti_1_header& header)
+NiftiHeader::Quirks NiftiHeader::setupFrom(const nifti_1_header& header, const AString& filename)
 {
-    if (header.sizeof_hdr != sizeof(nifti_1_header)) throw DataFileException("incorrect sizeof_hdr");
+    Quirks ret;
+    if (header.sizeof_hdr != sizeof(nifti_1_header)) throw DataFileException(filename, "incorrect sizeof_hdr");
     const char magic[] = "n+1\0";//only support single-file nifti
-    if (strncmp(header.magic, magic, 4) != 0) throw DataFileException("incorrect magic");
-    if (header.dim[0] < 1 || header.dim[0] > 7) throw DataFileException("incorrect dim[0]");
+    if (strncmp(header.magic, magic, 4) != 0) throw DataFileException(filename, "incorrect magic");
+    if (header.dim[0] < 1 || header.dim[0] > 7) throw DataFileException(filename, "incorrect dim[0]");
     for (int i = 0; i < header.dim[0]; ++i)
     {
-        if (header.dim[i + 1] < 1) throw DataFileException("dim[" + QString::number(i + 1) + "] < 1");
+        if (header.dim[i + 1] < 1) throw DataFileException(filename, "dim[" + QString::number(i + 1) + "] < 1");
     }
-    if (header.vox_offset < 352) throw DataFileException("incorrect vox_offset");
+    if (header.vox_offset < 352)
+    {
+        if (header.vox_offset < 348)
+        {
+            throw DataFileException(filename, "invalid vox_offset: " + AString::number(header.vox_offset));
+        }
+        ret.no_extender = true;
+    }
     int numBits = typeToNumBits(header.datatype);
-    if (header.bitpix != numBits) CaretLogWarning("datatype disagrees with bitpix");
+    if (header.bitpix != numBits) CaretLogWarning("datatype disagrees with bitpix in file '" + filename + "'");
     m_header.sizeof_hdr = header.sizeof_hdr;//copy in everything, so we don't have to fake anything to print the header as read
     for (int i = 0; i < 4; ++i)//mostly using nifti-2 field order to make it easier to find if things are missed
     {
@@ -601,24 +768,27 @@ void NiftiHeader::setupFrom(const nifti_1_header& header)
     m_header.intent_code = header.intent_code;
     for (int i = 0; i < 16; ++i) m_header.intent_name[i] = header.intent_name[i];
     m_header.dim_info = header.dim_info;
+    return ret;
 }
 
-void NiftiHeader::setupFrom(const nifti_2_header& header)
+NiftiHeader::Quirks NiftiHeader::setupFrom(const nifti_2_header& header, const AString& filename)
 {
-    if (header.sizeof_hdr != sizeof(nifti_2_header)) throw DataFileException("incorrect sizeof_hdr");
+    Quirks ret;
+    if (header.sizeof_hdr != sizeof(nifti_2_header)) throw DataFileException(filename, "incorrect sizeof_hdr");
     const char magic[] = "n+2\0\r\n\032\n";//only support single-file nifti
     for (int i = 0; i < 8; ++i)
     {
-        if (header.magic[i] != magic[i]) throw DataFileException("incorrect magic");
+        if (header.magic[i] != magic[i]) throw DataFileException(filename, "incorrect magic");
     }
-    if (header.dim[0] < 1 || header.dim[0] > 7) throw DataFileException("incorrect dim[0]");
+    if (header.dim[0] < 1 || header.dim[0] > 7) throw DataFileException(filename, "incorrect dim[0]");
     for (int i = 0; i < header.dim[0]; ++i)
     {
-        if (header.dim[i + 1] < 1) throw DataFileException("dim[" + QString::number(i + 1) + "] < 1");
+        if (header.dim[i + 1] < 1) throw DataFileException(filename, "dim[" + QString::number(i + 1) + "] < 1");
     }
-    if (header.vox_offset < 352) throw DataFileException("incorrect vox_offset");
-    if (header.bitpix != typeToNumBits(header.datatype)) CaretLogWarning("datatype disagrees with bitpix");
+    if (header.vox_offset < 544) throw DataFileException(filename, "incorrect vox_offset");//haven't noticed any nifti-2 with bad vox_offset yet, and all cifti files have a big extension, so they have to have used it correctly
+    if (header.bitpix != typeToNumBits(header.datatype)) CaretLogWarning("datatype disagrees with bitpix in file '" + filename + "'");
     memcpy(&m_header, &header, sizeof(nifti_2_header));
+    return ret;
 }
 
 int NiftiHeader::typeToNumBits(const int64_t& type)
@@ -658,7 +828,7 @@ int NiftiHeader::typeToNumBits(const int64_t& type)
             return 256;
             break;
         default:
-            throw DataFileException("incorrect datatype code");
+            throw DataFileException("incorrect nifti datatype code");
     }
 }
 
@@ -733,6 +903,12 @@ void NiftiHeader::swapHeaderBytes(nifti_2_header& header)
 void NiftiHeader::write(CaretBinaryFile& outFile, const int& version, const bool& swapEndian)
 {
     if (!canWriteVersion(version)) throw DataFileException("unable to write NIfTI version " + QString::number(version) + " for file " + outFile.getFilename());
+    double junk1, junk2;
+    int16_t datatype = getDataType();
+    if (getDataScaling(junk1, junk2) && ((datatype & 0x70) > 0 || datatype >= 1536))
+    {//that hacky expression is to detect 16, 32, 64, 1536, 1792, and 2048
+        CaretLogWarning("writing nifti file with scaling factor and floating point datatype");
+    }
     const char padding[16] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
     int64_t voxOffset;
     if (version == 2)

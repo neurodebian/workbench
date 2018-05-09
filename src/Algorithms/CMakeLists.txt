@@ -11,7 +11,12 @@ SET(QT_DONT_USE_QTGUI)
 #
 # Add QT for includes
 #
-INCLUDE (${QT_USE_FILE})
+if(Qt5_FOUND)
+    include_directories(${Qt5Core_INCLUDE_DIRS})
+endif()
+IF (QT4_FOUND)
+    INCLUDE(${QT_USE_FILE})
+ENDIF ()
 
 #
 # Create the helper library
@@ -37,6 +42,7 @@ AlgorithmCiftiFalseCorrelation.h
 AlgorithmCiftiFindClusters.h
 AlgorithmCiftiGradient.h
 AlgorithmCiftiLabelAdjacency.h
+AlgorithmCiftiLabelProbability.h
 AlgorithmCiftiLabelToBorder.h
 AlgorithmCiftiLabelToROI.h
 AlgorithmCiftiMergeDense.h
@@ -64,6 +70,7 @@ AlgorithmGiftiLabelToROI.h
 AlgorithmLabelDilate.h
 AlgorithmLabelErode.h
 AlgorithmLabelModifyKeys.h
+AlgorithmLabelProbability.h
 AlgorithmLabelResample.h
 AlgorithmLabelToBorder.h
 AlgorithmLabelToVolumeMapping.h
@@ -109,6 +116,7 @@ AlgorithmSurfaceWedgeVolume.h
 AlgorithmVolumeAffineResample.h
 AlgorithmVolumeAllLabelsToROIs.h
 AlgorithmVolumeDilate.h
+AlgorithmVolumeDistortion.h
 AlgorithmVolumeErode.h
 AlgorithmVolumeEstimateFWHM.h
 AlgorithmVolumeExtrema.h
@@ -128,6 +136,7 @@ AlgorithmVolumeSmoothing.h
 AlgorithmVolumeTFCE.h
 AlgorithmVolumeToSurfaceMapping.h
 AlgorithmVolumeVectorOperation.h
+AlgorithmVolumeWarpfieldAffineRegression.h
 AlgorithmVolumeWarpfieldResample.h
 OverlapLogicEnum.h
 
@@ -151,6 +160,7 @@ AlgorithmCiftiFalseCorrelation.cxx
 AlgorithmCiftiFindClusters.cxx
 AlgorithmCiftiGradient.cxx
 AlgorithmCiftiLabelAdjacency.cxx
+AlgorithmCiftiLabelProbability.cxx
 AlgorithmCiftiLabelToBorder.cxx
 AlgorithmCiftiLabelToROI.cxx
 AlgorithmCiftiMergeDense.cxx
@@ -178,6 +188,7 @@ AlgorithmGiftiLabelToROI.cxx
 AlgorithmLabelDilate.cxx
 AlgorithmLabelErode.cxx
 AlgorithmLabelModifyKeys.cxx
+AlgorithmLabelProbability.cxx
 AlgorithmLabelResample.cxx
 AlgorithmLabelToBorder.cxx
 AlgorithmLabelToVolumeMapping.cxx
@@ -223,6 +234,7 @@ AlgorithmSurfaceWedgeVolume.cxx
 AlgorithmVolumeAffineResample.cxx
 AlgorithmVolumeAllLabelsToROIs.cxx
 AlgorithmVolumeDilate.cxx
+AlgorithmVolumeDistortion.cxx
 AlgorithmVolumeErode.cxx
 AlgorithmVolumeEstimateFWHM.cxx
 AlgorithmVolumeExtrema.cxx
@@ -242,9 +254,12 @@ AlgorithmVolumeSmoothing.cxx
 AlgorithmVolumeTFCE.cxx
 AlgorithmVolumeToSurfaceMapping.cxx
 AlgorithmVolumeVectorOperation.cxx
+AlgorithmVolumeWarpfieldAffineRegression.cxx
 AlgorithmVolumeWarpfieldResample.cxx
 OverlapLogicEnum.cxx
 )
+
+TARGET_LINK_LIBRARIES(Algorithms ${CARET_QT5_LINK})
 
 #
 # Find Headers

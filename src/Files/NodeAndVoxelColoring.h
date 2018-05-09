@@ -30,7 +30,6 @@
 namespace caret {
     class FastStatistics;
     class GiftiLabelTable;
-    class Palette;
     class PaletteColorMapping;
     
     class NodeAndVoxelColoring {
@@ -38,8 +37,8 @@ namespace caret {
     public:
         static void colorScalarsWithPalette(const FastStatistics* statistics,
                                             const PaletteColorMapping* paletteColorMapping,
-                                            const Palette* palette,
                                             const float* scalars,
+                                            const PaletteColorMapping* thresholdPaletteColorMapping,
                                             const float* scalarThresholds,
                                             const int64_t numberOfScalars,
                                             float* rgbaOut,
@@ -47,8 +46,8 @@ namespace caret {
         
         static void colorScalarsWithPalette(const FastStatistics* statistics,
                                             const PaletteColorMapping* paletteColorMapping,
-                                            const Palette* palette,
                                             const float* scalars,
+                                            const PaletteColorMapping* thresholdPaletteColorMapping,
                                             const float* scalarThresholds,
                                             const int64_t numberOfScalars,
                                             uint8_t* rgbaOut,
@@ -103,8 +102,8 @@ namespace caret {
         
         static void colorScalarsWithPalettePrivate(const FastStatistics* statistics,
                                                    const PaletteColorMapping* paletteColorMapping,
-                                                   const Palette* palette,
                                                    const float* scalars,
+                                                   const PaletteColorMapping* thresholdPaletteColorMapping,
                                                    const float* scalarThresholds,
                                                    const int64_t numberOfScalars,
                                                    const ColorDataType colorDataType,

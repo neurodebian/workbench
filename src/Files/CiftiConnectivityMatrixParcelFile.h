@@ -24,18 +24,15 @@
 #include "BrainConstants.h"
 #include "CiftiMappableConnectivityMatrixDataFile.h"
 #include "ChartableMatrixParcelInterface.h"
-#include "EventListenerInterface.h"
 
 namespace caret {
 
     class ChartMatrixDisplayProperties;
     class CiftiParcelReorderingModel;
-    class PaletteFile;
     
     class CiftiConnectivityMatrixParcelFile :
     public CiftiMappableConnectivityMatrixDataFile,
-    public ChartableMatrixParcelInterface,
-    public EventListenerInterface {
+    public ChartableMatrixParcelInterface {
         
     public:
         CiftiConnectivityMatrixParcelFile();
@@ -70,7 +67,7 @@ namespace caret {
         virtual void setMatrixChartingEnabled(const int32_t tabIndex,
                                         const bool enabled);
 
-        virtual void getSupportedMatrixChartDataTypes(std::vector<ChartDataTypeEnum::Enum>& chartDataTypesOut) const;
+        virtual void getSupportedMatrixChartDataTypes(std::vector<ChartOneDataTypeEnum::Enum>& chartDataTypesOut) const;
         
         const ChartMatrixDisplayProperties* getChartMatrixDisplayProperties(const int32_t tabIndex) const;
         

@@ -68,7 +68,6 @@ namespace caret {
         void volumeAxesCrosshairsComboBoxToggled(bool value);
         void volumeAxesLabelsComboBoxToggled(bool value);
         void volumeAxesMontageCoordinatesComboBoxToggled(bool value);
-//        void volumeMontageGapValueChanged(int value);
         void volumeMontageCoordinatePrecisionChanged(int value);
         void volumeIdentificationComboBoxToggled(bool value);
         
@@ -87,14 +86,15 @@ namespace caret {
             PREF_COLOR_FOREGROUND_SURFACE      = 6,
             PREF_COLOR_FOREGROUND_VOLUME       = 7,
             PREF_COLOR_CHART_MATRIX_GRID_LINES = 8,
-            NUMBER_OF_PREF_COLORS              = 9
+            PREF_COLOR_CHART_THRESHOLD         = 9,
+            NUMBER_OF_PREF_COLORS              = 10
         };
         
         QWidget* createColorsWidget();
         QWidget* createIdentificationSymbolWidget();
         QWidget* createMiscellaneousWidget();
         QWidget* createOpenGLWidget();
-        QWidget* createVolumeWidget();
+        QWidget* createTabDefaltsWidget();
         
         void updateColorWidget(CaretPreferences* prefs);
         void updateIdentificationWidget(CaretPreferences* prefs);
@@ -129,6 +129,7 @@ namespace caret {
         QWidget* m_backgroundColorSurfaceWidget;
         QWidget* m_backgroundColorVolumeWidget;
         QWidget* m_chartMatrixGridLinesColorWidget;
+        QWidget* m_chartHistogramThresholdColorWidget;
 
         WuQTrueFalseComboBox* m_miscDevelopMenuEnabledComboBox;
         QComboBox* m_miscLoggingLevelComboBox;
@@ -145,7 +146,6 @@ namespace caret {
         WuQTrueFalseComboBox* m_volumeAxesCrosshairsComboBox;
         WuQTrueFalseComboBox* m_volumeAxesLabelsComboBox;
         WuQTrueFalseComboBox* m_volumeAxesMontageCoordinatesComboBox;
-//        QSpinBox* m_volumeMontageGapSpinBox;
         QSpinBox* m_volumeMontageCoordinatePrecisionSpinBox;
         WuQTrueFalseComboBox* m_volumeIdentificationComboBox;
         

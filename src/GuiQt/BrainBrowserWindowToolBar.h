@@ -52,6 +52,11 @@ namespace caret {
     
     class BrainBrowserWindowToolBarChartAxes;
     class BrainBrowserWindowToolBarChartAttributes;
+    class BrainBrowserWindowToolBarChartTwoAttributes;
+    class BrainBrowserWindowToolBarChartTwoAxes;
+    class BrainBrowserWindowToolBarChartTwoOrientation;
+    class BrainBrowserWindowToolBarChartTwoTitle;
+    class BrainBrowserWindowToolBarChartTwoType;
     class BrainBrowserWindowToolBarChartType;
     class BrainBrowserWindowToolBarClipping;
     class BrainBrowserWindowToolBarSlicePlane;
@@ -80,15 +85,14 @@ namespace caret {
                                   BrowserTabContent* initialBrowserTabContent,
                                   QAction* overlayToolBoxAction,
                                   QAction* layersToolBoxAction,
-                                  QAction* windowAspectRatioLockedAction,
-                                  QAction* tabAspectRatioLockedAction,
+                                  QToolButton* toolBarLockWindowAndAllTabAspectRatioButton,
                                   BrainBrowserWindow* parentBrainBrowserWindow);
         
         ~BrainBrowserWindowToolBar();
         
         void addNewTab();
         
-        void addNewTabCloneContent(BrowserTabContent* browserTabContentToBeCloned);
+        void addNewDuplicatedTab(BrowserTabContent* browserTabContentToBeCloned);
         
         void addNewTabWithContent(BrowserTabContent* browserTabContent);
         
@@ -96,6 +100,7 @@ namespace caret {
         
         void receiveEvent(Event* event);
         
+        int32_t getNumberOfTabs() const;
         
         virtual SceneClass* saveToScene(const SceneAttributes* sceneAttributes,
                                         const AString& instanceName);
@@ -120,27 +125,34 @@ namespace caret {
         BrowserTabContent* getTabContentFromSelectedTab();
         BrowserTabContent* getTabContentFromTab(const int tabIndex);
         
+        int32_t getTabBarIndexWithBrowserTabIndex(const int32_t browserTabIndex);
+        
         Model* getDisplayedModel();
         
         int32_t loadIntoTab(const int32_t tabIndex,
                             Model* controller);
 
         void updateGraphicsWindow();
+        void updateGraphicsWindowAndYokedWindows();
         void updateUserInterface();
         void updateToolBox();
+        void updateAllTabNames();
         void updateTabName(const int32_t tabIndex);
-        void updateOtherYokedWindows();
         
         QWidget* createViewWidget();
         QWidget* createOrientationWidget();
         QWidget* createWholeBrainSurfaceOptionsWidget();
         QWidget* createVolumeIndicesWidget();
         QWidget* createModeWidget();
-        QWidget* createTabOptionsWidget(QAction* windowAspectRatioLockedAction,
-                                        QAction* tabAspectRatioLockedAction);
+        QWidget* createTabOptionsWidget(QToolButton* toolBarLockWindowAndAllTabAspectRatioButton);
         QWidget* createChartAxesWidget();
         QWidget* createChartAttributesWidget();
+        QWidget* createChartTwoOrientationWidget();
+        QWidget* createChartTwoAttributesWidget();
+        QWidget* createChartTwoAxesWidget();
+        QWidget* createChartTwoTitleWidget();
         QWidget* createChartTypeWidget();
+        QWidget* createChartTypeTwoWidget();
         QWidget* createSingleSurfaceOptionsWidget();
         QWidget* createSurfaceMontageOptionsWidget();
         QWidget* createClippingOptionsWidget();
@@ -157,7 +169,12 @@ namespace caret {
         void updateSurfaceMontageOptionsWidget(BrowserTabContent* browserTabContent);
         void updateChartAxesWidget(BrowserTabContent* browserTabContent);
         void updateChartAttributesWidget(BrowserTabContent* browserTabContent);
+        void updateChartTwoAttributesWidget(BrowserTabContent* browserTabContent);
+        void updateChartTwoAxesWidget(BrowserTabContent* browserTabContent);
+        void updateChartTwoOrientationWidget(BrowserTabContent* browserTabContent);
+        void updateChartTwoTitleWidget(BrowserTabContent* browserTabContent);
         void updateChartTypeWidget(BrowserTabContent* browserTabContent);
+        void updateChartTypeTwoWidget(BrowserTabContent* browserTabContent);
         void updateVolumeMontageWidget(BrowserTabContent* browserTabContent);
         void updateVolumePlaneWidget(BrowserTabContent* browserTabContent);
         void updateClippingOptionsWidget(BrowserTabContent* browserTabContent);
@@ -180,8 +197,13 @@ namespace caret {
         QWidget* volumeMontageWidget;
         QWidget* volumePlaneWidget;
         QWidget* chartTypeWidget;
+        QWidget* chartTypeTwoWidget;
         QWidget* chartAxesWidget;
         QWidget* chartAttributesWidget;
+        QWidget* chartTwoOrientationWidget;
+        QWidget* chartTwoAttributesWidget;
+        QWidget* chartTwoAxesWidget;
+        QWidget* chartTwoTitleWidget;
         
         WuQWidgetObjectGroup* viewWidgetGroup;
         WuQWidgetObjectGroup* orientationWidgetGroup;
@@ -204,19 +226,6 @@ namespace caret {
 
         /** Is set to the user input widget provided by the user input processor */
         QWidget* userInputControlsWidgetActiveInputWidget;
-        
-        /**
-         * When updating, no signals should be emitted.  This variable
-         * is incremented at the beginning of an update method and
-         * decremented at the end of the update method.  If it is 
-         * non-zero in a slot method, then a signal was emitted during
-         * the update and the widget that emitted the signal should
-         * have its signal blocked.
-         */
-        void incrementUpdateCounter(const char* methodName);
-        void decrementUpdateCounter(const char* methodName);
-        void checkUpdateCounter();
-        int updateCounter;
         
         void removeAndReturnAllTabs(std::vector<BrowserTabContent*>& allTabContent);
         
@@ -245,16 +254,27 @@ namespace caret {
         void selectedTabChanged(int indx);
         void tabMoved(int, int);
         void tabCloseSelected(int);
+        void showTabMenu(const QPoint& pos);
         
     private:
-        void insertTabAtIndex(BrowserTabContent* browserTabContent,
-                              const int32_t insertAtIndex);
+        enum class InsertTabMode {
+            APPEND,
+            AT_TAB_BAR_INDEX,
+            AT_TAB_CONTENTS_INDEX
+        };
         
-        void addOrInsertNewTab(BrowserTabContent* browserTabContent,
-                               const int32_t insertAtIndex);
+        bool allowAddingNewTab();
+        
+        void insertTabContentPrivate(const InsertTabMode insertTabMode,
+                                     BrowserTabContent* browserTabContent,
+                                     const int32_t tabBarIndex);
         
         void removeTab(int index);
         void tabClosed(int index);
+        
+        void insertNewTabAtTabBarIndex(int32_t tabBarIndex);
+        void insertAndCloneTabContentAtTabBarIndex(const BrowserTabContent* tabContentToBeCloned,
+                                                 const int32_t tabBarIndex);
         
         BrowserTabContent* createNewTab(AString& errorMessage);
         
@@ -262,7 +282,8 @@ namespace caret {
         QRadioButton* viewModeSurfaceMontageRadioButton;
         QRadioButton* viewModeVolumeRadioButton;
         QRadioButton* viewModeWholeBrainRadioButton;
-        QRadioButton* viewModeChartRadioButton;
+        QRadioButton* viewModeChartOneRadioButton;
+        QRadioButton* viewModeChartTwoRadioButton;
         
         QAction* customViewAction;
 
@@ -349,8 +370,14 @@ namespace caret {
         
     private:
         BrainBrowserWindowToolBarChartAxes* m_chartAxisToolBarComponent;
+        BrainBrowserWindowToolBarChartTwoType* m_chartTwoTypeToolBarComponent;
         BrainBrowserWindowToolBarChartType* m_chartTypeToolBarComponent;
         BrainBrowserWindowToolBarChartAttributes* m_chartAttributesToolBarComponent;
+        BrainBrowserWindowToolBarChartTwoAxes* m_chartTwoAxesToolBarComponent;
+        BrainBrowserWindowToolBarChartTwoOrientation* m_chartTwoOrientationToolBarComponent;
+        BrainBrowserWindowToolBarChartTwoAttributes* m_chartTwoAttributesToolBarComponent;
+        BrainBrowserWindowToolBarChartTwoTitle* m_chartTwoTitleToolBarComponent;
+
         BrainBrowserWindowToolBarSurfaceMontage* m_surfaceMontageToolBarComponent;
         
         BrainBrowserWindowToolBarClipping* m_clippingToolBarComponent;
@@ -384,6 +411,11 @@ namespace caret {
     private:
         friend class BrainBrowserWindow;
         friend class BrainBrowserWindowToolBarChartAxes;
+        friend class BrainBrowserWindowToolBarChartTwoAxes;
+        friend class BrainBrowserWindowToolBarChartTwoOrientation;
+        friend class BrainBrowserWindowToolBarChartTwoAttributes;
+
+        friend class BrainBrowserWindowToolBarChartTwoType;
         friend class BrainBrowserWindowToolBarChartType;
         friend class BrainBrowserWindowToolBarClipping;
         friend class BrainBrowserWindowToolBarComponent;
@@ -400,9 +432,20 @@ namespace caret {
          * box around it.
          */
         int32_t m_tabIndexForTileTabsHighlighting;
+        QTimer* m_tileTabsHighlightingTimer = NULL;
+        bool m_tileTabsHighlightingTimerEnabledFlag = true;
         
         bool isContructorFinished;
         bool isDestructionInProgress;
+        
+        /**
+         * Tracks when update is performed to catch incorrectly emitted signals.
+         */
+        bool m_performingUpdateFlag = false;
+        
+        const int32_t TAB_INDEX_APPEND_TO_TOOLBAR = 10000;
+        
+        friend class BrainBrowserWindowToolBarTabPopUpMenu;
     };
 }
 

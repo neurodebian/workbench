@@ -32,10 +32,10 @@
 #include "DataFileContentInformation.h"
 #include "ElapsedTimer.h"
 #include "EventManager.h"
-#include "EventPaletteGetByName.h"
 #include "GroupAndNameHierarchyModel.h"
 #include "FastStatistics.h"
 #include "Histogram.h"
+#include "MapFileDataSelector.h"
 #include "MultiDimIterator.h"
 #include "NiftiIO.h"
 #include "Palette.h"
@@ -223,6 +223,13 @@ void VolumeFile::readFile(const AString& filename)
         NiftiIO myIO;//begin nifti specific code - should this go somewhere else?
         myIO.openRead(fileToRead);
         const NiftiHeader& inHeader = myIO.getHeader();
+        for (int i = 0; i < (int)inHeader.m_extensions.size(); ++i)
+        {//check for actually being cifti
+            if (inHeader.m_extensions[i]->m_ecode == NIFTI_ECODE_CIFTI)
+            {
+                throw DataFileException(filename, "Cifti files cannot be used as volume files");
+            }
+        }
         int numComponents = myIO.getNumComponents();
         vector<int64_t> myDims = myIO.getDimensions();
         int fullDims = 3;//deal with nifti with less than 3 dimensions
@@ -233,8 +240,20 @@ void VolumeFile::readFile(const AString& filename)
             extraDims = vector<int64_t>(myDims.begin() + 3, myDims.end());
         }
         while (myDims.size() < 3) myDims.push_back(1);//pretend we have 3 dimensions in header, always, things that use getOriginalDimensions assume this (because "VolumeFile")
+        if (myDims.size() > 3)
+        {//check for cifti-like dimensions here, so that we have the filename to report in the error
+            int64_t numFrames = myDims[3];
+            for (int i = 4; i < (int)myDims.size(); ++i)
+            {
+                numFrames *= myDims[i];
+            }
+            if (myDims[0] == 1 && myDims[1] == 1 && myDims[2] == 1 && numFrames > 10000)
+            {
+                throw DataFileException(filename, "volume FOV is 1x1x1 voxel, with over 10,000 frames, which suggests a broken cifti file (no header extension)");
+            }
+        }//this check is also done in reinitialize(), but we don't want to call getSForm before this check when reading a file
         reinitialize(myDims, inHeader.getSForm(), numComponents);
-        setFileName(filename);  // must be donw after reinitialize() since it calls clear() which clears the name of the file
+        setFileName(filename);  // must be done after reinitialize() since it calls clear() which clears the name of the file
         int64_t frameSize = myDims[0] * myDims[1] * myDims[2];
         if (numComponents != 1)
         {
@@ -265,6 +284,7 @@ void VolumeFile::readFile(const AString& filename)
                      + " seconds.");
         m_header.grabNew(new NiftiHeader(inHeader));//end nifti-specific code
         parseExtensions();
+        updateAfterFileDataChanges();
         clearModified();
     }
     
@@ -276,6 +296,10 @@ void VolumeFile::readFile(const AString& filename)
     if (isMappedWithLabelTable()) {
         m_forceUpdateOfGroupAndNameHierarchy = true;
         getGroupAndNameHierarchyModel();
+    }
+    
+    if ( ! hasGoodSpatialInformation()) {
+        addFileReadWarning("No spatial information in file (in NIFTI header, both qform and sform are invalid).");
     }
     
     CaretLogFine("Total Time to read and process volume is "
@@ -330,10 +354,21 @@ VolumeFile::writeFile(const AString& filename)
     {
         myIO.writeData(getFrame(getBrickIndexFromNonSpatialIndexes(*myiter)), 3, *myiter);//NOTE: does not deal with multi-component volumes
     }
+    myIO.close();//call close explicitly to get a throw rather than a severe log when there is a problem
     m_header.grabNew(new NiftiHeader(outHeader));//update header to last written version, end nifti-specific code
     
     m_volumeFileEditorDelegate->clear();
     m_volumeFileEditorDelegate->updateIfVolumeFileChangedNumberOfMaps();
+    clearModified();
+}
+
+bool VolumeFile::hasGoodSpatialInformation() const
+{
+    if (m_header != NULL)
+    {
+        return m_header->hasGoodSpatialInformation();
+    }
+    return true;
 }
 
 float VolumeFile::interpolateValue(const float* coordIn, InterpType interp, bool* validOut, const int64_t brickIndex, const int64_t component) const
@@ -645,7 +680,7 @@ void VolumeFile::validateMembers()
         }
     }
     
-    setPaletteNormalizationMode(PaletteNormalizationModeEnum::NORMALIZATION_SELECTED_MAP_DATA);
+    //setPaletteNormalizationMode(PaletteNormalizationModeEnum::NORMALIZATION_SELECTED_MAP_DATA);
     
     m_singleSliceFlag = false;
     if ((dimensions[0] == 1)
@@ -697,6 +732,8 @@ VolumeFile::clearModified()
     CaretMappableDataFile::clearModified();
     clearModifiedVolumeBase();
 
+    getFileMetaData()->clearModified();
+    
     const int32_t numMaps = getNumberOfMaps();
     if (isMappedWithPalette())
     {
@@ -709,6 +746,10 @@ VolumeFile::clearModified()
         for (int32_t i = 0; i < numMaps; i++) {
             getMapLabelTable(i)->clearModified();
         }
+    }
+    
+    for (int32_t i = 0; i < numMaps; i++) {
+        getMapMetaData(i)->clearModified();
     }
 }
 
@@ -727,12 +768,21 @@ VolumeFile::isModifiedExcludingPaletteColorMapping() const
         return true;
     }
     
+    if (getFileMetaData()->isModified()) {
+        return true;
+    }
+    
     const int32_t numMaps = getNumberOfMaps();
     if (isMappedWithLabelTable()) {
         for (int32_t i = 0; i < numMaps; i++) {
             if (getMapLabelTable(i)->isModified()) {
                 return true;
             }
+        }
+    }
+    for (int32_t i = 0; i < numMaps; i++) {
+        if (getMapMetaData(i)->isModified()) {
+            return true;
         }
     }
     
@@ -797,22 +847,14 @@ VolumeFile::setMapName(const int32_t mapIndex,
 
 const GiftiMetaData* VolumeFile::getMapMetaData(const int32_t mapIndex) const
 {
-    CaretAssertVectorIndex(m_brickAttributes, mapIndex);
-    if (m_brickAttributes[mapIndex].m_metadata == NULL)
-    {
-        m_brickAttributes[mapIndex].m_metadata.grabNew(new GiftiMetaData());
-    }
-    return m_brickAttributes[mapIndex].m_metadata;
+    CaretAssertVectorIndex(m_caretVolExt.m_attributes, mapIndex);
+    return &m_caretVolExt.m_attributes[mapIndex]->m_metadata;
 }
 
 GiftiMetaData* VolumeFile::getMapMetaData(const int32_t mapIndex)
 {
-    CaretAssertVectorIndex(m_brickAttributes, mapIndex);
-    if (m_brickAttributes[mapIndex].m_metadata == NULL)
-    {
-        m_brickAttributes[mapIndex].m_metadata.grabNew(new GiftiMetaData());
-    }
-    return m_brickAttributes[mapIndex].m_metadata;
+    CaretAssertVectorIndex(m_caretVolExt.m_attributes, mapIndex);
+    return &m_caretVolExt.m_attributes[mapIndex]->m_metadata;
 }
 
 void VolumeFile::checkStatisticsValid()
@@ -847,9 +889,31 @@ const Histogram* VolumeFile::getMapHistogram(const int32_t mapIndex)
     CaretAssertVectorIndex(m_brickAttributes, mapIndex);
     checkStatisticsValid();
     const int64_t* dimensions = getDimensionsPtr();
+    
+    bool updateHistogramFlag = false;
+    int32_t numberOfBuckets = 0;
+    switch (getPaletteNormalizationMode()) {
+        case PaletteNormalizationModeEnum::NORMALIZATION_ALL_MAP_DATA:
+            numberOfBuckets = getFileHistogramNumberOfBuckets();
+            break;
+        case PaletteNormalizationModeEnum::NORMALIZATION_SELECTED_MAP_DATA:
+            numberOfBuckets = getMapPaletteColorMapping(mapIndex)->getHistogramNumberOfBuckets();
+            break;
+    }
     if (m_brickAttributes[mapIndex].m_histogram == NULL)
     {
-        m_brickAttributes[mapIndex].m_histogram.grabNew(new Histogram(100, getFrame(mapIndex), dimensions[0] * dimensions[1] * dimensions[2]));
+        m_brickAttributes[mapIndex].m_histogram.grabNew(new Histogram(numberOfBuckets));
+        updateHistogramFlag = true;
+    }
+    else if (numberOfBuckets != m_brickAttributes[mapIndex].m_histogramNumberOfBuckets)
+    {
+        updateHistogramFlag = true;
+    }
+    
+    if (updateHistogramFlag)
+    {
+        m_brickAttributes[mapIndex].m_histogram->update(numberOfBuckets, getFrame(mapIndex), dimensions[0] * dimensions[1] * dimensions[2]);
+        m_brickAttributes[mapIndex].m_histogramNumberOfBuckets = numberOfBuckets;
     }
     return m_brickAttributes[mapIndex].m_histogram;
 }
@@ -884,12 +948,22 @@ VolumeFile::getMapHistogram(const int32_t mapIndex,
     
     bool updateHistogramFlag = false;
     
+    int32_t numberOfBuckets = 0;
+    switch (getPaletteNormalizationMode()) {
+        case PaletteNormalizationModeEnum::NORMALIZATION_ALL_MAP_DATA:
+            numberOfBuckets = getFileHistogramNumberOfBuckets();
+            break;
+        case PaletteNormalizationModeEnum::NORMALIZATION_SELECTED_MAP_DATA:
+            numberOfBuckets = getMapPaletteColorMapping(mapIndex)->getHistogramNumberOfBuckets();
+            break;
+    }
     if (m_brickAttributes[mapIndex].m_histogramLimitedValues == NULL)
     {
         m_brickAttributes[mapIndex].m_histogramLimitedValues.grabNew(new Histogram(100));
         updateHistogramFlag = true;
     }
-    else if ((mostPositiveValueInclusive != m_brickAttributes[mapIndex].m_histogramLimitedValuesMostPositiveValueInclusive)
+    else if ((numberOfBuckets != m_brickAttributes[mapIndex].m_histogramLimitedValuesNumberOfBuckets)
+             || (mostPositiveValueInclusive != m_brickAttributes[mapIndex].m_histogramLimitedValuesMostPositiveValueInclusive)
              || (leastPositiveValueInclusive != m_brickAttributes[mapIndex].m_histogramLimitedValuesLeastPositiveValueInclusive)
              || (leastNegativeValueInclusive != m_brickAttributes[mapIndex].m_histogramLimitedValuesLeastNegativeValueInclusive)
              || (mostNegativeValueInclusive != m_brickAttributes[mapIndex].m_histogramLimitedValuesMostNegativeValueInclusive)
@@ -898,13 +972,15 @@ VolumeFile::getMapHistogram(const int32_t mapIndex,
     }
     
     if (updateHistogramFlag) {
-        m_brickAttributes[mapIndex].m_histogramLimitedValues->update(getFrame(mapIndex),
+        m_brickAttributes[mapIndex].m_histogramLimitedValues->update(numberOfBuckets,
+                                                                     getFrame(mapIndex),
                                                                      dimensions[0] * dimensions[1] * dimensions[2],
                                                                      mostPositiveValueInclusive,
                                                                      leastPositiveValueInclusive,
                                                                      leastNegativeValueInclusive,
                                                                      mostNegativeValueInclusive,
                                                                      includeZeroValues);
+        m_brickAttributes[mapIndex].m_histogramLimitedValuesNumberOfBuckets = numberOfBuckets;
         m_brickAttributes[mapIndex].m_histogramLimitedValuesMostPositiveValueInclusive = mostPositiveValueInclusive;
         m_brickAttributes[mapIndex].m_histogramLimitedValuesLeastPositiveValueInclusive = leastPositiveValueInclusive;
         m_brickAttributes[mapIndex].m_histogramLimitedValuesLeastNegativeValueInclusive = leastNegativeValueInclusive;
@@ -972,15 +1048,32 @@ VolumeFile::getFileFastStatistics()
 const Histogram*
 VolumeFile::getFileHistogram()
 {
-    if (m_fileHistogram == NULL) {
+    const int32_t numBuckets = getFileHistogramNumberOfBuckets();
+    bool updateHistogramFlag = false;
+    if (m_fileHistogram != NULL) {
+        if (numBuckets != m_fileHistogramNumberOfBuckets) {
+            updateHistogramFlag = true;
+        }
+    }
+    else {
+        updateHistogramFlag = true;
+        
+    }
+    
+    if (updateHistogramFlag) {
         std::vector<float> fileData;
         getFileData(fileData);
         if ( ! fileData.empty()) {
-            m_fileHistogram.grabNew(new Histogram());
-            m_fileHistogram->update(&fileData[0],
+            if (m_fileHistogram == NULL) {
+                m_fileHistogram.grabNew(new Histogram(numBuckets));
+            }
+            m_fileHistogram->update(numBuckets,
+                                    &fileData[0],
                                     fileData.size());
+            m_fileHistogramNumberOfBuckets = numBuckets;
         }
     }
+    
     return m_fileHistogram;
 }
 
@@ -1010,9 +1103,11 @@ VolumeFile::getFileHistogram(const float mostPositiveValueInclusive,
                                            const float mostNegativeValueInclusive,
                                            const bool includeZeroValues)
 {
+    const int32_t numberOfBuckets = getFileHistogramNumberOfBuckets();
     bool updateHistogramFlag = false;
     if (m_fileHistorgramLimitedValues != NULL) {
-        if ((mostPositiveValueInclusive != m_fileHistogramLimitedValuesMostPositiveValueInclusive)
+        if ((numberOfBuckets != m_fileHistogramLimitedValuesNumberOfBuckets)
+            || (mostPositiveValueInclusive != m_fileHistogramLimitedValuesMostPositiveValueInclusive)
             || (leastPositiveValueInclusive != m_fileHistogramLimitedValuesLeastPositiveValueInclusive)
             || (leastNegativeValueInclusive != m_fileHistogramLimitedValuesLeastNegativeValueInclusive)
             || (mostNegativeValueInclusive != m_fileHistogramLimitedValuesMostNegativeValueInclusive)
@@ -1031,7 +1126,8 @@ VolumeFile::getFileHistogram(const float mostPositiveValueInclusive,
             if (m_fileHistorgramLimitedValues == NULL) {
                 m_fileHistorgramLimitedValues.grabNew(new Histogram());
             }
-            m_fileHistorgramLimitedValues->update(&fileData[0],
+            m_fileHistorgramLimitedValues->update(numberOfBuckets,
+                                                  &fileData[0],
                                                   fileData.size(),
                                                   mostPositiveValueInclusive,
                                                   leastPositiveValueInclusive,
@@ -1039,6 +1135,7 @@ VolumeFile::getFileHistogram(const float mostPositiveValueInclusive,
                                                   mostNegativeValueInclusive,
                                                   includeZeroValues);
             
+            m_fileHistogramLimitedValuesNumberOfBuckets = numberOfBuckets;
             m_fileHistogramLimitedValuesMostPositiveValueInclusive  = mostPositiveValueInclusive;
             m_fileHistogramLimitedValuesLeastPositiveValueInclusive = leastPositiveValueInclusive;
             m_fileHistogramLimitedValuesLeastNegativeValueInclusive = leastNegativeValueInclusive;
@@ -1049,6 +1146,25 @@ VolumeFile::getFileHistogram(const float mostPositiveValueInclusive,
     
     return m_fileHistorgramLimitedValues;
 }
+
+/**
+ * @return Pointer to file's metadata.
+ */
+GiftiMetaData*
+VolumeFile::getFileMetaData()
+{
+    return &m_caretVolExt.m_metadata;
+}
+
+/**
+ * @return Pointer to file's metadata.
+ */
+const GiftiMetaData*
+VolumeFile::getFileMetaData() const
+{
+    return &m_caretVolExt.m_metadata;
+}
+
 
 /**
  * Get all data for a volume file.  If the file is very
@@ -1131,7 +1247,7 @@ VolumeFile::isMappedWithPalette() const
  *     vector is assumed to be the default mode.
  */
 void
-VolumeFile::getPaletteNormalizationModesSupported(std::vector<PaletteNormalizationModeEnum::Enum>& modesSupportedOut)
+VolumeFile::getPaletteNormalizationModesSupported(std::vector<PaletteNormalizationModeEnum::Enum>& modesSupportedOut) const
 {
     modesSupportedOut.clear();
     
@@ -1262,12 +1378,8 @@ VolumeFile::isMappedWithRGBA() const
 AString 
 VolumeFile::getMapUniqueID(const int32_t mapIndex) const
 {
-    CaretAssertVectorIndex(m_brickAttributes, mapIndex);
-    if (m_brickAttributes[mapIndex].m_metadata == NULL)
-    {
-        m_brickAttributes[mapIndex].m_metadata.grabNew(new GiftiMetaData());
-    }
-    return m_brickAttributes[mapIndex].m_metadata->getUniqueID();
+    CaretAssertVectorIndex(m_caretVolExt.m_attributes, mapIndex);
+    return m_caretVolExt.m_attributes[mapIndex]->m_metadata.getUniqueID();
 }
 
 /**
@@ -1299,12 +1411,9 @@ VolumeFile::getVoxelSpaceBoundingBox(BoundingBox& boundingBoxOut) const
  *
  * @param mapIndex
  *     Index of map.
- * @param paletteFile
- *     File containing the palettes.
  */
 void
-VolumeFile::updateScalarColoringForMap(const int32_t mapIndex,
-                                    const PaletteFile* paletteFile)
+VolumeFile::updateScalarColoringForMap(const int32_t mapIndex)
 {
     if (s_voxelColoringEnabled == false) {
         return;
@@ -1313,41 +1422,9 @@ VolumeFile::updateScalarColoringForMap(const int32_t mapIndex,
     CaretAssertVectorIndex(m_caretVolExt.m_attributes, mapIndex);
     CaretAssert(m_voxelColorizer);
     
-    const bool usesPalette = isMappedWithPalette();
-    const PaletteColorMapping* pcm = (usesPalette
-                                      ? getMapPaletteColorMapping(mapIndex)
-                                      : NULL);
-    const AString paletteName = (usesPalette
-                                 ? pcm->getSelectedPaletteName()
-                                 : "");
-    Palette* palette = NULL;
+    m_voxelColorizer->assignVoxelColorsForMap(mapIndex);
     
-    if (usesPalette) {
-        if (paletteFile != NULL) {
-            palette = paletteFile->getPaletteByName(paletteName);
-        }
-        
-        if (palette == NULL) {
-            EventPaletteGetByName getPaletteEvent(paletteName);
-            EventManager::get()->sendEvent(getPaletteEvent.getPointer());
-            palette = getPaletteEvent.getPalette();
-        }
-    }
-    
-    if (usesPalette
-        && (palette == NULL)) {
-        CaretLogSevere("No palette named \""
-                       + paletteName
-                       + "\" found for coloring map index="
-                       + AString::number(mapIndex)
-                       + " in "
-                       + getFileNameNoPath());
-    }
-    
-    m_voxelColorizer->assignVoxelColorsForMap(mapIndex,
-                                              palette,
-                                              this,
-                                              mapIndex);
+    invalidateHistogramChartColoring();
 }
 
 /**
@@ -1355,8 +1432,6 @@ VolumeFile::updateScalarColoringForMap(const int32_t mapIndex,
  * Does nothing if coloring is not enabled and output colors are undefined
  * in this case.
  *
- * @param paletteFile
- *    The palette file.
  * @param mapIndex
  *    Index of the map.
  * @param slicePlane
@@ -1373,13 +1448,12 @@ VolumeFile::updateScalarColoringForMap(const int32_t mapIndex,
  *    Number of voxels with alpha greater than zero
  */
 int64_t
-VolumeFile::getVoxelColorsForSliceInMap(const PaletteFile* /*paletteFile*/,
-                                        const int32_t mapIndex,
-                                 const VolumeSliceViewPlaneEnum::Enum slicePlane,
-                                 const int64_t sliceIndex,
+VolumeFile::getVoxelColorsForSliceInMap(const int32_t mapIndex,
+                                        const VolumeSliceViewPlaneEnum::Enum slicePlane,
+                                        const int64_t sliceIndex,
                                         const DisplayGroupEnum::Enum displayGroup,
                                         const int32_t tabIndex,
-                                 uint8_t* rgbaOut) const
+                                        uint8_t* rgbaOut) const
 {
     if (s_voxelColoringEnabled == false) {
         return 0;
@@ -1450,8 +1524,6 @@ VolumeFile::getVoxelColorsForSliceInMap(const int32_t mapIndex,
 /**
   * Get the voxel colors for a sub slice in the map.
   *
-  * @param paletteFile
-  *    The palette file.
   * @param mapIndex
   *    Index of the map.
   * @param slicePlane
@@ -1475,8 +1547,7 @@ VolumeFile::getVoxelColorsForSliceInMap(const int32_t mapIndex,
  *    Number of voxels with alpha greater than zero
   */
 int64_t
-VolumeFile::getVoxelColorsForSubSliceInMap(const PaletteFile* /*paletteFile*/,
-                                           const int32_t mapIndex,
+VolumeFile::getVoxelColorsForSubSliceInMap(const int32_t mapIndex,
                                            const VolumeSliceViewPlaneEnum::Enum slicePlane,
                                            const int64_t sliceIndex,
                                            const int64_t firstCornerVoxelIndex[3],
@@ -1580,8 +1651,6 @@ VolumeFile::getVoxelValuesForSliceInMap(const int32_t mapIndex,
  * Does nothing if coloring is not enabled and output colors are undefined
  * in this case.
  *
- * @param paletteFile
- *    The palette file.
  * @param i
  *    Parasaggital index
  * @param j
@@ -1598,14 +1667,13 @@ VolumeFile::getVoxelValuesForSliceInMap(const int32_t mapIndex,
  *    Contains voxel coloring on exit.
  */
 void
-VolumeFile::getVoxelColorInMap(const PaletteFile* /*paletteFile*/,
-                               const int64_t i,
-                        const int64_t j,
-                        const int64_t k,
-                        const int64_t mapIndex,
+VolumeFile::getVoxelColorInMap(const int64_t i,
+                               const int64_t j,
+                               const int64_t k,
+                               const int64_t mapIndex,
                                const DisplayGroupEnum::Enum displayGroup,
                                const int32_t tabIndex,
-                        uint8_t rgbaOut[4]) const
+                               uint8_t rgbaOut[4]) const
 {
     if (s_voxelColoringEnabled == false) {
         return;
@@ -2030,7 +2098,7 @@ VolumeFile::setLineSeriesChartingEnabled(const int32_t tabIndex,
  *    Chart types supported by this file.
  */
 void
-VolumeFile::getSupportedLineSeriesChartDataTypes(std::vector<ChartDataTypeEnum::Enum>& chartDataTypesOut) const
+VolumeFile::getSupportedLineSeriesChartDataTypes(std::vector<ChartOneDataTypeEnum::Enum>& chartDataTypesOut) const
 {
     helpGetSupportedLineSeriesChartDataTypes(chartDataTypesOut);
 }
@@ -2120,6 +2188,89 @@ VolumeFile::loadLineSeriesChartDataForVoxelAtCoordinate(const float xyz[3])
     }
     
     return chartData;
+}
+
+/**
+ * Get data from the file as requested in the given map file data selector.
+ *
+ * @param mapFileDataSelector
+ *     Specifies selection of data.
+ * @param dataOut
+ *     Output with data.  Will be empty if data does not support the map file data selector.
+ */
+void
+VolumeFile::getDataForSelector(const MapFileDataSelector& mapFileDataSelector,
+                               std::vector<float>& dataOut) const
+{
+    dataOut.clear();
+    
+    switch (mapFileDataSelector.getDataSelectionType()) {
+        case MapFileDataSelector::DataSelectionType::INVALID:
+            break;
+        case MapFileDataSelector::DataSelectionType::COLUMN_DATA:
+            break;
+        case MapFileDataSelector::DataSelectionType::ROW_DATA:
+            break;
+        case MapFileDataSelector::DataSelectionType::SURFACE_VERTEX:
+            break;
+        case MapFileDataSelector::DataSelectionType::SURFACE_VERTICES_AVERAGE:
+            break;
+        case MapFileDataSelector::DataSelectionType::VOLUME_XYZ:
+        {
+             if (isMappedWithPalette()) {
+                 float xyz[3];
+                 mapFileDataSelector.getVolumeVoxelXYZ(xyz);
+                 
+                int64_t ijk[3];
+                enclosingVoxel(xyz,
+                               ijk);
+                
+                if (indexValid(ijk)) {
+                    const int32_t numMaps = getNumberOfMaps();
+                    for (int32_t iMap = 0; iMap < numMaps; iMap++) {
+                        dataOut.push_back(getValue(ijk, iMap));
+                    }
+                }
+            }
+        }
+            break;
+    }
+}
+
+/**
+ * Are all brainordinates in this file also in the given file?
+ * That is, the brainordinates are equal to or a subset of the brainordinates
+ * in the given file.
+ *
+ * @param mapFile
+ *     The given map file.
+ * @return
+ *     Match status.
+ */
+CaretMappableDataFile::BrainordinateMappingMatch
+VolumeFile::getBrainordinateMappingMatch(const CaretMappableDataFile* mapFile) const
+{
+    CaretAssert(mapFile);
+    if (mapFile->getDataFileType() == DataFileTypeEnum::VOLUME) {
+        const VolumeFile* otherVolumeFile = dynamic_cast<const VolumeFile*>(mapFile);
+        CaretAssert(otherVolumeFile);
+        
+        std::vector<int64_t> myDims, otherDims;
+        getDimensions(myDims);
+        otherVolumeFile->getDimensions(otherDims);
+        
+        for (int32_t i = 0; i < 3; i++) {
+            CaretAssertVectorIndex(myDims, i);
+            CaretAssertVectorIndex(otherDims, i);
+            if (myDims[i] != otherDims[i]) {
+                return BrainordinateMappingMatch::NO;
+            }
+        }
+        
+        return BrainordinateMappingMatch::EQUAL;
+    }
+    
+    return BrainordinateMappingMatch::NO;
 }
 
 

@@ -4,14 +4,16 @@
 PROJECT (OperationsBase)
 
 #
-# Need XML from Qt
-#
-SET(QT_DONT_USE_QTGUI)
-
-#
 # Add QT for includes
 #
-INCLUDE (${QT_USE_FILE})
+if(Qt5_FOUND)
+    include_directories(${Qt5Core_INCLUDE_DIRS})
+    #include_directories(${Qt5Network_INCLUDE_DIRS})
+endif()
+IF (QT4_FOUND)
+    SET(QT_DONT_USE_QTGUI)
+    INCLUDE(${QT_USE_FILE})
+ENDIF ()
 
 #
 # Create the helper library
@@ -25,6 +27,8 @@ AbstractOperation.cxx
 OperationParameters.cxx
 OperationParametersEnum.cxx
 )
+
+TARGET_LINK_LIBRARIES(OperationsBase ${CARET_QT5_LINK})
 
 #
 # Find Headers

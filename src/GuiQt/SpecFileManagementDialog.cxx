@@ -62,6 +62,7 @@
 #include "EventGetDisplayedDataFiles.h"
 #include "EventGraphicsUpdateAllWindows.h"
 #include "EventManager.h"
+#include "EventShowDataFileReadWarningsDialog.h"
 #include "EventSpecFileReadDataFiles.h"
 #include "EventSurfaceColoringInvalidate.h"
 #include "EventUserInterfaceUpdate.h"
@@ -1477,24 +1478,35 @@ SpecFileManagementDialog::loadSpecFileContentIntoDialog()
                 CaretAssert(statusItem);
                 statusItem->setText("");
                 if (caretDataFile != NULL) {
-                    if (caretDataFile->isModified()) {
-                        if (isFileSavable) {
-                            statusItem->setText("YES");
-                            
+                    if (isFileSavable) {
+                        /*
+                         * Is this a Caret Mappable Data file and is the modification
+                         * only in the palette color mapping?
+                         */
+                        CaretMappableDataFile* mapFile = dynamic_cast<CaretMappableDataFile*>(caretDataFile);
+                        if (mapFile != NULL) {
                             /*
-                             * Is this a Caret Mappable Data file and is the modification
-                             * only in the palette color mapping?
+                             * Is modification just the palette color mapping?
                              */
-                            CaretMappableDataFile* mapFile = dynamic_cast<CaretMappableDataFile*>(caretDataFile);
-                            if (mapFile != NULL) {
-                                /*
-                                 * Is modification just the palette color mapping?
-                                 */
-                                if (mapFile->isModifiedPaletteColorMapping()) {
-                                    if ( ! mapFile->isModifiedExcludingPaletteColorMapping()) {
+                            if (mapFile->isModifiedExcludingPaletteColorMapping()) {
+                                statusItem->setText("YES");
+                            }
+                            else {
+                                switch (mapFile->getPaletteColorMappingModifiedStatus()) {
+                                    case PaletteModifiedStatusEnum::MODIFIED:
                                         statusItem->setText("PALETTE");
-                                    }
+                                        break;
+                                    case PaletteModifiedStatusEnum::MODIFIED_BY_SHOW_SCENE:
+                                        statusItem->setText("SCENE PALETTE");
+                                        break;
+                                    case PaletteModifiedStatusEnum::UNMODIFIED:
+                                        break;
                                 }
+                            }
+                        }
+                        else {
+                            if (caretDataFile->isModified()) {
+                                statusItem->setText("YES");
                             }
                         }
                     }
@@ -1845,7 +1857,6 @@ SpecFileManagementDialog::okButtonClickedOpenSpecFile()
     ProgressReportingDialog::runEvent(&readSpecFileEvent,
                                       this,
                                       m_specFile->getFileNameNoPath());
-    
     errorMessages.appendWithNewLine(readSpecFileEvent.getErrorMessage());
     
     updateGraphicWindowsAndUserInterface();
@@ -2170,6 +2181,8 @@ SpecFileManagementDialog::fileReloadOrOpenFileActionSelected(int rowIndex)
         WuQMessageBox::errorOk(toolButtonWidget,
                                errorMessage);
     }
+    
+    EventManager::get()->sendEvent(EventShowDataFileReadWarningsDialog().getPointer());
 }
 
 /**
@@ -2763,26 +2776,8 @@ SpecFileManagementDialog::createManageFilesLoadedNotLoadedToolBar(QLabel* &label
 AString
 SpecFileManagementDialog::getEditedDataFileTypeName(const DataFileTypeEnum::Enum dataFileType)
 {
-    const AString typeName = DataFileTypeEnum::toGuiName(dataFileType);
-    
-    const AString connectivityPrefix("Connectivity - ");
-    const int connectivityPrefixLength = connectivityPrefix.length();
-    
-    const AString temporarySuffix(" TEMPORARY");
-    const int temporarySuffixLength = temporarySuffix.length();
-    
-    AString text = typeName;
-    if (text.startsWith(connectivityPrefix)) {
-        text = text.mid(connectivityPrefixLength);
-    }
-    
-    if (text.endsWith(temporarySuffix)) {
-        text = text.left(text.length() - temporarySuffixLength);
-    }
-    
-    return text;
+    return DataFileTypeEnum::toShortGuiName(dataFileType);
 }
-
 
 /**
  * @return Create and return a toolbar for viewing files by structure.

@@ -42,12 +42,12 @@ using namespace caret;
  * Constructor.
  */
 SceneInfo::SceneInfo()
-: CaretObject()
+: CaretObjectTracksModification()
 {
     
 }
 
-SceneInfo::SceneInfo(const SceneInfo& rhs) : CaretObject()
+SceneInfo::SceneInfo(const SceneInfo& rhs) : CaretObjectTracksModification()
 {
     m_sceneName = rhs.m_sceneName;
     m_sceneDescription = rhs.m_sceneDescription;
@@ -80,7 +80,10 @@ SceneInfo::getName() const
 void
 SceneInfo::setName(const AString& sceneName)
 {
-    m_sceneName = sceneName;
+    if (sceneName != m_sceneName) {
+        m_sceneName = sceneName;
+        setModified();
+    }
 }
 
 /**
@@ -100,7 +103,10 @@ SceneInfo::getDescription() const
 void
 SceneInfo::setDescription(const AString& sceneDescription)
 {
-    m_sceneDescription = sceneDescription;
+    if (sceneDescription != m_sceneDescription) {
+        m_sceneDescription = sceneDescription;
+        setModified();
+    }
 }
 
 /**
@@ -115,8 +121,11 @@ void
 SceneInfo::setImageBytes(const QByteArray& imageBytes,
                                   const AString& imageFormat)
 {
-    m_imageBytes  = imageBytes;
-    m_imageFormat = imageFormat;
+    if ((imageBytes != m_imageBytes)
+        || (imageFormat != m_imageFormat)) {
+        m_imageBytes  = imageBytes;
+        m_imageFormat = imageFormat;
+    }
 }
 
 /**
@@ -169,7 +178,10 @@ SceneInfo::getBalsaSceneID() const
 void
 SceneInfo::setBalsaSceneID(const AString& balsaSceneID)
 {
-    m_balsaSceneID = balsaSceneID;
+    if (balsaSceneID != m_balsaSceneID) {
+        m_balsaSceneID = balsaSceneID;
+        setModified();
+    }
 }
 
 /**
@@ -233,7 +245,7 @@ SceneInfo::writeSceneInfoImage(XmlWriter& xmlWriter,
     if (imageBytes.length() > 0) {
         //QString base64String(imageBytes.toBase64());
         const QByteArray base64ByteArray(imageBytes.toBase64());
-        QString base64String = QString::fromAscii(base64ByteArray.constData(),
+        QString base64String = QString::fromLatin1(base64ByteArray.constData(),
                                                   base64ByteArray.size());
         XmlAttributes attributes;
         attributes.addAttribute(SceneXmlElements::SCENE_INFO_IMAGE_ENCODING_ATTRIBUTE,
@@ -270,7 +282,7 @@ SceneInfo::setImageFromText(const AString& text,
     
     if ( ! text.isEmpty()) {
         if (encoding == SceneXmlElements::SCENE_INFO_ENCODING_BASE64_NAME) {
-            m_imageBytes = QByteArray::fromBase64(text.toAscii());
+            m_imageBytes = QByteArray::fromBase64(text.toLatin1());
             m_imageFormat = imageFormat;
         }
         else {

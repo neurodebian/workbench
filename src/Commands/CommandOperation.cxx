@@ -37,6 +37,7 @@ CommandOperation::CommandOperation(const AString& commandLineSwitch,
 {
     this->commandLineSwitch = commandLineSwitch;
     this->operationShortDescription = operationShortDescription;
+    CaretAssert(commandLineSwitch != "-command-switch");//catch failure to change things in the command template
     for (int i = 0; i < commandLineSwitch.length(); ++i)//release build should optimize out empty loops
     {
         CaretAssert(commandLineSwitch[i].unicode() < 128);
@@ -70,6 +71,14 @@ CommandOperation::execute(ProgramParameters& parameters, const bool& preventProv
 }
 
 void CommandOperation::disableProvenance()
+{
+}
+
+void CommandOperation::setCiftiOutputDTypeAndScale(const int16_t&, const double&, const double&)
+{
+}
+
+void CommandOperation::setCiftiOutputDTypeNoScale(const int16_t&)
 {
 }
 

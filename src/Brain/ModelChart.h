@@ -21,6 +21,8 @@
  */
 /*LICENSE_END*/
 
+#include <memory>
+
 #include <QSharedPointer>
 #include <QWeakPointer>
 
@@ -28,7 +30,7 @@
 #include <set>
 #include <map>
 
-#include "ChartDataTypeEnum.h"
+#include "ChartOneDataTypeEnum.h"
 #include "EventListenerInterface.h"
 #include "MapYokingGroupEnum.h"
 #include "Model.h"
@@ -89,12 +91,12 @@ namespace caret {
         
         virtual void receiveEvent(Event* event);
         
-        void getValidChartDataTypes(std::vector<ChartDataTypeEnum::Enum>& validChartDataTypesOut) const;
+        void getValidChartOneDataTypes(std::vector<ChartOneDataTypeEnum::Enum>& validChartDataTypesOut) const;
         
-        ChartDataTypeEnum::Enum getSelectedChartDataType(const int32_t tabIndex) const;
+        ChartOneDataTypeEnum::Enum getSelectedChartOneDataType(const int32_t tabIndex) const;
         
-        void setSelectedChartDataType(const int32_t tabIndex,
-                                      const ChartDataTypeEnum::Enum dataType);
+        void setSelectedChartOneDataType(const int32_t tabIndex,
+                                      const ChartOneDataTypeEnum::Enum dataType);
         
         ChartModelDataSeries* getSelectedDataSeriesChartModel(const int32_t tabIndex);
         
@@ -145,13 +147,15 @@ namespace caret {
         
         const ChartModelTimeSeries* getSelectedTimeSeriesChartModelHelper(const int32_t tabIndex) const;
         
+        void updateChartOverlaySets(const int32_t tabIndex);
+        
         void saveChartModelsToScene(const SceneAttributes* sceneAttributes,
                                     SceneClass* sceneClass,
                                     const std::vector<int32_t>& tabIndices,
                                     std::set<AString>& validChartDataIDsOut);
         
-        void restoreChartModelsFromScene(const SceneAttributes* sceneAttributes,
-                                         const SceneClass* sceneClass);
+        void restoreVersionOneChartModelsFromScene(const SceneAttributes* sceneAttributes,
+                                                   const SceneClass* sceneClass);
 
         void getTabsAndBrainordinateChartFilesForLineChartLoading(std::map<ChartableLineSeriesBrainordinateInterface*, std::vector<int32_t> >& chartBrainordinateFileEnabledTabsOut) const;
 
@@ -161,10 +165,16 @@ namespace caret {
         
         ChartData* loadCartesianChartWhenRestoringScene(const ChartData* chartData);
 
+        virtual void saveVersionOneModelSpecificInformationToScene(const SceneAttributes* sceneAttributes,
+                                                                   SceneClass* sceneClass);
+        
+        void restoreVersionOneModelSpecificInformationFromScene(const SceneAttributes* sceneAttributes,
+                                                              const SceneClass* sceneClass);
+        
         /** Overlays sets for this model and for each tab */
         OverlaySetArray* m_overlaySetArray;
         
-        mutable ChartDataTypeEnum::Enum m_selectedChartDataType[BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_TABS];
+        mutable ChartOneDataTypeEnum::Enum m_selectedChartOneDataType[BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_TABS];
         
         /** Chart model for data-series data */
         ChartModelDataSeries* m_chartModelDataSeries[BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_TABS];
@@ -190,7 +200,9 @@ namespace caret {
         
         CaretDataFileSelectionModel* m_chartableMatrixSeriesFileSelectionModel[BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_TABS];
         
-        SceneClassAssistant* m_sceneAssistant;
+        std::unique_ptr<SceneClassAssistant> m_sceneAssistant;
+        
+        friend class ModelChartTwo;
     };
 
 } // namespace

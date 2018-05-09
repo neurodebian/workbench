@@ -56,8 +56,9 @@ m_parentCiftiMappableDataFile(parentCiftiMappableDataFile)
     
     switch (parentCiftiMappableDataFile->getDataFileType()) {
         case DataFileTypeEnum::CONNECTIVITY_PARCEL:
-        case DataFileTypeEnum::CONNECTIVITY_PARCEL_SCALAR:
         case DataFileTypeEnum::CONNECTIVITY_PARCEL_LABEL:
+        case DataFileTypeEnum::CONNECTIVITY_PARCEL_SCALAR:
+        case DataFileTypeEnum::CONNECTIVITY_PARCEL_SERIES:
             break;
         default:
             CaretAssert(0);
@@ -81,6 +82,15 @@ CiftiParcelReorderingModel::~CiftiParcelReorderingModel()
 {
     delete m_sceneAssistant;
     
+    clearCiftiParcelReordering();
+}
+
+/**
+ * Clear all parcel reordering.
+ */
+void
+CiftiParcelReorderingModel::clearCiftiParcelReordering()
+{
     for (std::vector<CiftiParcelReordering*>::iterator iter = m_parcelReordering.begin();
          iter != m_parcelReordering.end();
          iter++) {
@@ -88,6 +98,7 @@ CiftiParcelReorderingModel::~CiftiParcelReorderingModel()
     }
     m_parcelReordering.clear();
 }
+
 
 /**
  * Copy constructor.
@@ -191,6 +202,7 @@ CiftiParcelReorderingModel::getParcelLabelFiles() const
                         testAlongRow    = true;
                         break;
                     case DataFileTypeEnum::CONNECTIVITY_PARCEL_SCALAR:
+                    case DataFileTypeEnum::CONNECTIVITY_PARCEL_SERIES:
                         testAlongColumn = true;
                         break;
                     case DataFileTypeEnum::CONNECTIVITY_PARCEL_LABEL:
@@ -513,7 +525,7 @@ CiftiParcelReorderingModel::restoreFromScene(const SceneAttributes* sceneAttribu
                                      sceneClass);    
     
     m_selectedParcelLabelFile = NULL;
-    m_parcelReordering.clear();
+    clearCiftiParcelReordering();
     
     const AString parcelLabelFileName = sceneClass->getPathNameValue("m_selectedParcelLabelFile");
     if ( ! parcelLabelFileName.isEmpty()) {

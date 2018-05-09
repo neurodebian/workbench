@@ -5,14 +5,15 @@
 PROJECT (Gifti)
 
 #
-# Need XML from Qt
-#
-SET(QT_DONT_USE_QTGUI)
-
-#
 # Add QT for includes
 #
-INCLUDE (${QT_USE_FILE})
+if(Qt5_FOUND)
+    include_directories(${Qt5Core_INCLUDE_DIRS})
+endif()
+IF (QT4_FOUND)
+    SET(QT_DONT_USE_QTGUI)
+    INCLUDE(${QT_USE_FILE})
+ENDIF ()
 
 #
 # Create GIFTI Library
@@ -38,6 +39,8 @@ GiftiFileWriter.cxx
 GiftiLabelTableSaxReader.cxx
 GiftiMetaDataSaxReader.cxx
 )
+
+TARGET_LINK_LIBRARIES(Gifti ${CARET_QT5_LINK})
 
 #
 # Find Headers

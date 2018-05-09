@@ -273,26 +273,26 @@ BrainBrowserWindowToolBarChartAxes::getCartesianChart()
     
     BrowserTabContent* browserTabContent = getTabContentFromSelectedTab();
     if (browserTabContent != NULL) {
-        ModelChart* modelChart = browserTabContent->getDisplayedChartModel();
+        ModelChart* modelChart = browserTabContent->getDisplayedChartOneModel();
         
         if (modelChart != NULL) {
             const int32_t tabIndex = browserTabContent->getTabNumber();
-            const ChartDataTypeEnum::Enum chartType = modelChart->getSelectedChartDataType(tabIndex);
+            const ChartOneDataTypeEnum::Enum chartType = modelChart->getSelectedChartOneDataType(tabIndex);
             
             switch (chartType) {
-                case ChartDataTypeEnum::CHART_DATA_TYPE_INVALID:
+                case ChartOneDataTypeEnum::CHART_DATA_TYPE_INVALID:
                     break;
-                case ChartDataTypeEnum::CHART_DATA_TYPE_MATRIX_LAYER:
+                case ChartOneDataTypeEnum::CHART_DATA_TYPE_MATRIX_LAYER:
                     break;
-                case ChartDataTypeEnum::CHART_DATA_TYPE_MATRIX_SERIES:
+                case ChartOneDataTypeEnum::CHART_DATA_TYPE_MATRIX_SERIES:
                     break;
-                case ChartDataTypeEnum::CHART_DATA_TYPE_LINE_DATA_SERIES:
+                case ChartOneDataTypeEnum::CHART_DATA_TYPE_LINE_DATA_SERIES:
                     cartesianChart = modelChart->getSelectedDataSeriesChartModel(tabIndex);  //dynamic_cast<ChartModelDataSeries*>(chart);
                     break;
-                case ChartDataTypeEnum::CHART_DATA_TYPE_LINE_FREQUENCY_SERIES:
+                case ChartOneDataTypeEnum::CHART_DATA_TYPE_LINE_FREQUENCY_SERIES:
                     cartesianChart = modelChart->getSelectedFrequencySeriesChartModel(tabIndex);
                     break;
-                case ChartDataTypeEnum::CHART_DATA_TYPE_LINE_TIME_SERIES:
+                case ChartOneDataTypeEnum::CHART_DATA_TYPE_LINE_TIME_SERIES:
                     cartesianChart = modelChart->getSelectedTimeSeriesChartModel(tabIndex);  //dynamic_cast<ChartModelDataSeries*>(chart);
                     break;
             }

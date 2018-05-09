@@ -33,6 +33,7 @@ namespace PaletteColorMappingXmlElements {
     static const AString XML_TAG_USER_SCALE_VALUES = "UserScaleValues";
     static const AString XML_TAG_PALETTE_NAME = "PaletteName";
     static const AString XML_TAG_INTERPOLATE = "InterpolatePalette";
+    static const AString XML_TAG_INVERT = "InvertPalette";
     static const AString XML_TAG_DISPLAY_POSITIVE = "DisplayPositiveData";
     static const AString XML_TAG_DISPLAY_NEGATIVE = "DisplayNegativeData";
     static const AString XML_TAG_DISPLAY_ZERO = "DisplayZeroData";
@@ -45,6 +46,13 @@ namespace PaletteColorMappingXmlElements {
     static const AString XML_TAG_THRESHOLD_FAILURE_IN_GREEN = "ThresholdFailureInGreen";
     static const AString XML_TAG_THRESHOLD_RANGE_MODE = "ThresholdRangeMode";
     static const AString XML_TAG_THRESHOLD_NEG_MIN_POS_MAX_LINKED = "ThresholdLowHighLinked";
+    static const AString XML_TAG_HISTOGRAM_RANGE_MODE = "HistogramRangeMode";
+    static const AString XML_TAG_HISTOGRAM_BARS_VISIBLE = "HistogramBarsVisible";
+    static const AString XML_TAG_HISTOGRAM_ENVELOPE_VISIBLE = "HistogramEnvelopeVisible";
+    static const AString XML_TAG_HISTOGRAM_BARS_COLOR = "HistogramBarsColor";
+    static const AString XML_TAG_HISTOGRAM_ENVELOPE_COLOR = "HistogramEnvelopeColor";
+    static const AString XML_TAG_HISTOGRAM_ENVELOPE_LINE_WIDTH_PERCENTAGE = "HistogramEnvelopeLineWidthPercentage";
+    static const AString XML_TAG_HISTOGRAM_NUMBER_OF_BUCKETS = "HistogramNumberOfBuckets";
     static const AString XML_TAG_NUMERIC_FORMAT_MODE = "NumericFormatMode";
     static const AString XML_TAG_PRECISION_DIGITS = "PrecisionDigits";
     static const AString XML_TAG_NUMERIC_SUBDIVISIONS = "NumericSubivisions";

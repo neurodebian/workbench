@@ -103,7 +103,8 @@ namespace caret {
         void getAnnotationsSelectedForEditing(const int32_t windowIndex,
                                     std::vector<std::pair<Annotation*, AnnotationFile*> >& annotationsAndFileOut) const;
         
-//        std::vector<AnnotationFile*> getFilesContainingAnnotations(const std::vector<Annotation*> annotations) const;
+        void getAnnotationsSelectedForEditingIncludingLabels(const int32_t windowIndex,
+                                              std::vector<std::pair<Annotation*, AnnotationFile*> >& annotationsAndFileOut) const;
         
         bool isAnnotationOnClipboardValid() const;
         

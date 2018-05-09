@@ -29,8 +29,11 @@
 #include <numeric>
 
 #include "BrowserTabContent.h"
+#include "BrowserWindowContent.h"
 #include "CaretAssert.h"
 #include "CaretLogger.h"
+#include "EventBrowserWindowContent.h"
+#include "EventManager.h"
 #include "GapsAndMargins.h"
 #include "MathFunctions.h"
 #include "ModelSurfaceMontage.h"
@@ -92,6 +95,14 @@ m_browserTabContent(browserTabContent)
     m_modelY      = modelViewport[1];
     m_modelWidth  = modelViewport[2];
     m_modelHeight = modelViewport[3];
+    
+    m_chartDataProjectionMatrix.identity();
+    m_chartDataModelViewMatrix.identity();
+    m_chartDataX = 0;
+    m_chartDataY = 0;
+    m_chartDataWidth = 0;
+    m_chartDataHeight = 0;
+    m_chartDataViewportValidFlag = false;
 }
 
 /**
@@ -139,6 +150,13 @@ BrainOpenGLViewportContent::operator=(const BrainOpenGLViewportContent& obj)
 void
 BrainOpenGLViewportContent::initializeMembersBrainOpenGLViewportContent()
 {
+    m_chartDataProjectionMatrix.identity();
+    m_chartDataModelViewMatrix.identity();
+    m_chartDataX      = 0;
+    m_chartDataY      = 0;
+    m_chartDataWidth  = 0;
+    m_chartDataHeight = 0;
+    m_chartDataViewportValidFlag = false;
     m_modelX       = 0;
     m_modelY       = 0;
     m_modelWidth   = 0;
@@ -161,6 +179,13 @@ BrainOpenGLViewportContent::initializeMembersBrainOpenGLViewportContent()
 void
 BrainOpenGLViewportContent::copyHelperBrainOpenGLViewportContent(const BrainOpenGLViewportContent& obj)
 {
+    m_chartDataProjectionMatrix = obj.m_chartDataProjectionMatrix;
+    m_chartDataModelViewMatrix  = obj.m_chartDataModelViewMatrix;
+    m_chartDataX      = obj.m_chartDataX;
+    m_chartDataY      = obj.m_chartDataY;
+    m_chartDataWidth  = obj.m_chartDataWidth;
+    m_chartDataHeight = obj.m_chartDataHeight;
+    m_chartDataViewportValidFlag = obj.m_chartDataViewportValidFlag;
     m_modelX       = obj.m_modelX;
     m_modelY       = obj.m_modelY;
     m_modelWidth   = obj.m_modelWidth;
@@ -282,6 +307,58 @@ BrainOpenGLViewportContent::isTabHighlighted() const
 }
 
 /**
+ * Get the data bounds and viewport for drawing the chart data.
+ *
+ * @param chartDataProjectionMatrixOut
+ *    Output into which projection matrix for drawing chart data loaded.
+ * @param chartDataModelViewMatrixOut
+ *    Output into which model viewing matrix for drawing chart data loaded.
+ * @param chartViewportOut
+ *    Output into which viewport is loaded.
+ *    (x, y, width, height)
+ * @return 
+ *    True if the chart data viewport is valid.
+ */
+bool
+BrainOpenGLViewportContent::getChartDataMatricesAndViewport(Matrix4x4& chartDataProjectionMatrixOut,
+                                                         Matrix4x4& chartDataModelViewMatrixOut,
+                                                         int chartViewportOut[4]) const
+{
+    chartDataProjectionMatrixOut = m_chartDataProjectionMatrix;
+    chartDataModelViewMatrixOut  = m_chartDataModelViewMatrix;
+    chartViewportOut[0] = m_chartDataX;
+    chartViewportOut[1] = m_chartDataY;
+    chartViewportOut[2] = m_chartDataWidth;
+    chartViewportOut[3] = m_chartDataHeight;
+    return m_chartDataViewportValidFlag;
+}
+
+/**
+ * Set the viewport for drawing the chart data.
+ *
+ * @param chartDataProjectionMatrix
+ *    Pojection matrix for drawing chart data.
+ * @param chartDataModelViewMatrix
+ *    Viewing matrix for drawing chart data.
+ * @param chartDataViewport
+ *    Viewport (x, y, width, height).
+ */
+void
+BrainOpenGLViewportContent::setChartDataMatricesAndViewport(const Matrix4x4& chartDataProjectionMatrix,
+                                                         const Matrix4x4& chartDataModelViewMatrix,
+                                                         const int chartViewport[4]) const
+{
+    m_chartDataProjectionMatrix = chartDataProjectionMatrix;
+    m_chartDataModelViewMatrix  = chartDataModelViewMatrix;
+    m_chartDataX = chartViewport[0];
+    m_chartDataY = chartViewport[1];
+    m_chartDataWidth = chartViewport[2];
+    m_chartDataHeight = chartViewport[3];
+    m_chartDataViewportValidFlag = true;
+}
+
+
+/**
  * Get the viewport for drawing the model (has been reduced
  * from tab viewport by applying the margin).
  *
@@ -373,7 +450,19 @@ BrainOpenGLViewportContent::toString() const
     const QString tabMsg    = QString("   Tab    x=%1 y=%2 w=%3 h=%4").arg(m_tabX).arg(m_tabY).arg(m_tabWidth).arg(m_tabHeight);
     const QString modelMsg  = QString("   Model  x=%1 y=%2 w=%3 h=%4").arg(m_modelX).arg(m_modelY).arg(m_modelWidth).arg(m_modelHeight);
     
-    AString msgOut(windowMsg);
+    AString msgOut;
+    if (m_chartDataViewportValidFlag) {
+        const QString chartProjectionMsg = QString("   Chart Projection=" + m_chartDataProjectionMatrix.toFormattedString("      "));
+        const QString chartModelMsg = QString("   Chart Model View=" + m_chartDataModelViewMatrix.toFormattedString("      "));
+        const QString chartViewportMsg = QString("   Chart x=%1 y=%2 w=%3 h=%4").arg(m_chartDataX).arg(m_chartDataY).arg(m_chartDataWidth).arg(m_chartDataHeight);
+        msgOut.appendWithNewLine(chartProjectionMsg);
+        msgOut.appendWithNewLine(chartModelMsg);
+        msgOut.appendWithNewLine(chartViewportMsg);
+    }
+    else {
+        msgOut.appendWithNewLine("   Chart Invalid.");
+    }
+    msgOut.appendWithNewLine(windowMsg);
     msgOut.appendWithNewLine(tabMsg);
     msgOut.appendWithNewLine(modelMsg);
     
@@ -395,10 +484,11 @@ BrainOpenGLViewportContent::toString() const
  *     Viewport content for the single tab.
  */
 BrainOpenGLViewportContent*
-BrainOpenGLViewportContent::createViewportForSingleTab(BrowserTabContent* browserTabContent,
-                                                              const GapsAndMargins* gapsAndMargins,
-                                                              const int32_t windowIndex,
-                                                              const int32_t windowViewport[4])
+BrainOpenGLViewportContent::createViewportForSingleTab(std::vector<BrowserTabContent*>& allTabContents,
+                                                       BrowserTabContent* selectedTabContent,
+                                                       const GapsAndMargins* gapsAndMargins,
+                                                       const int32_t windowIndex,
+                                                       const int32_t windowViewport[4])
 {
     int tabViewport[4] = {
         windowViewport[0],
@@ -414,14 +504,40 @@ BrainOpenGLViewportContent::createViewportForSingleTab(BrowserTabContent* browse
         tabViewport[3]
     };
     
-    if (browserTabContent != NULL) {
-        if (browserTabContent->isAspectRatioLocked()) {
-            const float aspectRatio = browserTabContent->getAspectRatio();
+    std::unique_ptr<EventBrowserWindowContent> eventContent = EventBrowserWindowContent::getWindowContent(windowIndex);
+    EventManager::get()->sendEvent(eventContent->getPointer());
+    
+    const BrowserWindowContent* browserWindowContent = eventContent->getBrowserWindowContent();
+    CaretAssert(browserWindowContent);
+    if (browserWindowContent->isAllTabsInWindowAspectRatioLocked()) {
+        /**
+         * Update aspect locking for any tabs that have not bee locked
+         * Locking is done here so that it will work for new tabs and
+         * for tabs from old scenes before "lock all".
+         * Aspect locking is also performed here so that it works 
+         * with both GUI and Command Line Show Scene
+         */
+        for (auto btc : allTabContents) {
+            if ( ! btc->isAspectRatioLocked()) {
+                if (tabViewport[2] > 0) {
+                    const float aspectRatio = (static_cast<float>(tabViewport[3])
+                                   / static_cast<float>(tabViewport[2]));
+                    
+                    btc->setAspectRatio(aspectRatio);
+                    btc->setAspectRatioLocked(true);
+                }
+            }
+        }
+    }
+    
+    if (selectedTabContent != NULL) {
+        if (selectedTabContent->isAspectRatioLocked()) {
+            const float aspectRatio = selectedTabContent->getAspectRatio();
             BrainOpenGLViewportContent::adjustViewportForAspectRatio(tabViewport,
                                                                      aspectRatio);
         }
         
-        const int32_t tabIndex = browserTabContent->getTabNumber();
+        const int32_t tabIndex = selectedTabContent->getTabNumber();
         createModelViewport(tabViewport,
                             tabIndex,
                             gapsAndMargins,
@@ -435,7 +551,7 @@ BrainOpenGLViewportContent::createViewportForSingleTab(BrowserTabContent* browse
                                                                            modelViewport,
                                                                            windowIndex,
                                                                            false,
-                                                                           browserTabContent);
+                                                                           selectedTabContent);
     
     return vpContent;
 }
@@ -510,6 +626,13 @@ BrainOpenGLViewportContent::createViewportContentForTileTabs(std::vector<Browser
     std::vector<int32_t> rowHeights(numRows, 0);
     std::vector<int32_t> columnWidths(numColumns, 0);
     
+    
+    std::unique_ptr<EventBrowserWindowContent> eventContent = EventBrowserWindowContent::getWindowContent(windowIndex);
+    EventManager::get()->sendEvent(eventContent->getPointer());
+    const BrowserWindowContent* browserWindowContent = eventContent->getBrowserWindowContent();
+    CaretAssert(browserWindowContent);
+    const bool allTabsAspectLockedFlag = browserWindowContent->isAllTabsInWindowAspectRatioLocked();
+    
     /*
      * Create the sizes for the tabs before and after application
      * of aspect ratio.
@@ -523,6 +646,28 @@ BrainOpenGLViewportContent::createViewportContentForTileTabs(std::vector<Browser
             if (iTab < numberOfTabs) {
                 CaretAssertVectorIndex(tabContents,
                                        iTab);
+                
+                /*
+                 * Is aspect ratio locked for all tabs ?
+                 */
+                if (allTabsAspectLockedFlag) {
+                    /**
+                     * Update aspect locking for any tabs that have not been locked
+                     * Locking is done here so that it will work for new tabs and
+                     * for tabs from old scenes before "lock all"
+                     * Aspect locking is also performed here so that it works
+                     * with both GUI and Command Line Show Scene
+                     */
+                    if ( ! tabContents[iTab]->isAspectRatioLocked()) {
+                        if (vpWidth > 0) {
+                            const float aspectRatio = (static_cast<float>(vpHeight)
+                                                       / static_cast<float>(vpWidth));
+                            
+                            tabContents[iTab]->setAspectRatio(aspectRatio);
+                            tabContents[iTab]->setAspectRatioLocked(true);
+                        }
+                    }
+                }
                 
                 /*
                  * Note: the constructor will adjust the width and
@@ -782,7 +927,6 @@ BrainOpenGLViewportContent::getSurfaceMontageModelViewport(const int32_t montage
     }
 }
 
-
 /* =================================================================================================== */
 
 
@@ -861,5 +1005,182 @@ BrainOpenGLViewportContent::TileTabsViewportSizingInfo::print(const int32_t x,
                       + "\n   x/y: " + QString::number(x) + ", " + QString::number(y)
                       + "\n   width/height: " + QString::number(m_width) + ", " + QString::number(m_height));
     std::cout << qPrintable(msg) << std::endl;
+}
+
+
+/**
+ * Get the viewport for a slice in all slices view.
+ *
+ * @param tabViewport
+ *    The viewport for the tab containing all slices.
+ * @param sliceViewPlane
+ *    The plane for slice drawing.  Note: "ALL" is used for orientation axes in oblique view.
+ * @param allPlanesLayout
+ *    The layout in ALL slices view.
+ * @param viewportOut
+ *    Output viewport (region of graphics area) for drawing slices.
+ */
+void
+BrainOpenGLViewportContent::getSliceAllViewViewport(const int32_t tabViewport[4],
+                                                       const VolumeSliceViewPlaneEnum::Enum sliceViewPlane,
+                                                       const VolumeSliceViewAllPlanesLayoutEnum::Enum allPlanesLayout,
+                                                       int32_t viewportOut[4])
+{
+    const int32_t gap = 2;
+    const int32_t tabViewportX      = tabViewport[0];
+    const int32_t tabViewportY      = tabViewport[1];
+    const int32_t tabViewportWidth  = tabViewport[2];
+    const int32_t tabViewportHeight = tabViewport[3];
+    
+    switch (allPlanesLayout) {
+        case VolumeSliceViewAllPlanesLayoutEnum::COLUMN_LAYOUT:
+        {
+            const int32_t vpHeight = (tabViewportHeight - (gap * 2)) / 3;
+            const int32_t vpOffsetY = vpHeight + gap;
+            const int32_t vpWidth  = tabViewportWidth;
+            
+            switch (sliceViewPlane) {
+                case VolumeSliceViewPlaneEnum::ALL:
+                    viewportOut[0] = 0;
+                    viewportOut[1] = 0;
+                    viewportOut[2] = 0;
+                    viewportOut[3] = 0;
+                    break;
+                case VolumeSliceViewPlaneEnum::AXIAL:
+                    viewportOut[0] = tabViewportX;
+                    viewportOut[1] = tabViewportY;
+                    viewportOut[2] = vpWidth;
+                    viewportOut[3] = vpHeight;
+                    break;
+                case VolumeSliceViewPlaneEnum::CORONAL:
+                    viewportOut[0] = tabViewportX;
+                    viewportOut[1] = tabViewportY + vpOffsetY;
+                    viewportOut[2] = vpWidth;
+                    viewportOut[3] = vpHeight;
+                    break;
+                case VolumeSliceViewPlaneEnum::PARASAGITTAL:
+                    viewportOut[0] = tabViewportX;
+                    viewportOut[1] = tabViewportY + (vpOffsetY * 2);
+                    viewportOut[2] = vpWidth;
+                    viewportOut[3] = vpHeight;
+                    break;
+            }
+        }
+            break;
+        case VolumeSliceViewAllPlanesLayoutEnum::GRID_LAYOUT:
+        {
+            const int32_t vpWidth   = (tabViewportWidth  - gap) / 2;
+            const int32_t vpHeight  = (tabViewportHeight - gap) / 2;
+            const int32_t vpOffsetX = vpWidth  + gap;
+            const int32_t vpOffsetY = vpHeight + gap;
+            switch (sliceViewPlane) {
+                case VolumeSliceViewPlaneEnum::ALL:
+                    viewportOut[0] = tabViewportX;
+                    viewportOut[1] = tabViewportY;
+                    viewportOut[2] = vpWidth;
+                    viewportOut[3] = vpHeight;
+                    break;
+                case VolumeSliceViewPlaneEnum::AXIAL:
+                    viewportOut[0] = tabViewportX + vpOffsetX;
+                    viewportOut[1] = tabViewportY;
+                    viewportOut[2] = vpWidth;
+                    viewportOut[3] = vpHeight;
+                    break;
+                case VolumeSliceViewPlaneEnum::CORONAL:
+                    viewportOut[0] = tabViewportX + vpOffsetX;
+                    viewportOut[1] = tabViewportY + vpOffsetY;
+                    viewportOut[2] = vpWidth;
+                    viewportOut[3] = vpHeight;
+                    break;
+                case VolumeSliceViewPlaneEnum::PARASAGITTAL:
+                    viewportOut[0] = tabViewportX;
+                    viewportOut[1] = tabViewportY + vpOffsetY;
+                    viewportOut[2] = vpWidth;
+                    viewportOut[3] = vpHeight;
+                    break;
+            }
+        }
+            break;
+        case VolumeSliceViewAllPlanesLayoutEnum::ROW_LAYOUT:
+        {
+            const int32_t vpWidth   = (tabViewportWidth - (gap * 2)) / 3;
+            const int32_t vpOffsetX = vpWidth + gap;
+            const int32_t vpHeight  = tabViewportHeight;
+            
+            switch (sliceViewPlane) {
+                case VolumeSliceViewPlaneEnum::ALL:
+                    viewportOut[0] = 0;
+                    viewportOut[1] = 0;
+                    viewportOut[2] = 0;
+                    viewportOut[3] = 0;
+                    break;
+                case VolumeSliceViewPlaneEnum::AXIAL:
+                    viewportOut[0] = tabViewportX + (vpOffsetX * 2);
+                    viewportOut[1] = tabViewportY;
+                    viewportOut[2] = vpWidth;
+                    viewportOut[3] = vpHeight;
+                    break;
+                case VolumeSliceViewPlaneEnum::CORONAL:
+                    viewportOut[0] = tabViewportX;
+                    viewportOut[1] = tabViewportY;
+                    viewportOut[2] = vpWidth;
+                    viewportOut[3] = vpHeight;
+                    break;
+                case VolumeSliceViewPlaneEnum::PARASAGITTAL:
+                    viewportOut[0] = tabViewportX + vpOffsetX;
+                    viewportOut[1] = tabViewportY;
+                    viewportOut[2] = vpWidth;
+                    viewportOut[3] = vpHeight;
+                    break;
+            }
+        }
+            break;
+    }
+}
+
+/*
+ * @return The slice view plane for the given viewport coordinate.
+ * If ALL is returned, is indicates that the given viewport coordinate
+ * is in the bottom left region in which volume slices are not displayed.
+ *
+ * @param viewport
+ *   The viewport.
+ * @param mousePressX
+ *   X Location of the mouse press.
+ * @param mousePressY
+ *   Y Location of the mouse press.
+ * @param allPlanesLayout
+ *    The layout in ALL slices view.
+ * @param sliceViewportOut
+ *    Output viewport (region of graphics area) for drawing slices.
+ */
+VolumeSliceViewPlaneEnum::Enum
+BrainOpenGLViewportContent::getSliceViewPlaneForVolumeAllSliceView(const int32_t viewport[4],
+                                                                   const VolumeSliceViewAllPlanesLayoutEnum::Enum allPlanesLayout,
+                                                                   const int32_t mousePressX,
+                                                                   const int32_t mousePressY,
+                                                                   int32_t sliceViewportOut[4])
+{
+    VolumeSliceViewPlaneEnum::Enum view = VolumeSliceViewPlaneEnum::ALL;
+    
+    std::vector<VolumeSliceViewPlaneEnum::Enum> allSlicePlanes;
+    VolumeSliceViewPlaneEnum::getAllEnums(allSlicePlanes);
+    for (auto slicePlane : allSlicePlanes) {
+        BrainOpenGLViewportContent::getSliceAllViewViewport(viewport,
+                                                           slicePlane,
+                                                           allPlanesLayout,
+                                                           sliceViewportOut);
+        const int32_t vpX = mousePressX - sliceViewportOut[0];
+        const int32_t vpY = mousePressY - sliceViewportOut[1];
+        if ((vpX >= 0)
+            && (vpY >= 0)
+            && (vpX < sliceViewportOut[2])
+            && (vpY < sliceViewportOut[3])) {
+            return slicePlane;
+        }
+    }
+    
+    CaretLogSevere("Failed to find slice plane in all sliced view");
+    return view;
 }
 

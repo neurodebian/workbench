@@ -28,7 +28,7 @@
 #include "BrainOpenGLViewportContent.h"
 #include "BrowserTabContent.h"
 #include "CaretAssert.h"
-#include "EventBrowserWindowContentGet.h"
+#include "EventBrowserWindowDrawingContent.h"
 #include "EventGraphicsUpdateAllWindows.h"
 #include "EventManager.h"
 #include "EventUserInterfaceUpdate.h"
@@ -270,9 +270,7 @@ UserInputModeVolumeEdit::updateGraphicsAfterEditing(VolumeFile* volumeFile,
     CaretAssert((mapIndex >= 0) && (mapIndex < volumeFile->getNumberOfMaps()));
 
     volumeFile->clearVoxelColoringForMap(mapIndex);
-    PaletteFile* paletteFile = GuiManager::get()->getBrain()->getPaletteFile();
-    volumeFile->updateScalarColoringForMap(mapIndex,
-                                           paletteFile);
+    volumeFile->updateScalarColoringForMap(mapIndex);
     EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
 }
 
@@ -328,7 +326,7 @@ UserInputModeVolumeEdit::getVolumeEditInfo(VolumeEditInfo& volumeEditInfo)
     volumeEditInfo.m_obliqueRotationMatrix.identity();
 //    volumeEditInfo.m_modelVolume    = NULL;
     
-    EventBrowserWindowContentGet windowEvent(m_windowIndex);
+    EventBrowserWindowDrawingContent windowEvent(m_windowIndex);
     EventManager::get()->sendEvent(windowEvent.getPointer());
     
     BrowserTabContent* tabContent = windowEvent.getSelectedBrowserTabContent();

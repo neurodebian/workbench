@@ -155,12 +155,27 @@ namespace caret {
          * XML Tag for BALSA Study ID element.
          */
         static const AString SCENE_INFO_BALSA_STUDY_ID_TAG = "BalsaStudyID";
-    
+        
+        /**
+         * XML Tag for BALSA Study ID element.
+         */
+        static const AString SCENE_INFO_BALSA_STUDY_TITLE_TAG = "BalsaStudyTitle";
         
         /**
          * XML Tag for Base Directory ID element.
          */
-        static const AString SCENE_INFO_BASE_DIRECTORY_TAG = "BaseDirectory";
+        static const AString SCENE_INFO_BALSA_BASE_DIRECTORY_TAG = "BalsaBaseDirectory";
+        static const AString SCENE_INFO_BALSA_BASE_DIRECTORY_TAG_OLD = "BaseDirectory";
+        
+        /**
+         * XML Tag for Extract Directory ID element.
+         */
+        static const AString SCENE_INFO_BALSA_EXTRACT_TO_DIRECTORY_TAG = "BalsaExtractToDirectory";
+        
+        /**
+         * XML Tag for Base Path Type
+         */
+        static const AString SCENE_INFO_BASE_PATH_TYPE = "BasePathType";
         
     } // namespace SceneXmlElements
     

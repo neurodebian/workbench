@@ -37,6 +37,8 @@ namespace caret {
         SceneObjectMapIntegerKey(const QString& name,
                            const SceneObjectDataTypeEnum::Enum valueDataType);
         
+        virtual std::vector<SceneObject*> getDescendants() const;
+        
     private:
         SceneObjectMapIntegerKey(const SceneObjectMapIntegerKey&);
         
@@ -86,9 +88,9 @@ namespace caret {
                       SceneClass* value);
         
         std::vector<int32_t> getKeys() const;
-        
+
         const std::map<int32_t, SceneObject*>& getMap() const;
-        
+
         const SceneObject* getObject(const int32_t key) const;
         
         const SceneClass* classValue(const int32_t key) const;
@@ -120,6 +122,8 @@ namespace caret {
         AString pathNameValue(const int32_t key) const;
         
         virtual SceneObject* clone() const;
+        
+        bool isEmpty() const;
         
     private:
         typedef std::map<int32_t, SceneObject*> DATA_MAP;

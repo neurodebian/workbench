@@ -57,6 +57,7 @@ namespace caret {
                               const AString& ifdefName,
                               const AString& ifdefNameStaticDeclaration,
                               const bool hasCopyAndAssignment,
+                              const bool hasEqualityOperator,
                               const bool hasEventListener,
                               const bool hasSceneInterface,
                               const bool hasSubClassSceneSaving);
@@ -67,9 +68,12 @@ namespace caret {
                                       const AString& eventTypeEnumName,
                                       const AString& ifdefNameStaticDeclaration,
                                       const bool hasCopyAndAssignment,
+                                      const bool hasEqualityOperator,
                                       const bool hasEventListener,
                                       const bool hasSceneInterface,
                                       const bool hasSubClassSceneSaving);
+        
+        const bool m_useUniquePtrFlag = true;
     };
     
 } // namespace

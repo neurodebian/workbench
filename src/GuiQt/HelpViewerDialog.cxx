@@ -32,8 +32,13 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
-#include <QPrintDialog>
-#include <QPrinter>
+#if QT_VERSION >= 0x050000
+#include <QtPrintSupport/QPrinter>
+#include <QtPrintSupport/QPrintDialog>
+#else // QT_VERSION
+#include <qprinter.h>
+#include <qprintdialog.h>
+#endif // QT_VERSION
 #include <QTextBrowser>
 #include <QSplitter>
 #include <QTabWidget>
@@ -48,6 +53,7 @@
 #include "CaretLogger.h"
 #include "CommandOperation.h"
 #include "CommandOperationManager.h"
+#include "FileInformation.h"
 #include "WuQMessageBox.h"
 #include "WuQtUtilities.h"
 
@@ -264,7 +270,6 @@ HelpViewerDialog::createHelpViewerWidget()
     connect(printButton, SIGNAL(clicked()),
             this, SLOT(helpPagePrintButtonClicked()));
     printButton->setText("Print");
-    printButton->hide();
     
     /**
      *  Copy button
@@ -326,15 +331,25 @@ HelpViewerDialog::createHelpViewerWidget()
 void
 HelpViewerDialog::showHelpPageWithName(const AString& helpPageName)
 {
-    CaretAssertMessage(0, "Not implmented yet.");
     const AString pageName = QString(helpPageName).replace('_', ' ');
     if (pageName.isEmpty()) {
         return;
     }
-    
-    CaretLogSevere("Could not find help page \""
-                   + helpPageName
-                   + "\" for loading.");
+
+    for (auto searchItem : m_allHelpSearchListWidgetItems) {
+        CaretAssert(searchItem);
+        HelpTreeWidgetItem* helpItem = searchItem->m_matchingTreeWidgetItem;
+        if (helpItem != NULL) {
+            if (helpItem->text(0) == pageName) {
+                displayHelpTextForHelpTreeWidgetItem(helpItem);
+                return;
+            }
+        }
+    }
+
+    WuQMessageBox::errorOk(this, "Error: Help page \""
+                           + helpPageName
+                           + "\" not found.");
 }
 
 /**
@@ -400,10 +415,15 @@ HelpViewerDialog::loadWorkbenchHelpInfoFromDirectory(QTreeWidgetItem* parent,
      */
     QListIterator<QFileInfo> otherHtmlPageIter(otherHtmlPagesList);
     while (otherHtmlPageIter.hasNext()) {
-        const QFileInfo pageInfo = otherHtmlPageIter.next();
+//        const QFileInfo pageInfo = otherHtmlPageIter.next();
+//        createHelpTreeWidgetItemForHelpPage(treeItem,
+//                                            pageInfo.baseName(),
+//                                            pageInfo.absoluteFilePath());
+        const QFileInfo qtPageInfo = otherHtmlPageIter.next();
+        const FileInformation pageInfo(qtPageInfo.absoluteFilePath());
         createHelpTreeWidgetItemForHelpPage(treeItem,
-                                            pageInfo.baseName(),
-                                            pageInfo.absoluteFilePath());
+                                            pageInfo.getFileNameNoExtension(),
+                                            qtPageInfo.absoluteFilePath());
     }
     
     /*
@@ -446,10 +466,8 @@ HelpViewerDialog::loadHelpTopicsIntoIndexTree()
     
     QDir resourceHelpDirectory(":/HelpFiles");
     
+    QTreeWidgetItem* bestPracticesItem = NULL;
     QTreeWidgetItem* glossaryItem = NULL;
-    
-    // CAN BE SET TO FIND FILES WITHOUT FULL PATH
-    //m_helpBrowser->setSearchPaths(QStringList(":/HelpFiles/Menus/File_Menu"));
     
     QFileInfoList subDirList = resourceHelpDirectory.entryInfoList((QDir::AllDirs | QDir::NoDotAndDotDot),
                                                                    QDir::Name);
@@ -461,6 +479,17 @@ HelpViewerDialog::loadHelpTopicsIntoIndexTree()
                                                                    subDirInfo);
         
         /*
+         * Is this the Best Practices?
+         * If so, move it so that it is a top level item.
+         */
+        if (subDirInfo.baseName().toLower() == "best_practices_guides") {
+            if (bestPracticesItem != NULL) {
+                CaretAssertMessage(0, "There should be only one best practices subdirectory !!!!");
+            }
+            bestPracticesItem = item;
+            workbenchItem->removeChild(bestPracticesItem);
+        }
+        /*
          * Is this the GLOSSARY?
          * If so, move it so that it is a top level item.
          */
@@ -470,10 +499,15 @@ HelpViewerDialog::loadHelpTopicsIntoIndexTree()
             }
             glossaryItem = item;
             workbenchItem->removeChild(glossaryItem);
-            m_topicIndexTreeWidget->addTopLevelItem(glossaryItem);
         }
     }
     
+    if (bestPracticesItem != NULL) {
+        m_topicIndexTreeWidget->addTopLevelItem(bestPracticesItem);
+    }
+    if (glossaryItem != NULL) {
+        m_topicIndexTreeWidget->addTopLevelItem(glossaryItem);
+    }
     
     /*
      * Load commands

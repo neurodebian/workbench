@@ -24,20 +24,22 @@
 
 #include "WuQDialogModal.h"
 
+class QLabel;
 class QLineEdit;
-
-
+class QPushButton;
+class QRegularExpressionValidator;
 
 namespace caret {
 
     class SceneFile;
+    class SceneBasePathWidget;
     
     class ZipSceneFileDialog : public WuQDialogModal {
         
         Q_OBJECT
 
     public:
-        ZipSceneFileDialog(const SceneFile* sceneFile,
+        ZipSceneFileDialog(SceneFile* sceneFile,
                            QWidget* parent);
         
         virtual ~ZipSceneFileDialog();
@@ -52,16 +54,33 @@ namespace caret {
     private slots:
         void chooseZipFileButtonClicked();
         
+        void validateData();
+        
     private:
+        enum class LabelName {
+            EXTRACT_DIRECTORY,
+            ZIP_FILE
+        };
+        
         ZipSceneFileDialog(const ZipSceneFileDialog&);
 
         ZipSceneFileDialog& operator=(const ZipSceneFileDialog&);
         
-        const SceneFile* m_sceneFile;
+        QRegularExpressionValidator* createValidator(const LabelName labelName);
+        
+        void setLabelText(const LabelName labelName);
+        
+        SceneFile* m_sceneFile;
+        
+        QLabel* m_zipFileNameLabel;
         
         QLineEdit* m_zipFileNameLineEdit;
         
+        QLabel* m_extractDirectoryLabel;
+        
         QLineEdit* m_extractDirectoryNameLineEdit;
+        
+        SceneBasePathWidget* m_basePathWidget;
         
         // ADD_NEW_MEMBERS_HERE
 

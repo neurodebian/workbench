@@ -23,6 +23,7 @@
 
 
 #include "BrainBrowserWindowToolBarComponent.h"
+#include "VolumeSliceViewPlaneEnum.h"
 
 class QAction;
 class QCheckBox;
@@ -52,14 +53,15 @@ namespace caret {
         void volumeIndicesParasagittalCheckBoxStateChanged(int state);
         void volumeIndicesCoronalCheckBoxStateChanged(int state);
         void volumeIndicesAxialCheckBoxStateChanged(int state);
-        void volumeIndicesParasagittalSpinBoxValueChanged(int i);
-        void volumeIndicesCoronalSpinBoxValueChanged(int i);
-        void volumeIndicesAxialSpinBoxValueChanged(int i);
+        void volumeIndicesParasagittalSpinBoxValueChanged(int sliceIndex);
+        void volumeIndicesCoronalSpinBoxValueChanged(int sliceIndex);
+        void volumeIndicesAxialSpinBoxValueChanged(int sliceIndex);
         void volumeIndicesXcoordSpinBoxValueChanged(double d);
         void volumeIndicesYcoordSpinBoxValueChanged(double d);
         void volumeIndicesZcoordSpinBoxValueChanged(double d);
         void volumeSliceProjectionTypeEnumComboBoxItemActivated();
         void volumeIdentificationToggled(bool value);
+        void obliqueMaskingActionTriggered(bool);
         
     private:
         BrainBrowserWindowToolBarSliceSelection(const BrainBrowserWindowToolBarSliceSelection&);
@@ -67,8 +69,11 @@ namespace caret {
         BrainBrowserWindowToolBarSliceSelection& operator=(const BrainBrowserWindowToolBarSliceSelection&);
         
         void readVolumeSliceCoordinatesAndUpdateSliceIndices();
-        void readVolumeSliceIndicesAndUpdateSliceCoordinates();
+        void readVolumeSliceIndicesAndUpdateSliceCoordinates(const VolumeSliceViewPlaneEnum::Enum viewPlane,
+                                                             const int64_t sliceIndex);
         void updateSliceIndicesAndCoordinatesRanges();
+        
+        void updateObliqueMaskingButton();
         
         BrainBrowserWindowToolBar* m_parentToolBar;
         
@@ -84,6 +89,7 @@ namespace caret {
         QDoubleSpinBox* m_volumeIndicesXcoordSpinBox;
         QDoubleSpinBox* m_volumeIndicesYcoordSpinBox;
         QDoubleSpinBox* m_volumeIndicesZcoordSpinBox;
+        QAction* m_obliqueMaskingAction;
         
         EnumComboBoxTemplate* m_volumeSliceProjectionTypeEnumComboBox;
         // ADD_NEW_MEMBERS_HERE

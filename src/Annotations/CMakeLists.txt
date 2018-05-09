@@ -11,6 +11,12 @@ SET(QT_DONT_USE_QTGUI TRUE)
 #
 # QT include files
 #
+if(Qt5_FOUND)
+    include_directories(${Qt5Core_INCLUDE_DIRS})
+    #include_directories(${Qt5Network_INCLUDE_DIRS})
+    include_directories(${Qt5Xml_INCLUDE_DIRS})
+endif()
+
 ###INCLUDE(${QT_USE_FILE})
 
 #
@@ -56,6 +62,7 @@ AnnotationTextOrientationEnum.h
 AnnotationTwoDimensionalShape.h
 AnnotationTypeEnum.h
 EventAnnotationAddToRemoveFromFile.h
+EventAnnotationChartLabelGet.h
 EventAnnotationGroupGetWithKey.h
 EventAnnotationGrouping.h
 
@@ -97,15 +104,19 @@ AnnotationTextOrientationEnum.cxx
 AnnotationTwoDimensionalShape.cxx
 AnnotationTypeEnum.cxx
 EventAnnotationAddToRemoveFromFile.cxx
+EventAnnotationChartLabelGet.cxx
 EventAnnotationGroupGetWithKey.cxx
 EventAnnotationGrouping.cxx
 )
+
+TARGET_LINK_LIBRARIES(Annotations ${CARET_QT5_LINK})
 
 #
 # Find headers
 #
 INCLUDE_DIRECTORIES(
 ${CMAKE_SOURCE_DIR}/Common
+${CMAKE_SOURCE_DIR}/Graphics
 ${CMAKE_SOURCE_DIR}/Scenes
 ${CMAKE_SOURCE_DIR}/Nifti
 )

@@ -33,7 +33,9 @@
 #include "GuiManager.h"
 #undef __GUI_MANAGER_DEFINE__
 
+#include "Annotation.h"
 #include "AnnotationFile.h"
+#include "AnnotationManager.h"
 #include "Brain.h"
 #include "BrainBrowserWindow.h"
 #include "BrainOpenGL.h"
@@ -43,7 +45,11 @@
 #include "CaretAssert.h"
 #include "CaretLogger.h"
 #include "CaretMappableDataFile.h"
+#include "ChartableTwoFileDelegate.h"
+#include "ChartableTwoFileMatrixChart.h"
 #include "ChartingDataManager.h"
+#include "ChartTwoOverlay.h"
+#include "ChartTwoOverlaySet.h"
 #include "CiftiConnectivityMatrixDataFileManager.h"
 #include "CiftiFiberTrajectoryManager.h"
 #include "CiftiConnectivityMatrixParcelFile.h"
@@ -56,8 +62,10 @@
 #include "ElapsedTimer.h"
 #include "EventAlertUser.h"
 #include "EventAnnotationGetDrawnInWindow.h"
+#include "EventBrowserTabGet.h"
 #include "EventBrowserTabGetAll.h"
 #include "EventBrowserWindowNew.h"
+#include "EventShowDataFileReadWarningsDialog.h"
 #include "EventGraphicsUpdateAllWindows.h"
 #include "EventGraphicsUpdateOneWindow.h"
 #include "EventHelpViewerDisplay.h"
@@ -84,6 +92,7 @@
 #include "ImageFile.h"
 #include "ImageCaptureDialog.h"
 #include "InformationDisplayDialog.h"
+#include "ModelChartTwo.h"
 #include "OverlaySettingsEditorDialog.h"
 #include "MacDockMenu.h"
 #include "MovieDialog.h"
@@ -96,6 +105,7 @@
 #include "SceneWindowGeometry.h"
 #include "SelectionManager.h"
 #include "SelectionItemChartMatrix.h"
+#include "SelectionItemChartTwoMatrix.h"
 #include "SelectionItemCiftiConnectivityMatrixRowColumn.h"
 #include "SelectionItemSurfaceNode.h"
 #include "SelectionItemSurfaceNodeIdentificationSymbol.h"
@@ -109,7 +119,6 @@
 #include "TileTabsConfigurationDialog.h"
 #include "VolumeMappableInterface.h"
 #include "WuQMessageBox.h"
-//#include "WuQWebView.h"
 #include "WuQtUtilities.h"
 
 #include "CaretAssert.h"
@@ -152,8 +161,6 @@ GuiManager::GuiManager(QObject* parent)
 void
 GuiManager::initializeGuiManager()
 {
-    this->nameOfApplication = "Connectome Workbench";
-    //this->brainOpenGL = NULL;
     this->allowBrowserWindowsToCloseWithoutConfirmation = false;
     
     m_bugReportDialog = NULL;
@@ -168,11 +175,17 @@ GuiManager::initializeGuiManager()
     this->connectomeDatabaseWebView = NULL;
     m_helpViewerDialog = NULL;
     m_paletteColorMappingEditor = NULL;
+    m_chartTwoLineSeriesHistoryDialog = NULL;
     this->sceneDialog = NULL;
     m_surfacePropertiesEditorDialog = NULL;
     m_tileTabsConfigurationDialog = NULL;
     
     this->cursorManager = new CursorManager();
+    
+    /*
+     * Windows vector never changes size
+     */
+    m_brainBrowserWindows.resize(BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_WINDOWS, NULL);
     
     /*
      * Information window.
@@ -281,11 +294,14 @@ GuiManager::initializeGuiManager()
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_ALERT_USER);
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_ANNOTATION_GET_DRAWN_IN_WINDOW);
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_BROWSER_WINDOW_NEW);
+    EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_GRAPHICS_UPDATE_ALL_WINDOWS);
+    EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_GRAPHICS_UPDATE_ONE_WINDOW);
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_HELP_VIEWER_DISPLAY);
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_MAC_DOCK_MENU_UPDATE);
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_OVERLAY_SETTINGS_EDITOR_SHOW);
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_OPERATING_SYSTEM_REQUEST_OPEN_DATA_FILE);
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_PALETTE_COLOR_MAPPING_EDITOR_SHOW);
+    EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_SHOW_FILE_DATA_READ_WARNING_DIALOG);
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_UPDATE_INFORMATION_WINDOWS);
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_USER_INTERFACE_UPDATE);
 }
@@ -301,7 +317,7 @@ GuiManager::~GuiManager()
     
     if (this->connectomeDatabaseWebView != NULL) {
         CaretAssertMessage(0, "Need to uncomment out line below if webkit is renabled");
-        //delete this->connectomeDatabaseWebView;
+        /* delete this->connectomeDatabaseWebView; */
     }
     
     FociPropertiesEditorDialog::deleteStaticMembers();
@@ -371,22 +387,6 @@ GuiManager::getBrain() const
 {
     return SessionManager::get()->getBrain(0);
 }
-
-/**
- * Get the Brain OpenGL for drawing with OpenGL.
- *
- * @return 
- *    Point to the brain.
- */
-//BrainOpenGL* 
-//GuiManager::getBrainOpenGL()
-//{
-//    if (this->brainOpenGL == NULL) {
-//        this->brainOpenGL = BrainOpenGL::getBrainOpenGL();
-//    }
-//    
-//    return this->brainOpenGL;
-//}
 
 /**
  * See if a brain browser window can be closed.  If there is only
@@ -551,7 +551,8 @@ GuiManager::getActiveBrowserWindow() const
 BrainBrowserWindow* 
 GuiManager::getBrowserWindowByWindowIndex(const int32_t browserWindowIndex)
 {
-    if (browserWindowIndex < static_cast<int32_t>(m_brainBrowserWindows.size())) {
+    if ((browserWindowIndex >= 0)
+        && (browserWindowIndex < static_cast<int32_t>(m_brainBrowserWindows.size()))) {
         return m_brainBrowserWindows[browserWindowIndex];
     }
     return NULL;
@@ -561,49 +562,104 @@ GuiManager::getBrowserWindowByWindowIndex(const int32_t browserWindowIndex)
  * Create a new BrainBrowser Window.
  * @param parent
  *    Optional parent that is used only for window placement.
+ * @param useWindowIndex
+ *    Create the new window in this index if this index is valid
  * @param browserTabContent
  *    Optional tab for initial windwo tab.
  * @param createDefaultTabs
  *    If true, create the default tabs in the new window.
+ * @param errorMessageOut
+ *    Contains message if window could not be created.
+ * @return 
+ *    Pointer to new window or NULL if unable to create a window.
  */
 BrainBrowserWindow*
 GuiManager::newBrainBrowserWindow(QWidget* parent,
+                                  const int32_t useWindowIndex,
                                   BrowserTabContent* browserTabContent,
-                                  const bool createDefaultTabs)
+                                  const bool createDefaultTabs,
+                                  AString& errorMessageOut)
 {
+    errorMessageOut.clear();
+    
     /*
      * If no tabs can be created, do not create a new window.
      */
     EventBrowserTabGetAll getAllTabs;
     EventManager::get()->sendEvent(getAllTabs.getPointer());
     if (getAllTabs.getNumberOfBrowserTabs() == BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_TABS) {
+        errorMessageOut = ("All browser tabs are being used.  "
+                           "Close some browser tabs and then try creating a new window.");
         return NULL;
     }
     
+    EventManager::get()->blockEvent(EventTypeEnum::EVENT_ANNOTATION_COLOR_BAR_GET, true);
+    
     int32_t windowIndex = -1;
     
+    /*
+     * Is window required to be at a specific index?
+     */
     int32_t numWindows = static_cast<int32_t>(m_brainBrowserWindows.size());
-    for (int32_t i = 0; i < numWindows; i++) {
-        if (m_brainBrowserWindows[i] == NULL) {
-            windowIndex = i;
-            break;
+    if (useWindowIndex >= 0) {
+        CaretAssertVectorIndex(m_brainBrowserWindows, useWindowIndex);
+        windowIndex = useWindowIndex;
+    }
+    else {
+        /*
+         * Use first available window
+         */
+        for (int32_t i = 0; i < numWindows; i++) {
+            if (m_brainBrowserWindows[i] == NULL) {
+                windowIndex = i;
+                break;
+            }
         }
     }
     
-    BrainBrowserWindow* bbw = NULL; 
+    if (windowIndex < 0) {
+        /*
+         * No windows are available
+         */
+        errorMessageOut = ("Unable to create a new window as the maximum number of windows ("
+                           + AString::number(BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_WINDOWS)
+                           + ") are currently open.");
+        return NULL;
+    }
+    
+    BrainBrowserWindow* bbw = NULL;
     
     BrainBrowserWindow::CreateDefaultTabsMode tabsMode = (createDefaultTabs
                                                           ? BrainBrowserWindow::CREATE_DEFAULT_TABS_YES
                                                           : BrainBrowserWindow::CREATE_DEFAULT_TABS_NO);
     
-    if (windowIndex < 0) {
-        windowIndex = m_brainBrowserWindows.size();
-        bbw = new BrainBrowserWindow(windowIndex, browserTabContent, tabsMode);
-        m_brainBrowserWindows.push_back(bbw);
+    if (m_brainBrowserWindows[windowIndex] != NULL) {
+        bbw = m_brainBrowserWindows[windowIndex];
     }
     else {
         bbw = new BrainBrowserWindow(windowIndex, browserTabContent, tabsMode);
         m_brainBrowserWindows[windowIndex] = bbw;
+    }
+    
+    /*
+     * Did OpenGL Context sharing fail?
+     */
+    if ( ! bbw->isOpenGLContextSharingValid()) {
+        delete bbw;
+        errorMessageOut = ("There has been a failure when creating an OpenGL Widget "
+                           "with a \"shared context\" for the new window.  "
+                           "This may be caused by a limitation of the OpenGL graphics or the "
+                           "windowing system on your computer.\n"
+                           "\n"
+                           "Please restart wb_view and report this problem as a bug using "
+                           "Help Menu --> Report a Workbench Bug...\n"
+                           "\n"
+                           "You will be able to continue using wb_view but you will not "
+                           "be able to have more than one window open.");
+        if (windowIndex >= 0) {
+            m_brainBrowserWindows[windowIndex] = NULL;
+        }
+        return NULL;
     }
     
     if (parent != NULL) {
@@ -614,6 +670,8 @@ GuiManager::newBrainBrowserWindow(QWidget* parent,
     
     bbw->resetGraphicsWidgetMinimumSize();
     
+    EventManager::get()->blockEvent(EventTypeEnum::EVENT_ANNOTATION_COLOR_BAR_GET, false);
+
     return bbw;
 }
 
@@ -652,7 +710,8 @@ GuiManager::testForModifiedFiles(const TestModifiedMode testModifiedMode,
     switch (testModifiedMode) {
         case TEST_FOR_MODIFIED_FILES_MODE_FOR_EXIT:
             break;
-        case TEST_FOR_MODIFIED_FILES_MODE_FOR_SCENE_ADD:
+        case TEST_FOR_MODIFIED_FILES_EXCLUDING_PALETTES_MODE_FOR_SCENE_ADD:
+        case TEST_FOR_MODIFIED_FILES_PALETTE_ONLY_MODE_FOR_SCENE_ADD:
             dataFileTypesToExclude.push_back(DataFileTypeEnum::SCENE);
             dataFileTypesToExclude.push_back(DataFileTypeEnum::SPECIFICATION);
             break;
@@ -679,12 +738,10 @@ GuiManager::testForModifiedFiles(const TestModifiedMode testModifiedMode,
         
         switch (testModifiedMode) {
             case TEST_FOR_MODIFIED_FILES_MODE_FOR_EXIT:
-                modifiedDataFiles.push_back(file);
-                break;
-            case TEST_FOR_MODIFIED_FILES_MODE_FOR_SCENE_ADD:
+            case TEST_FOR_MODIFIED_FILES_MODE_FOR_SCENE_SHOW:
             {
                 /*
-                 * Is modification just the palette color mapping?
+                 * Show both data modified and palette modified
                  */
                 CaretMappableDataFile* mappableDataFile = dynamic_cast<CaretMappableDataFile*>(file);
                 bool paletteOnlyModFlag = false;
@@ -701,11 +758,44 @@ GuiManager::testForModifiedFiles(const TestModifiedMode testModifiedMode,
                 else {
                     modifiedDataFiles.push_back(file);
                 }
-                
             }
                 break;
-            case TEST_FOR_MODIFIED_FILES_MODE_FOR_SCENE_SHOW:
-                modifiedDataFiles.push_back(file);
+            case TEST_FOR_MODIFIED_FILES_EXCLUDING_PALETTES_MODE_FOR_SCENE_ADD:
+            {
+                /*
+                 * Is modification data but NOT palette
+                 */
+                CaretMappableDataFile* mappableDataFile = dynamic_cast<CaretMappableDataFile*>(file);
+                if (mappableDataFile != NULL) {
+                    if ( ! mappableDataFile->isModifiedPaletteColorMapping()) {
+                        if (mappableDataFile->isModifiedExcludingPaletteColorMapping()) {
+                            modifiedDataFiles.push_back(file);
+                        }
+                    }
+                }
+                else {
+                    modifiedDataFiles.push_back(file);
+                }
+                break;
+            }
+            case TEST_FOR_MODIFIED_FILES_PALETTE_ONLY_MODE_FOR_SCENE_ADD:
+            {
+                /*
+                 * Is modification just the palette color mapping?
+                 */
+                CaretMappableDataFile* mappableDataFile = dynamic_cast<CaretMappableDataFile*>(file);
+                bool paletteOnlyModFlag = false;
+                if (mappableDataFile != NULL) {
+                    if (mappableDataFile->isModifiedPaletteColorMapping()) {
+                        if ( ! mappableDataFile->isModifiedExcludingPaletteColorMapping()) {
+                            paletteOnlyModFlag = true;
+                        }
+                    }
+                }
+                if (paletteOnlyModFlag) {
+                    paletteModifiedDataFiles.push_back(file);
+                }
+            }
                 break;
         }
     }
@@ -721,7 +811,8 @@ GuiManager::testForModifiedFiles(const TestModifiedMode testModifiedMode,
     switch (testModifiedMode) {
         case TEST_FOR_MODIFIED_FILES_MODE_FOR_EXIT:
             break;
-        case TEST_FOR_MODIFIED_FILES_MODE_FOR_SCENE_ADD:
+        case TEST_FOR_MODIFIED_FILES_EXCLUDING_PALETTES_MODE_FOR_SCENE_ADD:
+        case TEST_FOR_MODIFIED_FILES_PALETTE_ONLY_MODE_FOR_SCENE_ADD:
             /*
              * Do not need to notify about modified scene annotations
              * since scene annotations are saved to the scene
@@ -734,52 +825,68 @@ GuiManager::testForModifiedFiles(const TestModifiedMode testModifiedMode,
     
     if ((modFileCount > 0)
         || sceneAnnotationsModifiedFlag
-        || paletteModFileCount) {
+        || paletteModFileCount > 0) {
         /*
          * Display dialog allowing user to save files (goes to Save/Manage
          * Files dialog), exit without saving, or cancel.
          */
+        AString paletteModifiedMessage("These file(s) contain modified palette color mapping "
+                                       "(this may result from loading scenes that contained modified palette color "
+                                       "mapping and this modified status is needed if scenes "
+                                       "are added or replaced): ");
         switch (testModifiedMode) {
             case TEST_FOR_MODIFIED_FILES_MODE_FOR_EXIT:
                 textMessageOut = "Do you want to save changes you made to these files?";
                 break;
-            case TEST_FOR_MODIFIED_FILES_MODE_FOR_SCENE_ADD:
+            case TEST_FOR_MODIFIED_FILES_EXCLUDING_PALETTES_MODE_FOR_SCENE_ADD:
+            case TEST_FOR_MODIFIED_FILES_PALETTE_ONLY_MODE_FOR_SCENE_ADD:
                 textMessageOut = "Do you want to continue creating the scene?";
+                paletteModifiedMessage = ("These file(s) contain modified palette color mapping "
+                                          "AND \"Add modified palette color mapping to scene\" "
+                                          "is NOT checked on the Create New Scene Dialog:");
                 break;
             case TEST_FOR_MODIFIED_FILES_MODE_FOR_SCENE_SHOW:
                 textMessageOut = "Do you want to continue showing the scene?";
                 break;
         }
         
-        AString infoTextMsg;
-        if (modFileCount > 0) {
-            infoTextMsg.appendWithNewLine("Changes to these files will be lost if you don't save them:\n");
-            for (std::vector<CaretDataFile*>::iterator iter = modifiedDataFiles.begin();
-                 iter != modifiedDataFiles.end();
-                 iter++) {
-                const CaretDataFile* cdf = *iter;
-                infoTextMsg.appendWithNewLine("   "
-                                              + cdf->getFileNameNoPath());
+        AString infoTextMsg("<html>");
+        
+        if (sceneAnnotationsModifiedFlag
+            || (modFileCount > 0)) {
+            infoTextMsg.appendWithNewLine("These file(s) contain modified data:\n");
+            infoTextMsg.appendWithNewLine("<ul>");
+            
+            if (sceneAnnotationsModifiedFlag) {
+                infoTextMsg.appendWithNewLine("<li> Scene Annotations (must be saved to a scene)");
             }
-            infoTextMsg.append("\n");
+            
+            if (modFileCount > 0) {
+                for (std::vector<CaretDataFile*>::iterator iter = modifiedDataFiles.begin();
+                     iter != modifiedDataFiles.end();
+                     iter++) {
+                    const CaretDataFile* cdf = *iter;
+                    infoTextMsg.appendWithNewLine("<li> "
+                                                  + cdf->getFileNameNoPath());
+                }
+            }
+            
+            infoTextMsg.appendWithNewLine("</ul>");
         }
         if (paletteModFileCount > 0) {
-            infoTextMsg.appendWithNewLine("These file(s) contain modified palette color mapping.  It is not "
-                                          "necessary to save these file(s) if the save palette color mapping "
-                                          "option is selected on the scene creation dialog:\n");
+            infoTextMsg.appendWithNewLine(paletteModifiedMessage);
+            infoTextMsg.appendWithNewLine("<ul>");
             for (std::vector<CaretDataFile*>::iterator iter = paletteModifiedDataFiles.begin();
                  iter != paletteModifiedDataFiles.end();
                  iter++) {
                 const CaretDataFile* cdf = *iter;
-                infoTextMsg.appendWithNewLine("   "
+                infoTextMsg.appendWithNewLine("<li> "
                                               + cdf->getFileNameNoPath());
             }
-            infoTextMsg.append("\n");
+            infoTextMsg.appendWithNewLine("</ul>");
         }
         
-        if (sceneAnnotationsModifiedFlag) {
-            infoTextMsg.appendWithNewLine("Scene annotations are modified.");
-        }
+        infoTextMsg.appendWithNewLine("</html>");
         
         modifiedFilesMessageOut = infoTextMsg;
         return true;
@@ -896,6 +1003,17 @@ GuiManager::exitProgram(BrainBrowserWindow* parent)
     }
     
     if (okToExit) {
+        /*
+         * While resetting the brain is not absolutely necessary,
+         * some files may use GraphicsOpenGLBufferObject that are
+         * created by BrainOpenGL.  Resetting the brain will close
+         * all files which results in the GraphicsOpenGLBufferObject
+         * being released.  If the brain is not reset, the files 
+         * are deleted after BrainOpenGL so BrainOpenGL will report
+         * that GraphicsOpenGLBufferObjects were not deleted.
+         */
+        get()->getBrain()->resetBrain();
+        
         std::vector<BrainBrowserWindow*> bws = this->getAllOpenBrainBrowserWindows();
         for (int i = 0; i < static_cast<int>(bws.size()); i++) {
             bws[i]->deleteLater();
@@ -1121,15 +1239,6 @@ void GuiManager::processTileWindows()
 }
 
 /**
- * @return Name of the application.
- */
-QString 
-GuiManager::applicationName() const
-{
-    return this->nameOfApplication;
-}
-
-/**
  * Receive events from the event manager.
  * 
  * @param event
@@ -1188,11 +1297,14 @@ GuiManager::receiveEvent(Event* event)
             dynamic_cast<EventBrowserWindowNew*>(event);
         CaretAssert(eventNewBrowser);
         
-        BrainBrowserWindow* bbw = this->newBrainBrowserWindow(eventNewBrowser->getParent(), 
+        AString errorMessage;
+        BrainBrowserWindow* bbw = this->newBrainBrowserWindow(eventNewBrowser->getParent(),
+                                                              -1, /* allow any window index */
                                                               eventNewBrowser->getBrowserTabContent(),
-                                                              true);
+                                                              true,
+                                                              errorMessage);
         if (bbw == NULL) {
-            eventNewBrowser->setErrorMessage("Workench is exhausted.  It cannot create any more windows.");
+            eventNewBrowser->setErrorMessage(errorMessage);
             eventNewBrowser->setEventProcessed();
             return;
         }
@@ -1212,6 +1324,12 @@ GuiManager::receiveEvent(Event* event)
         bbw->resize(w, h);
         
         EventManager::get()->sendEvent(EventMacDockMenuUpdate().getPointer());
+    }
+    else if ((event->getEventType() == EventTypeEnum::EVENT_GRAPHICS_UPDATE_ALL_WINDOWS)
+             || (event->getEventType() == EventTypeEnum::EVENT_GRAPHICS_UPDATE_ONE_WINDOW)) {
+        for (auto overlayEditor : m_overlaySettingsEditors) {
+            overlayEditor->updateChartLinesInDialog();
+        }
     }
     else if (event->getEventType() == EventTypeEnum::EVENT_MAC_DOCK_MENU_UPDATE) {
         EventMacDockMenuUpdate* macDockMenuEvent = dynamic_cast<EventMacDockMenuUpdate*>(event);
@@ -1245,6 +1363,7 @@ GuiManager::receiveEvent(Event* event)
         BrainBrowserWindow* browserWindow = m_brainBrowserWindows[browserWindowIndex];
         CaretAssert(browserWindow);
         Overlay* overlay = mapEditEvent->getOverlay();
+        ChartTwoOverlay* chartOverlay = mapEditEvent->getChartTwoOverlay();
         
         switch (mode) {
             case EventOverlaySettingsEditorDialogRequest::MODE_OVERLAY_MAP_CHANGED:
@@ -1253,7 +1372,8 @@ GuiManager::receiveEvent(Event* event)
                      overlayEditorIter != m_overlaySettingsEditors.end();
                      overlayEditorIter++) {
                     OverlaySettingsEditorDialog* med = *overlayEditorIter;
-                    med->updateIfThisOverlayIsInDialog(overlay);
+                    med->updateIfThisOverlayIsInDialog(overlay,
+                                                       chartOverlay);
                 }
             }
                 break;
@@ -1302,7 +1422,8 @@ GuiManager::receiveEvent(Event* event)
                     }
                 }
                 
-                overlayEditor->updateDialogContent(overlay);
+                overlayEditor->updateDialogContent(overlay,
+                                                   chartOverlay);
                 overlayEditor->show();
                 overlayEditor->raise();
                 overlayEditor->activateWindow();
@@ -1391,6 +1512,21 @@ GuiManager::receiveEvent(Event* event)
         showHideHelpDialog(true,
                            helpEvent->getBrainBrowserWindow());
         m_helpViewerDialog->showHelpPageWithName(helpEvent->getHelpPageName());
+        
+        helpEvent->setEventProcessed();
+    }
+    else if (event->getEventType() == EventTypeEnum::EVENT_SHOW_FILE_DATA_READ_WARNING_DIALOG) {
+        EventShowDataFileReadWarningsDialog* warningEvent = dynamic_cast<EventShowDataFileReadWarningsDialog*>(event);
+        CaretAssert(warningEvent);
+        
+        BrainBrowserWindow* bbw = getBrowserWindowByWindowIndex(warningEvent->getBrowserWindowIndex());
+        if (bbw == NULL) {
+            bbw = getActiveBrowserWindow();
+        }
+        CaretAssert(bbw);
+        bbw->showDataFileReadWarningsDialog();
+        
+        warningEvent->setEventProcessed();
     }
 }
 
@@ -1537,9 +1673,7 @@ GuiManager::processShowSurfacePropertiesEditorDialog(BrainBrowserWindow* browser
         m_surfacePropertiesEditorDialog->setSaveWindowPositionForNextTime(true);
         wasCreatedFlag = true;
     }
-    m_surfacePropertiesEditorDialog->setVisible(true);
-    m_surfacePropertiesEditorDialog->show();
-    m_surfacePropertiesEditorDialog->activateWindow();
+    m_surfacePropertiesEditorDialog->showDialog();
     
     if (wasCreatedFlag) {
         WuQtUtilities::moveWindowToSideOfParent(browserWindow,
@@ -1626,8 +1760,9 @@ GuiManager::showHideSceneDialog(const bool status,
             }
         }
         
-        this->sceneDialog->show();
-        this->sceneDialog->activateWindow();
+        this->sceneDialog->showDialog();
+        
+        this->sceneDialog->createDefaultSceneFile();
     }
     else {
         this->sceneDialog->close();
@@ -1705,9 +1840,7 @@ GuiManager::processShowBugReportDialog(BrainBrowserWindow* browserWindow,
         this->addNonModalDialog(m_bugReportDialog);
     }
     
-    m_bugReportDialog->setVisible(true);
-    m_bugReportDialog->show();
-    m_bugReportDialog->activateWindow();
+    m_bugReportDialog->showDialog();
 }
 
 /**
@@ -1731,50 +1864,34 @@ GuiManager::getHelpViewerDialogDisplayAction()
  */
 void
 GuiManager::showHideHelpDialog(const bool status,
-                        BrainBrowserWindow* parentBrainBrowserWindow)
+                               const BrainBrowserWindow* parentBrainBrowserWindow)
 {
-    bool dialogWasCreated = false;
-    
-    QWidget* moveWindowParent = parentBrainBrowserWindow;
+    BrainBrowserWindow* helpDialogParentWindow = getActiveBrowserWindow();
+    if (parentBrainBrowserWindow != NULL) {
+        for (auto bbw : m_brainBrowserWindows) {
+            if (bbw == parentBrainBrowserWindow) {
+                helpDialogParentWindow = bbw;
+                break;
+            }
+        }
+    }
+    CaretAssert(helpDialogParentWindow);
     
     if (status) {
         if (m_helpViewerDialog == NULL) {
-            BrainBrowserWindow* helpDialogParent = parentBrainBrowserWindow;
-            if (helpDialogParent == NULL) {
-                helpDialogParent = getActiveBrowserWindow();
-            }
-            
-            m_helpViewerDialog = new HelpViewerDialog(helpDialogParent);
+            m_helpViewerDialog = new HelpViewerDialog(helpDialogParentWindow);
             this->addNonModalDialog(m_helpViewerDialog);
             QObject::connect(m_helpViewerDialog, SIGNAL(dialogWasClosed()),
                              this, SLOT(helpDialogWasClosed()));
             
-            dialogWasCreated = true;
-            
-            /*
-             * If there was no parent dialog for placement of the help
-             * dialog and there is only one browser window, use the browser
-             * for placement of the help dialog.
-             */
-            if (moveWindowParent == NULL) {
-                if (getAllOpenBrainBrowserWindows().size() == 1) {
-                    moveWindowParent = helpDialogParent;
-                }
-            }
+            WuQtUtilities::moveWindowToSideOfParent(helpDialogParentWindow,
+                                                    m_helpViewerDialog);
         }
         
-        m_helpViewerDialog->show();
-        m_helpViewerDialog->activateWindow();
+        m_helpViewerDialog->showDialog();
     }
     else {
         m_helpViewerDialog->close();
-    }
-    
-    if (dialogWasCreated) {
-        if (moveWindowParent != NULL) {
-            WuQtUtilities::moveWindowToSideOfParent(moveWindowParent,
-                                                    m_helpViewerDialog);
-        }
     }
     
     m_helpViewerDialogDisplayAction->blockSignals(true);
@@ -1885,9 +2002,7 @@ GuiManager::processShowInformationDisplayDialog(const bool forceDisplayOfDialog)
     if (forceDisplayOfDialog
         || m_informationDisplayDialogEnabledAction->isChecked()) {
         if (m_informationDisplayDialog != NULL) {
-            m_informationDisplayDialog->setVisible(true);
-            m_informationDisplayDialog->show();
-            m_informationDisplayDialog->activateWindow();
+            m_informationDisplayDialog->showDialog();
         }
     }
 }
@@ -1950,8 +2065,7 @@ GuiManager::showHideIdentfyBrainordinateDialog(const bool status,
             }
         }
         
-        m_identifyBrainordinateDialog->show();
-        m_identifyBrainordinateDialog->activateWindow();
+        m_identifyBrainordinateDialog->showDialog();
     }
     else {
         m_identifyBrainordinateDialog->close();
@@ -2023,9 +2137,7 @@ GuiManager::processShowClippingPlanesDialog(BrainBrowserWindow* browserWindow)
     
     const int32_t browserWindowIndex = browserWindow->getBrowserWindowIndex();
     m_clippingPlanesDialog->updateContent(browserWindowIndex);
-    m_clippingPlanesDialog->setVisible(true);
-    m_clippingPlanesDialog->show();
-    m_clippingPlanesDialog->activateWindow();
+    m_clippingPlanesDialog->showDialog();
 }
 
 
@@ -2044,9 +2156,7 @@ GuiManager::processShowCustomViewDialog(BrainBrowserWindow* browserWindow)
     
     const int32_t browserWindowIndex = browserWindow->getBrowserWindowIndex();
     m_customViewDialog->updateContent(browserWindowIndex);
-    m_customViewDialog->setVisible(true);
-    m_customViewDialog->show();
-    m_customViewDialog->activateWindow();
+    m_customViewDialog->showDialog();
     
 }
 
@@ -2064,9 +2174,7 @@ GuiManager::processShowTileTabsConfigurationDialog(caret::BrainBrowserWindow *br
     }
     
     m_tileTabsConfigurationDialog->updateDialogWithSelectedTileTabsFromWindow(browserWindow);
-    m_tileTabsConfigurationDialog->setVisible(true);
-    m_tileTabsConfigurationDialog->show();
-    m_tileTabsConfigurationDialog->activateWindow();
+    m_tileTabsConfigurationDialog->showDialog();
 }
 
 /**
@@ -2083,9 +2191,7 @@ GuiManager::processShowImageCaptureDialog(BrainBrowserWindow* browserWindow)
     }
     this->imageCaptureDialog->updateDialog();
     this->imageCaptureDialog->setBrowserWindowIndex(browserWindow->getBrowserWindowIndex());
-    this->imageCaptureDialog->setVisible(true);
-    this->imageCaptureDialog->show();
-    this->imageCaptureDialog->activateWindow();
+    this->imageCaptureDialog->showDialog();
 }
 
 /**
@@ -2101,10 +2207,7 @@ GuiManager::processShowGapsAndMarginsDialog(BrainBrowserWindow* browserWindow)
         this->addNonModalDialog(m_gapsAndMarginsDialog);
     }
     m_gapsAndMarginsDialog->updateDialog();
-    //m_tabMarginsDialog->setBrowserWindowIndex(browserWindow->getBrowserWindowIndex());
-    m_gapsAndMarginsDialog->setVisible(true);
-    m_gapsAndMarginsDialog->show();
-    m_gapsAndMarginsDialog->activateWindow();
+    m_gapsAndMarginsDialog->showDialog();
 }
 
 /**
@@ -2119,11 +2222,10 @@ GuiManager::processShowMovieDialog(BrainBrowserWindow* browserWindow)
         this->movieDialog = new MovieDialog(browserWindow);
         this->addNonModalDialog(this->movieDialog);
     }
-    //this->movieDialog->updateDialog();
-    //this->movieDialog->setBrowserWindowIndex(browserWindow->getBrowserWindowIndex());
     this->movieDialog->setVisible(true);
     this->movieDialog->show();
     this->movieDialog->activateWindow();
+    this->movieDialog->raise();
 }
 
 
@@ -2141,9 +2243,7 @@ GuiManager::processShowPreferencesDialog(BrainBrowserWindow* browserWindow)
         this->addNonModalDialog(this->preferencesDialog);
     }
     this->preferencesDialog->updateDialog();
-    this->preferencesDialog->setVisible(true);
-    this->preferencesDialog->show();
-    this->preferencesDialog->activateWindow();
+    this->preferencesDialog->showDialog();
 }
 
 /**
@@ -2213,6 +2313,19 @@ GuiManager::saveToScene(const SceneAttributes* sceneAttributes,
     SceneClass* sceneClass = new SceneClass(instanceName,
                                             "GuiManager",
                                             1);
+    
+    /*
+     * BrowserWindowContent is saved and restored by SessionManager.
+     * Some of the data in BrowserWindowContent needs to be updated
+     * by BrainBrowserWindow which is not saved until AFTER SessionManager
+     * so direct each window to update its BrowserWindowContent so that
+     * BrowserWindowContent can be saved by the SessionManager.
+     */
+    for (auto browserWindow : m_brainBrowserWindows) {
+        if (browserWindow != NULL) {
+            browserWindow->saveBrowserWindowContentForScene();
+        }
+    }
     
     /*
      * Save session manager (brain, etc)
@@ -2387,22 +2500,52 @@ GuiManager::restoreFromScene(const SceneAttributes* sceneAttributes,
         EventManager::get()->sendEvent(progressEvent.getPointer());
         const SceneClassArray* browserWindowArray = sceneClass->getClassArray("m_brainBrowserWindows");
         if (browserWindowArray != NULL) {
+            bool windowWasRestoredFlag = false;
             const int32_t numBrowserClasses = browserWindowArray->getNumberOfArrayElements();
             for (int32_t i = 0; i < numBrowserClasses; i++) {
                 const SceneClass* browserClass = browserWindowArray->getClassAtIndex(i);
+                CaretAssert(browserClass);
+                const int32_t windowIndex = browserClass->getIntegerValue("m_browserWindowIndex", -1);
+                
                 BrainBrowserWindow* bbw = NULL;
-                if (availableWindows.empty() == false) {
+                AString errorMessage;
+                if ( ! availableWindows.empty()) {
                     bbw = availableWindows.front();
-                    availableWindows.pop_front();
+
+                    if (windowIndex >= 0) {
+                        /*
+                         * Use window only if it has same index as window being restored.
+                         */
+                        if (bbw->getBrowserWindowIndex() != windowIndex) {
+                            bbw = NULL;
+                        }
+                    }
+                    
+                    if (bbw != NULL) {
+                        availableWindows.pop_front();
+                    }
                 }
-                else {
+                if (bbw == NULL) {
                     bbw = newBrainBrowserWindow(NULL,
+                                                windowIndex,
                                                 NULL,
-                                                false);
+                                                false,
+                                                errorMessage);
                 }
                 if (bbw != NULL) {
                     bbw->restoreFromScene(sceneAttributes,
                                           browserClass);
+                    windowWasRestoredFlag = true;
+                }
+                else {
+                    sceneAttributes->addToErrorMessage("\n" + errorMessage);
+                }
+            }
+            
+            if (windowWasRestoredFlag) {
+                if ( ! availableWindows.empty()) {
+                    BrainBrowserWindow* bbw = availableWindows.front();
+                    bbw->close();
                 }
             }
         }
@@ -2583,9 +2726,9 @@ GuiManager::processIdentification(const int32_t tabIndex,
                 double doubleXYZ[3];
                 idVoxel->getModelXYZ(doubleXYZ);
                 const float voxelXYZ[3] = {
-                    doubleXYZ[0],
-                    doubleXYZ[1],
-                    doubleXYZ[2]
+                    (float)doubleXYZ[0],
+                    (float)doubleXYZ[1],
+                    (float)doubleXYZ[2]
                 };
                 Surface* surface = brain->getPrimaryAnatomicalSurfaceNearestCoordinate(voxelXYZ,
                                                                                        3.0);
@@ -2685,15 +2828,15 @@ GuiManager::processIdentification(const int32_t tabIndex,
             }
         }
         
-        SelectionItemChartMatrix* idChartMatrix = selectionManager->getChartMatrixIdentification();
-        if (idChartMatrix->isValid()) {
-            ChartableMatrixInterface* chartMatrixInterface = idChartMatrix->getChartableMatrixInterface();
+        SelectionItemChartMatrix* idChartOneMatrix = selectionManager->getChartMatrixIdentification();
+        if (idChartOneMatrix->isValid()) {
+            ChartableMatrixInterface* chartMatrixInterface = idChartOneMatrix->getChartableMatrixInterface();
             if (chartMatrixInterface != NULL) {
                 CiftiConnectivityMatrixParcelFile* ciftiParcelFile = dynamic_cast<CiftiConnectivityMatrixParcelFile*>(chartMatrixInterface);
                 if (ciftiParcelFile != NULL) {
                     if (ciftiParcelFile->isMapDataLoadingEnabled(0)) {
-                        const int32_t rowIndex = idChartMatrix->getMatrixRowIndex();
-                        const int32_t columnIndex = idChartMatrix->getMatrixColumnIndex();
+                        const int32_t rowIndex = idChartOneMatrix->getMatrixRowIndex();
+                        const int32_t columnIndex = idChartOneMatrix->getMatrixColumnIndex();
                         if ((rowIndex >= 0)
                             && (columnIndex >= 0)) {
                             try {
@@ -2716,7 +2859,7 @@ GuiManager::processIdentification(const int32_t tabIndex,
                 
                 CiftiScalarDataSeriesFile* scalarDataSeriesFile = dynamic_cast<CiftiScalarDataSeriesFile*>(chartMatrixInterface);
                 if (scalarDataSeriesFile != NULL) {
-                    const int32_t rowIndex = idChartMatrix->getMatrixRowIndex();
+                    const int32_t rowIndex = idChartOneMatrix->getMatrixRowIndex();
                     if (rowIndex >= 0) {
                         scalarDataSeriesFile->setSelectedMapIndex(tabIndex,
                                                                   rowIndex);
@@ -2749,13 +2892,173 @@ GuiManager::processIdentification(const int32_t tabIndex,
                 const int32_t columnIndex = idCiftiConnMatrix->getMatrixColumnIndex();
                 if ((rowIndex >= 0)
                     || (columnIndex >= 0)) {
-                    ciftiConnectivityManager->loadRowOrColumnFromConnectivityMatrixFile(brain,
-                                                                                        matrixFile,
+                    ciftiConnectivityManager->loadRowOrColumnFromConnectivityMatrixFile(matrixFile,
                                                                                         rowIndex,
                                                                                         columnIndex,
                                                                                         ciftiLoadingInfo);
                     updateGraphicsFlag = true;
                 
+                }
+            }
+        }
+        
+        SelectionItemChartTwoMatrix* idChartTwoMatrix = selectionManager->getChartTwoMatrixIdentification();
+        if (idChartTwoMatrix != NULL) {
+            if (idChartTwoMatrix->isValid()) {
+                ChartableTwoFileMatrixChart* matrixChart = idChartTwoMatrix->getFileMatrixChart();
+                const int32_t rowIndex = idChartTwoMatrix->getRowIndex();
+                const int32_t colIndex = idChartTwoMatrix->getColumnIndex();
+                
+                CaretMappableDataFile* cmdf = matrixChart->getCaretMappableDataFile();
+                CaretAssert(cmdf);
+                
+                bool loadMapFlag = false;
+                
+                ChartTwoOverlay* chartOverlayContainingDataFile = NULL;
+                
+                EventBrowserTabGet eventBrowserTab(tabIndex);
+                EventManager::get()->sendEvent(eventBrowserTab.getPointer());
+                BrowserTabContent* tabContent = eventBrowserTab.getBrowserTab();
+                if (tabContent != NULL) {
+                    ModelChartTwo* chartTwoModel = tabContent->getDisplayedChartTwoModel();
+                    if (chartTwoModel != NULL) {
+                        if (chartTwoModel->getSelectedChartTwoDataType(tabIndex) == ChartTwoDataTypeEnum::CHART_DATA_TYPE_MATRIX) {
+                            ChartTwoOverlaySet* chartOverlaySet = tabContent->getChartTwoOverlaySet();
+                            chartOverlayContainingDataFile = chartOverlaySet->getDisplayedOverlayContainingDataFile(cmdf);
+                        }
+                    }
+                }
+                
+                bool foundChartOverlayFlag = false;
+                
+                if (chartOverlayContainingDataFile != NULL) {
+                    ChartableTwoFileMatrixChart* matrixChart = cmdf->getChartingDelegate()->getMatrixCharting();
+                    if (matrixChart != NULL) {
+                        if (matrixChart->isValid()) {
+                            int32_t rowColumnIndex = -1;
+                            switch (matrixChart->getSelectedRowColumnDimension()) {
+                                case ChartTwoMatrixLoadingDimensionEnum::CHART_MATRIX_LOADING_BY_COLUMN:
+                                    rowColumnIndex = colIndex;
+                                    break;
+                                case ChartTwoMatrixLoadingDimensionEnum::CHART_MATRIX_LOADING_BY_ROW:
+                                    rowColumnIndex = rowIndex;
+                                    break;
+                            }
+                            chartOverlayContainingDataFile->setSelectionData(cmdf,
+                                                                             rowColumnIndex);
+                            const MapYokingGroupEnum::Enum mapYoking = chartOverlayContainingDataFile->getMapYokingGroup();
+                            if (mapYoking != MapYokingGroupEnum::MAP_YOKING_GROUP_OFF) {
+                                    EventMapYokingSelectMap selectMapEvent(mapYoking,
+                                                                           cmdf,
+                                                                           rowColumnIndex,
+                                                                           true);
+                                    EventManager::get()->sendEvent(selectMapEvent.getPointer());
+                            }
+                            updateGraphicsFlag = true;
+                            foundChartOverlayFlag = true;
+                            chartingDataManager->loadChartForCiftiMappableFileRow(matrixChart->getCiftiMappableDataFile(),
+                                                                                  rowIndex);
+                        }
+                    }
+                }
+                
+                if ( ! foundChartOverlayFlag) {
+                    CaretLogWarning("PROGRAMMER NOTE: Failed to find chart overlay containing identified matrix row/column");
+                    
+                    switch (matrixChart->getMatrixContentType()) {
+                        case ChartTwoMatrixContentTypeEnum::MATRIX_CONTENT_BRAINORDINATE_MAPPABLE:
+                        {
+                            CiftiConnectivityMatrixParcelFile* ciftiParcelFile = dynamic_cast<CiftiConnectivityMatrixParcelFile*>(cmdf);
+                            if (ciftiParcelFile != NULL) {
+                                if (ciftiParcelFile->isMapDataLoadingEnabled(0)) {
+                                    if ((rowIndex >= 0)
+                                        && (colIndex >= 0)) {
+                                        try {
+                                            ciftiConnectivityManager->loadRowOrColumnFromParcelFile(brain,
+                                                                                                    ciftiParcelFile,
+                                                                                                    rowIndex,
+                                                                                                    colIndex,
+                                                                                                    ciftiLoadingInfo);
+                                            
+                                        }
+                                        catch (const DataFileException& e) {
+                                            cursor.restoreCursor();
+                                            QMessageBox::critical(parentWidget, "", e.whatString());
+                                            cursor.showWaitCursor();
+                                        }
+                                        updateGraphicsFlag = true;
+                                    }
+                                }
+                            }
+                            else {
+                                CiftiMappableConnectivityMatrixDataFile* matrixFile = dynamic_cast<CiftiMappableConnectivityMatrixDataFile*>(cmdf);
+                                if (matrixFile != NULL) {
+                                    if ((rowIndex >= 0)
+                                        || (colIndex >= 0)) {
+                                        ciftiConnectivityManager->loadRowOrColumnFromConnectivityMatrixFile(matrixFile,
+                                                                                                            rowIndex,
+                                                                                                            colIndex,
+                                                                                                            ciftiLoadingInfo);
+                                        updateGraphicsFlag = true;
+                                        
+                                    }
+                                }
+                                else {
+                                    loadMapFlag = true;
+                                }
+                            }
+                        }
+                            break;
+                        case ChartTwoMatrixContentTypeEnum::MATRIX_CONTENT_SCALARS:
+                        {
+                            CiftiScalarDataSeriesFile* scalarDataSeriesFile = dynamic_cast<CiftiScalarDataSeriesFile*>(cmdf);
+                            if (scalarDataSeriesFile != NULL) {
+                                if (rowIndex >= 0) {
+                                    scalarDataSeriesFile->setSelectedMapIndex(tabIndex,
+                                                                              rowIndex);
+                                    
+                                    const MapYokingGroupEnum::Enum mapYoking = scalarDataSeriesFile->getMatrixRowColumnMapYokingGroup(tabIndex);
+                                    
+                                    if (mapYoking != MapYokingGroupEnum::MAP_YOKING_GROUP_OFF) {
+                                        EventMapYokingSelectMap selectMapEvent(mapYoking,
+                                                                               scalarDataSeriesFile,
+                                                                               rowIndex,
+                                                                               true);
+                                        EventManager::get()->sendEvent(selectMapEvent.getPointer());
+                                    }
+                                    else {
+                                        chartingDataManager->loadChartForCiftiMappableFileRow(scalarDataSeriesFile,
+                                                                                              rowIndex);
+                                    }
+                                    
+                                    updateGraphicsFlag = true;
+                                }
+                            }
+                        }
+                            break;
+                        case ChartTwoMatrixContentTypeEnum::MATRIX_CONTENT_UNSUPPORTED:
+                            break;
+                    }
+                    
+                    if (loadMapFlag) {
+                        ChartableTwoFileMatrixChart* matrixChart = cmdf->getChartingDelegate()->getMatrixCharting();
+                        if (matrixChart != NULL) {
+                            if (matrixChart->isValid()) {
+                                int32_t rowColumnIndex = -1;
+                                switch (matrixChart->getSelectedRowColumnDimension()) {
+                                    case ChartTwoMatrixLoadingDimensionEnum::CHART_MATRIX_LOADING_BY_COLUMN:
+                                        rowColumnIndex = colIndex;
+                                        break;
+                                    case ChartTwoMatrixLoadingDimensionEnum::CHART_MATRIX_LOADING_BY_ROW:
+                                        rowColumnIndex = rowIndex;
+                                        break;
+                                }
+                                matrixChart->setSelectedRowColumnIndex(tabIndex,
+                                                                       rowColumnIndex);
+                                updateGraphicsFlag = true;
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -2883,7 +3186,7 @@ GuiManager::processIdentification(const int32_t tabIndex,
         EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
         EventManager::get()->sendEvent(EventUserInterfaceUpdate().addToolBar().addToolBox().getPointer());
     }
-} // tabIndex
+}
 
 
 

@@ -12,14 +12,35 @@ SET(QT_USE_QTXML TRUE)
 SET(QT_DONT_USE_QTGUI TRUE)
 SET(QT_USE_QTNETWORK TRUE)
 
-INCLUDE(${QT_USE_FILE})
+if(Qt5_FOUND)
+    include_directories(${Qt5Core_INCLUDE_DIRS})
+    include_directories(${Qt5Network_INCLUDE_DIRS})
+    include_directories(${Qt5Xml_INCLUDE_DIRS})
+endif()
+IF (QT4_FOUND)
+    INCLUDE(${QT_USE_FILE})
+ENDIF ()
 #message("QT VERSION: " ${QT_VERSION_MAJOR} ${QT_VERSION_MINOR} ${QT_VERSION_PATCH})
 
-SET(MOC_INPUT_HEADER_FILES
-CaretHttpManager.h
-)
+#
+# With AUTOMOC, do not need to specify files
+# that contain Q_OBJECT macro for Qt to process with 'moc'
+# (meta-object compiler).
+#
+IF(WORKBENCH_USE_CMAKE_AUTOMOC)
+    SET(CMAKE_AUTOMOC ON)
+ELSE()
+    SET(MOC_INPUT_HEADER_FILES
+        CaretHttpManager.h
+    )
 
-QT4_WRAP_CPP(MOC_SOURCE_FILES ${MOC_INPUT_HEADER_FILES})
+    IF(Qt5_FOUND)
+        QT5_WRAP_CPP(MOC_SOURCE_FILES ${MOC_INPUT_HEADER_FILES})
+    ENDIF()
+    IF (QT4_FOUND)
+        QT4_WRAP_CPP(MOC_SOURCE_FILES ${MOC_INPUT_HEADER_FILES})
+    ENDIF ()
+ENDIF()
 
 #
 # Create a library
@@ -47,7 +68,6 @@ CaretException.h
 CaretFunctionName.h
 CaretHeap.h
 CaretHttpManager.h
-CaretJsonObject.h
 CaretLogger.h
 CaretMathExpression.h
 CaretMutex.h
@@ -60,6 +80,7 @@ CaretPreferences.h
 CaretTemporaryFile.h
 CaretUndoCommand.h
 CaretUndoStack.h
+CaretUnitsTypeEnum.h
 CubicSpline.h
 DataCompressZLib.h
 DataFile.h
@@ -73,18 +94,17 @@ DescriptiveStatistics.h
 DeveloperFlagsEnum.h
 DisplayGroupAndTabItemInterface.h 
 DisplayGroupEnum.h
-DrawnWithOpenGLTextureInfo.h
-DrawnWithOpenGLTextureInterface.h
 ElapsedTimer.h
 Event.h
 EventAlertUser.h
+EventBrowserTabDelete.h
 EventBrowserTabIndicesGetAll.h
+EventCaretPreferencesGet.h
 EventGetViewportSize.h
 EventListenerInterface.h
 EventManager.h
 EventPaletteGetByName.h
 EventProgressUpdate.h
-EventOpenGLTexture.h
 EventTypeEnum.h
 FastStatistics.h
 FileAdapter.h
@@ -93,6 +113,7 @@ FloatMatrix.h
 Histogram.h
 HtmlStringBuilder.h
 ImageCaptureMethodEnum.h
+JsonHelper.h
 Logger.h
 LogHandler.h
 LogHandlerStandardError.h
@@ -130,9 +151,11 @@ TriStateSelectionStatusEnum.h
 Vector3D.h
 VectorOperation.h
 VoxelIJK.h
+WorkbenchSpecialVersionEnum.h
 YokingGroupEnum.h
 
 ${MOC_SOURCE_FILES}
+
 ${CMAKE_BINARY_DIR}/Common/ApplicationInformation.cxx
 ApplicationTypeEnum.cxx
 AString.cxx
@@ -150,7 +173,6 @@ CaretColorEnum.cxx
 CaretCommandLine.cxx
 CaretException.cxx
 CaretHttpManager.cxx
-CaretJsonObject.cxx
 CaretLogger.cxx
 CaretMathExpression.cxx
 CaretObject.cxx
@@ -160,6 +182,7 @@ CaretPreferences.cxx
 CaretTemporaryFile.cxx
 CaretUndoCommand.cxx
 CaretUndoStack.cxx
+CaretUnitsTypeEnum.cxx
 CubicSpline.cxx
 DataCompressZLib.cxx
 DataFile.cxx
@@ -171,16 +194,17 @@ DescriptiveStatistics.cxx
 DeveloperFlagsEnum.cxx
 DisplayGroupAndTabItemInterface.cxx
 DisplayGroupEnum.cxx
-DrawnWithOpenGLTextureInfo.cxx
 ElapsedTimer.cxx
 Event.cxx
 EventAlertUser.cxx
+EventBrowserTabDelete.cxx
 EventBrowserTabIndicesGetAll.cxx
+EventCaretPreferencesGet.cxx
 EventGetViewportSize.cxx
+EventListenerInterface.cxx
 EventManager.cxx
 EventPaletteGetByName.cxx
 EventProgressUpdate.cxx
-EventOpenGLTexture.cxx
 EventTypeEnum.cxx
 FastStatistics.cxx
 FileAdapter.cxx
@@ -189,6 +213,7 @@ FloatMatrix.cxx
 Histogram.cxx
 HtmlStringBuilder.cxx
 ImageCaptureMethodEnum.cxx
+JsonHelper.cxx
 Logger.cxx
 LogHandler.cxx
 LogHandlerStandardError.cxx
@@ -219,6 +244,7 @@ TileTabsConfiguration.cxx
 TriStateSelectionStatusEnum.cxx
 Vector3D.cxx
 VectorOperation.cxx
+WorkbenchSpecialVersionEnum.cxx
 YokingGroupEnum.cxx
 )
 
@@ -261,5 +287,8 @@ ENDIF(EXISTS ${GIT_REPOSITORY})
 # Conditionally link the dot library to use the SIMD-based dot product implementation
 #
 IF (WORKBENCH_USE_SIMD AND CPUINFO_COMPILES)
-    TARGET_LINK_LIBRARIES(Common dot)
-ENDIF()
+    TARGET_LINK_LIBRARIES(Common dot ${CARET_QT5_LINK})
+ELSE (WORKBENCH_USE_SIMD AND CPUINFO_COMPILES)
+    TARGET_LINK_LIBRARIES(Common ${CARET_QT5_LINK})
+ENDIF (WORKBENCH_USE_SIMD AND CPUINFO_COMPILES)
+

@@ -20,6 +20,7 @@
 /*LICENSE_END*/
 
 #include <QActionGroup>
+#include <QLineEdit>
 
 #define __USER_INPUT_MODE_VIEW_CONTEXT_MENU_DECLARE__
 #include "UserInputModeViewContextMenu.h"
@@ -29,11 +30,15 @@
 #include "AlgorithmNodesInsideBorder.h"
 #include "Border.h"
 #include "Brain.h"
+#include "BrainBrowserWindow.h"
+#include "BrainOpenGLViewportContent.h"
 #include "BrainOpenGLWidget.h"
 #include "BrainStructure.h"
 #include "BrowserTabContent.h"
 #include "ChartableLineSeriesBrainordinateInterface.h"
 #include "ChartingDataManager.h"
+#include "ChartTwoCartesianAxis.h"
+#include "ChartTwoOverlaySet.h"
 #include "CiftiBrainordinateLabelFile.h"
 #include "CiftiConnectivityMatrixDataFileManager.h"
 #include "CiftiFiberTrajectoryFile.h"
@@ -57,6 +62,7 @@
 #include "Model.h"
 #include "ProgressReportingDialog.h"
 #include "SelectionItemBorderSurface.h"
+#include "SelectionItemChartTwoLabel.h"
 #include "SelectionItemFocusSurface.h"
 #include "SelectionItemFocusVolume.h"
 #include "SelectionItemSurfaceNode.h"
@@ -66,7 +72,9 @@
 #include "SessionManager.h"
 #include "Surface.h"
 #include "UserInputModeFociWidget.h"
+#include "UserInputTileTabsContextMenu.h"
 #include "VolumeFile.h"
+#include "WuQDataEntryDialog.h"
 #include "WuQMessageBox.h"
 #include "WuQtUtilities.h"
 
@@ -83,22 +91,36 @@ using namespace caret;
  */
 /**
  * Constructor.
+ *
+ * @param viewportContent
+ *    Content of the viewport.
  * @param selectionManager
  *    The selection manager, provides data under the cursor.
- * @param browserTabContent
- *    Content of browser tab.
  * @param parentOpenGLWidget
  *    Parent OpenGL Widget on which the menu is displayed.
  */
-UserInputModeViewContextMenu::UserInputModeViewContextMenu(SelectionManager* selectionManager,
-                                                           BrowserTabContent* browserTabContent,
+UserInputModeViewContextMenu::UserInputModeViewContextMenu(BrainOpenGLViewportContent* viewportContent,
+                                                           SelectionManager* selectionManager,
                                                            BrainOpenGLWidget* parentOpenGLWidget)
 : QMenu(parentOpenGLWidget)
 {
+    this->viewportContent = viewportContent;
+    CaretAssert(this->viewportContent);
     this->parentOpenGLWidget = parentOpenGLWidget;
     this->selectionManager = selectionManager;
-    this->browserTabContent = browserTabContent;
+    this->browserTabContent = viewportContent->getBrowserTabContent();
+    CaretAssert(this->browserTabContent);
     
+    UserInputTileTabsContextMenu* tabMenu = new UserInputTileTabsContextMenu(this->parentOpenGLWidget,
+                                                                             this->viewportContent);
+    if (tabMenu->isValid()) {
+        addSubMenuToMenu(tabMenu,
+                         true);
+    }
+    else {
+        delete tabMenu;
+        tabMenu = NULL;
+    }
     /*
      * Add the identification actions.
      */
@@ -110,6 +132,11 @@ UserInputModeViewContextMenu::UserInputModeViewContextMenu(SelectionManager* sel
     addBorderRegionOfInterestActions();
     
     /*
+     * Add the chart actions
+     */
+    addChartActions();
+    
+    /*
      * Add the foci actions.
      */
     addFociActions();
@@ -117,16 +144,41 @@ UserInputModeViewContextMenu::UserInputModeViewContextMenu(SelectionManager* sel
     /*
      * Show Label ROI operations only for surfaces
      */
-        addLabelRegionOfInterestActions();
+    addLabelRegionOfInterestActions();
     
     const SelectionItemSurfaceNodeIdentificationSymbol* idSymbol = selectionManager->getSurfaceNodeIdentificationSymbol();
     
-    if (this->actions().count() > 0) {
-        this->addSeparator();
+    bool showRemoveVertexSymbolsFlag = false;
+    if (this->browserTabContent != NULL) {
+        switch (this->browserTabContent->getSelectedModelType()) {
+            case ModelTypeEnum::MODEL_TYPE_CHART:
+                break;
+            case ModelTypeEnum::MODEL_TYPE_CHART_TWO:
+                break;
+            case ModelTypeEnum::MODEL_TYPE_INVALID:
+                break;
+            case ModelTypeEnum::MODEL_TYPE_SURFACE:
+                showRemoveVertexSymbolsFlag = true;
+                break;
+            case ModelTypeEnum::MODEL_TYPE_SURFACE_MONTAGE:
+                showRemoveVertexSymbolsFlag = true;
+                break;
+            case ModelTypeEnum::MODEL_TYPE_VOLUME_SLICES:
+                showRemoveVertexSymbolsFlag = true;
+                break;
+            case ModelTypeEnum::MODEL_TYPE_WHOLE_BRAIN:
+                showRemoveVertexSymbolsFlag = true;
+                break;
+        }
     }
-    this->addAction("Remove All Vertex Identification Symbols",
-                    this,
-                    SLOT(removeAllNodeIdentificationSymbolsSelected()));
+    if (showRemoveVertexSymbolsFlag) {
+        if (this->actions().count() > 0) {
+            this->addSeparator();
+        }
+        this->addAction("Remove All Vertex Identification Symbols",
+                        this,
+                        SLOT(removeAllNodeIdentificationSymbolsSelected()));
+    }
     
     if (idSymbol->isValid()) {
         const AString text = ("Remove Identification of Vertices "
@@ -156,7 +208,7 @@ UserInputModeViewContextMenu::~UserInputModeViewContextMenu()
  * Add the actions to this context menu.
  *
  * @param actionsToAdd
- *     Actions to add to the menum.
+ *     Actions to add to the menu.
  * @param addSeparatorBeforeActions
  *     If true and there are actions presently in the menu, a separator
  *     (horizontal bar) is added prior to adding the given actions.
@@ -176,6 +228,30 @@ UserInputModeViewContextMenu::addActionsToMenu(QList<QAction*>& actionsToAdd,
     }
 }
 
+/**
+ * Add a submenu to this menu.
+ *
+ * @param menu
+ *     Menu that is added.
+ * @param addSeparatorBeforeMenu
+ *     If true and the menu is not empty, add a separator before
+ *     adding the sub menu.
+ */
+void
+UserInputModeViewContextMenu::addSubMenuToMenu(QMenu* menu,
+                                               const bool addSeparatorBeforeMenu)
+{
+    CaretAssert(menu);
+    
+    if (addSeparatorBeforeMenu) {
+        if (actions().isEmpty() == false) {
+            addSeparator();
+        }
+        
+        addMenu(menu);
+    }
+    
+}
 
 /**
  * Add the identification actions to the menu.
@@ -645,6 +721,57 @@ UserInputModeViewContextMenu::addLabelRegionOfInterestActions()
 }
 
 /**
+ * Add chart options to the menu
+ */
+void
+UserInputModeViewContextMenu::addChartActions()
+{
+    QList<QAction*> chartActions;
+
+    SelectionItemChartTwoLabel* labelID = this->selectionManager->getChartTwoLabelIdentification();
+    if (labelID->isValid()) {
+        chartActions.push_back(WuQtUtilities::createAction("Edit Chart Axis Label...",
+                                                                "",
+                                                                this,
+                                                                this,
+                                                                SLOT(editChartLabelSelected())));
+    }
+    
+    addActionsToMenu(chartActions, true);
+}
+
+/**
+ * Called to edit the chart label.
+ */
+void
+UserInputModeViewContextMenu::editChartLabelSelected()
+{
+    SelectionItemChartTwoLabel* labelID = this->selectionManager->getChartTwoLabelIdentification();
+    if (labelID->isValid()) {
+        ChartTwoCartesianAxis* axis = labelID->getChartTwoCartesianAxis();
+        ChartTwoOverlaySet* chartOverlaySet = labelID->getChartOverlaySet();
+        if ((axis != NULL)
+            && (chartOverlaySet != NULL)) {
+            WuQDataEntryDialog newNameDialog("Axis Label",
+                                             this);
+            QLineEdit* lineEdit = newNameDialog.addLineEditWidget("Label");
+            lineEdit->setText(chartOverlaySet->getAxisLabel(axis));
+            if (newNameDialog.exec() == WuQDataEntryDialog::Accepted) {
+                const AString name = lineEdit->text().trimmed();
+                chartOverlaySet->setAxisLabel(axis,
+                                              name);
+                
+                /*
+                 * Update graphics.
+                 */
+                EventManager::get()->sendEvent(EventUserInterfaceUpdate().getPointer());
+                EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+            }
+        }
+    }
+}
+
+/**
  * Add the foci options to the menu.
  */
 void
@@ -813,7 +940,7 @@ UserInputModeViewContextMenu::parcelCiftiConnectivityActionSelected(QAction* act
                                                "",
                                                this);
         progressDialog.setValue(0);
-        
+
         switch (pc->parcelType) {
             case ParcelConnectivity::PARCEL_TYPE_INVALID:
                 break;
@@ -956,6 +1083,7 @@ UserInputModeViewContextMenu::borderCiftiConnectivitySelected()
                                                    "",
                                                    this);
             progressDialog.setValue(0);
+
             CiftiConnectivityMatrixDataFileManager* ciftiConnMann = SessionManager::get()->getCiftiConnectivityMatrixDataFileManager();
             ciftiConnMann->loadAverageDataForSurfaceNodes(borderID->getBrain(),
                                                           surface,

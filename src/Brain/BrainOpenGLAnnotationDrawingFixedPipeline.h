@@ -21,6 +21,7 @@
  */
 /*LICENSE_END*/
 
+#include <memory>
 #include <stdint.h>
 
 #include "AnnotationCoordinateSpaceEnum.h"
@@ -44,10 +45,8 @@ namespace caret {
     class AnnotationText;
     class AnnotationTwoDimensionalShape;
     class Brain;
-    
     class BrainOpenGLFixedPipeline;
-    class BrainOpenGLShapeRing;
-    class DrawnWithOpenGLTextureInfo;
+    class EventOpenGLObjectToWindowTransform;
     class Surface;
     
     class BrainOpenGLAnnotationDrawingFixedPipeline : public CaretObject {
@@ -55,25 +54,6 @@ namespace caret {
     public:
         class Inputs {
         public:
-            /**
-             * Viewport height used for setting text height
-             */
-            enum TextHeightMode {
-                /** 
-                 * Use the viewport height from OpenGL drawing (last set by call to glViewport()).
-                 * This is the viewport that is active when annotation drawing is executed and in
-                 * which the model is drawn.
-                 */
-                TEXT_HEIGHT_USE_OPENGL_VIEWPORT_HEIGHT,
-                /**
-                 * Use the tab viewport height from the "Inputs".
-                 * This mode is primarily used when drawing a surface montage and results in
-                 * the same text height for a stereotaxic or surface annotation in both 
-                 * surface montage and single surface mode.
-                 */
-                TEXT_HEIGHT_USE_TAB_VIEWPORT_HEIGHT
-            };
-            
             enum WindowDrawingMode {
                 WINDOW_DRAWING_NO,
                 WINDOW_DRAWING_YES
@@ -82,31 +62,22 @@ namespace caret {
             Inputs(Brain* brain,
                    const BrainOpenGLFixedPipeline::Mode drawingMode,
                    const float centerToEyeDistance,
-                   const int32_t tabViewport[4],
                    const int32_t windowIndex,
                    const int32_t tabIndex,
-                   const TextHeightMode textHeightMode,
                    const WindowDrawingMode windowDrawingMode)
             : m_brain(brain),
             m_drawingMode(drawingMode),
             m_centerToEyeDistance(centerToEyeDistance),
             m_windowIndex(windowIndex),
             m_tabIndex(tabIndex),
-            m_textHeightMode(textHeightMode),
             m_windowDrawingMode(windowDrawingMode) {
-                m_tabViewport[0] = tabViewport[0];
-                m_tabViewport[1] = tabViewport[1];
-                m_tabViewport[2] = tabViewport[2];
-                m_tabViewport[3] = tabViewport[3];
             }
             
             Brain* m_brain;
             const BrainOpenGLFixedPipeline::Mode m_drawingMode;
             const float m_centerToEyeDistance;
-            int32_t m_tabViewport[4];
             const int32_t m_windowIndex;
             const int32_t m_tabIndex;
-            const TextHeightMode m_textHeightMode;
             const WindowDrawingMode m_windowDrawingMode;
         };
         
@@ -117,6 +88,7 @@ namespace caret {
         void drawAnnotations(Inputs* inputs,
                              const AnnotationCoordinateSpaceEnum::Enum drawingCoordinateSpace,
                              std::vector<AnnotationColorBar*>& colorBars,
+                             std::vector<Annotation*>& notInFileAnnotations,
                              const Surface* surfaceDisplayed);
 
         void drawModelSpaceAnnotationsOnVolumeSlice(Inputs* inputs,
@@ -166,19 +138,34 @@ namespace caret {
             float m_rgba[4];
         };
         
+        /**
+         * Used to save viewport, model view, projection
+         */
+        class TransformationInfo {
+        public:
+            void save();
+            void restore();
+            
+            GLint m_viewport[4];
+            GLdouble m_modelViewMatrix[16];
+            GLdouble m_projectionMatrix[16];
+            bool m_valid = false;
+        };
+        
         BrainOpenGLAnnotationDrawingFixedPipeline(const BrainOpenGLAnnotationDrawingFixedPipeline&);
 
         BrainOpenGLAnnotationDrawingFixedPipeline& operator=(const BrainOpenGLAnnotationDrawingFixedPipeline&);
         
         void drawAnnotationsInternal(const AnnotationCoordinateSpaceEnum::Enum drawingCoordinateSpace,
                                      std::vector<AnnotationColorBar*>& colorBars,
+                                     std::vector<Annotation*>& viewportAnnotations,
                                      const Surface* surfaceDisplayed,
                                      const float sliceThickness);
         
-        bool getAnnotationWindowCoordinate(const AnnotationCoordinate* coordinate,
-                                           const AnnotationCoordinateSpaceEnum::Enum annotationCoordSpace,
-                                            const Surface* surfaceDisplayed,
-                                            float windowXYZOut[3]) const;
+        bool getAnnotationDrawingSpaceCoordinate(const Annotation* annotation,
+                                                 const AnnotationCoordinate* coordinate,
+                                                 const Surface* surfaceDisplayed,
+                                                 float xyzOut[3]) const;
         
         bool getAnnotationTwoDimShapeBounds(const AnnotationTwoDimensionalShape* annotation2D,
                                  const float windowXYZ[3],
@@ -198,32 +185,16 @@ namespace caret {
                             Annotation* annotation,
                             const Surface* surfaceDisplayed);
         
+        void drawColorBar(AnnotationFile* annotationFile,
+                          AnnotationColorBar* colorBar);
+        
         bool drawBox(AnnotationFile* annotationFile,
                      AnnotationBox* box,
                        const Surface* surfaceDisplayed);
         
-        void drawColorBar(AnnotationFile* annotationFile,
-                          AnnotationColorBar* colorBar);
-        
         bool drawImage(AnnotationFile* annotationFile,
                        AnnotationImage* image,
                       const Surface* surfaceDisplayed);
-        
-        void  drawImageBytes(const float windowX,
-                             const float windowY,
-                             const float windowZ,
-                             const uint8_t* imageBytesRGBA,
-                             const int32_t imageWidth,
-                             const int32_t imageHeight);
-        
-        void  drawImageBytesWithTexture(DrawnWithOpenGLTextureInfo* textureInfo,
-                                        const float bottomLeft[3],
-                                        const float bottomRight[3],
-                                        const float topRight[3],
-                                        const float topLeft[3],
-                                        const uint8_t* imageBytesRGBA,
-                                        const int32_t imageWidth,
-                                        const int32_t imageHeight);
         
         bool drawLine(AnnotationFile* annotationFile,
                       AnnotationLine* line,
@@ -282,7 +253,8 @@ namespace caret {
                                                const float secondPoint[3],
                                                const float lineThickness);
         
-        bool isDrawnWithDepthTesting(const Annotation* annotation);
+        bool isDrawnWithDepthTesting(const Annotation* annotation,
+                                     const Surface* surface);
         
         bool setDepthTestingStatus(const bool newDepthTestingStatus);
         
@@ -299,7 +271,9 @@ namespace caret {
                                    const float lineThickness,
                                    const bool validStartArrow,
                                    const bool validEndArrow,
-                                   std::vector<float>& coordinatesOut) const;
+                                   std::vector<float>& lineCoordinatesOut,
+                                   std::vector<float>& startArrowCoordinatesOut,
+                                   std::vector<float>& endArrowCoordinatesOut) const;
         
         void getTextLineToBrainordinateLineCoordinates(const AnnotationText* text,
                                                        const Surface* surfaceDisplayed,
@@ -307,7 +281,8 @@ namespace caret {
                                                        const float bottomRight[3],
                                                        const float topRight[3],
                                                        const float topLeft[3],
-                                                       std::vector<float>& lineCoordinatesOut) const;
+                                                       std::vector<float>& lineCoordinatesOut,
+                                                       std::vector<float>& arrowCoordinatesOut) const;
         
         static void expandBox(float bottomLeft[3],
                        float bottomRight[3],
@@ -330,6 +305,10 @@ namespace caret {
                                const float topLeft[3],
                                const float startXYZ[3],
                                float endXYZ[3]) const;
+        
+        void convertObsoleteLineWidthPixelsToPercentageWidth(const Annotation* annotation) const;
+        
+        float getLineWidthFromPercentageHeight(const float percentageHeight) const;
         
         BrainOpenGLFixedPipeline* m_brainOpenGLFixedPipeline;
         
@@ -357,9 +336,6 @@ namespace caret {
         /** OpenGL Viewport */
         GLint m_modelSpaceViewport[4];
         
-        /** Browser tab's viewport */
-        //GLint m_tabViewport[4];
-        
         /** volume space plane */
         Plane m_volumeSpacePlane;
         
@@ -372,8 +348,11 @@ namespace caret {
         /** Color for selection box and sizing handles */
         uint8_t m_selectionBoxRGBA[4];
         
-        /** Used for rotation hanlde circle */
-        BrainOpenGLShapeRing* m_rotationHandleCircle;
+        float m_lineWidthMinimum = 1.0f;
+        
+        std::unique_ptr<EventOpenGLObjectToWindowTransform> m_transformEvent;
+        
+        static constexpr float s_sizingHandleLineWidthInPixels = 2.0f;
         
         // ADD_NEW_MEMBERS_HERE
 

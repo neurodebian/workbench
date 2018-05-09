@@ -77,7 +77,7 @@ m_browserWindowIndex(browserWindowIndex)
     QToolButton* rightAlignToolButton  = createHorizontalAlignmentToolButton(AnnotationTextAlignHorizontalEnum::RIGHT);
     
     m_horizontalAlignActionGroup = new QActionGroup(this);
-    m_horizontalAlignActionGroup->setExclusive(false); // not exclusive as may need to turn all off
+    m_horizontalAlignActionGroup->setExclusive(false); /**  not exclusive as may need to turn all off */
     m_horizontalAlignActionGroup->addAction(leftAlignToolButton->defaultAction());
     m_horizontalAlignActionGroup->addAction(centerAlignToolButton->defaultAction());
     m_horizontalAlignActionGroup->addAction(rightAlignToolButton->defaultAction());
@@ -90,7 +90,7 @@ m_browserWindowIndex(browserWindowIndex)
     QToolButton* bottomAlignToolButton = createVerticalAlignmentToolButton(AnnotationTextAlignVerticalEnum::BOTTOM);
     
     m_verticalAlignActionGroup = new QActionGroup(this);
-    m_verticalAlignActionGroup->setExclusive(false); // not exclusive as may need to turn all off
+    m_verticalAlignActionGroup->setExclusive(false); /** not exclusive as may need to turn all off */
     m_verticalAlignActionGroup->addAction(topAlignToolButton->defaultAction());
     m_verticalAlignActionGroup->addAction(middleAlignToolButton->defaultAction());
     m_verticalAlignActionGroup->addAction(bottomAlignToolButton->defaultAction());
@@ -160,9 +160,12 @@ void
 AnnotationTextAlignmentWidget::updateContent(std::vector<AnnotationText*>& annotationTexts)
 {
     m_annotations.clear();
-    m_annotations.insert(m_annotations.end(),
-                         annotationTexts.begin(),
-                         annotationTexts.end());
+    m_annotations.reserve(annotationTexts.size());
+    for (auto a : annotationTexts) {
+        if (a->testProperty(Annotation::Property::TEXT_ORIENTATION)) {
+            m_annotations.push_back(a);
+        }
+    }
     
     {
         /*
@@ -174,8 +177,8 @@ AnnotationTextAlignmentWidget::updateContent(std::vector<AnnotationText*>& annot
          * If multiple annotations are selected, the may have different alignments.
          */
         std::set<AnnotationTextAlignHorizontalEnum::Enum> selectedAlignments;
-        for (std::vector<AnnotationText*>::iterator iter = annotationTexts.begin();
-             iter != annotationTexts.end();
+        for (std::vector<AnnotationText*>::iterator iter = m_annotations.begin();
+             iter != m_annotations.end();
              iter++) {
             const AnnotationText* annText = *iter;
             CaretAssert(annText);
@@ -230,8 +233,8 @@ AnnotationTextAlignmentWidget::updateContent(std::vector<AnnotationText*>& annot
          * If multiple annotations are selected, the may have different alignments.
          */
         std::set<AnnotationTextAlignVerticalEnum::Enum> selectedAlignments;
-        for (std::vector<AnnotationText*>::iterator iter = annotationTexts.begin();
-             iter != annotationTexts.end();
+        for (std::vector<AnnotationText*>::iterator iter = m_annotations.begin();
+             iter != m_annotations.end();
              iter++) {
             const AnnotationText* annText = *iter;
             CaretAssert(annText);
@@ -277,7 +280,7 @@ AnnotationTextAlignmentWidget::updateContent(std::vector<AnnotationText*>& annot
         m_verticalAlignActionGroup->blockSignals(false);
     }
     
-    setEnabled( ! annotationTexts.empty());
+    setEnabled( ! m_annotations.empty());
 }
 
 /**
@@ -296,8 +299,10 @@ AnnotationTextAlignmentWidget::horizontalAlignmentActionSelected(QAction* action
                                                                                                              &valid);
     if (valid) {
         AnnotationRedoUndoCommand* undoCommand = new AnnotationRedoUndoCommand();
+        std::vector<Annotation*> annotations(m_annotations.begin(),
+                                             m_annotations.end());
         undoCommand->setModeTextAlignmentHorizontal(actionAlign,
-                                                    m_annotations);
+                                                    annotations);
         AnnotationManager* annMan = GuiManager::get()->getBrain()->getAnnotationManager();
         AString errorMessage;
         if ( ! annMan->applyCommand(undoCommand,
@@ -328,8 +333,10 @@ AnnotationTextAlignmentWidget::verticalAlignmentActionSelected(QAction* action)
                                                                                                              &valid);
     if (valid) {
         AnnotationRedoUndoCommand* undoCommand = new AnnotationRedoUndoCommand();
+        std::vector<Annotation*> annotations(m_annotations.begin(),
+                                             m_annotations.end());
         undoCommand->setModeTextAlignmentVertical(actionAlign,
-                                                  m_annotations);
+                                                  annotations);
         AnnotationManager* annMan = GuiManager::get()->getBrain()->getAnnotationManager();
         AString errorMessage;
         if ( ! annMan->applyCommand(undoCommand,
@@ -379,6 +386,7 @@ AnnotationTextAlignmentWidget::createHorizontalAlignmentToolButton(const Annotat
     action->setIcon(QIcon(pixmap));
     toolButton->setDefaultAction(action);
     toolButton->setIconSize(pixmap.size());
+    WuQtUtilities::setToolButtonStyleForQt5Mac(toolButton);
     
     return toolButton;
 }
@@ -418,6 +426,7 @@ AnnotationTextAlignmentWidget::createVerticalAlignmentToolButton(const Annotatio
     action->setIcon(QIcon(pixmap));
     toolButton->setDefaultAction(action);
     toolButton->setIconSize(pixmap.size());
+    WuQtUtilities::setToolButtonStyleForQt5Mac(toolButton);
     
     return toolButton;
 }
@@ -461,7 +470,7 @@ AnnotationTextAlignmentWidget::createHorizontalAlignmentPixmap(const QWidget* wi
     const qreal margin          = width * 0.05;
     const qreal longLineLength  = width - (margin * 2.0);
     const qreal shortLineLength = width / 2.0;
-    const qreal yStep = MathFunctions::round(height / (numLines + 1));  //6.0);
+    const qreal yStep = MathFunctions::round(height / (numLines + 1));
     
     for (int32_t i = 1; i <= numLines; i++) {
         const qreal lineLength = (((i % 2) == 0)

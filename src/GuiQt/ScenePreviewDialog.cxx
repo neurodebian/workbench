@@ -33,6 +33,7 @@
 #include "Scene.h"
 #include "SceneDialog.h"
 #include "SceneInfo.h"
+#include "WuQtUtilities.h"
 
 using namespace caret;
 
@@ -97,6 +98,7 @@ ScenePreviewDialog::ScenePreviewDialog(const Scene* scene,
     AString descriptionText;
     const int32_t negativeIsUnlimitedNumberOfLines = -1;
     SceneClassInfoWidget::getFormattedTextForSceneNameAndDescription(scene->getSceneInfo(),
+                                                                     -1,
                                                                      nameText,
                                                                      sceneIdText,
                                                                      descriptionText,
@@ -120,7 +122,9 @@ ScenePreviewDialog::ScenePreviewDialog(const Scene* scene,
         layout->addWidget(descriptionLabel);
     }
     
-    setCentralWidget(widget, SCROLL_AREA_AS_NEEDED);
+    setCentralWidget(widget, SCROLL_AREA_ALWAYS);
+
+    WuQtUtilities::limitWindowSizePercentageOfMaximum(this, 90.0, 80.0);
 }
 
 /**

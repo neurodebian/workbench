@@ -21,6 +21,7 @@
  */
 /*LICENSE_END*/
 
+#include "ChartTwoOverlay.h"
 #include "EventListenerInterface.h"
 #include "WuQDialogNonModal.h"
 
@@ -33,7 +34,9 @@ class QTabWidget;
 namespace caret {
     
     class CaretMappableDataFile;
+    class ChartTwoOverlay;
     class LabelTableEditorWidget;
+    class MapSettingsChartTwoLineHistoryWidget;
     class MapSettingsColorBarWidget;
     class MapSettingsFiberTrajectoryWidget;
     class MapSettingsLabelsWidget;
@@ -48,11 +51,15 @@ namespace caret {
     public:
         OverlaySettingsEditorDialog(QWidget* parent);
         
-        void updateDialogContent(Overlay* overlay);
+        void updateDialogContent(Overlay* brainordinateOverlay,
+                                 ChartTwoOverlay* chartOverlay);
         
-        void updateIfThisOverlayIsInDialog(Overlay* overlay);
+        void updateIfThisOverlayIsInDialog(Overlay* brainordinateOverlay,
+                                           ChartTwoOverlay* chartOverlay);
         
         void updateDialog();
+        
+        void updateChartLinesInDialog();
         
         virtual ~OverlaySettingsEditorDialog();
 
@@ -76,6 +83,9 @@ namespace caret {
         void editLabelTablePushButtonClicked();
         
     private:
+        void updateDialogContentPrivate(Overlay* brainordinateOverlay,
+                                        ChartTwoOverlay* chartOverlay);
+        
         QWidget* createWindowOptionsSection();
         
         QWidget* createMapFileAndNameSection();
@@ -90,9 +100,13 @@ namespace caret {
         
         CaretMappableDataFile* m_caretMappableDataFile;
         
-        Overlay* m_overlay;
+        Overlay* m_brainordinateOverlay;
         
-        int32_t m_mapIndex;
+        ChartTwoOverlay* m_chartOverlay;
+        
+        ChartTwoOverlay::SelectedIndexType m_chartOverlaySelectedIndexType;
+        
+        int32_t m_selectedMapFileIndex;
         
         MapSettingsPaletteColorMappingWidget* m_paletteColorMappingWidget;
         
@@ -107,6 +121,8 @@ namespace caret {
         MapSettingsLayerWidget* m_layerWidget;
         
         MapSettingsLabelsWidget* m_labelsWidget;
+        
+        MapSettingsChartTwoLineHistoryWidget* m_lineHistoryWidget;
         
         QPushButton* m_editLabelTablePushButton;
         
@@ -127,6 +143,8 @@ namespace caret {
         int32_t m_parcelsWidgetTabIndex;
         
         int32_t m_trajectoryWidgetTabIndex;
+        
+        int32_t m_lineHistoryWidgetTabIndex;
         
     };
     

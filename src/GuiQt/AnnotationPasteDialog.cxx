@@ -296,7 +296,7 @@ AnnotationPasteDialog::pasteOneDimensionalShape(AnnotationOneDimensionalShape* o
     bool windowFlag = false;
     
     switch (oneDimShape->getCoordinateSpace()) {
-        case AnnotationCoordinateSpaceEnum::PIXELS:
+        case AnnotationCoordinateSpaceEnum::CHART:
             break;
         case AnnotationCoordinateSpaceEnum::STEREOTAXIC:
             break;
@@ -304,6 +304,8 @@ AnnotationPasteDialog::pasteOneDimensionalShape(AnnotationOneDimensionalShape* o
             break;
         case AnnotationCoordinateSpaceEnum::TAB:
             tabFlag = true;
+            break;
+        case AnnotationCoordinateSpaceEnum::VIEWPORT:
             break;
         case AnnotationCoordinateSpaceEnum::WINDOW:
             windowFlag = true;

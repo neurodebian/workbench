@@ -22,23 +22,37 @@
  */
 /*LICENSE_END*/
 
+#include <memory>
+#include <set>
+
+/*
+ * When GLEW is used, CaretOpenGLInclude.h will include "Gl/glew.h".
+ * Gl/glew.h MUST BE BEFORE Gl/gl.h and Gl/gl.h is included by
+ * QGLWidget so, we must include CaretOpenGL.h before QGLWidget.
+ */
 #include "CaretOpenGLInclude.h"
 
+#ifdef WORKBENCH_USE_QT5_QOPENGL_WIDGET
+#include <QOpenGLWidget>
+#else
 #include <QGLWidget>
+#endif
+
 #include <QImage>
 
 #include <stdint.h>
 #include "BrainConstants.h"
+#include "BrainOpenGLWindowContent.h"
 #include "CaretPointer.h"
 #include "EventListenerInterface.h"
 
 class QMouseEvent;
+class QWidget;
 
 namespace caret {
 
     class Border;
     class BrainOpenGL;
-    class BrainOpenGLTextRenderInterface;
     class BrainOpenGLViewportContent;
     class BrowserTabContent;
     class EventImageCapture;
@@ -56,11 +70,16 @@ namespace caret {
     class UserInputModeAbstract;
     class VolumeFile;
     
+#ifdef WORKBENCH_USE_QT5_QOPENGL_WIDGET
+    class BrainOpenGLWidget : public QOpenGLWidget, public EventListenerInterface {
+#else
     class BrainOpenGLWidget : public QGLWidget, public EventListenerInterface {
+#endif
         Q_OBJECT
         
     public:
         BrainOpenGLWidget(QWidget* parent,
+                          const BrainOpenGLWidget* shareWidget,
                           const int32_t windowIndex);
         
         ~BrainOpenGLWidget();
@@ -92,6 +111,11 @@ namespace caret {
         
         std::vector<const BrainOpenGLViewportContent*> getViewportContent() const;
 
+        bool isOpenGLContextSharingValid() const;
+        
+        QImage performOffScreenImageCapture(const int32_t imageWidth,
+                                            const int32_t imageHeight);
+        
     protected:
         virtual void initializeGL();
         
@@ -123,11 +147,14 @@ namespace caret {
         
     private:
         
-        BrainOpenGLTextRenderInterface* createTextRenderer();
+        std::vector<BrainOpenGLViewportContent*> getDrawingViewportContent(const int32_t windowViewportIn[4]) const;
+        
+        void getDrawingWindowContent(const int32_t windowViewportIn[4],
+                                     BrainOpenGLWindowContent& windowContent) const;
         
         void clearDrawingViewportContents();
         
-        BrainOpenGLViewportContent* getViewportContentAtXY(const int x,
+        const BrainOpenGLViewportContent* getViewportContentAtXY(const int x,
                                                            const int y);
         
         void checkForMiddleMouseButton(Qt::MouseButtons& mouseButtons,
@@ -137,14 +164,9 @@ namespace caret {
         
         void captureImage(EventImageCapture* imageCaptureEvent);
         
-        BrainOpenGL* openGL;
-        
         const int32_t windowIndex;
         
-        /** Do not own text renderer so DO NOT delete */
-        BrainOpenGLTextRenderInterface* m_textRenderer;
-        
-        std::vector<BrainOpenGLViewportContent*> drawingViewportContents;
+        BrainOpenGLWindowContent m_windowContent;
         
         int32_t windowWidth[BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_WINDOWS];
         int32_t windowHeight[BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_WINDOWS];
@@ -181,12 +203,24 @@ namespace caret {
         bool    m_mousePositionValid;
         CaretPointer<MouseEvent> m_mousePositionEvent;
         
+        bool m_openGLContextSharingValid = false;
+        
+        void* m_contextShareGroupPointer = NULL;
+        
         static bool s_defaultGLFormatInitialized;
+        
+        static std::set<BrainOpenGLWidget*> s_brainOpenGLWidgets;
+        
+        static BrainOpenGL* s_singletonOpenGL;
+        
+
     };
     
 #ifdef __BRAIN_OPENGL_WIDGET_DEFINE__
-    const int32_t BrainOpenGLWidget::MOUSE_MOVEMENT_TOLERANCE = 0; //10;
-    bool BrainOpenGLWidget::s_defaultGLFormatInitialized = false;
+        const int32_t BrainOpenGLWidget::MOUSE_MOVEMENT_TOLERANCE = 0;
+        bool BrainOpenGLWidget::s_defaultGLFormatInitialized = false;
+        std::set<BrainOpenGLWidget*> BrainOpenGLWidget::s_brainOpenGLWidgets;
+        BrainOpenGL* BrainOpenGLWidget::s_singletonOpenGL = NULL;
 #endif // __BRAIN_OPENGL_WIDGET_DEFINE__
     
 } // namespace

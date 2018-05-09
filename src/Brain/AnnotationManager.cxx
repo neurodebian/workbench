@@ -19,10 +19,6 @@
  */
 /*LICENSE_END*/
 
-//#include <algorithm>
-//#include <limits>
-//#include <numeric>
-
 #define __ANNOTATION_MANAGER_DECLARE__
 #include "AnnotationManager.h"
 #undef __ANNOTATION_MANAGER_DECLARE__
@@ -41,6 +37,7 @@
 #include "CaretLogger.h"
 #include "CaretUndoStack.h"
 #include "DisplayPropertiesAnnotation.h"
+#include "EventAnnotationChartLabelGet.h"
 #include "EventAnnotationColorBarGet.h"
 #include "EventAnnotationGroupGetWithKey.h"
 #include "EventGetDisplayedDataFiles.h"
@@ -202,52 +199,15 @@ AnnotationManager::deselectAllAnnotationsForEditing(const int32_t windowIndex)
         cb->setSelectedForEditing(windowIndex,
                                   false);
     }
+    
+    EventAnnotationChartLabelGet chartLabelEvent;
+    EventManager::get()->sendEvent(chartLabelEvent.getPointer());
+    std::vector<Annotation*> chartLabels = chartLabelEvent.getAnnotationChartLabels();
+    for (auto label : chartLabels) {
+        label->setSelectedForEditing(windowIndex,
+                                     false);
+    }
 }
-
-///**
-// * Get the files containing the given annotations.  If a file is not found
-// * for an annotation NULL is selected for the file.
-// *
-// * @param annotations
-// *     Annotations for which file is found.
-// * @return
-// *     Files containing the annotations (NULL entry if file not found).  The
-// *     size of this vector will ALWAYS be the same as the size of the 
-// *     input vector.
-// */
-//std::vector<AnnotationFile*>
-//AnnotationManager::getFilesContainingAnnotations(const std::vector<Annotation*> annotations) const
-//{
-//    CaretAssertMessage(0, "Use annotation's getAnnotationFile() method.");
-////    std::vector<AnnotationFile*> allFiles;
-////    m_brain->getAllAnnotationFilesIncludingSceneAnnotationFile(allFiles);
-//    
-//    std::vector<AnnotationFile*> filesOut;
-//    
-////    for (std::vector<Annotation*>::const_iterator annIter = annotations.begin();
-////         annIter != annotations.end();
-////         annIter++) {
-////        Annotation* ann = *annIter;
-////        
-////        AnnotationFile* file = NULL;
-////        for (std::vector<AnnotationFile*>::const_iterator fileIter = allFiles.begin();
-////             fileIter != allFiles.end();
-////             fileIter++) {
-////            AnnotationFile* annFile = *fileIter;
-////            if (annFile->containsAnnotation(ann)) {
-////                file = annFile;
-////                break;
-////            }
-////        }
-////        
-////        filesOut.push_back(file);
-////    }
-//
-//    
-//    CaretAssert(filesOut.size() == annotations.size());
-//    return filesOut;
-//}
-
 
 /**
  * Select the given annotation for editing using the given mode.
@@ -436,7 +396,7 @@ AnnotationManager::isAnnotationSelectedForEditingDeletable(const int32_t windowI
              iter != selectedAnnotations.end();
              iter++) {
             const Annotation* ann = *iter;
-            if ( ! ann->isDeletable()) {
+            if ( ! ann->testProperty(Annotation::Property::DELETION)) {
                 selectedAnnotationsDeletableFlag = false;
                 break;
             }
@@ -483,6 +443,13 @@ AnnotationManager::getAllAnnotations() const
         allAnnotations.push_back(*iter);
     }
 
+    EventAnnotationChartLabelGet chartLabelEvent;
+    EventManager::get()->sendEvent(chartLabelEvent.getPointer());
+    std::vector<Annotation*> chartLabels = chartLabelEvent.getAnnotationChartLabels();
+    allAnnotations.insert(allAnnotations.end(),
+                          chartLabels.begin(),
+                          chartLabels.end());
+    
     return allAnnotations;
 }
 
@@ -602,6 +569,34 @@ AnnotationManager::getAnnotationsSelectedForEditing(const int32_t windowIndex,
             if (ann->isSelectedForEditing(windowIndex)) {
                 annotationsAndFileOut.push_back(std::make_pair(ann, file));
             }
+        }
+    }
+    
+}
+
+/**
+ * Get the selected annotations for editing and the files that contain them.
+ * INCLUDES chart labels.
+ *
+ * @param windowIndex
+ *     Index of window for annotation selection.
+ * @param annotationsAndFileOut
+ *    A 'pair' containing a selected annotation and the file that contains the annotation.
+ */
+void
+AnnotationManager::getAnnotationsSelectedForEditingIncludingLabels(const int32_t windowIndex,
+                                                     std::vector<std::pair<Annotation*, AnnotationFile*> >& annotationsAndFileOut) const
+{
+    getAnnotationsSelectedForEditing(windowIndex,
+                                     annotationsAndFileOut);
+    
+    EventAnnotationChartLabelGet chartLabelEvent;
+    EventManager::get()->sendEvent(chartLabelEvent.getPointer());
+    std::vector<Annotation*> chartLabels = chartLabelEvent.getAnnotationChartLabels();
+    AnnotationFile* nullFile = NULL;
+    for (auto cl : chartLabels) {
+        if (cl->isSelectedForEditing(windowIndex)) {
+            annotationsAndFileOut.push_back(std::make_pair(cl, nullFile));
         }
     }
 }
@@ -916,7 +911,6 @@ AnnotationManager::getDisplayedAnnotationFiles(EventGetDisplayedDataFiles* displ
     
     const std::vector<int32_t> tabIndices = displayedFilesEvent->getTabIndices();
     
-//    const DisplayPropertiesAnnotation* annProps = m_brain->getDisplayPropertiesAnnotation();
     std::vector<AnnotationFile*> annotationFiles;
     m_brain->getAllAnnotationFilesIncludingSceneAnnotationFile(annotationFiles);
     
@@ -935,16 +929,19 @@ AnnotationManager::getDisplayedAnnotationFiles(EventGetDisplayedDataFiles* displ
 
             bool displayedFlag = false;
             switch (ann->getCoordinateSpace()) {
-                case AnnotationCoordinateSpaceEnum::PIXELS:
+                case AnnotationCoordinateSpaceEnum::CHART:
+                    displayedFlag = true;
                     break;
                 case AnnotationCoordinateSpaceEnum::STEREOTAXIC:
                     displayedFlag = true;
                     break;
                 case AnnotationCoordinateSpaceEnum::SURFACE:
-                            displayedFlag = true;
+                    displayedFlag = true;
                     break;
                 case AnnotationCoordinateSpaceEnum::TAB:
                     displayedFlag = true;
+                    break;
+                case AnnotationCoordinateSpaceEnum::VIEWPORT:
                     break;
                 case AnnotationCoordinateSpaceEnum::WINDOW:
                     displayedFlag = true;
