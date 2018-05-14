@@ -3,7 +3,7 @@ Upstream-Name: Connectome Workbench
 Source: http://www.humanconnectome.org/software/get-connectome-workbench.html
 
 Files: *
-Copyright: 2014-2016 Washington University School of Medicine
+Copyright: 2014-2018 Washington University School of Medicine
 License: GPL-2+
 
 Files: src/Files/SurfaceResamplingHelper.cxx src/Cifti/examples/* src/CommandLine/wb_shortcuts src/CommandLine/wb_command_completion
@@ -430,5 +430,5 @@ License: OFL-1.1
  IN THE FONT SOFTWARE.
 
 Files: debian/*
-Copyright: 2014-2016, Yaroslav Halchenko <debian@onerussian.com>
+Copyright: 2014-2018, Yaroslav Halchenko <debian@onerussian.com>
 License: GPL-2+

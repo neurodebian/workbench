@@ -39,6 +39,7 @@ override_dh_auto_configure:
 	[ -e src/FtglFont ] && mv src/FtglFont src/FtglFont.aside || [ -e src/FtglFont.aside ]
 	OSMESA_DIR=/usr \
      dh_auto_configure -- \
+		-DWORKBENCH_MESA_DIR=/usr \
 		-DCMAKE_SKIP_RPATH:BOOL=OFF
 #-DBUILD_SHARED_LIBS:BOOL=ON
 
