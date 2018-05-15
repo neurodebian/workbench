@@ -1,0 +1,454 @@
+From d97bdf13b2ef105d07f36c8be7f5dfee75b6d6e3 Mon Sep 17 00:00:00 2001
+From: Tim Coalson <tsc5yc@mst.edu>
+Date: Mon, 14 May 2018 15:59:42 -0500
+Subject: [PATCH] attempt fix for avx simd by updating dot library
+
+---
+ src/kloewe/dot/src/dot_avx.h    |  67 ++++++++++----------
+ src/kloewe/dot/src/dot_sse2.h   |  18 +++---
+ src/kloewe/dot/src/makefile-mex | 137 ++++++++++++++++++++++++++++++++++++++++
+ src/kloewe/dot/src/makefile-oct | 129 +++++++++++++++++++++++++++++++++++++
+ 4 files changed, 310 insertions(+), 41 deletions(-)
+ create mode 100644 src/kloewe/dot/src/makefile-mex
+ create mode 100644 src/kloewe/dot/src/makefile-oct
+
+diff --git a/src/kloewe/dot/src/dot_avx.h b/src/kloewe/dot/src/dot_avx.h
+index 2cbcff936..93f01d854 100644
+--- a/src/kloewe/dot/src/dot_avx.h
++++ b/src/kloewe/dot/src/dot_avx.h
+@@ -15,8 +15,8 @@
+ 
+ // alignment check
+ #include <stdint.h>
+-#define is_aligned(POINTER, BYTE_COUNT) \
+-  (((uintptr_t)(const void *)(POINTER)) % (BYTE_COUNT) == 0)
++#define align_rem(PTR, NBYTES) (((uintptr_t)(const void *)(PTR)) % (NBYTES))
++#define is_aligned(PTR, NBYTES) (align_rem(PTR,NBYTES) == 0)
+ 
+ /*----------------------------------------------------------------------------
+   Function Prototypes
+@@ -46,18 +46,19 @@ inline float sdot_avx    (const float *a, const float *b, int n)
+   float s = 0.0f;
+ 
+   // compute and add up to 7 products without SIMD to achieve alignment
+-  int aligned = is_aligned(a, 32) && is_aligned(b, 32);
+-  if (!aligned) {
+-    int k = 0;
+-    while (!aligned) {
+-      s += (*a) * (*b);
+-      n--; a++; b++;
+-      aligned = is_aligned(a, 32) && is_aligned(b, 32);
+-      if (aligned || (++k > 6) || (n == 0))
+-        break;
++  if (align_rem(a,32) == align_rem(b,32)) {
++    int aligned = is_aligned(a, 32) && is_aligned(b, 32);
++    if (!aligned) {
++      int k = 0;
++      while (!aligned) {
++        s += (*a) * (*b);
++        n--; a++; b++;
++        aligned = is_aligned(a, 32) && is_aligned(b, 32);
++        if (aligned || (++k > 6) || (n == 0))
++          break;
++      }
+     }
+   }
+-  assert(aligned || (n < 8));
+ 
+   // initialize 8 sums
+   __m256 s8 = _mm256_setzero_ps();
+@@ -105,18 +106,19 @@ inline double ddot_avx    (const double *a, const double *b, int n)
+   double s = 0.0;
+ 
+   // compute and add up to 3 products without SIMD to achieve alignment
+-  int aligned = is_aligned(a, 32) && is_aligned(b, 32);
+-  if (!aligned) {
+-    int k = 0;
+-    while (!aligned) {
+-      s += (*a) * (*b);
+-      n--; a++; b++;
+-      aligned = is_aligned(a, 32) && is_aligned(b, 32);
+-      if (aligned || (++k > 2) || (n == 0))
+-        break;
++  if (align_rem(a,32) == align_rem(b,32)) {
++    int aligned = is_aligned(a, 32) && is_aligned(b, 32);
++    if (!aligned) {
++      int k = 0;
++      while (!aligned) {
++        s += (*a) * (*b);
++        n--; a++; b++;
++        aligned = is_aligned(a, 32) && is_aligned(b, 32);
++        if (aligned || (++k > 2) || (n == 0))
++          break;
++      }
+     }
+   }
+-  assert(aligned || (n < 4));
+ 
+   // initialize 4 sums
+   __m256d s4 = _mm256_setzero_pd();
+@@ -156,18 +158,19 @@ inline double dsdot_avx    (const float *a, const float *b, int n)
+   double s = 0.0;
+ 
+   // compute and add up to 7 products without SIMD to achieve alignment
+-  int aligned = is_aligned(a, 32) && is_aligned(b, 32);
+-  if (!aligned) {
+-    int k = 0;
+-    while (!aligned) {
+-      s += (*a) * (*b);
+-      n--; a++; b++;
+-      aligned = is_aligned(a, 32) && is_aligned(b, 32);
+-      if (aligned || (++k > 6) || (n == 0))
+-        break;
++  if (align_rem(a,32) == align_rem(b,32)) {
++    int aligned = is_aligned(a, 32) && is_aligned(b, 32);
++    if (!aligned) {
++      int k = 0;
++      while (!aligned) {
++        s += (*a) * (*b);
++        n--; a++; b++;
++        aligned = is_aligned(a, 32) && is_aligned(b, 32);
++        if (aligned || (++k > 6) || (n == 0))
++          break;
++      }
+     }
+   }
+-  assert(aligned || (n < 8));
+ 
+   // initialize 4 sums
+   __m256d s4 = _mm256_setzero_pd();
+diff --git a/src/kloewe/dot/src/dot_sse2.h b/src/kloewe/dot/src/dot_sse2.h
+index b35ea9273..9ebb7612c 100644
+--- a/src/kloewe/dot/src/dot_sse2.h
++++ b/src/kloewe/dot/src/dot_sse2.h
+@@ -14,8 +14,8 @@
+ 
+ // alignment check
+ #include <stdint.h>
+-#define is_aligned(POINTER, BYTE_COUNT) \
+-  (((uintptr_t)(const void *)(POINTER)) % (BYTE_COUNT) == 0)
++#define align_rem(PTR, NBYTES) (((uintptr_t)(const void *)(PTR)) % (NBYTES))
++#define is_aligned(PTR, NBYTES) (align_rem(PTR,NBYTES) == 0)
+ 
+ // horizontal sum variant
+ #ifdef HORZSUM_SSE3
+@@ -45,7 +45,7 @@ inline float sdot_sse2 (const float *a, const float *b, int n)
+ 
+   // compute and add up to 3 products without SIMD to achieve alignment
+   int aligned = is_aligned(a, 16) && is_aligned(b, 16);
+-  if (!aligned) {
++  if (!aligned && (align_rem(a,16) == align_rem(b,16))) {
+     int k = 0;
+     while (!aligned) {
+       s += (*a) * (*b);
+@@ -60,7 +60,7 @@ inline float sdot_sse2 (const float *a, const float *b, int n)
+   __m128 s4 = _mm_setzero_ps();
+ 
+   // in each iteration, add 1 product to each of the 4 sums in parallel
+-  if (is_aligned(a, 16) && is_aligned(b, 16))
++  if (aligned)
+     for (int k = 0, nq = 4*(n/4); k < nq; k += 4)
+       s4 = _mm_add_ps(s4, _mm_mul_ps(_mm_load_ps(a+k), _mm_load_ps(b+k)));
+   else
+@@ -94,10 +94,10 @@ inline double ddot_sse2 (const double *a, const double *b, int n)
+ 
+   // compute and add up to 1 product without SIMD to achieve alignment
+   int aligned = is_aligned(a, 16) && is_aligned(b, 16);
+-  if (!aligned) {
+-      s += (*a) * (*b);
+-      n--; a++; b++;
+-      aligned = is_aligned(a, 16) && is_aligned(b, 16);
++  if (!aligned && (align_rem(a,16) == align_rem(b,16))) {
++    s += (*a) * (*b);
++    n--; a++; b++;
++    aligned = is_aligned(a, 16) && is_aligned(b, 16);
+   }
+ 
+   // compute and add (the bulk of the) products using SSE2 intrinsics
+@@ -134,7 +134,7 @@ inline double dsdot_sse2 (const float *a, const float *b, int n)
+ 
+   // compute and add up to 3 products without SIMD to achieve alignment
+   int aligned = is_aligned(a, 16) && is_aligned(b, 16);
+-  if (!aligned) {
++  if (!aligned && (align_rem(a,16) == align_rem(b,16))) {
+     int k = 0;
+     while (!aligned) {
+       s += (*a) * (*b);
+diff --git a/src/kloewe/dot/src/makefile-mex b/src/kloewe/dot/src/makefile-mex
+new file mode 100644
+index 000000000..6c4bbc245
+--- /dev/null
++++ b/src/kloewe/dot/src/makefile-mex
+@@ -0,0 +1,137 @@
++#-----------------------------------------------------------------------------
++# File    : makefile-mex
++# Contents: build objects for use with matlab/mex
++# Author  : Kristian Loewe
++#
++# Usage   : make -f makefile-mex
++#           MEX_FLAGS='-v' make -f makefile-mex
++#           make -f makefile-mex | grep -v 'Warning.*gcc version'
++#           make -B -f makefile-mex | grep -v 'Warning.*gcc version'
++#           DEBUG=1 make -B -f makefile-mex | grep -v 'Warning.*gcc version'
++#           GCC=/usr/bin/gcc-7 make -f makefile-mex
++#-----------------------------------------------------------------------------
++.SUFFIXES:
++MAKEFLAGS   += -r
++
++GCC         ?= gcc
++CFBASE       = -std=c99 -Wall -Wextra -Wno-unused-parameter -Wconversion \
++               -Wshadow -pedantic
++DEFS        ?=
++MEX_FLAGS   ?=
++
++DEBUG       ?= 0
++ifeq ($(DEBUG), 1)
++  CFBASE    += -g
++  CFOPT     ?= -O0
++else
++  CFOPT     ?= -O2
++  DEFS      += -DNDEBUG
++endif
++CFLAGS       = $(CFBASE) -fPIC $(DEFS)
++
++MATLABROOT   = $(dir $(realpath $(shell which matlab)))
++MEXCC        = $(realpath $(MATLABROOT))/mex -largeArrayDims $(MEX_FLAGS) \
++               CFLAGS='$(CFLAGS)' GCC=$(GCC)
++
++OBJDIR       = ../obj/$(shell uname -m)/matlab
++_DUMMY      := $(shell mkdir -p $(OBJDIR))
++
++#-----------------------------------------------------------------------------
++
++CPUINFODIR   = ../../cpuinfo
++
++#-----------------------------------------------------------------------------
++
++GCC_VERSION := $(shell expr `$(GCC) -dumpversion`)
++ifeq (,$(findstring .,$(GCC_VERSION)))
++  GCC_VERSION := $(shell expr `$(GCC) -dumpfullversion`)
++endif
++GCC_VERSION := $(shell expr `echo $(GCC_VERSION) | \
++               sed -e 's/\.\([0-9][0-9]\)/\1/g' -e 's/\.\([0-9]\)/0\1/g' \
++               -e 's/^[0-9]\{3,4\}$$/&00/'`)
++
++GCC_GTEQ_47 := $(shell echo $(GCC_VERSION)\>=40700 | bc)
++GCC_GTEQ_71 := $(shell echo $(GCC_VERSION)\>=70100 | bc)
++
++DOT_DEFS =
++
++ifeq ($(GCC_GTEQ_47),1)
++  DOT_USEFMA ?= 1
++endif
++
++ifeq ($(GCC_GTEQ_71),1)
++  CFLAGS += -Wimplicit-fallthrough=0
++  DOT_USEAVX512 ?= 1
++endif
++
++OBJS = dot.o dot_naive.o dot_sse2.o dot_avx.o
++
++ifeq ($(DOT_USEFMA),1)
++  OBJS += dot_avxfma.o
++else
++  DOT_DEFS += -DDOT_NOFMA
++endif
++
++ifeq ($(DOT_USEAVX512),1)
++  OBJS += dot_avx512.o
++  ifeq ($(DOT_USEFMA),1)
++    OBJS += dot_avx512fma.o
++  endif
++else
++  DOT_DEFS += -DDOT_NOAVX512
++endif
++
++#-----------------------------------------------------------------------------
++# Build Objects
++#-----------------------------------------------------------------------------
++all: $(OBJS) dot_all.o
++
++dot_naive.o:                $(OBJDIR)/dot_naive.o
++$(OBJDIR)/dot_naive.o:      dot_naive.h dot_naive_real.h
++$(OBJDIR)/dot_naive.o:      dot_naive.c makefile-mex
++	$(MEXCC) COPTIMFLAGS='$(CFOPT)' \
++    -c dot_naive.c -outdir $(OBJDIR)
++
++dot_sse2.o:                 $(OBJDIR)/dot_sse2.o
++$(OBJDIR)/dot_sse2.o:       dot_sse2.h
++$(OBJDIR)/dot_sse2.o:       dot_sse2.c makefile-mex
++	$(MEXCC) COPTIMFLAGS='$(CFOPT) -msse2' \
++    -c dot_sse2.c -outdir $(OBJDIR)
++
++dot_avx.o:                  $(OBJDIR)/dot_avx.o
++$(OBJDIR)/dot_avx.o:        dot_avx.h
++$(OBJDIR)/dot_avx.o:        dot_avx.c makefile-mex
++	$(MEXCC) COPTIMFLAGS='$(CFOPT) -mavx -funroll-loops' \
++    -c dot_avx.c -outdir $(OBJDIR)
++
++dot_avxfma.o:               $(OBJDIR)/dot_avxfma.o
++$(OBJDIR)/dot_avxfma.o:     dot_avx.h
++$(OBJDIR)/dot_avxfma.o:     dot_avxfma.c dot_avx.c makefile-mex
++	$(MEXCC) COPTIMFLAGS='$(CFOPT) -mfma -mavx -funroll-loops' \
++    -c dot_avxfma.c -outdir $(OBJDIR)
++
++dot_avx512.o:               $(OBJDIR)/dot_avx512.o
++$(OBJDIR)/dot_avx512.o:     dot_avx512.h
++$(OBJDIR)/dot_avx512.o:     dot_avx512.c makefile-mex
++	$(MEXCC) COPTIMFLAGS='$(CFOPT) -mavx512f -funroll-loops' \
++    -c dot_avx512.c -outdir $(OBJDIR)
++
++dot_avx512fma.o:            $(OBJDIR)/dot_avx512fma.o
++$(OBJDIR)/dot_avx512fma.o:  dot_avx512.h
++$(OBJDIR)/dot_avx512fma.o:  dot_avx512.c makefile
++	mv $(OBJDIR)/dot_avx512.o $(OBJDIR)/dot_avx512.o.tmp; \
++  $(MEXCC) COPTIMFLAGS='$(CFOPT) -mavx512f -mfma -funroll-loops' \
++    -c dot_avx512.c -outdir $(OBJDIR); \
++  mv $(OBJDIR)/dot_avx512.o $(OBJDIR)/dot_avx512fma.o; \
++  mv $(OBJDIR)/dot_avx512.o.tmp $(OBJDIR)/dot_avx512.o \
++
++dot.o:                      $(OBJDIR)/dot.o
++$(OBJDIR)/dot.o:            dot.h $(CPUINFODIR)/src/cpuinfo.h
++$(OBJDIR)/dot.o:            dot.c makefile-mex
++	$(MEXCC) COPTIMFLAGS='$(CFOPT)' $(DOT_DEFS) \
++    -I$(CPUINFODIR)/src -c dot.c -outdir $(OBJDIR)
++
++dot_all.o:                  $(OBJDIR)/dot_all.o
++$(OBJDIR)/dot_all.o:        $(addprefix $(OBJDIR)/, $(OBJS))
++$(OBJDIR)/dot_all.o:        makefile-mex
++	$(LD) -r -o $(OBJDIR)/dot_all.o $(addprefix $(OBJDIR)/, $(OBJS))
+diff --git a/src/kloewe/dot/src/makefile-oct b/src/kloewe/dot/src/makefile-oct
+new file mode 100644
+index 000000000..97ac2d74b
+--- /dev/null
++++ b/src/kloewe/dot/src/makefile-oct
+@@ -0,0 +1,129 @@
++#-----------------------------------------------------------------------------
++# File    : makefile-oct
++# Contents: build objects for use with octave/mex
++# Author  : Kristian Loewe
++#           (with modifications for octave by Christina Rossmanith)
++#
++# Usage   : make -f makefile-oct
++#           MEX_FLAGS='-v' make -f makefile-oct
++#           make -B -f makefile-oct
++#           DEBUG=1 make -B -f makefile-oct
++#           GCC=/usr/bin/gcc-7 make -f makefile-oct
++#-----------------------------------------------------------------------------
++.SUFFIXES:
++MAKEFLAGS   += -r
++
++GCC         ?= gcc
++CFBASE       = -std=c99 -Wall -Wextra -Wno-unused-parameter -Wconversion \
++               -Wshadow -pedantic
++DEFS        ?=
++MEX_FLAGS   ?=
++
++DEBUG       ?= 0
++ifeq ($(DEBUG), 1)
++  CFBASE    += -g
++  CFOPT     ?= -O0
++else
++  CFOPT     ?= -O2
++  DEFS      += -DNDEBUG
++endif
++CFLAGS       = $(CFBASE) -fPIC $(DEFS)
++
++
++MEXCC        = CC=$(GCC) mkoctfile --mex $(MEX_FLAGS)
++
++
++OBJDIR = ../obj/$(shell uname -m)/octave
++_DUMMY := $(shell mkdir -p $(OBJDIR))
++
++#-----------------------------------------------------------------------------
++
++CPUINFODIR   = ../../cpuinfo
++
++#-----------------------------------------------------------------------------
++
++GCC_VERSION := $(shell expr `$(GCC) -dumpversion`)
++ifeq (,$(findstring .,$(GCC_VERSION)))
++  GCC_VERSION := $(shell expr `$(GCC) -dumpfullversion`)
++endif
++GCC_VERSION := $(shell expr `echo $(GCC_VERSION) | \
++               sed -e 's/\.\([0-9][0-9]\)/\1/g' -e 's/\.\([0-9]\)/0\1/g' \
++               -e 's/^[0-9]\{3,4\}$$/&00/'`)
++
++GCC_GTEQ_47 := $(shell echo $(GCC_VERSION)\>=40700 | bc)
++GCC_GTEQ_71 := $(shell echo $(GCC_VERSION)\>=70100 | bc)
++
++DOT_DEFS =
++
++ifeq ($(GCC_GTEQ_47),1)
++  DOT_USEFMA ?= 1
++endif
++
++ifeq ($(GCC_GTEQ_71),1)
++  CFLAGS += -Wimplicit-fallthrough=0
++  DOT_USEAVX512 ?= 1
++endif
++
++OBJS = dot.o dot_naive.o dot_sse2.o dot_avx.o
++
++ifeq ($(DOT_USEFMA),1)
++  OBJS += dot_avxfma.o
++else
++  DOT_DEFS += -DDOT_NOFMA
++endif
++
++ifeq ($(DOT_USEAVX512),1)
++  OBJS += dot_avx512.o
++  ifeq ($(DOT_USEFMA),1)
++    OBJS += dot_avx512fma.o
++  endif
++else
++  DOT_DEFS += -DDOT_NOAVX512
++endif
++
++#-----------------------------------------------------------------------------
++# Build Objects
++#-----------------------------------------------------------------------------
++all: $(OBJS) dot_all.o
++
++dot_naive.o:                $(OBJDIR)/dot_naive.o
++$(OBJDIR)/dot_naive.o:      dot_naive.h dot_naive_real.h
++$(OBJDIR)/dot_naive.o:      dot_naive.c makefile-oct
++	CFLAGS='$(CFLAGS) $(CFOPT)' $(MEXCC) -c $< -o $@
++
++dot_sse2.o:                 $(OBJDIR)/dot_sse2.o
++$(OBJDIR)/dot_sse2.o:       dot_sse2.h
++$(OBJDIR)/dot_sse2.o:       dot_sse2.c makefile-oct
++	CFLAGS='$(CFLAGS) $(CFOPT) -msse2' $(MEXCC) -c $< -o $@
++
++dot_avx.o:                  $(OBJDIR)/dot_avx.o
++$(OBJDIR)/dot_avx.o:        dot_avx.h
++$(OBJDIR)/dot_avx.o:        dot_avx.c makefile-oct
++	CFLAGS='$(CFLAGS) $(CFOPT) -mavx -funroll-loops' $(MEXCC) -c $< -o $@
++
++dot_avxfma.o:               $(OBJDIR)/dot_avxfma.o
++$(OBJDIR)/dot_avxfma.o:     dot_avx.h
++$(OBJDIR)/dot_avxfma.o:     dot_avxfma.c dot_avx.c makefile-oct
++	CFLAGS='$(CFLAGS) $(CFOPT) -mfma -mavx -funroll-loops' $(MEXCC) -c $< -o $@
++
++dot_avx512.o:               $(OBJDIR)/dot_avx512.o
++$(OBJDIR)/dot_avx512.o:     dot_avx512.h
++$(OBJDIR)/dot_avx512.o:     dot_avx512.c makefile-oct
++	CFLAGS='$(CFLAGS) $(CFOPT) -mavx512f -funroll-loops' $(MEXCC) -c $< -o $@
++
++dot_avx512fma.o:            $(OBJDIR)/dot_avx512fma.o
++$(OBJDIR)/dot_avx512fma.o:  dot_avx512.h
++$(OBJDIR)/dot_avx512fma.o:  dot_avx512.c makefile-oct
++	CFLAGS='$(CFLAGS) $(CFOPT) -mavx512f -mfma -funroll-loops' \
++    $(MEXCC) -c dot_avx512.c -o $@
++
++dot.o:                      $(OBJDIR)/dot.o
++$(OBJDIR)/dot.o:            dot.h $(CPUINFODIR)/src/cpuinfo.h
++$(OBJDIR)/dot.o:            dot.c makefile-oct
++	CFLAGS='$(CFLAGS) $(CFOPT)' \
++    $(MEXCC) $(DOT_DEFS) -I$(CPUINFODIR)/src -c $< -o $@
++
++dot_all.o:                  $(OBJDIR)/dot_all.o
++$(OBJDIR)/dot_all.o:        $(addprefix $(OBJDIR)/, $(OBJS))
++$(OBJDIR)/dot_all.o:        makefile-mex
++	$(LD) -r -o $(OBJDIR)/dot_all.o $(addprefix $(OBJDIR)/, $(OBJS))
