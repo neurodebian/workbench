@@ -1,0 +1,12 @@
+--- a/src/kloewe/dot/src/dot.c
++++ b/src/kloewe/dot/src/dot.c
+@@ -4,9 +4,7 @@
+   Author  : Kristian Loewe
+ ----------------------------------------------------------------------------*/
+ #include "dot.h"
+-#ifdef ARCH_IS_X86_64
+ #include "cpuinfo.h"
+-#endif
+ 
+ /*----------------------------------------------------------------------------
+   Function Prototypes
