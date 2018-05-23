@@ -1,0 +1,25 @@
+From 5992e15c078a1daef8e9f5888eda6e74dcdf35c0 Mon Sep 17 00:00:00 2001
+From: John Harwell <john@brainmap.wustl.edu>
+Date: Wed, 16 May 2018 08:52:23 -0500
+Subject: [PATCH] Add 'this' when calling QAction(QObject* parent = nullptr). 
+ In Qt 5.7, the parent was made optional so this should fix a compilation
+ error when using earlier versions of Qt.  Also, in this instance, the missing
+ parent  would result in a small memory leak if the window was closed.
+
+---
+ src/GuiQt/BrainBrowserWindow.cxx | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/GuiQt/BrainBrowserWindow.cxx b/src/GuiQt/BrainBrowserWindow.cxx
+index dae45623b..7498e71f5 100644
+--- a/src/GuiQt/BrainBrowserWindow.cxx
++++ b/src/GuiQt/BrainBrowserWindow.cxx
+@@ -769,7 +769,7 @@ BrainBrowserWindow::createActionsUsedByToolBar()
+                                           "ratio for the selected tab or the window."
+                                           "</html>");
+     
+-    m_toolBarLockWindowAndAllTabAspectRatioAction = new QAction();
++    m_toolBarLockWindowAndAllTabAspectRatioAction = new QAction(this);
+     m_toolBarLockWindowAndAllTabAspectRatioAction->setCheckable(true);
+     m_toolBarLockWindowAndAllTabAspectRatioAction->setChecked(false);
+     m_toolBarLockWindowAndAllTabAspectRatioAction->setText("Lock Aspect");
