@@ -1,0 +1,64 @@
+From: John Harwell <john@brainmap.wustl.edu>
+Subject: Fixes so that source will build with Qt-5.5.1
+
+--- a/src/GuiQt/BrainBrowserWindowToolBarChartTwoTitle.cxx
++++ b/src/GuiQt/BrainBrowserWindowToolBarChartTwoTitle.cxx
+@@ -23,6 +23,7 @@
+ #include "BrainBrowserWindowToolBarChartTwoTitle.h"
+ #undef __BRAIN_BROWSER_WINDOW_TOOL_BAR_CHART_TWO_TITLE_DECLARE__
+ 
++#include <QAction>
+ #include <QCheckBox>
+ #include <QGridLayout>
+ #include <QLabel>
+@@ -64,7 +65,7 @@ BrainBrowserWindowToolBarChartTwoTitle::
+     QObject::connect(m_showTitleCheckBox, &QCheckBox::clicked,
+                      this, &BrainBrowserWindowToolBarChartTwoTitle::showTitleCheckBoxClicked);
+     
+-    QAction* editTitleAction = new QAction("Edit Title...");
++    QAction* editTitleAction = new QAction("Edit Title...", this);
+     editTitleAction->setToolTip("Edit the chart title in a dialog");
+     QObject::connect(editTitleAction, &QAction::triggered,
+                      this, &BrainBrowserWindowToolBarChartTwoTitle::editTitleActionTriggered);
+--- a/src/GuiQt/BrainBrowserWindowToolBarSlicePlane.cxx
++++ b/src/GuiQt/BrainBrowserWindowToolBarSlicePlane.cxx
+@@ -154,7 +154,7 @@ m_parentToolBar(parentToolBar)
+                                               QSizePolicy::Fixed);
+     WuQtUtilities::setToolButtonStyleForQt5Mac(slicePlaneCustomToolButton);
+     
+-    m_volumeAxisCrosshairsToolButtonAction = new QAction("");
++    m_volumeAxisCrosshairsToolButtonAction = new QAction("", this);
+     m_volumeAxisCrosshairsToolButtonAction->setCheckable(true);
+     m_volumeAxisCrosshairsToolButtonAction->setToolTip("Show crosshairs on slice planes");
+     QObject::connect(m_volumeAxisCrosshairsToolButtonAction, &QAction::triggered,
+@@ -166,7 +166,7 @@ m_parentToolBar(parentToolBar)
+     volumeCrosshairsToolButton->setIconSize(xhairPixmap.size());
+     WuQtUtilities::setToolButtonStyleForQt5Mac(volumeCrosshairsToolButton);
+     
+-    m_volumeAxisCrosshairLabelsToolButtonAction = new QAction("");
++    m_volumeAxisCrosshairLabelsToolButtonAction = new QAction("", this);
+     m_volumeAxisCrosshairLabelsToolButtonAction->setCheckable(true);
+     m_volumeAxisCrosshairLabelsToolButtonAction->setToolTip("Show crosshair slice plane labels");
+     QObject::connect(m_volumeAxisCrosshairLabelsToolButtonAction, &QAction::triggered,
+--- a/src/GuiQt/BrainBrowserWindowToolBarSliceSelection.cxx
++++ b/src/GuiQt/BrainBrowserWindowToolBarSliceSelection.cxx
+@@ -180,7 +180,7 @@ m_parentToolBar(parentToolBar)
+     WuQtUtilities::setToolTipAndStatusTip(m_volumeSliceProjectionTypeEnumComboBox->getWidget(),
+                                           "Chooses viewing orientation (oblique or orthogonal)");
+     
+-    m_obliqueMaskingAction = new QAction("M");
++    m_obliqueMaskingAction = new QAction("M", this);
+     m_obliqueMaskingAction->setToolTip(VolumeSliceInterpolationEdgeEffectsMaskingEnum::getToolTip());
+     m_obliqueMaskingAction->setCheckable(true);
+     QObject::connect(m_obliqueMaskingAction, &QAction::triggered,
+--- a/src/GuiQt/BrainBrowserWindowToolBarVolumeMontage.cxx
++++ b/src/GuiQt/BrainBrowserWindowToolBarVolumeMontage.cxx
+@@ -83,7 +83,7 @@ m_parentToolBar(parentToolBar)
+     QObject::connect(m_montageSpacingSpinBox, SIGNAL(valueChanged(int)),
+                      this, SLOT(montageSpacingSpinBoxValueChanged(int)));
+     
+-    m_showSliceCoordinateAction = new QAction("XYZ");
++    m_showSliceCoordinateAction = new QAction("XYZ", this);
+     m_showSliceCoordinateAction->setText("XYZ");
+     m_showSliceCoordinateAction->setCheckable(true);
+     m_showSliceCoordinateAction->setToolTip("Show coordinates on slices");
