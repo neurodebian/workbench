@@ -1,10 +1,2 @@
 up_include_cpuinfo
 deb_dot_DNDEBUG
-# SIMD
-d97bdf13b2ef105d07f36c8be7f5dfee75b6d6e3.patch
-changeset_b10e8fca197dba953203267b7f4d7884d1811669.diff
-changeset_f8f2092e9756d90ae5cb5ddc68118b2b88fd5e6f.diff
-# QT (backportability)
-5992e15c078a1daef8e9f5888eda6e74dcdf35c0.patch 
-
-changeset_d5e169819bf51adebf786d87532ee6c0199611bb.diff
