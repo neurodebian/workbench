@@ -830,7 +830,7 @@ GuiManager::testForModifiedFiles(const TestModifiedMode testModifiedMode,
          * Display dialog allowing user to save files (goes to Save/Manage
          * Files dialog), exit without saving, or cancel.
          */
-        AString paletteModifiedMessage("These file(s) contain modified palette color mapping "
+        AString paletteModifiedMessage("These file(s) contain <b>modified palette color mapping</b> "
                                        "(this may result from loading scenes that contained modified palette color "
                                        "mapping and this modified status is needed if scenes "
                                        "are added or replaced): ");
@@ -841,7 +841,7 @@ GuiManager::testForModifiedFiles(const TestModifiedMode testModifiedMode,
             case TEST_FOR_MODIFIED_FILES_EXCLUDING_PALETTES_MODE_FOR_SCENE_ADD:
             case TEST_FOR_MODIFIED_FILES_PALETTE_ONLY_MODE_FOR_SCENE_ADD:
                 textMessageOut = "Do you want to continue creating the scene?";
-                paletteModifiedMessage = ("These file(s) contain modified palette color mapping "
+                paletteModifiedMessage = ("These file(s) contain <b>modified palette color mapping</b> "
                                           "AND \"Add modified palette color mapping to scene\" "
                                           "is NOT checked on the Create New Scene Dialog:");
                 break;
@@ -854,7 +854,7 @@ GuiManager::testForModifiedFiles(const TestModifiedMode testModifiedMode,
         
         if (sceneAnnotationsModifiedFlag
             || (modFileCount > 0)) {
-            infoTextMsg.appendWithNewLine("These file(s) contain modified data:\n");
+            infoTextMsg.appendWithNewLine("These file(s) contain <b>modified data</b>:\n");
             infoTextMsg.appendWithNewLine("<ul>");
             
             if (sceneAnnotationsModifiedFlag) {
@@ -1617,44 +1617,54 @@ GuiManager::closeAllOtherWindows(BrainBrowserWindow* browserWindow)
 void 
 GuiManager::reparentNonModalDialogs(BrainBrowserWindow* closingBrainBrowserWindow)
 {
-    BrainBrowserWindow* firstBrainBrowserWindow = NULL;
-    
-    for (int32_t i = 0; i < static_cast<int32_t>(m_brainBrowserWindows.size()); i++) {
-        if (m_brainBrowserWindows[i] != NULL) {
-            if (m_brainBrowserWindows[i] != closingBrainBrowserWindow) {
-                firstBrainBrowserWindow = m_brainBrowserWindows[i];
-                break;
-            }
+    /*
+     * Find valid windows and use first window for reparenting
+     */
+    std::set<QWidget*> validWindows;
+    for (auto bbw : m_brainBrowserWindows) {
+        if ((bbw != NULL)
+            && (bbw != closingBrainBrowserWindow)) {
+            validWindows.insert(bbw);
         }
     }
+    QWidget* firstBrainBrowserWindow = (validWindows.empty()
+                                                   ? NULL
+                                                   : *(validWindows.begin()));
     
     if (firstBrainBrowserWindow != NULL) {
-        for (std::set<QWidget*>::iterator iter = this->nonModalDialogs.begin();
-                 iter != this->nonModalDialogs.end();
-                 iter++) {
-            QWidget* d = *iter;
-            if (d->parent() == closingBrainBrowserWindow) {
-                const bool wasVisible = d->isVisible();
-                const QPoint globalPos = d->pos();
-                d->setParent(firstBrainBrowserWindow, d->windowFlags());
-                d->move(globalPos);
+        for (auto dialog : this->nonModalDialogs) {
+            QWidget* dialogParent = dialog->parentWidget();
+            if (validWindows.find(dialogParent) == validWindows.end()) {
+                const bool wasVisible = dialog->isVisible();
+                const QPoint globalPos = dialog->pos();
+                dialog->setParent(firstBrainBrowserWindow, dialog->windowFlags());
+                dialog->move(globalPos);
                 if (wasVisible) {
-                    d->show();
+                    dialog->show();
                 }
                 else {
-                    d->hide();
+                    dialog->hide();
                 }
             }
             
             /*
              * Update any dialogs that are WuQ non modal dialogs.
              */
-            WuQDialogNonModal* wuqNonModalDialog = dynamic_cast<WuQDialogNonModal*>(d);
+            WuQDialogNonModal* wuqNonModalDialog = dynamic_cast<WuQDialogNonModal*>(dialog);
             if (wuqNonModalDialog != NULL) {
                 wuqNonModalDialog->updateDialog();
             }
         }
     }
+}
+
+/**
+ * Update the non-modal dialogs.
+ */
+void
+GuiManager::updateNonModalDialogs()
+{
+    reparentNonModalDialogs(NULL);
 }
 
 /**
@@ -2604,6 +2614,8 @@ GuiManager::restoreFromScene(const SceneAttributes* sceneAttributes,
         timer.reset();
     }
     
+    updateNonModalDialogs();
+    
     if (imageCaptureDialog != NULL) {
         imageCaptureDialog->updateDialog();
     }
@@ -2869,6 +2881,7 @@ GuiManager::processIdentification(const int32_t tabIndex,
                         if (mapYoking != MapYokingGroupEnum::MAP_YOKING_GROUP_OFF) {
                             EventMapYokingSelectMap selectMapEvent(mapYoking,
                                                                    scalarDataSeriesFile,
+                                                                   NULL,
                                                                    rowIndex,
                                                                    true);
                             EventManager::get()->sendEvent(selectMapEvent.getPointer());
@@ -2950,6 +2963,7 @@ GuiManager::processIdentification(const int32_t tabIndex,
                             if (mapYoking != MapYokingGroupEnum::MAP_YOKING_GROUP_OFF) {
                                     EventMapYokingSelectMap selectMapEvent(mapYoking,
                                                                            cmdf,
+                                                                           NULL,
                                                                            rowColumnIndex,
                                                                            true);
                                     EventManager::get()->sendEvent(selectMapEvent.getPointer());
@@ -3022,6 +3036,7 @@ GuiManager::processIdentification(const int32_t tabIndex,
                                     if (mapYoking != MapYokingGroupEnum::MAP_YOKING_GROUP_OFF) {
                                         EventMapYokingSelectMap selectMapEvent(mapYoking,
                                                                                scalarDataSeriesFile,
+                                                                               NULL,
                                                                                rowIndex,
                                                                                true);
                                         EventManager::get()->sendEvent(selectMapEvent.getPointer());

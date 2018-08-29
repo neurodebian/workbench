@@ -27,6 +27,8 @@
 #include "AnnotationSpatialModification.h"
 #include "CaretAssert.h"
 #include "CaretLogger.h"
+#include "EventAnnotationTextSubstitutionGet.h"
+#include "EventManager.h"
 #include "MathFunctions.h"
 #include "SceneClass.h"
 #include "SceneClassAssistant.h"
@@ -162,6 +164,7 @@ AnnotationText::initializeAnnotationTextMembers()
     }
     
     m_text = "";
+    m_textWithSubstitutions = "";
     
     /*
      * Assists with attributes that may be saved to scene (controlled by annotation property).
@@ -280,6 +283,95 @@ AnnotationText::getText() const
 }
 
 /**
+ * Invalidate text substitutions.  This method is
+ * implemented as a virtual method to avoid
+ * dyamic casts since they are slow.
+ */
+void
+AnnotationText::invalidateTextSubstitution()
+{
+    m_textWithSubstitutions.clear();
+}
+
+/**
+ * @return Text with any substitutions applied to the text.
+ */
+AString
+AnnotationText::getTextWithSubstitutionsApplied() const
+{
+    if (m_textWithSubstitutions.isEmpty()) {
+        if ( ! m_text.isEmpty()) {
+            std::vector<int32_t> indices;
+            const QChar substituteChar('$');
+            int32_t index = m_text.indexOf(substituteChar);
+            while (index >= 0) {
+                indices.push_back(index);
+                index = m_text.indexOf(substituteChar, index + 1);
+            }
+            
+            if (indices.size() < 2) {
+                if (indices.size() == 1) {
+                    CaretLogWarning("Text annotation \""
+                                    + m_text
+                                    + "\" is missing substitution delimeters");
+                }
+                
+                m_textWithSubstitutions = m_text;
+            }
+            else {
+                int32_t lastPos = 0;
+                const int32_t numSubsitutions = static_cast<int32_t>(indices.size() / 2);
+                for (int32_t i = 0; i < numSubsitutions; i++) {
+                    const int32_t i2 = i * 2;
+                    CaretAssertVectorIndex(indices, i2+1);
+                    const int32_t indexOne = indices[i2];
+                    const int32_t indexTwo = indices[i2+1];
+                    if (indexTwo > (indexOne + 1)) {
+                        const int32_t nameLen  = indexTwo - indexOne - 1;
+                        AString name = m_text.mid(indexOne + 1, nameLen);
+                        
+                        EventAnnotationTextSubstitutionGet subEvent;
+                        subEvent.addSubstitutionName(name);
+                        EventManager::get()->sendEvent(subEvent.getPointer());
+                        const AString subValue = subEvent.getSubstitutionValueForName(name);
+                        
+                        if (subValue.isEmpty()) {
+                            CaretLogWarning("Unable to find substitution value for name \""
+                                            + name
+                                            + "\"");
+                        }
+                        
+                        const AString txt = m_text.mid(lastPos, indexOne - lastPos);
+                        m_textWithSubstitutions.append(txt);
+                        if (subValue.isEmpty()) {
+                            m_textWithSubstitutions.append("$" + name + "$");
+                        }
+                        else {
+                            m_textWithSubstitutions.append(subValue);
+                        }
+                    }
+                    else {
+                        const AString txt = m_text.mid(lastPos, indexOne - lastPos);
+                        m_textWithSubstitutions.append(txt + "$$");
+                        CaretLogWarning("Text annotation \""
+                                        + m_text
+                                        + "\" contains empty text substitution delimeters ("
+                                        + substituteChar
+                                        + ")");
+                    }
+                    lastPos = indexTwo + 1;
+                }
+                const AString lastTxt = m_text.mid(lastPos);
+                m_textWithSubstitutions.append(lastTxt);
+            }
+            
+        }
+    }
+    
+    return m_textWithSubstitutions;
+}
+
+/**
  * Set the text for an annotation.
  * @param text
  *    Text for the annotation.
@@ -289,6 +381,7 @@ AnnotationText::setText(const AString& text)
 {
     if (text != m_text) {
         m_text = text;
+        m_textWithSubstitutions.clear();
         textAnnotationResetName();
         setModified();
     }
@@ -792,6 +885,7 @@ void
 AnnotationText::copyHelperAnnotationText(const AnnotationText& obj)
 {
     m_text                = obj.m_text;
+    m_textWithSubstitutions.clear();
     m_alignmentHorizontal = obj.m_alignmentHorizontal;
     m_alignmentVertical   = obj.m_alignmentVertical;
     m_font                = obj.m_font;

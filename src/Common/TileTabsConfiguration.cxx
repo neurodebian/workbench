@@ -124,8 +124,6 @@ TileTabsConfiguration::initialize()
     setNumberOfRows(2);
     setNumberOfColumns(2);
     
-    m_defaultConfigurationFlag = false;
-
     m_uniqueIdentifier = SystemUtilities::createUniqueID();
 }
 
@@ -137,12 +135,28 @@ TileTabsConfiguration::initialize()
 void 
 TileTabsConfiguration::copyHelperTileTabsConfiguration(const TileTabsConfiguration& obj)
 {
+    if (this == &obj) {
+        return;
+    }
+    
     m_numberOfColumns = obj.m_numberOfColumns;
     m_numberOfRows    = obj.m_numberOfRows;
     m_rowStretchFactors = obj.m_rowStretchFactors;
     m_columnStretchFactors = obj.m_columnStretchFactors;
     m_name = obj.m_name;
     //DO NOT CHANGE THE UNIQUE IDENTIFIER:  m_uniqueIdentifier
+}
+
+/**
+ * Copies the tile tabs configuration rows, columns, and
+ * stretch factors.   Name is NOT copied.
+ */
+void
+TileTabsConfiguration::copy(const TileTabsConfiguration& rhs)
+{
+    AString savedName = m_name;
+    copyHelperTileTabsConfiguration(rhs);
+    m_name = savedName;
 }
 
 /**
@@ -155,6 +169,8 @@ TileTabsConfiguration::copyHelperTileTabsConfiguration(const TileTabsConfigurati
  *      Height of window.
  * @param numberOfModelsToDraw
  *      Number of models to draw.
+ * @param configurationMode
+ *      The tile tabs configuration mode
  * @param rowHeightsOut
  *      Output containing height of each row.
  * @param columnWidthsOut
@@ -166,6 +182,7 @@ bool
 TileTabsConfiguration::getRowHeightsAndColumnWidthsForWindowSize(const int32_t windowWidth,
                                                                  const int32_t windowHeight,
                                                                  const int32_t numberOfModelsToDraw,
+                                                                 const TileTabsConfigurationModeEnum::Enum configurationMode,
                                                                  std::vector<int32_t>& rowHeightsOut,
                                                                  std::vector<int32_t>& columnWidthsOut)
 {
@@ -183,58 +200,62 @@ TileTabsConfiguration::getRowHeightsAndColumnWidthsForWindowSize(const int32_t w
     rowHeightsOut.clear();
     columnWidthsOut.clear();
     
-    if (isDefaultConfiguration()) {
-        /*
-         * Update number of rows/columns in the default configuration
-         * so that if a scene is saved, the correct number of rows
-         * and columns are saved to the scene.
-         */
-        updateDefaultConfigurationRowsAndColumns(numberOfModelsToDraw);
-        numRows = getNumberOfRows();
-        numCols = getNumberOfColumns();
-        
-        for (int32_t i = 0; i < numRows; i++) {
-            rowHeightsOut.push_back(windowHeight / numRows);
-        }
-        for (int32_t i = 0; i < numCols; i++) {
-            columnWidthsOut.push_back(windowWidth / numCols);
-        }
-    }
-    else {
-        /*
-         * Rows/columns from user configuration
-         */
-        numRows = getNumberOfRows();
-        numCols = getNumberOfColumns();
-        
-        /*
-         * Determine height of each row
-         */
-        float rowStretchTotal = 0.0;
-        for (int32_t i = 0; i < numRows; i++) {
-            rowStretchTotal += getRowStretchFactor(i);
-        }
-        CaretAssert(rowStretchTotal > 0.0);
-        for (int32_t i = 0; i < numRows; i++) {
-            const int32_t h = static_cast<int32_t>((getRowStretchFactor(i) / rowStretchTotal)
-                                                   * windowHeight);
+    switch (configurationMode) {
+        case TileTabsConfigurationModeEnum::AUTOMATIC:
+        {
+            /*
+             * Update number of rows/columns in the default configuration
+             * so that if a scene is saved, the correct number of rows
+             * and columns are saved to the scene.
+             */
+            updateAutomaticConfigurationRowsAndColumns(numberOfModelsToDraw);
+            numRows = getNumberOfRows();
+            numCols = getNumberOfColumns();
             
-            rowHeightsOut.push_back(h);
-        }
-        
-        /*
-         * Determine width of each column
-         */
-        float columnStretchTotal = 0.0;
-        for (int32_t i = 0; i < numCols; i++) {
-            columnStretchTotal += getColumnStretchFactor(i);
-        }
-        CaretAssert(columnStretchTotal > 0.0);
-        for (int32_t i = 0; i < numCols; i++) {
-            const int32_t w = static_cast<int32_t>((getColumnStretchFactor(i) / columnStretchTotal)
-                                                   * windowWidth);
-            columnWidthsOut.push_back(w);
-        }
+            for (int32_t i = 0; i < numRows; i++) {
+                rowHeightsOut.push_back(windowHeight / numRows);
+            }
+            for (int32_t i = 0; i < numCols; i++) {
+                columnWidthsOut.push_back(windowWidth / numCols);
+            }
+        }            break;
+        case TileTabsConfigurationModeEnum::CUSTOM:
+        {
+            /*
+             * Rows/columns from user configuration
+             */
+            numRows = getNumberOfRows();
+            numCols = getNumberOfColumns();
+            
+            /*
+             * Determine height of each row
+             */
+            float rowStretchTotal = 0.0;
+            for (int32_t i = 0; i < numRows; i++) {
+                rowStretchTotal += getRowStretchFactor(i);
+            }
+            CaretAssert(rowStretchTotal > 0.0);
+            for (int32_t i = 0; i < numRows; i++) {
+                const int32_t h = static_cast<int32_t>((getRowStretchFactor(i) / rowStretchTotal)
+                                                       * windowHeight);
+                
+                rowHeightsOut.push_back(h);
+            }
+            
+            /*
+             * Determine width of each column
+             */
+            float columnStretchTotal = 0.0;
+            for (int32_t i = 0; i < numCols; i++) {
+                columnStretchTotal += getColumnStretchFactor(i);
+            }
+            CaretAssert(columnStretchTotal > 0.0);
+            for (int32_t i = 0; i < numCols; i++) {
+                const int32_t w = static_cast<int32_t>((getColumnStretchFactor(i) / columnStretchTotal)
+                                                       * windowWidth);
+                columnWidthsOut.push_back(w);
+            }
+        }            break;
     }
     
     if ((numRows == static_cast<int32_t>(rowHeightsOut.size()))
@@ -461,51 +482,57 @@ TileTabsConfiguration::setRowStretchFactor(const int32_t rowIndex,
 }
 
 /**
- * @return Is this the default configuration?  Each browser window
- * always has ONE default configuration which displays all tabs.
- */
-bool
-TileTabsConfiguration::isDefaultConfiguration() const
-{
-    return m_defaultConfigurationFlag;
-}
-
-/**
- * Set the default configuration status.  This should only be called by
- * the browser window which contains one tile tabs configuration that is
- * used by the browser window for display of all tabs.
+ * Get the number of rows and columns for an automatic layout with the
+ * given number of tabs.
+ * @param numberOfTabs
+ *     Number of tabs.
+ * @param numberOfRowsOut
+ *     Output with number of rows.
+ * @param numberOfColumnsOut
+ *     Output with number of columns.
  */
 void
-TileTabsConfiguration::setDefaultConfiguration(const bool defaultConfiguration)
+TileTabsConfiguration::getRowsAndColumnsForNumberOfTabs(const int32_t numberOfTabs,
+                                                        int32_t& numberOfRowsOut,
+                                                        int32_t& numberOfColumnsOut)
 {
-    m_defaultConfigurationFlag = defaultConfiguration;
+    CaretAssert(numberOfTabs >= 0);
+    
+    numberOfRowsOut = (int)std::sqrt((double)numberOfTabs);
+    numberOfColumnsOut = numberOfRowsOut;
+    int32_t row2 = numberOfRowsOut * numberOfRowsOut;
+    if (row2 < numberOfTabs) {
+        numberOfColumnsOut++;
+    }
+    if ((numberOfRowsOut * numberOfColumnsOut) < numberOfTabs) {
+        numberOfRowsOut++;
+    }
 }
 
 /**
- * Updates the number of rows and columns in this default configuration
- * based upon the number of tabs.  If this is NOT the default configuration
- * (isDefaultConfiguration() returns false), no action is taken.
+ * Updates the number of rows and columns for the automatic configuration
+ * based upon the number of tabs.  
  *
  * Since screen width typically exceeds height, ensure the number of 
  * columns is always greater than the number of rows.
  */
 void
-TileTabsConfiguration::updateDefaultConfigurationRowsAndColumns(const int32_t numberOfTabs)
+TileTabsConfiguration::updateAutomaticConfigurationRowsAndColumns(const int32_t numberOfTabs)
 {
-    if (isDefaultConfiguration()) {
-        int32_t numRows = (int)std::sqrt((double)numberOfTabs);
-        int32_t numCols = numRows;
-        int32_t row2 = numRows * numRows;
-        if (row2 < numberOfTabs) {
-            numCols++;
-        }
-        if ((numRows * numCols) < numberOfTabs) {
-            numRows++;
-        }
-        
-        setNumberOfRows(numRows);
-        setNumberOfColumns(numCols);
-    }
+    int32_t numRows(0), numCols(0);
+    getRowsAndColumnsForNumberOfTabs(numberOfTabs,
+                                     numRows,
+                                     numCols);
+    
+    setNumberOfRows(numRows);
+    setNumberOfColumns(numCols);
+    
+    std::fill(m_columnStretchFactors.begin(),
+              m_columnStretchFactors.end(),
+              1.0);
+    std::fill(m_rowStretchFactors.begin(),
+              m_rowStretchFactors.end(),
+              1.0);
 }
 
 
@@ -565,7 +592,6 @@ TileTabsConfiguration::encodeInXML() const
 bool
 TileTabsConfiguration::decodeFromXML(const AString& xmlString)
 {
-    m_defaultConfigurationFlag = false;
     setNumberOfRows(2);
     setNumberOfColumns(2);
     

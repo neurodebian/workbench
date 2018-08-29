@@ -27,6 +27,7 @@
 #include "AnnotationCoordinateSpaceEnum.h"
 #include "AnnotationSizingHandleTypeEnum.h"
 #include "BrainOpenGLFixedPipeline.h"
+#include "BrainOpenGLTextRenderInterface.h"
 #include "CaretObject.h"
 #include "CaretOpenGLInclude.h"
 #include "Plane.h"
@@ -216,12 +217,12 @@ namespace caret {
                                   const float sectionsHeightInPixels);
         
         void drawColorBarText(const AnnotationColorBar* colorBar,
-                              const float bottomLeft[3],
-                              const float bottomRight[3],
-                              const float topRight[3],
-                              const float topLeft[3],
-                              const float textHeightInPixels,
-                              const float offsetFromTopInPixels);
+                               const float bottomLeft[3],
+                               const float bottomRight[3],
+                               const float topRight[3],
+                               const float topLeft[3],
+                               const float textHeightInPixels,
+                               const float offsetFromTopInPixels);
 
         void drawColorBarTickMarks(const AnnotationColorBar* colorBar,
                                    const float bottomLeft[3],
@@ -310,6 +311,9 @@ namespace caret {
         
         float getLineWidthFromPercentageHeight(const float percentageHeight) const;
         
+        float estimateColorBarWidth(const AnnotationColorBar* colorBar,
+                                    const float textHeightInPixels) const;
+        
         BrainOpenGLFixedPipeline* m_brainOpenGLFixedPipeline;
         
         Inputs* m_inputs;
@@ -349,6 +353,8 @@ namespace caret {
         uint8_t m_selectionBoxRGBA[4];
         
         float m_lineWidthMinimum = 1.0f;
+        
+        BrainOpenGLTextRenderInterface::DrawingFlags m_textDrawingFlags;
         
         std::unique_ptr<EventOpenGLObjectToWindowTransform> m_transformEvent;
         

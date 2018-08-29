@@ -49,11 +49,17 @@ namespace caret {
         
         void logout();
         
+        bool isStudyIDValid(const AString& studyID);
+        
         bool getAllStudyInformation(std::vector<BalsaStudyInformation>& studyInformationOut,
                                     AString& errorMessageOut);
         
         bool getUserRoles(BalsaUserRoles& userRolesOut,
                           AString& errorMessageOut);
+        
+        bool getStudyExtractDirectoryPrefix(const AString& studyID,
+                                            AString& extractDirectoryPrefixOut,
+                                            AString& errorMessageOut);
         
         bool getStudyIDFromStudyTitle(const AString& studyTitle,
                                       AString& studyIdOut,
@@ -75,6 +81,9 @@ namespace caret {
                                          const AString& extractDirectory,
                                          const AString& zipFileName,
                                          AString& errorMessageOut);
+        
+        bool isStudyEditableByUser(const AString& studyID,
+                                   AString& errorMessageOut);
         
         // ADD_NEW_METHODS_HERE
 

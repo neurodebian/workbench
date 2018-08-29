@@ -85,13 +85,11 @@ namespace caret {
         
         virtual AString toString() const;
         
-        AString getName() const;
+        AString getTabName() const;
         
-        //void setGuiName(const AString& name);
+        AString getUserTabName() const;
         
-        AString getUserName() const;
-        
-        void setUserName(const AString& userName);
+        void setUserTabName(const AString& userName);
         
         OverlaySet* getOverlaySet();
         
@@ -470,6 +468,8 @@ namespace caret {
         void updateYokedModelBrowserTabs();
         
         AString getDefaultName() const;
+        
+        AString getTabNamePrefix() const;
         
         /** Number of this tab */
         int32_t m_tabNumber;

@@ -679,7 +679,8 @@ FtglFontTextRenderer::expandBox(float bottomLeft[3],
 void
 FtglFontTextRenderer::drawTextAtViewportCoords(const double viewportX,
                                                const double viewportY,
-                                               const AnnotationText& annotationText)
+                                               const AnnotationText& annotationText,
+                                               const DrawingFlags& flags)
 {
     setViewportHeight();
     
@@ -687,7 +688,8 @@ FtglFontTextRenderer::drawTextAtViewportCoords(const double viewportX,
                                      viewportX,
                                      viewportY,
                                      0.0,
-                                     annotationText);
+                                     annotationText,
+                                     flags);
 }
 
 /**
@@ -709,7 +711,8 @@ void
 FtglFontTextRenderer::drawTextAtViewportCoords(const double viewportX,
                                                const double viewportY,
                                                const double viewportZ,
-                                               const AnnotationText& annotationText)
+                                               const AnnotationText& annotationText,
+                                               const DrawingFlags& flags)
 {
     setViewportHeight();
     
@@ -717,7 +720,8 @@ FtglFontTextRenderer::drawTextAtViewportCoords(const double viewportX,
                                      viewportX,
                                      viewportY,
                                      viewportZ,
-                                     annotationText);
+                                     annotationText,
+                                     flags);
 }
 
 /**
@@ -741,7 +745,8 @@ FtglFontTextRenderer::drawTextAtViewportCoordsInternal(const DepthTestEnum depth
                                                        const double viewportX,
                                                        const double viewportY,
                                                        const double viewportZ,
-                                                       const AnnotationText& annotationText)
+                                                       const AnnotationText& annotationText,
+                                                       const DrawingFlags& flags)
 {
     if (annotationText.getText().isEmpty()) {
         return;
@@ -763,6 +768,7 @@ FtglFontTextRenderer::drawTextAtViewportCoordsInternal(const DepthTestEnum depth
     const double lineThicknessForViewportHeight = getLineWidthFromPercentageHeight(annotationText.getLineWidthPercentage());
     
     TextStringGroup tsg(annotationText,
+                        flags,
                         font,
                         viewportX,
                         viewportY,
@@ -805,6 +811,7 @@ FtglFontTextRenderer::drawTextAtViewportCoordsInternal(const DepthTestEnum depth
  */
 void
 FtglFontTextRenderer::getBoundsForTextAtViewportCoords(const AnnotationText& annotationText,
+                                                       const DrawingFlags& flags,
                                                        const double viewportX,
                                                        const double viewportY,
                                                        const double viewportZ,
@@ -833,6 +840,7 @@ FtglFontTextRenderer::getBoundsForTextAtViewportCoords(const AnnotationText& ann
     double lineThicknessForViewportHeight = getLineWidthFromPercentageHeight(annotationText.getLineWidthPercentage());
     
     TextStringGroup textStringGroup(annotationText,
+                                    flags,
                                     font,
                                     viewportX,
                                     viewportY,
@@ -889,8 +897,122 @@ FtglFontTextRenderer::getBoundsForTextAtViewportCoords(const AnnotationText& ann
     }
 }
 
-
-
+/**
+ * Get the bounds of text (in pixels) using the given text
+ * attributes.  NO MARGIN is included around the text.
+ *
+ * See http://ftgl.sourceforge.net/docs/html/metrics.png
+ *
+ * @param annotationText
+ *   Text that is to be drawn.
+ * @param viewportX
+ *    Viewport X-coordinate.
+ * @param viewportY
+ *    Viewport Y-coordinate.
+ * @param viewportZ
+ *    Viewport Z-coordinate.
+ * @param viewportWidth
+ *    Width of the viewport needed for percentage height text.
+ * @param viewportHeight
+ *    Height of the viewport needed for percentage height text.
+ * @param bottomLeftOut
+ *    The bottom left corner of the text bounds.
+ * @param bottomRightOut
+ *    The bottom right corner of the text bounds.
+ * @param topRightOut
+ *    The top right corner of the text bounds.
+ * @param topLeftOut
+ *    The top left corner of the text bounds.
+ */
+void
+FtglFontTextRenderer::getBoundsWithoutMarginForTextAtViewportCoords(const AnnotationText& annotationText,
+                                                                    const DrawingFlags& flags,
+                                                                    const double viewportX,
+                                                                    const double viewportY,
+                                                                    const double viewportZ,
+                                                                    const double viewportWidth,
+                                                                    const double viewportHeight,
+                                                                    double bottomLeftOut[3],
+                                                                    double bottomRightOut[3],
+                                                                    double topRightOut[3],
+                                                                    double topLeftOut[3])
+{
+    setViewportHeight();
+    m_viewportWidth  = viewportWidth;
+    m_viewportHeight = viewportHeight;
+    
+    FTFont* font = getFont(annotationText, false);
+    if ( ! font) {
+        return;
+    }
+    
+    BrainOpenGL::testForOpenGLError("At begininng of FtglFontTextRenderer::getBoundsForTextAtViewportCoords() while "
+                                    "drawing text " + annotationText.getText());
+    
+    if (annotationText.getLineWidthPercentage() <= 0.0f) {
+        annotationText.convertObsoleteLineWidthPixelsToPercentageWidth(m_viewportHeight);
+    }
+    double lineThicknessForViewportHeight = getLineWidthFromPercentageHeight(annotationText.getLineWidthPercentage());
+    
+    TextStringGroup textStringGroup(annotationText,
+                                    flags,
+                                    font,
+                                    viewportX,
+                                    viewportY,
+                                    viewportZ,
+                                    annotationText.getRotationAngle(),
+                                    lineThicknessForViewportHeight);
+    
+    double rotationPointXYZ[3];
+    
+    const double noMargin(0.0);
+    textStringGroup.getViewportBounds(noMargin,
+                                      bottomLeftOut,
+                                      bottomRightOut,
+                                      topRightOut,
+                                      topLeftOut,
+                                      rotationPointXYZ);
+    
+    std::unique_ptr<GraphicsOpenGLError> openglError = GraphicsUtilitiesOpenGL::getOpenGLError();
+    if (openglError) {
+        AString sizeMessage;
+        sizeMessage.appendWithNewLine("At end of FtglFontTextRenderer::getBoundsForTextAtViewportCoords().");
+        sizeMessage.appendWithNewLine("    Error may be caused by font size that is too small.");
+        sizeMessage.appendWithNewLine("    Error may also occur with particular characters in a font.");
+        sizeMessage.appendWithNewLine("    Text that caused error: \"" + annotationText.getText() + "\"");
+        
+        switch (annotationText.getFontSizeType()) {
+            case AnnotationTextFontSizeTypeEnum::PERCENTAGE_OF_VIEWPORT_HEIGHT:
+            {
+                const float percentSize = annotationText.getFontPercentViewportSize();
+                const float fontHeight  = (percentSize / 100.0f) * viewportHeight;
+                sizeMessage.appendWithNewLine("    Percent of viewport height="
+                                              + AString::number(percentSize, 'f', 2)
+                                              + "%, viewport height=" + AString::number(viewportHeight)
+                                              + " approximage font height=" + AString::number(fontHeight, 'f', 2));
+            }
+                break;
+            case AnnotationTextFontSizeTypeEnum::PERCENTAGE_OF_VIEWPORT_WIDTH:
+            {
+                const float percentSize = annotationText.getFontPercentViewportSize();
+                const float fontHeight  = (percentSize / 100.0f) * viewportWidth;
+                sizeMessage.appendWithNewLine("    Percent of viewport width="
+                                              + AString::number(percentSize, 'f', 2)
+                                              + "%, viewport width=" + AString::number(viewportWidth)
+                                              + " approximage font height=" + AString::number(fontHeight, 'f', 2));
+            }
+                break;
+            case AnnotationTextFontSizeTypeEnum::POINTS:
+                sizeMessage.appendWithNewLine("    Font Size="
+                                              + AnnotationTextFontNameEnum::toGuiName(annotationText.getFont()));
+                break;
+        }
+        
+        sizeMessage.appendWithNewLine(openglError->getVerboseDescription());
+        
+        CaretLogWarning(sizeMessage);
+    }
+}
 
 /**
  * Apply the background coloring by drawing a rectangle in the background
@@ -982,6 +1104,7 @@ FtglFontTextRenderer::setViewportHeight()
  */
 void
 FtglFontTextRenderer::getTextWidthHeightInPixels(const AnnotationText& annotationText,
+                                                 const DrawingFlags& flags,
                                                  const double viewportWidth,
                                                  const double viewportHeight,
                                                  double& widthOut,
@@ -1002,11 +1125,11 @@ FtglFontTextRenderer::getTextWidthHeightInPixels(const AnnotationText& annotatio
         AnnotationText* textCopy = dynamic_cast<AnnotationText*>(annotation.get());
         CaretAssert(textCopy);
         textCopy->setRotationAngle(0.0);
-        getBoundsForTextAtViewportCoords(*textCopy, 0.0, 0.0, 0.0,
+        getBoundsForTextAtViewportCoords(*textCopy, flags, 0.0, 0.0, 0.0,
                                          viewportWidth, viewportHeight, bottomLeft, bottomRight, topRight, topLeft);
     }
     else {
-        getBoundsForTextAtViewportCoords(annotationText, 0.0, 0.0, 0.0,
+        getBoundsForTextAtViewportCoords(annotationText, flags, 0.0, 0.0, 0.0,
                                          viewportWidth, viewportHeight, bottomLeft, bottomRight, topRight, topLeft);
     }
     
@@ -1033,7 +1156,8 @@ void
 FtglFontTextRenderer::drawTextAtModelCoords(const double modelX,
                                             const double modelY,
                                             const double modelZ,
-                                            const AnnotationText& annotationText)
+                                            const AnnotationText& annotationText,
+                                            const DrawingFlags& flags)
 {
     setViewportHeight();
     
@@ -1076,7 +1200,8 @@ FtglFontTextRenderer::drawTextAtModelCoords(const double modelX,
                                          x,
                                          y,
                                          windowZ,
-                                         annotationText);
+                                         annotationText,
+                                         flags);
         
     }
     else {
@@ -1709,6 +1834,7 @@ FtglFontTextRenderer::TextString::getTextBoundsInViewportCoordinates(double& vie
  *    Line thickness adjusted for viewport height.
  */
 FtglFontTextRenderer::TextStringGroup::TextStringGroup(const AnnotationText& annotationText,
+                                                       const DrawingFlags& flags,
                                                        FTFont* font,
                                                        const double viewportX,
                                                        const double viewportY,
@@ -1763,8 +1889,11 @@ m_viewportBoundsMaxY(0.0)
      * Each row (horizontal text) or column (vertical text) is
      * separated by a newline character
      */
-    QStringList textList = m_annotationText.getText().split('\n',
-                                                            QString::KeepEmptyParts);
+    QString textString = (flags.isDrawSubstitutedText()
+                          ? m_annotationText.getTextWithSubstitutionsApplied()
+                          : m_annotationText.getText());
+    QStringList textList = textString.split('\n',
+                                            QString::KeepEmptyParts);
     const int32_t textListSize = textList.size();
     
     for (int32_t i = 0; i < textListSize; i++) {

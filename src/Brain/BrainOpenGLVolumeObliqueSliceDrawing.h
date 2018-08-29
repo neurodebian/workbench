@@ -21,7 +21,10 @@
  */
 /*LICENSE_END*/
 
+#include <array>
+
 #include "BrainOpenGLFixedPipeline.h"
+#include "BrainOpenGLVolumeSliceDrawing.h"
 #include "CaretObject.h"
 #include "DisplayGroupEnum.h"
 #include "ModelTypeEnum.h"
@@ -59,140 +62,117 @@ namespace caret {
 
         // ADD_NEW_METHODS_HERE
 
-    private:
-        /**
-         * Holds values in the slice for a volume so that they
-         * can be colored all at once which is more efficient than
-         * colors singles voxels many times
-         */
-        class VolumeSlice{
+    private:        
+        class ObliqueSlice {
         public:
-            /**
-             * Constructor
-             *
-             * @param volumeMappableInterface
-             *   Volume that contains the data values.
-             */
-            VolumeSlice(VolumeMappableInterface* volumeMappableInterface,
-                        const int32_t mapIndex,
-                        const float opacity);
+            enum class DataValueType {
+                INVALID,
+                CIFTI_LABEL,
+                CIFTI_PALETTE,
+                VOLUME_LABEL,
+                VOLUME_PALETTE,
+                VOLUME_RGB,
+                VOLUME_RGBA
+            };
             
-            /**
-             * Add a value and return its index.
-             *
-             * @param value
-             *     Value that is added.
-             * @return
-             *     The index for the value.
-             */
-            int64_t addValue(const float value);
-
-            /**
-             * Add values for RGBA and returns its index.
-             *
-             * @param value
-             *     Value that is added.
-             * @return
-             *     The index for the value.
-             */
-            int64_t addValuesRGBA(const float values[4]);
+            ObliqueSlice(BrainOpenGLFixedPipeline* fixedPipelineDrawing,
+                         VolumeMappableInterface* volumeInterface,
+                         const float opacity,
+                         const int32_t mapIndex,
+                         const int32_t numberOfRows,
+                         const int32_t numberOfColumns,
+                         const int32_t browserTabIndex,
+                         const DisplayPropertiesLabels* displayPropertiesLabels,
+                         const DisplayGroupEnum::Enum displayGroup,
+                         const float originXYZ[3],
+                         const float leftToRightStepXYZ[3],
+                         const float bottomToTopStepXYZ[3],
+                         const VolumeSliceInterpolationEdgeEffectsMaskingEnum::Enum maskingType,
+                         const float voxelEditingValue,
+                         const bool volumeEditingDrawAllVoxelsFlag,
+                         const bool    identificationModeFlag);
             
-            /**
-             * Return RGBA colors for value using the value's index
-             * returned by addValue().
-             *
-             * @param indx
-             *    Index of the value.
-             * @return
-             *    RGBA coloring for value.
-             */
-            uint8_t* getRgbaForValueByIndex(const int64_t indx);
+            void assignRgba(const bool volumeEditingDrawAllVoxelsFlag);
             
-            /**
-             * Allocate colors for the voxel values
-             */
-            void allocateColors();
+            void addOutlines();
             
-            /**
-             * Volume containing the values
-             */
-            VolumeMappableInterface* m_volumeMappableInterface;
+            void loadData(const VolumeSliceInterpolationEdgeEffectsMaskingEnum::Enum maskingType,
+                          const float voxelEditingValue,
+                          const bool volumeEditingDrawAllVoxelsFlag);
             
-            /**
-             * If not NULL, it is a VolumeFile
-             */
-            VolumeFile* m_volumeFile;
+            bool setThresholdFileAndMap();
             
-            /**
-             * If not NULL, it is a Cifti Mappable Data File
-             */
-            CiftiMappableDataFile* m_ciftiMappableDataFile;
+            bool getSelectionIJK(int32_t ijkOut[3]) const;
             
-            /**
-             * Map index
-             */
-            int32_t m_mapIndex;
+            void draw(BrainOpenGLFixedPipeline* fixedPipelineDrawing);
             
-            /**
-             * Opacity
-             */
-            float m_opacity;
+            bool spatialMatch(const ObliqueSlice* slice);
             
-            /**
-             * The voxel values for single scalar or red if RGBA volume
-             */
-            std::vector<float> m_values;
+            bool compositeSlicesRGBA(const std::vector<ObliqueSlice*>& slices);
             
-            /** Voxel values for green in RGBA */
-            std::vector<float> m_valuesGreen;
+            VolumeMappableInterface* m_volumeInterface;
             
-            /** Voxel values for blue in RGBA */
-            std::vector<float> m_valuesBlue;
+            const float m_opacity;
             
-            /** Voxel values for alpha in RGBA */
-            std::vector<float> m_valuesAlpha;
+            const CaretMappableDataFile* m_mapFile = NULL;
             
-            /**
-             * Coloring corresponding to the values (4 components per voxel)
-             */
-            std::vector<uint8_t> m_rgba;
-        };
+            const int32_t m_mapIndex;
+            
+            const int32_t m_numberOfRows;
+            
+            const int32_t m_numberOfColumns;
+            
+            const int32_t m_browserTabIndex;
+            
+            const DisplayPropertiesLabels* m_displayPropertiesLabels;
+            
+            const DisplayGroupEnum::Enum m_displayGroup;
+            
+            const int32_t m_identificationX;
+            
+            const int32_t m_identificationY;
+            
+            const bool m_identificationModeFlag;
+            
+            CiftiMappableDataFile* m_ciftiMappableFile = NULL;
+            
+            VolumeFile* m_volumeFile = NULL;
+            
+            uint8_t m_opacityByte = 255;
+            
+            CiftiMappableDataFile* m_thresholdCiftiMappableFile = NULL;
+            
+            VolumeFile* m_thresholdVolumeFile = NULL;
+            
+            PaletteColorMapping* m_thresholdPaletteColorMapping = NULL;
+            
+            int32_t m_thresholdMapIndex = -1;
+            
+            float m_originXYZ[3];
+            
+            float m_leftToRightStepXYZ[3];
+            
+            float m_bottomToTopStepXYZ[3];
         
-        /**
-         * For each voxel, contains offsets to each layer
-         */
-        class VoxelToDraw {
-        public:
-            VoxelToDraw(const float center[3],
-                        const double leftBottom[3],
-                        const double rightBottom[3],
-                        const double rightTop[3],
-                        const double leftTop[3]);
+            DataValueType m_dataValueType = DataValueType::INVALID;
             
-            void getDiffXYZ(float dxyzOut[3]) const;
+            std::vector<float> m_data;
+        
+            std::vector<float> m_thresholdData;
             
-            void addVolumeValue(const int64_t sliceIndex,
-                                const int64_t sliceOffset);
+            std::vector<uint8_t> m_rgba;
             
-            /**
-             * Center of voxel.
-             */
-            float m_center[3];
+            std::vector<int64_t> m_identificationIJK;
             
-            /**
-             * Corners of voxel
-             */
-            float m_coordinates[12];
+            int32_t m_validVoxelCount = 0;
             
-            /*
-             * Index of volume in VoxelsInSliceForVolume
-             */
-            std::vector<int64_t> m_sliceIndices;
+            int32_t m_sliceNumberOfVoxels = 0;
             
-            /**
-             * Offset in values in VoxelsInSliceForVolume
-             */
-            std::vector<int64_t> m_sliceOffsets;
+            int32_t m_voxelNumberOfComponents = 1;
+            
+            std::unique_ptr<IdentificationWithColor> m_identificationHelper;
+            
+            int64_t m_selectionIJK[3];
         };
         
         BrainOpenGLVolumeObliqueSliceDrawing(const BrainOpenGLVolumeObliqueSliceDrawing&);
@@ -208,17 +188,20 @@ namespace caret {
                                       const VolumeSliceViewAllPlanesLayoutEnum::Enum allPlanesLayout,
                                       const int32_t viewport[4]);
         
-        void drawVolumeSliceViewType(const VolumeSliceDrawingTypeEnum::Enum sliceDrawingType,
+        void drawVolumeSliceViewType(const BrainOpenGLVolumeSliceDrawing::AllSliceViewMode allSliceViewMode,
+                                     const VolumeSliceDrawingTypeEnum::Enum sliceDrawingType,
                            const VolumeSliceProjectionTypeEnum::Enum sliceProjectionType,
                            const VolumeSliceViewPlaneEnum::Enum sliceViewPlane,
                            const int32_t viewport[4]);
         
-        void drawVolumeSliceViewTypeMontage(const VolumeSliceDrawingTypeEnum::Enum sliceDrawingType,
+        void drawVolumeSliceViewTypeMontage(const BrainOpenGLVolumeSliceDrawing::AllSliceViewMode allSliceViewMode,
+                                            const VolumeSliceDrawingTypeEnum::Enum sliceDrawingType,
                                             const VolumeSliceProjectionTypeEnum::Enum sliceProjectionType,
                                   const VolumeSliceViewPlaneEnum::Enum sliceViewPlane,
                                   const int32_t viewport[4]);
         
-        void drawVolumeSliceViewProjection(const VolumeSliceDrawingTypeEnum::Enum sliceDrawingType,
+        void drawVolumeSliceViewProjection(const BrainOpenGLVolumeSliceDrawing::AllSliceViewMode allSliceViewMode,
+                                           const VolumeSliceDrawingTypeEnum::Enum sliceDrawingType,
                                            const VolumeSliceProjectionTypeEnum::Enum sliceProjectionType,
                                  const VolumeSliceViewPlaneEnum::Enum sliceViewPlane,
                                  const float sliceCoordinates[3],
@@ -228,13 +211,8 @@ namespace caret {
                               Matrix4x4& transformationMatrix,
                               const Plane& plane);
         
-        void drawOrthogonalSlice(const VolumeSliceViewPlaneEnum::Enum sliceViewPlane,
-                                 const float sliceCoordinates[3],
-                                 const Plane& plane);
-        
-        void drawOrthogonalSliceWithCulling(const VolumeSliceViewPlaneEnum::Enum sliceViewPlane,
-                                            const float sliceCoordinates[3],
-                                            const Plane& plane);
+        void drawObliqueSliceWithOutlines(const VolumeSliceViewPlaneEnum::Enum sliceViewPlane,
+                                          Matrix4x4& transformationMatrix);
         
         void createSlicePlaneEquation(const VolumeSliceProjectionTypeEnum::Enum sliceProjectionType,
                                       const VolumeSliceViewPlaneEnum::Enum sliceViewPlane,
@@ -261,8 +239,6 @@ namespace caret {
                         const Plane& slicePlane,
                         const float sliceCoordinates[3]);
         
-//        void drawSurfaceOutline(const Plane& plane);
-        
         void drawVolumeSliceFoci(const Plane& plane);
         
         void drawAxesCrosshairs(const VolumeSliceProjectionTypeEnum::Enum sliceProjectionType,
@@ -278,45 +254,9 @@ namespace caret {
         
         void drawOrientationAxes(const int viewport[4]);
         
-        void setOrthographicProjection(const VolumeSliceViewPlaneEnum::Enum sliceViewPlane,
+        void setOrthographicProjection(const BrainOpenGLVolumeSliceDrawing::AllSliceViewMode allSliceViewMode,
+                                       const VolumeSliceViewPlaneEnum::Enum sliceViewPlane,
                                        const int viewport[4]);
-        
-        void drawOrthogonalSliceVoxels(const float sliceNormalVector[3],
-                                       const float coordinate[3],
-                                       const float rowStep[3],
-                                       const float columnStep[3],
-                                       const int64_t numberOfColumns,
-                                       const int64_t numberOfRows,
-                                       const std::vector<uint8_t>& sliceRGBA,
-                                       const int64_t validVoxelCount,
-                                       const VolumeMappableInterface* volumeInterface,
-                                       const int32_t volumeIndex,
-                                       const int32_t mapIndex,
-                                       const uint8_t sliceOpacity);
-        
-        void drawOrthogonalSliceVoxelsSingleQuads(const float sliceNormalVector[3],
-                                       const float coordinate[3],
-                                       const float rowStep[3],
-                                       const float columnStep[3],
-                                       const int64_t numberOfColumns,
-                                       const int64_t numberOfRows,
-                                       const std::vector<uint8_t>& sliceRGBA,
-                                       const VolumeMappableInterface* volumeInterface,
-                                       const int32_t volumeIndex,
-                                       const int32_t mapIndex,
-                                       const uint8_t sliceOpacity);
-        
-        void drawOrthogonalSliceVoxelsQuadIndicesAndStrips(const float sliceNormalVector[3],
-                                                           const float coordinate[3],
-                                                           const float rowStep[3],
-                                                           const float columnStep[3],
-                                                           const int64_t numberOfColumns,
-                                                           const int64_t numberOfRows,
-                                                           const std::vector<uint8_t>& sliceRGBA,
-                                                           const VolumeMappableInterface* volumeInterface,
-                                                           const int32_t volumeIndex,
-                                                           const int32_t mapIndex,
-                                                           const uint8_t sliceOpacity);
         
         bool getVoxelCoordinateBoundsAndSpacing(float boundsOut[6],
                                                 float spacingOut[3]);

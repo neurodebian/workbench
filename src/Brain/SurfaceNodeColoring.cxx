@@ -341,6 +341,8 @@ SurfaceNodeColoring::colorSurfaceNodes(const DisplayPropertiesLabels* displayPro
             switch (mapDataFileType) {
                 case DataFileTypeEnum::ANNOTATION:
                     break;
+                case DataFileTypeEnum::ANNOTATION_TEXT_SUBSTITUTION:
+                    break;
                 case DataFileTypeEnum::BORDER:
                     break;
                 case DataFileTypeEnum::CONNECTIVITY_DENSE:
@@ -490,6 +492,72 @@ SurfaceNodeColoring::colorSurfaceNodes(const DisplayPropertiesLabels* displayPro
                     break;
                 case DataFileTypeEnum::UNKNOWN:
                     break;
+            }
+            
+            if (isColoringValid) {
+                if (selectedMapFile->isMappedWithPalette()) {
+                    const PaletteColorMapping* pcm = selectedMapFile->getMapPaletteColorMapping(selectedMapIndex);
+                    CaretAssert(pcm);
+                    bool hideDataFlag    = false;
+                    bool showOutlineFlag = false;
+                    const PaletteThresholdOutlineDrawingModeEnum::Enum outlineMode = pcm->getThresholdOutlineDrawingMode();
+                    switch (outlineMode) {
+                        case PaletteThresholdOutlineDrawingModeEnum::OFF:
+                            break;
+                        case PaletteThresholdOutlineDrawingModeEnum::OUTLINE:
+                            hideDataFlag    = true;
+                            showOutlineFlag = true;
+                        case PaletteThresholdOutlineDrawingModeEnum::OUTLINE_AND_DATA:
+                            showOutlineFlag = true;
+                            break;
+                    }
+                    
+                    if (showOutlineFlag) {
+                        const CaretColorEnum::Enum outlineColor = pcm->getThresholdOutlineDrawingColor();
+                        float outlineRGBA[4];
+                        CaretColorEnum::toRGBAFloat(outlineColor, outlineRGBA);
+                        
+                        CaretPointer<TopologyHelper> topologyHelper = surface->getTopologyHelper();
+                        std::vector<float> rgbaCopy(numNodes * 4);
+                        for (int32_t i = 0; i < (numNodes*4); i++) {
+                            rgbaCopy[i] = overlayRGBV[i];
+                        }
+                        for (int32_t i = 0; i < numNodes; i++) {
+                            const int32_t i4 = i * 4;
+                            CaretAssertVectorIndex(rgbaCopy, i4 + 3);
+                            const float alpha = rgbaCopy[i4 + 3];
+                            if (alpha > 0.0 ) {
+                                /*
+                                 * If a node is the same color as all of its neighbors,
+                                 * use the fill color.  Otherwise, use the outline color.
+                                 */
+                                bool isLabelBoundaryNode = false;
+                                int32_t numNeighbors = 0;
+                                const int32_t* allNeighbors = topologyHelper->getNodeNeighbors(i, numNeighbors);
+                                for (int32_t n = 0; n < numNeighbors; n++) {
+                                    const int32_t neighborNodeIndex = allNeighbors[n];
+                                    const int32_t n4 = neighborNodeIndex * 4;
+                                    CaretAssertVectorIndex(rgbaCopy, n4 + 3);
+                                    const float neighborAlpha = rgbaCopy[n4 + 3];
+                                    if (neighborAlpha <= 0.0) {
+                                        isLabelBoundaryNode = true;
+                                        break;
+                                    }
+                                }
+                                CaretAssertArrayIndex(overlayRGBV, numNodes * 4, i4 + 3);
+                                if (isLabelBoundaryNode) {
+                                    overlayRGBV[i4]   = outlineRGBA[0];
+                                    overlayRGBV[i4+1] = outlineRGBA[1];
+                                    overlayRGBV[i4+2] = outlineRGBA[2];
+                                    overlayRGBV[i4+3] = 1.0;
+                                }
+                                else if (hideDataFlag) {
+                                    overlayRGBV[i4+3] = 0.0;
+                                }
+                            }
+                        }
+                    }
+                }
             }
             
             if (isColoringValid) {

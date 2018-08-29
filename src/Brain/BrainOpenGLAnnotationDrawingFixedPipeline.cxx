@@ -49,6 +49,7 @@
 #include "CaretLogger.h"
 #include "DeveloperFlagsEnum.h"
 #include "DisplayPropertiesAnnotation.h"
+#include "DisplayPropertiesAnnotationTextSubstitution.h"
 #include "EventBrowserTabGet.h"
 #include "EventManager.h"
 #include "EventOpenGLObjectToWindowTransform.h"
@@ -66,7 +67,7 @@
 
 using namespace caret;
 
-
+static const bool debugFlag = false;
     
 /**
  * \class caret::BrainOpenGLAnnotationDrawingFixedPipeline 
@@ -331,7 +332,6 @@ BrainOpenGLAnnotationDrawingFixedPipeline::getAnnotationDrawingSpaceCoordinate(c
     return drawingSpaceXYZValid;
 }
 
-
 /**
  * Convert the given model coordinate into a window coordinate.
  *
@@ -394,6 +394,7 @@ BrainOpenGLAnnotationDrawingFixedPipeline::getAnnotationTwoDimShapeBounds(const 
     bool boundsValid = false;
     if (textFlag) {
         m_brainOpenGLFixedPipeline->getTextRenderer()->getBoundsForTextAtViewportCoords(*textAnnotation,
+                                                                                        m_textDrawingFlags,
                                                                                    windowXYZ[0], windowXYZ[1], windowXYZ[2],
                                                                                     viewportWidth, viewportHeight,
                                                                                    bottomLeftOut, bottomRightOut, topRightOut, topLeftOut);
@@ -573,6 +574,9 @@ BrainOpenGLAnnotationDrawingFixedPipeline::drawAnnotationsInternal(const Annotat
     
     bool drawAnnotationsFromFilesFlag = true;
     
+    const DisplayPropertiesAnnotationTextSubstitution* dpats = m_inputs->m_brain->getDisplayPropertiesAnnotationTextSubstitution();
+    m_textDrawingFlags.setDrawSubstitutedText(dpats->isEnableSubstitutions());
+    
     bool haveDisplayGroupFlag = true;
     switch (drawingCoordinateSpace) {
         case AnnotationCoordinateSpaceEnum::CHART:
@@ -703,8 +707,10 @@ BrainOpenGLAnnotationDrawingFixedPipeline::drawAnnotationsInternal(const Annotat
                     /*
                      * Note: Positions are in percentages ranging [0.0, 100.0]
                      */
+                    const float yStart = 4.0;
                     float x = 14.0;
-                    float y = 4.0;
+                    float y = yStart;
+                    int32_t lastTabIndex = -1;
                     bool firstColorBarFlag = true;
                     if ( ! colorBars.empty()) {
                         for (std::vector<AnnotationColorBar*>::iterator cbIter = colorBars.begin();
@@ -728,9 +734,23 @@ BrainOpenGLAnnotationDrawingFixedPipeline::drawAnnotationsInternal(const Annotat
                                             if (halfHeight > y) {
                                                 y = halfHeight;
                                             }
+                                            
+                                            if (drawingCoordinateSpace == AnnotationCoordinateSpaceEnum::TAB) {
+                                                lastTabIndex = cb->getTabIndex();
+                                            }
                                         }
                                         else {
                                             y += halfHeight;
+                                            
+                                            if (drawingCoordinateSpace == AnnotationCoordinateSpaceEnum::TAB) {
+                                                if (cb->getTabIndex() != lastTabIndex) {
+                                                    /*
+                                                     * First color bar in tab is at bottom of tab
+                                                     */
+                                                    y = yStart;
+                                                }
+                                                lastTabIndex = cb->getTabIndex();
+                                            }
                                         }
                                         
                                         float xyz[3];
@@ -1267,6 +1287,141 @@ BrainOpenGLAnnotationDrawingFixedPipeline::drawColorBar(AnnotationFile* annotati
         return;
     }
     
+    const float viewportHeight = m_modelSpaceViewport[3];
+    const float viewportWidth  = m_modelSpaceViewport[2];
+    
+    /*
+     * The user sets the total height of the colorbar and the
+     * height of the text.
+     *
+     * There are three items in the colorbar from top to bottom:
+     *    (1) The numeric values
+     *    (2) The tick marks
+     *    (3) The palettes color sections
+     */
+    float totalHeightPercent = colorBar->getHeight();
+    float textHeightPercent        = colorBar->getFontPercentViewportSize();
+    float totalHeightPixels = (viewportHeight
+                               * (totalHeightPercent / 100.0f));
+    
+    /*
+     * Text is aligned at the top of the characters
+     */
+    float textHeightPixels = (viewportHeight
+                                    * (textHeightPercent / 100.0f));
+    
+    if (debugFlag) {
+        std::cout << "Color bar heights before corrections (pixels) " << std::endl;
+        std::cout << "   Text:        " << textHeightPixels << std::endl;
+    }
+    
+    switch (colorBar->getPositionMode()) {
+        case AnnotationColorBarPositionModeEnum::AUTOMATIC:
+            {
+                const float startingX = (bottomLeft[0] + topLeft[0]) / 2.0f;
+                float estimatedWidth = estimateColorBarWidth(colorBar,
+                                                             textHeightPixels);
+                /*
+                 * Maximum width is set so that margins on left and right sides
+                 * of the color bar are identical.
+                 */
+                const float maximumWidth = viewportWidth - (startingX * 2.0f);
+                if (estimatedWidth > maximumWidth) {
+                    /*
+                     * Since the width of the text is a function of the text height,
+                     * gradually reduce the height of the text until the color bar
+                     * width is less than the maximum allowable width.  Note that 
+                     * the font heights are not a continuous function so that a
+                     * range of "requested font heights" may correspond to one
+                     * font height.
+                     */
+                    const float tooBigTextHeightPixels = textHeightPixels;
+                    const float onePercentPixelHeight = textHeightPixels * 0.01;
+                    for (int32_t pctSteps = 0; pctSteps < 100; pctSteps++) {
+                        textHeightPixels -= onePercentPixelHeight;
+                        estimatedWidth = estimateColorBarWidth(colorBar,
+                                                               textHeightPixels);
+                        if (estimatedWidth <= maximumWidth) {
+                            break;
+                        }
+                    }
+                    if (estimatedWidth > maximumWidth) {
+                        estimatedWidth = maximumWidth;
+                    }
+                    
+                    /*
+                     * Since the height of the text has been reduced, we must also reduce the
+                     * height of the color bar.  Otherwise, the color swatches will become taller
+                     * (color swatches fill the region of color bar not used by the text).
+                     */
+                    const float textHeightPixelChangePercent = ((tooBigTextHeightPixels - textHeightPixels)
+                                                                / tooBigTextHeightPixels);
+                    if (debugFlag) {
+                        std::cout << "Too big text height: " << tooBigTextHeightPixels << std::endl;
+                        std::cout << "   Reduced to: " << textHeightPixels << std::endl;
+                        std::cout << "Text height percentage change: " << textHeightPixelChangePercent << std::endl;
+                    }
+                    
+                    const float tooBigTextHeightPercent = textHeightPercent;
+                    textHeightPercent = (textHeightPixels / viewportHeight) * 100.0;
+                    const float textPercentChange = tooBigTextHeightPercent - textHeightPercent;
+                    totalHeightPercent -= textPercentChange;
+                    totalHeightPixels = (viewportHeight
+                                         * (totalHeightPercent / 100.0f));
+                }
+                
+                const float shapeWidth = MathFunctions::distance3D(bottomLeft, bottomRight);
+                if (estimatedWidth > shapeWidth) {
+                    /*
+                     * The corners of the color bar must now be recomputed to account
+                     * for the reduced dimensions of the color bar.
+                     */
+                    float bottomUnitVector[3];
+                    MathFunctions::createUnitVector(bottomLeft, bottomRight, bottomUnitVector);
+                    float topUnitVector[3];
+                    MathFunctions::createUnitVector(topLeft, topRight, topUnitVector);
+                    float leftUnitVector[3];
+                    MathFunctions::createUnitVector(bottomLeft, topLeft, leftUnitVector);
+                    if (debugFlag) {
+                        std::cout << "Too short bottom right: " << AString::fromNumbers(bottomRight, 3, ", ") << std::endl;
+                    }
+                    for (int32_t i = 0; i < 3; i++) {
+                        topLeft[i]     = bottomLeft[i] + leftUnitVector[i] * totalHeightPixels;
+                        topRight[i]    = topLeft[i]    + topUnitVector[i] * estimatedWidth;
+                        bottomRight[i] = bottomLeft[i] + bottomUnitVector[i] * estimatedWidth;
+                    }
+                    if (debugFlag) {
+                        std::cout << "   Adjusted bottom right: " << AString::fromNumbers(bottomRight, 3, ", ") << std::endl;
+                    }
+                }
+            }
+            break;
+        case AnnotationColorBarPositionModeEnum::MANUAL:
+            break;
+    }
+    
+    float ticksMarksHeightPercent  = totalHeightPercent * 0.10;
+    float sectionsHeightPercent    = totalHeightPercent - (ticksMarksHeightPercent - textHeightPercent);
+    
+    if (sectionsHeightPercent <= 0.0f) {
+        sectionsHeightPercent    = totalHeightPercent * 0.10f;
+        textHeightPercent = totalHeightPercent - sectionsHeightPercent;
+    }
+    const float tickMarksHeightPixels = (viewportHeight
+                                         * (ticksMarksHeightPercent / 100.0f));
+    const float textOffsetFromTopPixels = 2;
+    const float sectionsHeightPixels = (totalHeightPixels
+                                        - (textHeightPixels
+                                           + textOffsetFromTopPixels
+                                           + tickMarksHeightPixels));
+    if (debugFlag) {
+        std::cout << "Color bar heights after any adjustments (pixels) " << std::endl;
+        std::cout << "   Total:       " << totalHeightPixels << std::endl;
+        std::cout << "   Text:        " << textHeightPixels << std::endl;
+        std::cout << "   Text Offset: " << textOffsetFromTopPixels << std::endl;
+        std::cout << "   Ticks:       " << tickMarksHeightPixels << std::endl;
+    }
+
     const float selectionCenterXYZ[3] = {
         (bottomLeft[0] + bottomRight[0] + topRight[0] + topLeft[0]) / 4.0f,
         (bottomLeft[1] + bottomRight[1] + topRight[1] + topLeft[1]) / 4.0f,
@@ -1318,50 +1473,6 @@ BrainOpenGLAnnotationDrawingFixedPipeline::drawColorBar(AnnotationFile* annotati
                                                    backgroundRGBA);
         }
         
-        /*
-         * The user sets the total height of the colorbar and the
-         * height of the text.
-         *
-         * There are three items in the colorbar from top to bottom:
-         *    (1) The numeric values
-         *    (2) The tick marks
-         *    (3) The palettes color sections
-         */
-        const float totalHeightPercent = colorBar->getHeight();
-        float textHeightPercent        = colorBar->getFontPercentViewportSize();
-        float ticksMarksHeightPercent  = totalHeightPercent * 0.10;
-        float sectionsHeightPercent    = totalHeightPercent - (ticksMarksHeightPercent - textHeightPercent);
-        
-        if (sectionsHeightPercent <= 0.0f) {
-            sectionsHeightPercent    = totalHeightPercent * 0.10f;
-            textHeightPercent = totalHeightPercent - sectionsHeightPercent;
-        }
-        
-        const float viewportHeight = m_modelSpaceViewport[3];
-        
-        /*
-         * Text is aligned at the top of the characters
-         */
-        const float totalHeightPixels = (viewportHeight
-                                         * (totalHeightPercent / 100.0f));
-        const float textOffsetFromTopPixels = 2;
-        const float textHeightPixels = (viewportHeight
-                                        * (textHeightPercent / 100.0f));
-        const float tickMarksHeightPixels = (viewportHeight
-                                             * (ticksMarksHeightPercent / 100.0f));
-        const float sectionsHeightPixels = (totalHeightPixels
-                                            - (textHeightPixels
-                                               + textOffsetFromTopPixels
-                                               + tickMarksHeightPixels));
-        
-        const bool debugFlag = false;
-        if (debugFlag) {
-            std::cout << "Color bar heights (pixels) " << std::endl;
-            std::cout << "   Total:       " << totalHeightPixels << std::endl;
-            std::cout << "   Text:        " << textHeightPixels << std::endl;
-            std::cout << "   Text Offset: " << textOffsetFromTopPixels << std::endl;
-            std::cout << "   Ticks:       " << tickMarksHeightPixels << std::endl;
-        }
         
         drawColorBarSections(colorBar,
                              bottomLeft,
@@ -1670,6 +1781,166 @@ BrainOpenGLAnnotationDrawingFixedPipeline::drawColorBarSections(const Annotation
 }
 
 /**
+ * Estimate the width of the color bar.
+ * 
+ * @param colorbar
+ *    The color bar.
+ * @param textHeightInPixels
+ *    Height of the text in pixels.
+ * @return
+ *    Estimated width of the color bar.
+ */
+float
+BrainOpenGLAnnotationDrawingFixedPipeline::estimateColorBarWidth(const AnnotationColorBar* colorBar,
+                                                                 const float textHeightInPixels) const
+{
+    const int32_t numText = colorBar->getNumberOfNumericText();
+    if (numText <= 0) {
+        return 0.0f;
+    }
+    
+    const int32_t viewportWidth = m_modelSpaceViewport[2];
+    const int32_t viewportHeight = m_modelSpaceViewport[3];
+    
+    const float textPercentageHeight = (textHeightInPixels / viewportHeight) * 100.0;
+    
+    AnnotationPercentSizeText annText(AnnotationAttributesDefaultTypeEnum::NORMAL);
+    annText.setHorizontalAlignment(AnnotationTextAlignHorizontalEnum::CENTER);
+    annText.setVerticalAlignment(AnnotationTextAlignVerticalEnum::TOP);
+    annText.setFont(colorBar->getFont());
+    annText.setFontPercentViewportSize(textPercentageHeight);
+    annText.setTextColor(CaretColorEnum::CUSTOM);
+    float rgba[4];
+    colorBar->getTextColorRGBA(rgba);
+    annText.setCustomTextColor(rgba);
+    annText.setRotationAngle(colorBar->getRotationAngle());
+    
+    float windowX = 0.0f;
+    float windowY = 0.0f;
+    float windowZ = 0.0f;
+    
+    std::vector<float> allTextWidths;
+    
+    if (debugFlag) {
+        std::cout << "Estimating with pixel height: " << textHeightInPixels << std::endl;
+    }
+    
+    /*
+     * Get width of each numerical text value displayed above the color bar
+     */
+    for (int32_t i = 0; i < numText; i++) {
+        const AnnotationColorBarNumericText* numericText = colorBar->getNumericText(i);
+        annText.setText(numericText->getNumericText());
+        
+            {
+                float textBottomLeft[3];
+                float textBottomRight[3];
+                float textTopRight[3];
+                float textTopLeft[3];
+                m_brainOpenGLFixedPipeline->getTextRenderer()->getBoundsWithoutMarginForTextAtViewportCoords(annText,
+                                                                                                             m_textDrawingFlags,
+                                                                                                windowX, windowY, windowZ,
+                                                                                                viewportWidth, viewportHeight,
+                                                                                                textBottomLeft, textBottomRight, textTopRight, textTopLeft);
+                float textWidth = MathFunctions::distance3D(textBottomLeft, textBottomRight);
+                allTextWidths.push_back(textWidth);
+                if (debugFlag) {
+                    std::cout << "Width of \"" << numericText->getNumericText() << "\" is " << textWidth << std::endl;
+                }
+                
+            }
+    }
+
+    /*
+     * A seaparator may be placed between numerical values
+     */
+    float separatorWidth = 0.0;
+    {
+        const AString separatorCharacter("0");
+        annText.setText(separatorCharacter);
+        float textBottomLeft[3];
+        float textBottomRight[3];
+        float textTopRight[3];
+        float textTopLeft[3];
+        m_brainOpenGLFixedPipeline->getTextRenderer()->getBoundsForTextAtViewportCoords(annText,
+                                                                                        m_textDrawingFlags,
+                                                                                        windowX, windowY, windowZ,
+                                                                                        viewportWidth, viewportHeight,
+                                                                                        textBottomLeft, textBottomRight, textTopRight, textTopLeft);
+        separatorWidth = MathFunctions::distance3D(textBottomLeft, textBottomRight);
+        if (debugFlag) {
+            std::cout << "Separator \"" << separatorCharacter << "\" width: " << separatorWidth << std::endl;
+        }
+    }
+    
+    CaretAssert(numText == static_cast<int32_t>(allTextWidths.size()));
+    
+    CaretAssertVectorIndex(allTextWidths, 0);
+    const float firstWidth = allTextWidths[0];
+    
+    float estimatedWidth = 0.0f;
+    if (numText == 1) {
+        estimatedWidth = firstWidth;
+    }
+    else {
+        const int32_t lastIndex = numText - 1;
+        CaretAssertVectorIndex(allTextWidths, lastIndex);
+        const float lastWidth = allTextWidths[lastIndex];
+        
+        if (numText == 2) {
+            estimatedWidth = firstWidth + separatorWidth + lastWidth;
+        }
+        else {
+            /*
+             * Each of the numerical values are equally spaced.  The first value is aligned left,
+             * the last value is aligned right, and the remaining values are center aligned.
+             * Our strategy is examine the interval (width) between each consecutive pair of
+             * numerical values and ensure the interval is large enough so that the two
+             * numerical text values do not overlap.  Since all intervals are equally spaced,
+             * use the largest interval for all intervals and then set the width of the color bar
+             * to the sum of these intervals.
+             */
+            float largestInterval = 0.0f;
+            for (int32_t i = 1; i < numText; i++) {
+                CaretAssertVectorIndex(allTextWidths, i);
+                const float halfWidth = allTextWidths[i] / 2.0f;
+                
+                float interval = 0.0f;
+                if (i == 1) {
+                    interval = firstWidth + halfWidth;
+                }
+                else if (i == lastIndex) {
+                    interval = lastWidth + halfWidth;
+                }
+                else {
+                    CaretAssertVectorIndex(allTextWidths, i - 1);
+                    const float previousHalfWidth = allTextWidths[i - 1] / 2.0f;
+                    interval = previousHalfWidth + halfWidth;
+                }
+                
+                /* space to separate adjacent text */
+                interval += separatorWidth;
+                
+                if (debugFlag) {
+                    std::cout << "Interval " << i << " width: " << interval << std::endl;
+                }
+                largestInterval = std::max(largestInterval,
+                                           interval);
+            }
+            
+            const float numberOfIntervals = numText - 1;
+            estimatedWidth = largestInterval * numberOfIntervals;
+            if (debugFlag) {
+                std::cout << "Estimated Width: " << estimatedWidth
+                   << " Viewport Width: " << viewportWidth << std::endl;
+            }
+        }
+    }
+    
+    return estimatedWidth;
+}
+
+/**
  * Draw the color bar's text
  *
  * @param colorBar
@@ -1686,6 +1957,8 @@ BrainOpenGLAnnotationDrawingFixedPipeline::drawColorBarSections(const Annotation
  *     Height of text in pixels.
  * @param offsetFromTopInPixels
  *     Offset of text from the top of the colorbar viewport in pixels
+ * @return
+ *     Estimated width when colorBarTextMode is estimating otherwise zero when drawing.
  */
 void
 BrainOpenGLAnnotationDrawingFixedPipeline::drawColorBarText(const AnnotationColorBar* colorBar,
@@ -1728,6 +2001,8 @@ BrainOpenGLAnnotationDrawingFixedPipeline::drawColorBarText(const AnnotationColo
     const float dx = leftToRightVector[0];
     const float dy = leftToRightVector[1];
     
+    std::vector<std::pair<float, float>> textWidthInfo;
+    
     const float windowZ = (bottomLeft[2] + bottomRight[2] + topRight[2] + topLeft[2]) / 4.0;
     const int32_t numText = colorBar->getNumberOfNumericText();
     bool fontTooSmallFlag = false;
@@ -1741,10 +2016,14 @@ BrainOpenGLAnnotationDrawingFixedPipeline::drawColorBarText(const AnnotationColo
         const float windowY = yTopLeft + (dy * (scalar + scalarOffset));
         
         annText.setText(numericText->getNumericText());
+
+        BrainOpenGLTextRenderInterface::DrawingFlags flags;
+        flags.setDrawSubstitutedText(false);
         m_brainOpenGLFixedPipeline->getTextRenderer()->drawTextAtViewportCoords(windowX,
                                                                                 windowY,
                                                                                 windowZ,
-                                                                                annText);
+                                                                                annText,
+                                                                                flags);
         
         if (annText.isFontTooSmallWhenLastDrawn()) {
             fontTooSmallFlag = true;
@@ -2148,6 +2427,7 @@ BrainOpenGLAnnotationDrawingFixedPipeline::drawText(AnnotationFile* annotationFi
     const bool modifiedStatus = text->isModified();
     
     m_brainOpenGLFixedPipeline->getTextRenderer()->getBoundsForTextAtViewportCoords(*text,
+                                                                                    m_textDrawingFlags,
                                                                                     annXYZ[0], annXYZ[1], annXYZ[2],
                                                                                     m_modelSpaceViewport[2], m_modelSpaceViewport[3],
                                                                                     bottomLeft, bottomRight, topRight, topLeft);
@@ -2217,7 +2497,6 @@ BrainOpenGLAnnotationDrawingFixedPipeline::drawText(AnnotationFile* annotationFi
             }
             
             if (drawTextFlag) {
-                const bool debugFlag = false;
                 if (debugFlag) {
                     if (text->getCoordinateSpace() == AnnotationCoordinateSpaceEnum::STEREOTAXIC) {
                         AString msg("Drawing Text: " + text->getText() + "  DepthTest=" + AString::fromBool(depthTestFlag));
@@ -2232,7 +2511,8 @@ BrainOpenGLAnnotationDrawingFixedPipeline::drawText(AnnotationFile* annotationFi
                     m_brainOpenGLFixedPipeline->getTextRenderer()->drawTextAtViewportCoords(annXYZ[0],
                                                                                             annXYZ[1],
                                                                                             annXYZ[2],
-                                                                                            *text);
+                                                                                            *text,
+                                                                                            m_textDrawingFlags);
                     drawnFlag = true;
                 }
                 else {
@@ -2256,7 +2536,8 @@ BrainOpenGLAnnotationDrawingFixedPipeline::drawText(AnnotationFile* annotationFi
                     else {
                         m_brainOpenGLFixedPipeline->getTextRenderer()->drawTextAtViewportCoords(annXYZ[0],
                                                                                            annXYZ[1],
-                                                                                           *text);
+                                                                                           *text,
+                                                                                                m_textDrawingFlags);
                         drawnFlag = true;
                     }
                 }
@@ -2390,7 +2671,6 @@ BrainOpenGLAnnotationDrawingFixedPipeline::drawImage(AnnotationFile* annotationF
                                                     selectionCenterXYZ));
         }
         else {
-            const bool debugFlag = false;
             if (debugFlag) {
                 if (image->getCoordinateSpace() == AnnotationCoordinateSpaceEnum::STEREOTAXIC) {
                     AString msg("Drawing Image: DepthTest=" + AString::fromBool(depthTestFlag));

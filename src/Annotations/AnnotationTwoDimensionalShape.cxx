@@ -1473,7 +1473,8 @@ AnnotationTwoDimensionalShape::getShapeBounds(const float viewportWidth,
      * NOTE: Annotation's height and width are 'relative' ([0.0, 100.0] percentage) of window size.
      * So want HALF of width/height
      */
-    float halfWidth  = (getWidth()  / 200.0) * viewportWidth;
+    const float width = getWidth();
+    float halfWidth  = (width  / 200.0) * viewportWidth;
     const float halfHeight = (getHeight() / 200.0) * viewportHeight;
     if (isFixedAspectRatio()) {
         halfWidth = halfHeight / getFixedAspectRatio();

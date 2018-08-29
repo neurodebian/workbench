@@ -79,6 +79,7 @@ BrainOpenGLTextRenderInterface::~BrainOpenGLTextRenderInterface()
  */
 void
 BrainOpenGLTextRenderInterface::getBoundsForTextAtViewportCoords(const AnnotationText& annotationText,
+                                                                 const DrawingFlags& flags,
                                                                  const float viewportX,
                                                                  const float viewportY,
                                                                  const float viewportZ,
@@ -95,6 +96,7 @@ BrainOpenGLTextRenderInterface::getBoundsForTextAtViewportCoords(const Annotatio
     double topLeft[3];
     
     getBoundsForTextAtViewportCoords(annotationText,
+                                     flags,
                                      viewportX,
                                      viewportY,
                                      viewportZ,
@@ -104,6 +106,71 @@ BrainOpenGLTextRenderInterface::getBoundsForTextAtViewportCoords(const Annotatio
                                      bottomRight,
                                      topRight,
                                      topLeft);
+    
+    for (int32_t i = 0; i < 3; i++) {
+        bottomLeftOut[i]  = bottomLeft[i];
+        bottomRightOut[i] = bottomRight[i];
+        topRightOut[i]    = topRight[i];
+        topLeftOut[i]     = topLeft[i];
+    }
+}
+
+/**
+ * Get the bounds of text (in pixels) using the given text
+ * attributes.  NO MARGIN is placed around the text.
+ *
+ * See http://ftgl.sourceforge.net/docs/html/metrics.png
+ *
+ * @param annotationText
+ *   Text that is to be drawn.
+ * @param viewportX
+ *    Viewport X-coordinate.
+ * @param viewportY
+ *    Viewport Y-coordinate.
+ * @param viewportZ
+ *    Viewport Z-coordinate.
+ * @param viewportWidth
+ *    Widgth of the viewport needed for percentage height text.
+ * @param viewportHeight
+ *    Height of the viewport needed for percentage height text.
+ * @param bottomLeftOut
+ *    The bottom left corner of the text bounds.
+ * @param bottomRightOut
+ *    The bottom right corner of the text bounds.
+ * @param topRightOut
+ *    The top right corner of the text bounds.
+ * @param topLeftOut
+ *    The top left corner of the text bounds.
+ */
+void
+BrainOpenGLTextRenderInterface::getBoundsWithoutMarginForTextAtViewportCoords(const AnnotationText& annotationText,
+                                                                              const DrawingFlags& flags,
+                                                                 const float viewportX,
+                                                                 const float viewportY,
+                                                                 const float viewportZ,
+                                                                 const float viewportWidth,
+                                                                 const float viewportHeight,
+                                                                 float bottomLeftOut[3],
+                                                                 float bottomRightOut[3],
+                                                                 float topRightOut[3],
+                                                                 float topLeftOut[3])
+{
+    double bottomLeft[3];
+    double bottomRight[3];
+    double topRight[3];
+    double topLeft[3];
+    
+    getBoundsWithoutMarginForTextAtViewportCoords(annotationText,
+                                                  flags,
+                                                  viewportX,
+                                                  viewportY,
+                                                  viewportZ,
+                                                  viewportWidth,
+                                                  viewportHeight,
+                                                  bottomLeft,
+                                                  bottomRight,
+                                                  topRight,
+                                                  topLeft);
     
     for (int32_t i = 0; i < 3; i++) {
         bottomLeftOut[i]  = bottomLeft[i];

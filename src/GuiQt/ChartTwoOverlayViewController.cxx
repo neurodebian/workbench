@@ -351,6 +351,7 @@ ChartTwoOverlayViewController::mapRowOrColumnIndexSpinBoxValueChanged(int indxIn
     if (mapYoking != MapYokingGroupEnum::MAP_YOKING_GROUP_OFF) {
         EventMapYokingSelectMap selectMapEvent(mapYoking,
                                                file,
+                                               NULL,
                                                indx,
                                                m_chartOverlay->isEnabled());
         EventManager::get()->sendEvent(selectMapEvent.getPointer());
@@ -403,6 +404,7 @@ ChartTwoOverlayViewController::mapRowOrColumnNameComboBoxSelected(int indx)
     if (mapYoking != MapYokingGroupEnum::MAP_YOKING_GROUP_OFF) {
         EventMapYokingSelectMap selectMapEvent(mapYoking,
                                                file,
+                                               NULL,
                                                indx,
                                                m_chartOverlay->isEnabled());
         EventManager::get()->sendEvent(selectMapEvent.getPointer());
@@ -453,6 +455,7 @@ ChartTwoOverlayViewController::enabledCheckBoxClicked(bool checked)
         if (selectedIndexType == ChartTwoOverlay::SelectedIndexType::MAP) {
             EventMapYokingSelectMap selectMapEvent(mapYoking,
                                                    mapFile,
+                                                   NULL,
                                                    selectedIndex,
                                                    m_chartOverlay->isEnabled());
             EventManager::get()->sendEvent(selectMapEvent.getPointer());
@@ -513,11 +516,25 @@ ChartTwoOverlayViewController::allMapsCheckBoxClicked(bool status)
     m_chartOverlay->getSelectionData(mapFile,
                                      selectedIndexType,
                                      selectedIndex);
+
+    bool doAllMapsFlag = true;
     if (mapFile != NULL) {
-        mapFile->invalidateHistogramChartColoring();
+        if (status) {
+            doAllMapsFlag = WuQMessageBox::warningLargeFileSizeOkCancel(m_allMapsCheckBox,
+                                                                        mapFile);
+        }
+        if (doAllMapsFlag) {
+            mapFile->invalidateHistogramChartColoring();
+        }
     }
     
-    m_chartOverlay->setAllMapsSelected(status);
+    if (doAllMapsFlag) {
+        m_chartOverlay->setAllMapsSelected(status);
+    }
+    else {
+        QSignalBlocker blocker(m_allMapsCheckBox);
+        m_allMapsCheckBox->setChecked(false);
+    }
     
     this->updateGraphicsWindow();
 }

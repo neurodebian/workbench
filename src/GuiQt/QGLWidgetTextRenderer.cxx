@@ -116,14 +116,16 @@ QGLWidgetTextRenderer::~QGLWidgetTextRenderer()
 void
 QGLWidgetTextRenderer::drawTextAtViewportCoords(const double viewportX,
                                                const double viewportY,
-                                               const AnnotationText& annotationText)
+                                               const AnnotationText& annotationText,
+                                                const BrainOpenGLTextRenderInterface::DrawingFlags& flags)
 {
     setViewportHeight();
     
     drawTextAtViewportCoords(viewportX,
                              viewportY,
                              0.0,
-                             annotationText);
+                             annotationText,
+                             flags);
 }
 
 /**
@@ -145,7 +147,8 @@ void
 QGLWidgetTextRenderer::drawTextAtViewportCoords(const double viewportX,
                                                const double viewportY,
                                                const double /*viewportZ */,
-                                               const AnnotationText& annotationText)
+                                               const AnnotationText& annotationText,
+                                                const BrainOpenGLTextRenderInterface::DrawingFlags& flags)
 {
     setViewportHeight();
     
@@ -193,12 +196,14 @@ QGLWidgetTextRenderer::drawTextAtViewportCoords(const double viewportX,
         case AnnotationTextOrientationEnum::HORIZONTAL:
             drawHorizontalTextAtWindowCoords(viewportX,
                                              viewportY,
-                                             annotationText);
+                                             annotationText,
+                                             flags);
             break;
         case AnnotationTextOrientationEnum::STACKED:
             drawVerticalTextAtWindowCoords(viewportX,
                                            viewportY,
-                                           annotationText);
+                                           annotationText,
+                                           flags);
             break;
     }
     
@@ -227,7 +232,8 @@ void
 QGLWidgetTextRenderer::drawTextAtModelCoords(const double modelX,
                                           const double modelY,
                                           const double modelZ,
-                                          const AnnotationText& annotationText)
+                                          const AnnotationText& annotationText,
+                                             const BrainOpenGLTextRenderInterface::DrawingFlags& flags)
 {
     setViewportHeight();
     
@@ -289,8 +295,8 @@ QGLWidgetTextRenderer::drawTextAtModelCoords(const double modelX,
         drawTextAtViewportCoords(x,
                                  y,
                                  0.0,
-                                 annotationText);
-        
+                                 annotationText,
+                                 flags);
 //        glPopMatrix();
 //        glMatrixMode(GL_PROJECTION);
 //        glPopMatrix();
@@ -317,7 +323,8 @@ QGLWidgetTextRenderer::drawTextAtModelCoords(const double modelX,
 void
 QGLWidgetTextRenderer::drawHorizontalTextAtWindowCoords(const double windowX,
                                                        const double windowY,
-                                                       const AnnotationText& annotationText)
+                                                       const AnnotationText& annotationText,
+                                                        const BrainOpenGLTextRenderInterface::DrawingFlags& flags)
 {
     QFont* font = findFont(annotationText,
                            false);
@@ -353,7 +360,7 @@ QGLWidgetTextRenderer::drawHorizontalTextAtWindowCoords(const double windowX,
     const AString text = annotationText.getText();
     
     double bottomLeft[3], bottomRight[3], topRight[3], topLeft[3];
-    getBoundsForTextAtViewportCoords(annotationText, windowX, windowY, 0.0, viewport[2], viewport[3], bottomLeft, bottomRight, topRight, topLeft);
+    getBoundsForTextAtViewportCoords(annotationText, flags, windowX, windowY, 0.0, viewport[2], viewport[3], bottomLeft, bottomRight, topRight, topLeft);
     
     double left   = bottomLeft[0];
     double right  = bottomRight[0];
@@ -498,7 +505,8 @@ QGLWidgetTextRenderer::drawHorizontalTextAtWindowCoords(const double windowX,
 void
 QGLWidgetTextRenderer::drawVerticalTextAtWindowCoords(const double windowX,
                                                      const double windowY,
-                                                     const AnnotationText& annotationText)
+                                                     const AnnotationText& annotationText,
+                                                      const BrainOpenGLTextRenderInterface::DrawingFlags& flags)
 {
     QFont* font = findFont(annotationText,
                            false);
@@ -538,6 +546,7 @@ QGLWidgetTextRenderer::drawVerticalTextAtWindowCoords(const double windowX,
     double textHeight = 0.0;
     std::vector<CharInfo> textCharsToDraw;
     getVerticalTextCharInfo(annotationText,
+                            flags,
                             textMinX,
                             textMaxX,
                             textHeight,
@@ -696,6 +705,7 @@ QGLWidgetTextRenderer::applyForegroundColoring(const AnnotationText& annotationT
  */
 void
 QGLWidgetTextRenderer::getTextWidthHeightInPixels(const AnnotationText& annotationText,
+                                                  const BrainOpenGLTextRenderInterface::DrawingFlags& flags,
                                                   const double viewportWidth,
                                                   const double viewportHeight,
                                                  double& widthOut,
@@ -710,6 +720,7 @@ QGLWidgetTextRenderer::getTextWidthHeightInPixels(const AnnotationText& annotati
     
     double bottomLeft[3], bottomRight[3], topRight[3], topLeft[3];
     getBoundsForTextAtViewportCoords(annotationText,
+                                     flags,
                                      0.0,
                                      0.0,
                                      0.0,
@@ -753,6 +764,7 @@ QGLWidgetTextRenderer::getTextWidthHeightInPixels(const AnnotationText& annotati
  */
 void
 QGLWidgetTextRenderer::getBoundsForTextAtViewportCoords(const AnnotationText& annotationText,
+                                                        const BrainOpenGLTextRenderInterface::DrawingFlags& flags,
                                               const double viewportX,
                                               const double viewportY,
                                               const double viewportZ,
@@ -797,6 +809,7 @@ QGLWidgetTextRenderer::getBoundsForTextAtViewportCoords(const AnnotationText& an
             double textHeight = 0.0;
             std::vector<CharInfo> charInfo;
             getVerticalTextCharInfo(annotationText,
+                                    flags,
                                     xMin,
                                     xMax,
                                     textHeight,
@@ -854,6 +867,137 @@ QGLWidgetTextRenderer::getBoundsForTextAtViewportCoords(const AnnotationText& an
 }
 
 /**
+ * Get the bounds of text (in pixels) using the given text
+ * attributes.  NO MARGIN is placed around the text.
+ *
+ * See http://ftgl.sourceforge.net/docs/html/metrics.png
+ *
+ * @param annotationText
+ *   Text that is to be drawn.
+ * @param viewportX
+ *    Viewport X-coordinate.
+ * @param viewportY
+ *    Viewport Y-coordinate.
+ * @param viewportZ
+ *    Viewport Z-coordinate.
+ * @param viewportWidth
+ *    Height of the viewport needed for percentage height text.
+ * @param viewportHeight
+ *    Height of the viewport needed for percentage height text.
+ * @param bottomLeftOut
+ *    The bottom left corner of the text bounds.
+ * @param bottomRightOut
+ *    The bottom right corner of the text bounds.
+ * @param topRightOut
+ *    The top right corner of the text bounds.
+ * @param topLeftOut
+ *    The top left corner of the text bounds.
+ */
+void
+QGLWidgetTextRenderer::getBoundsWithoutMarginForTextAtViewportCoords(const AnnotationText& annotationText,
+                                                                     const BrainOpenGLTextRenderInterface::DrawingFlags& flags,
+                                                                     const double viewportX,
+                                                                     const double viewportY,
+                                                                     const double viewportZ,
+                                                                     const double /*viewportWidth*/,
+                                                                     const double /*viewportHeight*/,
+                                                                     double bottomLeftOut[3],
+                                                                     double bottomRightOut[3],
+                                                                     double topRightOut[3],
+                                                                     double topLeftOut[3])
+{
+    setViewportHeight();
+    
+    QFont* font = findFont(annotationText,
+                           false);
+    if (font == NULL) {
+        return;
+    }
+    
+    double xMin = 0.0;
+    double xMax = 0.0;
+    double yMin = 0.0;
+    double yMax = 0.0;
+    
+    switch (annotationText.getOrientation()) {
+        case AnnotationTextOrientationEnum::HORIZONTAL:
+        {
+            QFontMetricsF fontMetrics(*font);
+            QRectF boundsRect = fontMetrics.boundingRect(annotationText.getText());
+            
+            /*
+             * Note: sometimes boundsRect.top() is negative and
+             * that screws things up.
+             */
+            xMin = boundsRect.left();
+            xMax = boundsRect.right();
+            yMin = boundsRect.bottom();
+            yMax = boundsRect.bottom() + boundsRect.height();
+        }
+            break;
+        case AnnotationTextOrientationEnum::STACKED:
+        {
+            double textHeight = 0.0;
+            std::vector<CharInfo> charInfo;
+            getVerticalTextCharInfo(annotationText,
+                                    flags,
+                                    xMin,
+                                    xMax,
+                                    textHeight,
+                                    charInfo);
+            yMax = textHeight;
+        }
+            break;
+    }
+    
+    const double width = xMax - xMin;
+    double left = 0.0;
+    switch (annotationText.getHorizontalAlignment()) {
+        case AnnotationTextAlignHorizontalEnum::LEFT:
+            left = viewportX;
+            break;
+        case AnnotationTextAlignHorizontalEnum::CENTER:
+            left = viewportX - (width / 2.0);
+            break;
+        case AnnotationTextAlignHorizontalEnum::RIGHT:
+            left = viewportX - width;
+            break;
+    }
+    const double right = left + width;
+    
+    const double height = yMax - yMin;
+    double bottom = 0.0;
+    switch (annotationText.getVerticalAlignment()) {
+        case AnnotationTextAlignVerticalEnum::BOTTOM:
+            bottom = viewportY;
+            break;
+        case AnnotationTextAlignVerticalEnum::MIDDLE:
+            bottom = viewportY - (height / 2.0);
+            break;
+        case AnnotationTextAlignVerticalEnum::TOP:
+            bottom = viewportY - height;
+            break;
+    }
+    const double top = bottom + height;
+    
+    bottomLeftOut[0] = left;
+    bottomLeftOut[1] = bottom;
+    bottomLeftOut[2] = viewportZ;
+    
+    bottomRightOut[0] = right;
+    bottomRightOut[0] = bottom;
+    bottomRightOut[0] = viewportZ;
+    
+    topRightOut[0] = right;
+    topRightOut[0] = top;
+    topRightOut[0] = viewportZ;
+    
+    topLeftOut[0] = left;
+    topLeftOut[0] = top;
+    topLeftOut[0] = viewportZ;
+}
+
+/**
  * Get the character info for drawing vertical text which includes
  * position for each of the characters.  The TOP of the first
  * character will be at Y=0.
@@ -872,6 +1016,7 @@ QGLWidgetTextRenderer::getBoundsForTextAtViewportCoords(const AnnotationText& an
  */
 void
 QGLWidgetTextRenderer::getVerticalTextCharInfo(const AnnotationText& annotationText,
+                                               const BrainOpenGLTextRenderInterface::DrawingFlags& flags,
                                               double& xMinOut,
                                               double& xMaxOut,
                                               double& heightOut,
@@ -882,7 +1027,9 @@ QGLWidgetTextRenderer::getVerticalTextCharInfo(const AnnotationText& annotationT
     xMaxOut = 0.0;
     heightOut = 0.0;
     
-    const AString text = annotationText.getText();
+    const AString text = (flags.isDrawSubstitutedText()
+                          ? annotationText.getTextWithSubstitutionsApplied()
+                          : annotationText.getText());
     const int32_t numChars = static_cast<int32_t>(text.size());
     if (numChars <= 0) {
         return;
