@@ -166,6 +166,10 @@ namespace caret {
         QCheckBox* interpolateColorsCheckBox;
         EnumComboBoxTemplate* invertPaletteModeComboBox;
         
+        QWidget* thresholdOutlineDrawingWidget;
+        EnumComboBoxTemplate* thresholdOutlineDrawingModeComboBox;
+        CaretColorEnumComboBox* thresholdOutlineDrawingColorComboBox;
+        
         QComboBox* thresholdTypeComboBox;
         QToolButton* thresholdSetAllMapsToolButton;
         

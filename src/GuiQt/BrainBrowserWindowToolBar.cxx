@@ -70,6 +70,7 @@
 #include "BrainBrowserWindowToolBarVolumeMontage.h"
 #include "BrainStructure.h"
 #include "BrowserTabContent.h"
+#include "BrowserWindowContent.h"
 #include "CaretAssert.h"
 #include "CaretFunctionName.h"
 #include "CaretLogger.h"
@@ -794,29 +795,32 @@ BrainBrowserWindowToolBar::allowAddingNewTab()
     
     BrainBrowserWindow* browserWindow = GuiManager::get()->getBrowserWindowByWindowIndex(this->browserWindowIndex);
     CaretAssert(browserWindow);
+    BrowserWindowContent* browserWindowContent = browserWindow->getBrowerWindowContent();
+    CaretAssert(browserWindowContent);
     
     /*
      * Is tile tabs off?
      */
-    if ( ! browserWindow->isTileTabsSelected()) {
-        return true;
-    }
-    
-    const TileTabsConfiguration* tileTabs = browserWindow->getSelectedTileTabsConfiguration();
-    if (tileTabs == NULL) {
+    if ( ! browserWindowContent->isTileTabsEnabled()) {
         return true;
     }
     
     /*
-     * Default configuration always shows all tabs
+     * Automatic configuration always shows all tabs
      */
-    if (tileTabs->isDefaultConfiguration()) {
-        return true;
+    switch (browserWindowContent->getTileTabsConfigurationMode()) {
+        case TileTabsConfigurationModeEnum::AUTOMATIC:
+            return true;
+            break;
+        case TileTabsConfigurationModeEnum::CUSTOM:
+            break;
     }
     
     /*
      * Is there space in the current configuration?
      */
+    const TileTabsConfiguration* tileTabs = browserWindowContent->getCustomTileTabsConfiguration();
+    CaretAssert(tileTabs);
     const int32_t tileTabsCount = tileTabs->getNumberOfColumns() * tileTabs->getNumberOfRows();
     if (getNumberOfTabs() < tileTabsCount) {
         return true;
@@ -1342,7 +1346,7 @@ BrainBrowserWindowToolBar::renameTab()
     if (tabIndex >= 0) {
         void* p = this->tabBar->tabData(tabIndex).value<void*>();
         BrowserTabContent* btc = (BrowserTabContent*)p;
-        AString currentName = btc->getUserName();
+        AString currentName = btc->getUserTabName();
         bool ok = false;
         AString newName = QInputDialog::getText(this,
                                                 "Set Tab Name",
@@ -1351,7 +1355,7 @@ BrainBrowserWindowToolBar::renameTab()
                                                 currentName,
                                                 &ok);
         if (ok) {
-            btc->setUserName(newName);
+            btc->setUserTabName(newName);
             this->updateTabName(tabIndex);
         }
     }
@@ -1388,7 +1392,7 @@ BrainBrowserWindowToolBar::updateTabName(const int32_t tabIndex)
     AString newName = "";
     BrowserTabContent* btc = (BrowserTabContent*)p;   
     if (btc != NULL) {
-        newName = btc->getName();
+        newName = btc->getTabName();
     }
     this->tabBar->setTabText(tabIndexForUpdate, newName);
 }
@@ -4021,16 +4025,15 @@ BrainBrowserWindowToolBar::receiveEvent(Event* event)
                     getModelEvent->addBrowserTab(btc);
                 }
                 
-                getModelEvent->setTileTabsSelected(browserWindow->isTileTabsSelected());
+                BrowserWindowContent* windowContent = browserWindow->getBrowerWindowContent();
+                getModelEvent->setBrowserWindowContent(windowContent);
                 
-                if (browserWindow->isTileTabsSelected()) {
+                if (windowContent->isTileTabsEnabled()) {
                     /*
                      * Tab that is highlighted so user knows which tab
                      * any changes in toolbar/toolboxes apply to.
                      */
                     getModelEvent->setTabIndexForTileTabsHighlighting(m_tabIndexForTileTabsHighlighting);
-                    
-                    getModelEvent->setTileTabsConfiguration(browserWindow->getSelectedTileTabsConfiguration());
                 }
                 
                 getModelEvent->setSelectedBrowserTabContent(this->getTabContentFromSelectedTab());

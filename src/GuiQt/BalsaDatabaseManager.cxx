@@ -329,8 +329,15 @@ BalsaDatabaseManager::verifyUploadFileResponse(const std::map<AString, AString>&
                                             AString& errorMessageOut) const
 {
     if (responseHttpCode != 200) {
-        errorMessageOut = ("Upload failed.  Http Code="
-                           + AString::number(responseHttpCode));
+        if (responseHttpCode == 403) {
+            errorMessageOut = ("Upload failed.  Http Code="
+                               + AString::number(responseHttpCode)
+                               + ".  You may not have ownership/permission to edit the study.");
+        }
+        else {
+            errorMessageOut = ("Upload failed.  Http Code="
+                               + AString::number(responseHttpCode));
+        }
         return false;
     }
     
@@ -1162,6 +1169,84 @@ BalsaDatabaseManager::getUserRoles(BalsaUserRoles& userRolesOut,
     return userRolesOut.isValid();
 }
 
+/**
+ * Get the Extract Directory Prefix for the given study.
+ *
+ * @param studyID
+ *     The Study ID.
+ * @param extractDirectoryPrefixOut
+ *     Output containing the directory prefix from BALSA.
+ * @param errorMessageOut
+ *     Contains description of any error(s).
+ * @return
+ *     True if processing was successful, else false.
+ */
+bool
+BalsaDatabaseManager::getStudyExtractDirectoryPrefix(const AString& studyID,
+                                                     AString& extractDirectoryPrefixOut,
+                                                     AString& errorMessageOut)
+{
+    const AString studyIdURL(m_databaseURL
+                             + "/study/extractdir/"
+                             + studyID.trimmed());
+    
+    extractDirectoryPrefixOut.clear();
+    errorMessageOut.clear();
+    
+    CaretHttpRequest caretRequest;
+    caretRequest.m_method = CaretHttpManager::POST_ARGUMENTS;
+    caretRequest.m_url    = studyIdURL;
+    caretRequest.m_headers.insert(std::make_pair("Content-Type",
+                                                 "application/x-www-form-urlencoded"));
+    caretRequest.m_headers.insert(std::make_pair("Cookie",
+                                                 getJSessionIdCookie()));
+    caretRequest.m_arguments.push_back(std::make_pair("type",
+                                                      "utf-8"));
+    
+    CaretHttpResponse studyResponse;
+    CaretHttpManager::httpRequest(caretRequest, studyResponse);
+    
+    if (m_debugFlag) {
+        std::cout << "Request extract directory response Code: " << studyResponse.m_responseCode << std::endl;
+    }
+    
+    if (studyResponse.m_responseCode != 200) {
+        errorMessageOut = ("Requesting extract directory failed with HTTP code="
+                           + AString::number(studyResponse.m_responseCode));
+        return false;
+    }
+    
+    AString contentType = getHeaderValue(studyResponse, "Content-Type");
+    if (contentType.isNull()) {
+        errorMessageOut = ("Requesting extract directory failed.  Content type returned by BALSA is unknown");
+        return false;
+    }
+    
+    studyResponse.m_body.push_back('\0');
+    AString responseContent(&studyResponse.m_body[0]);
+    
+    if (m_debugFlag) {
+        std::cout << "Request extract directory body:\n" << responseContent << std::endl << std::endl;
+    }
+    
+    if ( ! contentType.toLower().startsWith("text/html;charset=utf-8")) {
+        errorMessageOut = ("Requesting exxtract directory failed.  Content type return by BALSA should be text/html;charset=utf-8 format but is "
+                           + contentType);
+        return false;
+    }
+    
+    extractDirectoryPrefixOut = responseContent;
+    
+    /*
+     * "null" is returned by BALSA when the directory is empty
+     */
+    if (extractDirectoryPrefixOut == "null") {
+        extractDirectoryPrefixOut.clear();
+    }
+
+    return true;
+}
+
 
 /**
  * Request study information.
@@ -1279,6 +1364,75 @@ BalsaDatabaseManager::getAllStudyInformation(std::vector<BalsaStudyInformation>&
     }
     
     return true;
+}
+
+/**
+ * @return Is the given Study ID valid (in BALSA)?
+ *
+ * @param studyID
+ *     The study ID.
+ */
+bool
+BalsaDatabaseManager::isStudyIDValid(const AString& studyID)
+{
+    std::vector<BalsaStudyInformation> studyInformation;
+    AString errorMessage;
+    
+    if (getAllStudyInformation(studyInformation,
+                               errorMessage)) {
+        for (const auto info : studyInformation) {
+            if (info.getStudyID() == studyID) {
+                return true;
+            }
+        }
+    }
+    
+    return false;
+}
+
+/**
+ * @return Is the study editable by the user?
+ * 
+ * @param studyID
+ *     The study ID.
+ * @param errorMessageOut
+ *      Description of error if false is returned.
+ */
+bool
+BalsaDatabaseManager::isStudyEditableByUser(const AString& studyID,
+                                            AString& errorMessageOut)
+{
+    errorMessageOut.clear();
+    
+    std::vector<BalsaStudyInformation> studyInformation;
+    AString errorMessage;
+    
+    if (getAllStudyInformation(studyInformation,
+                               errorMessage)) {
+        for (const auto& info : studyInformation) {
+            if (info.getStudyID() == studyID) {
+                if (info.isEditable()) {
+                    return true;
+                }
+                else {
+                    errorMessageOut = ("The study (ID="
+                                       + studyID
+                                       + ") is not editable.");
+                    return false;
+                }
+            }
+        }
+        
+        errorMessageOut = ("You are not the owner of the study (ID="
+                           + studyID
+                           + ").");
+        return false;
+    }
+    else {
+        errorMessageOut = errorMessage;
+    }
+    
+    return false;
 }
 
 

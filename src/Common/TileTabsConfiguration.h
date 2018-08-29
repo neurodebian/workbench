@@ -23,6 +23,7 @@
 
 #include "CaretException.h"
 #include "CaretObject.h"
+#include "TileTabsConfigurationModeEnum.h"
 
 class QDomDocument;
 
@@ -40,11 +41,14 @@ namespace caret {
 
         TileTabsConfiguration& operator=(const TileTabsConfiguration& obj);
         
-        TileTabsConfiguration* newCopyWithNewUniqueIdentifier() const;
+        void copy(const TileTabsConfiguration& rhs);
         
+        TileTabsConfiguration* newCopyWithNewUniqueIdentifier() const;
+                
         bool getRowHeightsAndColumnWidthsForWindowSize(const int32_t windowWidth,
                                                        const int32_t windowHeight,
                                                        const int32_t numberOfModelsToDraw,
+                                                       const TileTabsConfigurationModeEnum::Enum configurationMode,
                                                        std::vector<int32_t>& rowHeightsOut,
                                                        std::vector<int32_t>& columnWidthsOut);
         
@@ -72,13 +76,11 @@ namespace caret {
         void setRowStretchFactor(const int32_t rowIndex,
                                  const float stretchFactor);
         
-        bool isDefaultConfiguration() const;
-        
-        void setDefaultConfiguration(const bool defaultConfiguration);
-        
         AString encodeInXML() const;
         
         bool decodeFromXML(const AString& xmlString);
+        
+        void updateAutomaticConfigurationRowsAndColumns(const int32_t numberOfTabs);
         
         static bool lessThanComparisonByName(const TileTabsConfiguration* ttc1,
                                              const TileTabsConfiguration* ttc2);
@@ -93,8 +95,9 @@ namespace caret {
          */
         static inline int32_t getMaximumNumberOfColumns() { return 20; }
         
-        void updateDefaultConfigurationRowsAndColumns(const int32_t numberOfTabs);
-        
+        static void getRowsAndColumnsForNumberOfTabs(const int32_t numberOfTabs,
+                                                     int32_t& numberOfRowsOut,
+                                                     int32_t& numberOfColumnsOut);
         // ADD_NEW_METHODS_HERE
         
         
@@ -108,8 +111,6 @@ namespace caret {
         // ADD_NEW_MEMBERS_HERE
         
         AString m_name;
-        
-        bool m_defaultConfigurationFlag;
         
         /** Unique identifier does not get copied */
         AString m_uniqueIdentifier;

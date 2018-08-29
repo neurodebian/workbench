@@ -32,6 +32,7 @@
 #include "DataFileTypeEnum.h"
 #include "EventListenerInterface.h"
 #include "SceneableInterface.h"
+#include "TileTabsConfigurationModeEnum.h"
 
 class QAction;
 class QActionGroup;
@@ -115,10 +116,6 @@ namespace caret {
         virtual void restoreFromScene(const SceneAttributes* sceneAttributes,
                                       const SceneClass* sceneClass);
 
-        TileTabsConfiguration* getSelectedTileTabsConfiguration();
-        
-        void setSelectedTileTabsConfiguration(TileTabsConfiguration* configuration);
-        
         void resetGraphicsWidgetMinimumSize();
         
         void setGraphicsWidgetFixedSize(const int32_t width,
@@ -152,6 +149,9 @@ namespace caret {
         
         bool isOpenGLContextSharingValid() const;
 
+        AString getTileTabsConfigurationLabelText(const TileTabsConfigurationModeEnum::Enum configurationMode,
+                                              const bool includeRowsAndColumns) const;
+
         void resizeDockWidgets(const QList<QDockWidget *> &docks, const QList<int> &sizes, Qt::Orientation orientation);
         
     protected:
@@ -181,6 +181,11 @@ namespace caret {
         void processShowIdentifyBrainordinateDialog();
         void processGapsAndMargins();
         
+        void processViewTileTabsLoadUserConfigurationMenuAboutToShow();
+        void processViewTileTabsLoadUserConfigurationMenuItemTriggered(QAction* action);
+        void processViewTileTabsAutomaticCustomTriggered(QAction* action);
+        
+
         void processMoveOverlayToolBoxToLeft();
         void processMoveOverlayToolBoxToBottom();
         void processMoveOverlayToolBoxToFloat();
@@ -207,9 +212,6 @@ namespace caret {
         void processFileMenuAboutToShow();
         void processDataMenuAboutToShow();
         void processViewMenuAboutToShow();
-        
-        void processTileTabsMenuAboutToBeDisplayed();
-        void processTileTabsMenuSelection(QAction*);
         
         void processSurfaceMenuInformation();
         void processSurfaceMenuPrimaryAnatomical();
@@ -290,6 +292,7 @@ namespace caret {
         QMenu* createMenuView();
         QMenu* createMenuViewMoveOverlayToolBox();
         QMenu* createMenuViewMoveFeaturesToolBox();
+        QMenu* createMenuViewTileTabsLoadUserConfiguration();
         QMenu* createMenuConnect();
         QMenu* createMenuData();
         QMenu* createMenuSurface();
@@ -369,12 +372,15 @@ namespace caret {
         
         QMenu* m_viewMoveFeaturesToolBoxMenu;
         QMenu* m_viewMoveOverlayToolBoxMenu;
+        QMenu* m_viewTileTabsLoadUserConfigurationMenu;
         
         QAction* m_viewFullScreenAction;
         QAction* m_viewTileTabsAction;
         
-        QMenu* m_tileTabsMenu;
-        QAction* m_createAndEditTileTabsAction;
+        QAction* m_viewTileTabsConfigurationDialogAction;
+        QAction* m_viewAutomaticTileTabsConfigurationAction;
+        QAction* m_viewCustomTileTabsConfigurationAction;
+        std::vector<std::pair<QAction*, TileTabsConfiguration*>> m_viewCustomTileTabsConfigurationActions;
         
         QAction* m_gapsAndMarginsAction;
         
@@ -433,9 +439,6 @@ namespace caret {
         BrainBrowserWindowOrientedToolBox* m_overlayVerticalToolBox;
         BrainBrowserWindowOrientedToolBox* m_overlayActiveToolBox;
         BrainBrowserWindowOrientedToolBox* m_featuresToolBox;
-        
-        AString m_selectedTileTabsConfigurationUniqueIdentifier;
-        TileTabsConfiguration* m_defaultTileTabsConfiguration;
         
         static AString s_previousOpenFileNameFilter;
         static AString s_previousOpenFileDirectory;

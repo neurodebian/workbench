@@ -28,6 +28,7 @@
 #include "CaretObject.h"
 
 #include "SceneableInterface.h"
+#include "TileTabsConfigurationModeEnum.h"
 
 namespace caret {
     class SceneClassAssistant;
@@ -64,6 +65,22 @@ namespace caret {
         
         void setTileTabsEnabled(const bool tileTabsEnabled);
 
+        TileTabsConfiguration* getSelectedTileTabsConfiguration();
+        
+        const TileTabsConfiguration* getSelectedTileTabsConfiguration() const;
+        
+        TileTabsConfiguration* getAutomaticTileTabsConfiguration();
+        
+        const TileTabsConfiguration* getAutomaticTileTabsConfiguration() const;
+        
+        TileTabsConfiguration* getCustomTileTabsConfiguration();
+        
+        const TileTabsConfiguration* getCustomTileTabsConfiguration() const;
+        
+        TileTabsConfigurationModeEnum::Enum getTileTabsConfigurationMode() const;
+        
+        void setTileTabsConfigurationMode(const TileTabsConfigurationModeEnum::Enum configMode);
+        
         int32_t getSceneGraphicsWidth() const;
         
         void setSceneGraphicsWidth(const int32_t width);
@@ -71,10 +88,6 @@ namespace caret {
         int32_t getSceneGraphicsHeight() const;
         
         void setSceneGraphicsHeight(const int32_t width);
-        
-        TileTabsConfiguration* getSceneTileTabsConfiguration() const;
-        
-        void copyTileTabsConfigurationForSavingScene(const TileTabsConfiguration* tileTabsConfiguration);
         
         int32_t getSceneSelectedTabIndex() const;
         
@@ -129,28 +142,27 @@ namespace caret {
         
         bool m_tileTabsEnabled = false;
         
+        TileTabsConfigurationModeEnum::Enum m_tileTabsConfigurationMode = TileTabsConfigurationModeEnum::AUTOMATIC;
+        
         int32_t m_sceneGraphicsWidth = 0;
         
         int32_t m_sceneGraphicsHeight = 0;
         
-        std::unique_ptr<TileTabsConfiguration> m_sceneTileTabsConfiguration;
+        std::unique_ptr<TileTabsConfiguration> m_automaticTileTabsConfiguration;
         
-        std::unique_ptr<TileTabsConfiguration> m_tileTabsConfigurationForSavingScene;
+        std::unique_ptr<TileTabsConfiguration> m_customTileTabsConfiguration;
         
         int32_t m_sceneSelectedTabIndex = 0;
         
         std::vector<int32_t> m_sceneTabIndices;
         
         friend class BrainBrowserWindow;
-        
-        static const AString s_sceneTileTabsConfigurationText;
 
         // ADD_NEW_MEMBERS_HERE
 
     };
     
 #ifdef __BROWSER_WINDOW_CONTENT_DECLARE__
-    const AString BrowserWindowContent::s_sceneTileTabsConfigurationText = "From Scene: ";
 #endif // __BROWSER_WINDOW_CONTENT_DECLARE__
 
 } // namespace

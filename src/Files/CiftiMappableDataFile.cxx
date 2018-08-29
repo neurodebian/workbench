@@ -131,7 +131,6 @@ CiftiMappableDataFile::CiftiMappableDataFile(const DataFileTypeEnum::Enum dataFi
             m_colorMappingMethod           = COLOR_MAPPING_METHOD_PALETTE;
             m_paletteColorMappingSource    = PALETTE_COLOR_MAPPING_SOURCE_FROM_FILE;
             m_paletteNormalizationModesSupported.push_back(PaletteNormalizationModeEnum::NORMALIZATION_SELECTED_MAP_DATA);
-            m_paletteNormalizationModesSupported.push_back(PaletteNormalizationModeEnum::NORMALIZATION_ALL_MAP_DATA);
             m_fileMapDataType              = FILE_MAP_DATA_TYPE_MATRIX;
             break;
         case DataFileTypeEnum::CONNECTIVITY_DENSE_DYNAMIC:
@@ -140,7 +139,6 @@ CiftiMappableDataFile::CiftiMappableDataFile(const DataFileTypeEnum::Enum dataFi
             m_colorMappingMethod           = COLOR_MAPPING_METHOD_PALETTE;
             m_paletteColorMappingSource    = PALETTE_COLOR_MAPPING_SOURCE_FROM_FILE;
             m_paletteNormalizationModesSupported.push_back(PaletteNormalizationModeEnum::NORMALIZATION_SELECTED_MAP_DATA);
-            m_paletteNormalizationModesSupported.push_back(PaletteNormalizationModeEnum::NORMALIZATION_ALL_MAP_DATA);
             m_fileMapDataType              = FILE_MAP_DATA_TYPE_MATRIX;
             break;
         case DataFileTypeEnum::CONNECTIVITY_DENSE_LABEL:
@@ -224,6 +222,7 @@ CiftiMappableDataFile::CiftiMappableDataFile(const DataFileTypeEnum::Enum dataFi
             m_fileMapDataType              = FILE_MAP_DATA_TYPE_MULTI_MAP;
             break;
         case DataFileTypeEnum::ANNOTATION:
+        case DataFileTypeEnum::ANNOTATION_TEXT_SUBSTITUTION:
         case DataFileTypeEnum::BORDER:
         case DataFileTypeEnum::CONNECTIVITY_FIBER_ORIENTATIONS_TEMPORARY:
         case DataFileTypeEnum::CONNECTIVITY_FIBER_TRAJECTORY_TEMPORARY:
@@ -784,6 +783,7 @@ CiftiMappableDataFile::validateMappingTypes(const AString& filename)
             expectedAlongRowMapType = CiftiMappingType::SERIES;
             break;
         case DataFileTypeEnum::ANNOTATION:
+        case DataFileTypeEnum::ANNOTATION_TEXT_SUBSTITUTION:
         case DataFileTypeEnum::BORDER:
         case DataFileTypeEnum::CONNECTIVITY_FIBER_ORIENTATIONS_TEMPORARY:
         case DataFileTypeEnum::CONNECTIVITY_FIBER_TRAJECTORY_TEMPORARY:
@@ -1425,6 +1425,9 @@ CiftiMappableDataFile::invalidateColoringInAllMaps()
     for (int64_t i = 0; i < numMaps; i++) {
         CaretAssertVectorIndex(m_mapContent, i);
         m_mapContent[i]->m_rgbaValid = false;
+        
+        /* invalidates histograms */
+        updateForChangeInMapDataWithMapIndex(i);
     }
     
     /*
@@ -1868,6 +1871,8 @@ CiftiMappableDataFile::getMatrixForChartingRGBA(int32_t& numberOfRowsOut,
             useMatrixFileHelperFlag = true;
             break;
         case DataFileTypeEnum::ANNOTATION:
+            break;
+        case DataFileTypeEnum::ANNOTATION_TEXT_SUBSTITUTION:
             break;
         case DataFileTypeEnum::BORDER:
             break;
@@ -3723,58 +3728,6 @@ CiftiMappableDataFile::getVoxelColorsForSubSliceInMap(const int32_t mapIndex,
                 }
             }
         }
-            for (int64_t k = kStart; k <= kEnd; k++) {
-                for (int64_t j = jStart; j < jEnd; j++) {
-                    const int64_t dataOffset = m_voxelIndicesToOffset->getOffsetForIndices(sliceIndex,
-                                                                                           j,
-                                                                                           k);
-                    if (dataOffset >= 0) {
-                        const int64_t dataOffset4 = dataOffset * 4;
-                        CaretAssert(dataOffset4 < mapRgbaCount);
-                        
-                        const int64_t rgbaOffset = (((k - kStart) * voxelCountJ) + (j - jStart)) * 4;
-                        CaretAssert(rgbaOffset < componentCount);
-                        rgbaOut[rgbaOffset]   = mapRGBA[dataOffset4];
-                        rgbaOut[rgbaOffset+1] = mapRGBA[dataOffset4+1];
-                        rgbaOut[rgbaOffset+2] = mapRGBA[dataOffset4+2];
-                        /*
-                         * A negative value for alpha indicates "do not draw".
-                         * Since unsigned bytes do not have negative values,
-                         * change the value to zero (which indicates "transparent").
-                         */
-                        float alpha = mapRGBA[dataOffset4+3];
-                        if (alpha < 0.0) {
-                            alpha = 0.0;
-                        }
-                        
-                        if (alpha > 0.0) {
-                            if (labelTable != NULL) {
-                                /*
-                                 * For label data, verify that the label is displayed.
-                                 * If NOT displayed, zero out the alpha value to
-                                 * prevent display of the data.
-                                 */
-                                CaretAssertVectorIndex(dataValues, dataOffset);
-                                const int32_t dataValue = dataValues[dataOffset];
-                                const GiftiLabel* label = labelTable->getLabel(dataValue);
-                                if (label != NULL) {
-                                    const GroupAndNameHierarchyItem* item = label->getGroupNameSelectionItem();
-                                    CaretAssert(item);
-                                    if (item->isSelected(displayGroup, tabIndex) == false) {
-                                        alpha = 0.0;
-                                    }
-                                }
-                            }
-                            
-                        }
-                        
-                        if (alpha > 0.0) {
-                            ++validVoxelCount;
-                        }
-                        rgbaOut[rgbaOffset+3] = (alpha * 255.0);
-                    }
-                }
-            }
             break;
     }
     
@@ -4624,6 +4577,9 @@ CiftiMappableDataFile::getSurfaceNodeIdentificationForMaps(const std::vector<int
     bool useSeriesData = false;
     switch (getDataFileType()) {
         case DataFileTypeEnum::ANNOTATION:
+            CaretAssert(0);
+            break;
+        case DataFileTypeEnum::ANNOTATION_TEXT_SUBSTITUTION:
             CaretAssert(0);
             break;
         case DataFileTypeEnum::BORDER:

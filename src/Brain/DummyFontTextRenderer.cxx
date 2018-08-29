@@ -81,7 +81,8 @@ DummyFontTextRenderer::isValid() const
 void
 DummyFontTextRenderer::drawTextAtViewportCoords(const double /*viewportX*/,
                                                 const double /*viewportY*/,
-                                                const AnnotationText& /*annotationText*/)
+                                                const AnnotationText& /*annotationText*/,
+                                                const DrawingFlags& /*flags*/)
 {
     
 }
@@ -106,7 +107,8 @@ void
 DummyFontTextRenderer::drawTextAtViewportCoords(const double /*viewportX*/,
                                       const double /*viewportY*/,
                                       const double /*viewportZ*/,
-                                      const AnnotationText& /*annotationText*/)
+                                      const AnnotationText& /*annotationText*/,
+                                                const DrawingFlags& /*flags*/)
 {
     
 }
@@ -130,7 +132,8 @@ void
 DummyFontTextRenderer::drawTextAtModelCoords(const double /*modelX*/,
                                    const double /*modelY*/,
                                    const double /*modelZ*/,
-                                   const AnnotationText& /*annotationText*/)
+                                             const AnnotationText& /*annotationText*/,
+                                             const DrawingFlags& /*flags*/)
 {
     
 }
@@ -164,6 +167,7 @@ DummyFontTextRenderer::drawTextAtModelCoords(const double /*modelX*/,
  */
 void
 DummyFontTextRenderer::getBoundsForTextAtViewportCoords(const AnnotationText& /*annotationText*/,
+                                                        const DrawingFlags& /*flags*/,
                                                         const double /*viewportX*/,
                                                         const double /*viewportY*/,
                                                         const double /*viewportZ*/,
@@ -172,6 +176,48 @@ DummyFontTextRenderer::getBoundsForTextAtViewportCoords(const AnnotationText& /*
                                                         double* /*bottomRightOut[3]*/,
                                                         double* /*topRightOut[3]*/,
                                                         double* /*topLeftOut[3]*/)
+{
+    
+}
+
+/**
+ * Get the bounds of text (in pixels) using the given text
+ * attributes.    NO MARGIN is placed around the text.
+ *
+ * See http://ftgl.sourceforge.net/docs/html/metrics.png
+ *
+ * @param annotationText
+ *   Text that is to be drawn.
+ * @param viewportX
+ *    Viewport X-coordinate.
+ * @param viewportY
+ *    Viewport Y-coordinate.
+ * @param viewportZ
+ *    Viewport Z-coordinate.
+ * @param viewportWidth
+ *    Width of the viewport needed for percentage height text.
+ * @param viewportHeight
+ *    Height of the viewport needed for percentage height text.
+ * @param bottomLeftOut
+ *    The bottom left corner of the text bounds.
+ * @param bottomRightOut
+ *    The bottom right corner of the text bounds.
+ * @param topRightOut
+ *    The top right corner of the text bounds.
+ * @param topLeftOut
+ *    The top left corner of the text bounds.
+ */
+void
+DummyFontTextRenderer::getBoundsWithoutMarginForTextAtViewportCoords(const AnnotationText& /*annotationText*/,
+                                                                     const DrawingFlags& /*flags*/,
+                                                                     const double /*viewportX*/,
+                                                                     const double /*viewportY*/,
+                                                                     const double /*viewportZ*/,
+                                                                     const double /*viewportWidth*/,                                                        const double /*viewportHeight*/,
+                                                                     double* /*bottomLeftOut[3]*/,
+                                                                     double* /*bottomRightOut[3]*/,
+                                                                     double* /*topRightOut[3]*/,
+                                                                     double* /*topLeftOut[3]*/)
 {
     
 }
@@ -193,6 +239,7 @@ DummyFontTextRenderer::getBoundsForTextAtViewportCoords(const AnnotationText& /*
  */
 void
 DummyFontTextRenderer::getTextWidthHeightInPixels(const AnnotationText& /*annotationText*/,
+                                                  const DrawingFlags& /*flags*/,
                                                   const double /*viewportWidth*/,
                                                   const double /*viewportHeight*/,
                                                   double& /*widthOut*/,

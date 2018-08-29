@@ -27,6 +27,7 @@
 
 #include "WuQDialogModal.h"
 
+class QAction;
 class QCheckBox;
 class QComboBox;
 class QLabel;
@@ -61,6 +62,8 @@ namespace caret {
         void loginButtonClicked();
         
         void returnPressedUsernameOrPassword();
+        
+        void showPasswordActionTriggered(bool checked);
         
         void labelHtmlLinkClicked(const QString&);
 
@@ -129,6 +132,8 @@ namespace caret {
         
         void updateUserRolesLabel();
         
+        bool checkBalsaExtractionDirectoryPrefix();
+        
         SceneFile* m_sceneFile;
         
         std::unique_ptr<BalsaDatabaseManager> m_balsaDatabaseManager;
@@ -143,6 +148,7 @@ namespace caret {
         
         QLabel* m_passwordLabel;
         QLineEdit* m_passwordLineEdit;
+        QAction* m_showPasswordAction;
         
         QPushButton* m_loginPushButton;
         QLabel* m_userRolesLabel;

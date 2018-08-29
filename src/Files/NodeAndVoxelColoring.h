@@ -26,6 +26,7 @@
 #include "CaretColorEnum.h"
 #include "DisplayGroupEnum.h"
 #include "LabelDrawingTypeEnum.h"
+#include "PaletteThresholdOutlineDrawingModeEnum.h"
 
 namespace caret {
     class FastStatistics;
@@ -93,6 +94,12 @@ namespace caret {
                                                       const CaretColorEnum::Enum labelOutlineColor,
                                                       const int64_t xdim,
                                                       const int64_t ydim);
+        
+        static void convertPaletteSliceColoringToOutlineMode(uint8_t* rgbaInOut,
+                                                             const PaletteThresholdOutlineDrawingModeEnum::Enum outlineMode,
+                                                             const CaretColorEnum::Enum outlineColor,
+                                                             const int64_t xdim,
+                                                             const int64_t ydim);
         
     private:
         enum ColorDataType {

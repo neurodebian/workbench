@@ -57,6 +57,8 @@ namespace caret {
         
         void setText(const AString& text);
 
+        AString getTextWithSubstitutionsApplied() const;
+        
         AnnotationTextAlignHorizontalEnum::Enum getHorizontalAlignment() const;
         
         void setHorizontalAlignment(const AnnotationTextAlignHorizontalEnum::Enum alignment);
@@ -184,6 +186,8 @@ namespace caret {
         
         void setFontPercentViewportSizeProtected(const float fontPercentViewportHeight);
         
+        virtual void invalidateTextSubstitution() override;
+
     private:
         /* Not implemented */
         AnnotationText();
@@ -198,6 +202,9 @@ namespace caret {
         CaretPointer<SceneClassAssistant> m_attributesAssistant;
 
         AString m_text;
+        
+        /* Not saved to scenes */
+        mutable AString m_textWithSubstitutions;
         
         AnnotationTextAlignHorizontalEnum::Enum  m_alignmentHorizontal;
         

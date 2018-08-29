@@ -57,7 +57,8 @@ BalsaStudyInformation::BalsaStudyInformation(const AString& studyID,
                                              const AString& studyTitle)
 : CaretObject(),
 m_studyID(studyID),
-m_studyTitle(studyTitle)
+m_studyTitle(studyTitle),
+m_editableStatus(false)
 {
 }
 
@@ -75,6 +76,16 @@ BalsaStudyInformation::BalsaStudyInformation(const QJsonObject& jsonObject)
         && (titleIter != jsonObject.end())) {
         m_studyID    = (*idIter).toString();
         m_studyTitle = (*titleIter).toString();
+
+        QJsonObject::const_iterator statusIter = jsonObject.find("status");
+        if (statusIter != jsonObject.end()) {
+            QJsonObject statusObject = (*statusIter).toObject();
+            QJsonObject::const_iterator nameIter = statusObject.find("name");
+            if (nameIter != jsonObject.end()) {
+                AString editText = (*nameIter).toString().toUpper().trimmed();
+                m_editableStatus = (editText == "EDITABLE");
+            }
+        }
     }
 }
 
@@ -138,6 +149,7 @@ BalsaStudyInformation::copyHelperBalsaStudyInformation(const BalsaStudyInformati
 {
     m_studyID    = obj.m_studyID;
     m_studyTitle = obj.m_studyTitle;
+    m_editableStatus = obj.m_editableStatus;
 }
 
 /**
@@ -188,6 +200,16 @@ BalsaStudyInformation::setStudyTitle(const AString& studyTitle)
 {
     m_studyTitle = studyTitle;
 }
+
+/**
+ * @return True is the study is editable.
+ */
+bool
+BalsaStudyInformation::isEditable() const
+{
+    return m_editableStatus;
+}
+
 
 /**
  * Get a description of this object's content.

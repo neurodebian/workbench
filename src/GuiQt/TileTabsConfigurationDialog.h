@@ -21,34 +21,39 @@
  */
 /*LICENSE_END*/
 
-
+#include "EventListenerInterface.h"
 #include "WuQDialogNonModal.h"
 
-class QComboBox;
 class QDoubleSpinBox;
 class QLabel;
 class QLineEdit;
+class QListWidgetItem;
 class QPushButton;
-class QScrollArea;
+class QRadioButton;
 class QSpinBox;
 
 namespace caret {
     class BrainBrowserWindow;
+    class BrainBrowserWindowComboBox;
+    class BrowserWindowContent;
     class CaretPreferences;
     class TileTabsConfiguration;
+    class WuQListWidget;
     
-    class TileTabsConfigurationDialog : public WuQDialogNonModal {
+    class TileTabsConfigurationDialog : public WuQDialogNonModal, public EventListenerInterface {
         
         Q_OBJECT
 
     public:
-        TileTabsConfigurationDialog(QWidget* parent);
+        TileTabsConfigurationDialog(BrainBrowserWindow* parentBrainBrowserWindow);
         
         virtual ~TileTabsConfigurationDialog();
         
         void updateDialogWithSelectedTileTabsFromWindow(BrainBrowserWindow* brainBrowserWindow);
         
         void updateDialog();
+        
+        virtual void receiveEvent(Event* event) override;
         
     private:
         TileTabsConfigurationDialog(const TileTabsConfigurationDialog&);
@@ -60,17 +65,23 @@ namespace caret {
         // ADD_NEW_METHODS_HERE
 
     private slots:
-        void newConfigurationButtonClicked();
+        void browserWindowComboBoxValueChanged(BrainBrowserWindow* browserWindow);
         
-        void deleteConfigurationButtonClicked();
+        void newUserConfigurationButtonClicked();
         
-        void renameConfigurationButtonClicked();
+        void deleteUserConfigurationButtonClicked();
         
-        void configurationComboBoxItemSelected(int);
+        void renameUserConfigurationButtonClicked();
         
-        void numberOfRowsOrColumnsChanged();
+        void configurationNumberOfRowsOrColumnsChanged();
         
         void configurationStretchFactorWasChanged();
+        
+        void replaceUserConfigurationPushButtonClicked();
+        
+        void loadIntoActiveConfigurationPushButtonClicked();
+
+        void automaticCustomButtonClicked(QAbstractButton*);
         
     protected:
         void focusGained();
@@ -78,31 +89,45 @@ namespace caret {
     private:
         // ADD_NEW_MEMBERS_HERE
         
-        enum {
-            GRID_LAYOUT_COLUMN_INDEX_FOR_LABELS = 0,
-            GRID_LAYOUT_COLUMN_INDEX_FOR_ROW_CONTROLS = 1,
-            GRID_LAYOUT_COLUMN_INDEX_FOR_COLUMN_CONTROLS = 2
-        };
+        QWidget* createCopyLoadPushButtonsWidget();
+        
+        QWidget* createWorkbenchWindowWidget();
         
         void selectTileTabConfigurationByUniqueID(const AString& uniqueID);
         
-        AString getSelectedTileTabsConfigurationUniqueID();
+        TileTabsConfiguration* getAutomaticTileTabsConfiguration();
         
-        TileTabsConfiguration* getSelectedTileTabsConfiguration();
+        TileTabsConfiguration* getCustomTileTabsConfiguration();
         
-        QWidget* createConfigurationSelectionWidget();
+        TileTabsConfiguration* getSelectedUserTileTabsConfiguration();
         
-        QWidget* createEditConfigurationWidget();
+        QWidget* createUserConfigurationSelectionWidget();
         
-        void updateBrowserWindowsTileTabsConfigurationSelection();
+        QWidget* createActiveConfigurationWidget();
+        
+        QWidget* createCustomConfigurationWidget();
         
         void updateStretchFactors();
         
-        void updateGraphicsWindows();
-        
-        void selectConfigurationFromComboBoxIndex(int indx);
+        void updateGraphicsWindow();
         
         void readConfigurationsFromPreferences();
+        
+        BrainBrowserWindow* getBrowserWindow();
+        
+        BrowserWindowContent* getBrowserWindowContent();
+        
+        void updatePercentageLabels(const std::vector<QDoubleSpinBox*>& factorSpinBoxes,
+                                    std::vector<QLabel*>& percentageLabels,
+                                    const int32_t validCount);
+        
+        BrainBrowserWindowComboBox* m_browserWindowComboBox;
+        
+        QWidget* m_customConfigurationWidget;
+        
+        QRadioButton* m_automaticConfigurationRadioButton;
+        
+        QRadioButton* m_customConfigurationRadioButton;
         
         QPushButton* m_newConfigurationPushButton;
         
@@ -110,30 +135,32 @@ namespace caret {
         
         QPushButton* m_renameConfigurationPushButton;
         
-        QComboBox* m_configurationSelectionComboBox;
+        QPushButton* m_replacePushButton;
         
-        QLineEdit* m_nameLineEdit;
+        QPushButton* m_loadPushButton;
+        
+        WuQListWidget* m_userConfigurationSelectionListWidget;
         
         QSpinBox* m_numberOfRowsSpinBox;
         
         QSpinBox* m_numberOfColumnsSpinBox;
         
-        QScrollArea* m_stretchFactorScrollArea;
-        QWidget* m_stretchFactorWidget;
-        
-        std::vector<QLabel*> m_stretchFactorIndexLabels;
+        std::vector<QLabel*> m_rowStretchFactorIndexLabels;
         
         std::vector<QDoubleSpinBox*> m_rowStretchFactorSpinBoxes;
         
+        std::vector<QLabel*> m_rowStretchPercentageLabels;
+        
+        std::vector<QLabel*> m_columnStretchFactorIndexLabels;
+        
         std::vector<QDoubleSpinBox*> m_columnStretchFactorSpinBoxes;
+        
+        std::vector<QLabel*> m_columnStretchPercentageLabels;
         
         /** Blocks reading of preferences since that may invalidate data pointers */
         bool m_blockReadConfigurationsFromPreferences;
         
-        /** browser window from which this dialog was last displayed */
-        BrainBrowserWindow* m_brainBrowserWindow;
-        
-        /** 
+        /**
          * Keep a pointer to preferences but DO NOT delete it
          * since the preferences are managed by the session
          * manager.
@@ -142,7 +169,7 @@ namespace caret {
     };
     
 #ifdef __TILE_TABS_CONFIGURATION_DIALOG_DECLARE__
-    // <PLACE DECLARATIONS OF STATIC MEMBERS HERE>
+//    const AString TileTabsConfigurationDialog::s_automaticConfigurationPrefix = "Automatic Configuration";
 #endif // __TILE_TABS_CONFIGURATION_DIALOG_DECLARE__
 
 } // namespace

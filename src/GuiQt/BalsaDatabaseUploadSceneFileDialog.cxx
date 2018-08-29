@@ -23,6 +23,7 @@
 #include "BalsaDatabaseUploadSceneFileDialog.h"
 #undef __BALSA_DATABASE_UPLOAD_SCENE_FILE_DIALOG_DECLARE__
 
+#include <QAction>
 #include <QApplication>
 #include <QButtonGroup>
 #include <QCheckBox>
@@ -34,11 +35,13 @@
 #include <QGroupBox>
 #include <QLabel>
 #include <QLineEdit>
+#include <QProcessEnvironment>
 #include <QPushButton>
 #include <QRadioButton>
 #include <QRegularExpression>
 #include <QRegularExpressionValidator>
 #include <QTabWidget>
+#include <QToolButton>
 
 #include "BalsaDatabaseManager.h"
 #include "BalsaStudySelectionDialog.h"
@@ -116,6 +119,11 @@ m_sceneFile(sceneFile)
     
     m_basePathWidget->updateWithSceneFile(m_sceneFile);
     updateUserRolesLabel();
+    
+    disableAutoDefaultForAllPushButtons();
+    m_loginPushButton->setAutoDefault(true);
+    m_loginPushButton->setDefault(true);
+    showPasswordActionTriggered(m_showPasswordAction->isChecked());
 }
 
 /**
@@ -177,7 +185,16 @@ BalsaDatabaseUploadSceneFileDialog::createLoginWidget()
     m_passwordLineEdit = new QLineEdit();
     m_passwordLineEdit->setMinimumWidth(minimumLineEditWidth);
     m_passwordLineEdit->setEchoMode(QLineEdit::Password);
-    m_passwordLineEdit->setText(s_password);
+    if (s_password.isEmpty()) {
+        const bool allowEnvPasswordFlag(false);
+        if (allowEnvPasswordFlag) {
+            QProcessEnvironment environment = QProcessEnvironment::systemEnvironment();
+            m_passwordLineEdit->setText(environment.value("WORKBENCH_BALSA_PD"));
+        }
+    }
+    else {
+        m_passwordLineEdit->setText(s_password);
+    }
     m_passwordLineEdit->setValidator(createValidator(LabelName::LABEL_PASSWORD));
     QObject::connect(m_passwordLineEdit, &QLineEdit::textEdited,
                      this, [=] { this->loginInformationChanged(); });
@@ -192,6 +209,17 @@ BalsaDatabaseUploadSceneFileDialog::createLoginWidget()
                                              "</html>");
     QObject::connect(forgotUsernameLabel, SIGNAL(linkActivated(const QString&)),
                      this, SLOT(labelHtmlLinkClicked(const QString&)));
+    
+    /*
+     * Show password tool button
+     */
+    m_showPasswordAction = new QAction("Show");
+    m_showPasswordAction->setCheckable(true);
+    m_showPasswordAction->setChecked(false);
+    QObject::connect(m_showPasswordAction, &QAction::triggered,
+                     this, &BalsaDatabaseUploadSceneFileDialog::showPasswordActionTriggered);
+    QToolButton* showPasswordToolButton = new QToolButton();
+    showPasswordToolButton->setDefaultAction(m_showPasswordAction);
     
     /*
      * Forgot password label/link
@@ -245,7 +273,8 @@ BalsaDatabaseUploadSceneFileDialog::createLoginWidget()
     row++;
     gridLayout->addWidget(m_passwordLabel, row, COLUMN_LABEL, Qt::AlignRight);
     gridLayout->addWidget(m_passwordLineEdit, row, COLUMN_DATA_WIDGET_ONE, 1, 2);
-    gridLayout->addWidget(forgotPasswordLabel, row, COLUMN_BUTTON_ONE);
+    gridLayout->addWidget(showPasswordToolButton, row, COLUMN_BUTTON_ONE);
+    gridLayout->addWidget(forgotPasswordLabel, row, COLUMN_BUTTON_TWO);
     row++;
     gridLayout->setRowMinimumHeight(row, 10); // empty row
     row++;
@@ -266,6 +295,23 @@ BalsaDatabaseUploadSceneFileDialog::loginInformationChanged()
     m_selectStudyTitlePushButton->setEnabled(false);
     m_userRoles->resetToAllInvalid();
     updateAllLabels();
+}
+
+/**
+ * Called when show password action is triggered.
+ *
+ * @param checked
+ *     New status.
+ */
+void
+BalsaDatabaseUploadSceneFileDialog::showPasswordActionTriggered(bool checked)
+{
+    if (checked) {
+        m_passwordLineEdit->setEchoMode(QLineEdit::Normal);
+    }
+    else {
+        m_passwordLineEdit->setEchoMode(QLineEdit::Password);
+    }
 }
 
 /**
@@ -296,7 +342,7 @@ BalsaDatabaseUploadSceneFileDialog::createUploadTab()
     m_extractDirectoryNameLineEdit = new QLineEdit();
     m_extractDirectoryNameLineEdit->setText("ExtDir");
     m_extractDirectoryNameLineEdit->setValidator(createValidator(LabelName::LABEL_EXTRACT_DIRECTORY));
-    m_extractDirectoryNameLineEdit->setToolTip("Directory that is created when user unzips the ZIP file");
+    m_extractDirectoryNameLineEdit->setToolTip("Directory created when data files are extracted from ZIP archive");
     m_extractDirectoryNameLineEdit->setText(defaultExtractDirectoryName);
     QObject::connect(m_extractDirectoryNameLineEdit, &QLineEdit::textEdited,
                      this, [=] { this->validateUploadData(); });
@@ -687,6 +733,88 @@ BalsaDatabaseUploadSceneFileDialog::loginButtonClicked()
 }
 
 /**
+ * Check the BALSA database to see if the "Extraction Directory Prefix" in the database
+ * is different than the value in the dialog.  If so, warn user.
+ *
+ * @return 
+ *     True if uploading should continue, otherwise false.
+ */
+bool
+BalsaDatabaseUploadSceneFileDialog::checkBalsaExtractionDirectoryPrefix()
+{
+    bool validFlag = true;
+    
+    const AString studyID = m_balsaStudyIDLineEdit->text().trimmed();
+    if ( ! studyID.isEmpty()) {
+        if (m_balsaDatabaseManager->isStudyIDValid(studyID)) {
+            AString balsaDirectoryName;
+            AString errorMessage;
+            if (m_balsaDatabaseManager->getStudyExtractDirectoryPrefix(studyID,
+                                                                       balsaDirectoryName,
+                                                                       errorMessage)) {
+                if ( ! balsaDirectoryName.isEmpty()) {
+                    const AString currentDirName = m_extractDirectoryNameLineEdit->text().trimmed();
+                    if (balsaDirectoryName != currentDirName) {
+                        AString msg("<html>"
+                                    "The <b>Extraction Directory Prefix</b> in this dialog differs from the "
+                                    "<b>Extraction Directory Prefix</b> for this study in the BALSA Database."
+                                    "<p>"
+                                    "This may be caused by:"
+                                    "<ul>"
+                                    "<li>A scene file containing a different base directory in the "
+                                    "same study was uploaded to BALSA"
+                                    "<li>The Extraction Directory Prefix has been edited in this scene file"
+                                    "<li>The Extraction Directory Prefix has been edited through the "
+                                    "BALSA Database web interface (Edit Study: Study Details)"
+                                    "</ul>"
+                                    "<p>"
+                                    "For the Extraction Directory Prefix:"
+                                    "</html>");
+                        WuQDataEntryDialog ded("Warning, Extraction Directory Prefix",
+                                               this);
+                        ded.setTextAtTop(msg, true);
+                        QRadioButton* balsaDirRadioButton = ded.addRadioButton("Change to \""
+                                                                               + balsaDirectoryName
+                                                                               + "\"");
+                        
+                        QRadioButton* dialogDirRadioButton = ded.addRadioButton("No change, use \""
+                                                                                + currentDirName
+                                                                                + "\" from this dialog");
+                        balsaDirRadioButton->setChecked(true);
+                        ded.setOkButtonText("Continue");
+                        if (ded.exec() == WuQDataEntryDialog::Accepted) {
+                            AString dirName;
+                            if (balsaDirRadioButton->isChecked()){
+                                dirName = balsaDirectoryName;
+                            }
+                            else if (dialogDirRadioButton->isChecked()) {
+                                dirName = currentDirName;
+                            }
+                            else {
+                                CaretAssert(0);
+                            }
+                            m_extractDirectoryNameLineEdit->setText(dirName);
+                            m_sceneFile->setBalsaExtractToDirectoryName(dirName);
+                        }
+                        else {
+                            validFlag = false;
+                        }
+                    }
+                }
+            }
+            else {
+                AString msg("BALSA was unable to provide an updated \"Extraction Directory Prefix\" for Study ID \""
+                            + studyID
+                            + "\".  You may continue uploading.");
+                WuQMessageBox::warningOk(this, msg);
+            }
+        }
+    }
+    
+    return validFlag;
+}
+
+/**
  * Update roles label with user's valid roles
  */
 void
@@ -753,7 +881,7 @@ BalsaDatabaseUploadSceneFileDialog::okButtonClicked()
         msg.appendWithNewLine(zipFileErrorMessage + "<p>");
     }
     if ( ! m_extractDirectoryNameLineEdit->hasAcceptableInput()) {
-        msg.appendWithNewLine("Extract to Directory is invalid.<p>");
+        msg.appendWithNewLine("Extraction Directory Prefix is invalid.<p>");
     }
     
     AString basePathErrorMessage;
@@ -793,11 +921,32 @@ BalsaDatabaseUploadSceneFileDialog::okButtonClicked()
                               + m_selectStudyTitlePushButton->text()
                               + "\" button to choose or create a BALSA Study ID and Title.");
     }
+    else {
+        /*
+         * Note: Test of study ID for editable status will move
+         * into BALSA Database so disabled until that time.
+         */
+        const bool testStudyIdEditableFlag(false);
+        if (testStudyIdEditableFlag) {
+            if (m_extractDirectoryNameLineEdit->hasAcceptableInput()) {
+                const AString studyID = m_balsaStudyIDLineEdit->text().trimmed();
+                AString errorMessage;
+                if ( ! m_balsaDatabaseManager->isStudyEditableByUser(studyID,
+                                                                     errorMessage)) {
+                    msg.appendWithNewLine(errorMessage);
+                }
+            }
+        }
+    }
     
     if ( ! msg.isEmpty()) {
         msg.insert(0, "<html>");
         msg.append("</html>");
         WuQMessageBox::errorOk(this, msg);
+        return;
+    }
+    
+    if ( ! checkBalsaExtractionDirectoryPrefix()) {
         return;
     }
     
@@ -1142,7 +1291,7 @@ BalsaDatabaseUploadSceneFileDialog::setLabelText(const LabelName labelName)
             break;
         case LabelName::LABEL_EXTRACT_DIRECTORY:
             label = m_extractDirectoryNameLabel;
-            labelText = "Unzip into Directory";
+            labelText = "Extraction Directory Prefix";
             validFlag = m_extractDirectoryNameLineEdit->hasAcceptableInput();
             break;
         case LabelName::LABEL_PASSWORD:
