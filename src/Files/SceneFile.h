@@ -21,9 +21,11 @@
  */
 /*LICENSE_END*/
 
+#include <memory>
 #include <set>
 
 #include "CaretDataFile.h"
+#include "SceneDataFileInfo.h"
 #include "SceneFileBasePathTypeEnum.h"
 
 namespace caret {
@@ -48,9 +50,19 @@ namespace caret {
         
         void clear();
         
+        virtual void setFileName(const AString& filename) override;
+
         void readFile(const AString& filename);
         
+        void readFileSaxReader(const AString& filename);
+        
+        void readFileStreamReader(const AString& filename);
+        
         void writeFile(const AString& filename);
+        
+        void writeFileSaxWriter(const AString& filename);
+        
+        void writeFileStreamWriter(const AString& filename);
         
         bool isEmpty() const;
 
@@ -107,20 +119,20 @@ namespace caret {
         
         std::vector<AString> getBaseDirectoryHierarchyForDataFiles(const int32_t maximumAncestorCount = 25);
         
-        class SceneDataFileInfo {
+        class FileAndSceneIndicesInfo {
         public:
-            SceneDataFileInfo(const AString& dataFileName,
-                              const int32_t sceneIndex)
+            FileAndSceneIndicesInfo(const AString& dataFileName,
+                                  const int32_t sceneIndex)
             : m_dataFileName(dataFileName) {
-                m_sceneIndices.push_back(sceneIndex);
+                m_sceneIndices.push_back(sceneIndex + 1);
             }
             
-            bool operator<(const SceneDataFileInfo& rhs) const {
+            bool operator<(const FileAndSceneIndicesInfo& rhs) const {
                 return m_dataFileName < rhs.m_dataFileName;
             }
             
             void addSceneIndex(const int32_t sceneIndex) const {
-                m_sceneIndices.push_back(sceneIndex);
+                m_sceneIndices.push_back(sceneIndex + 1);
             }
             
             AString getSceneIndices() const {
@@ -132,7 +144,9 @@ namespace caret {
             mutable std::vector<int32_t> m_sceneIndices;
         };
         
-        std::set<SceneDataFileInfo> getAllDataFileNamesFromAllScenes() const;
+        std::set<FileAndSceneIndicesInfo> getAllDataFileNamesFromAllScenes() const;
+        
+        std::vector<SceneDataFileInfo> getAllDataFileInfoFromAllScenes() const;
         
         void reorderScenes(std::vector<Scene*>& orderedScenes);
         
@@ -154,8 +168,11 @@ namespace caret {
         
         // ADD_NEW_METHODS_HERE
 
-        /** Version of file */
-        static float getFileVersion() { return s_sceneFileVersion; }
+        int32_t getSceneFileVersionForWriting() const;
+        
+        static int32_t getSceneFileVersionBeforeMacros();
+        
+        static int32_t getMaxiumSupportedSceneFileVersion();
         
         /** XML Tag for scene file */
         static const AString XML_TAG_SCENE_FILE;
@@ -193,15 +210,26 @@ namespace caret {
         
         // ADD_NEW_MEMBERS_HERE
 
-        /** Version of this SceneFile */
-        static const float s_sceneFileVersion;
+        /** Version of this SceneFile before addition of macros */
+        static const int32_t s_sceneFileVersionBeforeMacros;
+        
+        /** Version of this SceneFile containing macros */
+        static const int32_t s_sceneFileVersionContainingMacros;
     };
     
 #ifdef __SCENE_FILE_DECLARE__
     const AString SceneFile::XML_TAG_SCENE_FILE = "SceneFile";
     const AString SceneFile::XML_ATTRIBUTE_VERSION = "Version";
     const AString SceneFile::XML_TAG_SCENE_INFO_DIRECTORY_TAG = "SceneInfoDirectory";
-    const float SceneFile::s_sceneFileVersion = 3.0;
+    
+    /*
+     * NOTE: If these scene file versions change, getSupportedSceneFileVersion()
+     * will need to be updated with the maximum scene file version that
+     * can be read
+     */
+    const int32_t SceneFile::s_sceneFileVersionBeforeMacros     = 3;
+    const int32_t SceneFile::s_sceneFileVersionContainingMacros = 4;
+    
 #endif // __SCENE_FILE_DECLARE__
 
 } // namespace

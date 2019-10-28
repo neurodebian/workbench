@@ -27,6 +27,7 @@
 #include "SceneAttributes.h"
 #include "SceneClass.h"
 #include "SceneInfo.h"
+#include "WuQMacroGroup.h"
 
 using namespace caret;
 
@@ -237,6 +238,12 @@ Scene::Scene(const SceneTypeEnum::Enum sceneType)
                                             this);
     m_hasFilesWithRemotePaths = false;
     m_sceneInfo = new SceneInfo();
+
+    static int counter = 1;
+    const AString macroGroupName("SceneFile_"
+                                 + AString::number(counter));
+    m_macroGroup.reset(new WuQMacroGroup(macroGroupName));
+    m_macroGroup->clearModified();
 }
 
 Scene::Scene(const Scene& rhs)
@@ -378,6 +385,8 @@ void
 Scene::setName(const AString& sceneName)
 {
     m_sceneInfo->setName(sceneName);
+    m_macroGroup->setName("Scene: "
+                          + sceneName);
 }
 
 /**
@@ -490,7 +499,9 @@ Scene::getSceneInfo() const
 void
 Scene::setSceneInfo(SceneInfo* sceneInfo)
 {
-    CaretAssert(sceneInfo);
+    if (sceneInfo == NULL) {
+        return;//TSC: SceneFileXmlStreamReader will call this with NULL argument when reading ancient scene files
+    }
     
     if (m_sceneInfo != NULL) {
         delete m_sceneInfo;
@@ -512,6 +523,10 @@ Scene::isModified() const
         return true;
     }
     
+    if (m_macroGroup->isModified()) {
+        return true;
+    }
+
     return false;
 }
 
@@ -523,6 +538,64 @@ Scene::clearModified()
 {
     CaretObjectTracksModification::clearModified();
     m_sceneInfo->clearModified();
+    m_macroGroup->clearModified();
 }
+
+/**
+ * @return The macro group
+ */
+WuQMacroGroup*
+Scene::getMacroGroup()
+{
+    return m_macroGroup.get();
+}
+
+/**
+ * @return The macro group (const method)
+ */
+const WuQMacroGroup*
+Scene::getMacroGroup() const
+{
+    return m_macroGroup.get();
+}
+
+/**
+ * Move any macros in the given scene to this scene
+ *
+ * @param scene
+ *     Scene whose macros are moved to this scene.
+ */
+void
+Scene::moveMacrosFromScene(Scene* scene)
+{
+    CaretAssert(scene);
+    std::vector<WuQMacro*> macros = scene->getMacroGroup()->takeAllMacros();
+    if ( ! macros.empty()) {
+        for (auto m : macros) {
+            getMacroGroup()->addMacro(m);
+        }
+    }
+    setModified();
+}
+
+/**
+ * Copy any macros in the given scene to this scene
+ *
+ * @param scene
+ *     Scene whose macros are copied to this scene.
+ */
+void
+Scene::copyMacrosFromScene(const Scene* scene)
+{
+    CaretAssert(scene);
+
+    const WuQMacroGroup* macroGroup = scene->getMacroGroup();
+    if (macroGroup != NULL) {
+        if ( ! macroGroup->isEmpty()) {
+            getMacroGroup()->appendMacroGroup(macroGroup);
+        }
+    }
+}
+
 
 

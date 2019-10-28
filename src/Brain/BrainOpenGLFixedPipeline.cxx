@@ -47,6 +47,7 @@
 #include "BrainOpenGLPrimitiveDrawing.h"
 #include "BrainOpenGLVolumeObliqueSliceDrawing.h"
 #include "BrainOpenGLVolumeSliceDrawing.h"
+#include "BrainOpenGLVolumeTextureSliceDrawing.h"
 #include "BrainOpenGLShapeCone.h"
 #include "BrainOpenGLShapeCube.h"
 #include "BrainOpenGLShapeCylinder.h"
@@ -117,6 +118,7 @@
 #include "SelectionItemSurfaceNodeIdentificationSymbol.h"
 #include "SelectionItemSurfaceTriangle.h"
 #include "SelectionItemVoxel.h"
+#include "SpacerTabContent.h"
 #include "SurfaceMontageConfigurationCerebellar.h"
 #include "SurfaceMontageConfigurationCerebral.h"
 #include "SurfaceMontageConfigurationFlatMaps.h"
@@ -153,6 +155,8 @@
 
 using namespace caret;
 
+static Surface* annotationDrawingNullSurface(NULL);
+static float    annotationDrawingUnusedSurfaceScaling(1.0f);
 /**
  * Constructor.
  *
@@ -223,6 +227,8 @@ BrainOpenGLFixedPipeline::~BrainOpenGLFixedPipeline()
  *
  * @param windowIndex
  *    Index of window for selection
+ * @param userInputMode
+ *    Input mode for window
  * @param brain
  *    The brain (must be valid!)
  * @param viewportContent
@@ -241,14 +247,17 @@ BrainOpenGLFixedPipeline::~BrainOpenGLFixedPipeline()
  */
 void 
 BrainOpenGLFixedPipeline::selectModelImplementation(const int32_t windowIndex,
+                                                    const UserInputModeEnum::Enum windowUserInputMode,
                                                     Brain* brain,
-                                      const BrainOpenGLViewportContent* viewportContent,
-                                      const int32_t mouseX,
-                                      const int32_t mouseY,
-                                      const bool applySelectionBackgroundFiltering)
+                                                    const BrainOpenGLViewportContent* viewportContent,
+                                                    const int32_t mouseX,
+                                                    const int32_t mouseY,
+                                                    const bool applySelectionBackgroundFiltering)
 {
     m_brain = brain;
     m_windowIndex = windowIndex;
+    m_windowUserInputMode = windowUserInputMode;
+    
     CaretAssert(m_brain);
     CaretAssert((m_windowIndex >= 0)
                 && (m_windowIndex < BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_WINDOWS));
@@ -286,7 +295,12 @@ BrainOpenGLFixedPipeline::selectModelImplementation(const int32_t windowIndex,
      * everything else.
      */
     glClear(GL_DEPTH_BUFFER_BIT);
-    drawTabAnnotations(viewportContent);
+    if (viewportContent->getSpacerTabContent() != NULL) {
+        drawSpacerAnnotations(viewportContent);
+    }
+    else {
+        drawTabAnnotations(viewportContent);
+    }
     
     int windowViewport[4];
     viewportContent->getWindowViewport(windowViewport);
@@ -296,6 +310,7 @@ BrainOpenGLFixedPipeline::selectModelImplementation(const int32_t windowIndex,
     
     m_brain = NULL;
     m_windowIndex = -1;
+    m_windowUserInputMode = UserInputModeEnum::INVALID;
 }
 
 /**
@@ -306,6 +321,8 @@ BrainOpenGLFixedPipeline::selectModelImplementation(const int32_t windowIndex,
  *
  * @param windowIndex
  *    Index of window for projection
+ * @param userInputMode
+ *    Input mode for window
  * @param brain
  *    The brain (must be valid!)
  * @param viewportContent
@@ -319,14 +336,16 @@ BrainOpenGLFixedPipeline::selectModelImplementation(const int32_t windowIndex,
  */
 void 
 BrainOpenGLFixedPipeline::projectToModelImplementation(const int32_t windowIndex,
+                                                       const UserInputModeEnum::Enum windowUserInputMode,
                                                        Brain* brain,
-                                         const BrainOpenGLViewportContent* viewportContent,
-                                         const int32_t mouseX,
-                                         const int32_t mouseY,
-                                         SurfaceProjectedItem& projectionOut)
+                                                       const BrainOpenGLViewportContent* viewportContent,
+                                                       const int32_t mouseX,
+                                                       const int32_t mouseY,
+                                                       SurfaceProjectedItem& projectionOut)
 {
     m_brain = brain;
     m_windowIndex = windowIndex;
+    m_windowUserInputMode = windowUserInputMode;
     CaretAssert(m_brain);
     CaretAssert((m_windowIndex >= 0)
                 && (m_windowIndex < BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_WINDOWS));
@@ -360,6 +379,7 @@ BrainOpenGLFixedPipeline::projectToModelImplementation(const int32_t windowIndex
     this->modeProjectionData = NULL;
     m_brain = NULL;
     m_windowIndex = -1;
+    m_windowUserInputMode = UserInputModeEnum::INVALID;
 }
 
 /**
@@ -404,12 +424,12 @@ void
 BrainOpenGLFixedPipeline::updateForegroundAndBackgroundColors(const BrainOpenGLViewportContent* vpContent)
 {
     /*
-     * Default to colors for surface
+     * Default to colors for window
      */
     CaretPreferences* prefs = SessionManager::get()->getCaretPreferences();
-    prefs->getBackgroundAndForegroundColors()->getColorForegroundSurfaceView(m_foregroundColorByte);
+    prefs->getBackgroundAndForegroundColors()->getColorForegroundWindow(m_foregroundColorByte);
     m_foregroundColorByte[3] = 255;
-    prefs->getBackgroundAndForegroundColors()->getColorBackgroundSurfaceView(m_backgroundColorByte);
+    prefs->getBackgroundAndForegroundColors()->getColorBackgroundWindow(m_backgroundColorByte);
     m_backgroundColorByte[3] = 255;
     
     if (vpContent != NULL) {
@@ -483,8 +503,6 @@ BrainOpenGLFixedPipeline::setTabViewport(const BrainOpenGLViewportContent* vpCon
  *
  * @param viewportContents
  *     Contents of the viewports.
- * @param windowColorBarsOut
- *     Output with window color bars in the viewports.
  */
 void
 BrainOpenGLFixedPipeline::setAnnotationColorBarsForDrawing(const std::vector<const BrainOpenGLViewportContent*>& viewportContents)
@@ -492,37 +510,44 @@ BrainOpenGLFixedPipeline::setAnnotationColorBarsForDrawing(const std::vector<con
     m_annotationColorBarsForDrawing.clear();
     
     /*
-     * When in tile tabs, a tab may have a color bar in window
-     * space that appears in a different tab.  So, we need to 
-     * get all color bars.  Otherwise, the user will not be able
-     * to select a color when it is displayed in a different tab.
+     * This event gets EVERY color bar, even those
+     * in other windows
      */
     EventAnnotationColorBarGet colorBarEvent;
     EventManager::get()->sendEvent(colorBarEvent.getPointer());
-    m_annotationColorBarsForDrawing = colorBarEvent.getAnnotationColorBars();
+    std::vector<AnnotationColorBar*> allColorBars = colorBarEvent.getAnnotationColorBars();
     
     /*
-     * Tab index is always set in BrowserTabContent when it receives
-     * EventAnnotationColorBarGet event.  So, the tab index should always
-     * be valid.  The user can place the color bar in window space so 
-     * update the window index so that color bar's in window space
-     * are drawn and drawn only in the window containing the color bar.
+     * Find the color bars contained in the viewports and
+     * exclude color bars not in the viewports (color bars that
+     * are in other windows or other tabs while in single
+     * tab view).
      */
-    for (auto colorBar : m_annotationColorBarsForDrawing) {
+    for (auto colorBar : allColorBars) {
         const int32_t tabIndex = colorBar->getTabIndex();
         for (auto vc : viewportContents) {
             if (vc->getTabIndex() == tabIndex) {
+                /*
+                 * While color bars are associated with tabs, the color bar
+                 * may be in window space so always update the window index
+                 * (users can move tabs to other windows).
+                 */
                 colorBar->setWindowIndex(vc->getWindowIndex());
+                m_annotationColorBarsForDrawing.push_back(colorBar);
+                break;
             }
         }
     }
 }
+
 
 /**
  * Draw models in their respective viewports.
  *
  * @param windowIndex
  *    Index of window for drawing
+ * @param userInputMode
+ *    Input mode for window
  * @param brain
  *    The brain (must be valid!)
  * @param viewportContents
@@ -530,11 +555,13 @@ BrainOpenGLFixedPipeline::setAnnotationColorBarsForDrawing(const std::vector<con
  */
 void 
 BrainOpenGLFixedPipeline::drawModelsImplementation(const int32_t windowIndex,
+                                                   const UserInputModeEnum::Enum windowUserInputMode,
                                                    Brain* brain,
-                                     const std::vector<const BrainOpenGLViewportContent*>& viewportContents)
+                                                   const std::vector<const BrainOpenGLViewportContent*>& viewportContents)
 {
     m_brain = brain;
     m_windowIndex = windowIndex;
+    m_windowUserInputMode = windowUserInputMode;
     CaretAssert(m_brain);
     CaretAssert((m_windowIndex >= 0)
                 && (m_windowIndex < BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_WINDOWS));
@@ -553,15 +580,9 @@ BrainOpenGLFixedPipeline::drawModelsImplementation(const int32_t windowIndex,
     this->checkForOpenGLError(NULL, "At beginning of drawModels()");
     
     /*
-     * Default the background colors to first model
-     * NOTE: If there are no models, the surface background color is used
+     * NULL will retrieve Window colors (window colors added on 07jul2019)
      */
-    if (viewportContents.empty()) {
-        updateForegroundAndBackgroundColors(NULL);
-    }
-    else {
-        updateForegroundAndBackgroundColors(viewportContents[0]);
-    }
+    updateForegroundAndBackgroundColors(NULL);
     
     /*
      * Use the background color as the clear color.
@@ -585,10 +606,51 @@ BrainOpenGLFixedPipeline::drawModelsImplementation(const int32_t windowIndex,
     this->checkForOpenGLError(NULL, "At middle of drawModels()");
     
     for (int32_t i = 0; i < static_cast<int32_t>(viewportContents.size()); i++) {
+        const BrainOpenGLViewportContent* vpContent = viewportContents[i];
+        /*
+         * Don't draw if off-screen
+         */
+        {
+            int32_t windowViewport[4];
+            vpContent->getWindowViewport(windowViewport);
+            
+            int32_t tabViewport[4];
+            vpContent->getTabViewportBeforeApplyingMargins(tabViewport);
+            
+            /*
+             * Test for tab offscreen to right (tabs flow left-to-right)
+             */
+            if (tabViewport[0] > (windowViewport[0] + windowViewport[2])) {
+                continue;
+            }
+            
+            /*
+             * Test for tab offscreen to bottom (tabs flow top-to-bottom)
+             */
+            const int32_t tabTop = tabViewport[1] + tabViewport[3];
+            if (tabTop < 0) {
+                continue;
+            }
+            
+            if (tabViewport[2] <= 0) {
+                CaretLogSevere("Invalid TAB width="
+                               + AString::number(tabViewport[2])
+                               + " for index="
+                               + AString::number(i));
+                continue;
+            }
+            if (tabViewport[3] <= 0) {
+                CaretLogSevere("Invalid TAB height="
+                               + AString::number(tabViewport[3])
+                               + " for index="
+                               + AString::number(i));
+                continue;
+            }
+        }
+        
         /*
          * Viewport of window.
          */
-        const BrainOpenGLViewportContent* vpContent = viewportContents[i];
         setTabViewport(vpContent);
         glViewport(m_tabViewport[0], m_tabViewport[1], m_tabViewport[2], m_tabViewport[3]);
         
@@ -598,36 +660,33 @@ BrainOpenGLFixedPipeline::drawModelsImplementation(const int32_t windowIndex,
         updateForegroundAndBackgroundColors(vpContent);
         
         /*
-         * If this is NOT the first viewport content,
-         * AND the background color for this viewport content is 
+         * If the background color for this viewport content is
          * different that the clear color, THEN
          * draw a rectangle with the background color.
          */
-        if (i > 0) {
-            if ((m_backgroundColorByte[0] != clearColorByte[0])
-                || (m_backgroundColorByte[1] != clearColorByte[1])
-                || (m_backgroundColorByte[2] != clearColorByte[2])) {
-                GLboolean depthEnabledFlag;
-                glGetBooleanv(GL_DEPTH_TEST,
-                              &depthEnabledFlag);
-                glDisable(GL_DEPTH_TEST);
-                
-                glMatrixMode(GL_PROJECTION);
-                glLoadIdentity();
-                glOrtho(0.0, 1.0, 0.0, 1.0, -1.0, 1.0);
-                glMatrixMode(GL_MODELVIEW);
-                glLoadIdentity();
-                glColor3ubv(m_backgroundColorByte);
-                glBegin(GL_POLYGON);
-                glVertex2f(0.0, 0.0);
-                glVertex2f(1.0, 0.0);
-                glVertex2f(1.0, 1.0);
-                glVertex2f(0.0, 1.0);
-                glEnd();
-                
-                if (depthEnabledFlag) {
-                    glEnable(GL_DEPTH_TEST);
-                }
+        if ((m_backgroundColorByte[0] != clearColorByte[0])
+            || (m_backgroundColorByte[1] != clearColorByte[1])
+            || (m_backgroundColorByte[2] != clearColorByte[2])) {
+            GLboolean depthEnabledFlag;
+            glGetBooleanv(GL_DEPTH_TEST,
+                          &depthEnabledFlag);
+            glDisable(GL_DEPTH_TEST);
+            
+            glMatrixMode(GL_PROJECTION);
+            glLoadIdentity();
+            glOrtho(0.0, 1.0, 0.0, 1.0, -1.0, 1.0);
+            glMatrixMode(GL_MODELVIEW);
+            glLoadIdentity();
+            glColor3ubv(m_backgroundColorByte);
+            glBegin(GL_POLYGON);
+            glVertex2f(0.0, 0.0);
+            glVertex2f(1.0, 0.0);
+            glVertex2f(1.0, 1.0);
+            glVertex2f(0.0, 1.0);
+            glEnd();
+            
+            if (depthEnabledFlag) {
+                glEnable(GL_DEPTH_TEST);
             }
         }
 
@@ -665,7 +724,12 @@ BrainOpenGLFixedPipeline::drawModelsImplementation(const int32_t windowIndex,
              */
             updateForegroundAndBackgroundColors(vpContent);
             
-            drawTabAnnotations(vpContent);
+            if (vpContent->getSpacerTabContent() != NULL) {
+                drawSpacerAnnotations(vpContent);
+            }
+            else {
+                drawTabAnnotations(vpContent);
+            }
         }
         
         /*
@@ -683,6 +747,7 @@ BrainOpenGLFixedPipeline::drawModelsImplementation(const int32_t windowIndex,
     
     m_brain = NULL;
     m_windowIndex = -1;
+    m_windowUserInputMode = UserInputModeEnum::INVALID;
 }
 
 /**
@@ -810,19 +875,23 @@ BrainOpenGLFixedPipeline::drawChartCoordinateSpaceAnnotations(const BrainOpenGLV
          * Draw annotations for this surface and maybe draw
          * the model annotations.
          */
+        const bool annotationModeFlag = (m_windowUserInputMode == UserInputModeEnum::ANNOTATIONS);
         BrainOpenGLAnnotationDrawingFixedPipeline::Inputs inputs(this->m_brain,
                                                                  this->mode,
                                                                  BrainOpenGLFixedPipeline::s_gluLookAtCenterFromEyeOffsetDistance,
                                                                  m_windowIndex,
                                                                  this->windowTabIndex,
-                                                                 BrainOpenGLAnnotationDrawingFixedPipeline::Inputs::WINDOW_DRAWING_NO);
+                                                                 SpacerTabIndex(),
+                                                                 BrainOpenGLAnnotationDrawingFixedPipeline::Inputs::WINDOW_DRAWING_NO,
+                                                                 annotationModeFlag);
         std::vector<AnnotationColorBar*> emptyColorBars;
         std::vector<Annotation*> emptyViewportAnnotations;
         m_annotationDrawing->drawAnnotations(&inputs,
                                              AnnotationCoordinateSpaceEnum::CHART,
                                              emptyColorBars,
                                              emptyViewportAnnotations,
-                                             NULL);
+                                             NULL,
+                                             1.0);
         
         
         
@@ -835,6 +904,65 @@ BrainOpenGLFixedPipeline::drawChartCoordinateSpaceAnnotations(const BrainOpenGLV
     glPopAttrib();
 }
 
+/**
+ * Draw the spacer tag annotations.
+ *
+ * @param tabContent
+ *    Viewport content
+ */
+void
+BrainOpenGLFixedPipeline::drawSpacerAnnotations(const BrainOpenGLViewportContent* tabContent)
+{
+    if (tabContent->getSpacerTabContent() == NULL) {
+        return;
+    }
+    
+    int tabViewport[4];
+    tabContent->getModelViewport(tabViewport);
+    CaretAssertMessage(m_brain, "m_brain must NOT be NULL for drawing spacer tab annotations.");
+    glViewport(tabViewport[0],
+               tabViewport[1],
+               tabViewport[2],
+               tabViewport[3]);
+    glMatrixMode(GL_PROJECTION);
+    glPushMatrix();
+    glOrtho(0.0, tabViewport[2], 0.0, tabViewport[3], -1.0, 1.0);
+    glMatrixMode(GL_MODELVIEW);
+    glPushMatrix();
+    glLoadIdentity();
+    
+    CaretAssert(m_windowIndex == tabContent->getWindowIndex());
+    this->browserTabContent = NULL;
+    m_clippingPlaneGroup = NULL; //const_cast<ClippingPlaneGroup*>(tabContent->getBrowserTabContent()->getClippingPlaneGroup());
+    
+    this->windowTabIndex = -1;
+    
+    SpacerTabIndex spacerTabIndex;
+    SpacerTabContent* spacerTabContent = tabContent->getSpacerTabContent();
+    CaretAssert(spacerTabContent);
+    spacerTabIndex = spacerTabContent->getSpacerTabIndex();
+    
+    const bool annotationModeFlag = (m_windowUserInputMode == UserInputModeEnum::ANNOTATIONS);
+    BrainOpenGLAnnotationDrawingFixedPipeline::Inputs inputs(this->m_brain,
+                                                             this->mode,
+                                                             BrainOpenGLFixedPipeline::s_gluLookAtCenterFromEyeOffsetDistance,
+                                                             m_windowIndex,
+                                                             this->windowTabIndex,
+                                                             spacerTabIndex,
+                                                             BrainOpenGLAnnotationDrawingFixedPipeline::Inputs::WINDOW_DRAWING_NO,
+                                                             annotationModeFlag);
+    m_annotationDrawing->drawAnnotations(&inputs,
+                                         AnnotationCoordinateSpaceEnum::SPACER,
+                                         m_annotationColorBarsForDrawing,
+                                         m_specialCaseGraphicsAnnotations,
+                                         annotationDrawingNullSurface,
+                                         annotationDrawingUnusedSurfaceScaling);
+    
+    glPopMatrix();
+    glMatrixMode(GL_PROJECTION);
+    glPopMatrix();
+    glMatrixMode(GL_MODELVIEW);
+}
 
 /**
  * Draw the tab annotations.
@@ -870,17 +998,21 @@ BrainOpenGLFixedPipeline::drawTabAnnotations(const BrainOpenGLViewportContent* t
     
     this->windowTabIndex = this->browserTabContent->getTabNumber();
     
+    const bool annotationModeFlag = (m_windowUserInputMode == UserInputModeEnum::ANNOTATIONS);
     BrainOpenGLAnnotationDrawingFixedPipeline::Inputs inputs(this->m_brain,
                                                              this->mode,
                                                              BrainOpenGLFixedPipeline::s_gluLookAtCenterFromEyeOffsetDistance,
                                                              m_windowIndex,
                                                              this->windowTabIndex,
-                                                             BrainOpenGLAnnotationDrawingFixedPipeline::Inputs::WINDOW_DRAWING_NO);
+                                                             SpacerTabIndex(),
+                                                             BrainOpenGLAnnotationDrawingFixedPipeline::Inputs::WINDOW_DRAWING_NO,
+                                                             annotationModeFlag);
     m_annotationDrawing->drawAnnotations(&inputs,
                                          AnnotationCoordinateSpaceEnum::TAB,
                                          m_annotationColorBarsForDrawing,
                                          m_specialCaseGraphicsAnnotations,
-                                         NULL);
+                                         annotationDrawingNullSurface,
+                                         annotationDrawingUnusedSurfaceScaling);
     
     glPopMatrix();
     glMatrixMode(GL_PROJECTION);
@@ -929,18 +1061,22 @@ BrainOpenGLFixedPipeline::drawWindowAnnotations(const int windowViewport[4])
      */
     this->windowTabIndex = -1;
     
+    const bool annotationModeFlag = (m_windowUserInputMode == UserInputModeEnum::ANNOTATIONS);
     BrainOpenGLAnnotationDrawingFixedPipeline::Inputs inputs(this->m_brain,
                                                              this->mode,
                                                              BrainOpenGLFixedPipeline::s_gluLookAtCenterFromEyeOffsetDistance,
                                                              m_windowIndex,
                                                              this->windowTabIndex,
-                                                             windowDrawingMode);
+                                                             SpacerTabIndex(),
+                                                             windowDrawingMode,
+                                                             annotationModeFlag);
     
     m_annotationDrawing->drawAnnotations(&inputs,
                                          AnnotationCoordinateSpaceEnum::WINDOW,
                                          m_annotationColorBarsForDrawing,
                                          m_specialCaseGraphicsAnnotations,
-                                         NULL);
+                                         annotationDrawingNullSurface,
+                                         annotationDrawingUnusedSurfaceScaling);
 
     glPopMatrix();
     glMatrixMode(GL_PROJECTION);
@@ -1017,7 +1153,9 @@ BrainOpenGLFixedPipeline::drawModelInternal(Mode mode,
             }
             else if (surfaceModel != NULL) {
                 m_mirroredClippingEnabled = true;
-                this->drawSurfaceModel(surfaceModel, viewport);
+                this->drawSurfaceModel(browserTabContent,
+                                       surfaceModel,
+                                       viewport);
             }
             else if (surfaceMontageModel != NULL) {
                 m_mirroredClippingEnabled = true;
@@ -1692,6 +1830,8 @@ BrainOpenGLFixedPipeline::disableLighting()
 void 
 BrainOpenGLFixedPipeline::enableLineAntiAliasing()
 {
+    glPushAttrib(GL_ENABLE_BIT
+                 | GL_COLOR_BUFFER_BIT);
     /*
      * If multi-sampling is enabled, it handle anti-aliasing
      */
@@ -1713,6 +1853,8 @@ BrainOpenGLFixedPipeline::enableLineAntiAliasing()
 void 
 BrainOpenGLFixedPipeline::disableLineAntiAliasing()
 {
+    glPopAttrib();
+    
     /*
      * If multi-sampling is enabled, it handle anti-aliasing
      */
@@ -1720,20 +1862,23 @@ BrainOpenGLFixedPipeline::disableLineAntiAliasing()
         return;
     }
     
-    glDisable(GL_LINE_SMOOTH);
-    glDisable(GL_BLEND);
+//    glDisable(GL_LINE_SMOOTH);
+//    glDisable(GL_BLEND);
 }
 
 /**
  * Draw contents of a surface model.
+ * @param browserTabContent
+ *    Browser tab containing surface model.
  * @param surfaceModel
  *    Model that is drawn.
  * @param viewport
  *    Viewport for drawing region.
  */
 void 
-BrainOpenGLFixedPipeline::drawSurfaceModel(ModelSurface* surfaceModel,
-                                   const int32_t viewport[4])
+BrainOpenGLFixedPipeline::drawSurfaceModel(BrowserTabContent* browserTabContent,
+                                           ModelSurface* surfaceModel,
+                                           const int32_t viewport[4])
 {
     Surface* surface = surfaceModel->getSurface();
     float center[3];
@@ -1752,6 +1897,7 @@ BrainOpenGLFixedPipeline::drawSurfaceModel(ModelSurface* surfaceModel,
                                                                                  this->windowTabIndex);
     
     this->drawSurface(surface,
+                      browserTabContent->getScaling(),
                       nodeColoringRGBA,
                       true);
 }
@@ -1782,6 +1928,8 @@ BrainOpenGLFixedPipeline::drawSurfaceAxes()
  *
  * @param surface
  *    Surface that is drawn.
+ * @param surfaceScaling
+ *    User scaling of surface.
  * @param nodeColoringRGBA
  *    RGBA coloring for the nodes.
  * @param drawAnnotationsInModelSpaceFlag
@@ -1789,9 +1937,12 @@ BrainOpenGLFixedPipeline::drawSurfaceAxes()
  */
 void 
 BrainOpenGLFixedPipeline::drawSurface(Surface* surface,
+                                      const float surfaceScaling,
                                       const float* nodeColoringRGBA,
                                       const bool drawAnnotationsInModelSpaceFlag)
 {
+    glPushAttrib(GL_COLOR_BUFFER_BIT);
+
     const DisplayPropertiesSurface* dps = m_brain->getDisplayPropertiesSurface();
     
     glMatrixMode(GL_MODELVIEW);
@@ -1856,8 +2007,11 @@ BrainOpenGLFixedPipeline::drawSurface(Surface* surface,
                         glPolygonOffset(factor, units);
                     }
 
+                    glPushAttrib(GL_ENABLE_BIT);
+                    glDisable(GL_CULL_FACE);
                     this->drawSurfaceTrianglesWithVertexArrays(surface,
                                                                nodeColoringRGBA);
+                    glPopAttrib();
                     
                     if (borderAboveSurfaceOffset != 0.0) {
                         glDisable(GL_POLYGON_OFFSET_FILL);
@@ -1883,25 +2037,32 @@ BrainOpenGLFixedPipeline::drawSurface(Surface* surface,
              * Draw annotations for this surface and maybe draw
              * the model annotations.
              */
+            const bool annotationModeFlag = (m_windowUserInputMode == UserInputModeEnum::ANNOTATIONS);
             BrainOpenGLAnnotationDrawingFixedPipeline::Inputs inputs(this->m_brain,
                                                                      this->mode,
                                                                      BrainOpenGLFixedPipeline::s_gluLookAtCenterFromEyeOffsetDistance,
                                                                      m_windowIndex,
                                                                      this->windowTabIndex,
-                                                                     BrainOpenGLAnnotationDrawingFixedPipeline::Inputs::WINDOW_DRAWING_NO);
+                                                                     SpacerTabIndex(),
+                                                                     BrainOpenGLAnnotationDrawingFixedPipeline::Inputs::WINDOW_DRAWING_NO,
+                                                                     annotationModeFlag);
             std::vector<AnnotationColorBar*> emptyColorBars;
             std::vector<Annotation*> emptyViewportAnnotations;
+           
+            
             m_annotationDrawing->drawAnnotations(&inputs,
                                                  AnnotationCoordinateSpaceEnum::SURFACE,
                                                  emptyColorBars,
                                                  emptyViewportAnnotations,
-                                                 surface);
+                                                 surface,
+                                                 surfaceScaling);
             if (drawAnnotationsInModelSpaceFlag) {
                 m_annotationDrawing->drawAnnotations(&inputs,
                                                      AnnotationCoordinateSpaceEnum::STEREOTAXIC,
                                                      emptyColorBars,
                                                      emptyViewportAnnotations,
-                                                     NULL);
+                                                     annotationDrawingNullSurface,
+                                                     annotationDrawingUnusedSurfaceScaling);
             }
         }
             break;
@@ -1931,25 +2092,30 @@ BrainOpenGLFixedPipeline::drawSurface(Surface* surface,
              * Draw annotations for this surface and maybe draw
              * the model annotations.
              */
+            const bool annotationModeFlag = (m_windowUserInputMode == UserInputModeEnum::ANNOTATIONS);
             BrainOpenGLAnnotationDrawingFixedPipeline::Inputs inputs(this->m_brain,
                                                                      this->mode,
                                                                      BrainOpenGLFixedPipeline::s_gluLookAtCenterFromEyeOffsetDistance,
                                                                      m_windowIndex,
                                                                      this->windowTabIndex,
-                                                                     BrainOpenGLAnnotationDrawingFixedPipeline::Inputs::WINDOW_DRAWING_NO);
+                                                                     SpacerTabIndex(),
+                                                                     BrainOpenGLAnnotationDrawingFixedPipeline::Inputs::WINDOW_DRAWING_NO,
+                                                                     annotationModeFlag);
             std::vector<AnnotationColorBar*> emptyColorBars;
             std::vector<Annotation*> emptyViewportAnnotations;
             m_annotationDrawing->drawAnnotations(&inputs,
                                                  AnnotationCoordinateSpaceEnum::SURFACE,
                                                  emptyColorBars,
                                                  emptyViewportAnnotations,
-                                                 surface);
+                                                 surface,
+                                                 surfaceScaling);
             if (drawAnnotationsInModelSpaceFlag) {
                 m_annotationDrawing->drawAnnotations(&inputs,
                                                      AnnotationCoordinateSpaceEnum::STEREOTAXIC,
                                                      emptyColorBars,
                                                      emptyViewportAnnotations,
-                                                     NULL);
+                                                     annotationDrawingNullSurface,
+                                                     annotationDrawingUnusedSurfaceScaling);
             }
             
             /*
@@ -1977,6 +2143,8 @@ BrainOpenGLFixedPipeline::drawSurface(Surface* surface,
     this->disableLighting();
     
     this->disableClippingPlanes();
+    
+    glPopAttrib();
 }
 
 /**
@@ -2650,32 +2818,21 @@ BrainOpenGLFixedPipeline::drawBorder(const BorderDrawInfo& borderDrawInfo)
     const int32_t numBorderPoints = borderDrawInfo.border->getNumberOfPoints();
     const bool isHighlightEndPoints = borderDrawInfo.isHighlightEndPoints;
     
-    float pointDiameter = 2.0;
-    float lineWidth  = 2.0;
-    BorderDrawingTypeEnum::Enum drawType = BorderDrawingTypeEnum::DRAW_AS_POINTS_SPHERES;
-    if (borderDrawInfo.borderFileIndex >= 0) {
-        const BrainStructure* bs = borderDrawInfo.surface->getBrainStructure();
-        const Brain* brain = bs->getBrain();
-        const DisplayPropertiesBorders* dpb = brain->getDisplayPropertiesBorders();
-        const DisplayGroupEnum::Enum displayGroup = dpb->getDisplayGroupForTab(this->windowTabIndex);
-        pointDiameter = dpb->getPointSize(displayGroup,
-                                          this->windowTabIndex);
-        lineWidth  = dpb->getLineWidth(displayGroup,
-                                       this->windowTabIndex);
-        drawType  = dpb->getDrawingType(displayGroup,
-                                        this->windowTabIndex);
-    }
-    
+    CaretAssert(m_brain);
+    const DisplayPropertiesBorders* dpb = m_brain->getDisplayPropertiesBorders();
+    const DisplayGroupEnum::Enum displayGroup = dpb->getDisplayGroupForTab(this->windowTabIndex);
+    const float pointDiameter = dpb->getPointSize(displayGroup,
+                                            this->windowTabIndex);
+    const float lineWidth  = dpb->getLineWidth(displayGroup,
+                                         this->windowTabIndex);
+    BorderDrawingTypeEnum::Enum drawType = dpb->getDrawingType(displayGroup,
+                                                                         this->windowTabIndex);
+
+    /*
+     * When a border is being drawn, always use spheres
+     */
     if (borderDrawInfo.border == this->borderBeingDrawn) {
-        if (borderDrawInfo.surface != NULL) {
-            const BoundingBox* bb = borderDrawInfo.surface->getBoundingBox();
-            const float maxSize = std::max(bb->getDifferenceX(),
-                                           std::max(bb->getDifferenceY(), bb->getDifferenceZ()));
-            if (maxSize > 0.0f) {
-                const float percentSize = 0.03f;
-                pointDiameter = maxSize * percentSize;
-            }
-        }
+        drawType = BorderDrawingTypeEnum::DRAW_AS_POINTS_SPHERES;
     }
     
     bool drawSphericalPoints = false;
@@ -3012,7 +3169,7 @@ BrainOpenGLFixedPipeline::drawBorder(const BorderDrawInfo& borderDrawInfo)
     }
     
     glPopAttrib();
-}//p->
+}
 
 
 /**
@@ -3171,9 +3328,6 @@ BrainOpenGLFixedPipeline::drawSurfaceFoci(Surface* surface)
                             colorLabel->getColor(rgbaFloat);
                             focus->setClassRgba(rgbaFloat);
                         }
-//                        else {
-//                            focus->setClassRgba(rgbaFloat);
-//                        }
                     }
                     focus->getClassRgba(rgbaFloat);
                     break;
@@ -3190,9 +3344,6 @@ BrainOpenGLFixedPipeline::drawSurfaceFoci(Surface* surface)
                             colorLabel->getColor(rgbaFloat);
                             focus->setNameRgba(rgbaFloat);
                         }
-//                        else {
-//                            focus->setNameRgba(rgbaFloat);
-//                        }
                     }
                     focus->getNameRgba(rgbaFloat);
                     break;
@@ -3544,9 +3695,6 @@ BrainOpenGLFixedPipeline::setupVolumeDrawInfo(BrowserTabContent* browserTabConte
                     VolumeMappableInterface* vf = dynamic_cast<VolumeMappableInterface*>(mapFile);
                     if (vf != NULL) {
                         float opacity = overlay->getOpacity();
-                        if (volumeDrawInfoOut.empty()) {
-                            opacity = 1.0;
-                        }
                         
                         WholeBrainVoxelDrawingMode::Enum wholeBrainVoxelDrawingMode = overlay->getWholeBrainVoxelDrawingMode();
                         
@@ -3666,25 +3814,57 @@ BrainOpenGLFixedPipeline::drawVolumeModel(BrowserTabContent* browserTabContent,
             break;
     }
     
+    /*
+     * Allow blending of volume slices and volume surface outline
+     */
+    glPushAttrib(GL_COLOR_BUFFER_BIT);
+    applyVolumePropertiesOpacity();
+    
     if (useNewDrawingFlag) {
-        BrainOpenGLVolumeSliceDrawing volumeSliceDrawing;
-        volumeSliceDrawing.draw(this,
-                                browserTabContent,
-                                volumeDrawInfo,
-                                sliceDrawingType,
-                                sliceProjectionType,
-                                viewport);
+        if (DeveloperFlagsEnum::isFlag(DeveloperFlagsEnum::DEVELOPER_FLAG_TEXTURE_VOLUME)) {
+            BrainOpenGLVolumeTextureSliceDrawing textureSliceDrawing;
+            textureSliceDrawing.draw(this,
+                                     browserTabContent,
+                                     volumeDrawInfo,
+                                     sliceDrawingType,
+                                     sliceProjectionType,
+                                     obliqueMaskType,
+                                     viewport);
+        }
+        else {
+            BrainOpenGLVolumeSliceDrawing volumeSliceDrawing;
+            volumeSliceDrawing.draw(this,
+                                    browserTabContent,
+                                    volumeDrawInfo,
+                                    sliceDrawingType,
+                                    sliceProjectionType,
+                                    viewport);
+        }
     }
     else {
-        BrainOpenGLVolumeObliqueSliceDrawing obliqueVolumeSliceDrawing;
-        obliqueVolumeSliceDrawing.draw(this,
-                                       browserTabContent,
-                                       volumeDrawInfo,
-                                       sliceDrawingType,
-                                       sliceProjectionType,
-                                       obliqueMaskType,
-                                       viewport);
+        if (DeveloperFlagsEnum::isFlag(DeveloperFlagsEnum::DEVELOPER_FLAG_TEXTURE_VOLUME)) {
+            BrainOpenGLVolumeTextureSliceDrawing textureSliceDrawing;
+            textureSliceDrawing.draw(this,
+                                           browserTabContent,
+                                           volumeDrawInfo,
+                                           sliceDrawingType,
+                                           sliceProjectionType,
+                                           obliqueMaskType,
+                                           viewport);
+        }
+        else {
+            BrainOpenGLVolumeObliqueSliceDrawing obliqueVolumeSliceDrawing;
+            obliqueVolumeSliceDrawing.draw(this,
+                                           browserTabContent,
+                                           volumeDrawInfo,
+                                           sliceDrawingType,
+                                           sliceProjectionType,
+                                           obliqueMaskType,
+                                           viewport);
+        }
     }
+    
+    glPopAttrib();
 }
 
 /**
@@ -5050,6 +5230,7 @@ BrainOpenGLFixedPipeline::drawSurfaceMontageModel(BrowserTabContent* browserTabC
                                           mvp->getProjectionViewType());
         
         this->drawSurface(mvp->getSurface(),
+                          browserTabContent->getScaling(),
                           nodeColoringRGBA,
                           true);
     }
@@ -5080,6 +5261,30 @@ BrainOpenGLFixedPipeline::drawWholeBrainModel(BrowserTabContent* browserTabConte
                                                                     tabNumberIndex);
     Surface* rightSurface = wholeBrainModel->getSelectedSurface(StructureEnum::CORTEX_RIGHT,
                                                                      tabNumberIndex);
+    
+    if (m_brain->isSurfaceMatchingToAnatomical()) {
+        /*
+         * Use the primary anatomical surface for sizing any surface in the same
+         * structure so that size of viewport is the same.  Otherwise, the viewport
+         * is scaled uniquely for each structure
+         */
+        BrainStructure* leftStructure = m_brain->getBrainStructure(StructureEnum::CORTEX_LEFT, false);
+        if (leftStructure != NULL) {
+            Surface* leftPrimaryAnat = leftStructure->getPrimaryAnatomicalSurface();
+            if (leftPrimaryAnat != NULL) {
+                leftSurface = leftPrimaryAnat;
+            }
+        }
+        BrainStructure* rightStructure = m_brain->getBrainStructure(StructureEnum::CORTEX_RIGHT, false);
+        if (rightStructure != NULL) {
+            Surface* rightPrimaryAnat = rightStructure->getPrimaryAnatomicalSurface();
+            if (rightPrimaryAnat != NULL) {
+                rightSurface = rightPrimaryAnat;
+            }
+        }
+        /* 2/22/19 ALL SURFACES SAME VIEWPORT */
+    }
+
     /*
      * Center using volume, if it is available
      * Otherwise, see if surface is available, but a surface is offset
@@ -5178,37 +5383,58 @@ BrainOpenGLFixedPipeline::drawWholeBrainModel(BrowserTabContent* browserTabConte
             
             if ( ! twoDimSliceDrawVolumeDrawInfo.empty()) {
                 /*
+                 * Allow blending of volume slices and volume surface outline
+                 */
+                glPushAttrib(GL_COLOR_BUFFER_BIT);
+                applyVolumePropertiesOpacity();
+                
+                /*
                  * Check for oblique slice drawing
                  */
                 VolumeSliceDrawingTypeEnum::Enum sliceDrawingType = browserTabContent->getSliceDrawingType();
                 VolumeSliceProjectionTypeEnum::Enum sliceProjectionType = browserTabContent->getSliceProjectionType();
                 
-                switch (sliceProjectionType) {
-                    case VolumeSliceProjectionTypeEnum::VOLUME_SLICE_PROJECTION_OBLIQUE:
-                    {
-                        VolumeSliceInterpolationEdgeEffectsMaskingEnum::Enum obliqueMaskType = browserTabContent->getVolumeSliceInterpolationEdgeEffectsMaskingType();
-                        BrainOpenGLVolumeObliqueSliceDrawing volumeSliceDrawing;
-                        volumeSliceDrawing.draw(this,
-                                                browserTabContent,
-                                                twoDimSliceDrawVolumeDrawInfo,
-                                                sliceDrawingType,
-                                                sliceProjectionType,
-                                                obliqueMaskType,
-                                                viewport);
-                    }
-                        break;
-                    case VolumeSliceProjectionTypeEnum::VOLUME_SLICE_PROJECTION_ORTHOGONAL:
-                    {
-                        BrainOpenGLVolumeSliceDrawing volumeSliceDrawing;
-                        volumeSliceDrawing.draw(this,
-                                                browserTabContent,
-                                                twoDimSliceDrawVolumeDrawInfo,
-                                                sliceDrawingType,
-                                                sliceProjectionType,
-                                                viewport);
-                    }
-                        break;
+                if (DeveloperFlagsEnum::isFlag(DeveloperFlagsEnum::DEVELOPER_FLAG_TEXTURE_VOLUME)) {
+                    VolumeSliceInterpolationEdgeEffectsMaskingEnum::Enum obliqueMaskType = browserTabContent->getVolumeSliceInterpolationEdgeEffectsMaskingType();
+                    BrainOpenGLVolumeTextureSliceDrawing textureSliceDrawing;
+                    textureSliceDrawing.draw(this,
+                                             browserTabContent,
+                                             twoDimSliceDrawVolumeDrawInfo,
+                                             sliceDrawingType,
+                                             sliceProjectionType,
+                                             obliqueMaskType,
+                                             viewport);
                 }
+                else {
+                    switch (sliceProjectionType) {
+                        case VolumeSliceProjectionTypeEnum::VOLUME_SLICE_PROJECTION_OBLIQUE:
+                        {
+                            VolumeSliceInterpolationEdgeEffectsMaskingEnum::Enum obliqueMaskType = browserTabContent->getVolumeSliceInterpolationEdgeEffectsMaskingType();
+                            BrainOpenGLVolumeObliqueSliceDrawing volumeSliceDrawing;
+                            volumeSliceDrawing.draw(this,
+                                                    browserTabContent,
+                                                    twoDimSliceDrawVolumeDrawInfo,
+                                                    sliceDrawingType,
+                                                    sliceProjectionType,
+                                                    obliqueMaskType,
+                                                    viewport);
+                        }
+                            break;
+                        case VolumeSliceProjectionTypeEnum::VOLUME_SLICE_PROJECTION_ORTHOGONAL:
+                        {
+                            BrainOpenGLVolumeSliceDrawing volumeSliceDrawing;
+                            volumeSliceDrawing.draw(this,
+                                                    browserTabContent,
+                                                    twoDimSliceDrawVolumeDrawInfo,
+                                                    sliceDrawingType,
+                                                    sliceProjectionType,
+                                                    viewport);
+                        }
+                            break;
+                    }
+                }
+
+                glPopAttrib();
             }
         }
     }
@@ -5219,6 +5445,7 @@ BrainOpenGLFixedPipeline::drawWholeBrainModel(BrowserTabContent* browserTabConte
     /*
      * Draw surfaces last so that opacity works.
      */
+    std::set<StructureEnum::Enum> uniqueStructuresToDraw;
     std::vector<Surface*> surfacesToDraw;
     const int32_t numberOfBrainStructures = m_brain->getNumberOfBrainStructures();
     for (int32_t i = 0; i < numberOfBrainStructures; i++) {
@@ -5244,8 +5471,19 @@ BrainOpenGLFixedPipeline::drawWholeBrainModel(BrowserTabContent* browserTabConte
             }
             
             if (drawIt) {
+                uniqueStructuresToDraw.insert(structure);
                 surfacesToDraw.push_back(surface);
             }
+        }
+    }
+
+    /*
+     * When only one surface structure is displayed, disable offset of surfaces
+     */
+    bool allowLeftRightSeparationFlag(true);
+    if (m_brain->isSurfaceMatchingToAnatomical()) {
+        if (uniqueStructuresToDraw.size() == 1) {
+            allowLeftRightSeparationFlag = false;
         }
     }
 
@@ -5258,27 +5496,29 @@ BrainOpenGLFixedPipeline::drawWholeBrainModel(BrowserTabContent* browserTabConte
         float dx = 0.0;
         float dy = 0.0;
         float dz = 0.0;
-        switch (surface->getStructure()) {
-            case StructureEnum::CORTEX_LEFT:
-                dx = -browserTabContent->getWholeBrainLeftRightSeparation();
-                if ((surfaceType != SurfaceTypeEnum::ANATOMICAL)
-                    && (surfaceType != SurfaceTypeEnum::RECONSTRUCTION)) {
-                    dx -= surface->getBoundingBox()->getMaxX();
-                }
-                break;
-            case StructureEnum::CORTEX_RIGHT:
-                dx = browserTabContent->getWholeBrainLeftRightSeparation();
-                if ((surfaceType != SurfaceTypeEnum::ANATOMICAL)
-                    && (surfaceType != SurfaceTypeEnum::RECONSTRUCTION)) {
-                    dx -= surface->getBoundingBox()->getMinX();
-                }
-                break;
-            case StructureEnum::CEREBELLUM:
-                dz = browserTabContent->getWholeBrainCerebellumSeparation();
-                break;
-            default:
-                CaretLogWarning("programmer-issure: Surface type not left/right/cerebellum");
-                break;
+        if (allowLeftRightSeparationFlag) {
+            switch (surface->getStructure()) {
+                case StructureEnum::CORTEX_LEFT:
+                    dx = -browserTabContent->getWholeBrainLeftRightSeparation();
+                    if ((surfaceType != SurfaceTypeEnum::ANATOMICAL)
+                        && (surfaceType != SurfaceTypeEnum::RECONSTRUCTION)) {
+                        dx -= surface->getBoundingBox()->getMaxX();
+                    }
+                    break;
+                case StructureEnum::CORTEX_RIGHT:
+                    dx = browserTabContent->getWholeBrainLeftRightSeparation();
+                    if ((surfaceType != SurfaceTypeEnum::ANATOMICAL)
+                        && (surfaceType != SurfaceTypeEnum::RECONSTRUCTION)) {
+                        dx -= surface->getBoundingBox()->getMinX();
+                    }
+                    break;
+                case StructureEnum::CEREBELLUM:
+                    dz = browserTabContent->getWholeBrainCerebellumSeparation();
+                    break;
+                default:
+                    CaretLogWarning("programmer-issure: Surface type not left/right/cerebellum");
+                    break;
+            }
         }
         
         if (surface != NULL) {
@@ -5294,10 +5534,29 @@ BrainOpenGLFixedPipeline::drawWholeBrainModel(BrowserTabContent* browserTabConte
             glPushMatrix();
             glTranslatef(dx, dy, dz);
             this->drawSurface(surface,
+                              browserTabContent->getScaling(),
                               nodeColoringRGBA,
                               drawModelSpaceAnnotationsFlag);
             glPopMatrix();
         }
+    }
+}
+
+/**
+ * Apply opacity from the volume properties
+ */
+void
+BrainOpenGLFixedPipeline::applyVolumePropertiesOpacity()
+{
+    const DisplayPropertiesVolume* dpv = m_brain->getDisplayPropertiesVolume();
+    const float opacity = dpv->getOpacity();
+    const bool useBlendingFlag(opacity < 1.0f);
+    
+    if (useBlendingFlag) {
+        glEnable(GL_BLEND);
+        glBlendColor(opacity, opacity, opacity, opacity);
+        glBlendFunc(GL_CONSTANT_ALPHA,
+                    GL_ONE_MINUS_CONSTANT_ALPHA);
     }
 }
 
@@ -6675,7 +6934,7 @@ BrainOpenGLFixedPipeline::drawTextAtModelCoords(const double modelX,
                                                 const AnnotationText& annotationText)
 {
     if (getTextRenderer() != NULL) {
-        getTextRenderer()->drawTextAtModelCoords(modelX,
+        getTextRenderer()->drawTextAtModelCoordsFacingUser(modelX,
                                                   modelY,
                                                   modelZ,
                                                   annotationText,
@@ -6697,7 +6956,7 @@ BrainOpenGLFixedPipeline::drawTextAtModelCoords(const double modelXYZ[3],
                                                 const AnnotationText& annotationText)
 {
     if (getTextRenderer() != NULL) {
-        getTextRenderer()->drawTextAtModelCoords(modelXYZ,
+        getTextRenderer()->drawTextAtModelCoordsFacingUser(modelXYZ,
                                                   annotationText,
                                                  BrainOpenGLTextRenderInterface::DrawingFlags());
     }
@@ -6717,7 +6976,7 @@ BrainOpenGLFixedPipeline::drawTextAtModelCoords(const float modelXYZ[3],
                                                 const AnnotationText& annotationText)
 {
     if (getTextRenderer() != NULL) {
-        getTextRenderer()->drawTextAtModelCoords(modelXYZ,
+        getTextRenderer()->drawTextAtModelCoordsFacingUser(modelXYZ,
                                                   annotationText,
                                                  BrainOpenGLTextRenderInterface::DrawingFlags());
     }

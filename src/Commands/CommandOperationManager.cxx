@@ -24,6 +24,7 @@
 #include "CommandOperationManager.h"
 #undef __COMMAND_OPERATION_MANAGER_DEFINE__
 
+#include "AlgorithmAnnotationResample.h"
 #include "AlgorithmBorderResample.h"
 #include "AlgorithmBorderToVertices.h"
 #include "AlgorithmCiftiAllLabelsToROIs.h"
@@ -43,6 +44,7 @@
 #include "AlgorithmCiftiFindClusters.h"
 #include "AlgorithmCiftiGradient.h"
 #include "AlgorithmCiftiLabelAdjacency.h"
+#include "AlgorithmCiftiLabelModifyKeys.h"
 #include "AlgorithmCiftiLabelProbability.h"
 #include "AlgorithmCiftiLabelToBorder.h"
 #include "AlgorithmCiftiLabelToROI.h"
@@ -122,6 +124,7 @@
 #include "AlgorithmVolumeFillHoles.h"
 #include "AlgorithmVolumeFindClusters.h"
 #include "AlgorithmVolumeGradient.h"
+#include "AlgorithmVolumeLabelModifyKeys.h"
 #include "AlgorithmVolumeLabelProbability.h"
 #include "AlgorithmVolumeLabelToROI.h"
 #include "AlgorithmVolumeLabelToSurfaceMapping.h"
@@ -174,6 +177,7 @@
 #include "OperationEstimateFiberBinghams.h"
 #include "OperationFileConvert.h"
 #include "OperationFileInformation.h"
+#include "OperationFociCreate.h"
 #include "OperationFociGetProjectionVertex.h"
 #include "OperationFociListCoords.h"
 #include "OperationGiftiConvert.h"
@@ -285,6 +289,7 @@ CommandOperationManager::deleteCommandOperationManager()
  */
 CommandOperationManager::CommandOperationManager()
 {
+    this->commandOperations.push_back(new CommandParser(new AutoAlgorithmAnnotationResample()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmBorderResample()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmBorderToVertices()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmCiftiAllLabelsToROIs()));
@@ -304,6 +309,7 @@ CommandOperationManager::CommandOperationManager()
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmCiftiFindClusters()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmCiftiGradient()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmCiftiLabelAdjacency()));
+    this->commandOperations.push_back(new CommandParser(new AutoAlgorithmCiftiLabelModifyKeys()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmCiftiLabelProbability()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmCiftiLabelToBorder()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmCiftiLabelToROI()));
@@ -384,6 +390,7 @@ CommandOperationManager::CommandOperationManager()
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmVolumeFillHoles()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmVolumeFindClusters()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmVolumeGradient()));
+    this->commandOperations.push_back(new CommandParser(new AutoAlgorithmVolumeLabelModifyKeys()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmVolumeLabelProbability()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmVolumeLabelToROI()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmVolumeLabelToSurfaceMapping()));
@@ -431,6 +438,7 @@ CommandOperationManager::CommandOperationManager()
     this->commandOperations.push_back(new CommandParser(new AutoOperationEstimateFiberBinghams()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationFileConvert()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationFileInformation()));
+    this->commandOperations.push_back(new CommandParser(new AutoOperationFociCreate()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationFociGetProjectionVertex()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationFociListCoords()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationGiftiConvert()));
@@ -613,7 +621,7 @@ CommandOperationManager::runCommand(ProgramParameters& parameters)
     {
         printHelpInfo();
     } else if (commandSwitch == "-arguments-help") {
-        printArgumentsHelp(myProgramName);
+        printArgumentsHelp();
     } else if (commandSwitch == "-global-options") {
         printGlobalOptions();
     } else if (commandSwitch == "-cifti-help") {
@@ -991,18 +999,19 @@ void CommandOperationManager::printHelpInfo()
     cout << endl;
 }
 
-void CommandOperationManager::printArgumentsHelp(const AString& programName)
+void CommandOperationManager::printArgumentsHelp()
 {
     //guide for wrap, assuming 80 columns:                                                  |
     cout << "   To get the help information on a subcommand, run it without any additional" << endl;
-    cout << "   arguments.  Options can occur in any position within the correct scope, and" << endl;
-    cout << "   can have suboptions, which must occur within the scope of the option.  The" << endl;
-    cout << "   easiest way to get this right is to specify options and arguments in the" << endl;
-    cout << "   order they are listed.  As an example, consider this help information:" << endl;
+    cout << "   arguments.  Options can occur in any order, however suboptions and arguments" << endl;
+    cout << "   to options must occur next to their parent option.  The easiest way to get" << endl;
+    cout << "   this right is to specify options and arguments in the order they are listed." << endl;
+    cout << "   As an example, consider this abbreviated version of the -volume-math help" << endl;
+    cout << "   information:" << endl;
     cout << endl;//guide for wrap, assuming 80 columns:                                     |
-    cout << "$ " << programName << " -volume-math" << endl;
+    cout << "$ wb_command -volume-math" << endl;
     cout << "EVALUATE EXPRESSION ON VOLUME FILES" << endl;
-    cout << "   " << programName << " -volume-math" << endl;
+    cout << "   wb_command -volume-math" << endl;
     cout << "      <expression> - the expression to evaluate, in quotes" << endl;
     cout << "      <volume-out> - output - the output volume" << endl;
     cout << endl;//guide for wrap, assuming 80 columns:                                     |
@@ -1018,37 +1027,52 @@ void CommandOperationManager::printArgumentsHelp(const AString& programName)
     cout << endl;//guide for wrap, assuming 80 columns:                                     |
     cout << "         [-repeat] - reuse a single subvolume for each subvolume of calculation" << endl;
     cout << "..." << endl;
+    cout << "      The following functions are supported:" << endl;
+    cout << "..." << endl;
+    cout << "         abs: 1 argument, the absolute value of the argument" << endl;
+    cout << "..." << endl;
     cout << endl;//guide for wrap, assuming 80 columns:                                     |
-    cout << "   '<expression>' and '<volume-out>' denote mandatory parameters.  '[-fixnan]'" << endl;
-    cout << "   denotes an option taking one mandatory parameter '<replace>', and" << endl;
-    cout << "   '[-var] - repeatable' denotes a repeatable option with mandatory parameters" << endl;
-    cout << "   '<name>' and '<volume>', and two suboptions: '[-subvolume]', which has a" << endl;
-    cout << "   mandatory parameter '<subvol>', and '[-repeat]', which takes no parameters." << endl;
-    cout << "   Commands also provide additional help info below the section in the example." << endl;
+    cout << "   '<expression>' represents a required input parameter (required parameters" << endl;
+    cout << "   are marked with the < and > symbols), and '<volume-out> - output' represents" << endl;
+    cout << "   a required output filename (marked by the presence of the word 'output')." << endl;
+    cout << "   '[-fixnan]' represents an option (marked with the [ and ] symbols), taking" << endl;
+    cout << "   one required parameter '<replace>' (the indentation level indicates what" << endl;
+    cout << "   parameters and suboptions are associated with a given option), and '[-var] -" << endl;
+    cout << "   repeatable' denotes a repeatable option (marked by the presence of the word" << endl;
+    cout << "   'repeatable') with required parameters '<name>' and '<volume>', and two" << endl;
+    cout << "   suboptions: '[-subvolume]', which has a required parameter '<subvol>', and" << endl;
+    cout << "   '[-repeat]', which takes no parameters." << endl;
+    cout << endl;//guide for wrap, assuming 80 columns:                                     |
     cout << "   Each option starts a new scope, and all options and arguments end any scope" << endl;
-    cout << "   that they are not valid in.  For example, this command is correct:" << endl;
+    cout << "   that they are not valid in.  This means that for any option, you must" << endl;
+    cout << "   specify all of its arguments and any desired suboptions before specifying" << endl;
+    cout << "   any other option or argument on the same or a previous level.  For example," << endl;
+    cout << "   this annotated command is valid:" << endl;
     cout << endl;//guide for wrap, assuming 80 columns:                                     |
-    cout << "$ " << programName << " -volume-math 'sin(x)' sin_x.nii.gz -fixnan 0 -var x x.nii.gz -subvolume 1" << endl;
+    cout << "$ wb_command -volume-math 'abs(x)'  abs_x.nii.gz -fixnan 0  -var x    x.nii.gz" << endl;
+    cout << "annotation:            <expression> <volume-out>     <replace> <name> <volume>" << endl;
     cout << endl;
-    cout << "   as is this one (though less intuitive):" << endl;
+    cout << "   Here is another annotated command that results in the same output, but" << endl;
+    cout << "   uses a different order of the options:" << endl;
     cout << endl;
-    cout << "$ " << programName << " -volume-math -fixnan 0 'sin(x)' -var x -subvolume 1 x.nii.gz sin_x.nii.gz" << endl;
+    cout << "$ wb_command -volume-math -fixnan 0     'abs(x)' -var x   x.nii.gz abs_x.nii.gz" << endl;
+    cout << "annotation:                 <replace> <expression> <name> <volume> <volume-out>" << endl;
     cout << endl;//guide for wrap, assuming 80 columns:                                     |
-    cout << "   while this one is not, because the -fixnan option ends the scope of the -var" << endl;
-    cout << "   option before all of its mandatory arguments are given:" << endl;
+    cout << "   This next command is invalid, because the -fixnan option ends the scope of" << endl;
+    cout << "   the -var option before all of its required arguments are given:" << endl;
     cout << endl;
-    cout << "$ " << programName << " -volume-math 'sin(x)' sin_x.nii.gz -var x -fixnan 0 x.nii.gz -subvolume 1" << endl;
+    cout << "wrong: wb_command -volume-math 'abs(x)' abs_x.nii.gz -var x -fixnan 0 x.nii.gz" << endl;
     cout << endl;
     //guide for wrap, assuming 80 columns:                                                  |
-    cout << "   and this one is incorrect because the -subvolume option occurs after the" << endl;
-    cout << "   scope of the -var option has ended due to -fixnan:" << endl;
+    cout << "   This command is invalid because the -subvolume option occurs after the" << endl;
+    cout << "   scope of the -var option has ended due to the -fixnan option:" << endl;
     cout << endl;
-    cout << "$ " << programName << " -volume-math 'sin(x)' sin_x.nii.gz -var x x.nii.gz -fixnan 0 -subvolume 1" << endl;
+    cout << "wrong: wb_command -volume-math 'abs(x)' abs_x.nii.gz -var x x.nii.gz -fixnan 0 -subvolume 1" << endl;
     cout << endl;//guide for wrap, assuming 80 columns:                                     |
-    cout << "   and this one is similarly incorrect because the -subvolume option occurs" << endl;
+    cout << "   This command is similarly invalid because the -subvolume option occurs" << endl;
     cout << "   after the scope of the -var option has ended due to the volume-out argument:" << endl;
     cout << endl;
-    cout << "$ " << programName << " -volume-math 'sin(x)' -fixnan 0 -var x x.nii.gz sin_x.nii.gz -subvolume 1" << endl;
+    cout << "wrong: wb_command -volume-math 'abs(x)' -var x x.nii.gz abs_x.nii.gz -subvolume 1 -fixnan 0" << endl;
     cout << endl;
 }
 

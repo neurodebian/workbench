@@ -90,7 +90,8 @@ namespace caret {
                          const VolumeSliceInterpolationEdgeEffectsMaskingEnum::Enum maskingType,
                          const float voxelEditingValue,
                          const bool volumeEditingDrawAllVoxelsFlag,
-                         const bool    identificationModeFlag);
+                         const bool identificationModeFlag,
+                         const bool bottomLayerFlag);
             
             void assignRgba(const bool volumeEditingDrawAllVoxelsFlag);
             
@@ -133,6 +134,8 @@ namespace caret {
             const int32_t m_identificationY;
             
             const bool m_identificationModeFlag;
+            
+            const bool m_bottomLayerFlag;
             
             CiftiMappableDataFile* m_ciftiMappableFile = NULL;
             
@@ -219,12 +222,11 @@ namespace caret {
                                       const float sliceCoordinates[3],
                                       Plane& planeOut);
         
-        void drawAxesCrosshairsOrthoAndOblique(const VolumeSliceProjectionTypeEnum::Enum sliceProjectionType,
-                                               const VolumeSliceViewPlaneEnum::Enum sliceViewPlane,
-                                               const float sliceCoordinates[3],
-                                               const bool drawCrosshairsFlag,
-                                               const bool drawCrosshairLabelsFlag);
-        
+        void drawAxesCrosshairsOblique(const VolumeSliceViewPlaneEnum::Enum sliceViewPlane,
+                                       const float sliceCoordinates[3],
+                                       const bool drawCrosshairsFlag,
+                                       const bool drawCrosshairLabelsFlag);
+
         void setVolumeSliceViewingAndModelingTransformations(const VolumeSliceProjectionTypeEnum::Enum sliceProjectionType,
                                                              const VolumeSliceViewPlaneEnum::Enum sliceViewPlane,
                                                              const Plane& plane,

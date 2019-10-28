@@ -61,7 +61,7 @@ using namespace caret;
  * Constructor.
  */
 UserInputModeView::UserInputModeView()
-: UserInputModeAbstract(UserInputModeAbstract::VIEW)
+: UserInputModeAbstract(UserInputModeEnum::VIEW)
 {
     
 }
@@ -72,7 +72,7 @@ UserInputModeView::UserInputModeView()
  * @param inputMode
  *    Subclass' input mode.
  */
-UserInputModeView::UserInputModeView(const UserInputMode inputMode)
+UserInputModeView::UserInputModeView(const UserInputModeEnum::Enum inputMode)
 : UserInputModeAbstract(inputMode)
 {
     
@@ -117,8 +117,17 @@ UserInputModeView::processModelViewIdentification(BrainOpenGLViewportContent* vi
        const int32_t tabIndex = btc->getTabNumber();
        GuiManager::get()->processIdentification(tabIndex,
                                                 selectionManager,
-                                                openGLWidget);    
-   }
+                                                openGLWidget);
+        
+        /*
+         * Keep the main window as the active window NOT the identification window.
+         * This does not work correctly on Linux as the identication window
+         * may hide behind the main window.  
+         */
+#ifdef CARET_OS_MACOSX
+        openGLWidget->parentWidget()->activateWindow();
+#endif
+    }
 }
 
 /**
@@ -279,13 +288,34 @@ UserInputModeView::mouseLeftDrag(const MouseEvent& mouseEvent)
     if (browserTabContent == NULL) {
         return;
     }
-    browserTabContent->applyMouseRotation(viewportContent,
-                                          mouseEvent.getPressedX(),
-                                          mouseEvent.getPressedY(),
-                                          mouseEvent.getX(),
-                                          mouseEvent.getY(),
-                                          mouseEvent.getDx(),
-                                          mouseEvent.getDy());
+
+    bool scrollVolumeSlicesFlag(false);
+    if (browserTabContent->isVolumeSlicesDisplayed()) {
+        switch (browserTabContent->getSliceProjectionType()) {
+            case VolumeSliceProjectionTypeEnum::VOLUME_SLICE_PROJECTION_OBLIQUE:
+                break;
+            case VolumeSliceProjectionTypeEnum::VOLUME_SLICE_PROJECTION_ORTHOGONAL:
+                scrollVolumeSlicesFlag = true;
+                break;
+        }
+    }
+    if (scrollVolumeSlicesFlag) {
+        browserTabContent->applyMouseVolumeSliceIncrement(viewportContent,
+                                                          mouseEvent.getPressedX(),
+                                                          mouseEvent.getPressedY(),
+                                                          mouseEvent.getDy());
+        EventManager::get()->sendSimpleEvent(EventTypeEnum::EVENT_UPDATE_VOLUME_SLICE_INDICES_COORDS_TOOLBAR);
+    }
+    else {
+        browserTabContent->applyMouseRotation(viewportContent,
+                                              mouseEvent.getPressedX(),
+                                              mouseEvent.getPressedY(),
+                                              mouseEvent.getX(),
+                                              mouseEvent.getY(),
+                                              mouseEvent.getDx(),
+                                              mouseEvent.getDy());
+    }
+    
     /*
      * Update graphics.
      */

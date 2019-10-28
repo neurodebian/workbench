@@ -69,6 +69,7 @@ OperationParameters* OperationCiftiConvert::getParameters()
     OptionalParameter* fgresetTimeunitsOpt = fgresetTimeOpt->createOptionalParameter(3, "-unit", "use a unit other than time");
     fgresetTimeunitsOpt->addStringParameter(1, "unit", "unit identifier (default SECOND)");
     fromGiftiExt->createOptionalParameter(4, "-reset-scalars", "reset mapping along rows to scalars, taking length from the gifti file");
+    fromGiftiExt->createOptionalParameter(6, "-column-reset-scalars", "reset mapping along columns to scalar (useful for changing number of series in a sdseries file)");
     OptionalParameter* fromGiftiReplace = fromGiftiExt->createOptionalParameter(5, "-replace-binary", "replace data with a binary file");
     fromGiftiReplace->addStringParameter(1, "binary-in", "the binary file that contains replacement data");
     fromGiftiReplace->createOptionalParameter(2, "-flip-endian", "byteswap the binary file");
@@ -127,6 +128,38 @@ OperationParameters* OperationCiftiConvert::getParameters()
     }
     ret->setHelpText(myText);
     return ret;
+}
+
+namespace
+{
+    
+    bool haveWarned = false;
+    
+    float toFloat(const AString& input)
+    {
+        bool ok = false;
+        double converted = input.toDouble(&ok);
+        if (!ok) throw OperationException("failed to convert text to number: '" + input + "'");
+        float ret = float(converted);//this will turn some non-inf values into +/- inf, so let's fix that
+        if (!std::isinf(converted) && (abs(converted) > numeric_limits<float>::max() || abs(converted) < numeric_limits<float>::denorm_min()))
+        {
+            if (!haveWarned)
+            {
+                CaretLogWarning("input number(s) changed to fit range of float32, first instance: '" + input + "'");
+                haveWarned = true;
+            }
+            if (std::isinf(ret))
+            {
+                if (ret > 0.0f)
+                {
+                    ret = numeric_limits<float>::max();
+                } else {
+                    ret = -numeric_limits<float>::max();
+                }
+            }
+        }
+        return ret;
+    }
 }
 
 void OperationCiftiConvert::useParameters(OperationParameters* myParams, ProgressObject* myProgObj)
@@ -194,7 +227,7 @@ void OperationCiftiConvert::useParameters(OperationParameters* myParams, Progres
         int64_t numRows = dataArrayRef->getNumberOfRows();
         OptionalParameter* fgresetTimeOpt = fromGiftiExt->getOptionalParameter(3);
         if (fgresetTimeOpt->m_present)
-        {
+        {//-reset-timepoints
             CiftiSeriesMap::Unit myUnit = CiftiSeriesMap::SECOND;
             OptionalParameter* fgresetTimeunitsOpt = fgresetTimeOpt->getOptionalParameter(3);
             if (fgresetTimeunitsOpt->m_present)
@@ -215,11 +248,17 @@ void OperationCiftiConvert::useParameters(OperationParameters* myParams, Progres
             myXML.getSeriesMap(CiftiXML::ALONG_COLUMN).setLength(numRows);
         }
         if (fromGiftiExt->getOptionalParameter(4)->m_present)
-        {
+        {//-reset-scalars
             if (fgresetTimeOpt->m_present) throw OperationException("only one of -reset-timepoints and -reset-scalars may be specified");
             CiftiScalarsMap newMap;
             newMap.setLength(numCols);
             myXML.setMap(CiftiXML::ALONG_ROW, newMap);
+        }
+        if (fromGiftiExt->getOptionalParameter(6)->m_present)
+        {//-column-reset-scalars
+            CiftiScalarsMap newMap;
+            newMap.setLength(numRows);
+            myXML.setMap(CiftiXML::ALONG_COLUMN, newMap);
         }
         if (myXML.getDimensionLength(CiftiXML::ALONG_ROW) != numCols || myXML.getDimensionLength(CiftiXML::ALONG_COLUMN) != numRows)
         {
@@ -376,7 +415,7 @@ void OperationCiftiConvert::useParameters(OperationParameters* myParams, Progres
         if (outXML.getNumberOfDimensions() != 2) throw OperationException("conversion only supported for 2D cifti");
         OptionalParameter* fnresetTimeOpt = fromNifti->getOptionalParameter(4);
         if (fnresetTimeOpt->m_present)
-        {
+        {//-reset-timepoints
             CiftiSeriesMap::Unit myUnit = CiftiSeriesMap::SECOND;
             OptionalParameter* fnresetTimeunitsOpt = fnresetTimeOpt->getOptionalParameter(3);
             if (fnresetTimeunitsOpt->m_present)
@@ -388,7 +427,7 @@ void OperationCiftiConvert::useParameters(OperationParameters* myParams, Progres
             outXML.setMap(CiftiXML::ALONG_ROW, CiftiSeriesMap(myDims[3], fnresetTimeOpt->getDouble(2), fnresetTimeOpt->getDouble(1), myUnit));
         }
         if (fromNifti->getOptionalParameter(5)->m_present)
-        {
+        {//-reset-scalars
             if (fnresetTimeOpt->m_present) throw OperationException("only one of -reset-timepoints and -reset-scalars may be specified");
             CiftiScalarsMap newMap;
             newMap.setLength(myDims[3]);
@@ -498,11 +537,9 @@ void OperationCiftiConvert::useParameters(OperationParameters* myParams, Progres
         }
         ciftiOut->setCiftiXML(outXML);
         vector<float> temprow(textRowLength);
-        bool ok = false;
         for (int i = 0; i < textRowLength; ++i)
         {
-            temprow[i] = entries[i].toFloat(&ok);
-            if (!ok) throw OperationException("failed to convert text to number: '" + entries[i] + "'");
+            temprow[i] = toFloat(entries[i]);
         }
         ciftiOut->setRow(temprow.data(), 0);
         for (int64_t j = 1; j < numRows; ++j)
@@ -517,8 +554,7 @@ void OperationCiftiConvert::useParameters(OperationParameters* myParams, Progres
             if (entries.size() != textRowLength) throw OperationException("text file has inconsistent line length");
             for (int i = 0; i < textRowLength; ++i)
             {
-                temprow[i] = entries[i].toFloat(&ok);
-                if (!ok) throw OperationException("failed to convert text to number: '" + entries[i] + "'");
+                temprow[i] = toFloat(entries[i]);
             }
             ciftiOut->setRow(temprow.data(), j);
         }

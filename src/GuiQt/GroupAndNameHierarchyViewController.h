@@ -49,7 +49,9 @@ namespace caret {
 
     public:
         GroupAndNameHierarchyViewController(const int32_t browserWindowIndex,
-                                            QWidget* parent = 0);
+                                            const QString& objectNameForMacros,
+                                            const QString& descriptiveNameForMacros,
+                                            QWidget* parent);
         
         virtual ~GroupAndNameHierarchyViewController();
         
@@ -95,7 +97,8 @@ namespace caret {
         
         void createTreeWidget();
         
-        QWidget* createAllOnOffControls();
+        QWidget* createAllOnOffControls(const QString& objectNameForMacros,
+                                        const QString& descriptiveNameForMacros);
         
         void setAllSelected(bool selected);
         

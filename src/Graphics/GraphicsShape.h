@@ -78,6 +78,11 @@ namespace caret {
                                                const double minorAxis,
                                                const uint8_t rgba[4]);
         
+        static void drawEllipseOutlineModelSpaceByteColor(const double majorAxis,
+                                                          const double minorAxis,
+                                                          const uint8_t rgba[4],
+                                                          const double lineThickness);
+        
         static void drawLinesByteColor(const std::vector<float>& xyz,
                                        const uint8_t rgba[4],
                                        const GraphicsPrimitive::LineWidthType lineThicknessType,
@@ -121,6 +126,34 @@ namespace caret {
                              const double outerRadius);
         
         static void deleteAllPrimitives();
+        
+        static void drawOutlineRectangleVerticesInMiddle(const double bottomLeft[3],
+                                                         const double bottomRight[3],
+                                                         const double topRight[3],
+                                                         const double topLeft[3],
+                                                         const double thickness,
+                                                         const uint8_t rgba[4]);
+        
+        static void drawOutlineRectangleVerticesInMiddle(const float bottomLeft[3],
+                                                         const float bottomRight[3],
+                                                         const float topRight[3],
+                                                         const float topLeft[3],
+                                                         const float thickness,
+                                                         const uint8_t rgba[4]);
+        
+        static void drawOutlineRectangleVerticesAtInside(const double bottomLeft[3],
+                                                         const double bottomRight[3],
+                                                         const double topRight[3],
+                                                         const double topLeft[3],
+                                                         const double thickness,
+                                                         const uint8_t rgba[4]);
+        
+        static void drawOutlineRectangleVerticesAtInside(const float bottomLeft[3],
+                                                         const float bottomRight[3],
+                                                         const float topRight[3],
+                                                         const float topLeft[3],
+                                                         const float thickness,
+                                                         const uint8_t rgba[4]);
         
         // ADD_NEW_METHODS_HERE
 
@@ -194,6 +227,22 @@ namespace caret {
                                     const int32_t numLat,
                                     float xyzOut[3],
                                     float normalXyzOut[3]);
+        
+        static void drawOutlineRectanglePrivate(const double bottomLeft[3],
+                                                const double bottomRight[3],
+                                                const double topRight[3],
+                                                const double topLeft[3],
+                                                const double thicknessIn,
+                                                const uint8_t rgba[4],
+                                                bool verticesInMiddleFlag);
+        
+        static void drawOutlineRectanglePrivate(const float bottomLeft[3],
+                                                const float bottomRight[3],
+                                                const float topRight[3],
+                                                const float topLeft[3],
+                                                const float thicknessIn,
+                                                const uint8_t rgba[4],
+                                                bool verticesInMiddleFlag);
         
         static std::unique_ptr<GraphicsPrimitiveV3f> s_byteSquarePrimitive;
         

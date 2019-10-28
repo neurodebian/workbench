@@ -59,11 +59,7 @@ AnnotationLineArrowTipsWidget::AnnotationLineArrowTipsWidget(const int32_t brows
 m_browserWindowIndex(browserWindowIndex)
 {
     QLabel* label = new QLabel("Line");
-    
-    const QSize toolButtonSize(24, 24);
-    
-    
-    
+
     QToolButton* endArrowToolButton = new QToolButton();
     m_endArrowAction = new QAction(this);
     m_endArrowAction->setCheckable(true);

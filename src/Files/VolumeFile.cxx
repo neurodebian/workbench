@@ -17,6 +17,8 @@
  *  51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 /*LICENSE_END*/
+
+#include <array>
 #include <cmath>
 #include <iostream>
 #include <sstream>
@@ -33,6 +35,7 @@
 #include "DataFileContentInformation.h"
 #include "ElapsedTimer.h"
 #include "EventManager.h"
+#include "GiftiLabel.h"
 #include "GroupAndNameHierarchyModel.h"
 #include "FastStatistics.h"
 #include "Histogram.h"
@@ -41,6 +44,7 @@
 #include "NiftiIO.h"
 #include "Palette.h"
 #include "SceneClass.h"
+#include "VolumeDynamicConnectivityFile.h"
 #include "VolumeFile.h"
 #include "VolumeFileEditorDelegate.h"
 #include "VolumeFileVoxelColorizer.h"
@@ -53,6 +57,7 @@ using namespace std;
 
 const float VolumeFile::INVALID_INTERP_VALUE = 0.0f;//we may want NaN or something more obvious
 bool VolumeFile::s_voxelColoringEnabled = true;
+const AString VolumeFile::s_paletteColorMappingNameInMetaData = "__DYNAMIC_FILE_PALETTE_COLOR_MAPPING__";
 
 /**
  * Static method that sets the status of voxel coloring.  Coloring may take
@@ -72,6 +77,19 @@ VolumeFile::setVoxelColoringEnabled(const bool enabled)
     CaretLogConfig(AString(s_voxelColoringEnabled
                               ? "Volume coloring is enabled."
                            : "Volume coloring is disabled."));
+}
+
+/** protected, used by dynamic volume file */
+VolumeFile::VolumeFile(const DataFileTypeEnum::Enum dataFileType)
+: VolumeBase(), CaretMappableDataFile(dataFileType)
+{//CaretPointers initialize to NULL, and this isn't an operator=
+    CaretAssert((dataFileType == DataFileTypeEnum::VOLUME)
+                || (dataFileType == DataFileTypeEnum::VOLUME_DYNAMIC));
+    m_forceUpdateOfGroupAndNameHierarchy = true;
+    for (int32_t i = 0; i < BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_TABS; i++) {
+        m_chartingEnabledForTab[i] = false;
+    }
+    validateMembers();
 }
 
 
@@ -196,6 +214,7 @@ VolumeFile::clear()
     VolumeBase::clear();
     
     m_volumeFileEditorDelegate->clear();
+    m_lazyInitializedDynamicConnectivityFile.reset();
 }
 
 void VolumeFile::readFile(const AString& filename)
@@ -332,6 +351,22 @@ VolumeFile::writeFile(const AString& filename)
         throw DataFileException(filename,
                                 "writing multi-component volumes is not currently supported");//its a hassle, and uncommon, and there is only one 3-component type, restricted to 0-255
     }
+    
+    /*
+     * Put the child dynamic data-series file's palette in the file's metadata.
+     */
+    if (m_lazyInitializedDynamicConnectivityFile != NULL) {
+        GiftiMetaData* fileMetaData = m_lazyInitializedDynamicConnectivityFile->getCiftiXML().getFileMetaData();
+        CaretAssert(fileMetaData);
+        if (m_lazyInitializedDynamicConnectivityFile->getNumberOfMaps() > 0) {
+            fileMetaData->set(s_paletteColorMappingNameInMetaData,
+                              m_lazyInitializedDynamicConnectivityFile->getMapPaletteColorMapping(0)->encodeInXML());
+        }
+        else {
+            fileMetaData->remove(s_paletteColorMappingNameInMetaData);
+        }
+    }
+
     updateCaretExtension();
     
     NiftiHeader outHeader;//begin nifti-specific code
@@ -405,8 +440,13 @@ float VolumeFile::interpolateValue(const float coordIn1, const float coordIn2, c
             int64_t ind3high = ind3low + 1;
             if (!indexValid(ind1low, ind2low, ind3low, brickIndex, component) || !indexValid(ind1high, ind2high, ind3high, brickIndex, component))
             {
-                if (validOut != NULL) *validOut = false;
-                return INVALID_INTERP_VALUE;//check for valid coord before deconvolving the frame
+                if (validOut != NULL) *validOut = false;//check for valid coord before deconvolving the frame
+                if (getType() == SubvolumeAttributes::LABEL)
+                {
+                    return getMapLabelTable(brickIndex)->getUnassignedLabelKey();
+                } else {
+                    return INVALID_INTERP_VALUE;
+                }
             }
             int64_t whichFrame = component * dimensions[3] + brickIndex;
             validateSpline(brickIndex, component);
@@ -426,7 +466,12 @@ float VolumeFile::interpolateValue(const float coordIn1, const float coordIn2, c
             if (!indexValid(ind1low, ind2low, ind3low, brickIndex, component) || !indexValid(ind1high, ind2high, ind3high, brickIndex, component))
             {
                 if (validOut != NULL) *validOut = false;
-                return INVALID_INTERP_VALUE;
+                if (getType() == SubvolumeAttributes::LABEL)
+                {
+                    return getMapLabelTable(brickIndex)->getUnassignedLabelKey();
+                } else {
+                    return INVALID_INTERP_VALUE;
+                }
             }
             float xhighWeight = index1 - ind1low;
             float xlowWeight = 1.0f - xhighWeight;
@@ -457,13 +502,23 @@ float VolumeFile::interpolateValue(const float coordIn1, const float coordIn2, c
                 return getValue(index1, index2, index3, brickIndex, component);
             } else {
                 if (validOut != NULL) *validOut = false;
-                return INVALID_INTERP_VALUE;
+                if (getType() == SubvolumeAttributes::LABEL)
+                {
+                    return getMapLabelTable(brickIndex)->getUnassignedLabelKey();
+                } else {
+                    return INVALID_INTERP_VALUE;
+                }
             }
         }
         break;
     }
-    if (validOut != NULL) *validOut = false;
-    return INVALID_INTERP_VALUE;
+    if (validOut != NULL) *validOut = false;//this shouldn't be reached unless the enum value is invalid
+    if (getType() == SubvolumeAttributes::LABEL)
+    {
+        return getMapLabelTable(brickIndex)->getUnassignedLabelKey();
+    } else {
+        return INVALID_INTERP_VALUE;
+    }
 }
 
 void VolumeFile::validateSpline(const int64_t brickIndex, const int64_t component) const
@@ -675,16 +730,16 @@ void VolumeFile::validateMembers()
             if (m_caretVolExt.m_attributes[i]->m_palette == NULL)
             {
                 m_caretVolExt.m_attributes[i]->m_palette.grabNew(new PaletteColorMapping());
-                if (theType == SubvolumeAttributes::ANATOMY)
+                m_caretVolExt.m_attributes[i]->m_palette->setScaleMode(PaletteScaleModeEnum::MODE_AUTO_SCALE_ABSOLUTE_PERCENTAGE);
+                if ((theType == SubvolumeAttributes::ANATOMY) && (numMaps == 1))
                 {
                     m_caretVolExt.m_attributes[i]->m_palette->setSelectedPaletteName(Palette::GRAY_INTERP_POSITIVE_PALETTE_NAME);
-                    m_caretVolExt.m_attributes[i]->m_palette->setScaleMode(PaletteScaleModeEnum::MODE_AUTO_SCALE_PERCENTAGE);
+                } else {
+                    m_caretVolExt.m_attributes[i]->m_palette->setSelectedPaletteName(Palette::ROY_BIG_BL_PALETTE_NAME);
                 }
             }
         }
     }
-    
-    //setPaletteNormalizationMode(PaletteNormalizationModeEnum::NORMALIZATION_SELECTED_MAP_DATA);
     
     m_singleSliceFlag = false;
     if ((dimensions[0] == 1)
@@ -754,6 +809,10 @@ VolumeFile::clearModified()
     
     for (int32_t i = 0; i < numMaps; i++) {
         getMapMetaData(i)->clearModified();
+    }
+    
+    if (m_lazyInitializedDynamicConnectivityFile != NULL) {
+        m_lazyInitializedDynamicConnectivityFile->clearModified();
     }
 }
 
@@ -1255,8 +1314,13 @@ VolumeFile::getPaletteNormalizationModesSupported(std::vector<PaletteNormalizati
 {
     modesSupportedOut.clear();
     
-    modesSupportedOut.push_back(PaletteNormalizationModeEnum::NORMALIZATION_SELECTED_MAP_DATA);
-    modesSupportedOut.push_back(PaletteNormalizationModeEnum::NORMALIZATION_ALL_MAP_DATA);
+    if (getDataFileType() == DataFileTypeEnum::VOLUME) {
+        modesSupportedOut.push_back(PaletteNormalizationModeEnum::NORMALIZATION_SELECTED_MAP_DATA);
+        modesSupportedOut.push_back(PaletteNormalizationModeEnum::NORMALIZATION_ALL_MAP_DATA);
+    }
+    else if (getDataFileType() == DataFileTypeEnum::VOLUME_DYNAMIC) {
+        modesSupportedOut.push_back(PaletteNormalizationModeEnum::NORMALIZATION_SELECTED_MAP_DATA);
+    }
 }
 
 /**
@@ -1913,6 +1977,10 @@ VolumeFile::saveFileDataToScene(const SceneAttributes* sceneAttributes,
         sceneClass->addClass(m_classNameHierarchy->saveToScene(sceneAttributes,
                                                                "m_classNameHierarchy"));
     }
+    if (m_lazyInitializedDynamicConnectivityFile != NULL) {
+        sceneClass->addClass(m_lazyInitializedDynamicConnectivityFile->saveToScene(sceneAttributes,
+                                                                                   "m_lazyInitializedDynamicConnectivityFile"));
+    }
 }
 
 /**
@@ -1954,6 +2022,13 @@ VolumeFile::restoreFileDataFromScene(const SceneAttributes* sceneAttributes,
                                                sc);
         m_forceUpdateOfGroupAndNameHierarchy = false;
     }
+
+    const SceneClass* dynamicFileSceneClass = sceneClass->getClass("m_lazyInitializedDynamicConnectivityFile");
+    if (dynamicFileSceneClass != NULL) {
+        VolumeDynamicConnectivityFile* denseDynamicFile = getVolumeDynamicConnectivityFile();
+        denseDynamicFile->restoreFromScene(sceneAttributes,
+                                           dynamicFileSceneClass);
+    }
 }
 
 /**
@@ -1989,18 +2064,55 @@ VolumeFile::addToDataFileContentInformation(DataFileContentInformation& dataFile
         dimString += AString::number(dims[i]);
     }
     dataFileInformation.addNameAndValue("Dimensions", dimString);
-    const int64_t zero64 = 0;
-    if (indexValid(zero64, zero64, zero64)) {
-        float x, y, z;
-        indexToSpace(zero64, zero64, zero64, x, y, z);
-        dataFileInformation.addNameAndValue("IJK = (0,0,0)",
-                                            ("XYZ = ("
-                                             + AString::number(x)
-                                             + ", "
-                                             + AString::number(y)
-                                             + ", "
-                                             + AString::number(z)
-                                             + ")"));
+    
+    if (dims.size() >= 3) {
+        const int64_t maxI((dims[0] > 1) ? dims[0] - 1 : 0);
+        const int64_t maxJ((dims[1] > 1) ? dims[1] - 1 : 0);
+        const int64_t maxK((dims[2] > 1) ? dims[2] - 1 : 0);
+        int64_t corners[8][3] = {
+            {    0,    0,    0 },
+            { maxI,    0,    0 },
+            { maxI, maxJ,    0 },
+            {    0, maxJ,    0},
+            {    0,    0, maxK },
+            { maxI,    0, maxK },
+            { maxI, maxJ, maxK },
+            {    0, maxJ, maxK}
+        };
+        for (int32_t m = 0; m < 8; m++) {
+            const int64_t i(corners[m][0]);
+            const int64_t j(corners[m][1]);
+            const int64_t k(corners[m][2]);
+            if (indexValid(i, j, k)) {
+                float x, y, z;
+                indexToSpace(i, j, k, x, y, z);
+                dataFileInformation.addNameAndValue("IJK = ("
+                                                    + AString::number(i)
+                                                    + ","
+                                                    + AString::number(j)
+                                                    + ","
+                                                    + AString::number(k)
+                                                    + ")",
+                                                    ("XYZ = ("
+                                                     + AString::number(x)
+                                                     + ", "
+                                                     + AString::number(y)
+                                                     + ", "
+                                                     + AString::number(z)
+                                                     + ")"));
+            }
+        }
+    }
+    
+    const std::vector<std::vector<float>>& sform = getVolumeSpace().getSform();
+    QString sformName("sform");
+    for (const auto& row : sform) {
+        AString s;
+        for (const auto element : row) {
+            s.append(AString::number(element, 'f', 6) + " ");
+        }
+        dataFileInformation.addNameAndValue(sformName, s);
+        sformName.clear();
     }
     
     BoundingBox boundingBox;
@@ -2277,4 +2389,259 @@ VolumeFile::getBrainordinateMappingMatch(const CaretMappableDataFile* mapFile) c
     return BrainordinateMappingMatch::NO;
 }
 
+/**
+ * Get the identification information for a surface node in the given maps.
+ *
+ * @param mapIndices
+ *    Indices of maps for which identification information is requested.
+ * @param xyz
+ *     Coordinate of voxel.
+ * @param ijkOut
+ *     Voxel indices of value.
+ * @param textOut
+ *    Output containing identification information.
+ */
+bool
+VolumeFile::getVolumeVoxelIdentificationForMaps(const std::vector<int32_t>& mapIndices,
+                                                const float xyz[3],
+                                                int64_t ijkOut[3],
+                                                AString& textOut) const
+{
+    float floatIJK[3];
+    spaceToIndex(xyz, floatIJK);
+    
+    ijkOut[0] = floatIJK[0];
+    ijkOut[1] = floatIJK[1];
+    ijkOut[2] = floatIJK[2];
+    
+    bool anyValidFlag = false;
+    AString valuesText;
+    for (const auto mapIndex : mapIndices) {
+        if ( ! valuesText.isEmpty()) {
+            valuesText.append(", ");
+        }
+        bool validFlag(false);
+        const float value = getVoxelValue(xyz,
+                                          &validFlag,
+                                          mapIndex);
+        if (validFlag) {
+            anyValidFlag = true;
+            if (isMappedWithLabelTable()) {
+                const GiftiLabelTable* labelTable = getMapLabelTable(mapIndex);
+                CaretAssert(labelTable);
+                const int32_t key = static_cast<int32_t>(value);
+                const GiftiLabel* label = labelTable->getLabel(key);
+                if (label != NULL) {
+                    valuesText.append(label->getName());
+                }
+                else {
+                    valuesText.append("?");
+                }
+            }
+            else {
+                valuesText.append(AString::number(value, 'f', 3));
+            }
+        }
+        else {
+            valuesText.append("invalid");
+        }
+    }
+    
+    if (anyValidFlag) {
+        textOut = valuesText;
+        return true;
+    }
+    
+    return false;
+}
+
+
+/**
+ * @return The units for the 'interval' between two consecutive maps.
+ */
+NiftiTimeUnitsEnum::Enum
+VolumeFile::getMapIntervalUnits() const
+{
+    NiftiTimeUnitsEnum::Enum units = NiftiTimeUnitsEnum::NIFTI_UNITS_UNKNOWN;
+    
+    if (m_header != NULL && m_header->getType() == AbstractHeader::NIFTI) {
+        const NiftiHeader& myHeader = *((NiftiHeader*)m_header.getPointer());
+        
+        std::vector<int64_t> dims;
+        getDimensions(dims);
+        if (dims.size() >= 4) {
+            if (dims[3] > 1) {
+                /*
+                 * Timestep from NiftiHeader is always seconds
+                 */
+                const float timeStep = myHeader.getTimeStep();
+                if (timeStep > 0.0) {
+                    units = NiftiTimeUnitsEnum::NIFTI_UNITS_SEC;
+                }
+            }
+        }
+    }
+
+    return units;
+}
+
+/**
+ * Get the units value for the first map and the
+ * quantity of units between consecutive maps.  If the
+ * units for the maps is unknown, value of one (1) are
+ * returned for both output values.
+ *
+ * @param firstMapUnitsValueOut
+ *     Output containing units value for first map.
+ * @param mapIntervalStepValueOut
+ *     Output containing number of units between consecutive maps.
+ */
+void
+VolumeFile::getMapIntervalStartAndStep(float& firstMapUnitsValueOut,
+                                       float& mapIntervalStepValueOut) const
+{
+    firstMapUnitsValueOut   = 0.0;
+    mapIntervalStepValueOut = 1.0;
+    
+    if (m_header != NULL && m_header->getType() == AbstractHeader::NIFTI) {
+        const NiftiHeader& myHeader = *((NiftiHeader*)m_header.getPointer());
+        
+        std::vector<int64_t> dims;
+        getDimensions(dims);
+        if (dims.size() >= 4) {
+            if (dims[3] > 1) {
+                /*
+                 * Timestep from NiftiHeader is always seconds
+                 */
+                const float timeStep = myHeader.getTimeStep();
+                if (timeStep > 0.0) {
+                    mapIntervalStepValueOut = timeStep;
+                }
+            }
+        }
+    }
+}
+
+/**
+ * @return The volume dynamic connectivity file for a data-series (functional) file
+ *         that contains at least two time points.  Note that some files may
+ *         have type anatomy but still contain functional data.
+ *         Will return NULL for other types.
+ */
+const VolumeDynamicConnectivityFile*
+VolumeFile::getVolumeDynamicConnectivityFile() const
+{
+    VolumeFile* nonConstThis = const_cast<VolumeFile*>(this);
+    return nonConstThis->getVolumeDynamicConnectivityFile();
+}
+
+/**
+ * @return The volume dynamic connectivity file for a data-series (functional) file
+ *         that contains at least two time points.  Note that some files may
+ *         have type anatomy but still contain functional data.
+ *         Will return NULL for other types.
+ */
+VolumeDynamicConnectivityFile*
+VolumeFile::getVolumeDynamicConnectivityFile()
+{
+    if (m_lazyInitializedDynamicConnectivityFile == NULL) {
+        if ((getType() == SubvolumeAttributes::ANATOMY)
+            || (getType() == SubvolumeAttributes::FUNCTIONAL)) {
+            std::vector<int64_t> dims;
+            getDimensions(dims);
+            if (dims.size() >= 4) {
+                const int64_t minimumNumberOfTimePoints(8);
+                if (dims[3] > minimumNumberOfTimePoints) {
+                    m_lazyInitializedDynamicConnectivityFile.reset(new VolumeDynamicConnectivityFile(this));
+                    
+                    m_lazyInitializedDynamicConnectivityFile->initializeFile();
+                    
+                    /*
+                     * Palette for dynamic file is in file metadata
+                     */
+                    GiftiMetaData* fileMetaData = getFileMetaData();
+                    const AString encodedPaletteColorMappingString = fileMetaData->get(s_paletteColorMappingNameInMetaData);
+                    if ( ! encodedPaletteColorMappingString.isEmpty()) {
+                        if (m_lazyInitializedDynamicConnectivityFile->getNumberOfMaps() > 0) {
+                            PaletteColorMapping* pcm = m_lazyInitializedDynamicConnectivityFile->getMapPaletteColorMapping(0);
+                            CaretAssert(pcm);
+                            pcm->decodeFromStringXML(encodedPaletteColorMappingString);
+                        }
+                    }
+                    
+                    m_lazyInitializedDynamicConnectivityFile->clearModified();
+                }
+            }
+        }
+    }
+    
+    return m_lazyInitializedDynamicConnectivityFile.get();
+}
+
+/**
+ * @return True if any of the maps in this file contain a
+ * color mapping that possesses a modified status.
+ */
+bool
+VolumeFile::isModifiedPaletteColorMapping() const
+{
+    /*
+     * This method is override because we need to know if the
+     * encapsulated dynamic dense file has a modified palette.
+     * When restoring a scene, a file with any type of modification
+     * must be reloaded to remove any modifications.  Note that
+     * when a scene is restored, files that are not modified and
+     * are in the new scene are NOT reloaded to save time.
+     */
+    if (CaretMappableDataFile::isModifiedPaletteColorMapping()) {
+        return true;
+    }
+    
+    if (m_lazyInitializedDynamicConnectivityFile != NULL) {
+        if (m_lazyInitializedDynamicConnectivityFile->isModifiedPaletteColorMapping()) {
+            return true;
+        }
+    }
+    
+    return false;
+}
+
+/**
+ * @return The modified status for aall palettes in this file.
+ * Note that 'modified' overrides any 'modified by show scene'.
+ */
+PaletteModifiedStatusEnum::Enum
+VolumeFile::getPaletteColorMappingModifiedStatus() const
+{
+    const std::array<PaletteModifiedStatusEnum::Enum, 2> fileModStatus = { {
+        CaretMappableDataFile::getPaletteColorMappingModifiedStatus(),
+        ((m_lazyInitializedDynamicConnectivityFile != NULL)
+         ? m_lazyInitializedDynamicConnectivityFile->getPaletteColorMappingModifiedStatus()
+         : PaletteModifiedStatusEnum::UNMODIFIED)
+    } };
+    
+    PaletteModifiedStatusEnum::Enum modStatus = PaletteModifiedStatusEnum::UNMODIFIED;
+    for (auto status : fileModStatus) {
+        switch (status) {
+            case PaletteModifiedStatusEnum::MODIFIED:
+                modStatus = PaletteModifiedStatusEnum::MODIFIED;
+                break;
+            case PaletteModifiedStatusEnum::MODIFIED_BY_SHOW_SCENE:
+                modStatus = PaletteModifiedStatusEnum::MODIFIED_BY_SHOW_SCENE;
+                break;
+            case PaletteModifiedStatusEnum::UNMODIFIED:
+                break;
+        }
+        
+        if (modStatus == PaletteModifiedStatusEnum::MODIFIED) {
+            /*
+             * 'MODIFIED' overrides 'MODIFIED_BY_SHOW_SCENE'
+             * so no need to continue loop
+             */
+            break;
+        }
+    }
+    
+    return modStatus;
+}
 

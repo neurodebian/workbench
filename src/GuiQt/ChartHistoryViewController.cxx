@@ -48,6 +48,7 @@
 #include "EventGraphicsUpdateOneWindow.h"
 #include "GuiManager.h"
 #include "ModelChart.h"
+#include "WuQMacroManager.h"
 #include "WuQtUtilities.h"
 
 using namespace caret;
@@ -65,11 +66,15 @@ using namespace caret;
  */
 ChartHistoryViewController::ChartHistoryViewController(const Qt::Orientation orientation,
                                                        const int32_t browserWindowIndex,
+                                                       const QString& parentObjectName,
                                                        QWidget* parent)
 : QWidget(parent),
 m_orientation(orientation),
-m_browserWindowIndex(browserWindowIndex)
+m_browserWindowIndex(browserWindowIndex),
+m_objectNamePrefix(parentObjectName
+                   + ":History")
 {
+    WuQMacroManager* macroManager = WuQMacroManager::instance();
     m_averageCheckBox = new QCheckBox("Show Average");
     WuQtUtilities::setWordWrappedToolTip(m_averageCheckBox,
                                          "Display an average of the displayed chart data.   "
@@ -79,6 +84,10 @@ m_browserWindowIndex(browserWindowIndex)
                                          "chart.");
     QObject::connect(m_averageCheckBox, SIGNAL(clicked(bool)),
                      this, SLOT(averageCheckBoxClicked(bool)));
+    m_averageCheckBox->setObjectName(m_objectNamePrefix
+                                     + ":ShowAverage");
+    macroManager->addMacroSupportToObject(m_averageCheckBox,
+                                          "Enable linew chart history average");
     
     QPushButton* clearPushButton = new QPushButton("Clear");
     clearPushButton->setFixedWidth(clearPushButton->sizeHint().width() + 20);
@@ -86,6 +95,11 @@ m_browserWindowIndex(browserWindowIndex)
                      this, SLOT(clearPushButtonClicked()));
     WuQtUtilities::setWordWrappedToolTip(clearPushButton,
                                          "Remove all charts of the selected type in this tab");
+    clearPushButton->setObjectName(m_objectNamePrefix
+                                   + ":ClearButton");
+    macroManager->addMacroSupportToObject(clearPushButton,
+                                          "Remove line charts in tab");
+    
     
     QLabel* maximumDisplayedLabel = new QLabel("Show last ");
     m_maximumDisplayedSpinBox = new QSpinBox(); 
@@ -93,6 +107,12 @@ m_browserWindowIndex(browserWindowIndex)
     m_maximumDisplayedSpinBox->setMaximum(1000);
     QObject::connect(m_maximumDisplayedSpinBox, SIGNAL(valueChanged(int)),
                      this, SLOT(maximumDisplayedSpinBoxValueChanged(int)));
+    m_maximumDisplayedSpinBox->setToolTip("Show Last Lines");
+    m_maximumDisplayedSpinBox->setObjectName(m_objectNamePrefix
+                                             + ":ShowLastCount");
+    macroManager->addMacroSupportToObject(m_maximumDisplayedSpinBox,
+                                          "Set maximum line charts");
+    
     QHBoxLayout* maxDisplayedLayout = new QHBoxLayout();
     maxDisplayedLayout->addWidget(maximumDisplayedLabel);
     maxDisplayedLayout->addWidget(m_maximumDisplayedSpinBox);
@@ -283,6 +303,7 @@ ChartHistoryViewController::updateHistoryViewController()
             break;
     }
     
+    WuQMacroManager* macroManager = WuQMacroManager::instance();
     const std::vector<ChartData*> chartDataVector = chartModel->getAllChartDatas();
     const int32_t numData = static_cast<int32_t>(chartDataVector.size());
 
@@ -291,6 +312,8 @@ ChartHistoryViewController::updateHistoryViewController()
                                       numWidgetRows);
     for (int32_t i = 0; i < maxItems; i++) {
         if (i >= static_cast<int32_t>(m_chartDataCheckBoxes.size())) {
+            const QString numberString(QString("%1").arg((int)i+1, 2, 10, QLatin1Char('0')));
+                                       
             /*
              * Checkbox
              */
@@ -299,6 +322,13 @@ ChartHistoryViewController::updateHistoryViewController()
                              m_chartDataCheckBoxesSignalMapper, SLOT(map()));
             m_chartDataCheckBoxesSignalMapper->setMapping(checkBox, i);
             m_chartDataCheckBoxes.push_back(checkBox);
+            checkBox->setToolTip("Show Chart Line");
+            checkBox->setObjectName(m_objectNamePrefix
+                                    + ":ShowChartLine"
+                                    + numberString);
+            macroManager->addMacroSupportToObject(checkBox,
+                                                  "Show line chart " + numberString);
+            
 
             /*
              * Construction Tool Button
@@ -326,6 +356,12 @@ ChartHistoryViewController::updateHistoryViewController()
                              m_chartDataColorComboBoxesSignalMapper, SLOT(map()));
             m_chartDataColorComboBoxesSignalMapper->setMapping(colorComboBox, i);
             m_chartDataColorComboBoxes.push_back(colorComboBox);
+            colorComboBox->getWidget()->setToolTip("Select Color");
+            colorComboBox->getWidget()->setObjectName(m_objectNamePrefix
+                                                        + ":Color"
+                                                        + numberString);
+            macroManager->addMacroSupportToObject(colorComboBox->getWidget(),
+                                                  "Set line chart " + numberString + " color");
             
             /*
              * Label

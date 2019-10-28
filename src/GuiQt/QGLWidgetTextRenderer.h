@@ -55,11 +55,17 @@ namespace caret {
                                               const AnnotationText& annotationText,
                                               const BrainOpenGLTextRenderInterface::DrawingFlags& flags) override;
         
-        virtual void drawTextAtModelCoords(const double modelX,
+        virtual void drawTextAtModelCoordsFacingUser(const double modelX,
                                            const double modelY,
                                            const double modelZ,
                                            const AnnotationText& annotationText,
                                            const BrainOpenGLTextRenderInterface::DrawingFlags& flags) override;
+        
+        virtual void drawTextInModelSpace(const AnnotationText& annotationText,
+                                          const float modelSpaceScaling,
+                                          const float heightOrWidthForPercentageSizeText,
+                                          const float normalVector[3],
+                                          const DrawingFlags& flags) override;
         
         virtual void getTextWidthHeightInPixels(const AnnotationText& annotationText,
                                                 const BrainOpenGLTextRenderInterface::DrawingFlags& flags,
@@ -67,6 +73,17 @@ namespace caret {
                                                 const double viewportHeight,
                                                 double& widthOut,
                                                 double& heightOut) override;
+        
+        virtual void getBoundsForTextInModelSpace(const AnnotationText& annotationText,
+                                                  const float modelSpaceScaling,
+                                                  const float heightOrWidthForPercentageSizeText,
+                                                  const DrawingFlags& flags,
+                                                  double bottomLeftOut[3],
+                                                  double bottomRightOut[3],
+                                                  double topRightOut[3],
+                                                  double topLeftOut[3],
+                                                  double underlineStartOut[3],
+                                                  double underlineEndOut[3]) override;
         
         virtual void getBoundsForTextAtViewportCoords(const AnnotationText& annotationText,
                                                       const BrainOpenGLTextRenderInterface::DrawingFlags& flags,

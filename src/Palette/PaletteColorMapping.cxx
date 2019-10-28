@@ -243,7 +243,7 @@ PaletteColorMapping::operator==(const PaletteColorMapping& pcm) const
 void
 PaletteColorMapping::initializeMembersPaletteColorMapping()
 {
-    this->scaleMode = PaletteScaleModeEnum::MODE_AUTO_SCALE_PERCENTAGE;
+    this->scaleMode = PaletteScaleModeEnum::MODE_AUTO_SCALE_ABSOLUTE_PERCENTAGE;
     this->autoScalePercentageNegativeMaximum = 98.0f;
     this->autoScalePercentageNegativeMinimum = 2.0f;
     this->autoScalePercentagePositiveMinimum = 2.0f;
@@ -1963,7 +1963,7 @@ PaletteColorMapping::mapDataToPaletteNormalizedValues(const FastStatistics* stat
             {
                 normalized = (scalar - mappingLeastPositive) / mappingPositiveDenominator + PALETTE_ZERO_COLOR_ZONE;
             } else {
-                if (scalar > mappingLeastPositive)
+                if (scalar >= mappingMostPositive)
                 {
                     normalized = 1.0f;
                 }
@@ -1979,7 +1979,7 @@ PaletteColorMapping::mapDataToPaletteNormalizedValues(const FastStatistics* stat
             {
                 normalized = (scalar - mappingLeastNegative) / mappingNegativeDenominator - PALETTE_ZERO_COLOR_ZONE;
             } else {
-                if (scalar < mappingLeastNegative)
+                if (scalar <= mappingMostNegative)
                 {
                     normalized = -1.0f;
                 }

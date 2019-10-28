@@ -159,7 +159,7 @@ AnnotationCreateDialog::newAnnotationFromSpaceTypeAndBounds(const MouseEvent& mo
 Annotation*
 AnnotationCreateDialog::newAnnotationFromSpaceTypeAndCoords(const Mode mode,
                                                             const MouseEvent& mouseEvent,
-                                                            const AnnotationCoordinateSpaceEnum::Enum annotationSpace,
+                                                            const AnnotationCoordinateSpaceEnum::Enum annotationSpaceIn,
                                                             const AnnotationTypeEnum::Enum annotationType,
                                                             AnnotationFile* annotationFile)
 {
@@ -173,7 +173,7 @@ AnnotationCreateDialog::newAnnotationFromSpaceTypeAndCoords(const Mode mode,
     }
     
     NewAnnotationInfo newInfo(mouseEvent,
-                              annotationSpace,
+                              annotationSpaceIn,
                               annotationType,
                               useBothFlag,
                               annotationFile);
@@ -212,7 +212,7 @@ AnnotationCreateDialog::newAnnotationFromSpaceTypeAndCoords(const Mode mode,
         }
         else {
             AString errorMessage;
-            Annotation* newAnn = createAnnotation(newInfo, annotationSpace, errorMessage);
+            Annotation* newAnn = createAnnotation(newInfo, newInfo.m_selectedSpace, /*annotationSpace,*/ errorMessage);
             if (newAnn != NULL) {
                 DisplayPropertiesAnnotation* dpa = GuiManager::get()->getBrain()->getDisplayPropertiesAnnotation();
                 dpa->updateForNewAnnotation(newAnn);
@@ -280,6 +280,8 @@ AnnotationCreateDialog::createAnnotation(NewAnnotationInfo& newAnnotationInfo,
             case AnnotationCoordinateSpaceEnum::CHART:
                 adjustTextPctSizeFlag = true;
                 break;
+            case AnnotationCoordinateSpaceEnum::SPACER:
+                break;
             case AnnotationCoordinateSpaceEnum::STEREOTAXIC:
                 adjustTextPctSizeFlag = true;
                 break;
@@ -333,6 +335,8 @@ AnnotationCreateDialog::createAnnotation(NewAnnotationInfo& newAnnotationInfo,
         switch (annotationSpace) {
             case AnnotationCoordinateSpaceEnum::CHART:
                 threeDimSpaceFlag = true;
+                break;
+            case AnnotationCoordinateSpaceEnum::SPACER:
                 break;
             case AnnotationCoordinateSpaceEnum::STEREOTAXIC:
                 threeDimSpaceFlag = true;
@@ -388,7 +392,7 @@ AnnotationCreateDialog::createAnnotation(NewAnnotationInfo& newAnnotationInfo,
         finishAnnotationCreation(newAnnotationInfo.m_annotationFile,
                                  newAnnotation,
                                  newAnnotationInfo.m_mouseEvent.getBrowserWindowIndex(),
-                                 newAnnotationInfo.m_coordOneInfo.m_tabIndex);
+                                 newAnnotationInfo.m_coordOneInfo.m_tabSpaceInfo.m_index);
         return newAnnotation;
     }
     
@@ -443,6 +447,13 @@ m_imageHeight(0)
              iter++) {
             const AnnotationCoordinateSpaceEnum::Enum space = *iter;
             QRadioButton* rb = new QRadioButton(AnnotationCoordinateSpaceEnum::toGuiName(space));
+            if (space == AnnotationCoordinateSpaceEnum::SPACER) {
+                /*
+                 * Spacer and Tab are presented as 'TAB' to the user.  So show 'TAB' but
+                 * use the integer code for 'SPACER'.
+                 */
+                rb->setText(AnnotationCoordinateSpaceEnum::toGuiName(AnnotationCoordinateSpaceEnum::TAB));
+            }
             m_annotationSpaceButtonGroup->addButton(rb,
                                                     AnnotationCoordinateSpaceEnum::toIntegerCode(space));
             coordGroupLayout->addWidget(rb);
@@ -794,8 +805,6 @@ AnnotationCreateDialog::finishAnnotationCreation(AnnotationFile* annotationFile,
      * A new chart annotation is displayed only in the tab in which it was created
      */
     if (annotation->getCoordinateSpace() == AnnotationCoordinateSpaceEnum::CHART) {
-        
-        //annotation->setItemDisplaySelectedInNoDisplayGroups();
         annotation->setItemDisplaySelectedInOneTab(tabIndex);
         annotation->setItemDisplaySelected(DisplayGroupEnum::DISPLAY_GROUP_TAB,
                                            tabIndex,
@@ -804,66 +813,6 @@ AnnotationCreateDialog::finishAnnotationCreation(AnnotationFile* annotationFile,
     
 }
 
-///**
-// * Constructor for information used to create a new annotation.
-// *
-// * @param mouseEvent
-// *     The mouse event.
-// * @param selectedSpace
-// *     The space selected by the user.
-// * @param annotationType
-// *     The annotation type.
-// * @param useBothCoordinatesFromMouseFlag
-// *     Use both coords (X/Y and pressed X/Y)
-// * @param annotationFile
-// *     File to which annotation is added.
-// */
-//AnnotationCreateDialog::NewAnnotationInfo::NewAnnotationInfo(const MouseEvent& mouseEvent,
-//                                                             const AnnotationCoordinateSpaceEnum::Enum selectedSpace,
-//                                                             const AnnotationTypeEnum::Enum annotationType,
-//                                                             const bool useBothCoordinatesFromMouseFlag,
-//                                                             AnnotationFile* annotationFile)
-//: m_mouseEvent(mouseEvent),
-//m_selectedSpace(selectedSpace),
-//m_annotationType(annotationType),
-//m_annotationFile(annotationFile)
-//{
-//    CaretAssert(annotationFile);
-//    
-//    m_validSpaces.clear();
-//    m_coordOneInfo.reset();
-//    m_coordTwoInfo.reset();
-//    m_coordTwoInfoValid = false;
-//    m_percentageWidth  = -1;
-//    m_percentageHeight = -1;
-//    
-//    AnnotationCoordinateInformation::createCoordinateInformationFromXY(mouseEvent,
-//                                                                       mouseEvent.getX(),
-//                                                                       mouseEvent.getY(),
-//                                                                       m_coordOneInfo);
-//    
-//    if (useBothCoordinatesFromMouseFlag) {
-//        AnnotationCoordinateInformation::createCoordinateInformationFromXY(mouseEvent,
-//                                                                           mouseEvent.getPressedX(),
-//                                                                           mouseEvent.getPressedY(),
-//                                                                           m_coordTwoInfo);
-//        
-//        AnnotationCoordinateInformation::getValidCoordinateSpaces(&m_coordOneInfo,
-//                                                                  &m_coordTwoInfo,
-//                                                                  m_validSpaces);
-//        
-//        if (isValid()) {
-//            m_coordTwoInfoValid = true;
-//            
-//            processTwoCoordInfo();
-//        }
-//    }
-//    else {
-//        AnnotationCoordinateInformation::getValidCoordinateSpaces(&m_coordOneInfo,
-//                                                                  NULL,
-//                                                                  m_validSpaces);
-//    }
-//}
 /**
  * Constructor for information used to create a new annotation.
  *
@@ -952,10 +901,30 @@ m_annotationFile(annotationFile)
                                                                   NULL,
                                                                   m_validSpaces);
     }
+    
+    /*
+     * There is not a selection in the GUI for the user to choose 'SPACER' coordinate space.
+     * Instead the user uses 'TAB' space in the GUI.  So, if TAB space is NOT valid, but
+     * SPACER space is valid, change the requested space to 'SPACER'
+     */
+    if (m_selectedSpace == AnnotationCoordinateSpaceEnum::TAB) {
+        const bool haveTabFlag = (std::find(m_validSpaces.begin(),
+                                            m_validSpaces.end(),
+                                            AnnotationCoordinateSpaceEnum::TAB) != m_validSpaces.end());
+        const bool haveSpacerFlag = (std::find(m_validSpaces.begin(),
+                                               m_validSpaces.end(),
+                                               AnnotationCoordinateSpaceEnum::SPACER) != m_validSpaces.end());
+        
+        if (haveSpacerFlag) {
+            if ( ! haveTabFlag) {
+                m_selectedSpace = AnnotationCoordinateSpaceEnum::SPACER;
+            }
+        }
+    }
 }
 
 /**
- * When the user drags to create an annotation, two points are 
+ * When the user drags to create an annotation, two points are
  * used at opposite corners.  For non-linear annotations, we
  * need a center, width, and height.  So for these types,
  * convert the two points to one point with center, width, 
@@ -964,8 +933,8 @@ m_annotationFile(annotationFile)
 void
 AnnotationCreateDialog::NewAnnotationInfo::processTwoCoordInfo()
 {
-    if ((m_coordOneInfo.m_windowIndex >= 0)
-        && (m_coordTwoInfo.m_windowIndex >= 0)) {
+    if ((m_coordOneInfo.m_windowSpaceInfo.m_index >= 0)
+        && (m_coordTwoInfo.m_windowSpaceInfo.m_index >= 0)) {
     
         bool useAverageFlag      = false;
         bool useTextAligmentFlag = false;
@@ -992,10 +961,10 @@ AnnotationCreateDialog::NewAnnotationInfo::processTwoCoordInfo()
         
         if (useAverageFlag
             || useTextAligmentFlag) {
-            int32_t windowPixelX    = m_coordOneInfo.m_windowPixelXYZ[0];
-            int32_t windowPixelY    = m_coordOneInfo.m_windowPixelXYZ[1];
-            int32_t windowTwoPixelX = m_coordTwoInfo.m_windowPixelXYZ[0];
-            int32_t windowTwoPixelY = m_coordTwoInfo.m_windowPixelXYZ[1];
+            int32_t windowPixelX    = m_coordOneInfo.m_windowSpaceInfo.m_pixelXYZ[0];
+            int32_t windowPixelY    = m_coordOneInfo.m_windowSpaceInfo.m_pixelXYZ[1];
+            int32_t windowTwoPixelX = m_coordTwoInfo.m_windowSpaceInfo.m_pixelXYZ[0];
+            int32_t windowTwoPixelY = m_coordTwoInfo.m_windowSpaceInfo.m_pixelXYZ[1];
             
             if ((windowPixelX >= 0)
                 && (windowPixelY >= 0)
@@ -1033,15 +1002,20 @@ AnnotationCreateDialog::NewAnnotationInfo::processTwoCoordInfo()
                                                                 viewport,
                                                                 subWidth,
                                                                 subHeight)) {
-//                                std::cout << "Changing "
-//                                << viewportWidth << ", " << viewportHeight << " to "
-//                                << subWidth << ", " << subHeight << std::endl;
                                 
                                 viewportWidth  = subWidth;
                                 viewportHeight = subHeight;
                             }
                             break;
                         }
+                        case AnnotationCoordinateSpaceEnum::SPACER:
+                        {
+                            int viewport[4];
+                            m_mouseEvent.getViewportContent()->getModelViewport(viewport);
+                            viewportWidth = viewport[2];
+                            viewportHeight = viewport[3];
+                        }
+                            break;
                         case AnnotationCoordinateSpaceEnum::TAB:
                         {
                             int viewport[4];

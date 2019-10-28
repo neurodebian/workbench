@@ -38,9 +38,11 @@ namespace caret {
 
         virtual ~SceneInfo();
         
-        AString getName() const;
+        bool isModified() const override;
         
-        void setName(const AString& sceneName);
+        void clearModified() override;
+        
+        AString getName() const;
         
         AString getDescription() const;
         
@@ -71,6 +73,12 @@ namespace caret {
                                  const AString& imageFormat) const;
         
     private:
+        /*
+         * setName() is private as users  should call Scene::setName()
+         * but the XML readers are allowed to call setName()
+         */
+        void setName(const AString& sceneName);
+        
         SceneInfo& operator=(const SceneInfo&);
         
         /** name of scene*/
@@ -90,6 +98,9 @@ namespace caret {
         
         // ADD_NEW_MEMBERS_HERE
 
+        friend class Scene;
+        friend class SceneInfoSaxReader;
+        friend class SceneInfoXmlStreamReader;
     };
     
 #ifdef __SCENE_INFO_DECLARE__

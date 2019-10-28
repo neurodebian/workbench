@@ -176,6 +176,14 @@ PreferencesDialog::addColorButtonAndSwatch(QGridLayout* gridLayout,
             buttonText = "Chart Threshold";
             m_chartHistogramThresholdColorWidget = colorSwatchWidget;
             break;
+        case PREF_COLOR_BACKGROUND_WINDOW:
+            buttonText = "Window Background";
+            m_backgroundColorWindowWidget = colorSwatchWidget;
+            break;
+        case PREF_COLOR_FOREGROUND_WINDOW:
+            buttonText = "Window Foreground";
+            m_foregroundColorWindowWidget = colorSwatchWidget;
+            break;
         case NUMBER_OF_PREF_COLORS:
             CaretAssert(0);
             break;
@@ -206,6 +214,13 @@ PreferencesDialog::createColorsWidget()
     QSignalMapper* colorSignalMapper = new QSignalMapper(this);
     
     QGridLayout* gridLayout = new QGridLayout();
+    
+    addColorButtonAndSwatch(gridLayout,
+                            PREF_COLOR_FOREGROUND_WINDOW,
+                            colorSignalMapper);
+    addColorButtonAndSwatch(gridLayout,
+                            PREF_COLOR_BACKGROUND_WINDOW,
+                            colorSignalMapper);
     
     addColorButtonAndSwatch(gridLayout,
                             PREF_COLOR_FOREGROUND_ALL,
@@ -310,6 +325,14 @@ PreferencesDialog::updateColorWidget(CaretPreferences* prefs)
             case PREF_COLOR_CHART_THRESHOLD:
                 colors.getColorChartHistogramThreshold(rgb);
                 colorSwatchWidget = m_chartHistogramThresholdColorWidget;
+                break;
+            case PREF_COLOR_BACKGROUND_WINDOW:
+                colors.getColorBackgroundWindow(rgb);
+                colorSwatchWidget = m_backgroundColorWindowWidget;
+                break;
+            case PREF_COLOR_FOREGROUND_WINDOW:
+                colors.getColorForegroundWindow(rgb);
+                colorSwatchWidget = m_foregroundColorWindowWidget;
                 break;
             case NUMBER_OF_PREF_COLORS:
                 CaretAssert(0);
@@ -458,6 +481,10 @@ PreferencesDialog::createIdentificationSymbolWidget()
     QObject::connect(m_volumeIdentificationSymbolComboBox, SIGNAL(statusChanged(bool)),
                      this, SLOT(identificationSymbolToggled()));
     
+    m_dataToolTipsComboBox = new WuQTrueFalseComboBox("On", "Off", this);
+    QObject::connect(m_dataToolTipsComboBox, SIGNAL(statusChanged(bool)),
+                     this, SLOT(identificationSymbolToggled()));
+    
     QGridLayout* gridLayout = new QGridLayout();
     int row = gridLayout->rowCount();
     gridLayout->addWidget(infoLabel,
@@ -468,6 +495,9 @@ PreferencesDialog::createIdentificationSymbolWidget()
     addWidgetToLayout(gridLayout,
                       "Show Volume ID Symbols: ",
                       m_volumeIdentificationSymbolComboBox->getWidget());
+    addWidgetToLayout(gridLayout,
+                      "Show Data Tool Tips: ",
+                      m_dataToolTipsComboBox->getWidget());
 
     QWidget* widget = new QWidget();
     QVBoxLayout* layout = new QVBoxLayout(widget);
@@ -487,6 +517,7 @@ PreferencesDialog::updateIdentificationWidget(CaretPreferences* prefs)
 {
     m_surfaceIdentificationSymbolComboBox->setStatus(prefs->isShowSurfaceIdentificationSymbols());
     m_volumeIdentificationSymbolComboBox->setStatus(prefs->isShowVolumeIdentificationSymbols());
+    m_dataToolTipsComboBox->setStatus(prefs->isShowDataToolTipsEnabled());
 }
 
 /**
@@ -498,6 +529,7 @@ PreferencesDialog::identificationSymbolToggled()
     CaretPreferences* prefs = SessionManager::get()->getCaretPreferences();
     prefs->setShowSurfaceIdentificationSymbols(m_surfaceIdentificationSymbolComboBox->isTrue());
     prefs->setShowVolumeIdentificationSymbols(m_volumeIdentificationSymbolComboBox->isTrue());
+    prefs->setShowDataToolTipsEnabled(m_dataToolTipsComboBox->isTrue());
 }
 
 /**
@@ -626,10 +658,15 @@ PreferencesDialog::createTabDefaltsWidget()
                                                                                               SLOT(volumeMontageCoordinatePrecisionChanged(int)));
     m_allWidgets->add(m_volumeMontageCoordinatePrecisionSpinBox);
     
-    m_allWidgets->add(m_volumeAxesCrosshairsComboBox);
-    m_allWidgets->add(m_volumeAxesLabelsComboBox);
-    m_allWidgets->add(m_volumeAxesMontageCoordinatesComboBox);
-    m_allWidgets->add(m_volumeMontageCoordinatePrecisionSpinBox);
+    /*
+     * All slice planes layout default
+     */
+    m_volumeAllSlicePlanesLayoutComboBox = new EnumComboBoxTemplate(this);
+    m_volumeAllSlicePlanesLayoutComboBox->setup<VolumeSliceViewAllPlanesLayoutEnum,VolumeSliceViewAllPlanesLayoutEnum::Enum>();
+    QObject::connect(m_volumeAllSlicePlanesLayoutComboBox, SIGNAL(itemActivated()),
+                     this, SLOT(m_volumeAllSlicePlanesLayoutItemActivated()));
+    m_allWidgets->add(m_volumeAllSlicePlanesLayoutComboBox->getWidget());
+
     
     QGridLayout* gridLayout = new QGridLayout();
     
@@ -661,6 +698,9 @@ PreferencesDialog::createTabDefaltsWidget()
     addWidgetToLayout(gridLayout,
                       "Volume Montage Precision: ",
                       m_volumeMontageCoordinatePrecisionSpinBox);
+    addWidgetToLayout(gridLayout,
+                      "All Slice Planes Layout: ",
+                      m_volumeAllSlicePlanesLayoutComboBox->getWidget());
     
     QWidget* widget = new QWidget();
     QVBoxLayout* layout = new QVBoxLayout(widget);
@@ -683,6 +723,7 @@ PreferencesDialog::updateVolumeWidget(CaretPreferences* prefs)
     m_volumeAxesMontageCoordinatesComboBox->setStatus(prefs->isVolumeMontageAxesCoordinatesDisplayed());
     m_volumeIdentificationComboBox->setStatus(prefs->isVolumeIdentificationDefaultedOn());
     m_volumeMontageCoordinatePrecisionSpinBox->setValue(prefs->getVolumeMontageCoordinatePrecision());
+    m_volumeAllSlicePlanesLayoutComboBox->setSelectedItem<VolumeSliceViewAllPlanesLayoutEnum, VolumeSliceViewAllPlanesLayoutEnum::Enum>(prefs->getVolumeAllSlicePlanesLayout());
 }
 
 /**
@@ -809,6 +850,14 @@ PreferencesDialog::updateColorWithDialog(const PREF_COLOR prefColor)
             colors.getColorChartHistogramThreshold(rgb);
             prefColorName = "Chart Histogram Threshold";
             break;
+        case PREF_COLOR_BACKGROUND_WINDOW:
+            colors.getColorBackgroundWindow(rgb);
+            prefColorName = "Background - Window";
+            break;
+        case PREF_COLOR_FOREGROUND_WINDOW:
+            colors.getColorForegroundWindow(rgb);
+            prefColorName = "Foreground - Window";
+            break;
         case NUMBER_OF_PREF_COLORS:
             CaretAssert(0);
             break;
@@ -861,6 +910,12 @@ PreferencesDialog::updateColorWithDialog(const PREF_COLOR prefColor)
                 break;
             case PREF_COLOR_CHART_THRESHOLD:
                 colors.setColorChartHistogramThreshold(rgb);
+                break;
+            case PREF_COLOR_BACKGROUND_WINDOW:
+                colors.setColorBackgroundWindow(rgb);
+                break;
+            case PREF_COLOR_FOREGROUND_WINDOW:
+                colors.setColorForegroundWindow(rgb);
                 break;
             case NUMBER_OF_PREF_COLORS:
                 CaretAssert(0);
@@ -973,6 +1028,18 @@ PreferencesDialog::volumeAxesMontageCoordinatesComboBoxToggled(bool value)
     EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
 }
 
+/**
+ * Called when ALL view slice plane layout changed by user
+ */
+void
+PreferencesDialog::m_volumeAllSlicePlanesLayoutItemActivated()
+{
+    VolumeSliceViewAllPlanesLayoutEnum::Enum layoutValue = m_volumeAllSlicePlanesLayoutComboBox->getSelectedItem<VolumeSliceViewAllPlanesLayoutEnum, VolumeSliceViewAllPlanesLayoutEnum::Enum>();
+    CaretPreferences* prefs = SessionManager::get()->getCaretPreferences();
+    prefs->setVolumeAllSlicePlanesLayout(layoutValue);
+    EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+
+}
 /**
  * Called when volume montage coordinate precision value is changed.
  */

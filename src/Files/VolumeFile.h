@@ -37,6 +37,7 @@
 namespace caret {
     
     class GroupAndNameHierarchyModel;
+    class VolumeDynamicConnectivityFile;
     class VolumeFileEditorDelegate;
     class VolumeFileVoxelColorizer;
     class VolumeSpline;
@@ -96,6 +97,8 @@ namespace caret {
         /** Performs coloring of voxels.  Will be NULL if coloring is disabled. */
         CaretPointer<VolumeFileVoxelColorizer> m_voxelColorizer;
         
+        std::unique_ptr<VolumeDynamicConnectivityFile> m_lazyInitializedDynamicConnectivityFile;
+        
         /** True if the volume is a single slice, needed by interpolateValue() methods */
         bool m_singleSliceFlag;
         
@@ -123,7 +126,11 @@ namespace caret {
         
         CaretPointer<VolumeFileEditorDelegate> m_volumeFileEditorDelegate;
         
+        static const AString s_paletteColorMappingNameInMetaData;
+        
     protected:
+        VolumeFile(const DataFileTypeEnum::Enum dataFileType);
+        
         virtual void saveFileDataToScene(const SceneAttributes* sceneAttributes,
                                          SceneClass* sceneClass);
         
@@ -189,9 +196,9 @@ namespace caret {
         ///returns true if volume space matches in spatial dimensions and sform
         bool matchesVolumeSpace(const int64_t dims[3], const std::vector<std::vector<float> >& sform) const;
         
-        void readFile(const AString& filename);
+        virtual void readFile(const AString& filename);
 
-        void writeFile(const AString& filename);
+        virtual void writeFile(const AString& filename);
 
         bool isEmpty() const { return VolumeBase::isEmpty(); }
         
@@ -369,6 +376,25 @@ namespace caret {
                                         std::vector<float>& dataOut) const override;
         
         virtual BrainordinateMappingMatch getBrainordinateMappingMatch(const CaretMappableDataFile* mapFile) const override;
+       
+        virtual bool getVolumeVoxelIdentificationForMaps(const std::vector<int32_t>& mapIndices,
+                                                         const float xyz[3],
+                                                         int64_t ijkOut[3],
+                                                         AString& textOut) const;
+        
+        virtual NiftiTimeUnitsEnum::Enum getMapIntervalUnits() const override;
+        
+        virtual void getMapIntervalStartAndStep(float& firstMapUnitsValueOut,
+                                                float& mapIntervalStepValueOut) const override;
+        
+        VolumeDynamicConnectivityFile* getVolumeDynamicConnectivityFile();
+        
+        const VolumeDynamicConnectivityFile* getVolumeDynamicConnectivityFile() const;
+        
+        virtual bool isModifiedPaletteColorMapping() const override;
+        
+        virtual PaletteModifiedStatusEnum::Enum getPaletteColorMappingModifiedStatus() const override;
+        
     };
 
 }

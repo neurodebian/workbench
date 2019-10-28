@@ -76,18 +76,22 @@ using namespace caret;
  *    Name of enumerated value.
  * @param guiName
  *    User-friendly name for use in user-interface.
+ * @param checkable
+ *    Checkable status (NO, YES)
  * @param defaultValue
  *    Default value for flag
  */
 DeveloperFlagsEnum::DeveloperFlagsEnum(const Enum enumValue,
                                        const AString& name,
                                        const AString& guiName,
+                                       const CheckableEnum checkable,
                                        const bool defaultValue)
 {
     this->enumValue = enumValue;
     this->integerCode = integerCodeCounter++;
     this->name = name;
     this->guiName = guiName;
+    this->checkable = checkable;
     this->flagStatus = defaultValue;
 }
 
@@ -109,14 +113,40 @@ DeveloperFlagsEnum::initialize()
     }
     initializedFlag = true;
 
-    enumData.push_back(DeveloperFlagsEnum(DEVELOPER_FLAG_UNUSED,
-                                          "DEVELOPER_FLAG_UNUSED",
-                                          "Developer Flag Unused",
-                                          false));
-    enumData.push_back(DeveloperFlagsEnum(DEVELOPER_FLAG_FLIP_PALETTE_NOT_DATA,
-                                          "DEVELOPER_FLAG_FLIP_PALETTE_NOT_DATA",
-                                          "Flip Palette Not Data",
-                                          false));
+    std::vector<DeveloperFlagsEnum> checkableItems;
+    checkableItems.push_back(DeveloperFlagsEnum(DEVELOPER_FLAG_UNUSED,
+                                                "DEVELOPER_FLAG_UNUSED",
+                                                "Developer Flag Unused",
+                                                CheckableEnum::YES,
+                                                false));
+    checkableItems.push_back(DeveloperFlagsEnum(DEVELOPER_FLAG_FLIP_PALETTE_NOT_DATA,
+                                                "DEVELOPER_FLAG_FLIP_PALETTE_NOT_DATA",
+                                                "Flip Palette Not Data",
+                                                CheckableEnum::YES,
+                                                false));
+    checkableItems.push_back(DeveloperFlagsEnum(DEVELOPER_FLAG_TEXTURE_VOLUME,
+                                                "DEVELOPER_FLAG_TEXTURE_VOLUME",
+                                                "Texture Volume Drawing",
+                                                CheckableEnum::YES,
+                                                false));
+    checkableItems.push_back(DeveloperFlagsEnum(DELELOPER_FLAG_VOXEL_SMOOTH,
+                                                "DELELOPER_FLAG_VOXEL_SMOOTH",
+                                                "Smooth Texture Volume Voxels",
+                                                CheckableEnum::YES,
+                                                false));
+
+    checkableItems.push_back(DeveloperFlagsEnum(DEVELOPER_FLAG_BALSA,
+                                                "DEVELOPER_FLAG_BALSA",
+                                                "Visit BALSA...",
+                                                CheckableEnum::NO,
+                                                false));
+    
+    std::vector<DeveloperFlagsEnum> notCheckableItems;
+
+    enumData.insert(enumData.end(),
+                    checkableItems.begin(), checkableItems.end());
+    enumData.insert(enumData.end(),
+                    notCheckableItems.begin(), notCheckableItems.end());
 }
 
 /**
@@ -405,6 +435,28 @@ DeveloperFlagsEnum::setFlag(const Enum enumValue,
     if (initializedFlag == false) initialize();
     DeveloperFlagsEnum* enumInstance = findData(enumValue);
     enumInstance->flagStatus = flagStatus;
+}
+
+/**
+ * @return True if the developer flag is checkable
+ */
+bool
+DeveloperFlagsEnum::isCheckable(const Enum enumValue)
+{
+    bool checkableStatus(false);
+    
+    if (initializedFlag == false) initialize();
+    DeveloperFlagsEnum* enumInstance = findData(enumValue);
+    switch (enumInstance->checkable) {
+        case CheckableEnum::NO:
+            checkableStatus = false;
+            break;
+        case CheckableEnum::YES:
+            checkableStatus = true;
+            break;
+    }
+    
+    return checkableStatus;
 }
 
 

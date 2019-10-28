@@ -3,6 +3,7 @@
 #
 CMAKE_MINIMUM_REQUIRED (VERSION 2.8)
 
+SET(WB_VERSION "1.4.0")
 #
 # Set to true for verbose output when debugging this file
 #
@@ -185,6 +186,15 @@ ENDIF(OPENSSL_FOUND)
 # https://cmake.org/cmake/help/v3.5/manual/cmake-packages.7.html#manual:cmake-packages(7)
 # Modules List: http://doc.qt.io/qt-5/qtmodules.html
 #
+SET(WB_WEBKIT_COMPONENTS "")
+SET(WB_WEBKIT_LIBS "")
+SET(HAVE_QT_WEBKIT False)
+IF (HAVE_QT_WEBKIT)
+    ADD_DEFINITIONS(-DHAVE_WEBKIT)
+    SET (WB_WEBKIT_COMPONENTS "WebEngine WebEngineCore WebEngineWidgets")
+    SET (WB_WEBKIT_LIBS "Qt5::WebEngine Qt5::WebEngineCore Qt5::WebEngineWidgets")
+
+ENDIF (HAVE_QT_WEBKIT)
 SET(QT_RESULT "Not Found")
 SET(CARET_QT5_LINK "")
 IF (WORKBENCH_USE_QT5) 
@@ -197,7 +207,7 @@ IF (WORKBENCH_USE_QT5)
         SET(WB_QT_OPENGL_MODULE "OpenGL")
     ENDIF ()
 
-    FIND_PACKAGE(Qt5 REQUIRED COMPONENTS Concurrent Core Gui Network ${WB_QT_OPENGL_MODULE} PrintSupport Test Widgets Xml)
+    FIND_PACKAGE(Qt5 REQUIRED COMPONENTS Concurrent Core Gui Network ${WB_QT_OPENGL_MODULE} PrintSupport Test Widgets Xml ${WB_WEBKIT_COMPONENTS})
     IF (WORKBENCH_USE_QT5_QOPENGL_WIDGET)
         #
         # QGLWidget is deprecated in Qt 5 and is replaced with QOpenGLWidget
@@ -244,6 +254,35 @@ IF (Qwt_FOUND)
 ELSE (Qwt_FOUND)
     SET(QWT_RESULT "In Workbench Source Code")
 ENDIF (Qwt_FOUND)
+
+##########################################################################################
+#
+# glm Math Library is header filess only containing C++ templates and functions.
+# Since there is no code to link, only need the path to the include files
+# https://glm.g-truc.net/0.9.9/index.html
+#
+SET(GLMATH_RESULT "Not Found")
+IF (NOT WIN32)
+    PKG_CHECK_MODULES(GLMath glm)
+ENDIF (NOT WIN32)
+IF (GLMath_FOUND)
+    SET(GLMATH_RESULT "Using OpenGL Math directory ${GLMath_INCLUDE_DIRS}")
+    INCLUDE_DIRECTORIES("${GLMath_INCLUDE_DIRS}")
+ELSE (GLMath_FOUND)
+    SET(GLMATH_RESULT "In Workbench Source Code")
+    INCLUDE_DIRECTORIES("${CMAKE_SOURCE_DIR}/GLMath")
+ENDIF (GLMath_FOUND)
+
+
+##########################################################################################
+#
+# Can Use OpenCL
+#
+SET(OPENCL_RESULT "Not found (OK, unused at this time)")
+FIND_PACKAGE(OpenCL)
+IF (OpenCL_FOUND)
+    SET(OPENCL_RESULT "Version: ${OpenCL_VERSION_STRING}")
+ENDIF (OpenCL_FOUND)
 
 ##########################################################################################
 #
@@ -589,6 +628,8 @@ IF(WB_CMAKE_VERBOSE_OUTPUT_FLAG)
     MESSAGE(${MSG_MODE} ${MSG_INDENT} "FTGL:     " ${FTGL_RESULT})
     MESSAGE(${MSG_MODE} ${MSG_INDENT} "FreeType: " ${FREETYPE_RESULT})
     MESSAGE(${MSG_MODE} ${MSG_INDENT} "GLEW:     " ${GLEW_RESULT})
+    MESSAGE(${MSG_MODE} ${MSG_INDENT} "GLMath:   " ${GLMATH_RESULT})
+    MESSAGE(${MSG_MODE} ${MSG_INDENT} "OpenCL:   " ${OPENCL_RESULT})
     MESSAGE(${MSG_MODE} ${MSG_INDENT} "OpenGL:   " ${OPENGL_RESULT})
     MESSAGE(${MSG_MODE} ${MSG_INDENT} "OpenMP:   " ${OPENMP_RESULT})
     MESSAGE(${MSG_MODE} ${MSG_INDENT} "OpenSSL:  " ${OPENSSL_RESULT})

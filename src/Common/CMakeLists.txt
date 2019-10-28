@@ -14,6 +14,7 @@ SET(QT_USE_QTNETWORK TRUE)
 
 if(Qt5_FOUND)
     include_directories(${Qt5Core_INCLUDE_DIRS})
+    include_directories(${Qt5Gui_INCLUDE_DIRS})
     include_directories(${Qt5Network_INCLUDE_DIRS})
     include_directories(${Qt5Xml_INCLUDE_DIRS})
 endif()
@@ -76,11 +77,13 @@ CaretObjectTracksModification.h
 CaretOMP.h
 CaretPointer.h
 CaretPointLocator.h
+CaretPreferenceDataValue.h
 CaretPreferences.h
 CaretTemporaryFile.h
 CaretUndoCommand.h
 CaretUndoStack.h
 CaretUnitsTypeEnum.h
+ConnectivityCorrelation.h
 CubicSpline.h
 DataCompressZLib.h
 DataFile.h
@@ -99,12 +102,15 @@ Event.h
 EventAlertUser.h
 EventBrowserTabDelete.h
 EventBrowserTabIndicesGetAll.h
+EventBrowserTabNew.h
+EventBrowserTabNewClone.h
 EventCaretPreferencesGet.h
 EventGetViewportSize.h
 EventListenerInterface.h
 EventManager.h
 EventPaletteGetByName.h
 EventProgressUpdate.h
+EventTileTabsConfigurationModification.h
 EventTypeEnum.h
 FastStatistics.h
 FileAdapter.h
@@ -139,6 +145,7 @@ ProgressObject.h
 ProgressReportingInterface.h
 ReductionEnum.h
 ReductionOperation.h
+SpacerTabIndex.h
 SpecFileDialogViewFilesTypeEnum.h
 SpeciesEnum.h
 StereotaxicSpaceEnum.h
@@ -146,13 +153,36 @@ StringTableModel.h
 StructureEnum.h
 SystemUtilities.h
 TileTabsConfiguration.h
-TileTabsConfigurationModeEnum.h
+TileTabsConfigurationLayoutTypeEnum.h
+TileTabsBaseConfiguration.h
+TileTabsGridLayoutConfiguration.h
+TileTabsGridModeEnum.h
+TileTabsGridRowColumnContentTypeEnum.h
+TileTabsGridRowColumnElement.h
+TileTabsGridRowColumnStretchTypeEnum.h
 TracksModificationInterface.h
 TriStateSelectionStatusEnum.h
 Vector3D.h
 VectorOperation.h
+VolumeSliceViewAllPlanesLayoutEnum.h
 VoxelIJK.h
 WorkbenchSpecialVersionEnum.h
+WuQMacro.h
+WuQMacroCommand.h
+WuQMacroCommandParameter.h
+WuQMacroCommandTypeEnum.h
+WuQMacroDataValueTypeEnum.h
+WuQMacroFile.h
+WuQMacroGroup.h
+WuQMacroGroupXmlStreamBase.h
+WuQMacroGroupXmlStreamReader.h
+WuQMacroGroupXmlStreamWriter.h
+WuQMacroModeEnum.h
+WuQMacroMouseEventInfo.h
+WuQMacroMouseEventTypeEnum.h
+WuQMacroShortCutKeyEnum.h
+WuQMacroStandardItemTypeEnum.h
+WuQMacroWidgetTypeEnum.h
 YokingGroupEnum.h
 
 ${MOC_SOURCE_FILES}
@@ -179,11 +209,13 @@ CaretMathExpression.cxx
 CaretObject.cxx
 CaretObjectTracksModification.cxx
 CaretPointLocator.cxx
+CaretPreferenceDataValue.cxx
 CaretPreferences.cxx
 CaretTemporaryFile.cxx
 CaretUndoCommand.cxx
 CaretUndoStack.cxx
 CaretUnitsTypeEnum.cxx
+ConnectivityCorrelation.cxx
 CubicSpline.cxx
 DataCompressZLib.cxx
 DataFile.cxx
@@ -200,12 +232,15 @@ Event.cxx
 EventAlertUser.cxx
 EventBrowserTabDelete.cxx
 EventBrowserTabIndicesGetAll.cxx
+EventBrowserTabNew.cxx
+EventBrowserTabNewClone.cxx
 EventCaretPreferencesGet.cxx
 EventGetViewportSize.cxx
 EventListenerInterface.cxx
 EventManager.cxx
 EventPaletteGetByName.cxx
 EventProgressUpdate.cxx
+EventTileTabsConfigurationModification.cxx
 EventTypeEnum.cxx
 FastStatistics.cxx
 FileAdapter.cxx
@@ -235,6 +270,7 @@ ProgramParametersException.cxx
 ProgressObject.cxx
 ReductionEnum.cxx
 ReductionOperation.cxx
+SpacerTabIndex.cxx
 SpecFileDialogViewFilesTypeEnum.cxx
 SpeciesEnum.cxx
 StereotaxicSpaceEnum.cxx
@@ -242,11 +278,34 @@ StringTableModel.cxx
 StructureEnum.cxx
 SystemUtilities.cxx
 TileTabsConfiguration.cxx
-TileTabsConfigurationModeEnum.cxx
+TileTabsConfigurationLayoutTypeEnum.cxx
+TileTabsBaseConfiguration.cxx
+TileTabsGridLayoutConfiguration.cxx
+TileTabsGridModeEnum.cxx
+TileTabsGridRowColumnContentTypeEnum.cxx
+TileTabsGridRowColumnElement.cxx
+TileTabsGridRowColumnStretchTypeEnum.cxx
 TriStateSelectionStatusEnum.cxx
 Vector3D.cxx
 VectorOperation.cxx
+VolumeSliceViewAllPlanesLayoutEnum.cxx
 WorkbenchSpecialVersionEnum.cxx
+WuQMacro.cxx
+WuQMacroCommand.cxx
+WuQMacroCommandTypeEnum.cxx
+WuQMacroCommandParameter.cxx
+WuQMacroDataValueTypeEnum.cxx
+WuQMacroFile.cxx
+WuQMacroGroup.cxx
+WuQMacroGroupXmlStreamBase.cxx
+WuQMacroGroupXmlStreamReader.cxx
+WuQMacroGroupXmlStreamWriter.cxx
+WuQMacroModeEnum.cxx
+WuQMacroMouseEventInfo.cxx
+WuQMacroMouseEventTypeEnum.cxx
+WuQMacroShortCutKeyEnum.cxx
+WuQMacroStandardItemTypeEnum.cxx
+WuQMacroWidgetTypeEnum.cxx
 YokingGroupEnum.cxx
 )
 
@@ -267,9 +326,10 @@ IF (EXISTS ${GIT_REPOSITORY})
         COMMAND ${CMAKE_COMMAND}
             -DINFILE="${CMAKE_SOURCE_DIR}/Common/ApplicationInformation.cxx.in"
             -DOUTFILE="${CMAKE_BINARY_DIR}/Common/ApplicationInformation.cxx"
+            -DVERSION="${WB_VERSION}"
             -P "${CMAKE_SOURCE_DIR}/CMakeScripts/git_commit_info.cmake.in"
         WORKING_DIRECTORY ${GIT_REPOSITORY}/..
-        DEPENDS ApplicationInformation.cxx.in ${CMAKE_SOURCE_DIR}/CMakeScripts/git_commit_info.cmake.in ${GIT_REPOSITORY}/HEAD ${GIT_REPOSITORY}/index
+        DEPENDS ApplicationInformation.cxx.in ${CMAKE_SOURCE_DIR}/CMakeScripts/git_commit_info.cmake.in ${CMAKE_SOURCE_DIR}/CMakeLists.txt ${GIT_REPOSITORY}/HEAD ${GIT_REPOSITORY}/index
         COMMENT "Setting commit info"
     )
 ELSE(EXISTS ${GIT_REPOSITORY})
@@ -278,9 +338,10 @@ ELSE(EXISTS ${GIT_REPOSITORY})
         COMMAND ${CMAKE_COMMAND}
             -DINFILE="${CMAKE_SOURCE_DIR}/Common/ApplicationInformation.cxx.in"
             -DOUTFILE="${CMAKE_BINARY_DIR}/Common/ApplicationInformation.cxx"
+            -DVERSION="${WB_VERSION}"
             -P "${CMAKE_SOURCE_DIR}/CMakeScripts/git_commit_info.cmake.in"
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/..
-        DEPENDS ApplicationInformation.cxx.in ${CMAKE_SOURCE_DIR}/CMakeScripts/git_commit_info.cmake.in
+        DEPENDS ApplicationInformation.cxx.in ${CMAKE_SOURCE_DIR}/CMakeScripts/git_commit_info.cmake.in ${CMAKE_SOURCE_DIR}/CMakeLists.txt
         COMMENT "No repository found, setting commit info to 'unknown'.  Reconfigure to look for the repository again."
     )
 ENDIF(EXISTS ${GIT_REPOSITORY})

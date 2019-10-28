@@ -739,6 +739,28 @@ ChartTwoOverlay::getSelectionDataPrivate(std::vector<CaretMappableDataFile*>& ma
                              * and dimensions must also match
                              */
                             useIt = true;
+                            
+                            /*
+                             * If file is a scalar data series, and the same scalar data series file
+                             * is enabled in a "higher" chart overlay, do not show the file in this
+                             * overlay.  Updated to only hide this file in disabled overlays.
+                             */
+                            const bool enableSdsFilterFlag(false);
+                            if (enableSdsFilterFlag) {
+                                if (mapFile->getDataFileType() == DataFileTypeEnum::CONNECTIVITY_SCALAR_DATA_SERIES) {
+                                    if ( ! isEnabled()) {
+                                        for (int32_t io = 0; io < m_overlayIndex; io++) {
+                                            const ChartTwoOverlay* otherOverlay = m_parentChartTwoOverlaySet->getOverlay(io);
+                                            CaretAssert(otherOverlay);
+                                            if (otherOverlay->isEnabled()) {
+                                                if (otherOverlay->getSelectedMapFile() == mapFile) {
+                                                    useIt = false;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -1010,10 +1032,21 @@ ChartTwoOverlay::setSelectionData(CaretMappableDataFile* selectedMapFile,
                 ChartableTwoFileDelegate* chartDelegate = m_selectedMapFile->getChartingDelegate();
                 CaretAssert(chartDelegate);
                 matrixChart   = chartDelegate->getMatrixCharting();
-//                ChartableTwoFileMatrixChart* matrixChart   = chartDelegate->getMatrixCharting();
-//                CaretAssert(matrixChart);
-//                matrixChart->setSelectedRowColumnIndex(m_parentChartTwoOverlaySet->m_tabIndex,
-//                                                       selectedMapIndex);
+
+                if (m_selectedMapFile->getDataFileType() == DataFileTypeEnum::CONNECTIVITY_SCALAR_DATA_SERIES) {
+                    ChartableTwoFileLineSeriesChart* lineChart = chartDelegate->getLineSeriesCharting();
+                    if (lineChart != NULL) {
+                        switch (lineChart->getLineSeriesContentType()) {
+                            case ChartTwoLineSeriesContentTypeEnum::LINE_SERIES_CONTENT_UNSUPPORTED:
+                                break;
+                            case ChartTwoLineSeriesContentTypeEnum::LINE_SERIES_CONTENT_BRAINORDINATE_DATA:
+                                break;
+                            case ChartTwoLineSeriesContentTypeEnum::LINE_SERIES_CONTENT_ROW_SCALAR_DATA:
+                                lineSeriesChart = lineChart;
+                                break;
+                        }
+                    }
+                }
             }
                 break;
         }
@@ -1125,6 +1158,8 @@ ChartTwoOverlay::isAllMapsSupported() const
                             break;
                         case DataFileTypeEnum::METRIC:
                             break;
+                        case DataFileTypeEnum::METRIC_DYNAMIC:
+                            break;
                         case DataFileTypeEnum::PALETTE:
                             break;
                         case DataFileTypeEnum::RGBA:
@@ -1138,6 +1173,8 @@ ChartTwoOverlay::isAllMapsSupported() const
                         case DataFileTypeEnum::UNKNOWN:
                             break;
                         case DataFileTypeEnum::VOLUME:
+                            break;
+                        case DataFileTypeEnum::VOLUME_DYNAMIC:
                             break;
                     }
                 }

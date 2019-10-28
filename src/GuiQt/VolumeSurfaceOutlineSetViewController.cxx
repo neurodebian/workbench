@@ -36,6 +36,7 @@
 #include "VolumeSurfaceOutlineSetModel.h"
 #include "VolumeSurfaceOutlineViewController.h"
 #include "WuQFactory.h"
+#include "WuQMacroManager.h"
 #include "WuQtUtilities.h"
 using namespace caret;
 
@@ -53,11 +54,17 @@ using namespace caret;
  *    Orientation for layout
  * @param browserWindowIndex
  *    Index of browser window that contains this view controller.
+ * @param parentObjectNamePrefix
+ *    Name of parent object for macros
+ * @param descriptivePrefix
+ *    Descriptive prefix for macros
  * @param parent
  *    Parent widget.
  */
 VolumeSurfaceOutlineSetViewController::VolumeSurfaceOutlineSetViewController(const Qt::Orientation orientation,
                                                                              const int32_t browserWindowIndex,
+                                                                             const QString& parentObjectNamePrefix,
+                                                                             const QString& descriptivePrefix,
                                                                              QWidget* parent)
 : QWidget(parent)
 {    
@@ -91,8 +98,12 @@ VolumeSurfaceOutlineSetViewController::VolumeSurfaceOutlineSetViewController(con
     }
     
     for (int32_t i = 0; i < BrainConstants::MAXIMUM_NUMBER_OF_VOLUME_SURFACE_OUTLINES; i++) {
+        const QString name = QString(parentObjectNamePrefix
+                                     + ":VolumeSurfaceOutline%1").arg((int)(i + 1), 2, 10, QLatin1Char('0'));
         VolumeSurfaceOutlineViewController* ovc = new VolumeSurfaceOutlineViewController(orientation,
-                                                               gridLayout);
+                                                                                         gridLayout,
+                                                                                         name,
+                                                                                         descriptivePrefix + " " + QString::number(i + 1));
         this->outlineViewControllers.push_back(ovc);
     }
     
@@ -103,6 +114,11 @@ VolumeSurfaceOutlineSetViewController::VolumeSurfaceOutlineSetViewController(con
     this->outlineCountSpinBox->setSingleStep(1);
     QObject::connect(this->outlineCountSpinBox, SIGNAL(valueChanged(int)),
                      this, SLOT(outlineCountSpinBoxValueChanged(int)));
+    this->outlineCountSpinBox->setObjectName(parentObjectNamePrefix
+                                             + ":VolumeSurfaceOutlineNumberOfOutlines");
+    this->outlineCountSpinBox->setToolTip("Number of volume surface outlines");
+    WuQMacroManager::instance()->addMacroSupportToObject(this->outlineCountSpinBox,
+                                                         "Set number of displayed volume/surface outlines for " + descriptivePrefix);
     
     QHBoxLayout* overlayCountLayout = new QHBoxLayout();
     overlayCountLayout->addWidget(outlineCountLabel);

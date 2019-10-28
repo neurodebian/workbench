@@ -92,6 +92,8 @@ namespace caret {
         
         static const QString ATTRIBUTE_ROTATION_ANGLE;
         
+        static const QString ATTRIBUTE_SPACER_TAB_INDEX;
+        
         static const QString ATTRIBUTE_TAB_INDEX;
         
         static const QString ATTRIBUTE_TAB_OR_WINDOW_INDEX;
@@ -162,6 +164,8 @@ namespace caret {
         
         static const int32_t XML_VERSION_TWO;
         
+        static const int32_t XML_VERSION_THREE;
+        
         // ADD_NEW_MEMBERS_HERE
 
     };
@@ -211,6 +215,8 @@ namespace caret {
     const QString AnnotationFileXmlFormatBase::ATTRIBUTE_LINE_START_ARROW = "startArrow";
     
     const QString AnnotationFileXmlFormatBase::ATTRIBUTE_ROTATION_ANGLE = "rotationAngle";
+    
+    const QString AnnotationFileXmlFormatBase::ATTRIBUTE_SPACER_TAB_INDEX = "spacerTabIndex";
     
     const QString AnnotationFileXmlFormatBase::ATTRIBUTE_TAB_INDEX = "tabIndex";
     
@@ -281,6 +287,8 @@ namespace caret {
     const int32_t AnnotationFileXmlFormatBase::XML_VERSION_ONE = 1;
     
     const int32_t AnnotationFileXmlFormatBase::XML_VERSION_TWO = 2;
+    
+    const int32_t AnnotationFileXmlFormatBase::XML_VERSION_THREE = 3;
     
 #endif // __ANNOTATION_FILE_XML_FORMAT_BASE_DECLARE__
 

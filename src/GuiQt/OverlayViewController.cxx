@@ -54,6 +54,7 @@
 #include "Overlay.h"
 #include "UsernamePasswordWidget.h"
 #include "WuQFactory.h"
+#include "WuQMacroManager.h"
 #include "WuQMessageBox.h"
 #include "WuQtUtilities.h"
 #include "WuQGridLayoutGroup.h"
@@ -70,10 +71,16 @@ using namespace caret;
 /**
  * Constructor.
  *
+ * @param orientation
+ *    Orientation of overlay (horizontal/vertical)
+ * @param gridLayout
+ *    Layout for widegets
  * @param browserWindowIndex
  *    Index of browser window in which this view controller resides.
- * @param showTopHorizontalLine
- *    If true, display a horizontal line above the controls.
+ * @param overlayIndex
+ *    Index of the overlay
+ * @param parentObjectName
+ *    Name of parent object for macros
  * @param parent
  *    The parent widget.
  */
@@ -81,6 +88,7 @@ OverlayViewController::OverlayViewController(const Qt::Orientation orientation,
                                              QGridLayout* gridLayout,
                                              const int32_t browserWindowIndex,
                                              const int32_t overlayIndex,
+                                             const QString& parentObjectName,
                                              QObject* parent)
 : QObject(parent),
   browserWindowIndex(browserWindowIndex),
@@ -97,49 +105,73 @@ OverlayViewController::OverlayViewController(const Qt::Orientation orientation,
     }
     const QComboBox::SizeAdjustPolicy comboSizePolicy = QComboBox::AdjustToContentsOnFirstShow; //QComboBox::AdjustToContents;
 
+    WuQMacroManager* macroManager = WuQMacroManager::instance();
+    CaretAssert(macroManager);
+    QString objectNamePrefix = QString(parentObjectName
+                                       + ":Overlay%1"
+                                       + ":").arg((int)(overlayIndex + 1), 2, 10, QLatin1Char('0'));
+    const QString descriptivePrefix = QString("overlay %1").arg(overlayIndex + 1);
     /*
      * Enabled Check Box
      */
     const QString checkboxText = ((orientation == Qt::Horizontal) ? " " : " ");
     this->enabledCheckBox = new QCheckBox(checkboxText);
+    this->enabledCheckBox->setObjectName(objectNamePrefix
+                                         + "OnOff");
     QObject::connect(this->enabledCheckBox, SIGNAL(clicked(bool)),
                      this, SLOT(enabledCheckBoxClicked(bool)));
     this->enabledCheckBox->setToolTip("Enables display of this overlay");
+    macroManager->addMacroSupportToObject(this->enabledCheckBox,
+                                          "Enable " + descriptivePrefix);
     
     /*
-     * File Selection Check Box
+     * File Selection Combo Box
      */
     this->fileComboBox = WuQFactory::newComboBox();
+    this->fileComboBox->setObjectName(objectNamePrefix
+                                      + "FileSelection");
     this->fileComboBox->setMinimumWidth(minComboBoxWidth);
     this->fileComboBox->setMaximumWidth(maxComboBoxWidth);
     QObject::connect(this->fileComboBox, SIGNAL(activated(int)),
                      this, SLOT(fileComboBoxSelected(int)));
     this->fileComboBox->setToolTip("Selects file for this overlay");
     this->fileComboBox->setSizeAdjustPolicy(comboSizePolicy);
+    macroManager->addMacroSupportToObject(this->fileComboBox,
+                                          ("Select file in " + descriptivePrefix));
     
     /*
      * Map Index Spin Box
      */
     m_mapIndexSpinBox = WuQFactory::newSpinBox();
+    this->m_mapIndexSpinBox->setObjectName(objectNamePrefix
+                                         + "MapIndex");
     QObject::connect(m_mapIndexSpinBox, SIGNAL(valueChanged(int)),
                      this, SLOT(mapIndexSpinBoxValueChanged(int)));
     m_mapIndexSpinBox->setToolTip("Select map by its index");
+    macroManager->addMacroSupportToObject(m_mapIndexSpinBox,
+                                          ("Select " + descriptivePrefix + " map index"));
     
     /*
      * Map Name Combo Box
      */
     this->mapNameComboBox = WuQFactory::newComboBox();
+    this->mapNameComboBox->setObjectName(objectNamePrefix
+                                      + "MapSelection");
     this->mapNameComboBox->setMinimumWidth(minComboBoxWidth);
     this->mapNameComboBox->setMaximumWidth(maxComboBoxWidth);
     QObject::connect(this->mapNameComboBox, SIGNAL(activated(int)),
                      this, SLOT(mapNameComboBoxSelected(int)));
     this->mapNameComboBox->setToolTip("Select map by its name");
     this->mapNameComboBox->setSizeAdjustPolicy(comboSizePolicy);
+    macroManager->addMacroSupportToObject(this->mapNameComboBox,
+                                          ("Select " + descriptivePrefix + " map name"));
     
     /*
      * Opacity double spin box
      */
     this->opacityDoubleSpinBox = WuQFactory::newDoubleSpinBox();
+    this->opacityDoubleSpinBox->setObjectName(objectNamePrefix
+                                              + "Opacity");
     this->opacityDoubleSpinBox->setMinimum(0.0);
     this->opacityDoubleSpinBox->setMaximum(1.0);
     this->opacityDoubleSpinBox->setSingleStep(0.10);
@@ -148,24 +180,40 @@ OverlayViewController::OverlayViewController(const Qt::Orientation orientation,
     QObject::connect(this->opacityDoubleSpinBox, SIGNAL(valueChanged(double)),
                      this, SLOT(opacityDoubleSpinBoxValueChanged(double)));
     this->opacityDoubleSpinBox->setToolTip("Opacity (0.0=transparent, 1.0=opaque)");
+    macroManager->addMacroSupportToObject(this->opacityDoubleSpinBox,
+                                          ("Set " + descriptivePrefix + " opacity"));
     
     /*
      * ColorBar Tool Button
      */
-    QIcon colorBarIcon;
-    const bool colorBarIconValid = WuQtUtilities::loadIcon(":/LayersPanel/colorbar.png",
-                                                           colorBarIcon);
-    this->colorBarAction = WuQtUtilities::createAction("CB", 
-                                                       "Display color bar for this overlay", 
-                                                       this, 
-                                                       this, 
-                                                       SLOT(colorBarActionTriggered(bool)));
-    this->colorBarAction->setCheckable(true);
-    if (colorBarIconValid) {
-        this->colorBarAction->setIcon(colorBarIcon);
-    }
-    QToolButton* colorBarToolButton = new QToolButton();
-    colorBarToolButton->setDefaultAction(this->colorBarAction);
+    m_colorBarToolButton = WuQtUtilities::createToolButtonWithIcon("CB",
+                                                                   ":/LayersPanel/colorbar.png",
+                                                                   "Display color bar for this overlay",
+                                                                   this,
+                                                                   SLOT(colorBarActionTriggered(bool)));
+    m_colorBarToolButton->setCheckable(true);
+    m_colorBarToolButton->setObjectName(objectNamePrefix
+                                        + "ShowColorBar");
+    macroManager->addMacroSupportToObject(m_colorBarToolButton,
+                                          ("Enable " + descriptivePrefix + " colorbar"));
+    
+//    /*
+//     * ColorBar Tool Button
+//     */
+//    QIcon colorBarIcon;
+//    const bool colorBarIconValid = WuQtUtilities::loadIcon(":/LayersPanel/colorbar.png",
+//                                                           colorBarIcon);
+//    this->colorBarAction = WuQtUtilities::createAction("CB", 
+//                                                       "Display color bar for this overlay", 
+//                                                       this, 
+//                                                       this, 
+//                                                       SLOT(colorBarActionTriggered(bool)));
+//    this->colorBarAction->setCheckable(true);
+//    if (colorBarIconValid) {
+//        this->colorBarAction->setIcon(colorBarIcon);
+//    }
+//    QToolButton* colorBarToolButton = new QToolButton();
+//    colorBarToolButton->setDefaultAction(this->colorBarAction);
     
     /*
      * Settings Tool Button
@@ -179,14 +227,19 @@ OverlayViewController::OverlayViewController(const Qt::Orientation orientation,
                                                           this, 
                                                           this, 
                                                           SLOT(settingsActionTriggered()));
+    this->settingsAction->setObjectName(objectNamePrefix
+                                        + "ShowSettingsDialog");
     if (settingsIconValid) {
         this->settingsAction->setIcon(settingsIcon);
     }
     QToolButton* settingsToolButton = new QToolButton();
     settingsToolButton->setDefaultAction(this->settingsAction);
+    macroManager->addMacroSupportToObject(this->settingsAction,
+                                          ("Display " + descriptivePrefix + " palette settings"));
     
     /*
      * Construction Tool Button
+     * Note: macro support is on each action in menu in 'createConstructionMenu'
      */
     QIcon constructionIcon;
     const bool constructionIconValid = WuQtUtilities::loadIcon(":/LayersPanel/construction.png",
@@ -198,7 +251,10 @@ OverlayViewController::OverlayViewController(const Qt::Orientation orientation,
         this->constructionAction->setIcon(constructionIcon);
     }
     m_constructionToolButton = new QToolButton();
-    QMenu* constructionMenu = createConstructionMenu(m_constructionToolButton);
+    QMenu* constructionMenu = createConstructionMenu(m_constructionToolButton,
+                                                     descriptivePrefix,
+                                                     (objectNamePrefix
+                                                      + "ConstructionMenu:"));
     this->constructionAction->setMenu(constructionMenu);
     m_constructionToolButton->setDefaultAction(this->constructionAction);
     m_constructionToolButton->setPopupMode(QToolButton::InstantPopup);
@@ -214,13 +270,14 @@ OverlayViewController::OverlayViewController(const Qt::Orientation orientation,
     
     /*
      * Yoking Group
+     * Note: macro support is in the class MapYokingGroupComboBox
      */
-    m_mapYokingGroupComboBox = new MapYokingGroupComboBox(this);
+    m_mapYokingGroupComboBox = new MapYokingGroupComboBox(this,
+                                                          (objectNamePrefix
+                                                           + "MapYokingSelection"),
+                                                          descriptivePrefix);
     m_mapYokingGroupComboBox->getWidget()->setStatusTip("Synchronize enabled status and map indices)");
     m_mapYokingGroupComboBox->getWidget()->setToolTip("Yoke to Overlay Mapped Files");
-#ifdef CARET_OS_MACOSX
-    m_mapYokingGroupComboBox->getWidget()->setFixedWidth(m_mapYokingGroupComboBox->getWidget()->sizeHint().width() - 20);
-#endif // CARET_OS_MACOSX
     QObject::connect(m_mapYokingGroupComboBox, SIGNAL(itemActivated()),
                      this, SLOT(yokingGroupActivated()));
 
@@ -237,7 +294,7 @@ OverlayViewController::OverlayViewController(const Qt::Orientation orientation,
         this->gridLayoutGroup->addWidget(settingsToolButton,
                                          row, 1,
                                          Qt::AlignHCenter);
-        this->gridLayoutGroup->addWidget(colorBarToolButton,
+        this->gridLayoutGroup->addWidget(m_colorBarToolButton, //colorBarToolButton,
                                          row, 2);
         this->gridLayoutGroup->addWidget(m_constructionToolButton,
                                          row, 3);
@@ -268,7 +325,7 @@ OverlayViewController::OverlayViewController(const Qt::Orientation orientation,
                                          row, 0);
         this->gridLayoutGroup->addWidget(settingsToolButton,
                                          row, 1);
-        this->gridLayoutGroup->addWidget(colorBarToolButton,
+        this->gridLayoutGroup->addWidget(m_colorBarToolButton, //colorBarToolButton,
                                          row, 2);
         this->gridLayoutGroup->addWidget(m_constructionToolButton,
                                          row, 3);
@@ -687,9 +744,10 @@ OverlayViewController::updateViewController(Overlay* overlay)
     
     m_mapYokingGroupComboBox->setMapYokingGroup(overlay->getMapYokingGroup());
     
-    this->colorBarAction->blockSignals(true);
-    this->colorBarAction->setChecked(overlay->getColorBar()->isDisplayed());
-    this->colorBarAction->blockSignals(false);
+    m_colorBarToolButton->setChecked(overlay->getColorBar()->isDisplayed());
+//    this->colorBarAction->blockSignals(true);
+//    this->colorBarAction->setChecked(overlay->getColorBar()->isDisplayed());
+//    this->colorBarAction->blockSignals(false);
     
     this->opacityDoubleSpinBox->blockSignals(true);
     this->opacityDoubleSpinBox->setValue(overlay->getOpacity());
@@ -758,7 +816,8 @@ OverlayViewController::updateViewController(Overlay* overlay)
     this->constructionAction->setEnabled(true);
     this->opacityDoubleSpinBox->setEnabled(haveOpacity);
     this->m_mapYokingGroupComboBox->getWidget()->setEnabled(haveYoking);
-    this->colorBarAction->setEnabled(dataIsMappedWithPalette);
+    //this->colorBarAction->setEnabled(dataIsMappedWithPalette);
+    this->m_colorBarToolButton->setEnabled(dataIsMappedWithPalette);
     this->settingsAction->setEnabled(true);
 }
 
@@ -805,53 +864,102 @@ OverlayViewController::updateGraphicsWindow()
  * Create the construction menu.
  * @param parent
  *    Parent widget.
+ * @param descriptivePrefix
+ *    Descriptive prefix
+ * @param menuActionNamePrefix
+ *    Prefix for macros
  */
 QMenu* 
-OverlayViewController::createConstructionMenu(QWidget* parent)
+OverlayViewController::createConstructionMenu(QWidget* parent,
+                                              const AString& descriptivePrefix,
+                                              const AString& menuActionNamePrefix)
 {
+    WuQMacroManager* macroManager = WuQMacroManager::instance();
+    CaretAssert(macroManager);
+    
     QMenu* menu = new QMenu(parent);
     QObject::connect(menu, SIGNAL(aboutToShow()),
                      this, SLOT(menuConstructionAboutToShow()));
     
-    menu->addAction("Add Overlay Above", 
-                    this, 
-                    SLOT(menuAddOverlayAboveTriggered()));
+    QAction* addAboveAction = menu->addAction("Add Overlay Above",
+                                              this,
+                                              SLOT(menuAddOverlayAboveTriggered()));
+    addAboveAction->setObjectName(menuActionNamePrefix
+                                  + "AddOverlayAbove");
+    addAboveAction->setToolTip("Add an overlay above this overlay");
+    macroManager->addMacroSupportToObject(addAboveAction,
+                                          ("Add overlay above " + descriptivePrefix));
     
-    menu->addAction("Add Overlay Below", 
-                    this, 
-                    SLOT(menuAddOverlayBelowTriggered()));
+    QAction* addBelowAction = menu->addAction("Add Overlay Below",
+                                              this,
+                                              SLOT(menuAddOverlayBelowTriggered()));
+    addBelowAction->setObjectName(menuActionNamePrefix
+                                  + "AddOverlayBelow");
+    addBelowAction->setToolTip("Add an overlay below this overlay");
+    macroManager->addMacroSupportToObject(addBelowAction,
+                                          ("Add overlay below " + descriptivePrefix));
     
     menu->addSeparator();
     
-    menu->addAction("Move Overlay Up", 
-                    this, 
-                    SLOT(menuMoveOverlayUpTriggered()));
+    QAction* moveUpAction = menu->addAction("Move Overlay Up",
+                                            this,
+                                            SLOT(menuMoveOverlayUpTriggered()));
+    moveUpAction->setObjectName(menuActionNamePrefix
+                                + "MoveOverlayUp");
+    moveUpAction->setToolTip("Move this overlay up");
+    macroManager->addMacroSupportToObject(moveUpAction,
+                                          ("Move " + descriptivePrefix + " up"));
     
-    menu->addAction("Move Overlay Down", 
-                    this, 
-                    SLOT(menuMoveOverlayDownTriggered()));
+    QAction* moveDownAction = menu->addAction("Move Overlay Down",
+                                              this,
+                                              SLOT(menuMoveOverlayDownTriggered()));
+    moveDownAction->setObjectName(menuActionNamePrefix
+                                  + "MoveOverlayDown");
+    moveDownAction->setToolTip("Move this overlay down");
+    macroManager->addMacroSupportToObject(moveDownAction,
+                                          ("Move " + descriptivePrefix + " down"));
     
     menu->addSeparator();
     
-    menu->addAction("Remove This Overlay", 
-                    this, 
-                    SLOT(menuRemoveOverlayTriggered()));
+    QAction* removeAction = menu->addAction("Remove This Overlay",
+                                            this,
+                                            SLOT(menuRemoveOverlayTriggered()));
+    removeAction->setObjectName(menuActionNamePrefix
+                                + "RemoveOverlay");
+    removeAction->setToolTip("Remove this overlay");
+    macroManager->addMacroSupportToObject(removeAction,
+                                          ("Remove " + descriptivePrefix));
     
     menu->addSeparator();
     
     m_constructionReloadFileAction = menu->addAction("Reload Selected File",
                                                      this,
                                                      SLOT(menuReloadFileTriggered()));
+    m_constructionReloadFileAction->setObjectName(menuActionNamePrefix
+                                                  + "ReloadSelectedFile");
+    m_constructionReloadFileAction->setToolTip("Reload file in this overlay");
+    macroManager->addMacroSupportToObject(m_constructionReloadFileAction,
+                                          ("Reload file in " + descriptivePrefix));
     
     menu->addSeparator();
     
     m_copyPathAndFileNameToClipboardAction = menu->addAction("Copy Path and File Name to Clipboard",
                                                              this,
                                                              SLOT(menuCopyFileNameToClipBoard()));
+    m_copyPathAndFileNameToClipboardAction->setObjectName(menuActionNamePrefix
+                                                          + "CopyPathAndFileNameToClipboard");
+    m_copyPathAndFileNameToClipboardAction->setToolTip("Copy path and file name of file in this overlay to clipboard");
+    macroManager->addMacroSupportToObject(m_copyPathAndFileNameToClipboardAction,
+                                          ("Copy path and filename from " + descriptivePrefix + " to clipboard"));
     
-    menu->addAction("Copy Map Name to Clipboard",
-                    this,
-                    SLOT(menuCopyMapNameToClipBoard()));
+    QAction* copyMapNameAction = menu->addAction("Copy Map Name to Clipboard",
+                                                 this,
+                                                 SLOT(menuCopyMapNameToClipBoard()));
+    copyMapNameAction->setObjectName(menuActionNamePrefix
+                                     + "CopyMapNameToClipboard");
+    copyMapNameAction->setToolTip("Copy name of selected map to the clipboard");
+    macroManager->addMacroSupportToObject(copyMapNameAction,
+                                          ("Copy map namne in " + descriptivePrefix + " to clipboard"));
     
     return menu;
     
@@ -881,9 +989,74 @@ OverlayViewController::menuConstructionAboutToShow()
                 menuText += suffix;
             }
             
-            const bool notDynConnFileFlag = (caretDataFile->getDataFileType() != DataFileTypeEnum::CONNECTIVITY_DENSE_DYNAMIC);
-            m_constructionReloadFileAction->setEnabled(notDynConnFileFlag);
-            m_copyPathAndFileNameToClipboardAction->setEnabled(notDynConnFileFlag);
+            bool dynConnFlag(false);
+            switch (caretDataFile->getDataFileType()) {
+                case DataFileTypeEnum::ANNOTATION:
+                    break;
+                case DataFileTypeEnum::ANNOTATION_TEXT_SUBSTITUTION:
+                    break;
+                case DataFileTypeEnum::BORDER:
+                    break;
+                case DataFileTypeEnum::CONNECTIVITY_DENSE:
+                    break;
+                case DataFileTypeEnum::CONNECTIVITY_DENSE_DYNAMIC:
+                    dynConnFlag = true;
+                    break;
+                case DataFileTypeEnum::CONNECTIVITY_DENSE_LABEL:
+                    break;
+                case DataFileTypeEnum::CONNECTIVITY_DENSE_PARCEL:
+                    break;
+                case DataFileTypeEnum::CONNECTIVITY_PARCEL:
+                    break;
+                case DataFileTypeEnum::CONNECTIVITY_PARCEL_DENSE:
+                    break;
+                case DataFileTypeEnum::CONNECTIVITY_PARCEL_LABEL:
+                    break;
+                case DataFileTypeEnum::CONNECTIVITY_PARCEL_SCALAR:
+                    break;
+                case DataFileTypeEnum::CONNECTIVITY_PARCEL_SERIES:
+                    break;
+                case DataFileTypeEnum::CONNECTIVITY_DENSE_SCALAR:
+                    break;
+                case DataFileTypeEnum::CONNECTIVITY_DENSE_TIME_SERIES:
+                    break;
+                case DataFileTypeEnum::CONNECTIVITY_FIBER_ORIENTATIONS_TEMPORARY:
+                    break;
+                case DataFileTypeEnum::CONNECTIVITY_FIBER_TRAJECTORY_TEMPORARY:
+                    break;
+                case DataFileTypeEnum::CONNECTIVITY_SCALAR_DATA_SERIES:
+                    break;
+                case DataFileTypeEnum::FOCI:
+                    break;
+                case DataFileTypeEnum::IMAGE:
+                    break;
+                case DataFileTypeEnum::LABEL:
+                    break;
+                case DataFileTypeEnum::METRIC:
+                    break;
+                case DataFileTypeEnum::METRIC_DYNAMIC:
+                    dynConnFlag = true;
+                    break;
+                case DataFileTypeEnum::PALETTE:
+                    break;
+                case DataFileTypeEnum::RGBA:
+                    break;
+                case DataFileTypeEnum::SCENE:
+                    break;
+                case DataFileTypeEnum::SPECIFICATION:
+                    break;
+                case DataFileTypeEnum::SURFACE:
+                    break;
+                case DataFileTypeEnum::UNKNOWN:
+                    break;
+                case DataFileTypeEnum::VOLUME:
+                    break;
+                case DataFileTypeEnum::VOLUME_DYNAMIC:
+                    dynConnFlag = true;
+                    break;
+            }
+            m_constructionReloadFileAction->setEnabled( ! dynConnFlag);
+            m_copyPathAndFileNameToClipboardAction->setEnabled( ! dynConnFlag);
         }
         
         m_constructionReloadFileAction->setText(menuText);

@@ -177,6 +177,9 @@ BalsaDatabaseManager::login(const AString& databaseURL,
     errorMessageOut = ("Login has failed.\n"
                        "HTTP Code: " + AString::number(loginResponse.m_responseCode)
                        + " Content: " + responseContent);
+    if (loginResponse.m_responseCode < 0) {
+        errorMessageOut.appendWithNewLine(loginResponse.m_errorMessage);
+    }
     logout();
 
     return false;
@@ -303,9 +306,10 @@ BalsaDatabaseManager::uploadFileWithCaretHttpManager(const AString& uploadURL,
 
     
     return verifyUploadFileResponse(uploadResponse.m_headers,
-                                 responseContentOut,
-                                 uploadResponse.m_responseCode,
-                                 errorMessageOut);
+                                    responseContentOut,
+                                    uploadResponse.m_responseCode,
+                                    uploadResponse.m_errorMessage,
+                                    errorMessageOut);
 }
 
 /**
@@ -317,6 +321,8 @@ BalsaDatabaseManager::uploadFileWithCaretHttpManager(const AString& uploadURL,
  *     Content from the response.
  * @param responseHttpCode
  *     HTTP code from response.
+ * @param responseErrorMessage
+ *
  * @param errorMessageOut
  *     Contains description of error.
  * @return
@@ -324,19 +330,39 @@ BalsaDatabaseManager::uploadFileWithCaretHttpManager(const AString& uploadURL,
  */
 bool
 BalsaDatabaseManager::verifyUploadFileResponse(const std::map<AString, AString>& responseHeaders,
-                                            const AString& responseContent,
-                                            const int32_t responseHttpCode,
-                                            AString& errorMessageOut) const
+                                               const AString& responseContent,
+                                               const int32_t responseHttpCode,
+                                               const AString& responseErrorMessage,
+                                               AString& errorMessageOut) const
 {
     if (responseHttpCode != 200) {
         if (responseHttpCode == 403) {
-            errorMessageOut = ("Upload failed.  Http Code="
+            errorMessageOut = ("Upload failed.  (Http Code="
                                + AString::number(responseHttpCode)
-                               + ".  You may not have ownership/permission to edit the study.");
+                               + ").\n\n"
+                               "Either you do now have ownership/permission to edit the study or "
+                               "the study has been submitted for curation.\n\n"
+                               "Use your web browser to login to BALSA to view the study and "
+                               "check its permissions.  If the the study has been submitted for "
+                               "curation, there will be a 'return for revision' option on the study.  "
+                               "Selection of 'return for 'revision' will allow you to upload your data.");
         }
         else {
             errorMessageOut = ("Upload failed.  Http Code="
-                               + AString::number(responseHttpCode));
+                               + AString::number(responseHttpCode)
+                               + ".\n"
+                               + responseErrorMessage);
+//            if (responseHttpCode < 0) {
+//                const QString s(responseContent.isEmpty()
+//                                ? "Response content is empty !!!"
+//                                : ("Response content:\n"
+//                                   + responseContent));
+//                CaretLogSevere("Invalid http response="
+//                               + AString::number(responseHttpCode)
+//                               + "\n"
+//                               + s
+//                               + "\n");
+//            }
         }
         return false;
     }
@@ -388,11 +414,13 @@ BalsaDatabaseManager::verifyUploadFileResponse(const std::map<AString, AString>&
         }
         
         QJsonParseError jsonError;
-        QJsonDocument jsonDocument = QJsonDocument::fromJson(responseContent.toLatin1(),
+        QJsonDocument jsonDocument = QJsonDocument::fromJson(responseContent.toUtf8(),
                                                              &jsonError);
         if (jsonDocument.isNull()) {
             errorMessageOut = ("Process upload response failed.  Failed to parse JSON, error:"
                                + jsonError.errorString()
+                               + " Offset="
+                               + AString::number(jsonError.offset)
                                + "\n\n"
                                "Response Content: "
                                + responseContent);
@@ -520,12 +548,12 @@ BalsaDatabaseManager::zipSceneAndDataFiles(const SceneFile* sceneFile,
     
     bool successFlag = false;
     try {
-        OperationZipSceneFile::createZipFile(sceneFileName,
+        OperationZipSceneFile::createZipFile(NULL,
+                                             sceneFileName,
                                              extractToDirectoryName,
                                              zipFileName,
                                              basePathName,
-                                             OperationZipSceneFile::PROGRESS_GUI_EVENT,
-                                             NULL);
+                                             OperationZipSceneFile::PROGRESS_GUI_EVENT);
         successFlag = true;
     }
     catch (const CaretException& e) {
@@ -620,7 +648,8 @@ BalsaDatabaseManager::processUploadedFile(SceneFile* sceneFile,
     if (uploadResponse.m_responseCode != 200) {
         errorMessageOut = ("Process Upload failed code: "
                            + QString::number(uploadResponse.m_responseCode)
-                           + "\n");
+                           + ".  ");
+        errorMessageOut.appendWithNewLine(uploadResponse.m_errorMessage);
         
         return false;
     }
@@ -691,7 +720,7 @@ BalsaDatabaseManager::updateSceneIdsFromProcessUploadResponse(SceneFile* sceneFi
                                                               AString& errorMessageOut)
 {
     QJsonParseError jsonError;
-    QJsonDocument jsonDocument = QJsonDocument::fromJson(jsonContent.toLatin1(),
+    QJsonDocument jsonDocument = QJsonDocument::fromJson(jsonContent.toUtf8(),
                                                          &jsonError);
     if (jsonDocument.isNull()) {
         errorMessageOut = ("Failed to parse JSON response from procssess upload, error:"
@@ -878,7 +907,8 @@ BalsaDatabaseManager::getSceneIDs(const int32_t numberOfSceneIDs,
     if (response.m_responseCode != 200) {
         errorMessageOut = ("Requesting Scene IDs failed with HTTP code="
                            + AString::number(response.m_responseCode)
-                           + ".  This error may be caused by failure to agree to data use terms.");
+                           + ".  This error may be caused by failure to agree to data use terms.  ");
+        errorMessageOut.appendWithNewLine(response.m_errorMessage);
         return false;
     }
     
@@ -977,7 +1007,8 @@ BalsaDatabaseManager::requestStudyID(const AString& databaseURL,
     if (studyResponse.m_responseCode != 200) {
         errorMessageOut = ("Requesting study ID failed with HTTP code="
                            + AString::number(studyResponse.m_responseCode)
-                           + ".  This error may be caused by failure to agree to data use terms.");
+                           + ".  This error may be caused by failure to agree to data use terms.  ");
+        errorMessageOut.appendWithNewLine(studyResponse.m_errorMessage);
         return false;
     }
     
@@ -1001,11 +1032,13 @@ BalsaDatabaseManager::requestStudyID(const AString& databaseURL,
     }
     
     QJsonParseError jsonError;
-    QJsonDocument jsonDocument = QJsonDocument::fromJson(responseContent.toLatin1(),
+    QJsonDocument jsonDocument = QJsonDocument::fromJson(responseContent.toUtf8(),
                                                          &jsonError);
     if (jsonDocument.isNull()) {
         errorMessageOut = ("Requesting study ID failed.  Failed to parse JSON, error:"
-                           + jsonError.errorString());
+                           + jsonError.errorString()
+                           + " Offset="
+                           + AString::number(jsonError.offset));
         return false;
     }
     
@@ -1104,12 +1137,14 @@ BalsaDatabaseManager::getUserRoles(BalsaUserRoles& userRolesOut,
     CaretHttpManager::httpRequest(caretRequest, studyResponse);
     
     if (m_debugFlag) {
-        std::cout << "Request rolese response Code: " << studyResponse.m_responseCode << std::endl;
+        std::cout << "Request roles response Code: " << studyResponse.m_responseCode << std::endl;
     }
     
     if (studyResponse.m_responseCode != 200) {
         errorMessageOut = ("Requesting roles failed with HTTP code="
-                           + AString::number(studyResponse.m_responseCode));
+                           + AString::number(studyResponse.m_responseCode)
+                           + ".  ");
+        errorMessageOut.appendWithNewLine(studyResponse.m_errorMessage);
         return false;
     }
     
@@ -1133,11 +1168,13 @@ BalsaDatabaseManager::getUserRoles(BalsaUserRoles& userRolesOut,
     }
     
     QJsonParseError jsonError;
-    QJsonDocument jsonDocument = QJsonDocument::fromJson(responseContent.toLatin1(),
+    QJsonDocument jsonDocument = QJsonDocument::fromJson(responseContent.toUtf8(),
                                                          &jsonError);
     if (jsonDocument.isNull()) {
         errorMessageOut = ("Requesting roles failed.  Failed to parse JSON, error:"
-                           + jsonError.errorString());
+                           + jsonError.errorString()
+                           + " Offset="
+                           + AString::number(jsonError.offset));
         return false;
     }
     
@@ -1212,7 +1249,9 @@ BalsaDatabaseManager::getStudyExtractDirectoryPrefix(const AString& studyID,
     
     if (studyResponse.m_responseCode != 200) {
         errorMessageOut = ("Requesting extract directory failed with HTTP code="
-                           + AString::number(studyResponse.m_responseCode));
+                           + AString::number(studyResponse.m_responseCode)
+                           + ".  ");
+        errorMessageOut.appendWithNewLine(studyResponse.m_errorMessage);
         return false;
     }
     
@@ -1283,6 +1322,15 @@ BalsaDatabaseManager::getAllStudyInformation(std::vector<BalsaStudyInformation>&
     CaretHttpResponse idResponse;
     CaretHttpManager::httpRequest(caretRequest, idResponse);
     
+    idResponse.m_body.push_back('\0');
+    AString responseContent(&idResponse.m_body[0]);
+    CaretLogFine("Get All Study Information Response from "
+                 + studyIdURL
+                 + ", Response Code="
+                 + AString::number(idResponse.m_responseCode)
+                 + "\nContent:\n"
+                 + responseContent);
+    
     if (m_debugFlag) {
         std::cout << "Request all studies response Code: " << idResponse.m_responseCode << std::endl;
     }
@@ -1290,7 +1338,8 @@ BalsaDatabaseManager::getAllStudyInformation(std::vector<BalsaStudyInformation>&
     if (idResponse.m_responseCode != 200) {
         errorMessageOut = ("Requesting all study information failed with HTTP code="
                            + AString::number(idResponse.m_responseCode)
-                           + ".  This error may be caused by failure to agree to data use terms.");
+                           + ".  This error may be caused by failure to agree to data use terms.  ");
+        errorMessageOut.appendWithNewLine(idResponse.m_errorMessage);
         return false;
     }
     
@@ -1306,19 +1355,19 @@ BalsaDatabaseManager::getAllStudyInformation(std::vector<BalsaStudyInformation>&
         return false;
     }
     
-    idResponse.m_body.push_back('\0');
-    AString responseContent(&idResponse.m_body[0]);
     
     if (m_debugFlag) {
         std::cout << "Request all studies reply body:\n" << responseContent << std::endl << std::endl;
     }
     
     QJsonParseError jsonError;
-    QJsonDocument jsonDocument = QJsonDocument::fromJson(responseContent.toLatin1(),
+    QJsonDocument jsonDocument = QJsonDocument::fromJson(responseContent.toUtf8(),
                                                          &jsonError);
     if (jsonDocument.isNull()) {
         errorMessageOut = ("Requesting all study information failed.  Failed to parse JSON, error:"
-                           + jsonError.errorString());
+                           + jsonError.errorString()
+                           + " Offset="
+                           + AString::number(jsonError.offset));
         return false;
     }
     QByteArray json = jsonDocument.toJson();

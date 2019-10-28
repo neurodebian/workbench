@@ -134,6 +134,8 @@ m_validRowColumnSelectionDimensions(validRowColumnSelectionDimensions)
                 break;
             case DataFileTypeEnum::METRIC:
                 break;
+            case DataFileTypeEnum::METRIC_DYNAMIC:
+                break;
             case DataFileTypeEnum::PALETTE:
                 break;
             case DataFileTypeEnum::RGBA:
@@ -147,6 +149,8 @@ m_validRowColumnSelectionDimensions(validRowColumnSelectionDimensions)
             case DataFileTypeEnum::UNKNOWN:
                 break;
             case DataFileTypeEnum::VOLUME:
+                break;
+            case DataFileTypeEnum::VOLUME_DYNAMIC:
                 break;
         }
         

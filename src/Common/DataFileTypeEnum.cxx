@@ -123,7 +123,6 @@ DataFileTypeEnum::initialize()
                                         "Annotation",
                                         "ANNOTATION",
                                         false,
-                                        "annot",
                                         "wb_annot"));
     
     enumData.push_back(DataFileTypeEnum(ANNOTATION_TEXT_SUBSTITUTION,
@@ -272,7 +271,14 @@ DataFileTypeEnum::initialize()
                                         "func.gii",
                                         "shape.gii"));
     
-    enumData.push_back(DataFileTypeEnum(PALETTE, 
+    enumData.push_back(DataFileTypeEnum(METRIC_DYNAMIC,
+                                        "METRIC_DYNAMIC",
+                                        "Metric - Dynamic",
+                                        "METRIC_DYNAMIC",
+                                        true,
+                                        "func_dynconn")); // this file is never written
+    
+    enumData.push_back(DataFileTypeEnum(PALETTE,
                                         "PALETTE", 
                                         "Palette",
                                         "PALETTE",
@@ -324,6 +330,13 @@ DataFileTypeEnum::initialize()
                                         false,
                                         "nii",
                                         "nii.gz"));
+    
+    enumData.push_back(DataFileTypeEnum(VOLUME_DYNAMIC,
+                                        "VOLUME_DYNAMIC",
+                                        "Volume - Dynamic",
+                                        "VOLUME DYNAMIC",
+                                        false,
+                                        "vol_dynconn")); // this file is never written
 }
 
 /**
@@ -612,23 +625,89 @@ DataFileTypeEnum::getAllFileExtensions(const Enum enumValue)
 
 /**
  * @return All valid file extensions for all file types except UNKNOWN
- * and CONNECTIVITY_DENSE_DYNAMIC
+ * and dynanmic connectivity files
+ *
+ * @param includeNonWritableFileTypesFlag
+ *     If true, include non-writable files such as dynamic connectvity files
  */
 std::vector<AString>
-DataFileTypeEnum::getFilesExtensionsForEveryFile()
+DataFileTypeEnum::getFilesExtensionsForEveryFile(const bool includeNonWritableFileTypesFlag)
 {
     std::vector<AString> allExtensions;
     
     for (std::vector<DataFileTypeEnum>::iterator enumIter = enumData.begin();
          enumIter != enumData.end();
          enumIter++) {
-        if (enumIter->enumValue == DataFileTypeEnum::CONNECTIVITY_DENSE_DYNAMIC) {
-            /* nothing */
+        bool validFlag(true);
+        
+        switch (enumIter->enumValue) {
+            case DataFileTypeEnum::ANNOTATION:
+                break;
+            case DataFileTypeEnum::ANNOTATION_TEXT_SUBSTITUTION:
+                break;
+            case DataFileTypeEnum::BORDER:
+                break;
+            case DataFileTypeEnum::CONNECTIVITY_DENSE:
+                break;
+            case DataFileTypeEnum::CONNECTIVITY_DENSE_DYNAMIC:
+                validFlag = includeNonWritableFileTypesFlag;
+                break;
+            case DataFileTypeEnum::CONNECTIVITY_DENSE_LABEL:
+                break;
+            case DataFileTypeEnum::CONNECTIVITY_DENSE_PARCEL:
+                break;
+            case DataFileTypeEnum::CONNECTIVITY_PARCEL:
+                break;
+            case DataFileTypeEnum::CONNECTIVITY_PARCEL_DENSE:
+                break;
+            case DataFileTypeEnum::CONNECTIVITY_PARCEL_LABEL:
+                break;
+            case DataFileTypeEnum::CONNECTIVITY_PARCEL_SCALAR:
+                break;
+            case DataFileTypeEnum::CONNECTIVITY_PARCEL_SERIES:
+                break;
+            case DataFileTypeEnum::CONNECTIVITY_DENSE_SCALAR:
+                break;
+            case DataFileTypeEnum::CONNECTIVITY_DENSE_TIME_SERIES:
+                break;
+            case DataFileTypeEnum::CONNECTIVITY_FIBER_ORIENTATIONS_TEMPORARY:
+                break;
+            case DataFileTypeEnum::CONNECTIVITY_FIBER_TRAJECTORY_TEMPORARY:
+                break;
+            case DataFileTypeEnum::CONNECTIVITY_SCALAR_DATA_SERIES:
+                break;
+            case DataFileTypeEnum::FOCI:
+                break;
+            case DataFileTypeEnum::IMAGE:
+                break;
+            case DataFileTypeEnum::LABEL:
+                break;
+            case DataFileTypeEnum::METRIC:
+                break;
+            case DataFileTypeEnum::METRIC_DYNAMIC:
+                validFlag = includeNonWritableFileTypesFlag;
+                break;
+            case DataFileTypeEnum::PALETTE:
+                break;
+            case DataFileTypeEnum::RGBA:
+                break;
+            case DataFileTypeEnum::SCENE:
+                break;
+            case DataFileTypeEnum::SPECIFICATION:
+                break;
+            case DataFileTypeEnum::SURFACE:
+                break;
+            case DataFileTypeEnum::UNKNOWN:
+                validFlag = false;
+                break;
+            case DataFileTypeEnum::VOLUME:
+                break;
+            case DataFileTypeEnum::VOLUME_DYNAMIC:
+                validFlag = includeNonWritableFileTypesFlag;
+                break;
         }
-        else if (enumIter->enumValue == DataFileTypeEnum::UNKNOWN) {
-            /* nothing */
-        }
-        else {
+        
+        if (validFlag) {
             allExtensions.insert(allExtensions.end(),
                                  enumIter->fileExtensions.begin(),
                                  enumIter->fileExtensions.end());
@@ -841,24 +920,92 @@ DataFileTypeEnum::getAllEnums(std::vector<DataFileTypeEnum::Enum>& allEnums,
     
     allEnums.clear();
     
-    const bool includeDenseDynamicFlag = (options & OPTIONS_INCLUDE_CONNECTIVITY_DENSE_DYNAMIC);
-    const bool includeUnknownFlag      = (options & OPTIONS_INCLUDE_UNKNOWN);
+    const bool includeDenseDynamicFlag  = (options & OPTIONS_INCLUDE_CONNECTIVITY_DENSE_DYNAMIC);
+    const bool includeMetricDynamicFlag = (options & OPTIONS_INCLUDE_METRIC_DENSE_DYNAMIC);
+    const bool includeVolumeDynamicFlag = (options & OPTIONS_INCLUDE_VOLUME_DENSE_DYNAMIC);
+    const bool includeUnknownFlag       = (options & OPTIONS_INCLUDE_UNKNOWN);
     
-    for (std::vector<DataFileTypeEnum>::iterator iter = enumData.begin();
-         iter != enumData.end();
-         iter++) {
-        if (iter->enumValue == CONNECTIVITY_DENSE_DYNAMIC) {
-            if ( ! includeDenseDynamicFlag) {
-                continue;
-            }
-        }
-        if (iter->enumValue == UNKNOWN) {
-            if ( ! includeUnknownFlag) {
-                continue;
-            }
+    for (const auto dataType : enumData) {
+        bool addEnumFlag(true);
+        
+        switch (dataType.enumValue) {
+            case DataFileTypeEnum::ANNOTATION:
+                break;
+            case DataFileTypeEnum::ANNOTATION_TEXT_SUBSTITUTION:
+                break;
+            case DataFileTypeEnum::BORDER:
+                break;
+            case DataFileTypeEnum::CONNECTIVITY_DENSE:
+                break;
+            case DataFileTypeEnum::CONNECTIVITY_DENSE_DYNAMIC:
+                if ( ! includeDenseDynamicFlag) {
+                    addEnumFlag = false;
+                }
+                break;
+            case DataFileTypeEnum::CONNECTIVITY_DENSE_LABEL:
+                break;
+            case DataFileTypeEnum::CONNECTIVITY_DENSE_PARCEL:
+                break;
+            case DataFileTypeEnum::CONNECTIVITY_PARCEL:
+                break;
+            case DataFileTypeEnum::CONNECTIVITY_PARCEL_DENSE:
+                break;
+            case DataFileTypeEnum::CONNECTIVITY_PARCEL_LABEL:
+                break;
+            case DataFileTypeEnum::CONNECTIVITY_PARCEL_SCALAR:
+                break;
+            case DataFileTypeEnum::CONNECTIVITY_PARCEL_SERIES:
+                break;
+            case DataFileTypeEnum::CONNECTIVITY_DENSE_SCALAR:
+                break;
+            case DataFileTypeEnum::CONNECTIVITY_DENSE_TIME_SERIES:
+                break;
+            case DataFileTypeEnum::CONNECTIVITY_FIBER_ORIENTATIONS_TEMPORARY:
+                break;
+            case DataFileTypeEnum::CONNECTIVITY_FIBER_TRAJECTORY_TEMPORARY:
+                break;
+            case DataFileTypeEnum::CONNECTIVITY_SCALAR_DATA_SERIES:
+                break;
+            case DataFileTypeEnum::FOCI:
+                break;
+            case DataFileTypeEnum::IMAGE:
+                break;
+            case DataFileTypeEnum::LABEL:
+                break;
+            case DataFileTypeEnum::METRIC:
+                break;
+            case DataFileTypeEnum::METRIC_DYNAMIC:
+                if ( ! includeMetricDynamicFlag) {
+                    addEnumFlag = false;
+                }
+                break;
+            case DataFileTypeEnum::PALETTE:
+                break;
+            case DataFileTypeEnum::RGBA:
+                break;
+            case DataFileTypeEnum::SCENE:
+                break;
+            case DataFileTypeEnum::SPECIFICATION:
+                break;
+            case DataFileTypeEnum::SURFACE:
+                break;
+            case DataFileTypeEnum::UNKNOWN:
+                if ( ! includeUnknownFlag) {
+                    addEnumFlag = false;
+                }
+                break;
+            case DataFileTypeEnum::VOLUME:
+                break;
+            case DataFileTypeEnum::VOLUME_DYNAMIC:
+                if ( ! includeVolumeDynamicFlag) {
+                    addEnumFlag = false;
+                }
+                break;
         }
         
-        allEnums.push_back(iter->enumValue);
+        if (addEnumFlag) {
+            allEnums.push_back(dataType.enumValue);
+        }
     }
 }
 

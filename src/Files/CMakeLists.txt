@@ -109,6 +109,7 @@ LabelDrawingProperties.h
 LabelDrawingTypeEnum.h
 LabelFile.h
 MapYokingGroupEnum.h
+MetricDynamicConnectivityFile.h
 MetricFile.h
 MetricSmoothingObject.h
 NodeAndVoxelColoring.h
@@ -116,14 +117,19 @@ OxfordSparseThreeFile.h
 PaletteFile.h
 RgbaFile.h
 RibbonMappingHelper.h
+SceneDataFileInfo.h
 SceneFile.h
 SceneFileSaxReader.h
+SceneFileXmlStreamBase.h
+SceneFileXmlStreamReader.h
+SceneFileXmlStreamWriter.h
 SignedDistanceHelper.h
 SparseVolumeIndexer.h
 SpecFile.h
 SpecFileDataFileTypeGroup.h
 SpecFileDataFile.h
 SpecFileSaxReader.h
+SceneFileXmlStreamFormatTester.h
 StudyMetaDataLink.h
 StudyMetaDataLinkSet.h
 StudyMetaDataLinkSetSaxReader.h
@@ -141,6 +147,7 @@ SurfaceResamplingMethodEnum.h
 SurfaceTypeEnum.h
 TextFile.h
 TopologyHelper.h
+VolumeDynamicConnectivityFile.h
 VolumeEditingModeEnum.h
 VolumeFile.h
 VolumeFileEditorDelegate.h
@@ -237,6 +244,7 @@ LabelDrawingProperties.cxx
 LabelDrawingTypeEnum.cxx
 LabelFile.cxx
 MapYokingGroupEnum.cxx
+MetricDynamicConnectivityFile.cxx
 MetricFile.cxx
 MetricSmoothingObject.cxx
 NodeAndVoxelColoring.cxx
@@ -244,8 +252,13 @@ OxfordSparseThreeFile.cxx
 PaletteFile.cxx
 RgbaFile.cxx
 RibbonMappingHelper.cxx
+SceneDataFileInfo.cxx
 SceneFile.cxx
 SceneFileSaxReader.cxx
+SceneFileXmlStreamBase.cxx
+SceneFileXmlStreamFormatTester.cxx
+SceneFileXmlStreamReader.cxx
+SceneFileXmlStreamWriter.cxx
 SignedDistanceHelper.cxx
 SparseVolumeIndexer.cxx
 SpecFile.cxx
@@ -269,6 +282,7 @@ SurfaceResamplingMethodEnum.cxx
 SurfaceTypeEnum.cxx
 TextFile.cxx
 TopologyHelper.cxx
+VolumeDynamicConnectivityFile.cxx
 VolumeEditingModeEnum.cxx
 VolumeFile.cxx
 VolumeFileEditorDelegate.cxx

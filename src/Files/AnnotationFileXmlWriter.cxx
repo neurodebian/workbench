@@ -167,8 +167,19 @@ AnnotationFileXmlWriter::writeFileContentToXmlStreamWriter(const AnnotationFile*
     m_stream->writeStartDocument();
     
     m_stream->writeStartElement(ELEMENT_ANNOTATION_FILE);
-    m_stream->writeAttribute(ATTRIBUTE_VERSION,
-                             AString::number(XML_VERSION_TWO));
+    
+    /*
+     * To improve backward compatibility, only write version 3 if there
+     * are annotations in 'spacer' coordinate space.
+     */
+    if (annotationFile->hasAnnotationsInCoordinateSpace(AnnotationCoordinateSpaceEnum::SPACER)) {
+        m_stream->writeAttribute(ATTRIBUTE_VERSION,
+                                 AString::number(XML_VERSION_THREE));
+    }
+    else {
+        m_stream->writeAttribute(ATTRIBUTE_VERSION,
+                                 AString::number(XML_VERSION_TWO));
+    }
     
     m_streamHelper->writeMetaData(annotationFile->getFileMetaData());
     
@@ -239,6 +250,9 @@ AnnotationFileXmlWriter::writeGroup(const AnnotationGroup* group)
                              AnnotationGroupTypeEnum::toName(group->getGroupType()));
     m_stream->writeAttribute(ATTRIBUTE_TAB_OR_WINDOW_INDEX,
                              QString::number(group->getTabOrWindowIndex()));
+    m_stream->writeAttribute(ATTRIBUTE_SPACER_TAB_INDEX,
+                             group->getSpacerTabIndex().getXmlAttributeText());
+    
     m_stream->writeAttribute(ATTRIBUTE_UNIQUE_KEY,
                              QString::number(group->getUniqueKey()));
     
@@ -500,6 +514,9 @@ AnnotationFileXmlWriter::getAnnotationPropertiesAsAttributes(const Annotation* a
     attributes.append(ATTRIBUTE_WINDOW_INDEX,
                       QString::number(annotation->getWindowIndex()));
     
+    attributes.append(ATTRIBUTE_SPACER_TAB_INDEX,
+                      annotation->getSpacerTabIndex().getXmlAttributeText());
+
     attributes.append(ATTRIBUTE_UNIQUE_KEY,
                       QString::number(annotation->getUniqueKey()));
 }

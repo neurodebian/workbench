@@ -42,11 +42,12 @@ class QDoubleSpinBox;
 class QHBoxLayout;
 class QIcon;
 class QLabel;
+class QMainWindow;
 class QMenu;
 class QRadioButton;
 class QSpinBox;
-class QTabBar;
 class QToolButton;
+class QVBoxLayout;
 
 namespace caret {
     
@@ -74,6 +75,7 @@ namespace caret {
     class Surface;
     class SurfaceSelectionViewController;
     class StructureSurfaceSelectionControl;
+    class WuQTabBar;
     class WuQWidgetObjectGroup;
     
     class BrainBrowserWindowToolBar : public QToolBar, public EventListenerInterface, public SceneableInterface   {
@@ -86,6 +88,7 @@ namespace caret {
                                   QAction* overlayToolBoxAction,
                                   QAction* layersToolBoxAction,
                                   QToolButton* toolBarLockWindowAndAllTabAspectRatioButton,
+                                  const QString& objectNamePrefix,
                                   BrainBrowserWindow* parentBrainBrowserWindow);
         
         ~BrainBrowserWindowToolBar();
@@ -102,11 +105,14 @@ namespace caret {
         
         int32_t getNumberOfTabs() const;
         
+        void insertDuplicateMenuBar(QMainWindow* mainWindow);
+        
         virtual SceneClass* saveToScene(const SceneAttributes* sceneAttributes,
                                         const AString& instanceName);
         
         virtual void restoreFromScene(const SceneAttributes* sceneAttributes,
                                       const SceneClass* sceneClass);
+
     signals:
         void viewedModelChanged();
         
@@ -211,12 +217,14 @@ namespace caret {
         WuQWidgetObjectGroup* modeWidgetGroup;
         WuQWidgetObjectGroup* singleSurfaceSelectionWidgetGroup;
         
+        QVBoxLayout* m_toolBarMainLayout;
+        
         QWidget* fullToolBarWidget;
         QWidget* m_toolbarWidget;
         QHBoxLayout* toolbarWidgetLayout;
         
         QWidget* tabBarWidget;
-        QTabBar* tabBar;
+        WuQTabBar* tabBar;
         
         /** Widget displayed at bottom of toolbar for mouse input controls */
         QWidget* userInputControlsWidget;
@@ -250,17 +258,20 @@ namespace caret {
         
         void showHideToolBar(bool showIt);
         
+        void showMacroDialog();
+        
     private slots:
         void selectedTabChanged(int indx);
         void tabMoved(int, int);
         void tabCloseSelected(int);
         void showTabMenu(const QPoint& pos);
+        void tabBarMousePressedSlot();
+        void tabBarMouseReleasedSlot();
         
     private:
         enum class InsertTabMode {
             APPEND,
-            AT_TAB_BAR_INDEX,
-            AT_TAB_CONTENTS_INDEX
+            AT_TAB_BAR_INDEX
         };
         
         bool allowAddingNewTab();
@@ -275,6 +286,7 @@ namespace caret {
         void insertNewTabAtTabBarIndex(int32_t tabBarIndex);
         void insertAndCloneTabContentAtTabBarIndex(const BrowserTabContent* tabContentToBeCloned,
                                                  const int32_t tabBarIndex);
+        void replaceBrowserTabs(const std::vector<BrowserTabContent*>& browserTabs);
         
         BrowserTabContent* createNewTab(AString& errorMessage);
         
@@ -291,6 +303,8 @@ namespace caret {
         void viewModeRadioButtonClicked(QAbstractButton*);
         
         void customViewActionTriggered();
+        
+        void sceneToolButtonClicked();
         
     private:
         QAction* orientationLateralMedialToolButtonAction;
@@ -328,6 +342,9 @@ namespace caret {
         QIcon* viewOrientationLeftMedialIcon;
         QIcon* viewOrientationRightLateralIcon;
         QIcon* viewOrientationRightMedialIcon;
+        
+        QToolButton* m_movieToolButton = NULL;
+        
     private slots:
         void orientationLeftOrLateralToolButtonTriggered(bool checked);
         void orientationRightOrMedialToolButtonTriggered(bool checked);
@@ -347,8 +364,15 @@ namespace caret {
         QCheckBox*      wholeBrainSurfaceLeftCheckBox;
         QCheckBox*      wholeBrainSurfaceRightCheckBox;
         QCheckBox*      wholeBrainSurfaceCerebellumCheckBox;
+        QMenu*          wholeBrainSurfaceLeftMenu;
+        QMenu*          wholeBrainSurfaceRightMenu;
+        QMenu*          wholeBrainSurfaceCerebellumMenu;
         QDoubleSpinBox* wholeBrainSurfaceSeparationLeftRightSpinBox;
         QDoubleSpinBox* wholeBrainSurfaceSeparationCerebellumSpinBox;
+        QCheckBox*      wholeBrainSurfaceMatchCheckBox;
+        void updateAllWholeBrainSurfaceMenus();
+        void updateWholeBrainSurfaceMenu(QMenu* menu,
+                                         const StructureEnum::Enum structure);
 
     private slots:
         void wholeBrainSurfaceTypeComboBoxIndexChanged(int indx);
@@ -360,7 +384,12 @@ namespace caret {
         void wholeBrainSurfaceLeftToolButtonTriggered(bool checked);
         void wholeBrainSurfaceRightToolButtonTriggered(bool checked);
         void wholeBrainSurfaceCerebellumToolButtonTriggered(bool checked);
-    
+        void wholeBrainSurfaceMatchCheckBoxClicked(bool checked);
+        
+        void wholeBrainSurfaceLeftMenuTriggered(QAction*);
+        void wholeBrainSurfaceRightMenuTriggered(QAction*);
+        void wholeBrainSurfaceCerebellumMenuTriggered(QAction*);
+
     private:
         StructureSurfaceSelectionControl* surfaceSurfaceSelectionControl;
         
@@ -435,6 +464,8 @@ namespace caret {
         QTimer* m_tileTabsHighlightingTimer = NULL;
         bool m_tileTabsHighlightingTimerEnabledFlag = true;
         
+        QString m_objectNamePrefix;
+        
         bool isContructorFinished;
         bool isDestructionInProgress;
         
@@ -447,6 +478,9 @@ namespace caret {
         
         friend class BrainBrowserWindowToolBarTabPopUpMenu;
     };
+    
+#ifdef __BRAIN_BROWSER_WINDOW_TOOLBAR_DECLARE__
+#endif // __BRAIN_BROWSER_WINDOW_TOOLBAR_DECLARE__
 }
 
 #endif // __BRAIN_BROWSER_WINDOW_TOOLBAR_H__

@@ -27,6 +27,7 @@
 #include "CaretAssert.h"
 #include "CaretLogger.h"
 #include "ChartTwoDataCartesian.h"
+#include "MapFileDataSelector.h"
 #include "SceneAttributes.h"
 #include "SceneClass.h"
 #include "SceneClassAssistant.h"
@@ -159,7 +160,7 @@ ChartTwoLineSeriesHistory::validateDefaultColor()
 {
     std::vector<CaretColorEnum::Enum> allEnums;
     CaretColorEnum::getColorAndOptionalEnums(allEnums, (CaretColorEnum::ColorOptions::OPTION_INCLUDE_CUSTOM_COLOR
-                                                        || CaretColorEnum::CaretColorEnum::OPTION_INCLUDE_NONE_COLOR));
+                                                        | CaretColorEnum::CaretColorEnum::OPTION_INCLUDE_NONE_COLOR));
     if (std::find(allEnums.begin(),
                   allEnums.end(),
                   m_defaultColor) == allEnums.end()) {
@@ -371,6 +372,20 @@ void
 ChartTwoLineSeriesHistory::addHistoryItem(ChartTwoDataCartesian* historyItem)
 {
     CaretAssert(historyItem);
+    
+    /*
+     * Do not add to history if new history item matches history
+     * item at front of the deque
+     */
+    if ( ! m_chartHistory.empty()) {
+        const MapFileDataSelector* newFileMap = historyItem->getMapFileDataSelector();
+        const MapFileDataSelector* frontFileMap = m_chartHistory.at(0)->getMapFileDataSelector();
+        if (*newFileMap == *frontFileMap) {
+            delete historyItem;
+            return;
+        }
+    }
+    
     historyItem->setColor(m_defaultColor);
     historyItem->setLineWidth(m_defaultLineWidth);
     addHistoryItemNoDefaults(historyItem);
@@ -416,12 +431,57 @@ ChartTwoLineSeriesHistory::getHistoryItem(const int32_t index) const
     return m_chartHistory[index];
 }
 
+/**
+ * Remove the history item at the given index
+ *
+ * @param index
+ *      Index of the item.
+ */
 void
 ChartTwoLineSeriesHistory::removeHistoryItem(const int32_t index)
 {
     CaretAssertVectorIndex(m_chartHistory, index);
     delete m_chartHistory[index];
     m_chartHistory.erase(m_chartHistory.begin() + index);
+}
+
+/**
+ * Move the history item down at the given index
+ *
+ * @param index
+ *      Index of the item.
+ */
+void
+ChartTwoLineSeriesHistory::moveDownHistoryItem(const int32_t index)
+{
+    if (getHistoryCount() <= 1) {
+        return;
+    }
+    
+    const int32_t lastIndex = getHistoryCount() - 1;
+    if (index < lastIndex) {
+        std::swap(m_chartHistory[index],
+                  m_chartHistory[index + 1]);
+    }
+}
+
+/**
+ * Move the history item up at the given index
+ *
+ * @param index
+ *      Index of the item.
+ */
+void
+ChartTwoLineSeriesHistory::moveUpHistoryItem(const int32_t index)
+{
+    if (getHistoryCount() <= 1) {
+        return;
+    }
+    
+    if (index > 0) {
+        std::swap(m_chartHistory[index - 1],
+                  m_chartHistory[index]);
+    }
 }
 
 /**

@@ -369,6 +369,8 @@ EventManager::sendSimpleEvent(const EventTypeEnum::Enum eventType)
     switch (eventType) {
         case EventTypeEnum::EVENT_ANNOTATION_TOOLBAR_UPDATE:
         case EventTypeEnum::EVENT_BROWSER_WINDOW_MENUS_UPDATE:
+        case EventTypeEnum::EVENT_MOVIE_RECORDING_DIALOG_UPDATE:
+        case EventTypeEnum::EVENT_UPDATE_VOLUME_SLICE_INDICES_COORDS_TOOLBAR:
         {
             sendEvent(Event(eventType).getPointer());
         }
@@ -400,6 +402,7 @@ EventManager::sendSimpleEvent(const EventTypeEnum::Enum eventType)
         case EventTypeEnum::EVENT_BROWSER_TAB_GET_ALL_VIEWED:
         case EventTypeEnum::EVENT_BROWSER_TAB_INDICES_GET_ALL:
         case EventTypeEnum::EVENT_BROWSER_TAB_NEW:
+        case EventTypeEnum::EVENT_BROWSER_TAB_NEW_CLONE:
         case EventTypeEnum::EVENT_BROWSER_WINDOW_CONTENT:
         case EventTypeEnum::EVENT_BROWSER_WINDOW_CREATE_TABS:
         case EventTypeEnum::EVENT_BROWSER_WINDOW_DRAWING_CONTENT_GET:
@@ -410,6 +413,7 @@ EventManager::sendSimpleEvent(const EventTypeEnum::Enum eventType)
         case EventTypeEnum::EVENT_CARET_MAPPABLE_DATA_FILES_GET:
         case EventTypeEnum::EVENT_CARET_MAPPABLE_DATA_FILE_MAPS_VIEWED_IN_OVERLAYS:
         case EventTypeEnum::EVENT_CARET_PREFERENCES_GET:
+        case EventTypeEnum::EVENT_CARET_MAPPABLE_DATA_FILES_AND_MAPS_IN_DISPLAYED_OVERLAYS:
         case EventTypeEnum::EVENT_CHART_MATRIX_YOKING_VALIDATION:
         case EventTypeEnum::EVENT_CHART_OVERLAY_VALIDATE:
         case EventTypeEnum::EVENT_CHART_TWO_ATTRIBUTES_CHANGED:
@@ -428,6 +432,7 @@ EventManager::sendSimpleEvent(const EventTypeEnum::Enum eventType)
         case EventTypeEnum::EVENT_GRAPHICS_OPENGL_CREATE_TEXTURE_NAME:
         case EventTypeEnum::EVENT_GRAPHICS_OPENGL_DELETE_BUFFER_OBJECT:
         case EventTypeEnum::EVENT_GRAPHICS_OPENGL_DELETE_TEXTURE_NAME:
+        case EventTypeEnum::EVENT_GRAPHICS_TIMING_ONE_WINDOW:
         case EventTypeEnum::EVENT_GRAPHICS_UPDATE_ALL_WINDOWS:
         case EventTypeEnum::EVENT_GRAPHICS_UPDATE_ONE_WINDOW:
         case EventTypeEnum::EVENT_HELP_VIEWER_DISPLAY:
@@ -443,6 +448,7 @@ EventManager::sendSimpleEvent(const EventTypeEnum::Enum eventType)
         case EventTypeEnum::EVENT_MODEL_GET_ALL:
         case EventTypeEnum::EVENT_MODEL_GET_ALL_DISPLAYED:
         case EventTypeEnum::EVENT_MODEL_SURFACE_GET:
+        case EventTypeEnum::EVENT_MOVIE_RECORDING_MANUAL_MODE_CAPTURE:
         case EventTypeEnum::EVENT_NODE_IDENTIFICATION_COLORS_GET_FROM_CHARTS:
         case EventTypeEnum::EVENT_OPENGL_OBJECT_TO_WINDOW_TRANSFORM:
         case EventTypeEnum::EVENT_OPERATING_SYSTEM_REQUEST_OPEN_DATA_FILE:
@@ -450,11 +456,14 @@ EventManager::sendSimpleEvent(const EventTypeEnum::Enum eventType)
         case EventTypeEnum::EVENT_OVERLAY_VALIDATE:
         case EventTypeEnum::EVENT_PALETTE_COLOR_MAPPING_EDITOR_SHOW:
         case EventTypeEnum::EVENT_PALETTE_GET_BY_NAME:
+        case EventTypeEnum::EVENT_SCENE_ACTIVE:
         case EventTypeEnum::EVENT_SHOW_FILE_DATA_READ_WARNING_DIALOG:
+        case EventTypeEnum::EVENT_SPACER_TAB_GET:
         case EventTypeEnum::EVENT_SPEC_FILE_READ_DATA_FILES:
         case EventTypeEnum::EVENT_SURFACE_COLORING_INVALIDATE:
         case EventTypeEnum::EVENT_SURFACES_GET:
         case EventTypeEnum::EVENT_SURFACE_STRUCTURES_VALID_GET:
+        case EventTypeEnum::EVENT_TILE_TABS_MODIFICATION:
         case EventTypeEnum::EVENT_TOOLBOX_SELECTION_DISPLAY:
         case EventTypeEnum::EVENT_USER_INTERFACE_UPDATE:
         case EventTypeEnum::EVENT_PROGRESS_UPDATE:

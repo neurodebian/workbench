@@ -25,6 +25,7 @@
 #include "BrainBrowserWindowToolBarComponent.h"
 
 class QActionGroup;
+class QDoubleSpinBox;
 class QMenu;
 class QPixmap;
 
@@ -36,7 +37,8 @@ namespace caret {
         Q_OBJECT
         
     public:
-        BrainBrowserWindowToolBarSlicePlane(BrainBrowserWindowToolBar* parentToolBar);
+        BrainBrowserWindowToolBarSlicePlane(const QString& parentObjectName,
+                                            BrainBrowserWindowToolBar* parentToolBar);
         
         virtual ~BrainBrowserWindowToolBarSlicePlane();
         
@@ -53,18 +55,24 @@ namespace caret {
         void volumeAxisCrosshairsTriggered(bool checked);
         void volumeAxisCrosshairLabelsTriggered(bool checked);
         
+        void crosshairMenuAboutToShow();
+        
     private:
         BrainBrowserWindowToolBarSlicePlane(const BrainBrowserWindowToolBarSlicePlane&);
 
         BrainBrowserWindowToolBarSlicePlane& operator=(const BrainBrowserWindowToolBarSlicePlane&);
         
-        QMenu* createViewAllSlicesLayoutMenu();
+        QMenu* createViewAllSlicesLayoutMenu(const QString& objectNamePrefix);
         
         void updateViewAllSlicesLayoutMenu(BrowserTabContent* browserTabContent);
         
         QPixmap createCrosshairsIcon(const QWidget* widget);
         
         QPixmap createCrosshairLabelsIcon(const QWidget* widget);
+        
+        QMenu* createCrosshairMenu(const QString& objectNamePrefix);
+        
+        void crosshairGapSpinBoxValueChanged(double value);
         
         BrainBrowserWindowToolBar* m_parentToolBar;
         
@@ -81,6 +89,8 @@ namespace caret {
         QAction* m_volumeAxisCrosshairLabelsToolButtonAction;
         
         QActionGroup* m_volumePlaneActionGroup;
+        
+        QDoubleSpinBox* m_crosshairGapSpinBox;
         
         // ADD_NEW_MEMBERS_HERE
 

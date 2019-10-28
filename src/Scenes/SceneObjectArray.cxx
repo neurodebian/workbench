@@ -47,6 +47,7 @@ using namespace caret;
 SceneObjectArray::SceneObjectArray(const QString& name,
                                    const SceneObjectDataTypeEnum::Enum dataType)
 : SceneObject(name,
+              SceneObjectContainerTypeEnum::ARRAY,
               dataType)
 {
     
@@ -60,3 +61,122 @@ SceneObjectArray::~SceneObjectArray()
     
 }
 
+/**
+ * Cast an instance of SceneObject to a SceneObjectArray.
+ * Is used to avoid dynamic casting and overridden by the class.
+ *
+ * @return Valid pointer (non-NULL) this is SceneObjectArray
+ */
+SceneObjectArray*
+SceneObjectArray::castToSceneObjectArray()
+{
+    return this;
+}
+
+/**
+ * Cast an instance of SceneObject to a SceneObjectArray.
+ * Is used to avoid dynamic casting and overridden by the class.
+ *
+ * @return Valid pointer (non-NULL) this is SceneObjectArray
+ */
+const SceneObjectArray*
+SceneObjectArray::castToSceneObjectArray() const
+{
+    return this;
+}
+
+/**
+ * Cast an instance of SceneObjectArray to a SceneClassArray.
+ * Is used to avoid dynamic casting and overridden by the class.
+ *
+ * @return Valid pointer (non-NULL) this is SceneClass
+ */
+SceneClassArray*
+SceneObjectArray::castToSceneClassArray()
+{
+    return NULL;
+}
+
+/**
+ * Cast an instance of SceneObjectArray to a SceneClassArray.
+ * Is used to avoid dynamic casting and overridden by the class.
+ *
+ * @return Valid pointer (non-NULL) this is SceneClass
+ */
+const SceneClassArray*
+SceneObjectArray::castToSceneClassArray() const
+{
+    return NULL;
+}
+
+/**
+ * Cast an instance of SceneObjectArray to a SceneEnumeratedTypeArray.
+ * Is used to avoid dynamic casting and overridden by the class.
+ *
+ * @return Valid pointer (non-NULL) this is SceneClass
+ */
+SceneEnumeratedTypeArray*
+SceneObjectArray::castToSceneEnumeratedTypeArray()
+{
+    return NULL;
+}
+
+/**
+ * Cast an instance of SceneObjectArray to a SceneEnumeratedTypeArray.
+ * Is used to avoid dynamic casting and overridden by the class.
+ *
+ * @return Valid pointer (non-NULL) this is SceneClass
+ */
+const SceneEnumeratedTypeArray*
+SceneObjectArray::castToSceneEnumeratedTypeArray() const
+{
+    return NULL;
+}
+
+/**
+ * Cast an instance of SceneObjectArray to a ScenePathNameArray.
+ * Is used to avoid dynamic casting and overridden by the class.
+ *
+ * @return Valid pointer (non-NULL) this is SceneClass
+ */
+ScenePathNameArray*
+SceneObjectArray::castToScenePathNameArray()
+{
+    return NULL;
+}
+
+/**
+ * Cast an instance of SceneObjectArray to a ScenePathNameArray.
+ * Is used to avoid dynamic casting and overridden by the class.
+ *
+ * @return Valid pointer (non-NULL) this is SceneClass
+ */
+const ScenePathNameArray*
+SceneObjectArray::castToScenePathNameArray() const
+{
+    return NULL;
+}
+
+/**
+ * Cast an instance of SceneObjectArray to a ScenePrimitiveArray.
+ * Is used to avoid dynamic casting and overridden by the class.
+ *
+ * @return Valid pointer (non-NULL) this is SceneClass
+ */
+ScenePrimitiveArray*
+SceneObjectArray::castToScenePrimitiveArray()
+{
+    return NULL;
+}
+
+/**
+ * Cast an instance of SceneObjectArray to a ScenePrimitiveArray.
+ * Is used to avoid dynamic casting and overridden by the class.
+ *
+ * @return Valid pointer (non-NULL) this is SceneClass
+ */
+const ScenePrimitiveArray*
+SceneObjectArray::castToScenePrimitiveArray() const
+{
+    return NULL;
+}

@@ -31,6 +31,7 @@
 #include "ProjectionViewTypeEnum.h"
 #include "SceneableInterface.h"
 #include "StructureEnum.h"
+#include "TabContentBase.h"
 #include "VolumeSliceDrawingTypeEnum.h"
 #include "VolumeSliceInterpolationEdgeEffectsMaskingEnum.h"
 #include "VolumeSliceProjectionTypeEnum.h"
@@ -47,6 +48,7 @@ namespace caret {
     class ChartTwoMatrixDisplayProperties;
     class ChartTwoOverlaySet;
     class ClippingPlaneGroup;
+    class EventCaretMappableDataFilesAndMapsInDisplayedOverlays;
     class Matrix4x4;
     class ModelChart;
     class ModelChartTwo;
@@ -70,7 +72,7 @@ namespace caret {
     class WholeBrainSurfaceSettings;
     
     /// Maintains content in a brower's tab
-    class BrowserTabContent : public CaretObject, public EventListenerInterface, public SceneableInterface {
+    class BrowserTabContent : public TabContentBase, public EventListenerInterface, public SceneableInterface {
         
     public:
         BrowserTabContent(const int32_t tabNumber);
@@ -85,7 +87,7 @@ namespace caret {
         
         virtual AString toString() const;
         
-        AString getTabName() const;
+        AString getTabName() const override;
         
         AString getUserTabName() const;
         
@@ -151,6 +153,8 @@ namespace caret {
         
         void getFilesDisplayedInTab(std::vector<CaretDataFile*>& displayedDataFilesOut);
         
+        void getFilesAndMapIndicesInOverlays(EventCaretMappableDataFilesAndMapsInDisplayedOverlays* fileAndMapsEvent);
+
         void update(const std::vector<Model*> models);
         
         bool isChartOneModelValid() const;
@@ -258,6 +262,11 @@ namespace caret {
         void dorsalView();
         
         void ventralView();
+        
+        void applyMouseVolumeSliceIncrement(BrainOpenGLViewportContent* viewportContent,
+                                            const int32_t mousePressX,
+                                            const int32_t mousePressY,
+                                            const int32_t mouseDY);
         
         void applyMouseRotation(BrainOpenGLViewportContent* viewportContent,
                                 const int32_t mousePressX,
@@ -428,6 +437,10 @@ namespace caret {
         
         void setWholeBrainCerebellumSeparation(const float separation);
         
+        ViewingTransformations* getViewingTransformation();
+        
+        const ViewingTransformations* getViewingTransformation() const;
+        
         virtual SceneClass* saveToScene(const SceneAttributes* sceneAttributes,
                                         const AString& instanceName);
         
@@ -459,17 +472,13 @@ namespace caret {
 //                                                                  const int32_t mousePressY,
 //                                                                              int sliceViewportOut[4]) const;
         
-        ViewingTransformations* getViewingTransformation();
-        
-        const ViewingTransformations* getViewingTransformation() const;
-        
         void updateBrainModelYokedBrowserTabs();
         
         void updateYokedModelBrowserTabs();
         
         AString getDefaultName() const;
         
-        AString getTabNamePrefix() const;
+        AString getTabNamePrefix() const override;
         
         /** Number of this tab */
         int32_t m_tabNumber;

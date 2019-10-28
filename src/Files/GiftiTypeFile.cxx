@@ -24,10 +24,15 @@
 #include "FastStatistics.h"
 #include "GiftiDataArray.h"
 #include "GiftiFile.h"
+#include "GiftiLabel.h"
+#include "GiftiLabelTable.h"
 #include "GiftiMetaData.h"
 #include "GiftiTypeFile.h"
 #include "GiftiMetaDataXmlElements.h"
 #include "Histogram.h"
+#include "LabelFile.h"
+#include "MapFileDataSelector.h"
+#include "MetricFile.h"
 #include "PaletteColorMapping.h"
 #include "PaletteColorMappingSaxReader.h"
 #include "SurfaceFile.h"
@@ -809,10 +814,74 @@ GiftiTypeFile::getFileHistogram(const float mostPositiveValueInclusive,
 bool 
 GiftiTypeFile::isMappedWithPalette() const
 {
-    if (this->getDataFileType() == DataFileTypeEnum::METRIC) {
-        return true;
+    bool paletteFlag(false);
+    
+    switch (getDataFileType()) {
+        case DataFileTypeEnum::ANNOTATION:
+            break;
+        case DataFileTypeEnum::ANNOTATION_TEXT_SUBSTITUTION:
+            break;
+        case DataFileTypeEnum::BORDER:
+            break;
+        case DataFileTypeEnum::CONNECTIVITY_DENSE:
+            break;
+        case DataFileTypeEnum::CONNECTIVITY_DENSE_DYNAMIC:
+            break;
+        case DataFileTypeEnum::CONNECTIVITY_DENSE_LABEL:
+            break;
+        case DataFileTypeEnum::CONNECTIVITY_DENSE_PARCEL:
+            break;
+        case DataFileTypeEnum::CONNECTIVITY_PARCEL:
+            break;
+        case DataFileTypeEnum::CONNECTIVITY_PARCEL_DENSE:
+            break;
+        case DataFileTypeEnum::CONNECTIVITY_PARCEL_LABEL:
+            break;
+        case DataFileTypeEnum::CONNECTIVITY_PARCEL_SCALAR:
+            break;
+        case DataFileTypeEnum::CONNECTIVITY_PARCEL_SERIES:
+            break;
+        case DataFileTypeEnum::CONNECTIVITY_DENSE_SCALAR:
+            break;
+        case DataFileTypeEnum::CONNECTIVITY_DENSE_TIME_SERIES:
+            break;
+        case DataFileTypeEnum::CONNECTIVITY_FIBER_ORIENTATIONS_TEMPORARY:
+            break;
+        case DataFileTypeEnum::CONNECTIVITY_FIBER_TRAJECTORY_TEMPORARY:
+            break;
+        case DataFileTypeEnum::CONNECTIVITY_SCALAR_DATA_SERIES:
+            break;
+        case DataFileTypeEnum::FOCI:
+            break;
+        case DataFileTypeEnum::IMAGE:
+            break;
+        case DataFileTypeEnum::LABEL:
+            break;
+        case DataFileTypeEnum::METRIC:
+            paletteFlag = true;
+            break;
+        case DataFileTypeEnum::METRIC_DYNAMIC:
+            paletteFlag = true;
+            break;
+        case DataFileTypeEnum::PALETTE:
+            break;
+        case DataFileTypeEnum::RGBA:
+            break;
+        case DataFileTypeEnum::SCENE:
+            break;
+        case DataFileTypeEnum::SPECIFICATION:
+            break;
+        case DataFileTypeEnum::SURFACE:
+            break;
+        case DataFileTypeEnum::UNKNOWN:
+            break;
+        case DataFileTypeEnum::VOLUME:
+            break;
+        case DataFileTypeEnum::VOLUME_DYNAMIC:
+            break;
     }
-    return false;
+    
+    return paletteFlag;
 }
 
 /**
@@ -829,9 +898,70 @@ GiftiTypeFile::getPaletteNormalizationModesSupported(std::vector<PaletteNormaliz
 {
     modesSupportedOut.clear();
     
-    if (getDataFileType() == DataFileTypeEnum::METRIC) {
-        modesSupportedOut.push_back(PaletteNormalizationModeEnum::NORMALIZATION_SELECTED_MAP_DATA);
-        modesSupportedOut.push_back(PaletteNormalizationModeEnum::NORMALIZATION_ALL_MAP_DATA);
+    switch (getDataFileType()) {
+        case DataFileTypeEnum::ANNOTATION:
+            break;
+        case DataFileTypeEnum::ANNOTATION_TEXT_SUBSTITUTION:
+            break;
+        case DataFileTypeEnum::BORDER:
+            break;
+        case DataFileTypeEnum::CONNECTIVITY_DENSE:
+            break;
+        case DataFileTypeEnum::CONNECTIVITY_DENSE_DYNAMIC:
+            break;
+        case DataFileTypeEnum::CONNECTIVITY_DENSE_LABEL:
+            break;
+        case DataFileTypeEnum::CONNECTIVITY_DENSE_PARCEL:
+            break;
+        case DataFileTypeEnum::CONNECTIVITY_DENSE_SCALAR:
+            break;
+        case DataFileTypeEnum::CONNECTIVITY_DENSE_TIME_SERIES:
+            break;
+        case DataFileTypeEnum::CONNECTIVITY_FIBER_ORIENTATIONS_TEMPORARY:
+            break;
+        case DataFileTypeEnum::CONNECTIVITY_FIBER_TRAJECTORY_TEMPORARY:
+            break;
+        case DataFileTypeEnum::CONNECTIVITY_PARCEL:
+            break;
+        case DataFileTypeEnum::CONNECTIVITY_PARCEL_DENSE:
+            break;
+        case DataFileTypeEnum::CONNECTIVITY_PARCEL_LABEL:
+            break;
+        case DataFileTypeEnum::CONNECTIVITY_PARCEL_SCALAR:
+            break;
+        case DataFileTypeEnum::CONNECTIVITY_PARCEL_SERIES:
+            break;
+        case DataFileTypeEnum::CONNECTIVITY_SCALAR_DATA_SERIES:
+            break;
+        case DataFileTypeEnum::FOCI:
+            break;
+        case DataFileTypeEnum::IMAGE:
+            break;
+        case DataFileTypeEnum::LABEL:
+            break;
+        case DataFileTypeEnum::METRIC:
+            modesSupportedOut.push_back(PaletteNormalizationModeEnum::NORMALIZATION_SELECTED_MAP_DATA);
+            modesSupportedOut.push_back(PaletteNormalizationModeEnum::NORMALIZATION_ALL_MAP_DATA);
+            break;
+        case DataFileTypeEnum::METRIC_DYNAMIC:
+            modesSupportedOut.push_back(PaletteNormalizationModeEnum::NORMALIZATION_SELECTED_MAP_DATA);
+            break;
+        case DataFileTypeEnum::PALETTE:
+            break;
+        case DataFileTypeEnum::RGBA:
+            break;
+        case DataFileTypeEnum::SCENE:
+            break;
+        case DataFileTypeEnum::SPECIFICATION:
+            break;
+        case DataFileTypeEnum::SURFACE:
+            break;
+        case DataFileTypeEnum::UNKNOWN:
+            break;
+        case DataFileTypeEnum::VOLUME:
+            break;
+        case DataFileTypeEnum::VOLUME_DYNAMIC:
+            break;
     }
 }
 
@@ -963,9 +1093,13 @@ GiftiTypeFile::getMapIndexFromUniqueID(const AString& uniqueID) const
  *    Palette file containing palettes.
  */
 void
-GiftiTypeFile::updateScalarColoringForMap(const int32_t /*mapIndex*/)
+GiftiTypeFile::updateScalarColoringForMap(const int32_t mapIndex)
 {
     invalidateHistogramChartColoring();
+    if ((mapIndex >= 0)
+        && (mapIndex < getNumberOfMaps())) {
+        this->giftiFile->getDataArray(mapIndex)->invalidateHistograms();
+    }
 }
 
 /**
@@ -992,10 +1126,85 @@ GiftiTypeFile::addToDataFileContentInformation(DataFileContentInformation& dataF
  *     Output with data.  Will be empty if data does not support the map file data selector.
  */
 void
-GiftiTypeFile::getDataForSelector(const MapFileDataSelector& /*mapFileDataSelector*/,
+GiftiTypeFile::getDataForSelector(const MapFileDataSelector& mapFileDataSelector,
                                   std::vector<float>& dataOut) const
 {
     dataOut.clear();
+    
+    switch (mapFileDataSelector.getDataSelectionType()) {
+        case MapFileDataSelector::DataSelectionType::INVALID:
+        case MapFileDataSelector::DataSelectionType::COLUMN_DATA:
+        case MapFileDataSelector::DataSelectionType::ROW_DATA:
+            break;
+        case MapFileDataSelector::DataSelectionType::SURFACE_VERTEX:
+        {
+            StructureEnum::Enum structure = StructureEnum::INVALID;
+            int32_t numberOfNodes(-1);
+            int32_t nodeIndex(-1);
+            mapFileDataSelector.getSurfaceVertex(structure, numberOfNodes, nodeIndex);
+            if ((getStructure() == structure)
+                && (getNumberOfNodes() == numberOfNodes)) {
+                const int32_t numberOfMaps = getNumberOfMaps();
+                if (isMappedWithLabelTable()) {
+                    const LabelFile* lf = dynamic_cast<const LabelFile*>(this);
+                    CaretAssert(lf);
+                    for (int32_t mapIndex = 0; mapIndex < numberOfMaps; mapIndex++) {
+                        const int32_t key = lf->getLabelKey(nodeIndex,
+                                                            mapIndex);
+                        dataOut.push_back(key);
+                    }
+                }
+                if (isMappedWithPalette()) {
+                    const MetricFile* mf = dynamic_cast<const MetricFile*>(this);
+                    CaretAssert(mf);
+                    for (int32_t mapIndex = 0; mapIndex < numberOfMaps; mapIndex++) {
+                        const float value = mf->getValue(nodeIndex,
+                                                         mapIndex);
+                        dataOut.push_back(value);
+                    }
+                }
+            }
+        }
+            break;
+        case MapFileDataSelector::DataSelectionType::SURFACE_VERTICES_AVERAGE:
+        {
+            StructureEnum::Enum structure = StructureEnum::INVALID;
+            int32_t numberOfNodes(-1);
+            std::vector<int32_t> nodeIndices;
+            mapFileDataSelector.getSurfaceVertexAverage(structure, numberOfNodes, nodeIndices);
+            if ((getStructure() == structure)
+                && (getNumberOfNodes() == numberOfNodes)) {
+                if (isMappedWithPalette()) {
+                    const MetricFile* mf = dynamic_cast<const MetricFile*>(this);
+                    CaretAssert(mf);
+                    const int32_t numberOfNodeIndices = static_cast<int32_t>(nodeIndices.size());
+                    if (numberOfNodeIndices > 0) {
+                        const int32_t numberOfMaps = getNumberOfMaps();
+                        if (numberOfMaps > 0) {
+                            for (int32_t iNode = 0; iNode < numberOfNodeIndices; iNode++) {
+                                CaretAssertVectorIndex(nodeIndices, iNode);
+                                const int32_t nodeIndex = nodeIndices[iNode];
+                                
+                                float sum(0.0f);
+                                for (int32_t mapIndex = 0; mapIndex < numberOfMaps; mapIndex++) {
+                                    const float value = mf->getValue(nodeIndex,
+                                                                     mapIndex);
+                                    sum += value;
+                                }
+                                
+                                const float value = sum / numberOfMaps;
+                                dataOut.push_back(value);
+                            }
+                        }
+
+                    }
+                }
+            }
+        }
+            break;
+        case MapFileDataSelector::DataSelectionType::VOLUME_XYZ:
+            break;
+    }
 }
 
 /**
@@ -1058,6 +1267,9 @@ GiftiTypeFile::getBrainordinateMappingMatch(const CaretMappableDataFile* mapFile
         case DataFileTypeEnum::METRIC:
             giftiFlag = true;
             break;
+        case DataFileTypeEnum::METRIC_DYNAMIC:
+            giftiFlag = true;
+            break;
         case DataFileTypeEnum::PALETTE:
             break;
         case DataFileTypeEnum::RGBA:
@@ -1074,6 +1286,8 @@ GiftiTypeFile::getBrainordinateMappingMatch(const CaretMappableDataFile* mapFile
             break;
         case DataFileTypeEnum::VOLUME:
             break;
+        case DataFileTypeEnum::VOLUME_DYNAMIC:
+            break;
     }
     
     if (giftiFlag) {
@@ -1086,6 +1300,134 @@ GiftiTypeFile::getBrainordinateMappingMatch(const CaretMappableDataFile* mapFile
     }
     
     return BrainordinateMappingMatch::NO;
+}
+
+/**
+ * Get the identification information for a surface node in the given maps.
+ *
+ * @param mapIndices
+ *    Indices of maps for which identification information is requested.
+ * @param structure
+ *    Structure of the surface.
+ * @param nodeIndex
+ *    Index of the node.
+ * @param numberOfNodes
+ *    Number of nodes in the surface.
+ * @param textOut
+ *    Output containing identification information.
+ */
+bool
+GiftiTypeFile::getSurfaceNodeIdentificationForMaps(const std::vector<int32_t>& mapIndices,
+                                                           const StructureEnum::Enum structure,
+                                                           const int nodeIndex,
+                                                           const int32_t numberOfNodes,
+                                                           AString& textOut) const
+{
+    textOut.clear();
+    
+    if ((getStructure() == structure)
+        && (getNumberOfNodes() == numberOfNodes)) {
+        switch (getDataFileType()) {
+            case DataFileTypeEnum::ANNOTATION:
+                break;
+            case DataFileTypeEnum::ANNOTATION_TEXT_SUBSTITUTION:
+                break;
+            case DataFileTypeEnum::BORDER:
+                break;
+            case DataFileTypeEnum::CONNECTIVITY_DENSE:
+                break;
+            case DataFileTypeEnum::CONNECTIVITY_DENSE_DYNAMIC:
+                break;
+            case DataFileTypeEnum::CONNECTIVITY_DENSE_LABEL:
+                break;
+            case DataFileTypeEnum::CONNECTIVITY_DENSE_PARCEL:
+                break;
+            case DataFileTypeEnum::CONNECTIVITY_DENSE_SCALAR:
+                break;
+            case DataFileTypeEnum::CONNECTIVITY_DENSE_TIME_SERIES:
+                break;
+            case DataFileTypeEnum::CONNECTIVITY_FIBER_ORIENTATIONS_TEMPORARY:
+                break;
+            case DataFileTypeEnum::CONNECTIVITY_FIBER_TRAJECTORY_TEMPORARY:
+                break;
+            case DataFileTypeEnum::CONNECTIVITY_PARCEL:
+                break;
+            case DataFileTypeEnum::CONNECTIVITY_PARCEL_DENSE:
+                break;
+            case DataFileTypeEnum::CONNECTIVITY_PARCEL_LABEL:
+                break;
+            case DataFileTypeEnum::CONNECTIVITY_PARCEL_SCALAR:
+                break;
+            case DataFileTypeEnum::CONNECTIVITY_PARCEL_SERIES:
+                break;
+            case DataFileTypeEnum::CONNECTIVITY_SCALAR_DATA_SERIES:
+                break;
+            case DataFileTypeEnum::FOCI:
+                break;
+            case DataFileTypeEnum::IMAGE:
+                break;
+            case DataFileTypeEnum::LABEL:
+            {
+                const LabelFile* lf = dynamic_cast<const LabelFile*>(this);
+                CaretAssert(lf);
+                const GiftiLabelTable* labelTable = lf->getLabelTable();
+                AString valuesText;
+                for (const auto mapIndex : mapIndices) {
+                    const int32_t key = lf->getLabelKey(nodeIndex,
+                                                        mapIndex);
+                    if (key >= 0) {
+                        if ( ! valuesText.isEmpty()) {
+                            valuesText.append(", ");
+                        }
+                        valuesText.append(labelTable->getLabel(key)->getName());
+                    }
+                }
+                
+                if ( ! valuesText.isEmpty()) {
+                    textOut = valuesText;
+                }
+            }
+                break;
+            case DataFileTypeEnum::METRIC:
+            case DataFileTypeEnum::METRIC_DYNAMIC: // subclass of METRIC
+            {
+                const MetricFile* mf = dynamic_cast<const MetricFile*>(this);
+                CaretAssert(mf);
+                AString valuesText;
+                for (const auto mapIndex : mapIndices) {
+                    const float value = mf->getValue(nodeIndex,
+                                                     mapIndex);
+                    if ( ! valuesText.isEmpty()) {
+                        valuesText.append(", ");
+                    }
+                    valuesText.append(AString::number(value, 'f', 3));
+                }
+                
+                if ( ! valuesText.isEmpty()) {
+                    textOut = valuesText;
+                }
+            }
+                break;
+            case DataFileTypeEnum::PALETTE:
+                break;
+            case DataFileTypeEnum::RGBA:
+                break;
+            case DataFileTypeEnum::SCENE:
+                break;
+            case DataFileTypeEnum::SPECIFICATION:
+                break;
+            case DataFileTypeEnum::SURFACE:
+                break;
+            case DataFileTypeEnum::UNKNOWN:
+                break;
+            case DataFileTypeEnum::VOLUME:
+                break;
+            case DataFileTypeEnum::VOLUME_DYNAMIC:
+                break;
+        }
+    }
+    
+    return ( ! textOut.isEmpty());
 }
 
 

@@ -25,6 +25,7 @@
 #include "CaretObject.h"
 #include "CaretPointer.h"
 #include "CursorEnum.h"
+#include "UserInputModeEnum.h"
 
 class QPoint;
 class QWidget;
@@ -39,25 +40,8 @@ namespace caret {
     class UserInputModeAbstract : public CaretObject {
         
     public:
-        /** Enumerated type for input modes */
-        enum UserInputMode {
-            /** Invalid */
-            INVALID,
-            /** Annotation Operations */
-            ANNOTATIONS,
-            /** Border Operations */
-            BORDERS,
-            /** Foci Operations */
-            FOCI,
-            /** Image Operations */
-            IMAGE,
-            /** Viewing Operations */
-            VIEW,
-            /** Volume Edit Operations */
-            VOLUME_EDIT
-        };
         
-        UserInputModeAbstract(const UserInputMode inputMode);
+        UserInputModeAbstract(const UserInputModeEnum::Enum inputMode);
         
         virtual ~UserInputModeAbstract();
         
@@ -65,7 +49,7 @@ namespace caret {
         /**
          * @return The input mode enumerated type.
          */
-        UserInputMode getUserInputMode() const;
+        UserInputModeEnum::Enum getUserInputMode() const;
         
         /**
          * Called when 'this' user input receiver is set
@@ -96,8 +80,12 @@ namespace caret {
          *
          * @param keyEvent
          *     Key event information.
+         * @return
+         *     True if the input process recognized the key event
+         *     and the key event SHOULD NOT be propagated to parent
+         *     widgets
          */
-        virtual void keyPressEvent(const KeyEvent& /*keyEvent*/) { }
+        virtual bool keyPressEvent(const KeyEvent& /*keyEvent*/) { return false; }
         
         /**
          * Process a mouse left double-click event.
@@ -238,7 +226,7 @@ namespace caret {
 
         UserInputModeAbstract& operator=(const UserInputModeAbstract&);
 
-        const UserInputMode m_userInputMode;
+        const UserInputModeEnum::Enum m_userInputMode;
         
         QWidget* m_widgetForToolBar;
         

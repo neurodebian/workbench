@@ -63,6 +63,8 @@
  **
  ****************************************************************************/
 
+#ifdef HAVE_FREETYPE
+
 #define __FTGL_FONT_TEXT_RENDERER_DECLARE__
 #include "FtglFontTextRenderer.h"
 #undef __FTGL_FONT_TEXT_RENDERER_DECLARE__
@@ -75,21 +77,23 @@
 #include <QFile>
 #include <QStringList>
 
+#include "AnnotationCoordinate.h"
 #include "AnnotationPointSizeText.h"
 #include "BrainOpenGL.h"
 #include "CaretAssert.h"
 #include "CaretLogger.h"
 #include "CaretOpenGLInclude.h"
+#include "GraphicsEngineDataOpenGL.h"
 #include "GraphicsOpenGLError.h"
+#include "GraphicsPrimitiveV3f.h"
+#include "GraphicsPrimitiveV3fN3f.h"
 #include "GraphicsShape.h"
 #include "GraphicsUtilitiesOpenGL.h"
 #include "MathFunctions.h"
 #include "Matrix4x4.h"
 
-#ifdef HAVE_FREETYPE
 #include <FTGL/ftgl.h>
 using namespace FTGL;
-#endif // HAVE_FREETYPE
 
 using namespace caret;
 
@@ -122,7 +126,6 @@ FtglFontTextRenderer::FtglFontTextRenderer()
 : BrainOpenGLTextRenderInterface()
 {
     m_defaultFont = NULL;
-#ifdef HAVE_FREETYPE
     AnnotationPointSizeText defaultAnnotationText(AnnotationAttributesDefaultTypeEnum::NORMAL);
     defaultAnnotationText.setFontPointSize(AnnotationTextFontPointSizeEnum::SIZE14);
     defaultAnnotationText.setFont(AnnotationTextFontNameEnum::VERA);
@@ -130,8 +133,8 @@ FtglFontTextRenderer::FtglFontTextRenderer()
     defaultAnnotationText.setBoldStyleEnabled(false);
     defaultAnnotationText.setUnderlineStyleEnabled(false);
     m_defaultFont = getFont(defaultAnnotationText,
+                            FtglFontTypeEnum::TEXTURE,
                             true);
-#endif // HAVE_FREETYPE
     m_depthTestingStatus = DEPTH_TEST_NO;
     BrainOpenGL::getMinMaxLineWidth(m_lineWidthMinimum,
                                     m_lineWidthMaximum);
@@ -142,7 +145,6 @@ FtglFontTextRenderer::FtglFontTextRenderer()
  */
 FtglFontTextRenderer::~FtglFontTextRenderer()
 {
-#ifdef HAVE_FREETYPE
     for (FONT_MAP_ITERATOR iter = m_fontNameToFontMap.begin();
          iter != m_fontNameToFontMap.end();
          iter++) {
@@ -155,7 +157,6 @@ FtglFontTextRenderer::~FtglFontTextRenderer()
      * in m_fontNameToFontMap.  Doing so would cause
      * a double delete.
      */
-#endif // HAVE_FREETYPE
 }
 
 /**
@@ -173,6 +174,10 @@ FtglFontTextRenderer::isValid() const
  *
  * @param annotationText
  *   Annotation Text that is to be drawn.
+ * @param ftglFontType
+ *    Type of font.
+ * @param heightOrWidthForPercentageSizeText
+ *    If positive, use it to override width/height of viewport.
  * @param creatingDefaultFontFlag
  *    True if creating the default font.
  * @return
@@ -181,14 +186,17 @@ FtglFontTextRenderer::isValid() const
  */
 FTFont*
 FtglFontTextRenderer::getFont(const AnnotationText& annotationText,
+                              const FtglFontTypeEnum ftglFontType,
+                              const float heightOrWidthForPercentageSizeText,
                               const bool creatingDefaultFontFlag)
 {
-#ifdef HAVE_FREETYPE
     int32_t viewportWidth  = m_viewportWidth;
     int32_t viewportHeight = m_viewportHeight;
     
     switch (annotationText.getCoordinateSpace()) {
         case AnnotationCoordinateSpaceEnum::CHART:
+            break;
+        case AnnotationCoordinateSpaceEnum::SPACER:
             break;
         case AnnotationCoordinateSpaceEnum::STEREOTAXIC:
             break;
@@ -207,8 +215,29 @@ FtglFontTextRenderer::getFont(const AnnotationText& annotationText,
         case AnnotationCoordinateSpaceEnum::WINDOW:
             break;
     }
-    const AString fontName = annotationText.getFontRenderingEncodedName(viewportWidth,
-                                                                        viewportHeight);
+    
+    if (heightOrWidthForPercentageSizeText > 0.0) {
+        viewportHeight = heightOrWidthForPercentageSizeText;
+        viewportWidth  = heightOrWidthForPercentageSizeText;
+    }
+    
+    bool tooSmallTextHeightValidFlag = false;
+    AString fontTypeString;
+    switch (ftglFontType) {
+        case FtglFontTypeEnum::POLYGON:
+            fontTypeString = "Polygon_";
+            /* Polygon text is never too small */
+            tooSmallTextHeightValidFlag = false;
+            break;
+        case FtglFontTypeEnum::TEXTURE:
+            fontTypeString = "Texture_";
+            tooSmallTextHeightValidFlag = true;
+            break;
+    }
+    
+    const AString fontName = (fontTypeString
+                              + annotationText.getFontRenderingEncodedName(viewportWidth,
+                                                                           viewportHeight));
     
     /*
      * Has the font already has been created?
@@ -222,7 +251,8 @@ FtglFontTextRenderer::getFont(const AnnotationText& annotationText,
          * Set font "too small" status
          */
         const bool tooSmallFlag = (fontData->m_font->FaceSize() <= AnnotationText::getTooSmallTextHeight());
-        annotationText.setFontTooSmallWhenLastDrawn(tooSmallFlag);
+        annotationText.setFontTooSmallWhenLastDrawn(tooSmallFlag
+                                                    && tooSmallTextHeightValidFlag);
         
         return fontData->m_font;
     }
@@ -231,6 +261,7 @@ FtglFontTextRenderer::getFont(const AnnotationText& annotationText,
      * Create and save the font
      */
     FontData* fontData = new FontData(annotationText,
+                                      ftglFontType,
                                       viewportWidth,
                                       viewportHeight);
     if (fontData->m_valid) {
@@ -246,8 +277,9 @@ FtglFontTextRenderer::getFont(const AnnotationText& annotationText,
          * Set font "too small" status
          */
         const bool tooSmallFlag = (fontData->m_font->FaceSize() <= AnnotationText::getTooSmallTextHeight());
-        annotationText.setFontTooSmallWhenLastDrawn(tooSmallFlag);
-
+        annotationText.setFontTooSmallWhenLastDrawn(tooSmallFlag
+                                                    && tooSmallTextHeightValidFlag);
+        
         return fontData->m_font;
     }
     else {
@@ -282,11 +314,32 @@ FtglFontTextRenderer::getFont(const AnnotationText& annotationText,
      */
     annotationText.setFontTooSmallWhenLastDrawn(false);
     return m_defaultFont;
-    
-#else  // HAVE_FREETYPE
-    CaretLogSevere("Trying to use FTGL Font rendering but FTGL is not valid.");
-    return NULL;
-#endif // HAVE_FREETYPE
+}
+
+
+/*
+ * Get the font with the given font attributes.
+ * If the font is not created, return the default font.
+ *
+ * @param annotationText
+ *   Annotation Text that is to be drawn.
+ * @param ftglFontType
+ *    Type of font.
+ * @param creatingDefaultFontFlag
+ *    True if creating the default font.
+ * @return
+ *    The FTGL font.  If there are errors this value will
+ *    be NULL.
+ */
+FTFont*
+FtglFontTextRenderer::getFont(const AnnotationText& annotationText,
+                              const FtglFontTypeEnum ftglFontType,
+                              const bool creatingDefaultFontFlag)
+{
+    return getFont(annotationText,
+                   ftglFontType,
+                   -1.0, // negative indicates invalid height for percentage text
+                   creatingDefaultFontFlag);
 }
 
 /**
@@ -325,16 +378,13 @@ void
 FtglFontTextRenderer::drawTextAtViewportCoordinatesInternal(const AnnotationText& annotationText,
                                                             const TextStringGroup& textStringGroup)
 {
-#ifdef HAVE_FREETYPE
     FTFont* font = getFont(annotationText,
+                           FtglFontTypeEnum::TEXTURE,
                            false);
     if (! font) {
         return;
     }
 
-//    const bool tooSmallFlag = (font->FaceSize() <= s_tooSmallFontSize);
-//    annotationText.setFontTooSmallWhenLastDrawn(tooSmallFlag);
-    
     if (annotationText.getText().isEmpty()) {
         return;
     }
@@ -479,25 +529,23 @@ FtglFontTextRenderer::drawTextAtViewportCoordinatesInternal(const AnnotationText
             
             glPopMatrix();
         }
-        
-        if (ts->m_outlineThickness > 0.0) {
-            glPushMatrix();
-            glTranslated(ts->m_viewportX - rotationPointXYZ[0], ts->m_viewportY - rotationPointXYZ[1], 0.0);
-            
-            uint8_t foregroundRgba[4];
-            annotationText.getLineColorRGBA(foregroundRgba);
-            drawOutline(ts->m_stringGlyphsMinX,
-                        ts->m_stringGlyphsMaxX,
-                        ts->m_stringGlyphsMinY,
-                        ts->m_stringGlyphsMaxY,
-                        z,
-                        ts->m_outlineThickness,
-                        foregroundRgba);
-            
-            glPopMatrix();
-        }
     }
     
+    glLoadIdentity();
+    
+    uint8_t foregroundRgba[4];
+    annotationText.getLineColorRGBA(foregroundRgba);
+    if (foregroundRgba[3] > 0) {
+        GraphicsPrimitiveV3f primitive(GraphicsPrimitive::PrimitiveType::POLYGONAL_LINE_LOOP_MITER_JOIN,
+                                       foregroundRgba);
+        primitive.addVertex(topLeft);
+        primitive.addVertex(bottomLeft);
+        primitive.addVertex(bottomRight);
+        primitive.addVertex(topRight);
+        primitive.setLineWidth(GraphicsPrimitive::LineWidthType::PERCENTAGE_VIEWPORT_HEIGHT,
+                               annotationText.getLineWidthPercentage());
+        GraphicsEngineDataOpenGL::draw(&primitive);
+    }
     glPopMatrix();
     
     BrainOpenGL::testForOpenGLError("At end of "
@@ -506,10 +554,6 @@ FtglFontTextRenderer::drawTextAtViewportCoordinatesInternal(const AnnotationText
                                     + annotationText.getText());
     
     restoreStateOfOpenGL();
-
-#else // HAVE_FREETYPE
-    CaretLogSevere("Trying to use FTGL Font rendering but it cannot be used due to FreeType not found.");
-#endif // HAVE_FREETYPE
 }
 
 /**
@@ -539,6 +583,8 @@ FtglFontTextRenderer::drawUnderline(const double lineStartX,
     /*
      * Need to enable anti-aliasing for smooth lines
      */
+    glPushAttrib(GL_COLOR_BUFFER_BIT
+                 | GL_ENABLE_BIT);
     glEnable(GL_LINE_SMOOTH);
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -556,9 +602,7 @@ FtglFontTextRenderer::drawUnderline(const double lineStartX,
                                       foregroundRgba,
                                       GraphicsPrimitive::LineWidthType::PIXELS,
                                       underlineThickness);
-    
-    glDisable(GL_LINE_SMOOTH);
-    glDisable(GL_BLEND);
+    glPopAttrib();
 }
 
 /**
@@ -591,6 +635,8 @@ FtglFontTextRenderer::drawOutline(const double minX,
     /*
      * Need to enable anti-aliasing for smooth lines
      */
+    glPushAttrib(GL_COLOR_BUFFER_BIT
+                 | GL_ENABLE_BIT);
     glEnable(GL_LINE_SMOOTH);
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -600,19 +646,17 @@ FtglFontTextRenderer::drawOutline(const double minX,
     float bottomRight[3] = { (float)maxX, (float)minY, (float)z };
     float topRight[3]    = { (float)maxX, (float)maxY, (float)z };
     float topLeft[3]     = { (float)minX, (float)maxY, (float)z };
-    expandBox(bottomLeft, bottomRight, topRight, topLeft,
-              outlineThickness, outlineThickness);
+    MathFunctions::expandBox(bottomLeft, bottomRight, topRight, topLeft,
+                             outlineThickness, outlineThickness);
     
     GraphicsShape::drawBoxOutlineByteColor(bottomLeft, bottomRight, topRight, topLeft,
                                            foregroundRgba,
                                            GraphicsPrimitive::LineWidthType::PIXELS, outlineThickness);
-    
-    glDisable(GL_LINE_SMOOTH);
-    glDisable(GL_BLEND);
+    glPopAttrib();
 }
 
 /**
- * Expand a box by given amounts in X and Y.
+ * Draw an outline for 3D using the given coordinates.
  *
  * @param bottomLeft
  *     Bottom left corner of annotation.
@@ -622,45 +666,33 @@ FtglFontTextRenderer::drawOutline(const double minX,
  *     Top right corner of annotation.
  * @param topLeft
  *     Top left corner of annotation.
- * @param extraSpaceX
- *     Extra space to add in X.
- * @param extraSpaceY
- *     Extra space to add in Y.
+ * @param outlineThickness
+ *     Thickness of outline
+ * @param foregroundRGBA
+ *     Color for drawing outline.
  */
 void
-FtglFontTextRenderer::expandBox(float bottomLeft[3],
-                                float bottomRight[3],
-                                float topRight[3],
-                                float topLeft[3],
-                                const float extraSpaceX,
-                                const float extraSpaceY)
+FtglFontTextRenderer::drawOutline3D(float bottomLeft[3],
+                                    float bottomRight[3],
+                                    float topRight[3],
+                                    float topLeft[3],
+                                    const double outlineThickness,
+                                    uint8_t foregroundRgba[4])
 {
-    float widthVector[3];
-    MathFunctions::subtractVectors(topRight, topLeft, widthVector);
-    MathFunctions::normalizeVector(widthVector);
+    /*
+     * Need to enable anti-aliasing for smooth lines
+     */
+    glPushAttrib(GL_COLOR_BUFFER_BIT
+                 | GL_ENABLE_BIT);
+    glEnable(GL_LINE_SMOOTH);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glHint(GL_LINE_SMOOTH_HINT, GL_NICEST);
     
-    float heightVector[3];
-    MathFunctions::subtractVectors(topLeft, bottomLeft, heightVector);
-    MathFunctions::normalizeVector(heightVector);
-    
-    const float widthSpacingX = extraSpaceX * widthVector[0];
-    const float widthSpacingY = extraSpaceY * widthVector[1];
-    
-    const float heightSpacingX = extraSpaceX * heightVector[0];
-    const float heightSpacingY = extraSpaceY * heightVector[1];
-    
-    
-    topLeft[0] += (-widthSpacingX + heightSpacingX);
-    topLeft[1] += (-widthSpacingY + heightSpacingY);
-    
-    topRight[0] += (widthSpacingX + heightSpacingX);
-    topRight[1] += (widthSpacingY + heightSpacingY);
-    
-    bottomLeft[0] += (-widthSpacingX - heightSpacingX);
-    bottomLeft[1] += (-widthSpacingY - heightSpacingY);
-    
-    bottomRight[0] += (widthSpacingX - heightSpacingX);
-    bottomRight[1] += (widthSpacingY - heightSpacingY);
+    GraphicsShape::drawBoxOutlineByteColor(bottomLeft, bottomRight, topRight, topLeft,
+                                           foregroundRgba,
+                                           GraphicsPrimitive::LineWidthType::PIXELS, outlineThickness);
+    glPopAttrib();
 }
 
 /**
@@ -752,13 +784,12 @@ FtglFontTextRenderer::drawTextAtViewportCoordsInternal(const DepthTestEnum depth
         return;
     }
     
-    FTFont* font = getFont(annotationText, false);
+    FTFont* font = getFont(annotationText,
+                           FtglFontTypeEnum::TEXTURE,
+                           false);
     if ( ! font) {
         return;
     }
-    
-//    const bool tooSmallFlag = (font->FaceSize() < s_tooSmallFontSize);
-//    annotationText.setFontTooSmallWhenLastDrawn(tooSmallFlag);
     
     m_depthTestingStatus = depthTesting;
     
@@ -826,7 +857,9 @@ FtglFontTextRenderer::getBoundsForTextAtViewportCoords(const AnnotationText& ann
     m_viewportWidth  = viewportWidth;
     m_viewportHeight = viewportHeight;
     
-    FTFont* font = getFont(annotationText, false);
+    FTFont* font = getFont(annotationText,
+                           FtglFontTypeEnum::TEXTURE,
+                           false);
     if ( ! font) {
         return;
     }
@@ -941,7 +974,9 @@ FtglFontTextRenderer::getBoundsWithoutMarginForTextAtViewportCoords(const Annota
     m_viewportWidth  = viewportWidth;
     m_viewportHeight = viewportHeight;
     
-    FTFont* font = getFont(annotationText, false);
+    FTFont* font = getFont(annotationText,
+                           FtglFontTypeEnum::TEXTURE,
+                           false);
     if ( ! font) {
         return;
     }
@@ -1140,6 +1175,7 @@ FtglFontTextRenderer::getTextWidthHeightInPixels(const AnnotationText& annotatio
 /**
  * Draw annnotation text at the given model coordinates using
  * the the annotations attributes for the style of text.
+ * Text is drawn so that is in the plane of the screen (faces user)
  *
  * Depth testing is ENABLED when drawing text with this method.
  *
@@ -1151,13 +1187,15 @@ FtglFontTextRenderer::getTextWidthHeightInPixels(const AnnotationText& annotatio
  *     Model Z-coordinate.
  * @param annotationText
  *     Annotation text and attributes.
+ * @param flags
+ *     Drawing flags.
  */
 void
-FtglFontTextRenderer::drawTextAtModelCoords(const double modelX,
-                                            const double modelY,
-                                            const double modelZ,
-                                            const AnnotationText& annotationText,
-                                            const DrawingFlags& flags)
+FtglFontTextRenderer::drawTextAtModelCoordsFacingUser(const double modelX,
+                                                      const double modelY,
+                                                      const double modelZ,
+                                                      const AnnotationText& annotationText,
+                                                      const DrawingFlags& flags)
 {
     setViewportHeight();
     
@@ -1208,6 +1246,316 @@ FtglFontTextRenderer::drawTextAtModelCoords(const double modelX,
         CaretLogSevere("gluProject() failed for drawing text at model coordinates.");
     }
 }
+
+/**
+ * Get the bounds of text drawn in model space using the current model transformations.
+ *
+ * @param annotationText
+ *   Text that is to be drawn.
+ * @param modelSpaceScaling
+ *   Scaling in the model space.
+ * @param heightOrWidthForPercentageSizeText
+ *    Size of region used when converting percentage size to a fixed size
+ * @param flags
+ *     Drawing flags.
+ * @param bottomLeftOut
+ *    The bottom left corner of the text bounds.
+ * @param bottomRightOut
+ *    The bottom right corner of the text bounds.
+ * @param topRightOut
+ *    The top right corner of the text bounds.
+ * @param topLeftOut
+ *    The top left corner of the text bounds.
+ * @param underlineStartOut
+ *    Starting coordinate for drawing text underline.
+ * @param underlineEndOut
+ *    Ending coordinate for drawing text underline.
+ */
+void
+FtglFontTextRenderer::getBoundsForTextInModelSpace(const AnnotationText& annotationText,
+                                                   const float /*modelSpaceScaling*/,
+                                                   const float heightOrWidthForPercentageSizeText,
+                                                   const DrawingFlags& flags,
+                                                   double bottomLeftOut[3],
+                                                   double bottomRightOut[3],
+                                                   double topRightOut[3],
+                                                   double topLeftOut[3],
+                                                   double underlineStartOut[3],
+                                                   double underlineEndOut[3])
+{
+    std::fill(bottomLeftOut,  bottomLeftOut + 3,  0.0f);
+    std::fill(bottomRightOut, bottomRightOut + 3, 0.0f);
+    std::fill(topRightOut,    topRightOut + 3,    0.0f);
+    std::fill(topLeftOut,     topLeftOut + 3,     0.0f);
+    
+    FTFont* font = getFont(annotationText,
+                           FtglFontTypeEnum::POLYGON,
+                           heightOrWidthForPercentageSizeText,
+                           false);
+    if (! font) {
+        return;
+    }
+    
+    
+    
+    
+    const float lineThicknessForViewportHeight(getLineThicknessPixelsInModelSpace(annotationText.getLineWidthPercentage(),
+                                                                                  heightOrWidthForPercentageSizeText,
+                                                                                  0.0));
+    
+    TextStringGroup textStringGroup(annotationText,
+                                    flags,
+                                    font,
+                                    0.0,
+                                    0.0,
+                                    0.0,
+                                    annotationText.getRotationAngle(),
+                                    lineThicknessForViewportHeight);
+    
+    double rotationPointXYZ[3];
+    textStringGroup.getViewportBounds(s_textMarginSize,
+                                      bottomLeftOut,
+                                      bottomRightOut,
+                                      topRightOut,
+                                      topLeftOut,
+                                      rotationPointXYZ);
+    
+    underlineStartOut[0] = bottomLeftOut[0];
+    underlineStartOut[1] = bottomLeftOut[1];
+    underlineStartOut[2] = bottomLeftOut[2];
+    underlineEndOut[0]   = bottomRightOut[0];
+    underlineEndOut[1]   = bottomRightOut[1];
+    underlineEndOut[2]   = bottomRightOut[2];
+}
+
+/**
+ * Get the line thickness for model space.
+ *
+ * @param lineWidthPercentage
+ *     The line width percentage.
+ * @param heightOrWidthForPercentageSizeText
+ *     The height/width of region (surface) for percentage size text.
+ * @param modelSpaceScaling
+ *     Scaling in model space.
+ */
+float
+FtglFontTextRenderer::getLineThicknessPixelsInModelSpace(const float lineWidthPercentage,
+                                                         const float heightOrWidthForPercentageSizeText,
+                                                         const float modelSpaceScaling) const
+{
+    float lineThicknessPercentage = std::max(0.01f,
+                                             (lineWidthPercentage / 100.f));
+    float lineThicknessPixels = (heightOrWidthForPercentageSizeText
+                                 * lineThicknessPercentage);
+    lineThicknessPixels *= modelSpaceScaling;
+    
+    return lineThicknessPixels;
+}
+
+
+/**
+ * Draw text in model space using the current model transformations.
+ *
+ * Depth testing is ENABLED when drawing text with this method.
+ *
+ * @param annotationText
+ *     Annotation text and attributes.
+ * @param modelSpaceScaling
+ *     Scaling in the model space.
+ * @param heightOrWidthForPercentageSizeText
+ *    If positive, use it to override width/height of viewport.
+ * @param normalVector
+ *     Normal vector of text.
+ * @param flags
+ *     Drawing flags.
+ */
+void
+FtglFontTextRenderer::drawTextInModelSpace(const AnnotationText& annotationText,
+                                           const float /*modelSpaceScaling*/,
+                                           const float heightOrWidthForPercentageSizeText,
+                                           const float* /*normalVector[3]*/,
+                                           const DrawingFlags& flags)
+{
+    FTFont* font = getFont(annotationText,
+                           FtglFontTypeEnum::POLYGON,
+                           heightOrWidthForPercentageSizeText,
+                           false);
+    if (! font) {
+        return;
+    }
+    
+    const bool drawCrossFlag = false;
+    if (drawCrossFlag) {
+        const float a(100.0f);
+        glLineWidth(3.0);
+        glBegin(GL_LINES);
+        glVertex3f(-a, 0, 0);
+        glVertex3f( a, 0, 0);
+        glVertex3f(0, -a, 0);
+        glVertex3f(0,  a, 0);
+        glVertex3f(0,  0,-a);
+        glVertex3f(0,  0, a);
+        glEnd();
+    }
+    AString text = (flags.isDrawSubstitutedText()
+                    ? annotationText.getTextWithSubstitutionsApplied()
+                    : annotationText.getText());
+    if (text.isEmpty()) {
+        return;
+    }
+    
+    const float lineThicknessForViewportHeight(getLineThicknessPixelsInModelSpace(annotationText.getLineWidthPercentage(),
+                                                                                  heightOrWidthForPercentageSizeText,
+                                                                                  0.0));
+    TextStringGroup tsg(annotationText,
+                        flags,
+                        font,
+                        0.0,
+                        0.0,
+                        0.0,
+                        annotationText.getRotationAngle(),
+                        lineThicknessForViewportHeight);
+    drawTextInModelSpaceInternal(annotationText,
+                                 tsg,
+                                 heightOrWidthForPercentageSizeText);
+}
+
+/**
+ * Draw the text piceces at their assigned model space.
+ *
+ * @param annotationText
+ *     Annotation text and attributes.
+ * @param textStringGroup
+ *     Text broken up into characters with positions
+ * @param heightOrWidthForPercentageSizeText
+ *    If positive, use it to override width/height of viewport.
+ *
+ */
+void
+FtglFontTextRenderer::drawTextInModelSpaceInternal(const AnnotationText& annotationText,
+                                                   const TextStringGroup& textStringGroup,
+                                                   const float heightOrWidthForPercentageSizeText)
+{
+    FTFont* font = getFont(annotationText,
+                           FtglFontTypeEnum::POLYGON,
+                           heightOrWidthForPercentageSizeText,
+                           false);
+    if (! font) {
+        return;
+    }
+    
+    if (annotationText.getText().isEmpty()) {
+        return;
+    }
+    
+    saveStateOfOpenGL();
+    
+    BrainOpenGL::testForOpenGLError("At beginning of "
+                                    "FtglFontTextRenderer::drawTextInModelSpaceInternal "
+                                    "while drawing text: "
+                                    + annotationText.getText());
+    
+    glEnable(GL_DEPTH_TEST);
+    
+    
+    const double underlineOffsetY = (textStringGroup.m_underlineThickness / 2.0);
+    
+    double bottomLeft[3], bottomRight[3], topRight[3], topLeft[3], rotationPointXYZ[3];
+    textStringGroup.getViewportBounds(s_textMarginSize,
+                                      bottomLeft, bottomRight, topRight, topLeft, rotationPointXYZ);
+    rotationPointXYZ[2] = 0.0;
+    
+    glPushMatrix();
+    
+    applyBackgroundColoring(textStringGroup);
+    
+    applyTextColoring(annotationText);
+    
+    const float rotationAngle = annotationText.getRotationAngle();
+    glTranslated(rotationPointXYZ[0], rotationPointXYZ[1], rotationPointXYZ[2]);
+    glRotated(rotationAngle, 0.0, 0.0, -1.0);
+    
+    glPolygonOffset(-1.0, -1.0);
+    glEnable(GL_POLYGON_OFFSET_FILL);
+    for (std::vector<TextString*>::const_iterator iter = textStringGroup.m_textStrings.begin();
+         iter != textStringGroup.m_textStrings.end();
+         iter++) {
+        const TextString* ts = *iter;
+        
+        double x = ts->m_viewportX;
+        double y = ts->m_viewportY;
+        double z = ts->m_viewportZ;
+        
+        applyTextColoring(annotationText);
+        
+        for (std::vector<TextCharacter*>::const_iterator charIter = ts->m_characters.begin();
+             charIter != ts->m_characters.end();
+             charIter++) {
+            const TextCharacter* tc = *charIter;
+            x += tc->m_offsetX;
+            y += tc->m_offsetY;
+            z += tc->m_offsetZ;
+            
+            const double offsetX = x - rotationPointXYZ[0];
+            const double offsetY = y - rotationPointXYZ[1];
+            const double offsetZ = z - rotationPointXYZ[2];
+            
+            glPushMatrix();
+            glTranslated(offsetX,
+                         offsetY,
+                         offsetZ);
+            font->Render(&tc->m_character,
+                         1);
+            glPopMatrix();
+        }
+        
+        if (ts->m_underlineThickness > 0.0) {
+            glPushMatrix();
+            glTranslated(ts->m_viewportX - rotationPointXYZ[0], ts->m_viewportY - rotationPointXYZ[1], 0.0);
+            
+            const double underlineY = ts->m_stringGlyphsMinY + underlineOffsetY;
+            uint8_t foregroundRgba[4];
+            annotationText.getTextColorRGBA(foregroundRgba);
+            drawUnderline(ts->m_stringGlyphsMinX,
+                          ts->m_stringGlyphsMaxX,
+                          underlineY,
+                          z,
+                          ts->m_underlineThickness,
+                          foregroundRgba);
+            
+            glPopMatrix();
+        }
+    }
+    
+    if (annotationText.getLineColor() != CaretColorEnum::NONE) {
+        glPushMatrix();
+        
+        uint8_t foregroundRgba[4];
+        annotationText.getLineColorRGBA(foregroundRgba);
+        
+        const float thickness = ((annotationText.getLineWidthPercentage() / 100.0)
+                                 * heightOrWidthForPercentageSizeText);
+        GraphicsShape::drawOutlineRectangleVerticesAtInside(bottomLeft,
+                                                            bottomRight,
+                                                            topRight,
+                                                            topLeft,
+                                                            thickness,
+                                                            foregroundRgba);
+        
+        glPopMatrix();
+    }
+    
+    glDisable(GL_POLYGON_OFFSET_FILL);
+    glPopMatrix();
+    
+    BrainOpenGL::testForOpenGLError("At end of "
+                                    "FtglFontTextRenderer::drawTextInModelSpaceInternal "
+                                    "while drawing text: "
+                                    + annotationText.getText());
+    
+    restoreStateOfOpenGL();
+}
+
 
 /**
  * Save the state of OpenGL.
@@ -1273,13 +1621,14 @@ FtglFontTextRenderer::FontData::FontData()
  *    Height of the viewport in which text is drawn.
  */
 FtglFontTextRenderer::FontData::FontData(const AnnotationText&  annotationText,
+                                         const FtglFontTypeEnum ftglFontType,
                                          const int32_t viewportWidth,
                                          const int32_t viewportHeight)
+: m_ftglFontType(ftglFontType)
 {
     m_valid    = false;
     m_font     = NULL;
     
-#ifdef HAVE_FREETYPE
     const AnnotationTextFontNameEnum::Enum fontName = annotationText.getFont();
     
     AString fontFileName = AnnotationTextFontNameEnum::getResourceFontFileName(fontName);
@@ -1312,8 +1661,16 @@ FtglFontTextRenderer::FontData::FontData(const AnnotationText&  annotationText,
             /*
              * Create the FTGL font.
              */
-            m_font = new FTTextureFont((const unsigned char*)m_fontData.data(),
-                                       numBytes);
+            switch (m_ftglFontType) {
+                case FtglFontTypeEnum::POLYGON:
+                    m_font = new FTGLPolygonFont((const unsigned char*)m_fontData.data(),
+                                                 numBytes);
+                    break;
+                case FtglFontTypeEnum::TEXTURE:
+                    m_font = new FTTextureFont((const unsigned char*)m_fontData.data(),
+                                               numBytes);
+                    break;
+            }
             
             CaretAssert(m_font);
             
@@ -1369,7 +1726,6 @@ FtglFontTextRenderer::FontData::FontData(const AnnotationText&  annotationText,
             m_font = NULL;
         }
     }
-#endif // HAVE_FREETYPE
 }
 
 /**
@@ -1377,12 +1733,10 @@ FtglFontTextRenderer::FontData::FontData(const AnnotationText&  annotationText,
  */
 FtglFontTextRenderer::FontData::~FontData()
 {
-#ifdef HAVE_FREETYPE
     if (m_font != NULL) {
         delete m_font;
         m_font = NULL;
     }
-#endif // HAVE_FREETYPE
 }
 
 /**
@@ -1488,7 +1842,9 @@ FtglFontTextRenderer::TextCharacter::print(const AString& offsetString)
  *
  * @param textString
  *     The text string.
- * @parm orientation
+ * @param textDrawingSpace
+ *     Text drawn in space.
+ * @param orientation
  *     Orientation of the text string.
  * @param underlineThickness
  *     Thickness of underline for the text.
@@ -1498,11 +1854,13 @@ FtglFontTextRenderer::TextCharacter::print(const AString& offsetString)
  *     Font for drawing the text string.
  */
 FtglFontTextRenderer::TextString::TextString(const QString& textString,
+                                             const TextDrawingSpace textDrawingSpace,
                                              const AnnotationTextOrientationEnum::Enum orientation,
                                              const double underlineThickness,
                                              const double outlineThickness,
                                              FTFont* font)
-: m_underlineThickness(underlineThickness),
+: m_textDrawingSpace(textDrawingSpace),
+m_underlineThickness(underlineThickness),
 m_outlineThickness(outlineThickness),
 m_viewportX(0.0),
 m_viewportY(0.0),
@@ -1512,7 +1870,6 @@ m_stringGlyphsMaxX(0.0),
 m_stringGlyphsMinY(0.0),
 m_stringGlyphsMaxY(0.0)
 {
-#ifdef HAVE_FREETYPE
     /*
      * Split the string into individual characters.
      */
@@ -1572,7 +1929,6 @@ m_stringGlyphsMaxY(0.0)
      * Set the bounds of the characters in this string.
      */
     setGlyphBounds();
-#endif // HAVE_FREETYPE
 }
 
 /**
@@ -1610,7 +1966,7 @@ FtglFontTextRenderer::TextString::initializeTextCharacterOffsets(const Annotatio
     double stringMinX =  std::numeric_limits<float>::max();
     double stringMaxX = -std::numeric_limits<float>::max();
     
-    const float verticalSpacing = s_textMarginSize * 2.0;
+    //const float verticalSpacing = s_textMarginSize * 2.0;
     
     /*
      * For each character, set its offset from the previous character
@@ -1629,7 +1985,16 @@ FtglFontTextRenderer::TextString::initializeTextCharacterOffsets(const Annotatio
             
             if (stackedTextFlag) {
                 double offsetY1 = prevChar->m_glyphMinY;
-                double offsetY2 = -verticalSpacing;
+                double offsetY2 = 0.0;
+                switch (m_textDrawingSpace) {
+                    case TextDrawingSpace::MODEL:
+                        offsetY2 = prevChar->m_glyphMaxY - prevChar->m_glyphMinY;
+                        offsetY2 = -(s_modelSpaceMarginPercentage * offsetY2);
+                        break;
+                    case TextDrawingSpace::VIEWPORT:
+                        offsetY2 = -(s_textMarginSize * 2.0);
+                        break;
+                }
                 double offsetY3 = -tc->m_glyphMaxY;
                 
                 offsetY = (offsetY1 + offsetY2 + offsetY3);
@@ -1851,10 +2216,15 @@ m_underlineThickness(0.0),
 m_viewportBoundsMinX(0.0),
 m_viewportBoundsMaxX(0.0),
 m_viewportBoundsMinY(0.0),
-m_viewportBoundsMaxY(0.0)
+m_viewportBoundsMaxY(0.0),
+m_textDrawingSpace(TextDrawingSpace::VIEWPORT)
 {
-#ifdef HAVE_FREETYPE
     CaretAssert(font);
+    
+    m_textDrawingSpace = TextDrawingSpace::VIEWPORT;
+    if (m_annotationText.isInSurfaceSpaceWithTangentOffset()) {
+        m_textDrawingSpace = TextDrawingSpace::MODEL;
+    }
     
     if (annotationText.getText().isEmpty()) {
         m_viewportBoundsMinX = m_viewportX;
@@ -1898,6 +2268,7 @@ m_viewportBoundsMaxY(0.0)
     
     for (int32_t i = 0; i < textListSize; i++) {
         TextString* ts = new TextString(textList.at(i),
+                                        m_textDrawingSpace,
                                         annotationText.getOrientation(),
                                         m_underlineThickness,
                                         outlineThickness,
@@ -1915,7 +2286,6 @@ m_viewportBoundsMaxY(0.0)
      * Alignment moves text so bounds need to be updated
      */
     updateTextBounds();
-#endif // HAVE_FREETYPE
 }
 
 /**
@@ -2047,14 +2417,23 @@ FtglFontTextRenderer::TextStringGroup::getViewportBounds(const double margin,
      * Margin is NOT included when rotation point is computed
      * as it will move the rotation point to the wrong position.
      */
-    bottomLeftOut[0]  -= margin;
-    bottomLeftOut[1]  -= margin;
-    bottomRightOut[0] += margin;
-    bottomRightOut[1] -= margin;
-    topRightOut[0]    += margin;
-    topRightOut[1]    += margin;
-    topLeftOut[0]     -= margin;
-    topLeftOut[1]     += margin;
+    double boundsMargin = 0.0;
+    switch (m_textDrawingSpace) {
+        case TextDrawingSpace::MODEL:
+            boundsMargin = GraphicsUtilitiesOpenGL::convertPixelsToMillimeters(margin);
+            break;
+        case TextDrawingSpace::VIEWPORT:
+            boundsMargin = margin;
+            break;
+    }
+    bottomLeftOut[0]  -= boundsMargin;
+    bottomLeftOut[1]  -= boundsMargin;
+    bottomRightOut[0] += boundsMargin;
+    bottomRightOut[1] -= boundsMargin;
+    topRightOut[0]    += boundsMargin;
+    topRightOut[1]    += boundsMargin;
+    topLeftOut[0]     -= boundsMargin;
+    topLeftOut[1]     += boundsMargin;
     
     matrix.multiplyPoint3(bottomLeftOut);
     matrix.multiplyPoint3(bottomRightOut);
@@ -2089,7 +2468,16 @@ FtglFontTextRenderer::TextStringGroup::initializeTextPositions()
                      * Move coordinate DOWN for next ROW of text
                      */
                     const double offsetY1 = prevTextString->m_stringGlyphsMinY;
-                    const double offsetY2 = -(s_textMarginSize * 2.0);
+                    double offsetY2 = 0.0;
+                    switch (m_textDrawingSpace) {
+                        case TextDrawingSpace::MODEL:
+                            offsetY2 = -(prevTextString->m_stringGlyphsMaxY - prevTextString->m_stringGlyphsMinY);
+                            offsetY2 = s_modelSpaceMarginPercentage * offsetY2;
+                            break;
+                        case TextDrawingSpace::VIEWPORT:
+                            offsetY2 = -(s_textMarginSize * 2.0);
+                            break;
+                    }
                     const double offsetY3 = -textString->m_stringGlyphsMaxY;
                     const double offsetY4 = 0.0;
                     const double offsetY  = (offsetY1 + offsetY2 + offsetY3 + offsetY4);
@@ -2103,7 +2491,16 @@ FtglFontTextRenderer::TextStringGroup::initializeTextPositions()
                      * Move coordinate RIGHT for next COLUMN of text
                      */
                     const double offsetX1 = prevTextString->m_stringGlyphsMaxX;
-                    const double offsetX2 = s_textMarginSize;
+                    double offsetX2 = 0.0;
+                    switch (m_textDrawingSpace) {
+                        case TextDrawingSpace::MODEL:
+                            offsetX2 = (prevTextString->m_stringGlyphsMaxX - prevTextString->m_stringGlyphsMinX);
+                            offsetX2 = s_modelSpaceMarginPercentage * offsetX2;
+                            break;
+                        case TextDrawingSpace::VIEWPORT:
+                            offsetX2 = s_textMarginSize;
+                            break;
+                    }
                     const double offsetX3 = -textString->m_stringGlyphsMinX;
                     const double offsetX  = (offsetX1 + offsetX2 + offsetX3);
                     
@@ -2293,3 +2690,5 @@ FtglFontTextRenderer::TextStringGroup::applyAlignmentsToTextStrings()
             break;
     }
 }
+
+#endif // HAVE_FREETYPE

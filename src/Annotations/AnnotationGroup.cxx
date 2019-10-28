@@ -57,12 +57,15 @@ using namespace caret;
  *     Annotation coordinate space for the group.
  * @param tabOrWindowIndex
  *     Index of tab or window for tab or window space.
+ * @param spacerTabIndex
+ *     Index of a spacer tab.
  */
 AnnotationGroup::AnnotationGroup(AnnotationFile* annotationFile,
                                  const AnnotationGroupTypeEnum::Enum groupType,
                                  const int32_t uniqueKey,
                                  const AnnotationCoordinateSpaceEnum::Enum coordinateSpace,
-                                 const int32_t tabOrWindowIndex)
+                                 const int32_t tabOrWindowIndex,
+                                 const SpacerTabIndex& spacerTabIndex)
 : CaretObjectTracksModification(),
 DisplayGroupAndTabItemInterface(),
 SceneableInterface()
@@ -91,9 +94,13 @@ SceneableInterface()
     
     m_coordinateSpace  = coordinateSpace;
     m_tabOrWindowIndex = tabOrWindowIndex;
+    m_spacerTabIndex   = spacerTabIndex;
     
     switch (m_coordinateSpace) {
         case AnnotationCoordinateSpaceEnum::CHART:
+            break;
+        case AnnotationCoordinateSpaceEnum::SPACER:
+            CaretAssert(m_spacerTabIndex.isValid());
             break;
         case AnnotationCoordinateSpaceEnum::STEREOTAXIC:
             break;
@@ -169,6 +176,7 @@ AnnotationGroup::copyHelperAnnotationGroup(const AnnotationGroup& obj)
     m_coordinateSpace  = obj.m_coordinateSpace;
     m_name             = obj.m_name;
     m_tabOrWindowIndex = obj.m_tabOrWindowIndex;
+    m_spacerTabIndex   = obj.m_spacerTabIndex;
     *m_displayGroupAndTabItemHelper = *obj.m_displayGroupAndTabItemHelper;
     
     CaretAssertMessage(0, "What to do with annotations remove copy constructor/operator=");
@@ -184,6 +192,7 @@ AnnotationGroup::initializeInstance()
     m_coordinateSpace  = AnnotationCoordinateSpaceEnum::VIEWPORT;
     m_name             = "";
     m_tabOrWindowIndex = -1;
+    m_spacerTabIndex = SpacerTabIndex();
     
     m_displayGroupAndTabItemHelper = new DisplayGroupAndTabItemHelper();
     
@@ -263,6 +272,10 @@ AnnotationGroup::getName() const
         switch (m_coordinateSpace) {
             case AnnotationCoordinateSpaceEnum::CHART:
                 break;
+            case AnnotationCoordinateSpaceEnum::SPACER:
+                spaceName.append(" "
+                                 + m_spacerTabIndex.getWindowRowColumnGuiText());
+                break;
             case AnnotationCoordinateSpaceEnum::STEREOTAXIC:
                 break;
             case AnnotationCoordinateSpaceEnum::SURFACE:
@@ -312,6 +325,15 @@ int32_t
 AnnotationGroup::getTabOrWindowIndex() const
 {
     return m_tabOrWindowIndex;
+}
+
+/**
+ * Index of a spacer tab.
+ */
+SpacerTabIndex
+AnnotationGroup::getSpacerTabIndex() const
+{
+    return m_spacerTabIndex;
 }
 
 /**
@@ -424,6 +446,13 @@ AnnotationGroup::validateAddedAnnotation(const Annotation* annotation)
     
     switch (space) {
         case AnnotationCoordinateSpaceEnum::CHART:
+            break;
+        case AnnotationCoordinateSpaceEnum::SPACER:
+            if (m_spacerTabIndex != annotation->getSpacerTabIndex()) {
+                CaretLogSevere("Attempting to add anntation with non-matching spacer tab index");
+                CaretAssert(0);
+                return false;
+            }
             break;
         case AnnotationCoordinateSpaceEnum::STEREOTAXIC:
             break;
@@ -898,17 +927,19 @@ AnnotationGroup::isItemExpandable() const
  *
  * @param displayGroup
  *     The display group.
- * @param tabIndex
+ * @param tabIndexIn
  *     Index of the tab.
  */
 bool
 AnnotationGroup::isItemExpanded(const DisplayGroupEnum::Enum displayGroup,
-                                const int32_t tabIndex) const
+                                const int32_t tabIndexIn) const
 {
     if (m_coordinateSpace == AnnotationCoordinateSpaceEnum::WINDOW) {
        return  m_displayGroupAndTabItemHelper->isExpandedInWindow(m_tabOrWindowIndex);
     }
     
+    const int32_t tabIndex = updateDisplayGroupTabIndex(displayGroup,
+                                                        tabIndexIn);
     return m_displayGroupAndTabItemHelper->isExpanded(displayGroup,
                                                       tabIndex);
 }
@@ -918,14 +949,14 @@ AnnotationGroup::isItemExpanded(const DisplayGroupEnum::Enum displayGroup,
  *
  * @param displayGroup
  *     The display group.
- * @param tabIndex
+ * @param tabIndexIn
  *     Index of the tab.
  * @param status
  *     New expanded status.
  */
 void
 AnnotationGroup::setItemExpanded(const DisplayGroupEnum::Enum displayGroup,
-                                 const int32_t tabIndex,
+                                 const int32_t tabIndexIn,
                                  const bool status)
 {
     if (m_coordinateSpace == AnnotationCoordinateSpaceEnum::WINDOW) {
@@ -933,6 +964,8 @@ AnnotationGroup::setItemExpanded(const DisplayGroupEnum::Enum displayGroup,
                                                             status);
     }
     else {
+        const int32_t tabIndex = updateDisplayGroupTabIndex(displayGroup,
+                                                            tabIndexIn);
         m_displayGroupAndTabItemHelper->setExpanded(displayGroup,
                                                     tabIndex,
                                                     status);
@@ -944,13 +977,16 @@ AnnotationGroup::setItemExpanded(const DisplayGroupEnum::Enum displayGroup,
  *
  * @param displayGroup
  *     The display group.
- * @param tabIndex
+ * @param tabIndexIn
  *     Index of the tab.
  */
 TriStateSelectionStatusEnum::Enum
 AnnotationGroup::getItemDisplaySelected(const DisplayGroupEnum::Enum displayGroup,
-                                 const int32_t tabIndex) const
+                                 const int32_t tabIndexIn) const
 {
+    const int32_t tabIndex = updateDisplayGroupTabIndex(displayGroup,
+                                                        tabIndexIn);
+    
     TriStateSelectionStatusEnum::Enum status = TriStateSelectionStatusEnum::UNSELECTED;
     
     const int numChildren = getNumberOfAnnotations();
@@ -987,14 +1023,14 @@ AnnotationGroup::getItemDisplaySelected(const DisplayGroupEnum::Enum displayGrou
  *
  * @param displayGroup
  *     The display group.
- * @param tabIndex
+ * @param tabIndexIn
  *     Index of the tab.
  * @param status
  *     New selection status.
  */
 void
 AnnotationGroup::setItemDisplaySelected(const DisplayGroupEnum::Enum displayGroup,
-                                 const int32_t tabIndex,
+                                 const int32_t tabIndexIn,
                                  const TriStateSelectionStatusEnum::Enum status)
 {
     switch (status) {
@@ -1008,16 +1044,41 @@ AnnotationGroup::setItemDisplaySelected(const DisplayGroupEnum::Enum displayGrou
             break;
     }
     
+    const int32_t tabIndex = updateDisplayGroupTabIndex(displayGroup,
+                                                        tabIndexIn);
+    
     /*
      * Note: An annotation group's selection status is based
      * of the the group's annotations so we do not need to set
      * an explicit selection status for the group.
      */
-    
     DisplayGroupAndTabItemInterface::setChildrenDisplaySelectedHelper(this,
                                                                 displayGroup,
                                                                 tabIndex,
                                                                 status);
+}
+
+/**
+ * Update the tab index to correspond to the tab index used for this
+ * annotation group if it is in tab annotation space.  This functionality 
+ * was added to resolve WB-831.
+ *
+ * @param displayGroup
+ *     The display group.
+ * @param tabIndex
+ *     Index of the tab.
+ */
+int32_t
+AnnotationGroup::updateDisplayGroupTabIndex(const DisplayGroupEnum::Enum displayGroup,
+                                       const int32_t tabIndex) const
+{
+    int32_t tabIndexOut(tabIndex);
+    if (getCoordinateSpace() == AnnotationCoordinateSpaceEnum::TAB) {
+        if (displayGroup == DisplayGroupEnum::DISPLAY_GROUP_TAB) {
+            tabIndexOut = getTabOrWindowIndex();
+        }
+    }
+    return tabIndexOut;
 }
 
 /**

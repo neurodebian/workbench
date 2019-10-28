@@ -86,6 +86,7 @@ namespace caret {
     class ImageFile;
     class LabelFile;
     class MetricFile;
+    class MetricDynamicConnectivityFile;
     class ModelChart;
     class ModelChartTwo;
     class ModelSurfaceMontage;
@@ -94,12 +95,14 @@ namespace caret {
     class PaletteFile;
     class RgbaFile;
     class SceneClassAssistant;
+    class Scene;
     class SceneFile;
     class SelectionManager;
     class SpecFile;
     class Surface;
     class SurfaceFile;
     class SurfaceProjectedItem;
+    class VolumeDynamicConnectivityFile;
     class VolumeFile;
     
     class Brain : public CaretObject, public EventListenerInterface, public SceneableInterface {
@@ -186,6 +189,10 @@ namespace caret {
         VolumeFile* getVolumeFile(const int32_t volumeFileIndex);
         
         const VolumeFile* getVolumeFile(const int32_t volumeFileIndex) const;
+        
+        void getVolumeDynamicConnectivityFiles(std::vector<VolumeDynamicConnectivityFile*>& volumeDynamicConnectivityFilesOut) const;
+        
+        void getMetricDynamicConnectivityFiles(std::vector<MetricDynamicConnectivityFile*>& metricDynamicConnectivityFilesOut) const;
         
         void resetBrain();
         
@@ -435,6 +442,10 @@ namespace caret {
         GapsAndMargins* getGapsAndMargins();
         
         const GapsAndMargins* getGapsAndMargins() const;
+        
+        bool isSurfaceMatchingToAnatomical() const;
+        
+        void setSurfaceMatchingToAnatomical(const bool matchStatus);
         
     private:
         /**
@@ -707,6 +718,8 @@ namespace caret {
         
         void initializeDenseDataSeriesFile(CiftiBrainordinateDataSeriesFile* dataSeriesFile);
         
+        void initializeVolumeFile(VolumeFile* volumeFile);
+        
         void updateChartModel();
         
         void updateVolumeSliceModel();
@@ -868,6 +881,10 @@ namespace caret {
         std::map<DataFileTypeEnum::Enum, int32_t> m_duplicateFileNameCounter;
         
         GapsAndMargins* m_gapsAndMargins;
+        
+        Scene* m_activeScene = NULL;
+        
+        bool m_surfaceMatchingToAnatomicalFlag = false;
     };
 
 } // namespace

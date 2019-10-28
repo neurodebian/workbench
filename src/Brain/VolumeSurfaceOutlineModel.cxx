@@ -23,15 +23,19 @@
 #include "VolumeSurfaceOutlineModel.h"
 #undef __VOLUME_SURFACE_OUTLINE_MODEL_DECLARE__
 
+#include "EventManager.h"
+#include "EventSurfaceColoringInvalidate.h"
 #include "SceneClass.h"
 #include "SceneClassAssistant.h"
 #include "SurfaceSelectionModel.h"
 #include "SurfaceTypeEnum.h"
+#include "VolumeMappableInterface.h"
 #include "VolumeSurfaceOutlineColorOrTabModel.h"
+#include "VolumeSurfaceOutlineModelCacheValue.h"
 
 using namespace caret;
 
-
+static const bool debugFlag(false);
     
 /**
  * \class VolumeSurfaceOutlineSelection 
@@ -73,6 +77,8 @@ VolumeSurfaceOutlineModel::VolumeSurfaceOutlineModel()
     m_thicknessPercentageViewportHeight = -1.0f;
     m_sceneAssistant->add("m_thicknessPercentageViewportHeight", &m_thicknessPercentageViewportHeight);
     m_thicknessPercentageViewportHeight = VolumeSurfaceOutlineModel::DEFAULT_LINE_THICKNESS_PERCENTAGE_VIEWPORT_HEIGHT;
+    
+    EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_SURFACE_COLORING_INVALIDATE);
 }
 
 /**
@@ -80,10 +86,14 @@ VolumeSurfaceOutlineModel::VolumeSurfaceOutlineModel()
  */
 VolumeSurfaceOutlineModel::~VolumeSurfaceOutlineModel()
 {
+    clearOutlineCache();
+    
     delete m_surfaceSelectionModel;
     delete m_colorOrTabModel;
     
     delete m_sceneAssistant;
+    
+    EventManager::get()->removeAllEventsFromListener(this);
 }
 
 /**
@@ -101,6 +111,28 @@ VolumeSurfaceOutlineModel::copyVolumeSurfaceOutlineModel(VolumeSurfaceOutlineMod
     
     VolumeSurfaceOutlineColorOrTabModel* colorTabToCopy = modelToCopy->getColorOrTabModel();
     m_colorOrTabModel->copyVolumeSurfaceOutlineColorOrTabModel(colorTabToCopy);
+    
+    clearOutlineCache();
+}
+
+/**
+ * Receive an event.
+ *
+ * @param event
+ *     The event that the receive can respond to.
+ */
+void
+VolumeSurfaceOutlineModel::receiveEvent(Event* event)
+{
+    CaretAssert(event);
+    
+    if (event->getEventType() == EventTypeEnum::EVENT_SURFACE_COLORING_INVALIDATE) {
+        EventSurfaceColoringInvalidate* colorEvent = dynamic_cast<EventSurfaceColoringInvalidate*>(event);
+        CaretAssert(colorEvent);
+        colorEvent->setEventProcessed();
+        
+        clearOutlineCache();
+    }
 }
 
 /**
@@ -131,6 +163,10 @@ void
 VolumeSurfaceOutlineModel::setDisplayed(const bool displayed)
 {
     m_displayed = displayed;
+    
+    if ( ! m_displayed) {
+        clearOutlineCache();
+    }
 }
 
 /**
@@ -262,6 +298,171 @@ VolumeSurfaceOutlineModel::restoreFromScene(const SceneAttributes* sceneAttribut
         return;
     }
     
+    clearOutlineCache();
+    
     m_sceneAssistant->restoreMembers(sceneAttributes, 
                                      sceneClass);
+}
+
+/**
+ * Set the outline primitives for the given cache key
+ *
+ * @param key
+ *     Key into the outline cache identifying axis and slice
+ * @param primitivesOut
+ *     Input containing the primitives
+ */
+void
+VolumeSurfaceOutlineModel::setOutlineCachePrimitives(const VolumeMappableInterface* underlayVolume,
+                                                     const VolumeSurfaceOutlineModelCacheKey& key,
+                                                     const std::vector<GraphicsPrimitive*>& primitives)
+{
+    auto iter = m_outlineCache.find(key);
+    if (iter != m_outlineCache.end()) {
+        iter->second->setGraphicsPrimitive(primitives);
+        return;
+    }
+    
+    if (m_outlineCache.empty()) {
+        m_outlineCacheInfo.update(this,
+                                  underlayVolume);
+    }
+    
+    if (debugFlag) {
+        std::cout << "Adding " << key.toString() << std::endl;
+    }
+    VolumeSurfaceOutlineModelCacheValue* value = new VolumeSurfaceOutlineModelCacheValue();
+    value->setGraphicsPrimitive(primitives);
+    m_outlineCache.insert(std::make_pair(key, value));
+}
+
+
+/**
+ * Get the outline primitives for the given cache key
+ *
+ * @param underlayVolume
+ *    The underlay volume
+ * @param key
+ *     Key into the outline cache identifying axis and slice
+ * @param primitivesOut
+ *     Output containing the primitives
+ * @return
+ *     Truie if outline primitives valid, else false.
+ */
+bool
+VolumeSurfaceOutlineModel::getOutlineCachePrimitives(const VolumeMappableInterface* underlayVolume,
+                                                     const VolumeSurfaceOutlineModelCacheKey& key,
+                                                     std::vector<GraphicsPrimitive*>& primitivesOut)
+{
+    if ( ! m_outlineCacheInfo.isValid(this,
+                                      underlayVolume)) {
+        clearOutlineCache();
+    }
+
+    auto iter = m_outlineCache.find(key);
+    if (iter != m_outlineCache.end()) {
+        primitivesOut = iter->second->getGraphicsPrimitives();
+        if (debugFlag) {
+            std::cout << "Found " << iter->first.toString() << std::endl;
+        }
+        return true;
+    }
+    
+    return false;
+}
+
+/**
+ * Clear the outline cache
+ */
+void
+VolumeSurfaceOutlineModel::clearOutlineCache()
+{
+    if (debugFlag) {
+        if ( ! m_outlineCache.empty()) {
+            std::cout << "Invalidating non-empty surface outline cache" << std::endl;
+        }
+    }
+    m_outlineCacheInfo.clear();
+    
+    for (auto iter : m_outlineCache) {
+        delete iter.second;
+    }
+    m_outlineCache.clear();
+}
+
+/* ==========================================================================================*/
+
+/**
+ * Constructor for outline cache
+ */
+VolumeSurfaceOutlineModel::OutlineCacheInfo::OutlineCacheInfo()
+{
+    clear();
+}
+
+/**
+ * Destructor
+ */
+VolumeSurfaceOutlineModel::OutlineCacheInfo::~OutlineCacheInfo()
+{
+    clear();
+}
+
+/**
+ * Clear the outline cache
+ */
+void
+VolumeSurfaceOutlineModel::OutlineCacheInfo::clear()
+{
+    m_surface = NULL;
+    m_thicknessPercentageViewportHeight = -1.0;
+    m_colorItem.reset();
+}
+
+/**
+ * Is the outline cache valid?
+ *
+ * @param surfaceOutlineModel
+ *     The parent surface outline model
+ * @param underlayVolume
+ *    The underlay volume
+ * @return
+ *     True if cache is valid, else false
+ */
+bool
+VolumeSurfaceOutlineModel::OutlineCacheInfo::isValid(VolumeSurfaceOutlineModel* surfaceOutlineModel,
+                                                     const VolumeMappableInterface* underlayVolume)
+{
+    bool validFlag(false);
+    if (m_surface != NULL) {
+        if ((m_surface == surfaceOutlineModel->getSurface())
+            && (m_underlayVolume == underlayVolume)
+            && (m_thicknessPercentageViewportHeight == surfaceOutlineModel->getThicknessPercentageViewportHeight())) {
+            if (m_colorItem != NULL) {
+                if (m_colorItem->equals(*(surfaceOutlineModel->getColorOrTabModel()->getSelectedItem()))) {
+                    validFlag = true;
+                }
+            }
+        }
+    }
+    
+    return validFlag;
+}
+
+/**
+ * Update the cache info from the parent surface outline model
+ *
+ * @param surfaceOutlineModel
+ *     The surface outline model
+ * @param underlayVolume
+ *    The underlay volume
+ */
+void
+VolumeSurfaceOutlineModel::OutlineCacheInfo::update(VolumeSurfaceOutlineModel* surfaceOutlineModel,
+                                                    const VolumeMappableInterface* underlayVolume)
+{
+    m_underlayVolume = underlayVolume;
+    m_surface = surfaceOutlineModel->getSurface();
+    m_thicknessPercentageViewportHeight = surfaceOutlineModel->getThicknessPercentageViewportHeight();
+    m_colorItem.reset(new VolumeSurfaceOutlineColorOrTabModel::Item(*(surfaceOutlineModel->getColorOrTabModel()->getSelectedItem())));
 }

@@ -33,6 +33,7 @@
 #include "DisplayGroupAndTabItemInterface.h"
 #include "EventAnnotationGrouping.h"
 #include "EventListenerInterface.h"
+#include "EventTileTabsConfigurationModification.h"
 
 namespace caret {
 
@@ -40,6 +41,7 @@ namespace caret {
     class AnnotationGroup;
     class DisplayGroupAndTabItemHelper;
     class SceneClassAssistant;
+    class SpacerTabIndex;
     
     class AnnotationFile
     : public CaretDataFile,
@@ -119,6 +121,8 @@ namespace caret {
         
         virtual DataFileContentCopyMoveInterface* newInstanceOfDataFile() const;
         
+        bool hasAnnotationsInCoordinateSpace(const AnnotationCoordinateSpaceEnum::Enum coordinateSpace) const;
+        
 
         // ADD_NEW_METHODS_HERE
         
@@ -182,6 +186,7 @@ namespace caret {
         void addAnnotationGroupDuringFileReading(const AnnotationGroupTypeEnum::Enum groupType,
                                                  const AnnotationCoordinateSpaceEnum::Enum coordinateSpace,
                                                  const int32_t tabOrWindowIndex,
+                                                 const SpacerTabIndex& spacerTabIndex,
                                                  const int32_t uniqueKey,
                                                  const std::vector<Annotation*>& annotations);
         
@@ -200,6 +205,9 @@ namespace caret {
         bool removeAnnotationPrivate(Annotation* annotation,
                                      const bool keepAnnotationForUndoRedoFlag);
         
+        bool cloneAnnotationsFromTabToTab(const int32_t fromTabIndex,
+                                          const int32_t toTabIndex);
+        
         bool removeAnnotationsInTab(const int32_t tabIndex);
         
         int32_t generateUniqueKey();
@@ -209,6 +217,8 @@ namespace caret {
         void updateUniqueKeysAfterReadingFile();
         
         AnnotationGroup* getSpaceAnnotationGroup(const Annotation* annotation);
+        
+        void updateSpacerAnnotationsAfterTileTabsModification(const EventTileTabsConfigurationModification* modEvent);
         
         const AnnotationFileSubType m_fileSubType;
         

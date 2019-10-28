@@ -23,10 +23,11 @@
 
 #include "CaretException.h"
 #include "CaretObject.h"
-#include "TileTabsConfigurationModeEnum.h"
+#include "TileTabsGridModeEnum.h"
+#include "TileTabsGridRowColumnElement.h"
 
-class QDomDocument;
-
+class QXmlStreamReader;
+class QXmlStreamWriter;
 
 namespace caret {
 
@@ -48,7 +49,7 @@ namespace caret {
         bool getRowHeightsAndColumnWidthsForWindowSize(const int32_t windowWidth,
                                                        const int32_t windowHeight,
                                                        const int32_t numberOfModelsToDraw,
-                                                       const TileTabsConfigurationModeEnum::Enum configurationMode,
+                                                       const TileTabsGridModeEnum::Enum configurationMode,
                                                        std::vector<int32_t>& rowHeightsOut,
                                                        std::vector<int32_t>& columnWidthsOut);
         
@@ -66,34 +67,31 @@ namespace caret {
 
         void setNumberOfColumns(const int32_t numberOfColumns);
         
-        float getColumnStretchFactor(const int32_t columnIndex) const;
-
-        void setColumnStretchFactor(const int32_t columnIndex,
-                                    const float stretchFactor);
+        TileTabsGridRowColumnElement* getColumn(const int32_t columnIndex);
         
-        float getRowStretchFactor(const int32_t rowIndex) const;
+        const TileTabsGridRowColumnElement* getColumn(const int32_t columnIndex) const;
         
-        void setRowStretchFactor(const int32_t rowIndex,
-                                 const float stretchFactor);
+        TileTabsGridRowColumnElement* getRow(const int32_t rowIndex);
+        
+        const TileTabsGridRowColumnElement* getRow(const int32_t rowIndex) const;
         
         AString encodeInXML() const;
         
-        bool decodeFromXML(const AString& xmlString);
+        AString encodeVersionInXML(const int32_t versionNumber) const;
+        
+        bool decodeFromXML(const AString& xmlString,
+                           AString& errorMessageOut);
         
         void updateAutomaticConfigurationRowsAndColumns(const int32_t numberOfTabs);
         
+        bool isCenteringCorrectionEnabled() const;
+        
+        void setCenteringCorrectionEnabled(const bool status);
+        
+        AString toString() const override;
+        
         static bool lessThanComparisonByName(const TileTabsConfiguration* ttc1,
                                              const TileTabsConfiguration* ttc2);
-        
-        /**
-         * @return Maximum number of rows in a tile tabs configuration
-         */
-        static inline int32_t getMaximumNumberOfRows() { return 20; }
-        
-        /**
-         * @return Maximum number of columns in a tile tabs configuration
-         */
-        static inline int32_t getMaximumNumberOfColumns() { return 20; }
         
         static void getRowsAndColumnsForNumberOfTabs(const int32_t numberOfTabs,
                                                      int32_t& numberOfRowsOut,
@@ -104,7 +102,24 @@ namespace caret {
     private:
         void copyHelperTileTabsConfiguration(const TileTabsConfiguration& obj);
 
-        void parseVersionOneXML(QDomDocument& doc);
+        bool decodeFromXMLWithStreamReader(const AString& xmlString,
+                                           AString& errorMessageOut);
+        
+        void decodeFromXMLWithStreamReaderVersionOne(QXmlStreamReader& xml);
+        
+        void decodeFromXMLWithStreamReaderVersionTwo(QXmlStreamReader& xml);
+        
+        AString encodeInXMLWithStreamWriterVersionOne() const;
+        
+        AString encodeInXMLWithStreamWriterVersionTwo() const;
+        
+        void encodeRowColumnElement(QXmlStreamWriter& writer,
+                                    const AString tagName,
+                                    const std::vector<TileTabsGridRowColumnElement>& elements) const;
+        
+        bool decodeRowColumnElement(QXmlStreamReader& reader,
+                                    TileTabsGridRowColumnElement& element,
+                                    AString& errorMessageOut);
         
         void initialize();
         
@@ -115,40 +130,62 @@ namespace caret {
         /** Unique identifier does not get copied */
         AString m_uniqueIdentifier;
         
-        int32_t m_numberOfRows;
+        std::vector<TileTabsGridRowColumnElement> m_columns;
         
-        int32_t m_numberOfColumns;
+        std::vector<TileTabsGridRowColumnElement> m_rows;
         
-        std::vector<float> m_rowStretchFactors;
+        bool m_centeringCorrectionEnabled = false;
         
-        std::vector<float> m_columnStretchFactors;
-
-        static const AString s_rootTagName;
-        static const AString s_versionTagName;
         static const AString s_nameTagName;
         static const AString s_uniqueIdentifierTagName;
-        static const AString s_versionNumberAttributeName;
-        static const AString s_columnStretchFactorsTagName;
-        static const AString s_columnStretchFactorsSelectedCountAttributeName;
-        static const AString s_columnStretchFactorsTotalCountAttributeName;
-        static const AString s_rowStretchFactorsTagName;
-        static const AString s_rowStretchFactorsSelectedCountAttributeName;
-        static const AString s_rowStretchFactorsTotalCountAttributeName;
+
+        static const AString s_v1_rootTagName;
+        static const AString s_v1_versionTagName;
+        static const AString s_v1_versionNumberAttributeName;
+        static const AString s_v1_columnStretchFactorsTagName;
+        static const AString s_v1_columnStretchFactorsSelectedCountAttributeName;
+        static const AString s_v1_columnStretchFactorsTotalCountAttributeName;
+        static const AString s_v1_rowStretchFactorsTagName;
+        static const AString s_v1_rowStretchFactorsSelectedCountAttributeName;
+        static const AString s_v1_rowStretchFactorsTotalCountAttributeName;
+        
+        static const AString s_v2_rootTagName;
+        static const AString s_v2_versionAttributeName;
+        static const AString s_v2_columnsTagName;
+        static const AString s_v2_contentTypeAttributeName;
+        static const AString s_v2_elementTagName;
+        static const AString s_v2_percentStretchAttributeName;
+        static const AString s_v2_rowsTagName;
+        static const AString s_v2_stretchTypeAttributeName;
+        static const AString s_v2_weightStretchAttributeName;
+        static const AString s_v2_centeringCorrectionName;
         
     };
     
 #ifdef __TILE_TABS_CONFIGURATION_DECLARE__
-    const AString TileTabsConfiguration::s_rootTagName = "TileTabsConfiguration";
-    const AString TileTabsConfiguration::s_versionTagName = "Version";
-    const AString TileTabsConfiguration::s_versionNumberAttributeName = "Number";
     const AString TileTabsConfiguration::s_nameTagName = "Name";
     const AString TileTabsConfiguration::s_uniqueIdentifierTagName = "UniqueIdentifier";
-    const AString TileTabsConfiguration::s_columnStretchFactorsTagName = "ColumnStretchFactors";
-    const AString TileTabsConfiguration::s_columnStretchFactorsSelectedCountAttributeName = "SelectedRowCount";
-    const AString TileTabsConfiguration::s_columnStretchFactorsTotalCountAttributeName = "TotalRowCount";
-    const AString TileTabsConfiguration::s_rowStretchFactorsTagName = "RowStretchFactors";
-    const AString TileTabsConfiguration::s_rowStretchFactorsSelectedCountAttributeName = "SelectedColumnCount";
-    const AString TileTabsConfiguration::s_rowStretchFactorsTotalCountAttributeName = "TotalColumnCount";
+
+    const AString TileTabsConfiguration::s_v1_rootTagName = "TileTabsConfiguration";
+    const AString TileTabsConfiguration::s_v1_versionTagName = "Version";
+    const AString TileTabsConfiguration::s_v1_versionNumberAttributeName = "Number";
+    const AString TileTabsConfiguration::s_v1_columnStretchFactorsTagName = "ColumnStretchFactors";
+    const AString TileTabsConfiguration::s_v1_columnStretchFactorsSelectedCountAttributeName = "SelectedRowCount";
+    const AString TileTabsConfiguration::s_v1_columnStretchFactorsTotalCountAttributeName = "TotalRowCount";
+    const AString TileTabsConfiguration::s_v1_rowStretchFactorsTagName = "RowStretchFactors";
+    const AString TileTabsConfiguration::s_v1_rowStretchFactorsSelectedCountAttributeName = "SelectedColumnCount";
+    const AString TileTabsConfiguration::s_v1_rowStretchFactorsTotalCountAttributeName = "TotalColumnCount";
+    
+    const AString TileTabsConfiguration::s_v2_rootTagName = "TileTabsConfigurationTwo";
+    const AString TileTabsConfiguration::s_v2_versionAttributeName = "Version";
+    const AString TileTabsConfiguration::s_v2_columnsTagName = "Columns";
+    const AString TileTabsConfiguration::s_v2_contentTypeAttributeName = "ContentType";
+    const AString TileTabsConfiguration::s_v2_elementTagName = "Element";
+    const AString TileTabsConfiguration::s_v2_percentStretchAttributeName = "PercentStretch";
+    const AString TileTabsConfiguration::s_v2_rowsTagName = "Rows";
+    const AString TileTabsConfiguration::s_v2_stretchTypeAttributeName = "StretchType";
+    const AString TileTabsConfiguration::s_v2_weightStretchAttributeName = "WeightStretch";
+    const AString TileTabsConfiguration::s_v2_centeringCorrectionName = "CenteringCorrection";
 #endif // __TILE_TABS_CONFIGURATION_DECLARE__
 
 } // namespace

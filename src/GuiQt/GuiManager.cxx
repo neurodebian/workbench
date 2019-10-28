@@ -27,6 +27,8 @@
 #include <QApplication>
 #include <QDesktopWidget>
 #include <QMenu>
+#include <QPainter>
+#include <QPen>
 #include <QPushButton>
 
 #define __GUI_MANAGER_DEFINE__
@@ -59,6 +61,7 @@
 #include "CursorManager.h"
 #include "CustomViewDialog.h"
 #include "DataFileException.h"
+#include "DataToolTipsManager.h"
 #include "ElapsedTimer.h"
 #include "EventAlertUser.h"
 #include "EventAnnotationGetDrawnInWindow.h"
@@ -92,16 +95,20 @@
 #include "ImageFile.h"
 #include "ImageCaptureDialog.h"
 #include "InformationDisplayDialog.h"
+#include "MetricDynamicConnectivityFile.h"
 #include "ModelChartTwo.h"
 #include "OverlaySettingsEditorDialog.h"
 #include "MacDockMenu.h"
 #include "MovieDialog.h"
+#include "MovieRecordingDialog.h"
 #include "PaletteColorMappingEditorDialog.h"
 #include "PreferencesDialog.h"
+#include "Scene.h"
 #include "SceneAttributes.h"
 #include "SceneClass.h"
 #include "SceneClassArray.h"
 #include "SceneDialog.h"
+#include "SceneFile.h"
 #include "SceneWindowGeometry.h"
 #include "SelectionManager.h"
 #include "SelectionItemChartMatrix.h"
@@ -117,7 +124,14 @@
 #include "SurfacePropertiesEditorDialog.h"
 #include "Surface.h"
 #include "TileTabsConfigurationDialog.h"
+#include "VolumeDynamicConnectivityFile.h"
 #include "VolumeMappableInterface.h"
+#include "VolumePropertiesEditorDialog.h"
+#include "WbMacroCustomOperationManager.h"
+#include "WbMacroHelper.h"
+#include "WuQMessageBox.h"
+#include "WuQMacroManager.h"
+#include "WuQMacroWidgetTypeEnum.h"
 #include "WuQMessageBox.h"
 #include "WuQtUtilities.h"
 
@@ -169,6 +183,7 @@ GuiManager::initializeGuiManager()
     m_gapsAndMarginsDialog = NULL;
     this->imageCaptureDialog = NULL;
     this->movieDialog = NULL;
+    m_movieRecordingDialog = NULL;
     m_informationDisplayDialog = NULL;
     m_identifyBrainordinateDialog = NULL;
     this->preferencesDialog = NULL;  
@@ -178,9 +193,23 @@ GuiManager::initializeGuiManager()
     m_chartTwoLineSeriesHistoryDialog = NULL;
     this->sceneDialog = NULL;
     m_surfacePropertiesEditorDialog = NULL;
+    m_volumePropertiesEditorDialog = NULL;
     m_tileTabsConfigurationDialog = NULL;
     
     this->cursorManager = new CursorManager();
+    
+    /*
+     * When running macro commands, some object may be child
+     * of GuiManager and not found when searching a window
+     * for children objects
+     */
+    WuQMacroWidgetTypeEnum::addWidgetClassNameAlias("QTabWidget",
+                                                    "caret::WuQTabWidgetWithSizeHint");
+    WuQMacroWidgetTypeEnum::addWidgetClassNameAlias("QTabBar",
+                                                    "caret::WuQTabBar");
+    WuQMacroManager::instance()->addParentObject(this);
+    WuQMacroManager::instance()->setMacroHelper(new WbMacroHelper(this));
+    WuQMacroManager::instance()->setCustomCommandManager(new WbMacroCustomOperationManager());
     
     /*
      * Windows vector never changes size
@@ -217,6 +246,9 @@ GuiManager::initializeGuiManager()
     this->showHideInfoWindowSelected(m_informationDisplayDialogEnabledAction->isChecked());
     m_informationDisplayDialogEnabledAction->setIconText("Info"); 
     m_informationDisplayDialogEnabledAction->blockSignals(false);
+    m_informationDisplayDialogEnabledAction->setObjectName("ToolBar:ShowInformationWindow");
+    WuQMacroManager::instance()->addMacroSupportToObject(m_informationDisplayDialogEnabledAction,
+                                                         "Display information window");
     
     /*
      * Identify brainordinate window
@@ -243,15 +275,17 @@ GuiManager::initializeGuiManager()
     m_identifyBrainordinateDialogEnabledAction->setCheckable(true);
     m_identifyBrainordinateDialogEnabledAction->setChecked(false);
     m_identifyBrainordinateDialogEnabledAction->blockSignals(false);
+    m_identifyBrainordinateDialogEnabledAction->setObjectName("ToolBar:ShowIdentifyBrainordinateWindow");
+    WuQMacroManager::instance()->addMacroSupportToObject(m_identifyBrainordinateDialogEnabledAction,
+                                                         "Display Identify Brainordinate Window");
     
     /*
      * Scene dialog action
      */
-    m_sceneDialogDisplayAction = WuQtUtilities::createAction("Scenes...",
-                                                             "Show/Hide the Scenes Window",
-                                                             this,
-                                                             this,
-                                                             SLOT(sceneDialogDisplayActionToggled(bool)));
+    m_sceneDialogDisplayAction = new QAction("Scenes...",
+                                             this);
+    QObject::connect(m_sceneDialogDisplayAction, &QAction::triggered,
+                     this, &GuiManager::sceneDialogDisplayActionTriggered);
     QIcon clapBoardIcon;
     const bool clapBoardIconValid = WuQtUtilities::loadIcon(":/ToolBar/clapboard.png",
                                                             clapBoardIcon);
@@ -263,9 +297,12 @@ GuiManager::initializeGuiManager()
         m_sceneDialogDisplayAction->setIconText("Scenes");
     }
     m_sceneDialogDisplayAction->blockSignals(true);
-    m_sceneDialogDisplayAction->setCheckable(true);
-    m_sceneDialogDisplayAction->setChecked(false);
+    m_sceneDialogDisplayAction->setCheckable(false);
     m_sceneDialogDisplayAction->blockSignals(false);
+    m_sceneDialogDisplayAction->setObjectName("ToolBar:ShowScenesWindow");
+    m_sceneDialogDisplayAction->setToolTip("Show the scenes window");
+    WuQMacroManager::instance()->addMacroSupportToObject(m_sceneDialogDisplayAction,
+                                                         "Display Scene Dialog");
     
     /*
      * Help dialog action
@@ -290,6 +327,14 @@ GuiManager::initializeGuiManager()
     m_helpViewerDialogDisplayAction->setCheckable(true);
     m_helpViewerDialogDisplayAction->setChecked(false);
     m_helpViewerDialogDisplayAction->blockSignals(false);
+    m_helpViewerDialogDisplayAction->setObjectName("ToolBar:ShowHelpWindow");
+    WuQMacroManager::instance()->addMacroSupportToObject(m_helpViewerDialogDisplayAction,
+                                                         "Display Help Dialog");
+    
+    /*
+     * Data tooltip action is created when requested by a toolbar
+     */
+    m_dataToolTipsEnabledAction = NULL;
     
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_ALERT_USER);
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_ANNOTATION_GET_DRAWN_IN_WINDOW);
@@ -377,6 +422,42 @@ void
 GuiManager::beep()
 {
     QApplication::beep();
+}
+
+/**
+ * Send an event to update the user interface
+ */
+void
+GuiManager::updateUserInterface()
+{
+    EventManager::get()->sendEvent(EventUserInterfaceUpdate().getPointer());
+}
+
+/**
+ * Send an event to update all graphics windows
+ */
+void
+GuiManager::updateGraphicsAllWindows()
+{
+    EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+}
+
+/**
+ * Send an event to update one graphics window
+ */
+void
+GuiManager::updateGraphicsOneWindow(const int32_t windowIndex)
+{
+    EventManager::get()->sendEvent(EventGraphicsUpdateOneWindow(windowIndex).getPointer());
+}
+
+/**
+ * Send an event to update surface coloring
+ */
+void
+GuiManager::updateSurfaceColoring()
+{
+    EventManager::get()->sendEvent(EventSurfaceColoringInvalidate().getPointer());
 }
 
 /**
@@ -706,6 +787,8 @@ GuiManager::testForModifiedFiles(const TestModifiedMode testModifiedMode,
     dataFileTypesToExclude.push_back(DataFileTypeEnum::CONNECTIVITY_DENSE_DYNAMIC);
     dataFileTypesToExclude.push_back(DataFileTypeEnum::CONNECTIVITY_FIBER_ORIENTATIONS_TEMPORARY);
     dataFileTypesToExclude.push_back(DataFileTypeEnum::CONNECTIVITY_FIBER_TRAJECTORY_TEMPORARY);
+    dataFileTypesToExclude.push_back(DataFileTypeEnum::METRIC_DYNAMIC);
+    dataFileTypesToExclude.push_back(DataFileTypeEnum::VOLUME_DYNAMIC);
     
     switch (testModifiedMode) {
         case TEST_FOR_MODIFIED_FILES_MODE_FOR_EXIT:
@@ -1143,6 +1226,13 @@ GuiManager::processBringAllWindowsToFront()
             w->raise();
         }
     }
+    
+    std::vector<QWidget*> macroDialogs = WuQMacroManager::instance()->getNonModalDialogs();
+    for (auto md : macroDialogs) {
+        if (md->isVisible()) {
+            md->raise();
+        }
+    }
 }
 
 /**
@@ -1528,6 +1618,11 @@ GuiManager::receiveEvent(Event* event)
         
         warningEvent->setEventProcessed();
     }
+    else if (event->getEventType() == EventTypeEnum::EVENT_USER_INTERFACE_UPDATE) {
+        if (m_movieRecordingDialog != NULL) {
+            m_movieRecordingDialog->updateDialog();
+        }
+    }
 }
 
 /**
@@ -1631,8 +1726,15 @@ GuiManager::reparentNonModalDialogs(BrainBrowserWindow* closingBrainBrowserWindo
                                                    ? NULL
                                                    : *(validWindows.begin()));
     
+    std::vector<QWidget*> allNonModalDialogs(this->nonModalDialogs.begin(),
+                                             this->nonModalDialogs.end());
+    std::vector<QWidget*> macroDialogs = WuQMacroManager::instance()->getNonModalDialogs();
+    allNonModalDialogs.insert(allNonModalDialogs.end(),
+                              macroDialogs.begin(),
+                              macroDialogs.end());
+    
     if (firstBrainBrowserWindow != NULL) {
-        for (auto dialog : this->nonModalDialogs) {
+        for (auto dialog : allNonModalDialogs) {
             QWidget* dialogParent = dialog->parentWidget();
             if (validWindows.find(dialogParent) == validWindows.end()) {
                 const bool wasVisible = dialog->isVisible();
@@ -1646,16 +1748,10 @@ GuiManager::reparentNonModalDialogs(BrainBrowserWindow* closingBrainBrowserWindo
                     dialog->hide();
                 }
             }
-            
-            /*
-             * Update any dialogs that are WuQ non modal dialogs.
-             */
-            WuQDialogNonModal* wuqNonModalDialog = dynamic_cast<WuQDialogNonModal*>(dialog);
-            if (wuqNonModalDialog != NULL) {
-                wuqNonModalDialog->updateDialog();
-            }
         }
     }
+    
+    updateNonModalDialogs();
 }
 
 /**
@@ -1664,7 +1760,13 @@ GuiManager::reparentNonModalDialogs(BrainBrowserWindow* closingBrainBrowserWindo
 void
 GuiManager::updateNonModalDialogs()
 {
-    reparentNonModalDialogs(NULL);
+    for (auto dialog : this->nonModalDialogs) {
+        WuQDialogNonModal* wuqNonModalDialog = dynamic_cast<WuQDialogNonModal*>(dialog);
+        if (wuqNonModalDialog != NULL) {
+            wuqNonModalDialog->updateDialog();
+        }
+    }
+    WuQMacroManager::instance()->updateNonModalDialogs();
 }
 
 /**
@@ -1692,6 +1794,30 @@ GuiManager::processShowSurfacePropertiesEditorDialog(BrainBrowserWindow* browser
 }
 
 /**
+ * Show the volume properties editor dialog.
+ * @param browserWindow
+ *    Browser window on which dialog is displayed.
+ */
+void
+GuiManager::processShowVolumePropertiesEditorDialog(BrainBrowserWindow* browserWindow)
+{
+    bool wasCreatedFlag = false;
+    
+    if (this->m_volumePropertiesEditorDialog == NULL) {
+        m_volumePropertiesEditorDialog = new VolumePropertiesEditorDialog(browserWindow);
+        this->addNonModalDialog(m_volumePropertiesEditorDialog);
+        m_volumePropertiesEditorDialog->setSaveWindowPositionForNextTime(true);
+        wasCreatedFlag = true;
+    }
+    m_volumePropertiesEditorDialog->showDialog();
+    
+    if (wasCreatedFlag) {
+        WuQtUtilities::moveWindowToSideOfParent(browserWindow,
+                                                m_volumePropertiesEditorDialog);
+    }
+}
+
+/**
  * @return The action for showing/hiding the scene dialog.
  */
 QAction*
@@ -1707,9 +1833,9 @@ GuiManager::getSceneDialogDisplayAction()
  *    New status (true display dialog, false hide it).
  */
 void
-GuiManager::sceneDialogDisplayActionToggled(bool status)
+GuiManager::sceneDialogDisplayActionTriggered(bool /*status*/)
 {
-    showHideSceneDialog(status,
+    showHideSceneDialog(true,
                         NULL);
 }
 
@@ -1722,7 +1848,6 @@ void
 GuiManager::sceneDialogWasClosed()
 {
     m_sceneDialogDisplayAction->blockSignals(true);
-    m_sceneDialogDisplayAction->setChecked(false);
     m_sceneDialogDisplayAction->blockSignals(false);
 }
 
@@ -1786,7 +1911,6 @@ GuiManager::showHideSceneDialog(const bool status,
     }
     
     m_sceneDialogDisplayAction->blockSignals(true);
-    m_sceneDialogDisplayAction->setChecked(status);
     m_sceneDialogDisplayAction->blockSignals(false);
 }
 
@@ -1811,25 +1935,76 @@ GuiManager::processShowSceneDialog(BrainBrowserWindow* browserWindowIn)
  *
  * @param browserWindow
  *    Parent of scene dialog if it needs to be created.
- * @param sceneFile
- *    Scene File that contains the scene.
+ * @param sceneFileIn
+ *    Scene File that contains the scene.  If NULL, the scene file
+ *    containing the scene will be located and used
  * @param scene
  *    Scene that is displayed.
+ * @param showSceneDialogFlag
+ *    If true, update the scene dialog.  Otherwise, load the scene
+ *    without showing the scene dialog
  */
 void
 GuiManager::processShowSceneDialogAndScene(BrainBrowserWindow* browserWindow,
-                                           SceneFile* sceneFile,
-                                           Scene* scene)
+                                           SceneFile* sceneFileIn,
+                                           Scene* scene,
+                                           const bool showSceneDialogFlag)
 {
-    showHideSceneDialog(true,
-                        browserWindow);
+    CaretAssert(browserWindow);
+    CaretAssert(scene);
     
-    const bool sceneWasDisplayed = this->sceneDialog->displayScene(sceneFile,
-                                                                   scene);
-    if (sceneWasDisplayed) {
-        showHideSceneDialog(false,
-                            NULL);
+    SceneFile* sceneFile(sceneFileIn);
+    if (sceneFile == NULL) {
+        /*
+         * If scene file is not valid, find scene file containing the scene
+         */
+        Brain* brain = getBrain();
+        CaretAssert(brain);
+        const int32_t numSceneFiles = brain->getNumberOfSceneFiles();
+        for (int32_t i = 0; i < numSceneFiles; i++) {
+            SceneFile* sf = brain->getSceneFile(i);
+            CaretAssert(sf);
+            const int32_t numScenes = sf->getNumberOfScenes();
+            for (int32_t j = 0; j < numScenes; j++) {
+                if (sf->getSceneAtIndex(j) == scene) {
+                    sceneFile = sf;
+                    break;
+                }
+            }
+            if (sceneFile != NULL) {
+                break;
+            }
+        }
+        
+        if (sceneFile == NULL) {
+            const QString msg("Cannot load scene.  Unable to find scene file containing scene named \""
+                              + scene->getName()
+                              + "\"");
+            WuQMessageBox::errorOk(browserWindow,
+                                   msg);
+            return;
+        }
     }
+    
+    /*
+     * Update scene dialog if it is open or if it should be displayed
+     */
+    const bool updateSceneDialogFlag(showSceneDialogFlag
+                                     || (this->sceneDialog != NULL));
+    if (updateSceneDialogFlag) {
+        this->sceneDialog->displayScene(sceneFile,
+                                        scene);
+        if (showSceneDialogFlag) {
+            showHideSceneDialog(true,
+                                NULL);
+        }
+    }
+    else {
+        SceneDialog::displaySceneWithErrorMessageDialog(browserWindow,
+                                                        sceneFile,
+                                                        scene);
+    }
+    
 }
 
 /**
@@ -1860,6 +2035,100 @@ QAction*
 GuiManager::getHelpViewerDialogDisplayAction()
 {
     return m_helpViewerDialogDisplayAction;
+}
+
+/**
+ * Get the action for the data tooltips.  The action
+ * is lazily initialized since a widget is needed to 
+ * create the tooltip's icon.  The background and foreground
+ * colors are copied from the widget and nothing is dependent
+ * upon the widget after this method returns.
+ *
+ * @param buttonWidget
+ *    Widget that is used the first time this method is called
+ *    to provide foreground/background colors for the pixmap.
+ *
+ * @return Action for display of data tool tips.
+ */
+QAction*
+GuiManager::getDataToolTipsAction(QWidget* buttonWidget)
+{
+    if (m_dataToolTipsEnabledAction == NULL) {
+        m_dataToolTipsEnabledAction = WuQtUtilities::createAction("Data ToolTips",
+                                                                  "Enable/Disable Data Tool Tips",
+                                                                  this,
+                                                                  this,
+                                                                  SLOT(dataToolTipsActionTriggered(bool)));
+        m_dataToolTipsEnabledAction->setIcon(createDataToolTipsIcon(buttonWidget));
+        m_dataToolTipsEnabledAction->setIconVisibleInMenu(false);
+        m_dataToolTipsEnabledAction->setCheckable(true);
+        m_dataToolTipsEnabledAction->setChecked(SessionManager::get()->getDataToolTipsManager()->isEnabled());
+        
+        m_dataToolTipsEnabledAction->setObjectName("ToolBar:DataToolTipsEnabled");
+        WuQMacroManager::instance()->addMacroSupportToObject(m_dataToolTipsEnabledAction,
+                                                             "Enable data tool tips");
+    }
+    
+    return m_dataToolTipsEnabledAction;
+}
+
+/**
+ * Create a pixmap for the data tool tips button.
+ *
+ * @param widget
+ *    To color the pixmap with backround and foreground,
+ *    the palette from the given widget is used.
+ * @return
+ *    The pixmap.
+ */
+QPixmap
+GuiManager::createDataToolTipsIcon(const QWidget* widget)
+{
+    CaretAssert(widget);
+    const float pixmapSize = 32.0;
+    
+    QPixmap pixmap(static_cast<int>(pixmapSize),
+                   static_cast<int>(pixmapSize));
+    QSharedPointer<QPainter> painter = WuQtUtilities::createPixmapWidgetPainterOriginCenter(widget,
+                                                                                            pixmap,
+                                                                                            WuQtUtilities::PixMapCreationOptions::TransparentBackground);
+    const int leftX(-14);
+    const int rightX(14);
+    const int bottomY(-8);
+    const int topY(14);
+    const int tipLeftX(-6);
+    const int tipRightX(6);
+    const int tipY(-14);
+    const int tipX(0);
+    
+    QPen pen(painter->pen());
+    pen.setWidth(2);
+    painter->setPen(pen);
+    
+    /*
+     * Outline of icon
+     */
+    QPolygon polygon;
+    polygon.push_back(QPoint(leftX, topY));
+    polygon.push_back(QPoint(leftX, bottomY));
+    polygon.push_back(QPoint(tipLeftX, bottomY));
+    polygon.push_back(QPoint(tipX, tipY));
+    polygon.push_back(QPoint(tipRightX, bottomY));
+    polygon.push_back(QPoint(rightX, bottomY));
+    polygon.push_back(QPoint(rightX, topY));
+    painter->drawPolygon(polygon);
+    
+    /*
+     * Horizontal lines inside outline
+     */
+    const int lineLeftX(-8);
+    const int lineRightX(8);
+    const int lineOneY(6);
+    const int lineTwoY(0);
+    painter->drawLine(lineLeftX, lineOneY, lineRightX, lineOneY);
+    painter->drawLine(lineLeftX, lineTwoY, lineRightX, lineTwoY);
+    
+    return pixmap;
 }
 
 /**
@@ -1925,11 +2194,26 @@ GuiManager::helpDialogWasClosed()
 
 /**
  * Called when show help action is triggered
+ *
+ * @param status
+ *     New status.
  */
 void
 GuiManager::showHelpDialogActionToggled(bool status)
 {
     showHideHelpDialog(status, NULL);
+}
+
+/**
+ * Called when data tooltips action is triggered
+ *
+ * @param status
+ *     New status.
+ */
+void
+GuiManager::dataToolTipsActionTriggered(bool status)
+{
+    SessionManager::get()->getDataToolTipsManager()->setEnabled(status);
 }
 
 /**
@@ -2205,6 +2489,24 @@ GuiManager::processShowImageCaptureDialog(BrainBrowserWindow* browserWindow)
 }
 
 /**
+ * Show the image capture window.
+ * @param browserWindow
+ *    Window on which dialog was requested.
+ */
+void
+GuiManager::processShowMovieRecordingDialog(BrainBrowserWindow* browserWindow)
+{
+    if (m_movieRecordingDialog == NULL) {
+        m_movieRecordingDialog = new MovieRecordingDialog(browserWindow);
+        this->addNonModalDialog(m_movieRecordingDialog);
+    }
+    m_movieRecordingDialog->updateDialog();
+    m_movieRecordingDialog->setBrowserWindowIndex(browserWindow->getBrowserWindowIndex());
+    m_movieRecordingDialog->showDialog();
+    m_movieRecordingDialog->restorePositionAndSize();
+}
+
+/**
  * Show the gaps and margins window.
  * @param browserWindow
  *    Window on which dialog was requested.
@@ -2374,6 +2676,10 @@ GuiManager::saveToScene(const SceneAttributes* sceneAttributes,
     if (m_surfacePropertiesEditorDialog != NULL) {
         sceneClass->addClass(m_surfacePropertiesEditorDialog->saveToScene(sceneAttributes,
                                                                           "m_surfacePropertiesEditorDialog"));
+    }
+    if (m_volumePropertiesEditorDialog != NULL) {
+        sceneClass->addClass(m_volumePropertiesEditorDialog->saveToScene(sceneAttributes,
+                                                                         "m_volumePropertiesEditorDialog"));
     }
     
     switch (sceneAttributes->getSceneType()) {
@@ -2608,6 +2914,18 @@ GuiManager::restoreFromScene(const SceneAttributes* sceneAttributes,
                                                               surfPropClass);
         }
         
+        const SceneClass* volPropClass = sceneClass->getClass("m_volumePropertiesEditorDialog");
+        if (volPropClass != NULL) {
+            if (m_volumePropertiesEditorDialog == NULL) {
+                processShowVolumePropertiesEditorDialog(firstBrowserWindow);
+            }
+            else if ( ! m_volumePropertiesEditorDialog->isVisible()) {
+                processShowVolumePropertiesEditorDialog(firstBrowserWindow);
+            }
+            m_volumePropertiesEditorDialog->restoreFromScene(sceneAttributes,
+                                                             volPropClass);
+        }
+        
         CaretLogFine("Time to restore information/property windows was "
                      + QString::number(timer.getElapsedTimeSeconds(), 'f', 3)
                      + " seconds");
@@ -2618,6 +2936,9 @@ GuiManager::restoreFromScene(const SceneAttributes* sceneAttributes,
     
     if (imageCaptureDialog != NULL) {
         imageCaptureDialog->updateDialog();
+    }
+    if (m_movieRecordingDialog != NULL) {
+        m_movieRecordingDialog->updateDialog();
     }
     
     progressEvent.setProgressMessage("Invalidating coloring and updating user interface");
@@ -2784,6 +3105,18 @@ GuiManager::processIdentification(const int32_t tabIndex,
                                                                         ciftiLoadingInfo);
                     chartingDataManager->loadChartForSurfaceNode(surface,
                                                                  nodeIndex);
+                    
+                    std::vector<MetricDynamicConnectivityFile*> metricDynConnFiles;
+                    brain->getMetricDynamicConnectivityFiles(metricDynConnFiles);
+                    
+                    for (auto mdc : metricDynConnFiles) {
+                        if (mdc->isEnabledAsLayer()) {
+                            mdc->loadDataForSurfaceNode(surface->getNumberOfNodes(),
+                                                        surface->getStructure(),
+                                                        nodeIndex);
+                        }
+                    }
+
                     updateGraphicsFlag = true;
                 }
                 catch (const DataFileException& e) {
@@ -2836,6 +3169,20 @@ GuiManager::processIdentification(const int32_t tabIndex,
                     cursor.restoreCursor();
                     QMessageBox::critical(parentWidget, "", e.whatString());
                     cursor.showWaitCursor();
+                }
+            }
+        }
+        
+        if (idVoxel->isValid()) {
+            std::vector<VolumeDynamicConnectivityFile*> volumeDynConnFiles;
+            brain->getVolumeDynamicConnectivityFiles(volumeDynConnFiles);
+            
+            for (auto vdc : volumeDynConnFiles) {
+                if (vdc->isEnabledAsLayer()) {
+                    double xyzDouble[3];
+                    idVoxel->getModelXYZ(xyzDouble);
+                    float xyz[3] { static_cast<float>(xyzDouble[0]), static_cast<float>(xyzDouble[1]), static_cast<float>(xyzDouble[2]) };
+                    vdc->loadConnectivityForVoxelXYZ(xyz);
                 }
             }
         }
@@ -3202,6 +3549,5 @@ GuiManager::processIdentification(const int32_t tabIndex,
         EventManager::get()->sendEvent(EventUserInterfaceUpdate().addToolBar().addToolBox().getPointer());
     }
 }
-
 
 

@@ -58,7 +58,7 @@ m_windowIndex(windowIndex)
     m_sceneAssistant->add("m_windowAspectLockedRatio", &m_windowAspectLockedRatio);
     m_sceneAssistant->add("m_allTabsInWindowAspectRatioLocked", &m_allTabsInWindowAspectRatioLocked);
     m_sceneAssistant->add("m_tileTabsEnabled", &m_tileTabsEnabled);
-    m_sceneAssistant->add<TileTabsConfigurationModeEnum, TileTabsConfigurationModeEnum::Enum>("m_tileTabsConfigurationMode",
+    m_sceneAssistant->add<TileTabsGridModeEnum, TileTabsGridModeEnum::Enum>("m_tileTabsConfigurationMode",
                                                                                               &m_tileTabsConfigurationMode);
     m_sceneAssistant->add("m_sceneGraphicsWidth", &m_sceneGraphicsWidth);
     m_sceneAssistant->add("m_sceneGraphicsHeight", &m_sceneGraphicsHeight);
@@ -108,7 +108,7 @@ BrowserWindowContent::reset()
     m_tileTabsEnabled = false;
     m_sceneGraphicsHeight = 0;
     m_sceneGraphicsWidth  = 0;
-    m_tileTabsConfigurationMode = TileTabsConfigurationModeEnum::AUTOMATIC;
+    m_tileTabsConfigurationMode = TileTabsGridModeEnum::AUTOMATIC;
     m_automaticTileTabsConfiguration->updateAutomaticConfigurationRowsAndColumns(1);
     /* sets rows/columns/factors to defaults */
     m_customTileTabsConfiguration->updateAutomaticConfigurationRowsAndColumns(1);
@@ -222,10 +222,10 @@ BrowserWindowContent::getSelectedTileTabsConfiguration()
     TileTabsConfiguration* configMode = NULL;
     
     switch (m_tileTabsConfigurationMode) {
-        case TileTabsConfigurationModeEnum::AUTOMATIC:
+        case TileTabsGridModeEnum::AUTOMATIC:
             configMode = m_automaticTileTabsConfiguration.get();
             break;
-        case TileTabsConfigurationModeEnum::CUSTOM:
+        case TileTabsGridModeEnum::CUSTOM:
             configMode = m_customTileTabsConfiguration.get();
             break;
     }
@@ -245,10 +245,10 @@ BrowserWindowContent::getSelectedTileTabsConfiguration() const
     TileTabsConfiguration* configMode = NULL;
     
     switch (m_tileTabsConfigurationMode) {
-        case TileTabsConfigurationModeEnum::AUTOMATIC:
+        case TileTabsGridModeEnum::AUTOMATIC:
             configMode = m_automaticTileTabsConfiguration.get();
             break;
-        case TileTabsConfigurationModeEnum::CUSTOM:
+        case TileTabsGridModeEnum::CUSTOM:
             configMode = m_customTileTabsConfiguration.get();
             break;
     }
@@ -296,7 +296,7 @@ BrowserWindowContent::getCustomTileTabsConfiguration() const
 /**
  * @return The tile tabs configuration mode.
  */
-TileTabsConfigurationModeEnum::Enum
+TileTabsGridModeEnum::Enum
 BrowserWindowContent::getTileTabsConfigurationMode() const
 {
     return m_tileTabsConfigurationMode;
@@ -309,7 +309,7 @@ BrowserWindowContent::getTileTabsConfigurationMode() const
  *     New value for configuration mode.
  */
 void
-BrowserWindowContent::setTileTabsConfigurationMode(const TileTabsConfigurationModeEnum::Enum configMode)
+BrowserWindowContent::setTileTabsConfigurationMode(const TileTabsGridModeEnum::Enum configMode)
 {
     m_tileTabsConfigurationMode = configMode;
 }
@@ -426,19 +426,25 @@ BrowserWindowContent::saveToScene(const SceneAttributes* sceneAttributes,
     m_sceneAssistant->saveMembers(sceneAttributes,
                                   sceneClass);
     
-    if (m_tileTabsEnabled) {
-        sceneClass->addString("m_customTileTabsConfiguration",
-                              m_customTileTabsConfiguration->encodeInXML());
-        
-        /*
-         * Write the tile tabs configuration a second time using
-         * the old name 'm_sceneTileTabsConfiguration'.  This will
-         * allow the previous version of Workbench to display
-         * tile tabs correctly.
-         */
-        sceneClass->addString("m_sceneTileTabsConfiguration",
-                              m_customTileTabsConfiguration->encodeInXML());
-    }
+    sceneClass->addString("m_customTileTabsConfigurationLatest",
+                          m_customTileTabsConfiguration->encodeInXML());
+    
+    /*
+     * Add a tile tabs version one so older versions of wb_view
+     * may still load the scene correctly
+     */
+    sceneClass->addString("m_customTileTabsConfiguration",
+                          m_customTileTabsConfiguration->encodeVersionInXML(1));
+    
+    /*
+     * Write the tile tabs configuration a second time using
+     * the old name 'm_sceneTileTabsConfiguration'.  This will
+     * allow the previous version of Workbench to display
+     * tile tabs correctly.
+     */
+    sceneClass->addString("m_sceneTileTabsConfiguration",
+                          m_customTileTabsConfiguration->encodeVersionInXML(1));
+
     sceneClass->addChild(new SceneIntegerArray("m_sceneTabIndices",
                                                m_sceneTabIndices));
 
@@ -480,18 +486,33 @@ BrowserWindowContent::restoreFromScene(const SceneAttributes* sceneAttributes,
         sceneTabIndicesArray->integerVectorValues(m_sceneTabIndices);
     }
     
-    AString tileTabsConfig = sceneClass->getStringValue("m_customTileTabsConfiguration");
+    /*
+     * Try restoring newest tile tabs configuration
+     */
+    AString tileTabsConfig = sceneClass->getStringValue("m_customTileTabsConfigurationLatest");
+    if ( ! tileTabsConfig.isEmpty()) {
+        /* Since latest was found, restore, but do not use, older configuration to prevent 'not found' warning */
+        sceneClass->getStringValue("m_customTileTabsConfiguration");
+    }
+    if (tileTabsConfig.isEmpty()) {
+        /* Try version one */
+        tileTabsConfig = sceneClass->getStringValue("m_customTileTabsConfiguration");
+    }
     if (tileTabsConfig.isEmpty()) {
         /* Restore an old name for custom configuration */
         tileTabsConfig = sceneClass->getStringValue("m_tileTabsConfiguration");
     }
     if ( ! tileTabsConfig.isEmpty()) {
-        const bool valid = m_customTileTabsConfiguration->decodeFromXML(tileTabsConfig);
+        AString errorMessage;
+        const bool valid = m_customTileTabsConfiguration->decodeFromXML(tileTabsConfig,
+                                                                        errorMessage);
         if ( ! valid) {
-            sceneAttributes->addToErrorMessage("Failed to decode custom tile tabs configuration from BrowserWindowContent: \""
+            sceneAttributes->addToErrorMessage("Failed to decode custom tile tabs configuration with error \""
+                                               + errorMessage
+                                               + "\" from BrowserWindowContent: \""
                                                + tileTabsConfig
                                                + "\"");
-            m_customTileTabsConfiguration.reset();
+            m_customTileTabsConfiguration.reset(new TileTabsConfiguration());
         }
         
         /*
@@ -508,12 +529,16 @@ BrowserWindowContent::restoreFromScene(const SceneAttributes* sceneAttributes,
          */
         const AString stringTileTabsConfig = sceneClass->getStringValue("m_sceneTileTabsConfiguration");
         if ( ! stringTileTabsConfig.isEmpty()) {
-            const bool valid = m_customTileTabsConfiguration->decodeFromXML(stringTileTabsConfig);
+            AString errorMessage;
+            const bool valid = m_customTileTabsConfiguration->decodeFromXML(stringTileTabsConfig,
+                                                                            errorMessage);
             if ( ! valid) {
-                sceneAttributes->addToErrorMessage("Failed to decode custom tile tabs configuration from BrowserWindowContent: \""
+                sceneAttributes->addToErrorMessage("Failed to decode custom tile tabs configuration with error \""
+                                                   + errorMessage
+                                                   + "\" from BrowserWindowContent: \""
                                                    + stringTileTabsConfig
                                                    + "\"");
-                m_customTileTabsConfiguration.reset();
+                m_customTileTabsConfiguration.reset(new TileTabsConfiguration());
             }
         }
     }
@@ -523,10 +548,10 @@ BrowserWindowContent::restoreFromScene(const SceneAttributes* sceneAttributes,
     if (oldTileTabsAutoPrimitive != NULL) {
         const bool autoModeSelected = oldTileTabsAutoPrimitive->booleanValue();
         if (autoModeSelected) {
-            m_tileTabsConfigurationMode = TileTabsConfigurationModeEnum::AUTOMATIC;
+            m_tileTabsConfigurationMode = TileTabsGridModeEnum::AUTOMATIC;
         }
         else {
-            m_tileTabsConfigurationMode = TileTabsConfigurationModeEnum::CUSTOM;
+            m_tileTabsConfigurationMode = TileTabsGridModeEnum::CUSTOM;
         }
     }
     
@@ -536,10 +561,10 @@ BrowserWindowContent::restoreFromScene(const SceneAttributes* sceneAttributes,
          * If tile tabs was enabled, use CUSTOM, otherwise AUTOMATIC
          */
         if (m_tileTabsEnabled) {
-            m_tileTabsConfigurationMode = TileTabsConfigurationModeEnum::CUSTOM;
+            m_tileTabsConfigurationMode = TileTabsGridModeEnum::CUSTOM;
         }
         else {
-            m_tileTabsConfigurationMode = TileTabsConfigurationModeEnum::AUTOMATIC;
+            m_tileTabsConfigurationMode = TileTabsGridModeEnum::AUTOMATIC;
         }
     }
     
@@ -594,7 +619,17 @@ BrowserWindowContent::restoreFromOldBrainBrowserWindowScene(const SceneAttribute
     
     const AString tileTabsConfigString = browserClass->getStringValue("m_sceneTileTabsConfiguration");
     if ( ! tileTabsConfigString.isEmpty()) {
-        m_customTileTabsConfiguration->decodeFromXML(tileTabsConfigString);
+        AString errorMessage;
+        const bool valid = m_customTileTabsConfiguration->decodeFromXML(tileTabsConfigString,
+                                                     errorMessage);
+        if ( ! valid) {
+            sceneAttributes->addToErrorMessage("Failed to decode custom tile tabs configuration with error \""
+                                               + errorMessage
+                                               + "\" from OLD BrowserWindowContent: \""
+                                               + tileTabsConfigString
+                                               + "\"");
+            m_customTileTabsConfiguration.reset(new TileTabsConfiguration());
+        }
     }
     
     const SceneClass* toolbarClass = browserClass->getClass("m_toolbar");
@@ -615,10 +650,10 @@ BrowserWindowContent::restoreFromOldBrainBrowserWindowScene(const SceneAttribute
      * If tile tabs was enabled, use CUSTOM, otherwise AUTOMATIC
      */
     if (m_tileTabsEnabled) {
-        m_tileTabsConfigurationMode = TileTabsConfigurationModeEnum::CUSTOM;
+        m_tileTabsConfigurationMode = TileTabsGridModeEnum::CUSTOM;
     }
     else {
-        m_tileTabsConfigurationMode = TileTabsConfigurationModeEnum::AUTOMATIC;
+        m_tileTabsConfigurationMode = TileTabsGridModeEnum::AUTOMATIC;
     }
 }
 

@@ -39,7 +39,8 @@ namespace caret {
     public:
         BrainBrowserWindowToolBarTab(const int32_t browserWindowIndex,
                                      QToolButton* toolBarLockWindowAndAllTabAspectRatioButton,
-                                     BrainBrowserWindowToolBar* parentToolBar);
+                                     BrainBrowserWindowToolBar* parentToolBar,
+                                     const QString& objectNamePrefix);
         
         virtual ~BrainBrowserWindowToolBarTab();
         
@@ -51,7 +52,7 @@ namespace caret {
     private slots:
         void yokeToGroupComboBoxIndexChanged();
         
-        void lightingEnabledCheckBoxToggled(bool checked);
+        void lightingEnabledCheckBoxChecked(bool checked);
         
     private:
         BrainBrowserWindowToolBarTab(const BrainBrowserWindowToolBarTab&);
@@ -69,6 +70,8 @@ namespace caret {
         QToolButton* m_lockWindowAndAllTabAspectButton;
         
         QCheckBox* m_lightingEnabledCheckBox;
+        
+        QLabel* m_macroRecordingLabel;
         
         // ADD_NEW_MEMBERS_HERE
 

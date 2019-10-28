@@ -76,6 +76,8 @@ public:
         EVENT_BROWSER_TAB_GET_ALL_VIEWED,
         /** Create a new browser tab */
         EVENT_BROWSER_TAB_NEW,
+        /** Create a new browser tab by cloning an existing browser tab */
+        EVENT_BROWSER_TAB_NEW_CLONE,
         /** Event for browser window content */
         EVENT_BROWSER_WINDOW_CONTENT,
         /** Get the content of a browser window */
@@ -96,6 +98,8 @@ public:
         EVENT_CARET_MAPPABLE_DATA_FILES_GET,
         /** Get CaretMappableDataFiles and their maps viewed as overlays */
         EVENT_CARET_MAPPABLE_DATA_FILE_MAPS_VIEWED_IN_OVERLAYS,
+        /** Get all mappable files and selected maps in all displayed overlays */
+        EVENT_CARET_MAPPABLE_DATA_FILES_AND_MAPS_IN_DISPLAYED_OVERLAYS,
         /** Event to get the Caret Preferences */
         EVENT_CARET_PREFERENCES_GET,
         /** Event for yoking the loading of matrix chart rows/columns */
@@ -134,6 +138,8 @@ public:
         EVENT_GRAPHICS_OPENGL_DELETE_BUFFER_OBJECT,
         /** Delete a texture name for an OpenGL context */
         EVENT_GRAPHICS_OPENGL_DELETE_TEXTURE_NAME,
+        /** Time the OpenGL graphics in a window */
+        EVENT_GRAPHICS_TIMING_ONE_WINDOW,
         /** Update all graphics windows */
         EVENT_GRAPHICS_UPDATE_ALL_WINDOWS,
         /** Update graphics in a window */
@@ -164,6 +170,10 @@ public:
         EVENT_MODEL_GET_ALL_DISPLAYED,
         /** model surface - get */
         EVENT_MODEL_SURFACE_GET,
+        /** Update the movie dialog */
+        EVENT_MOVIE_RECORDING_DIALOG_UPDATE,
+        /** Movie manual mode image recording */
+        EVENT_MOVIE_RECORDING_MANUAL_MODE_CAPTURE,
         /** Get the color for a node's identification symbol from a chart that contains the node */
         EVENT_NODE_IDENTIFICATION_COLORS_GET_FROM_CHARTS,
         /** Get the transformation for converting object coordinates to window coordinates */
@@ -178,8 +188,12 @@ public:
         EVENT_PALETTE_COLOR_MAPPING_EDITOR_SHOW,
         /** Get a palette by name from a palette file */
         EVENT_PALETTE_GET_BY_NAME,
+        /** Get the active scene */
+        EVENT_SCENE_ACTIVE,
         /** Show a dialog containing warnings encountered when reading data files */
         EVENT_SHOW_FILE_DATA_READ_WARNING_DIALOG,
+        /** Get a spacer tab by tab number */
+        EVENT_SPACER_TAB_GET,
         /** Read the selected files in a spec file */
         EVENT_SPEC_FILE_READ_DATA_FILES,
         /** Invalidate surface coloring */
@@ -188,6 +202,8 @@ public:
         EVENT_SURFACES_GET,
         /** Get valid surface strucutures and their number of nodes */
         EVENT_SURFACE_STRUCTURES_VALID_GET,
+        /** Tile tabs modification */
+        EVENT_TILE_TABS_MODIFICATION,
         /** Display/Hide the selection toolbox */
         EVENT_TOOLBOX_SELECTION_DISPLAY,
         /** Update the User-Interface */
@@ -198,6 +214,8 @@ public:
         EVENT_UPDATE_INFORMATION_WINDOWS,
         /** Update the volume editing toolbar */
         EVENT_UPDATE_VOLUME_EDITING_TOOLBAR,
+        /** Update the slice indices and coordinates in the toolbar */
+        EVENT_UPDATE_VOLUME_SLICE_INDICES_COORDS_TOOLBAR,
         /** Update yoked windows */
         EVENT_UPDATE_YOKED_WINDOWS,
         /* THIS MUST ALWAYS BE LAST - NOT an event type but is number of event types */

@@ -112,8 +112,8 @@ AnnotationOneDimensionalShape::copyHelperAnnotationOneDimensionalShape(const Ann
 void
 AnnotationOneDimensionalShape::initializeMembersAnnotationOneDimensionalShape()
 {
-    m_startCoordinate.grabNew(new AnnotationCoordinate());
-    m_endCoordinate.grabNew(new AnnotationCoordinate());
+    m_startCoordinate.grabNew(new AnnotationCoordinate(m_attributeDefaultType));
+    m_endCoordinate.grabNew(new AnnotationCoordinate(m_attributeDefaultType));
     
     m_sceneAssistant.grabNew(new SceneClassAssistant());
     if (testProperty(Property::SCENE_CONTAINS_ATTRIBUTES)) {
@@ -124,6 +124,42 @@ AnnotationOneDimensionalShape::initializeMembersAnnotationOneDimensionalShape()
                               "AnnotationCoordinate",
                               m_endCoordinate);
     }
+}
+
+/**
+ * @return 'this' as a one-dimensional shape. NULL if this is not a one-dimensional shape.
+ */
+AnnotationOneDimensionalShape*
+AnnotationOneDimensionalShape::castToOneDimensionalShape()
+{
+    return this;
+}
+
+/**
+ * @return 'this' as a one-dimensional shape. NULL if this is not a one-dimensional shape.
+ */
+const AnnotationOneDimensionalShape*
+AnnotationOneDimensionalShape::castToOneDimensionalShape() const
+{
+    return this;
+}
+
+/**
+ * @return 'this' as a one-dimensional shape. NULL if this is not a two-dimensional shape.
+ */
+AnnotationTwoDimensionalShape*
+AnnotationOneDimensionalShape::castToTwoDimensionalShape()
+{
+    return NULL;
+}
+
+/**
+ * @return 'this' as a one-dimensional shape. NULL if this is not a two-dimensional shape.
+ */
+const AnnotationTwoDimensionalShape*
+AnnotationOneDimensionalShape::castToTwoDimensionalShape() const
+{
+    return NULL;
 }
 
 /**
@@ -160,6 +196,16 @@ const AnnotationCoordinate*
 AnnotationOneDimensionalShape::getEndCoordinate() const
 {
     return m_endCoordinate;
+}
+
+/**
+ * @return The surface offset vector type for this annotation.
+ */
+AnnotationSurfaceOffsetVectorTypeEnum::Enum
+AnnotationOneDimensionalShape::getSurfaceOffsetVectorType() const
+{
+    CaretAssert(m_startCoordinate);
+    return m_startCoordinate->getSurfaceOffsetVectorType();
 }
 
 /**
@@ -323,24 +369,26 @@ AnnotationOneDimensionalShape::setRotationAngle(const float viewportWidth,
 bool
 AnnotationOneDimensionalShape::isSizeHandleValid(const AnnotationSizingHandleTypeEnum::Enum sizingHandle) const
 {
-    bool chartFlag       = false;
-    bool tabWindowFlag   = false;
+    bool xyPlaneFlag = false;
     
     switch (getCoordinateSpace()) {
         case AnnotationCoordinateSpaceEnum::CHART:
-            chartFlag = true;
+            xyPlaneFlag = true;
+            break;
+        case AnnotationCoordinateSpaceEnum::SPACER:
+            xyPlaneFlag = true;
             break;
         case AnnotationCoordinateSpaceEnum::STEREOTAXIC:
             break;
         case AnnotationCoordinateSpaceEnum::SURFACE:
             break;
         case AnnotationCoordinateSpaceEnum::TAB:
-            tabWindowFlag = true;
+            xyPlaneFlag = true;
             break;
         case AnnotationCoordinateSpaceEnum::VIEWPORT:
             break;
         case AnnotationCoordinateSpaceEnum::WINDOW:
-            tabWindowFlag = true;
+            xyPlaneFlag = true;
             break;
     }
     
@@ -370,13 +418,12 @@ AnnotationOneDimensionalShape::isSizeHandleValid(const AnnotationSizingHandleTyp
             validFlag = true;
             break;
         case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_NONE:
-            if (chartFlag
-                || tabWindowFlag) {
+            if (xyPlaneFlag) {
                 validFlag = true;
             }
             break;
         case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_ROTATION:
-            if (tabWindowFlag) {
+            if (xyPlaneFlag) {
                 validFlag = true;
             }
             break;
@@ -468,6 +515,21 @@ AnnotationOneDimensionalShape::applySpatialModificationSurfaceSpace(const Annota
     
     return validFlag;
 }
+
+/**
+ * Apply a spatial modification to an annotation in spacer tab space.
+ *
+ * @param spatialModification
+ *     Contains information about the spatial modification.
+ * @return
+ *     True if the annotation was modified, else false.
+ */
+bool
+AnnotationOneDimensionalShape::applySpatialModificationSpacerTabSpace(const AnnotationSpatialModification& spatialModification)
+{
+    return applySpatialModificationTabOrWindowSpace(spatialModification);
+}
+
 
 /**
  * Apply a spatial modification to an annotation in tab or window space.
@@ -745,6 +807,9 @@ AnnotationOneDimensionalShape::applySpatialModification(const AnnotationSpatialM
     switch (getCoordinateSpace()) {
         case AnnotationCoordinateSpaceEnum::CHART:
             return applySpatialModificationChartSpace(spatialModification);
+            break;
+        case AnnotationCoordinateSpaceEnum::SPACER:
+            return applySpatialModificationSpacerTabSpace(spatialModification);
             break;
         case AnnotationCoordinateSpaceEnum::STEREOTAXIC:
             return applySpatialModificationStereotaxicSpace(spatialModification);

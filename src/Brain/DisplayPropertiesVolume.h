@@ -38,6 +38,10 @@ namespace caret {
         
         void update();
         
+        float getOpacity() const;
+        
+        void setOpacity(const float opacity);
+        
         virtual void copyDisplayProperties(const int32_t sourceTabIndex,
                                            const int32_t targetTabIndex);
         
@@ -52,6 +56,7 @@ namespace caret {
 
         DisplayPropertiesVolume& operator=(const DisplayPropertiesVolume&);
         
+        float m_opacity = 1.0f;
     };
     
 #ifdef __DISPLAY_PROPERTIES_VOLUME_DECLARE__

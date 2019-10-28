@@ -504,6 +504,20 @@ namespace caret {
          */
         virtual BrainordinateMappingMatch getBrainordinateMappingMatch(const CaretMappableDataFile* mapFile) const = 0;
         
+        virtual bool getSurfaceNodeIdentificationForMaps(const std::vector<int32_t>& mapIndices,
+                                                         const StructureEnum::Enum structure,
+                                                         const int nodeIndex,
+                                                         const int32_t numberOfNodes,
+                                                         AString& textOut) const;
+        
+        virtual bool getVolumeVoxelIdentificationForMaps(const std::vector<int32_t>& mapIndices,
+                                                         const float xyz[3],
+                                                         int64_t ijkOut[3],
+                                                         AString& textOut) const;
+        
+
+        void updateAfterFileDataChanges();
+        
     protected:
         CaretMappableDataFile(const CaretMappableDataFile&);
 
@@ -512,8 +526,6 @@ namespace caret {
         ChartDataCartesian* helpCreateCartesianChartData(const std::vector<float>& data);
         
         void helpGetSupportedLineSeriesChartDataTypes(std::vector<ChartOneDataTypeEnum::Enum>& chartDataTypesOut) const;
-        
-        void updateAfterFileDataChanges();
         
         virtual void saveFileDataToScene(const SceneAttributes* sceneAttributes,
                                          SceneClass* sceneClass);

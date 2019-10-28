@@ -45,6 +45,7 @@
 #include "CiftiConnectivityMatrixViewController.h"
 #include "DeveloperFlagsEnum.h"
 #include "EventBrowserWindowDrawingContent.h"
+#include "EventGetOrSetUserInputModeProcessor.h"
 #include "EventManager.h"
 #include "EventUserInterfaceUpdate.h"
 #include "FiberOrientationSelectionViewController.h"
@@ -56,8 +57,10 @@
 #include "SceneClass.h"
 #include "SceneWindowGeometry.h"
 #include "SessionManager.h"
+#include "VolumeDynamicConnectivityFile.h"
 #include "VolumeFile.h"
 #include "VolumeSurfaceOutlineSetViewController.h"
+#include "WuQMacroManager.h"
 #include "WuQTabWidgetWithSizeHint.h"
 #include "WuQtUtilities.h"
 
@@ -70,12 +73,17 @@ using namespace caret;
  *    Index of browser window that contains this toolbox.
  * @param title
  *    Title for the toolbox.
- * @param location
- *    Locations allowed for this toolbox.
+ * @param toolBoxType
+ *    Type of toolbox
+ * @param parentObjectName
+ *    Name of parent for macro objets
+ * @param parent
+ *    The parent widget
  */
 BrainBrowserWindowOrientedToolBox::BrainBrowserWindowOrientedToolBox(const int32_t browserWindowIndex,
                                                                      const QString& title,
                                                                      const ToolBoxType toolBoxType,
+                                                                     const QString& parentObjectNamePrefix,
                                                                      QWidget* parent)
 :   QDockWidget(parent)
 {
@@ -86,8 +94,10 @@ BrainBrowserWindowOrientedToolBox::BrainBrowserWindowOrientedToolBox(const int32
     m_toolBoxTitle = title;
     setWindowTitle(m_toolBoxTitle);
     
+                                
     bool isFeaturesToolBox  = false;
     bool isOverlayToolBox = false;
+    QString typeSuffix;
     Qt::Orientation orientation = Qt::Horizontal;
     AString toolboxTypeName = "";
     switch (toolBoxType) {
@@ -96,21 +106,30 @@ BrainBrowserWindowOrientedToolBox::BrainBrowserWindowOrientedToolBox(const int32
             isFeaturesToolBox = true;
             toggleViewAction()->setText("Features Toolbox");
             toolboxTypeName = "Features";
+            typeSuffix = "Features";
             break;
         case TOOL_BOX_OVERLAYS_HORIZONTAL:
             orientation = Qt::Horizontal;
             isOverlayToolBox = true;
             toolboxTypeName = "OverlayHorizontal";
+            typeSuffix = "ToolBoxH";
             break;
         case TOOL_BOX_OVERLAYS_VERTICAL:
             orientation = Qt::Vertical;
             isOverlayToolBox = true;
             toolboxTypeName = "OverlayVertical";
+            typeSuffix = "ToolBoxV";
             break;
     }
     
+    WuQMacroManager* macroManager = WuQMacroManager::instance();
+    QString objectNamePrefix = (parentObjectNamePrefix
+                                + ":"
+                                + typeSuffix);
+    
     /*
      * Needed for saving and restoring window state in main window
+     * CHANGING THIS WILL BREAK SCENES !!!
      */
     CaretAssert(toolboxTypeName.length() > 0);
     setObjectName("BrainBrowserWindowOrientedToolBox_"
@@ -151,6 +170,9 @@ BrainBrowserWindowOrientedToolBox::BrainBrowserWindowOrientedToolBox(const int32
             break;
     }
 #endif
+    m_tabWidget->setObjectName(objectNamePrefix
+                               + ":Tab");
+    macroManager->addMacroSupportToObjectWithToolTip(m_tabWidget, "Toolbox tab", "");
     
     m_annotationTabIndex = -1;
     m_borderTabIndex = -1;
@@ -166,46 +188,59 @@ BrainBrowserWindowOrientedToolBox::BrainBrowserWindowOrientedToolBox(const int32
     
     if (isOverlayToolBox) {
         m_overlaySetViewController = new OverlaySetViewController(orientation,
-                                                                      browserWindowIndex,
-                                                                      this);  
+                                                                  browserWindowIndex,
+                                                                  objectNamePrefix,
+                                                                  this);  
         m_overlayTabIndex = addToTabWidget(m_overlaySetViewController,
                        "Layers");
     }
     if (isOverlayToolBox) {
         m_chartOverlaySetViewController = new ChartTwoOverlaySetViewController(orientation,
-                                                                         browserWindowIndex,
-                                                                         this);
+                                                                               browserWindowIndex,
+                                                                               objectNamePrefix,
+                                                                               this);
         m_chartOverlayTabIndex = addToTabWidget(m_chartOverlaySetViewController,
                                                 "Chart Layers");
     }
     if (isOverlayToolBox) {
         m_chartToolBoxViewController = new ChartToolBoxViewController(orientation,
                                                                       browserWindowIndex,
+                                                                      objectNamePrefix,
                                                                       this);
         m_chartTabIndex = addToTabWidget(m_chartToolBoxViewController,
                                          "Charting");
     }
     if (isOverlayToolBox) {
-        m_connectivityMatrixViewController = new CiftiConnectivityMatrixViewController(orientation,
+        m_connectivityMatrixViewController = new CiftiConnectivityMatrixViewController(objectNamePrefix,
                                                                                        this);
         m_connectivityTabIndex = addToTabWidget(m_connectivityMatrixViewController,
                              "Connectivity");
     }
     if (isFeaturesToolBox) {
         m_annotationViewController = new AnnotationSelectionViewController(browserWindowIndex,
+                                                                           objectNamePrefix,
                                                                            this);
         m_annotationTextSubstitutionViewController = new AnnotationTextSubstitutionViewController(browserWindowIndex,
+                                                                                                  objectNamePrefix,
                                                                                                   this);
         
         m_annotationTabWidget = new QTabWidget();
         m_annotationTabWidget->addTab(m_annotationViewController, "Annotations");
         m_annotationTabWidget->addTab(m_annotationTextSubstitutionViewController, "Substitutions");
+        m_annotationTabWidget->setObjectName(objectNamePrefix
+                                             + ":AnnotationTab");
+        macroManager->addMacroSupportToObjectWithToolTip(m_annotationTabWidget,
+                                                         "Features ToolBox Annotation Tab",
+                                                         "");
+        
         m_annotationTabIndex = addToTabWidget(m_annotationTabWidget,
                                               "Annot");
+        m_annotationTabWidget->setCurrentIndex(0);
     }
     if (isFeaturesToolBox) {
         m_borderSelectionViewController = new BorderSelectionViewController(browserWindowIndex,
-                                                                                this);
+                                                                            objectNamePrefix,
+                                                                            this);
         m_borderTabIndex = addToTabWidget(m_borderSelectionViewController,
                              "Borders");
     }
@@ -219,6 +254,7 @@ BrainBrowserWindowOrientedToolBox::BrainBrowserWindowOrientedToolBox(const int32
     
     if (isFeaturesToolBox) {
         m_fociSelectionViewController = new FociSelectionViewController(browserWindowIndex,
+                                                                        objectNamePrefix,
                                                                                 this);
         m_fociTabIndex = addToTabWidget(m_fociSelectionViewController,
                              "Foci");
@@ -226,6 +262,7 @@ BrainBrowserWindowOrientedToolBox::BrainBrowserWindowOrientedToolBox(const int32
     
     if (isFeaturesToolBox) {
         m_imageSelectionViewController = new ImageSelectionViewController(browserWindowIndex,
+                                                                          objectNamePrefix,
                                                                           this);
         m_imageTabIndex = addToTabWidget(m_imageSelectionViewController,
                                          "Images");
@@ -233,6 +270,7 @@ BrainBrowserWindowOrientedToolBox::BrainBrowserWindowOrientedToolBox(const int32
     
     if (isFeaturesToolBox) {
         m_labelSelectionViewController = new LabelSelectionViewController(browserWindowIndex,
+                                                                          objectNamePrefix,
                                                                           this);
         m_labelTabIndex = addToTabWidget(m_labelSelectionViewController,
                        "Labels");
@@ -240,7 +278,9 @@ BrainBrowserWindowOrientedToolBox::BrainBrowserWindowOrientedToolBox(const int32
     
     if (isOverlayToolBox) {
         m_volumeSurfaceOutlineSetViewController = new VolumeSurfaceOutlineSetViewController(orientation,
-                                                                                                m_browserWindowIndex);
+                                                                                            m_browserWindowIndex,
+                                                                                            objectNamePrefix,
+                                                                                            "toolbox");
         m_volumeSurfaceOutlineTabIndex = addToTabWidget(m_volumeSurfaceOutlineSetViewController,
                              "Vol/Surf Outline");
     }
@@ -250,7 +290,6 @@ BrainBrowserWindowOrientedToolBox::BrainBrowserWindowOrientedToolBox(const int32
     if (orientation == Qt::Horizontal) {
         setMinimumHeight(200);
         setMaximumHeight(800);
-        //setSizeHintHeight(200);
     }
     else {
         if (isOverlayToolBox) {
@@ -618,6 +657,7 @@ BrainBrowserWindowOrientedToolBox::receiveEvent(Event* event)
          * Determine types of data this is loaded
          */
         bool haveAnnotation = ( ! brain->getSceneAnnotationFile()->isEmpty());
+        bool haveAnnSub     = false;
         bool haveBorders    = false;
         bool haveConnFiles  = false;
         bool haveFibers     = false;
@@ -640,7 +680,7 @@ BrainBrowserWindowOrientedToolBox::receiveEvent(Event* event)
                     haveAnnotation = true;
                     break;
                 case DataFileTypeEnum::ANNOTATION_TEXT_SUBSTITUTION:
-                    haveAnnotation = true;
+                    haveAnnSub = true;
                     break;
                 case DataFileTypeEnum::BORDER:
                     haveBorders = true;
@@ -693,6 +733,9 @@ BrainBrowserWindowOrientedToolBox::receiveEvent(Event* event)
                     break;
                 case DataFileTypeEnum::METRIC:
                     break;
+                case DataFileTypeEnum::METRIC_DYNAMIC:
+                    haveConnFiles = true;
+                    break;
                 case DataFileTypeEnum::PALETTE:
                     break;
                 case DataFileTypeEnum::RGBA:
@@ -716,6 +759,14 @@ BrainBrowserWindowOrientedToolBox::receiveEvent(Event* event)
                         haveLabels = true;
                     }
                 }
+                    break;
+                case DataFileTypeEnum::VOLUME_DYNAMIC:
+                    haveConnFiles = true;
+//                    haveVolumes = true;
+//                    const VolumeDynamicConnectivityFile* volDynConnFile = vf->getVolumeDynamicConnectivityFile();
+//                    if (volDynConnFile != NULL) {
+//                        haveConnFiles = true;
+//                    }
                     break;
             }
         }
@@ -776,6 +827,33 @@ BrainBrowserWindowOrientedToolBox::receiveEvent(Event* event)
                 }
             }
 
+        EventGetOrSetUserInputModeProcessor inputModeEvent(m_browserWindowIndex);
+        EventManager::get()->sendEvent(inputModeEvent.getPointer());
+        const UserInputModeEnum::Enum inputMode = inputModeEvent.getUserInputMode();
+        switch (inputMode) {
+            case UserInputModeEnum::ANNOTATIONS:
+                break;
+            case UserInputModeEnum::BORDERS:
+                /*
+                 * Enable borders tab if the input mode is 'borders' so that user
+                 * can edit border point size while drawing a border before any
+                 * borders exist.
+                 */
+                haveBorders = true;
+                break;
+            case UserInputModeEnum::FOCI:
+                break;
+            case UserInputModeEnum::IMAGE:
+                break;
+            case UserInputModeEnum::INVALID:
+                break;
+            case UserInputModeEnum::VIEW:
+                break;
+            case UserInputModeEnum::VOLUME_EDIT:
+                break;
+        }
+        
+        
         /*
          * Get the selected tab BEFORE enabling/disabling tabs.
          * Otherwise, the enabling/disabling of tabs may cause the selection
@@ -794,7 +872,8 @@ BrainBrowserWindowOrientedToolBox::receiveEvent(Event* event)
         if (m_connectivityTabIndex >= 0) m_tabWidget->setTabEnabled(m_connectivityTabIndex, haveConnFiles);
         if (m_volumeSurfaceOutlineTabIndex >= 0) m_tabWidget->setTabEnabled(m_volumeSurfaceOutlineTabIndex, enableVolumeSurfaceOutline);
         
-        if (m_annotationTabIndex >= 0) m_tabWidget->setTabEnabled(m_annotationTabIndex, haveAnnotation);
+        if (m_annotationTabIndex >= 0) m_tabWidget->setTabEnabled(m_annotationTabIndex, (haveAnnotation
+                                                                                         || haveAnnSub));
         if (m_borderTabIndex >= 0) m_tabWidget->setTabEnabled(m_borderTabIndex, haveBorders);
         if (m_fiberOrientationTabIndex >= 0) m_tabWidget->setTabEnabled(m_fiberOrientationTabIndex, haveFibers);
         if (m_fociTabIndex >= 0) m_tabWidget->setTabEnabled(m_fociTabIndex, haveFoci);
@@ -803,6 +882,21 @@ BrainBrowserWindowOrientedToolBox::receiveEvent(Event* event)
         
         if (m_overlayTabIndex >= 0) m_tabWidget->setTabEnabled(m_overlayTabIndex, enableLayers);
         
+        if (m_annotationTabWidget != NULL) {
+            const int32_t numTabs = m_annotationTabWidget->count();
+            for (int32_t iTab = 0; iTab < numTabs; iTab++) {
+                if (m_annotationTabWidget->widget(iTab) == m_annotationViewController) {
+                    m_annotationTabWidget->setTabEnabled(iTab, haveAnnotation);
+                }
+                else if (m_annotationTabWidget->widget(iTab) == m_annotationTextSubstitutionViewController) {
+                    m_annotationTabWidget->setTabEnabled(iTab, haveAnnSub);
+                }
+                else {
+                    CaretAssertMessage(0, "Has new annotation sub tab been added?");
+                }
+            }
+        }
+
         /*
          * Switch selected tab if it is not valid
          */
