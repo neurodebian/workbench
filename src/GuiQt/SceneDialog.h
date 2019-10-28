@@ -68,6 +68,10 @@ namespace caret {
         static bool checkForModifiedFiles(const GuiManager::TestModifiedMode testMode,
                                           QWidget* parent);
         
+        static bool displaySceneWithErrorMessageDialog(QWidget* dialogParent,
+                                                       SceneFile* sceneFile,
+                                                       Scene* scene);
+
     private:
         SceneDialog(const SceneDialog&);
 
@@ -129,6 +133,8 @@ namespace caret {
     protected:
         virtual void closeEvent(QCloseEvent* event);
     
+        virtual void helpButtonClicked() override;
+        
     private:
         SceneFile* getSelectedSceneFile();
         
@@ -152,11 +158,12 @@ namespace caret {
         
         QWidget* createSceneFileWidget();
         
-        bool displayScenePrivateWithErrorMessageDialog(SceneFile* sceneFile,
-                                                       Scene* scene,
-                                                       const bool showWaitCursor);
-        
-        bool displayScenePrivateWithErrorMessage(SceneFile* sceneFile,
+        static bool displayScenePrivateWithErrorMessageDialog(QWidget* dialogParent,
+                                                              SceneFile* sceneFile,
+                                                              Scene* scene,
+                                                              const bool showWaitCursor);
+
+        static bool displayScenePrivateWithErrorMessage(SceneFile* sceneFile,
                                                  Scene* scene,
                                                  const bool showWaitCursor,
                                                  AString& errorMessageOut);
@@ -272,7 +279,8 @@ namespace caret {
         ~SceneClassInfoWidget();
         
         void updateContent(Scene* scene,
-                           const int32_t sceneIndex);
+                           const int32_t sceneIndex,
+                           const bool activeSceneFlag);
         
         void setBackgroundForSelected(const bool selected);
         
@@ -314,6 +322,8 @@ namespace caret {
         QWidget* m_rightSideWidget;
         
         QLabel* m_previewImageLabel;
+        
+        QLabel* m_activeSceneLabel;
         
         QLabel* m_nameLabel;
         

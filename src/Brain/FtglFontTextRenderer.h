@@ -1,5 +1,8 @@
+
 #ifndef __FTGL_FONT_TEXT_RENDERER_H__
 #define __FTGL_FONT_TEXT_RENDERER_H__
+
+#ifdef HAVE_FREETYPE
 
 /*LICENSE_START*/
 /*
@@ -52,12 +55,18 @@ namespace caret {
                                               const AnnotationText& annotationText,
                                               const DrawingFlags& flags) override;
         
-        virtual void drawTextAtModelCoords(const double modelX,
+        virtual void drawTextAtModelCoordsFacingUser(const double modelX,
                                            const double modelY,
                                            const double modelZ,
                                            const AnnotationText& annotationText,
                                            const DrawingFlags& flags) override;
         
+        virtual void drawTextInModelSpace(const AnnotationText& annotationText,
+                                          const float modelSpaceScaling,
+                                          const float heightOrWidthForPercentageSizeText,
+                                          const float normalVector[3],
+                                          const DrawingFlags& flags) override;
+
         virtual void getTextWidthHeightInPixels(const AnnotationText& annotationText,
                                                 const DrawingFlags& flags,
                                                 const double viewportWidth,
@@ -65,6 +74,17 @@ namespace caret {
                                                 double& widthOut,
                                                 double& heightOut) override;
         
+        
+        virtual void getBoundsForTextInModelSpace(const AnnotationText& annotationText,
+                                                  const float modelSpaceScaling,
+                                          const float heightOrWidthForPercentageSizeText,
+                                          const DrawingFlags& flags,
+                                          double bottomLeftOut[3],
+                                          double bottomRightOut[3],
+                                          double topRightOut[3],
+                                                  double topLeftOut[3],
+                                                  double underlineStartOut[3],
+                                                  double underlineEndOut[3]) override;
         
         virtual void getBoundsForTextAtViewportCoords(const AnnotationText& annotationText,
                                                       const DrawingFlags& flags,
@@ -98,6 +118,11 @@ namespace caret {
             DEPTH_TEST_YES
         };
         
+        enum class FtglFontTypeEnum {
+            POLYGON,
+            TEXTURE
+        };
+        
         FtglFontTextRenderer(const FtglFontTextRenderer&);
 
         FtglFontTextRenderer& operator=(const FtglFontTextRenderer&);
@@ -110,6 +135,12 @@ namespace caret {
                                               const DrawingFlags& flags);
         
         FTFont* getFont(const AnnotationText& annotationText,
+                        const FtglFontTypeEnum ftglFontType,
+                        const bool creatingDefaultFontFlag);
+        
+        FTFont* getFont(const AnnotationText& annotationText,
+                        const FtglFontTypeEnum ftglFontType,
+                        const float heightOrWidthForPercentageSizeText,
                         const bool creatingDefaultFontFlag);
         
         void drawUnderline(const double lineStartX,
@@ -127,27 +158,33 @@ namespace caret {
                          const double outlineThickness,
                          uint8_t foregroundRgba[4]);
         
-        static void expandBox(float bottomLeft[3],
-                              float bottomRight[3],
-                              float topRight[3],
-                              float topLeft[3],
-                              const float extraSpaceX,
-                              const float extraSpaceY);
+        void drawOutline3D(float bottomLeft[3],
+                           float bottomRight[3],
+                           float topRight[3],
+                           float topLeft[3],
+                           const double outlineThickness,
+                           uint8_t foregroundRgba[4]);
         
         double getLineWidthFromPercentageHeight(const double percentageHeight) const;
         
+        float getLineThicknessPixelsInModelSpace(const float lineWidthPercentage,
+                                                 const float heightOrWidthForPercentageSizeText,
+                                                 const float modelSpaceScaling) const;
         
         class FontData {
         public:
             FontData();
             
             FontData(const AnnotationText&  annotationText,
+                     const FtglFontTypeEnum ftglFontType,
                      const int32_t viewportWidth,
                      const int32_t viewportHeight);
             
             ~FontData();
             
             void initialize(const AString& fontFileName);
+            
+            FtglFontTypeEnum m_ftglFontType = FtglFontTypeEnum::TEXTURE;
             
             QByteArray m_fontData;
             
@@ -156,7 +193,19 @@ namespace caret {
             bool m_valid;
         };
         
-        
+        /**
+         * Drawing space of text
+         */
+        enum class TextDrawingSpace {
+            /**
+             * Drawn in model space coordinates
+             */
+            MODEL,
+            /**
+             * Drawn in viewport coordinates
+             */
+            VIEWPORT
+        };
         
         /**
          * A text character
@@ -201,6 +250,7 @@ namespace caret {
         class TextString {
         public:
             TextString(const QString& textString,
+                       const TextDrawingSpace textDrawingSpace,
                        const AnnotationTextOrientationEnum::Enum orientation,
                        const double underlineThickness,
                        const double outlineThickness,
@@ -217,6 +267,7 @@ namespace caret {
                                                     double& viewportMinY,
                                                     double& viewportMaxY) const;
             
+            const TextDrawingSpace m_textDrawingSpace;
             const double m_underlineThickness;
             const double m_outlineThickness;
             
@@ -288,6 +339,7 @@ namespace caret {
             double m_viewportBoundsMinY;
             double m_viewportBoundsMaxY;
             
+            TextDrawingSpace m_textDrawingSpace;
         private:
             void applyAlignmentsToHorizontalTextStrings();
             void applyAlignmentsToStackedTextStrings();
@@ -299,6 +351,10 @@ namespace caret {
         
         void drawTextAtViewportCoordinatesInternal(const AnnotationText& annotationText,
                                                    const TextStringGroup& textStringGroup);
+        
+        void drawTextInModelSpaceInternal(const AnnotationText& annotationText,
+                                          const TextStringGroup& textStringGroup,
+                                          const float heightOrWidthForPercentageSizeText);
         
         void applyTextColoring(const AnnotationText& annotationText);
         
@@ -351,11 +407,16 @@ namespace caret {
         float m_lineWidthMaximum = 5.0f;
         
         static const double s_textMarginSize;
+        static const double s_modelSpaceMarginPercentage;
     };
     
 #ifdef __FTGL_FONT_TEXT_RENDERER_DECLARE__
     const double FtglFontTextRenderer::s_textMarginSize = 3.0;
+    const double FtglFontTextRenderer::s_modelSpaceMarginPercentage = 0.2;
 #endif // __FTGL_FONT_TEXT_RENDERER_DECLARE__
 
 } // namespace
+
+#endif // HAVE_FREETYPE
+
 #endif  //__FTGL_FONT_TEXT_RENDERER_H__

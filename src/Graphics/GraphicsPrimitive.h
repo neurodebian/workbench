@@ -146,26 +146,60 @@ namespace caret {
             OPENGL_TRIANGLES,
             /**
              * Like OPENGL_LINE_LOOP but there is no limit on line width as it draws the lines using polygons
+             * and polygons that form the line use a BEVEL join at vertices.
+             * Draws in MODEL space so lines are affected by model transformations
+             */
+            MODEL_SPACE_POLYGONAL_LINE_LOOP_BEVEL_JOIN,
+            /**
+             * Like OPENGL_LINE_LOOP but there is no limit on line width as it draws the lines using polygons
+             * and polygons that form the line use a MITER join at vertices
+             * Draws in MODEL space so lines are affected by model transformations
+             */
+            MODEL_SPACE_POLYGONAL_LINE_LOOP_MITER_JOIN,
+            /**
+             * Like OPENGL_LINE_STRIP but there is no limit on line width as it draws the lines using polygons
              * and polygons that form the line use a BEVEL join at vertices
+             * Draws in MODEL space so lines are affected by model transformations
+             */
+            MODEL_SPACE_POLYGONAL_LINE_STRIP_BEVEL_JOIN,
+            /**
+             * Like OPENGL_LINE_STRIP but there is no limit on line width as it draws the lines using polygons
+             * and polygons that form the line use a MITER join at vertices
+             * Draws in MODEL space so lines are affected by model transformations
+             */
+            MODEL_SPACE_POLYGONAL_LINE_STRIP_MITER_JOIN,
+            /**
+             * Like OPENGL_LINES but there is no limit on line width as it draws the lines using polygons.
+             * Draws in MODEL space so lines are affected by model transformations
+             */
+            MODEL_SPACE_POLYGONAL_LINES,
+            /**
+             * Like OPENGL_LINE_LOOP but there is no limit on line width as it draws the lines using polygons
+             * and polygons that form the line use a BEVEL join at vertices.
+             * Lines drawn in window space so that lines always face user
              */
             POLYGONAL_LINE_LOOP_BEVEL_JOIN,
             /**
              * Like OPENGL_LINE_LOOP but there is no limit on line width as it draws the lines using polygons
              * and polygons that form the line use a MITER join at vertices
+             * Lines drawn in window space so that lines always face user
              */
             POLYGONAL_LINE_LOOP_MITER_JOIN,
             /**
              * Like OPENGL_LINE_STRIP but there is no limit on line width as it draws the lines using polygons
              * and polygons that form the line use a BEVEL join at vertices
+             * Lines drawn in window space so that lines always face user
              */
             POLYGONAL_LINE_STRIP_BEVEL_JOIN,
             /**
              * Like OPENGL_LINE_STRIP but there is no limit on line width as it draws the lines using polygons
              * and polygons that form the line use a MITER join at vertices
+             * Lines drawn in window space so that lines always face user
              */
             POLYGONAL_LINE_STRIP_MITER_JOIN,
             /**
              * Like OPENGL_LINES but there is no limit on line width as it draws the lines using polygons.
+             * Lines drawn in window space so that lines always face user
              */
             POLYGONAL_LINES,
             /*
@@ -335,6 +369,9 @@ namespace caret {
          */
         const std::vector<float>& getFloatXYZ() const { return m_xyz; }
         
+        void getVertexFloatXYZ(const int32_t vertexIndex,
+                               float xyzOut[3]) const;
+        
         void replaceFloatXYZ(const std::vector<float>& xyz);
         
         /**
@@ -395,6 +432,8 @@ namespace caret {
          * Clone this primitive.
          */
         virtual GraphicsPrimitive* clone() const = 0;
+
+        void simplfyLines(const int32_t skipVertexCount);
         
     protected:
         AString toStringPrivate(const bool includeAllDataFlag) const;
@@ -485,13 +524,10 @@ namespace caret {
         std::vector<float> m_floatTextureSTR;
         
         std::vector<uint8_t> m_textureImageBytesRGBA;
+
         friend class GraphicsEngineDataOpenGL;
         friend class GraphicsOpenGLPolylineTriangles;
         friend class GraphicsPrimitiveSelectionHelper;
-        
-        std::vector<float> m_dummyFloatRGBAVector;
-        
-        std::vector<uint8_t> m_dummyUnsignedByteRGBAVector;
         
         // ADD_NEW_MEMBERS_HERE
 

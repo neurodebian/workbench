@@ -32,7 +32,7 @@
 #include "DataFileTypeEnum.h"
 #include "EventListenerInterface.h"
 #include "SceneableInterface.h"
-#include "TileTabsConfigurationModeEnum.h"
+#include "TileTabsGridModeEnum.h"
 
 class QAction;
 class QActionGroup;
@@ -46,6 +46,7 @@ namespace caret {
     class BrainOpenGLWidget;
     class BrowserWindowContent;
     class BrowserTabContent;
+    class EventTileTabsConfigurationModification;
     class PlainTextStringBuilder;
     class SceneClassAssistant;
     class TileTabsConfiguration;
@@ -149,10 +150,12 @@ namespace caret {
         
         bool isOpenGLContextSharingValid() const;
 
-        AString getTileTabsConfigurationLabelText(const TileTabsConfigurationModeEnum::Enum configurationMode,
-                                              const bool includeRowsAndColumns) const;
+        AString getTileTabsConfigurationLabelText(const TileTabsGridModeEnum::Enum configurationMode,
+                                                  const bool includeRowsAndColumns) const;
 
         void resizeDockWidgets(const QList<QDockWidget *> &docks, const QList<int> &sizes, Qt::Orientation orientation);
+        
+        static void setEnableMacDuplicateMenuBar(bool status);
         
     protected:
         void closeEvent(QCloseEvent* event);
@@ -168,6 +171,7 @@ namespace caret {
         void processDataFileOpen();
         void processManageSaveLoadedFiles();
         void processCaptureImage();
+        void processMovieRecording();
         void processRecordMovie();
         void processEditPreferences();
         void processCloseAllFiles();
@@ -224,6 +228,7 @@ namespace caret {
         void processReportWorkbenchBug();
         
         void processShowSurfacePropertiesDialog();
+        void processShowVolumePropertiesDialog();
         
         void processDevelopGraphicsTiming();
         
@@ -321,6 +326,8 @@ namespace caret {
         void lockAllTabAspectRatios(const bool checked);
         void updateActionsForLockingAspectRatios();
         
+        void processToolBarLockWindowAndAllTabAspectsRatios(bool checked);
+        
         float getAspectRatioFromDialog(const AspectRatioMode aspectRatioMode,
                                        const QString& title,
                                        const float aspectRatio,
@@ -328,6 +335,8 @@ namespace caret {
         
         void saveBrowserWindowContentForScene();
         
+        void modifyTileTabsConfiguration(EventTileTabsConfigurationModification* modEvent);
+
         /** Index of this window */
         const int32_t m_browserWindowIndex;
         
@@ -362,6 +371,8 @@ namespace caret {
         
         QAction* m_captureImageAction;
 
+        QAction* m_movieRecordingAction;
+        
         QAction* m_recordMovieAction;
         
         QAction* m_preferencesAction;
@@ -461,6 +472,13 @@ namespace caret {
         static int32_t s_sceneFileFirstWindowY;
         
         static std::set<BrainBrowserWindow*> s_brainBrowserWindows;
+        
+        QString m_objectNamePrefix;
+        
+        bool m_keyEventProcessingFlag = false;
+        
+        static bool s_enableMacDuplicateMenuBarFlag;
+        
     };
 #ifdef __BRAIN_BROWSER_WINDOW_DECLARE__
     std::set<BrainBrowserWindow*> BrainBrowserWindow::s_brainBrowserWindows;
@@ -471,6 +489,8 @@ namespace caret {
     bool BrainBrowserWindow::s_firstWindowFlag = true;
     int32_t BrainBrowserWindow::s_sceneFileFirstWindowX = -1;
     int32_t BrainBrowserWindow::s_sceneFileFirstWindowY = -1;
+
+    bool BrainBrowserWindow::s_enableMacDuplicateMenuBarFlag = false;
 #endif // __BRAIN_BROWSER_WINDOW_DECLARE__
     
 }

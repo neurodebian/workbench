@@ -36,6 +36,7 @@ class QToolButton;
 
 namespace caret {
 
+    class AString;
     class MapYokingGroupComboBox;
     class Overlay;
     class WuQGridLayoutGroup;
@@ -49,6 +50,7 @@ namespace caret {
                               QGridLayout* gridLayout,
                               const int32_t browserWindowIndex,
                               const int32_t overlayIndex,
+                              const QString& parentObjectName,
                               QObject* parent);
         
         virtual ~OverlayViewController();
@@ -114,7 +116,9 @@ namespace caret {
         
         void updateGraphicsWindow();
         
-        QMenu* createConstructionMenu(QWidget* parent);
+        QMenu* createConstructionMenu(QWidget* parent,
+                                      const AString& descriptivePrefix,
+                                      const AString& menuActionNamePrefix);
         
         void validateYokingSelection();
         
@@ -140,7 +144,8 @@ namespace caret {
         
         QAction* constructionAction;
 
-        QAction* colorBarAction;
+        QToolButton* m_colorBarToolButton;
+        //QAction* colorBarAction;
         
         QAction* settingsAction;
         

@@ -30,7 +30,10 @@ namespace caret {
     class BrowserTabContent;
     class CaretMappableDataFile;
     class ChartDataSource;
+    class DataToolTipsManager;
     class MapFileDataSelector;
+    class Overlay;
+    class OverlaySet;
     class SelectionItemBorderSurface;
     class SelectionItemChartDataSeries;
     class SelectionItemChartFrequencySeries;
@@ -58,6 +61,11 @@ namespace caret {
         AString createIdentificationText(const SelectionManager* idManager,
                                          const Brain* brain) const;
         
+        AString createToolTipText(const Brain* brain,
+                                  const BrowserTabContent* browserTab,
+                                  const SelectionManager* selectionManager,
+                                  const DataToolTipsManager* dataToolTipsManager) const;
+        
     private:
         IdentificationTextGenerator(const IdentificationTextGenerator&);
 
@@ -67,11 +75,28 @@ namespace caret {
         virtual AString toString() const;
         
     private:
+        void generateSurfaceToolTip(const Brain* brain,
+                                    const BrowserTabContent* browserTab,
+                                    const SelectionManager* selectionManager,
+                                    const DataToolTipsManager* dataToolTipsManager,
+                                    IdentificationStringBuilder& idText) const;
+        
+        void generateVolumeToolTip(const BrowserTabContent* browserTab,
+                                   const SelectionManager* selectionManager,
+                                   const DataToolTipsManager* dataToolTipsManager,
+                                   IdentificationStringBuilder& idText) const;
+        
+        void generateChartToolTip(const SelectionManager* selectionManager,
+                                  const DataToolTipsManager* dataToolTipsManager,
+                                  IdentificationStringBuilder& idText) const;
+        
         void generateSurfaceBorderIdentifcationText(IdentificationStringBuilder& idText,
-                                                    const SelectionItemBorderSurface* idSurfaceBorder) const;
+                                                    const SelectionItemBorderSurface* idSurfaceBorder,
+                                                    const bool toolTipFlag) const;
         
         void generateSurfaceFociIdentifcationText(IdentificationStringBuilder& idText,
-                                                    const SelectionItemFocusSurface* idSurfaceFocus) const;
+                                                  const SelectionItemFocusSurface* idSurfaceFocus,
+                                                  const bool toolTipFlag) const;
         
         void generateVolumeFociIdentifcationText(IdentificationStringBuilder& idText,
                                                   const SelectionItemFocusVolume* idVolumeFocus) const;
@@ -120,6 +145,10 @@ namespace caret {
         
         void generateMapFileSelectorText(IdentificationStringBuilder& idText,
                                          const MapFileDataSelector* mapFileDataSelector) const;
+        
+        Overlay* getTopEnabledOverlay(OverlaySet* overlaySet) const;
+
+        friend class DataToolTipsManager;
     };
     
 #ifdef __IDENTIFICATION_TEXT_GENERATOR_DECLARE__

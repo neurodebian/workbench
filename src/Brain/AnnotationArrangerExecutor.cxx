@@ -542,6 +542,7 @@ AnnotationArrangerExecutor::getAnnotationsForArranging(const AnnotationArrangerI
     annotationsOut.clear();
     
     std::vector<AnnotationCoordinateSpaceEnum::Enum> spaces;
+    spaces.push_back(AnnotationCoordinateSpaceEnum::SPACER);
     spaces.push_back(AnnotationCoordinateSpaceEnum::TAB);
     spaces.push_back(AnnotationCoordinateSpaceEnum::WINDOW);
     
@@ -615,6 +616,10 @@ AnnotationArrangerExecutor::setupAnnotationInfo(const AnnotationArrangerInputs& 
         switch (annotation->getCoordinateSpace()) {
             case AnnotationCoordinateSpaceEnum::CHART:
                 CaretAssert(0);
+                break;
+            case AnnotationCoordinateSpaceEnum::SPACER:
+                getSpacerTabViewport(annotation->getSpacerTabIndex(),
+                                     annViewport);
                 break;
             case AnnotationCoordinateSpaceEnum::STEREOTAXIC:
                 CaretAssert(0);
@@ -864,7 +869,9 @@ void
 AnnotationArrangerExecutor::getTabViewport(const int32_t tabIndex,
                                            int32_t tabViewportOut[4])
 {
-    
+    /*
+     * Check cached viewports to avoid retrieving it a second time
+     */
     std::map<int32_t, ViewportArray>::iterator iter = m_tabViewports.find(tabIndex);
     if (iter != m_tabViewports.end()) {
         tabViewportOut[0] = iter->second.m_viewport[0];
@@ -890,6 +897,31 @@ AnnotationArrangerExecutor::getTabViewport(const int32_t tabIndex,
     else {
         throw CaretException("Failed to get viewport size for tab index "
                              + QString::number(tabIndex + 1));
+    }
+}
+
+/**
+ * Get the viewport for the given spacer tab.  Viewports are cached for efficiency.
+ *
+ * @param spacerTabIndex
+ *     Index of the spacer tab.
+ * @param tabViewportOut
+ *     Viewport of the tab.
+ * @throw  CaretException
+ *     If there is an error.
+ */
+void
+AnnotationArrangerExecutor::getSpacerTabViewport(const SpacerTabIndex& spacerTabIndex,
+                                                 int32_t tabViewportOut[4])
+{
+    EventGetViewportSize vpEvent(spacerTabIndex);
+    EventManager::get()->sendEvent(vpEvent.getPointer());
+    if (vpEvent.isViewportSizeValid()) {
+        vpEvent.getViewportSize(tabViewportOut);
+    }
+    else {
+        throw CaretException("Failed to get viewport size for spacer tab index "
+                             + spacerTabIndex.toString());
     }
 }
 

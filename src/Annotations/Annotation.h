@@ -27,14 +27,19 @@
 #include "AnnotationCoordinateSpaceEnum.h"
 #include "AnnotationGroupKey.h"
 #include "AnnotationSizingHandleTypeEnum.h"
+#include "AnnotationSurfaceOffsetVectorTypeEnum.h"
 #include "AnnotationTypeEnum.h"
 #include "CaretColorEnum.h"
 #include "CaretObjectTracksModification.h"
 #include "DisplayGroupAndTabItemInterface.h"
 #include "SceneableInterface.h"
+#include "SpacerTabIndex.h"
+#include "StructureEnum.h"
 
 
 namespace caret {
+    class AnnotationOneDimensionalShape;
+    class AnnotationTwoDimensionalShape;
     class AnnotationSpatialModification;
     class DisplayGroupAndTabItemHelper;
     class SceneClassAssistant;
@@ -119,6 +124,14 @@ namespace caret {
         
         Annotation* clone() const;
         
+        virtual AnnotationOneDimensionalShape* castToOneDimensionalShape() = 0;
+        
+        virtual const AnnotationOneDimensionalShape* castToOneDimensionalShape() const = 0;
+
+        virtual AnnotationTwoDimensionalShape* castToTwoDimensionalShape() = 0;
+        
+        virtual const AnnotationTwoDimensionalShape* castToTwoDimensionalShape() const = 0;
+
         bool testProperty(const Property property) const;
         
         bool testPropertiesAny(const Property propertyOne,
@@ -155,9 +168,25 @@ namespace caret {
         
         void setCoordinateSpace(const AnnotationCoordinateSpaceEnum::Enum coordinateSpace);
         
+        virtual AnnotationSurfaceOffsetVectorTypeEnum::Enum getSurfaceOffsetVectorType() const = 0;
+        
+        bool isInSurfaceSpaceWithTangentOffset() const;
+        
+        void changeSurfaceSpaceToTangentOffset();
+        
+        float getSurfaceSpaceWithTangentOffsetRotation(const StructureEnum::Enum structure,
+                                                       const float vertexNormal[3]) const;
+        
+        void initializeSurfaceSpaceWithTangentOffsetRotation(const StructureEnum::Enum structure,
+                                                             const float vertexNormal[3]);
+        
         int32_t getTabIndex() const;
         
         void setTabIndex(const int32_t tabIndex);
+        
+        SpacerTabIndex getSpacerTabIndex() const;
+        
+        void setSpacerTabIndex(const SpacerTabIndex& spacerTabIndex);
         
         int32_t getWindowIndex() const;
         
@@ -357,11 +386,16 @@ namespace caret {
         
         void setUniqueKey(const int32_t uniqueKey);
         
+        int32_t updateDisplayGroupTabIndex(const DisplayGroupEnum::Enum displayGroup,
+                                           const int32_t tabIndex) const;
+        
         SceneClassAssistant* m_sceneAssistant;
         
         DisplayGroupAndTabItemHelper* m_displayGroupAndTabItemHelper;
         
         AnnotationCoordinateSpaceEnum::Enum  m_coordinateSpace;
+        
+        SpacerTabIndex m_spacerTabIndex;
         
         int32_t m_tabIndex;
         

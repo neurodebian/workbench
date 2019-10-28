@@ -295,6 +295,10 @@ double CaretMathExpression::MathNode::eval(const vector<float>& values) const
                     CaretAssert(m_arguments.size() == 1);
                     ret = log10(m_arguments[0]->eval(values));
                     break;
+                case MathFunctionEnum::LOG2:
+                    CaretAssert(m_arguments.size() == 1);
+                    ret = log2(m_arguments[0]->eval(values));
+                    break;
                 case MathFunctionEnum::SQRT:
                     CaretAssert(m_arguments.size() == 1);
                     ret = sqrt(m_arguments[0]->eval(values));
@@ -372,7 +376,7 @@ double CaretMathExpression::MathNode::eval(const vector<float>& values) const
                     }
                     break;
                 }
-                case INVALID:
+                case MathFunctionEnum::INVALID:
                     CaretAssertMessage(0, "MathNode is type FUNC but INVALID function");
                     throw CaretException("parsing problem in CaretMathExpression");
             }
@@ -835,6 +839,7 @@ CaretPointer<CaretMathExpression::MathNode> CaretMathExpression::funcExpr()
                 case MathFunctionEnum::LN:
                 case MathFunctionEnum::EXP:
                 case MathFunctionEnum::LOG:
+                case MathFunctionEnum::LOG2:
                 case MathFunctionEnum::SQRT:
                 case MathFunctionEnum::ABS:
                 case MathFunctionEnum::FLOOR:

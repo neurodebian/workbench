@@ -62,6 +62,30 @@ ScenePrimitiveArray::~ScenePrimitiveArray()
 }
 
 /**
+ * Cast an instance of SceneObjectArray to a ScenePrimitiveArray.
+ * Is used to avoid dynamic casting and overridden by the class.
+ *
+ * @return Valid pointer (non-NULL) this is SceneClass
+ */
+ScenePrimitiveArray*
+ScenePrimitiveArray::castToScenePrimitiveArray()
+{
+    return this;
+}
+
+/**
+ * Cast an instance of SceneObjectArray to a ScenePrimitiveArray.
+ * Is used to avoid dynamic casting and overridden by the class.
+ *
+ * @return Valid pointer (non-NULL) this is SceneClass
+ */
+const ScenePrimitiveArray*
+ScenePrimitiveArray::castToScenePrimitiveArray() const
+{
+    return this;
+}
+
+/**
  * Load the array with boolean values.
  * @param valuesOut
  *    Array into which boolean values are loaded.

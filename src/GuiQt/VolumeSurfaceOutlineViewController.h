@@ -43,6 +43,8 @@ namespace caret {
     public:
         VolumeSurfaceOutlineViewController(const Qt::Orientation orientation,
                                            QGridLayout* gridLayout,
+                                           const QString& objectNamePrefix,
+                                           const QString& descriptivePrefix,
                                            QObject* parent = 0);
         
         virtual ~VolumeSurfaceOutlineViewController();
@@ -52,7 +54,7 @@ namespace caret {
         void updateViewController(VolumeSurfaceOutlineModel* outlineModel);
         
     private slots:
-        void enabledCheckBoxStateChanged(int);
+        void enabledCheckBoxChecked(bool checked);
         
         void thicknessSpinBoxValueChanged(double);
 

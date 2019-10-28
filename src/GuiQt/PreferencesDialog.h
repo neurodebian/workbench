@@ -70,6 +70,7 @@ namespace caret {
         void volumeAxesMontageCoordinatesComboBoxToggled(bool value);
         void volumeMontageCoordinatePrecisionChanged(int value);
         void volumeIdentificationComboBoxToggled(bool value);
+        void m_volumeAllSlicePlanesLayoutItemActivated();
         
         void yokingComboBoxToggled(bool value);
         
@@ -87,7 +88,9 @@ namespace caret {
             PREF_COLOR_FOREGROUND_VOLUME       = 7,
             PREF_COLOR_CHART_MATRIX_GRID_LINES = 8,
             PREF_COLOR_CHART_THRESHOLD         = 9,
-            NUMBER_OF_PREF_COLORS              = 10
+            PREF_COLOR_BACKGROUND_WINDOW       = 10,
+            PREF_COLOR_FOREGROUND_WINDOW       = 11,
+            NUMBER_OF_PREF_COLORS              = 12
         };
         
         QWidget* createColorsWidget();
@@ -120,10 +123,12 @@ namespace caret {
 
         PreferencesDialog& operator=(const PreferencesDialog&);
         
+        QWidget* m_foregroundColorWindowWidget;
         QWidget* m_foregroundColorAllWidget;
         QWidget* m_foregroundColorChartWidget;
         QWidget* m_foregroundColorSurfaceWidget;
         QWidget* m_foregroundColorVolumeWidget;
+        QWidget* m_backgroundColorWindowWidget;
         QWidget* m_backgroundColorAllWidget;
         QWidget* m_backgroundColorChartWidget;
         QWidget* m_backgroundColorSurfaceWidget;
@@ -143,6 +148,7 @@ namespace caret {
 
         WuQTrueFalseComboBox* m_dynamicConnectivityComboBox;
         
+        EnumComboBoxTemplate* m_volumeAllSlicePlanesLayoutComboBox;
         WuQTrueFalseComboBox* m_volumeAxesCrosshairsComboBox;
         WuQTrueFalseComboBox* m_volumeAxesLabelsComboBox;
         WuQTrueFalseComboBox* m_volumeAxesMontageCoordinatesComboBox;
@@ -153,6 +159,7 @@ namespace caret {
         
         WuQTrueFalseComboBox* m_surfaceIdentificationSymbolComboBox;
         WuQTrueFalseComboBox* m_volumeIdentificationSymbolComboBox;
+        WuQTrueFalseComboBox* m_dataToolTipsComboBox;
         
         WuQWidgetObjectGroup* m_allWidgets;
     };

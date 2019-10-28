@@ -27,11 +27,11 @@
 #include "CaretLogger.h"
 #include "SceneXmlElements.h"
 #include "XmlAttributes.h"
+#include "XmlUtilities.h"
 #include "XmlWriter.h"
+
 using namespace caret;
 
-
-    
 /**
  * \class caret::SceneInfo 
  * \brief Contains information about a scene.
@@ -44,7 +44,6 @@ using namespace caret;
 SceneInfo::SceneInfo()
 : CaretObjectTracksModification()
 {
-    
 }
 
 SceneInfo::SceneInfo(const SceneInfo& rhs) : CaretObjectTracksModification()
@@ -61,6 +60,28 @@ SceneInfo::SceneInfo(const SceneInfo& rhs) : CaretObjectTracksModification()
  */
 SceneInfo::~SceneInfo()
 {
+}
+
+/**
+ * @return True if this scene info is modified
+ */
+bool
+SceneInfo::isModified() const
+{
+    if (CaretObjectTracksModification::isModified()) {
+        return true;
+    }
+    
+    return false;
+}
+
+/**
+ * @return Is this instance modified?
+ */
+void
+SceneInfo::clearModified()
+{
+    CaretObjectTracksModification::clearModified();
 }
 
 /**
@@ -140,8 +161,8 @@ void
 SceneInfo::getImageBytes(QByteArray& imageBytesOut,
                                   AString& imageFormatOut) const
 {
-    imageBytesOut = m_imageBytes;
-    imageFormatOut         = m_imageFormat;
+    imageBytesOut  = m_imageBytes;
+    imageFormatOut = m_imageFormat;
 }
 
 /**

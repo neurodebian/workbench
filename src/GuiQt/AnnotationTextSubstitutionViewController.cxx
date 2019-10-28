@@ -49,6 +49,7 @@
 #include "MapYokingGroupComboBox.h"
 #include "SceneClass.h"
 #include "SceneClassAssistant.h"
+#include "WuQMacroManager.h"
 #include "WuQtUtilities.h"
 
 using namespace caret;
@@ -66,11 +67,14 @@ using namespace caret;
  *
  * @param browserWindowIndex
  *     Index of the browser window.
+ * @param parentObjectName
+ *     Name of parent object for macros
  * @param parent
  *     The parent widget.
  */
 AnnotationTextSubstitutionViewController::AnnotationTextSubstitutionViewController(const int32_t browserWindowIndex,
-                                                                     QWidget* parent)
+                                                                                   const QString& parentObjectName,
+                                                                                   QWidget* parent)
 : QWidget(parent),
 m_browserWindowIndex(browserWindowIndex)
 {
@@ -79,6 +83,11 @@ m_browserWindowIndex(browserWindowIndex)
     m_enableSubstitutionsCheckBox = new QCheckBox("Enable Substitutions");
     QObject::connect(m_enableSubstitutionsCheckBox, &QCheckBox::clicked,
                      this, &AnnotationTextSubstitutionViewController::enableCheckBoxClicked);
+    m_enableSubstitutionsCheckBox->setObjectName(parentObjectName
+                                                 + ":Substitutions:Enable");
+    m_enableSubstitutionsCheckBox->setToolTip("Enable Text Annotation Substitutions");
+    WuQMacroManager::instance()->addMacroSupportToObject(m_enableSubstitutionsCheckBox,
+                                                         "Enable annotation subsitutions");
     
     QButtonGroup* buttonGroup = new QButtonGroup();
     
@@ -97,8 +106,13 @@ m_browserWindowIndex(browserWindowIndex)
         
         QSpinBox* sb = new QSpinBox();
         sb->setRange(1, 100);
+#if QT_VERSION >= 0x050700
         QObject::connect(sb, QOverload<int>::of(&QSpinBox::valueChanged),
                          [=] { valueIndexSpinBoxChanged(i); } );
+#else
+        QObject::connect(sb, static_cast<void (QSpinBox::*)(int)>(&QSpinBox::valueChanged),
+                         [=] { valueIndexSpinBoxChanged(i); } );
+#endif
         
         QLabel* fl = new QLabel();
         

@@ -32,6 +32,7 @@
 #include "SurfaceSelectionModel.h"
 #include "WuQEventBlockingFilter.h"
 #include "WuQFactory.h"
+#include "WuQMacroManager.h"
 
 using namespace caret;
 
@@ -50,13 +51,21 @@ using namespace caret;
  *   The parent.
  * @param surfaceSelection
  *    Surface selection that is controlled through this control.
+ * @param objectName
+ *    Name for combo box
+ * @param descriptiveName
+ *    Descriptive name for macros
  */
 SurfaceSelectionViewController::SurfaceSelectionViewController(QObject* parent,
-                                                 SurfaceSelectionModel* surfaceSelectionModel)
+                                                               SurfaceSelectionModel* surfaceSelectionModel,
+                                                               const QString& objectName,
+                                                               const QString& descriptiveName)
 : WuQWidget(parent)
 {
     this->initializeControl(MODE_SELECTION_MODEL_STATIC,
-                            surfaceSelectionModel);
+                            surfaceSelectionModel,
+                            objectName,
+                            descriptiveName);
 }
 
 /**
@@ -65,9 +74,15 @@ SurfaceSelectionViewController::SurfaceSelectionViewController(QObject* parent,
  *   The parent.
  * @param brainStructure
  *   Allows selection of any surface with the specified brain structure.
+ * @param objectName
+ *    Name for combo box
+ * @param descriptiveName
+ *    Descriptive name for macros
  */
 SurfaceSelectionViewController::SurfaceSelectionViewController(QObject* parent,
-                                                 BrainStructure* brainStructure)
+                                                               BrainStructure* brainStructure,
+                                                               const QString& objectName,
+                                                               const QString& descriptiveName)
 : WuQWidget(parent)
 {
     std::vector<SurfaceTypeEnum::Enum> allSurfaceTypes;
@@ -76,7 +91,9 @@ SurfaceSelectionViewController::SurfaceSelectionViewController(QObject* parent,
     SurfaceSelectionModel* ss = new SurfaceSelectionModel(brainStructure->getStructure(),
                                                           allSurfaceTypes);
     this->initializeControl(MODE_BRAIN_STRUCTURE,
-                            ss);
+                            ss,
+                            objectName,
+                            descriptiveName);
 }
 
 /**
@@ -108,26 +125,47 @@ SurfaceSelectionViewController::~SurfaceSelectionViewController()
  *
  * @param parent
  *   The parent.
+ * @param objectName
+ *    Name for combo box
  */
-SurfaceSelectionViewController::SurfaceSelectionViewController(QObject* parent)
+SurfaceSelectionViewController::SurfaceSelectionViewController(QObject* parent,
+                                                               const QString& objectName,
+                                                               const QString& descriptiveName)
 : WuQWidget(parent)
 {
     this->initializeControl(MODE_SELECTION_MODEL_DYNAMIC,
-                            NULL);
+                            NULL,
+                            objectName,
+                            descriptiveName);
 }
 
 /**
- * Help initialize an instance.
+ * @param mode
+ *   The mode.
+ * @param surfaceSelectionModel
+ *   Model for surface selection
+ * @param objectName
+ *    Name for combo box
+ * @param descriptiveName
+ *    Descriptive name for macros
  */
 void 
 SurfaceSelectionViewController::initializeControl(const Mode mode,
-                                                  SurfaceSelectionModel* surfaceSelectionModel)
+                                                  SurfaceSelectionModel* surfaceSelectionModel,
+                                                  const QString& objectName,
+                                                  const QString& descriptiveName)
 {
     this->mode = mode;
     this->surfaceComboBox = WuQFactory::newComboBox();
     this->surfaceComboBox->setSizeAdjustPolicy(QComboBox::AdjustToContents);
     QObject::connect(this->surfaceComboBox, SIGNAL(currentIndexChanged(int)),
                      this, SLOT(comboBoxCurrentIndexChanged(int)));
+    
+    this->surfaceComboBox->setToolTip("Selects a surface in a combo box");
+    this->surfaceComboBox->setObjectName(objectName);
+    WuQMacroManager::instance()->addMacroSupportToObject(this->surfaceComboBox,
+                                                         "Select surface for " + descriptiveName);
+    
 
 //#ifdef CARET_OS_MACOSX
 //    /*

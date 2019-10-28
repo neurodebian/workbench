@@ -25,12 +25,14 @@
 #include "SceneableInterface.h"
 #include "WuQDialogNonModal.h"
 
+class QCheckBox;
+class QComboBox;
 class QDoubleSpinBox;
 
 namespace caret {
     class EnumComboBoxTemplate;
     class WuQTrueFalseComboBox;
-
+    
     class SurfacePropertiesEditorDialog : public WuQDialogNonModal, public EventListenerInterface, public SceneableInterface {
         Q_OBJECT
         
@@ -49,21 +51,18 @@ namespace caret {
         virtual void restoreFromScene(const SceneAttributes* sceneAttributes,
                                       const SceneClass* sceneClass);
         
-    private slots:
-        void surfaceDisplayPropertyChanged();
-        
     private:
         SurfacePropertiesEditorDialog(const SurfacePropertiesEditorDialog&);
 
         SurfacePropertiesEditorDialog& operator=(const SurfacePropertiesEditorDialog&);
         
-        WuQTrueFalseComboBox* m_displayNormalVectorsComboBox;
+        QCheckBox* m_displayNormalVectorsCheckBox;
         
         QDoubleSpinBox* m_linkSizeSpinBox;
         
         QDoubleSpinBox* m_nodeSizeSpinBox;
         
-        EnumComboBoxTemplate* m_surfaceDrawingTypeComboBox;
+        QComboBox* m_surfaceDrawingTypeComboBox;
         
         QDoubleSpinBox* m_opacitySpinBox;
         
@@ -74,7 +73,6 @@ namespace caret {
     };
     
 #ifdef __SURFACE_PROPERTIES_EDITOR_DIALOG_DECLARE__
-    // <PLACE DECLARATIONS OF STATIC MEMBERS HERE>
 #endif // __SURFACE_PROPERTIES_EDITOR_DIALOG_DECLARE__
 
 } // namespace

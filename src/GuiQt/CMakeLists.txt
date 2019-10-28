@@ -12,6 +12,12 @@ if(Qt5_FOUND)
     include_directories(${Qt5OpenGL_INCLUDE_DIRS})
     include_directories(${Qt5Network_INCLUDE_DIRS})
     include_directories(${Qt5Widgets_INCLUDE_DIRS})
+    if(HAVE_QT_WEBKIT)
+        include_directories(${Qt5WebEngine_INCLUDE_DIRS})
+        include_directories(${Qt5WebEngineCore_INCLUDE_DIRS})
+        include_directories(${Qt5WebEngineWidgets_INCLUDE_DIRS})
+        include_directories(${Qt5WebView_INCLUDE_DIRS})
+    endif(HAVE_QT_WEBKIT)
 endif()
 IF (QT4_FOUND)
     SET(QT_USE_QTNETWORK TRUE)
@@ -110,7 +116,7 @@ ELSE()
         CiftiParcelSelectionComboBox.h
         ClippingPlanesDialog.h
         ColorEditorWidget.h
-	CopyPaletteColorMappingToFilesDialog.h
+        CopyPaletteColorMappingToFilesDialog.h
         CustomViewDialog.h
         DataFileContentCopyMoveDialog.h
         DisplayGroupAndTabItemViewController.h
@@ -135,11 +141,12 @@ ELSE()
         InformationDisplayDialog.h
         InformationDisplayPropertiesDialog.h
         LabelSelectionViewController.h
-	LockAspectWarningDialog.h
+    	LockAspectWarningDialog.h
         MacApplication.h
         MacDockMenu.h
+	MacDuplicateMenuBar.h
         MapSettingsChartTwoLineHistoryWidget.h
-	MapSettingsColorBarPaletteOptionsWidget.h
+        MapSettingsColorBarPaletteOptionsWidget.h
         MapSettingsColorBarWidget.h
         MapSettingsFiberTrajectoryWidget.h
         MapSettingsLabelsWidget.h
@@ -150,7 +157,8 @@ ELSE()
         MetaDataEditorDialog.h
         MetaDataEditorWidget.h
         MovieDialog.h
-	OffScreenOpenGLRenderer.h
+	MovieRecordingDialog.h
+        OffScreenOpenGLRenderer.h
         OverlaySetViewController.h
         OverlaySettingsEditorDialog.h
         OverlayViewController.h
@@ -165,7 +173,10 @@ ELSE()
         SceneBasePathWidget.h
         SceneCreateReplaceDialog.h
         SceneDialog.h
+        SceneFileInformationDialog.h
+        SceneDataFileTreeItemModel.h
         ScenePreviewDialog.h
+        SceneReplaceAllDialog.h
         SceneShowOptionsDialog.h
         SpecFileManagementDialog.h
         SplashScreen.h
@@ -173,7 +184,7 @@ ELSE()
         StructureSurfaceSelectionControl.h
         SurfacePropertiesEditorDialog.h
         SurfaceSelectionViewController.h
-	ThresholdingSetMapsDialog.h
+        ThresholdingSetMapsDialog.h
         TileTabsConfigurationDialog.h
         UserInputModeAnnotationsContextMenu.h
         UserInputModeAnnotationsWidget.h
@@ -185,9 +196,12 @@ ELSE()
         UserInputTileTabsContextMenu.h
         UsernamePasswordWidget.h
         VolumeFileCreateDialog.h
+	VolumePropertiesEditorDialog.h
         VolumeSurfaceOutlineColorOrTabViewController.h
         VolumeSurfaceOutlineSetViewController.h
         VolumeSurfaceOutlineViewController.h
+	WbMacroHelper.h
+	WbMacroWidgetActionsManager.h
         WuQCollapsibleWidget.h
         WuQDataEntryDialog.h
         WuQDialog.h
@@ -200,14 +214,30 @@ ELSE()
         WuQGroupBoxExclusiveWidget.h
         WuQImageLabel.h
         WuQListWidget.h
+	WuQMacroCommandParameterWidget.h
+	WuQMacroCopyDialog.h
+        WuQMacroCreateDialog.h
+        WuQMacroDialog.h
+        WuQMacroExecutor.h
+        WuQMacroExecutorMonitor.h
+        WuQMacroHelperInterface.h
+        WuQMacroManager.h
+        WuQMacroMenu.h
+	WuQMacroNewCommandSelectionDialog.h
+        WuQMacroShortCutKeyComboBox.h
+        WuQMacroSignalEmitter.h
+        WuQMacroSignalWatcher.h
+        WuQMacroWidgetAction.h
         WuQMessageBox.h
         WuQwtPlot.h
         WuQSpecialIncrementDoubleSpinBox.h
+	WuQSpinBox.h
         WuQSpinBoxGroup.h
         WuQSpinBoxOddValue.h
+        WuQTabBar.h
         WuQTabWidget.h
-	WuQTabWidgetWithSizeHint.h
-	WuQTextEditorDialog.h
+        WuQTabWidgetWithSizeHint.h
+        WuQTextEditorDialog.h
         WuQTimedMessageDisplay.h
         WuQTreeWidget.h
         WuQTrueFalseComboBox.h
@@ -329,12 +359,14 @@ EventBrowserWindowGraphicsRedrawn.h
 EventBrowserWindowNew.h
 EventBrowserWindowTileTabOperation.h
 EventGetOrSetUserInputModeProcessor.h
+EventGraphicsTimingOneWindow.h
 EventGraphicsUpdateAllWindows.h
 EventGraphicsUpdateOneWindow.h
 EventHelpViewerDisplay.h
 EventIdentificationRequest.h
 EventImageCapture.h
 EventMacDockMenuUpdate.h
+EventMovieManualModeRecording.h
 EventOperatingSystemRequestOpenDataFile.h
 EventOverlaySettingsEditorDialogRequest.h
 EventPaletteColorMappingEditorDialogRequest.h
@@ -367,6 +399,7 @@ LabelSelectionViewController.h
 LockAspectWarningDialog.h
 MacApplication.h
 MacDockMenu.h
+MacDuplicateMenuBar.h
 MapSettingsChartTwoLineHistoryWidget.h
 MapSettingsColorBarPaletteOptionsWidget.h
 MapSettingsColorBarWidget.h
@@ -380,6 +413,7 @@ MetaDataEditorDialog.h
 MetaDataEditorWidget.h
 MouseEvent.h
 MovieDialog.h
+MovieRecordingDialog.h
 OffScreenOpenGLRenderer.h
 OverlaySetViewController.h
 OverlaySettingsEditorDialog.h
@@ -396,7 +430,11 @@ RegionOfInterestCreateFromBorderDialog.h
 SceneBasePathWidget.h
 SceneCreateReplaceDialog.h
 SceneDialog.h
+SceneFileInformationDialog.h
+SceneDataFileTreeItem.h
+SceneDataFileTreeItemModel.h
 ScenePreviewDialog.h
+SceneReplaceAllDialog.h
 SceneShowOptionsDialog.h
 SceneWindowGeometry.h
 SpecFileManagementDialog.h
@@ -407,6 +445,7 @@ SurfacePropertiesEditorDialog.h
 SurfaceSelectionViewController.h
 ThresholdingSetMapsDialog.h
 TileTabsConfigurationDialog.h
+TileTabsConfigurationModifier.h
 UserInputModeAbstract.h
 UserInputModeAnnotations.h
 UserInputModeAnnotationsContextMenu.h
@@ -425,9 +464,26 @@ UserInputTileTabsContextMenu.h
 UsernamePasswordWidget.h
 ViewModeEnum.h
 VolumeFileCreateDialog.h
+VolumePropertiesEditorDialog.h
 VolumeSurfaceOutlineColorOrTabViewController.h
 VolumeSurfaceOutlineSetViewController.h
 VolumeSurfaceOutlineViewController.h
+WbMacroCustomDataInfo.h
+WbMacroCustomDataTypeEnum.h
+WbMacroCustomOperationAnimateOverlayCrossFade.h
+WbMacroCustomOperationAnimateRotation.h
+WbMacroCustomOperationAnimateSurfaceInterpolation.h
+WbMacroCustomOperationAnimateVolumeSliceSequence.h
+WbMacroCustomOperationAnimateVolumeToSurfaceCrossFade.h
+WbMacroCustomOperationBase.h
+WbMacroCustomOperationDelay.h
+WbMacroCustomOperationIncrementRotation.h
+WbMacroCustomOperationIncrementVolumeSlice.h
+WbMacroCustomOperationManager.h
+WbMacroCustomOperationTypeEnum.h
+WbMacroHelper.h
+WbMacroWidgetActionNames.h
+WbMacroWidgetActionsManager.h
 WuQCollapsibleWidget.h
 WuQDataEntryDialog.h
 WuQDialog.h
@@ -441,11 +497,30 @@ WuQGridLayoutGroup.h
 WuQGroupBoxExclusiveWidget.h
 WuQImageLabel.h
 WuQListWidget.h
+WuQMacroCommandParameterWidget.h
+WuQMacroCopyDialog.h
+WuQMacroCreateDialog.h
+WuQMacroCustomOperationManagerInterface.h
+WuQMacroDialog.h
+WuQMacroExecutor.h
+WuQMacroExecutorMonitor.h
+WuQMacroExecutorOptions.h
+WuQMacroHelperInterface.h
+WuQMacroManager.h
+WuQMacroMenu.h
+WuQMacroMouseEventWidgetInterface.h
+WuQMacroNewCommandSelectionDialog.h
+WuQMacroShortCutKeyComboBox.h
+WuQMacroSignalEmitter.h
+WuQMacroSignalWatcher.h
+WuQMacroWidgetAction.h
 WuQMessageBox.h
 WuQwtPlot.h
 WuQSpecialIncrementDoubleSpinBox.h
+WuQSpinBox.h
 WuQSpinBoxGroup.h
 WuQSpinBoxOddValue.h
+WuQTabBar.h
 WuQTabWidget.h
 WuQTabWidgetWithSizeHint.h
 WuQTextEditorDialog.h
@@ -556,12 +631,14 @@ EventBrowserWindowGraphicsRedrawn.cxx
 EventBrowserWindowNew.cxx
 EventBrowserWindowTileTabOperation.cxx
 EventGetOrSetUserInputModeProcessor.cxx
+EventGraphicsTimingOneWindow.cxx
 EventGraphicsUpdateAllWindows.cxx
 EventGraphicsUpdateOneWindow.cxx
 EventHelpViewerDisplay.cxx
 EventIdentificationRequest.cxx
 EventImageCapture.cxx
 EventMacDockMenuUpdate.cxx
+EventMovieManualModeRecording.cxx
 EventOperatingSystemRequestOpenDataFile.cxx
 EventOverlaySettingsEditorDialogRequest.cxx
 EventPaletteColorMappingEditorDialogRequest.cxx
@@ -594,6 +671,7 @@ LabelSelectionViewController.cxx
 LockAspectWarningDialog.cxx
 MacApplication.cxx
 MacDockMenu.cxx
+MacDuplicateMenuBar.cxx
 MapSettingsChartTwoLineHistoryWidget.cxx
 MapSettingsColorBarPaletteOptionsWidget.cxx
 MapSettingsColorBarWidget.cxx
@@ -607,6 +685,7 @@ MetaDataEditorDialog.cxx
 MetaDataEditorWidget.cxx
 MouseEvent.cxx
 MovieDialog.cxx
+MovieRecordingDialog.cxx
 OffScreenOpenGLRenderer.cxx
 OverlaySetViewController.cxx
 OverlayViewController.cxx
@@ -623,7 +702,11 @@ RegionOfInterestCreateFromBorderDialog.cxx
 SceneBasePathWidget.cxx
 SceneCreateReplaceDialog.cxx
 SceneDialog.cxx
+SceneFileInformationDialog.cxx
+SceneDataFileTreeItem.cxx
+SceneDataFileTreeItemModel.cxx
 ScenePreviewDialog.cxx
+SceneReplaceAllDialog.cxx
 SceneShowOptionsDialog.cxx
 SceneWindowGeometry.cxx
 SpecFileManagementDialog.cxx
@@ -634,6 +717,7 @@ SurfacePropertiesEditorDialog.cxx
 SurfaceSelectionViewController.cxx
 ThresholdingSetMapsDialog.cxx
 TileTabsConfigurationDialog.cxx
+TileTabsConfigurationModifier.cxx
 UserInputModeAbstract.cxx
 UserInputModeAnnotations.cxx
 UserInputModeAnnotationsContextMenu.cxx
@@ -652,9 +736,25 @@ UserInputTileTabsContextMenu.cxx
 UsernamePasswordWidget.cxx
 ViewModeEnum.cxx
 VolumeFileCreateDialog.cxx
+VolumePropertiesEditorDialog.cxx
 VolumeSurfaceOutlineColorOrTabViewController.cxx
 VolumeSurfaceOutlineSetViewController.cxx
 VolumeSurfaceOutlineViewController.cxx
+WbMacroCustomDataInfo.cxx
+WbMacroCustomDataTypeEnum.cxx
+WbMacroCustomOperationAnimateOverlayCrossFade.cxx
+WbMacroCustomOperationAnimateRotation.cxx
+WbMacroCustomOperationAnimateSurfaceInterpolation.cxx
+WbMacroCustomOperationAnimateVolumeSliceSequence.cxx
+WbMacroCustomOperationAnimateVolumeToSurfaceCrossFade.cxx
+WbMacroCustomOperationBase.cxx
+WbMacroCustomOperationDelay.cxx
+WbMacroCustomOperationIncrementRotation.cxx
+WbMacroCustomOperationIncrementVolumeSlice.cxx
+WbMacroCustomOperationManager.cxx
+WbMacroCustomOperationTypeEnum.cxx
+WbMacroHelper.cxx
+WbMacroWidgetActionsManager.cxx
 WuQCollapsibleWidget.cxx
 WuQDataEntryDialog.cxx
 WuQDialog.cxx
@@ -668,11 +768,27 @@ WuQGridLayoutGroup.cxx
 WuQGroupBoxExclusiveWidget.cxx
 WuQImageLabel.cxx
 WuQListWidget.cxx
+WuQMacroCommandParameterWidget.cxx
+WuQMacroCopyDialog.cxx
+WuQMacroCreateDialog.cxx
+WuQMacroDialog.cxx
+WuQMacroExecutor.cxx
+WuQMacroExecutorMonitor.cxx
+WuQMacroExecutorOptions.cxx
+WuQMacroManager.cxx
+WuQMacroMenu.cxx
+WuQMacroNewCommandSelectionDialog.cxx
+WuQMacroShortCutKeyComboBox.cxx
+WuQMacroSignalEmitter.cxx
+WuQMacroSignalWatcher.cxx
+WuQMacroWidgetAction.cxx
 WuQMessageBox.cxx
 WuQwtPlot.cxx
 WuQSpecialIncrementDoubleSpinBox.cxx
+WuQSpinBox.cxx
 WuQSpinBoxGroup.cxx
 WuQSpinBoxOddValue.cxx
+WuQTabBar.cxx
 WuQTabWidget.cxx
 WuQTabWidgetWithSizeHint.cxx
 WuQTextEditorDialog.cxx

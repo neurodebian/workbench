@@ -55,6 +55,7 @@ namespace caret {
     class ImageFile;
     class ImageCaptureDialog;
     class InformationDisplayDialog;
+    class MovieRecordingDialog;
     class OverlaySettingsEditorDialog;
     class Model;
     class PaletteColorMappingEditorDialog;
@@ -65,6 +66,7 @@ namespace caret {
     class SelectionManager;
     class SpecFile;
     class SurfacePropertiesEditorDialog;
+    class VolumePropertiesEditorDialog;
     class TileTabsConfigurationDialog;
     
     /**
@@ -82,6 +84,14 @@ namespace caret {
         static void deleteGuiManager();
         
         static void beep();
+        
+        static void updateUserInterface();
+        
+        static void updateGraphicsAllWindows();
+        
+        static void updateGraphicsOneWindow(const int32_t windowIndex);
+        
+        static void updateSurfaceColoring();
         
         Brain* getBrain() const;
         
@@ -123,6 +133,8 @@ namespace caret {
         
         QAction* getHelpViewerDialogDisplayAction();
         
+        QAction* getDataToolTipsAction(QWidget* buttonWidget);
+        
         void closeAllOtherWindows(BrainBrowserWindow* browserWindow);
         
         void closeOtherWindowsAndReturnTheirTabContent(BrainBrowserWindow* browserWindow,
@@ -134,6 +146,7 @@ namespace caret {
         void processShowCustomViewDialog(BrainBrowserWindow* browserWindow);
         void processShowGapsAndMarginsDialog(BrainBrowserWindow* browserWindow);
         void processShowImageCaptureDialog(BrainBrowserWindow* browserWindow);
+        void processShowMovieRecordingDialog(BrainBrowserWindow* browserWindow);
         void processShowMovieDialog(BrainBrowserWindow* browserWindow);
         void processShowPreferencesDialog(BrainBrowserWindow* browserWindow);
         void processShowInformationDisplayDialog(const bool forceDisplayOfDialog);
@@ -145,9 +158,12 @@ namespace caret {
         
         void processShowSurfacePropertiesEditorDialog(BrainBrowserWindow* browserWindow);
         
+        void processShowVolumePropertiesEditorDialog(BrainBrowserWindow* browserWindow);
+        
         void processShowSceneDialogAndScene(BrainBrowserWindow* browserWindow,
                                             SceneFile* sceneFile,
-                                            Scene* scene);
+                                            Scene* scene,
+                                            const bool showSceneDialogFlag);
         
         void processShowAllenDataBaseWebView(BrainBrowserWindow* browserWindow);
         void processShowConnectomeDataBaseWebView(BrainBrowserWindow* browserWindow);
@@ -193,7 +209,7 @@ namespace caret {
         
         void showIdentifyBrainordinateDialogActionToggled(bool);
         
-        void sceneDialogDisplayActionToggled(bool);
+        void sceneDialogDisplayActionTriggered(bool);
         
         void showHelpDialogActionToggled(bool);
         
@@ -201,6 +217,7 @@ namespace caret {
         void helpDialogWasClosed();
         void sceneDialogWasClosed();
         void identifyBrainordinateDialogWasClosed();
+        void dataToolTipsActionTriggered(bool);
         
     private:
         GuiManager(QObject* parent = 0);
@@ -233,6 +250,8 @@ namespace caret {
         
         void addParentLessNonModalDialog(QWidget* dialog);
         
+        QPixmap createDataToolTipsIcon(const QWidget* widget);
+        
         /** One instance of the GuiManager */
         static GuiManager* singletonGuiManager;
         
@@ -258,6 +277,8 @@ namespace caret {
         
         ImageCaptureDialog* imageCaptureDialog;
 
+        MovieRecordingDialog* m_movieRecordingDialog;
+        
         GapsAndMarginsDialog* m_gapsAndMarginsDialog;
         
         MovieDialog* movieDialog;
@@ -274,6 +295,8 @@ namespace caret {
         
         SurfacePropertiesEditorDialog* m_surfacePropertiesEditorDialog;
         
+        VolumePropertiesEditorDialog* m_volumePropertiesEditorDialog;
+        
         WuQWebView* connectomeDatabaseWebView;
         
         CursorManager* cursorManager;
@@ -281,6 +304,8 @@ namespace caret {
         QAction* m_informationDisplayDialogEnabledAction;
         
         QAction* m_identifyBrainordinateDialogEnabledAction;
+        
+        QAction* m_dataToolTipsEnabledAction;
         
         BugReportDialog* m_bugReportDialog;
         

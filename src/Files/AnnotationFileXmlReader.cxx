@@ -133,7 +133,7 @@ AnnotationFileXmlReader::readFileFromString(const QString& fileInString,
      */
     m_stream.grabNew(new QXmlStreamReader(fileInString));
     
-    readFileContentFromXmlStreamReader("SceneFileName",
+    readFileContentFromXmlStreamReader("AnnotationsInSceneFile",
                                        annotationFile);
     
     if (m_stream->hasError()) {
@@ -196,6 +196,13 @@ AnnotationFileXmlReader::readFileContentFromXmlStreamReader(const QString& filen
         readVersionOne(annotationFile);
     }
     else if (m_fileVersionNumber == XML_VERSION_TWO) {
+        readVersionTwo(annotationFile);
+    }
+    else if (m_fileVersionNumber == XML_VERSION_THREE) {
+        /* 
+         * NOTE: version 3 added new coordinate space "SPACER "
+         * and otherwise is the same as version 2 format
+         */
         readVersionTwo(annotationFile);
     }
     else {
@@ -567,6 +574,18 @@ AnnotationFileXmlReader::readAnnotationAttributes(Annotation* annotation,
     annotation->setWindowIndex(m_streamHelper->getRequiredAttributeIntValue(attributes,
                                                             annotationElementName,
                                                             ATTRIBUTE_WINDOW_INDEX));
+    /*
+     * Spacer Tab Index added as part of WB-668
+     */
+    const AString spacerTabText = m_streamHelper->getOptionalAttributeStringValue(attributes,
+                                                                                 annotationElementName,
+                                                                                 ATTRIBUTE_SPACER_TAB_INDEX,
+                                                                                 "");
+    SpacerTabIndex spacerTabIndex;
+    if ( ! spacerTabText.isEmpty()) {
+        spacerTabIndex.setFromXmlAttributeText(spacerTabText);
+    }
+    annotation->setSpacerTabIndex(spacerTabIndex);
     
     /*
      * Unique Key
@@ -669,6 +688,18 @@ AnnotationFileXmlReader::readGroup(AnnotationFile* annotationFile)
                                                                                   ELEMENT_GROUP,
                                                                                   ATTRIBUTE_TAB_OR_WINDOW_INDEX);
     
+    /*
+     * Spacer Tab Index added as part of WB-668
+     */
+    const AString spacerTabText = m_streamHelper->getOptionalAttributeStringValue(attributes,
+                                                                                  ELEMENT_GROUP,
+                                                                                  ATTRIBUTE_SPACER_TAB_INDEX,
+                                                                                  "");
+    SpacerTabIndex spacerTabIndex;
+    if ( ! spacerTabText.isEmpty()) {
+        spacerTabIndex.setFromXmlAttributeText(spacerTabText);
+    }
+    
     const int32_t uniqueKey = m_streamHelper->getRequiredAttributeIntValue(attributes,
                                                                                   ELEMENT_GROUP,
                                                                                   ATTRIBUTE_UNIQUE_KEY);
@@ -745,6 +776,7 @@ AnnotationFileXmlReader::readGroup(AnnotationFile* annotationFile)
         annotationFile->addAnnotationGroupDuringFileReading(groupType,
                                                             coordSpace,
                                                             tabOrWindowIndex,
+                                                            spacerTabIndex,
                                                             uniqueKey,
                                                             annotations);
     }

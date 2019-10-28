@@ -101,6 +101,12 @@ m_browserWindowIndex(browserWindowIndex)
                                                               m_spaceActionGroup);
     QToolButton* tabSpaceToolButton = createSpaceToolButton(AnnotationCoordinateSpaceEnum::TAB,
                                                             m_spaceActionGroup);
+    const bool showSpacerToolButtonFlag(false);
+    QToolButton* spacerSpaceToolButton(NULL);
+    if (showSpacerToolButtonFlag) {
+        spacerSpaceToolButton = createSpaceToolButton(AnnotationCoordinateSpaceEnum::SPACER,
+                                                         m_spaceActionGroup);
+    }
     QToolButton* stereotaxicSpaceToolButton = createSpaceToolButton(AnnotationCoordinateSpaceEnum::STEREOTAXIC,
                                                                     m_spaceActionGroup);
     QToolButton* surfaceSpaceToolButton = createSpaceToolButton(AnnotationCoordinateSpaceEnum::SURFACE,
@@ -122,6 +128,9 @@ m_browserWindowIndex(browserWindowIndex)
         shapeTextToolButton->setMaximumSize(mw, mh);
 
         chartSpaceToolButton->setMaximumSize(mw, mh);
+        if (spacerSpaceToolButton != NULL) {
+            spacerSpaceToolButton->setMaximumSize(mw, mh);
+        }
         tabSpaceToolButton->setMaximumSize(mw, mh);
         stereotaxicSpaceToolButton->setMaximumSize(mw, mh);
         surfaceSpaceToolButton->setMaximumSize(mw, mh);
@@ -147,8 +156,11 @@ m_browserWindowIndex(browserWindowIndex)
         
         QLabel* insertLabel = new QLabel("Insert New");
         
+        const int32_t topColumnCount((spacerSpaceToolButton != NULL)
+                                     ? 9
+                                     : 8);
         gridLayout->addWidget(insertLabel,
-                              0, 0, 1, 8,
+                              0, 0, 1, topColumnCount,
                               Qt::AlignHCenter);
         
         gridLayout->addLayout(fileLayout,
@@ -157,18 +169,23 @@ m_browserWindowIndex(browserWindowIndex)
         
         gridLayout->setColumnMinimumWidth(1, 5);
         
+        int32_t topColumn(2);
         gridLayout->addWidget(spaceLabel,
-                              1, 2, Qt::AlignLeft);
+                              1, topColumn++, Qt::AlignLeft);
         gridLayout->addWidget(chartSpaceToolButton,
-                              1, 3);
+                              1, topColumn++);
+        if (spacerSpaceToolButton != NULL) {
+            gridLayout->addWidget(spacerSpaceToolButton,
+                                  1, topColumn++);
+        }
         gridLayout->addWidget(stereotaxicSpaceToolButton,
-                              1, 4);
+                              1, topColumn++);
         gridLayout->addWidget(surfaceSpaceToolButton,
-                              1, 5);
+                              1, topColumn++);
         gridLayout->addWidget(tabSpaceToolButton,
-                              1, 6);
+                              1, topColumn++);
         gridLayout->addWidget(windowSpaceToolButton,
-                              1, 7);
+                              1, topColumn++);
 
         gridLayout->setRowMinimumHeight(2, 2);
         
@@ -207,20 +224,22 @@ m_browserWindowIndex(browserWindowIndex)
                               1, 2, Qt::AlignLeft);
         gridLayout->addWidget(chartSpaceToolButton,
                               1, 3);
-        gridLayout->addWidget(stereotaxicSpaceToolButton,
+        gridLayout->addWidget(spacerSpaceToolButton,
                               1, 4);
-        gridLayout->addWidget(surfaceSpaceToolButton,
+        gridLayout->addWidget(stereotaxicSpaceToolButton,
                               1, 5);
-        gridLayout->addWidget(tabSpaceToolButton,
+        gridLayout->addWidget(surfaceSpaceToolButton,
                               1, 6);
-        gridLayout->addWidget(windowSpaceToolButton,
+        gridLayout->addWidget(tabSpaceToolButton,
                               1, 7);
+        gridLayout->addWidget(windowSpaceToolButton,
+                              1, 8);
         
         QSpacerItem* rowSpaceItem = new QSpacerItem(5, 5,
                                                     QSizePolicy::Fixed,
                                                     QSizePolicy::Fixed);
         gridLayout->addItem(rowSpaceItem,
-                            2, 3, 1, 6);
+                            2, 3, 1, 7);
         
         gridLayout->addWidget(typeLabel,
                               3, 2, Qt::AlignLeft);
@@ -298,43 +317,56 @@ AnnotationInsertNewWidget::enableDisableSpaceActions()
     if (window == NULL) {
         return;
     }
-    BrowserTabContent* tabContent = window->getBrowserTabContent();
-    if (tabContent == NULL) {
-        return;
+    
+    std::vector<BrowserTabContent*> allTabContent;
+    if (window->isTileTabsSelected()) {
+        window->getAllTabContent(allTabContent);
     }
-    Model* model = tabContent->getModelForDisplay();
-    if (model == NULL) {
-        return;
+    else {
+        BrowserTabContent* tabContent = window->getBrowserTabContent();
+        if (tabContent != NULL) {
+            allTabContent.push_back(tabContent);
+        }
     }
-    const ModelTypeEnum::Enum modelType = model->getModelType();
+    
+    const bool spacerSpaceValidFlag = window->isTileTabsSelected();
+    const bool tabSpaceValidFlag = ( ! allTabContent.empty());
+    const bool windowSpaceValidFlag = ( ! allTabContent.empty());
     
     bool chartSpaceValidFlag       = false;
     bool surfaceSpaceValidFlag     = false;
     bool stereotaxicSpaceValidFlag = false;
     
-    switch (modelType) {
-        case ModelTypeEnum::MODEL_TYPE_CHART:
-            break;
-        case ModelTypeEnum::MODEL_TYPE_CHART_TWO:
-            chartSpaceValidFlag = true;
-            break;
-        case ModelTypeEnum::MODEL_TYPE_INVALID:
-            break;
-        case ModelTypeEnum::MODEL_TYPE_SURFACE:
-            stereotaxicSpaceValidFlag = true;
-            surfaceSpaceValidFlag = true;
-            break;
-        case ModelTypeEnum::MODEL_TYPE_SURFACE_MONTAGE:
-            stereotaxicSpaceValidFlag = true;
-            surfaceSpaceValidFlag = true;
-            break;
-        case ModelTypeEnum::MODEL_TYPE_VOLUME_SLICES:
-            stereotaxicSpaceValidFlag = true;
-            break;
-        case ModelTypeEnum::MODEL_TYPE_WHOLE_BRAIN:
-            stereotaxicSpaceValidFlag = true;
-            surfaceSpaceValidFlag = true;
-            break;
+    for (auto tabContent : allTabContent) {
+        Model* model = tabContent->getModelForDisplay();
+        if (model == NULL) {
+            return;
+        }
+        const ModelTypeEnum::Enum modelType = model->getModelType();
+        switch (modelType) {
+            case ModelTypeEnum::MODEL_TYPE_CHART:
+                break;
+            case ModelTypeEnum::MODEL_TYPE_CHART_TWO:
+                chartSpaceValidFlag = true;
+                break;
+            case ModelTypeEnum::MODEL_TYPE_INVALID:
+                break;
+            case ModelTypeEnum::MODEL_TYPE_SURFACE:
+                stereotaxicSpaceValidFlag = true;
+                surfaceSpaceValidFlag = true;
+                break;
+            case ModelTypeEnum::MODEL_TYPE_SURFACE_MONTAGE:
+                stereotaxicSpaceValidFlag = true;
+                surfaceSpaceValidFlag = true;
+                break;
+            case ModelTypeEnum::MODEL_TYPE_VOLUME_SLICES:
+                stereotaxicSpaceValidFlag = true;
+                break;
+            case ModelTypeEnum::MODEL_TYPE_WHOLE_BRAIN:
+                stereotaxicSpaceValidFlag = true;
+                surfaceSpaceValidFlag = true;
+                break;
+        }
     }
     
     QAction* selectedAction = m_spaceActionGroup->checkedAction();
@@ -353,6 +385,9 @@ AnnotationInsertNewWidget::enableDisableSpaceActions()
             case AnnotationCoordinateSpaceEnum::CHART:
                 enableSpaceFlag = chartSpaceValidFlag;
                 break;
+            case AnnotationCoordinateSpaceEnum::SPACER:
+                enableSpaceFlag = spacerSpaceValidFlag;
+                break;
             case AnnotationCoordinateSpaceEnum::STEREOTAXIC:
                 enableSpaceFlag = stereotaxicSpaceValidFlag;
                 break;
@@ -361,12 +396,12 @@ AnnotationInsertNewWidget::enableDisableSpaceActions()
                 break;
             case AnnotationCoordinateSpaceEnum::TAB:
                 tabSpaceAction = action;
-                enableSpaceFlag = true;
+                enableSpaceFlag = tabSpaceValidFlag;
                 break;
             case AnnotationCoordinateSpaceEnum::VIEWPORT:
                 break;
             case AnnotationCoordinateSpaceEnum::WINDOW:
-                enableSpaceFlag = true;
+                enableSpaceFlag = windowSpaceValidFlag;
                 break;
         }
         
@@ -609,6 +644,8 @@ AnnotationInsertNewWidget::createSpaceToolButton(const AnnotationCoordinateSpace
     switch (annotationSpace) {
         case AnnotationCoordinateSpaceEnum::CHART:
             break;
+        case AnnotationCoordinateSpaceEnum::SPACER:
+            break;
         case AnnotationCoordinateSpaceEnum::STEREOTAXIC:
             break;
         case AnnotationCoordinateSpaceEnum::SURFACE:
@@ -686,6 +723,8 @@ AnnotationInsertNewWidget::createSpacePixmap(const QWidget* widget,
      */
     switch (annotationSpace) {
         case AnnotationCoordinateSpaceEnum::CHART:
+            break;
+        case AnnotationCoordinateSpaceEnum::SPACER:
             break;
         case AnnotationCoordinateSpaceEnum::STEREOTAXIC:
             break;

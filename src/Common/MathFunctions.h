@@ -172,6 +172,12 @@ public:
                             const double p1[3],
                             const double p2[3]);
     
+    static void addOffsetToVector(double v[3],
+                                  const double offset[3]);
+    
+    static void subtractOffsetFromVector(double v[3],
+                                         const double offset[3]);
+    
     static float triangleArea(
                     const float v1[3],
                     const float v2[3],
@@ -327,6 +333,8 @@ public:
                     const float pk[3],
                     const float n[3]);
 
+    static float angleInDegreesBetweenVectors(const float u[3], const float v[3]);
+    
     static bool isOddNumber(const int32_t number);
 
     static bool isEvenNumber(const int32_t number);
@@ -397,6 +405,33 @@ public:
     
     ///one minus cdf of standard normal distribution
     static float q_func(const float& x);
+    
+    static void expandBox(float bottomLeft[3],
+                          float bottomRight[3],
+                          float topRight[3],
+                          float topLeft[3],
+                          const float extraSpaceX,
+                          const float extraSpaceY);
+    
+    static void expandBoxPixels3D(double bottomLeft[3],
+                                  double bottomRight[3],
+                                  double topRight[3],
+                                  double topLeft[3],
+                                  const double extraSpacePixels);
+    
+    static void expandBoxPercentage3D(float bottomLeft[3],
+                                      float bottomRight[3],
+                                      float topRight[3],
+                                      float topLeft[3],
+                                      const float extraSpacePercentage);
+    
+    static void expandLinePercentage3D(float u[3],
+                                       float v[3],
+                                       const float extraSpacePercent);
+    
+    static void expandLinePixels3D(double u[3],
+                                   double v[3],
+                                   const double extraSpacePixels);
     
 };
 

@@ -49,6 +49,7 @@
 #include "GiftiLabelTable.h"
 #include "LabelFile.h"
 #include "VolumeFile.h"
+#include "WuQMacroManager.h"
 #include "WuQTreeWidget.h"
 #include "WuQtUtilities.h"
 
@@ -65,10 +66,19 @@ using namespace caret;
 
 /**
  * Constructor.
+ *
+ * @param browserWindowIndex
+ *    Index of browser window
+ * @param objectNameForMacros
+ *    Name of this object for macros
+ * @param descriptiveNameForMacros
+ *    Descriptive name for macros
  * @param parent
  *    Parent widget.
  */
 GroupAndNameHierarchyViewController::GroupAndNameHierarchyViewController(const int32_t browserWindowIndex,
+                                                                         const QString& objectNameForMacros,
+                                                                         const QString& descriptiveNameForMacros,
                                                                          QWidget* parent)
 : QWidget(parent)
 {
@@ -78,7 +88,8 @@ GroupAndNameHierarchyViewController::GroupAndNameHierarchyViewController(const i
     m_previousBrowserTabIndex = -1;
     m_browserWindowIndex = browserWindowIndex;
     
-    QWidget* allOnOffWidget = createAllOnOffControls();
+    QWidget* allOnOffWidget = createAllOnOffControls(objectNameForMacros,
+                                                     descriptiveNameForMacros);
 
     m_modelTreeWidgetLayout = new QVBoxLayout();
     WuQtUtilities::setLayoutSpacingAndMargins(m_modelTreeWidgetLayout, 0, 0);
@@ -176,19 +187,37 @@ GroupAndNameHierarchyViewController::updateGraphics()
 
 /**
  * Create buttons for all on and off
+ *
+ * @param objectNameForMacros
+ *    Name of this object for macros
+ * @param descriptiveNameForMacros
+ *    Descriptive name for macros
  */
 QWidget*
-GroupAndNameHierarchyViewController::createAllOnOffControls()
+GroupAndNameHierarchyViewController::createAllOnOffControls(const QString& objectNameForMacros,
+                                                            const QString& descriptiveNameForMacros)
 {
+    WuQMacroManager* macroManager = WuQMacroManager::instance();
+    
     QLabel* allLabel = new QLabel("All: ");
     
     QPushButton* onPushButton = new QPushButton("On");
+    onPushButton->setToolTip("Turn all on");
+    onPushButton->setObjectName(objectNameForMacros
+                                + ":AllOn");
     QObject::connect(onPushButton, SIGNAL(clicked()),
                      this, SLOT(allOnPushButtonClicked()));
+    macroManager->addMacroSupportToObject(onPushButton,
+                                          "Turn on all in " + descriptiveNameForMacros + " selection");
     
     QPushButton* offPushButton = new QPushButton("Off");
+    offPushButton->setToolTip("Turn all of");
+    offPushButton->setObjectName(objectNameForMacros
+                                + ":AllOff");
     QObject::connect(offPushButton, SIGNAL(clicked()),
                      this, SLOT(allOffPushButtonClicked()));
+    macroManager->addMacroSupportToObject(offPushButton,
+                                          "Turn off all in " + descriptiveNameForMacros + " selection");
     
     QWidget* w = new QWidget();
     QHBoxLayout* layout = new QHBoxLayout(w);

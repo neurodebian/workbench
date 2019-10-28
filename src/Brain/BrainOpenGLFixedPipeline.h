@@ -115,10 +115,12 @@ namespace caret {
         
     protected:
         void drawModelsImplementation(const int32_t windowIndex,
+                                      const UserInputModeEnum::Enum windowUserInputMode,
                                       Brain* brain,
                                       const std::vector<const BrainOpenGLViewportContent*>& viewportContents) override;
         
         void selectModelImplementation(const int32_t windowIndex,
+                                       const UserInputModeEnum::Enum windowUserInputMode,
                                        Brain* brain,
                                        const BrainOpenGLViewportContent* viewportContent,
                                        const int32_t mouseX,
@@ -126,6 +128,7 @@ namespace caret {
                                        const bool applySelectionBackgroundFiltering) override;
         
         void projectToModelImplementation(const int32_t windowIndex,
+                                          const UserInputModeEnum::Enum windowUserInputMode,
                                           Brain* brain,
                                           const BrainOpenGLViewportContent* viewportContent,
                                           const int32_t mouseX,
@@ -192,10 +195,12 @@ namespace caret {
                               ModelChartTwo* chartData,
                               const int32_t viewport[4]);
         
-        void drawSurfaceModel(ModelSurface* surfaceModel,
-                                   const int32_t viewport[4]);
+        void drawSurfaceModel(BrowserTabContent* browserTabContent,
+                              ModelSurface* surfaceModel,
+                              const int32_t viewport[4]);
         
         void drawSurface(Surface* surface,
+                         const float surfaceScaling,
                          const float* nodeColoringRGBA,
                          const bool drawAnnotationsInModelSpaceFlag);
         
@@ -448,6 +453,8 @@ namespace caret {
         
         void drawWindowAnnotations(const int windowViewport[4]);
         
+        void drawSpacerAnnotations(const BrainOpenGLViewportContent* tabContent);
+        
         void drawTabAnnotations(const BrainOpenGLViewportContent* tabContent);
         
         void drawChartCoordinateSpaceAnnotations(const BrainOpenGLViewportContent* viewportContent);
@@ -506,8 +513,13 @@ namespace caret {
                                  const float height,
                                  const float rgb[3]);
         
+        void applyVolumePropertiesOpacity();
+        
         /** Index of window */
         int32_t m_windowIndex = -1;
+        
+        /** User input mode for window */
+        UserInputModeEnum::Enum m_windowUserInputMode;
         
         /** Indicates OpenGL has been initialized */
         bool initializedOpenGLFlag;
@@ -612,7 +624,7 @@ namespace caret {
         friend class BrainOpenGLChartTwoDrawingFixedPipeline;
         friend class BrainOpenGLVolumeObliqueSliceDrawing;
         friend class BrainOpenGLVolumeSliceDrawing;
-        friend class OldBrainOpenGLVolumeSliceDrawing;
+        friend class BrainOpenGLVolumeTextureSliceDrawing;
     };
 
 #ifdef __BRAIN_OPENGL_FIXED_PIPELINE_DEFINE_H

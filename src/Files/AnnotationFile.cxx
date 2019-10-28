@@ -44,7 +44,9 @@
 #include "EventAnnotationGrouping.h"
 #include "EventAnnotationTextSubstitutionInvalidate.h"
 #include "EventBrowserTabDelete.h"
+#include "EventBrowserTabNewClone.h"
 #include "EventManager.h"
+#include "EventTileTabsConfigurationModification.h"
 #include "GiftiMetaData.h"
 #include "SceneClass.h"
 #include "SceneClassAssistant.h"
@@ -221,7 +223,11 @@ AnnotationFile::initializeAnnotationFile()
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_ANNOTATION_GROUP_GET_WITH_KEY);
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_ANNOTATION_GROUPING);
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_ANNOTATION_TEXT_SUBSTITUTION_INVALIDATE);
-    EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_BROWSER_TAB_DELETE);
+    
+    /* NEED THIS AFTER Tile Tabs have been modified */
+    EventManager::get()->addProcessedEventListener(this, EventTypeEnum::EVENT_TILE_TABS_MODIFICATION);
+    EventManager::get()->addProcessedEventListener(this, EventTypeEnum::EVENT_BROWSER_TAB_DELETE);
+    EventManager::get()->addProcessedEventListener(this, EventTypeEnum::EVENT_BROWSER_TAB_NEW_CLONE);
 }
 
 /**
@@ -237,9 +243,14 @@ AnnotationGroup*
 AnnotationFile::getSpaceAnnotationGroup(const Annotation* annotation)
 {
     const AnnotationCoordinateSpaceEnum::Enum annotationSpace = annotation->getCoordinateSpace();
+    SpacerTabIndex annotationSpacerTabIndex;
+    
     int32_t annotationTabOrWindowIndex = -1;
     switch (annotationSpace) {
         case AnnotationCoordinateSpaceEnum::CHART:
+            break;
+        case AnnotationCoordinateSpaceEnum::SPACER:
+            annotationSpacerTabIndex = annotation->getSpacerTabIndex();
             break;
         case AnnotationCoordinateSpaceEnum::STEREOTAXIC:
             break;
@@ -267,6 +278,11 @@ AnnotationFile::getSpaceAnnotationGroup(const Annotation* annotation)
                     case AnnotationCoordinateSpaceEnum::SURFACE:
                         return group;
                         break;
+                    case AnnotationCoordinateSpaceEnum::SPACER:
+                        if (annotationSpacerTabIndex == group->getSpacerTabIndex()) {
+                            return group;
+                        }
+                        break;
                     case AnnotationCoordinateSpaceEnum::VIEWPORT:
                         CaretAssert(0);
                         break;
@@ -290,6 +306,8 @@ AnnotationFile::getSpaceAnnotationGroup(const Annotation* annotation)
             CaretAssert((annotationTabOrWindowIndex >= 0)
                         && (annotationTabOrWindowIndex < BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_TABS));
             break;
+        case AnnotationCoordinateSpaceEnum::SPACER:
+            break;
         case AnnotationCoordinateSpaceEnum::VIEWPORT:
             CaretAssert(0);
             break;
@@ -303,7 +321,8 @@ AnnotationFile::getSpaceAnnotationGroup(const Annotation* annotation)
                                                  AnnotationGroupTypeEnum::SPACE,
                                                  generateUniqueKey(),
                                                  annotationSpace,
-                                                 annotationTabOrWindowIndex);
+                                                 annotationTabOrWindowIndex,
+                                                 annotationSpacerTabIndex);
     group->setItemParent(this);
     m_annotationGroups.push_back(QSharedPointer<AnnotationGroup>(group));
     
@@ -445,9 +464,16 @@ AnnotationFile::receiveEvent(Event* event)
         CaretAssert(deleteEvent);
         
         const int32_t tabIndex = deleteEvent->getBrowserTabIndex();
-        if (removeAnnotationsInTab(tabIndex)) {
-            deleteEvent->setEventProcessed();
-        }
+        removeAnnotationsInTab(tabIndex);
+    }
+    else if (event->getEventType() == EventTypeEnum::EVENT_BROWSER_TAB_NEW_CLONE) {
+        EventBrowserTabNewClone* cloneTabEvent = dynamic_cast<EventBrowserTabNewClone*>(event);
+        CaretAssert(cloneTabEvent);
+        
+        const int32_t cloneToTabIndex   = cloneTabEvent->getNewBrowserTabIndex();
+        const int32_t cloneFromTabIndex = cloneTabEvent->getIndexOfBrowserTabThatWasCloned();
+        cloneAnnotationsFromTabToTab(cloneFromTabIndex,
+                                     cloneToTabIndex);
     }
     else if (event->getEventType() == EventTypeEnum::EVENT_ANNOTATION_TEXT_SUBSTITUTION_INVALIDATE) {
         EventAnnotationTextSubstitutionInvalidate* textSubEvent = dynamic_cast<EventAnnotationTextSubstitutionInvalidate*>(event);
@@ -463,6 +489,11 @@ AnnotationFile::receiveEvent(Event* event)
         }
         
         textSubEvent->setEventProcessed();
+    }
+    else if (event->getEventType() == EventTypeEnum::EVENT_TILE_TABS_MODIFICATION) {
+        EventTileTabsConfigurationModification* modEvent = dynamic_cast<EventTileTabsConfigurationModification*>(event);
+        CaretAssert(modEvent);
+        updateSpacerAnnotationsAfterTileTabsModification(modEvent);
     }
 }
 
@@ -638,6 +669,7 @@ void
 AnnotationFile::addAnnotationGroupDuringFileReading(const AnnotationGroupTypeEnum::Enum groupType,
                                                     const AnnotationCoordinateSpaceEnum::Enum coordinateSpace,
                                                     const int32_t tabOrWindowIndex,
+                                                    const SpacerTabIndex& spacerTabIndex,
                                                     const int32_t uniqueKey,
                                                     const std::vector<Annotation*>& annotations)
 {
@@ -653,6 +685,12 @@ AnnotationFile::addAnnotationGroupDuringFileReading(const AnnotationGroupTypeEnu
     
     switch (coordinateSpace) {
         case AnnotationCoordinateSpaceEnum::CHART:
+            break;
+        case AnnotationCoordinateSpaceEnum::SPACER:
+            if ( ! spacerTabIndex.isValid()) {
+                throw DataFileException("Invalid spacer tab index for group while reading annotation file: "
+                                        + spacerTabIndex.toString());
+            }
             break;
         case AnnotationCoordinateSpaceEnum::STEREOTAXIC:
             break;
@@ -707,6 +745,15 @@ AnnotationFile::addAnnotationGroupDuringFileReading(const AnnotationGroupTypeEnu
                                                     + AnnotationCoordinateSpaceEnum::toGuiName(coordinateSpace)
                                                     + ".  Only one space group for each space is allowed.");
                             break;
+                        case AnnotationCoordinateSpaceEnum::SPACER:
+                            if (spacerTabIndex == group->getSpacerTabIndex()) {
+                                throw DataFileException("There is more than one annotation space group with space "
+                                                        + AnnotationCoordinateSpaceEnum::toGuiName(coordinateSpace)
+                                                        + " for spacer tab  "
+                                                        + spacerTabIndex.toString()
+                                                        + ".  Only one space group for each space is allowed.");
+                            }
+                            break;
                         case AnnotationCoordinateSpaceEnum::TAB:
                             if (tabOrWindowIndex == group->getTabOrWindowIndex()) {
                                 throw DataFileException("There is more than one annotation space group with space "
@@ -738,7 +785,8 @@ AnnotationFile::addAnnotationGroupDuringFileReading(const AnnotationGroupTypeEnu
                                                  groupType,
                                                  uniqueKey,
                                                  coordinateSpace,
-                                                 tabOrWindowIndex);
+                                                 tabOrWindowIndex,
+                                                 spacerTabIndex);
     for (std::vector<Annotation*>::const_iterator annIter = annotations.begin();
          annIter != annotations.end();
          annIter++) {
@@ -903,6 +951,50 @@ AnnotationFile::removeAnnotationPrivate(Annotation* annotation,
 }
 
 /**
+ * Clone annotations in 'fromTabIndex' to 'toTabIndex'
+ *
+ * @param fromTabIndex
+ *     Clone annotations from this tab index
+ * @param toTabIndex
+ *     Clone annotations into this tab index
+ * @return
+ *     True if any annotations were cloned.
+ */
+bool
+AnnotationFile::cloneAnnotationsFromTabToTab(const int32_t fromTabIndex,
+                                             const int32_t toTabIndex)
+{
+    /*
+     * Find annotation group(s) in tab space
+     * with the given tab index.
+     */
+    bool annotationsWereClonedFlag(false);
+    for (AnnotationGroupIterator groupIter = m_annotationGroups.begin();
+         groupIter != m_annotationGroups.end();
+         groupIter++) {
+        QSharedPointer<AnnotationGroup>& group = *groupIter;
+        if (group->getCoordinateSpace() == AnnotationCoordinateSpaceEnum::TAB) {
+            if (group->getTabOrWindowIndex() == fromTabIndex) {
+                std::vector<Annotation*> annotations;
+                group->getAllAnnotations(annotations);
+                
+                for (auto ann : annotations) {
+                    CaretAssert(ann->getTabIndex() == fromTabIndex);
+                    Annotation* newAnn = ann->clone();
+                    newAnn->setTabIndex(toTabIndex);
+                    addAnnotationPrivate(newAnn,
+                                         generateUniqueKey());
+                    annotationsWereClonedFlag = true;
+                }
+            }
+        }
+    }
+    
+    return annotationsWereClonedFlag;
+}
+
+
+/**
  * Remove all annotations in tab space in the given tab.
  *
  * @param tabIndex
@@ -984,6 +1076,26 @@ AnnotationFile::getAllAnnotationGroups(std::vector<AnnotationGroup*>& annotation
          groupIter++) {
         annotationGroupsOut.push_back((*groupIter).data());
     }
+}
+
+/**
+ * Does this file contain annotations in the given coordinate space?
+ * 
+ * @param coordinateSpace
+ *     The coordinate space.
+ * @return 
+ *     True if there are annotations in the given coordinate space, else false.
+ */
+bool
+AnnotationFile::hasAnnotationsInCoordinateSpace(const AnnotationCoordinateSpaceEnum::Enum coordinateSpace) const
+{
+    for (const auto groupIter : m_annotationGroups) {
+        if (groupIter->getCoordinateSpace() == coordinateSpace) {
+            return true;
+        }
+    }
+    
+    return false;
 }
 
 /**
@@ -1093,7 +1205,8 @@ AnnotationFile::processGroupingAnnotations(EventAnnotationGrouping* groupingEven
                                                  AnnotationGroupTypeEnum::USER,
                                                  generateUniqueKey(),
                                                  spaceGroup->getCoordinateSpace(),
-                                                 spaceGroup->getTabOrWindowIndex());
+                                                 spaceGroup->getTabOrWindowIndex(),
+                                                 spaceGroup->getSpacerTabIndex());
     
     for (std::vector<QSharedPointer<Annotation> >::iterator annPtrIter = movedAnnotations.begin();
          annPtrIter != movedAnnotations.end();
@@ -1246,7 +1359,8 @@ AnnotationFile::processRegroupingAnnotations(EventAnnotationGrouping* groupingEv
                                                          AnnotationGroupTypeEnum::USER,
                                                          reuseUniqueKeyOrGenerateNewUniqueKey(userGroupUniqueKey),
                                                          spaceGroup->getCoordinateSpace(),
-                                                         spaceGroup->getTabOrWindowIndex());
+                                                         spaceGroup->getTabOrWindowIndex(),
+                                                         spaceGroup->getSpacerTabIndex());
             
             bool allValidFlag = true;
             std::vector<QSharedPointer<Annotation> > movedAnnotations;
@@ -1545,6 +1659,15 @@ AnnotationFile::readFile(const AString& filename)
 void
 AnnotationFile::writeFile(const AString& filename)
 {
+    /*
+     * JWH, 11 Sep 2019
+     * WB-866 removed the ".annot" extension for the annotation file.
+     * It is possible that a user may have a disk annotation file in
+     * multiple scenes.  If this message caused the user to change
+     * the file extension from ".annot" to ".wb_annot", it could break
+     * other scenes if they are not updated.
+     * So, continue avoiding a log message if ".annot" extension is present.
+     */
     if (!(filename.endsWith(".annot") || filename.endsWith(".wb_annot")))
     {
         CaretLogWarning("annotation file '" + filename + "' should be saved ending in .annot");
@@ -1760,7 +1883,8 @@ AnnotationFile::appendContentFromDataFile(const DataFileContentCopyMoveParameter
                                                 AnnotationGroupTypeEnum::USER,
                                                 generateUniqueKey(),
                                                 groupToCopy->getCoordinateSpace(),
-                                                groupToCopy->getTabOrWindowIndex());
+                                                groupToCopy->getTabOrWindowIndex(),
+                                                groupToCopy->getSpacerTabIndex());
                     group->setItemParent(this);
                     m_annotationGroups.push_back(QSharedPointer<AnnotationGroup>(group));
                     break;
@@ -2039,4 +2163,229 @@ AnnotationFile::isItemSelectedForEditingInWindow(const int32_t /*windowIndex*/)
      */
     return false;
 }
+
+/**
+ * Update spacer annotations after tile tabs configuration is modified.
+ *
+ * @param modEvent
+ *     The tile tabs modify event.
+ */
+void
+AnnotationFile::updateSpacerAnnotationsAfterTileTabsModification(const EventTileTabsConfigurationModification* modEvent)
+{
+    const int32_t rowColumnIndex = modEvent->getRowColumnIndex();
+    const bool rowFlag = (modEvent->getRowColumnType() == EventTileTabsConfigurationModification::RowColumnType::ROW);
+    
+    int32_t deleteIndex(-1);
+    int32_t shiftStartIndex(-1);
+    int32_t duplicateFromIndex(-1);
+    int32_t duplicateToIndex(-1);
+    int32_t moveOneIndex(-1);
+    int32_t moveTwoIndex(-1);
+    
+    switch (modEvent->getOperation()) {
+        case EventTileTabsConfigurationModification::Operation::DELETE_IT:
+            deleteIndex     = rowColumnIndex;
+            shiftStartIndex = rowColumnIndex + 1;
+            break;
+        case EventTileTabsConfigurationModification::Operation::DUPLICATE_AFTER:
+        {
+            shiftStartIndex = rowColumnIndex + 1;
+            duplicateFromIndex       = rowColumnIndex;
+            duplicateToIndex         = rowColumnIndex + 1;
+        }
+            break;
+        case EventTileTabsConfigurationModification::Operation::DUPLICATE_BEFORE:
+        {
+            shiftStartIndex = rowColumnIndex;
+            duplicateFromIndex       = rowColumnIndex + 1;
+            duplicateToIndex         = rowColumnIndex;
+        }
+            break;
+        case EventTileTabsConfigurationModification::Operation::INSERT_SPACER_BEFORE:
+            shiftStartIndex = rowColumnIndex;
+            break;
+        case EventTileTabsConfigurationModification::Operation::INSERT_SPACER_AFTER:
+            shiftStartIndex = rowColumnIndex + 1;
+            break;
+        case EventTileTabsConfigurationModification::Operation::MOVE_AFTER:
+            moveOneIndex = rowColumnIndex;
+            moveTwoIndex = rowColumnIndex + 1;
+            break;
+        case EventTileTabsConfigurationModification::Operation::MOVE_BEFORE:
+            moveOneIndex = rowColumnIndex;
+            moveTwoIndex = rowColumnIndex - 1;
+            break;
+    }
+
+    std::vector<Annotation*> deleteAnnotations;
+    std::vector<Annotation*> duplicatedAnnotations;
+    std::vector<std::pair<QSharedPointer<AnnotationGroup>, Annotation*>> modifiedAnnotations;
+    
+    std::set<Annotation*> processedAnnotations;
+    
+    const int32_t windowIndex = modEvent->getWindowIndex();
+    for (auto group : m_annotationGroups) {
+        std::vector<QSharedPointer<Annotation>> removeAnnotationsFromGroup;
+        
+        if (group->getCoordinateSpace() == AnnotationCoordinateSpaceEnum::SPACER) {
+            const int32_t numAnn = group->getNumberOfAnnotations();
+            for (int32_t iAnn = 0; iAnn < numAnn; iAnn++) {
+                Annotation* ann = group->getAnnotation(iAnn);
+                CaretAssert(ann);
+                SpacerTabIndex spacerTabIndex = ann->getSpacerTabIndex();
+                
+                if (spacerTabIndex.getWindowIndex() == windowIndex) {
+                    int32_t rowIndex = spacerTabIndex.getRowIndex();
+                    int32_t columnIndex = spacerTabIndex.getColumnIndex();
+                    
+                    switch (modEvent->getOperation()) {
+                        case EventTileTabsConfigurationModification::Operation::DELETE_IT:
+                        {
+                            int32_t rcIndex = (rowFlag ? rowIndex : columnIndex);
+                            if (rcIndex == deleteIndex) {
+                                deleteAnnotations.push_back(ann);
+                            }
+                            
+                            /*
+                             * Shift annotations
+                             */
+                            if (rcIndex >= shiftStartIndex) {
+                                rcIndex = rcIndex - 1;
+                                
+                                if (rowFlag) {
+                                    rowIndex = rcIndex;
+                                }
+                                else {
+                                    columnIndex = rcIndex;
+                                }
+                            }
+                        }
+                            break;
+                        case EventTileTabsConfigurationModification::Operation::DUPLICATE_AFTER:
+                        case EventTileTabsConfigurationModification::Operation::DUPLICATE_BEFORE:
+                        {
+                            int32_t rcIndex = (rowFlag ? rowIndex : columnIndex);
+                            /*
+                             * Shift annotations
+                             */
+                            if (rcIndex >= shiftStartIndex) {
+                                rcIndex = rcIndex + 1;
+                            }
+                            
+                            /*
+                             * Then duplicate and yes, ok to use rowIndex even though it has changed
+                             */
+                            if (rcIndex == duplicateFromIndex) {
+                                Annotation* dupAnn = ann->clone();
+                                SpacerTabIndex dupAnnSTI = dupAnn->getSpacerTabIndex();
+                                if (rowFlag) {
+                                    dupAnnSTI.setRowIndex(duplicateToIndex);
+                                }
+                                else {
+                                    dupAnnSTI.setColumnIndex(duplicateToIndex);
+                                }
+                                dupAnn->setSpacerTabIndex(dupAnnSTI);
+                                CaretLogFine("Copying from "
+                                             + AString::number(rcIndex) + " to " + AString::number(duplicateToIndex)
+                                             +  " " + ann->toString());
+                                duplicatedAnnotations.push_back(dupAnn);
+                            }
+                            
+                            if (rowFlag) {
+                                rowIndex = rcIndex;
+                            }
+                            else {
+                                columnIndex = rcIndex;
+                            }
+                        }
+                            break;
+                        case EventTileTabsConfigurationModification::Operation::INSERT_SPACER_BEFORE:
+                        case EventTileTabsConfigurationModification::Operation::INSERT_SPACER_AFTER:
+                        {
+                            int32_t rcIndex = (rowFlag ? rowIndex : columnIndex);
+                            if (rcIndex >= shiftStartIndex) {
+                                rcIndex = rcIndex + 1;
+                            }
+                            if (rowFlag) {
+                                rowIndex = rcIndex;
+                            }
+                            else {
+                                columnIndex = rcIndex;
+                            }
+                        }
+                            break;
+                        case EventTileTabsConfigurationModification::Operation::MOVE_AFTER:
+                        case EventTileTabsConfigurationModification::Operation::MOVE_BEFORE:
+                        {
+                            int32_t rcIndex = (rowFlag ? rowIndex : columnIndex);
+                            int32_t newIndex(-1);
+                            if (rcIndex == moveOneIndex) {
+                                newIndex = moveTwoIndex;
+                            }
+                            else if (rcIndex == moveTwoIndex) {
+                                newIndex = moveOneIndex;
+                            }
+                            if (newIndex >= 0) {
+                                if (rowFlag) {
+                                    rowIndex = newIndex;
+                                }
+                                else {
+                                    columnIndex = newIndex;
+                                }
+                            }
+                        }
+                            break;
+                    }
+                    
+                    if ((rowIndex != spacerTabIndex.getRowIndex())
+                        || (columnIndex != spacerTabIndex.getColumnIndex())) {
+                        spacerTabIndex.setRowIndex(rowIndex);
+                        spacerTabIndex.setColumnIndex(columnIndex);
+                        ann->setSpacerTabIndex(spacerTabIndex);
+                        CaretLogFine("Moved from "
+                                     + ann->getSpacerTabIndex().toString()
+                                     + " to " + spacerTabIndex.toString() + " " + ann->toString());
+                        modifiedAnnotations.push_back(std::make_pair(group, ann));
+                    }
+                }
+            }
+        }
+        
+    }
+    
+    /*
+     * Move modified annotations into correct annotation group.
+     */
+    for (auto groupAndAnn : modifiedAnnotations) {
+        QSharedPointer<AnnotationGroup> group = groupAndAnn.first;
+        Annotation* ann = groupAndAnn.second;
+        
+        QSharedPointer<Annotation> annSharedPointer;
+        if (group->removeAnnotation(ann,
+                                    annSharedPointer)) {
+            addAnnotationPrivateSharedPointer(annSharedPointer,
+                                              ann->getUniqueKey());
+        }
+    }
+    
+    /*
+     * Add duplicated anntotations.
+     */
+    for (auto ann : duplicatedAnnotations) {
+        addAnnotationPrivate(ann,
+                             generateUniqueKey());
+    }
+    
+    /*
+     * Delete annotations
+     */
+    for (auto ann : deleteAnnotations) {
+        const bool keepAnnotationForUndoRedoFlag(false);
+        removeAnnotationPrivate(ann,
+                                keepAnnotationForUndoRedoFlag);
+    }
+}
+
+
 

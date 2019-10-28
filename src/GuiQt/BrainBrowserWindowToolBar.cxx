@@ -44,7 +44,6 @@
 #include <QRadioButton>
 #include <QSpinBox>
 #include <QStyleFactory>
-#include <QTabBar>
 #include <QTextEdit>
 #include <QTimer>
 #include <QToolButton>
@@ -68,6 +67,7 @@
 #include "BrainBrowserWindowToolBarTab.h"
 #include "BrainBrowserWindowToolBarTabPopUpMenu.h"
 #include "BrainBrowserWindowToolBarVolumeMontage.h"
+#include "BrainOpenGLWidget.h"
 #include "BrainStructure.h"
 #include "BrowserTabContent.h"
 #include "BrowserWindowContent.h"
@@ -78,6 +78,7 @@
 #include "CursorDisplayScoped.h"
 #include "DeveloperFlagsEnum.h"
 #include "DisplayPropertiesBorders.h"
+#include "EventBrowserTabNewClone.h"
 #include "EventBrowserTabDelete.h"
 #include "EventBrowserTabGet.h"
 #include "EventBrowserTabGetAll.h"
@@ -93,10 +94,12 @@
 #include "EventUserInterfaceUpdate.h"
 #include "EventManager.h"
 #include "EventModelGetAll.h"
+#include "EventSceneActive.h"
 #include "EventSurfaceColoringInvalidate.h"
 #include "EventUpdateYokedWindows.h"
 #include "GuiManager.h"
 #include "LockAspectWarningDialog.h"
+#include "MacDuplicateMenuBar.h"
 #include "Model.h"
 #include "ModelChart.h"
 #include "ModelChartTwo.h"
@@ -107,6 +110,7 @@
 #include "ModelVolume.h"
 #include "ModelWholeBrain.h"
 #include "OverlaySet.h"
+#include "Scene.h"
 #include "SceneAttributes.h"
 #include "SceneClass.h"
 #include "SceneIntegerArray.h"
@@ -123,7 +127,9 @@
 #include "VolumeSurfaceOutlineSetModel.h"
 #include "WuQDataEntryDialog.h"
 #include "WuQFactory.h"
+#include "WuQMacroManager.h"
 #include "WuQMessageBox.h"
+#include "WuQTabBar.h"
 #include "WuQWidgetObjectGroup.h"
 #include "WuQtUtilities.h"
 
@@ -144,6 +150,8 @@ using namespace caret;
  *    Action to show layers tool box.
  * @param toolBarLockWindowAndAllTabAspectRatioButton
  *    Button to lock window's aspect ratio and aspect ratio of all tabs.
+ * @param objectNamePrefix
+ *    Prefix for object name
  * @param parent
  *    Parent for this toolbar.
  */
@@ -152,6 +160,7 @@ BrainBrowserWindowToolBar::BrainBrowserWindowToolBar(const int32_t browserWindow
                                                      QAction* overlayToolBoxAction,
                                                      QAction* layersToolBoxAction,
                                                      QToolButton* toolBarLockWindowAndAllTabAspectRatioButton,
+                                                     const QString& objectNamePrefix,
                                                      BrainBrowserWindow* parentBrainBrowserWindow)
 : QToolBar(parentBrainBrowserWindow)
 {
@@ -175,13 +184,14 @@ BrainBrowserWindowToolBar::BrainBrowserWindowToolBar(const int32_t browserWindow
     /*
      * Needed for saving and restoring window state in main window
      */
-    setObjectName("BrainBrowserWindowToolBar_"
-                  + AString::number(browserWindowIndex));
+    m_objectNamePrefix = (objectNamePrefix
+                          + ":ToolBar");
+    setObjectName(m_objectNamePrefix);
     
     /*
      * Create tab bar that displays models.
      */
-    this->tabBar = new QTabBar();
+    this->tabBar = new WuQTabBar();
     if (WuQtUtilities::isSmallDisplay()) {
         this->tabBar->setStyleSheet("QTabBar::tab:selected {"
                                     "    font: bold;"
@@ -232,7 +242,12 @@ BrainBrowserWindowToolBar::BrainBrowserWindowToolBar(const int32_t browserWindow
                      this, SLOT(tabCloseSelected(int)));
     QObject::connect(this->tabBar, SIGNAL(tabMoved(int,int)),
                      this, SLOT(tabMoved(int,int)));
+    this->tabBar->setObjectName(m_objectNamePrefix
+                                + ":Tab");
     
+    WuQMacroManager::instance()->addMacroSupportToObjectWithToolTip(qobject_cast<QTabBar*>(this->tabBar),
+                                                                    "ToolBar Tab",
+                                                                    "Select Tab");
 
     /*
      * Add context menu
@@ -255,6 +270,10 @@ BrainBrowserWindowToolBar::BrainBrowserWindowToolBar(const int32_t browserWindow
                                                          this,
                                                          this,
                                                          SLOT(customViewActionTriggered()));
+    this->customViewAction->setObjectName(m_objectNamePrefix
+                                          + ":CustomView");
+    WuQMacroManager::instance()->addMacroSupportToObject(this->customViewAction,
+                                                         "Display custom view dialog");
     
     /*
      * Actions at right side of toolbar
@@ -267,9 +286,52 @@ BrainBrowserWindowToolBar::BrainBrowserWindowToolBar(const int32_t browserWindow
     
     QToolButton* helpDialogToolButton = new QToolButton();
     helpDialogToolButton->setDefaultAction(GuiManager::get()->getHelpViewerDialogDisplayAction());
-    
+
+    /*
+     * Scene button
+     */
     QToolButton* sceneDialogToolButton = new QToolButton();
+    sceneDialogToolButton->setText("");
+    sceneDialogToolButton->setIcon(GuiManager::get()->getSceneDialogDisplayAction()->icon());
     sceneDialogToolButton->setDefaultAction(GuiManager::get()->getSceneDialogDisplayAction());
+    QObject::connect(sceneDialogToolButton, &QToolButton::clicked,
+                     this, &BrainBrowserWindowToolBar::sceneToolButtonClicked);
+
+    /*
+     * Movie button
+     */
+    QIcon movieIcon;
+    QString movieButtonText;
+    if ( ! WuQtUtilities::loadIcon(":/ToolBar/movie.png",
+                                   movieIcon)) {
+        movieButtonText = "Movie";
+    }
+    const QString movieButtonToolTip("Show movie recording window");
+    m_movieToolButton = new QToolButton();
+    m_movieToolButton->setText(movieButtonText);
+    m_movieToolButton->setIcon(movieIcon);
+    m_movieToolButton->setToolTip(movieButtonToolTip);
+    QObject::connect(m_movieToolButton, &QToolButton::clicked,
+                     parentBrainBrowserWindow, &BrainBrowserWindow::processMovieRecording);
+    
+    /*
+     * Macros button
+     */
+    QIcon macrosIcon;
+    QAction* macrosAction = new QAction();
+    if (WuQtUtilities::loadIcon(":/ToolBar/macro.png",
+                                macrosIcon)) {
+        macrosAction->setIcon(macrosIcon);
+    }
+    else {
+        macrosAction->setText("M");
+    }
+    macrosAction->setToolTip("Show macros window");
+    QObject::connect(macrosAction, &QAction::triggered,
+                     this, &BrainBrowserWindowToolBar::showMacroDialog);
+    QToolButton* macrosToolButton = new QToolButton();
+    macrosToolButton->setDefaultAction(macrosAction);
+    macrosAction->setParent(macrosToolButton);
     
     /*
      * Toolbar action and tool button at right of the tab bar
@@ -297,6 +359,10 @@ BrainBrowserWindowToolBar::BrainBrowserWindowToolBar(const int32_t browserWindow
     this->toolBarToolButtonAction->blockSignals(false);
     QToolButton* toolBarToolButton = new QToolButton();
     toolBarToolButton->setDefaultAction(this->toolBarToolButtonAction);
+    toolBarToolButtonAction->setObjectName(m_objectNamePrefix
+                                           + ":ShowToolBar");
+    WuQMacroManager::instance()->addMacroSupportToObject(toolBarToolButtonAction,
+                                                         "Show toolbar");
     
     /*
      * Toolbox control at right of the tab bar
@@ -307,17 +373,25 @@ BrainBrowserWindowToolBar::BrainBrowserWindowToolBar(const int32_t browserWindow
     QToolButton* layersToolBoxToolButton = new QToolButton();
     layersToolBoxToolButton->setDefaultAction(layersToolBoxAction);
     
+    QToolButton* dataToolTipsToolButton = new QToolButton();
+    dataToolTipsToolButton->setDefaultAction(GuiManager::get()->getDataToolTipsAction(dataToolTipsToolButton));
+    
     /*
      * Make all tool buttons the same height
      */
-    WuQtUtilities::matchWidgetHeights(helpDialogToolButton,
+    WuQtUtilities::matchWidgetHeights(macrosToolButton,
+                                      m_movieToolButton,
+                                      helpDialogToolButton,
                                       informationDialogToolButton,
                                       identifyDialogToolButton,
                                       sceneDialogToolButton,
                                       toolBarToolButton,
                                       overlayToolBoxToolButton,
-                                      layersToolBoxToolButton);
+                                      layersToolBoxToolButton,
+                                      dataToolTipsToolButton);
     
+    WuQtUtilities::setToolButtonStyleForQt5Mac(macrosToolButton);
+    WuQtUtilities::setToolButtonStyleForQt5Mac(m_movieToolButton);
     WuQtUtilities::setToolButtonStyleForQt5Mac(helpDialogToolButton);
     WuQtUtilities::setToolButtonStyleForQt5Mac(informationDialogToolButton);
     WuQtUtilities::setToolButtonStyleForQt5Mac(identifyDialogToolButton);
@@ -325,6 +399,7 @@ BrainBrowserWindowToolBar::BrainBrowserWindowToolBar(const int32_t browserWindow
     WuQtUtilities::setToolButtonStyleForQt5Mac(toolBarToolButton);
     WuQtUtilities::setToolButtonStyleForQt5Mac(overlayToolBoxToolButton);
     WuQtUtilities::setToolButtonStyleForQt5Mac(layersToolBoxToolButton);
+    WuQtUtilities::setToolButtonStyleForQt5Mac(dataToolTipsToolButton);
     
     /*
      * Tab bar and controls at far right side of toolbar
@@ -333,9 +408,12 @@ BrainBrowserWindowToolBar::BrainBrowserWindowToolBar(const int32_t browserWindow
     QHBoxLayout* tabBarLayout = new QHBoxLayout(this->tabBarWidget);
     WuQtUtilities::setLayoutSpacingAndMargins(tabBarLayout, 2, 1);
     tabBarLayout->addWidget(this->tabBar, 100);
+    tabBarLayout->addWidget(dataToolTipsToolButton);
     tabBarLayout->addWidget(helpDialogToolButton);
     tabBarLayout->addWidget(informationDialogToolButton);
     tabBarLayout->addWidget(identifyDialogToolButton);
+    tabBarLayout->addWidget(m_movieToolButton);
+    tabBarLayout->addWidget(macrosToolButton);
     tabBarLayout->addWidget(sceneDialogToolButton);
     tabBarLayout->addWidget(toolBarToolButton);
     tabBarLayout->addWidget(overlayToolBoxToolButton);
@@ -428,11 +506,11 @@ BrainBrowserWindowToolBar::BrainBrowserWindowToolBar(const int32_t browserWindow
      * Arrange the tabbar and the toolbar vertically.
      */
     QWidget* w = new QWidget();
-    QVBoxLayout* layout = new QVBoxLayout(w);
-    WuQtUtilities::setLayoutSpacingAndMargins(layout, 1, 0);
-    layout->addWidget(this->tabBarWidget);
-    layout->addWidget(m_toolbarWidget);
-    layout->addWidget(this->userInputControlsWidget);
+    m_toolBarMainLayout = new QVBoxLayout(w);
+    WuQtUtilities::setLayoutSpacingAndMargins(m_toolBarMainLayout, 1, 0);
+    m_toolBarMainLayout->addWidget(this->tabBarWidget);
+    m_toolBarMainLayout->addWidget(m_toolbarWidget);
+    m_toolBarMainLayout->addWidget(this->userInputControlsWidget);
     
     this->addWidget(w);
     
@@ -461,6 +539,11 @@ BrainBrowserWindowToolBar::BrainBrowserWindowToolBar(const int32_t browserWindow
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_BROWSER_WINDOW_CREATE_TABS);
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_BROWSER_WINDOW_TILE_TAB_OPERATION);
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_USER_INTERFACE_UPDATE);
+
+    QObject::connect(this->tabBar, &WuQTabBar::mousePressedSignal,
+                     this, &BrainBrowserWindowToolBar::tabBarMousePressedSlot);
+    QObject::connect(this->tabBar, &WuQTabBar::mouseReleasedSignal,
+                     this, &BrainBrowserWindowToolBar::tabBarMouseReleasedSlot);
 }
 
 /**
@@ -535,6 +618,29 @@ BrainBrowserWindowToolBar::~BrainBrowserWindowToolBar()
 }
 
 /**
+ * Insert a duplicate of the application's menu at the top of the toolbar.
+ * This is only enabled on MacOSX.
+ *
+ * @param mainWindow
+ *     Main window whose menus are copied.
+ */
+void
+BrainBrowserWindowToolBar::insertDuplicateMenuBar(QMainWindow* mainWindow)
+{
+#ifndef CARET_OS_MACOSX
+    return;
+#endif
+    MacDuplicateMenuBar* menuBar = new MacDuplicateMenuBar(mainWindow,
+                                                           this);
+    CaretAssert(menuBar);
+    
+    /*
+     * Insert at top of tool bar
+     */
+    m_toolBarMainLayout->insertWidget(0, menuBar);
+}
+
+/**
  * Create a new tab.  NOTE: This method only creates
  * a new tab, it DOES NOT add the tab to the toolbar.
  * @param errorMessage
@@ -600,15 +706,18 @@ BrainBrowserWindowToolBar::insertAndCloneTabContentAtTabBarIndex(const BrowserTa
     CursorDisplayScoped cursor;
     cursor.showWaitCursor();
     
-    AString errorMessage;
-    BrowserTabContent* tabContent = this->createNewTab(errorMessage);
-    if (tabContent == NULL) {
+    EventBrowserTabNewClone cloneTabEvent(browserTabContentToBeCloned->getTabNumber());
+    EventManager::get()->sendEvent(cloneTabEvent.getPointer());
+    if (cloneTabEvent.isError()) {
         cursor.restoreCursor();
         QMessageBox::critical(this,
                               "",
-                              errorMessage);
+                              cloneTabEvent.getErrorMessage());
         return;
     }
+    
+    BrowserTabContent* tabContent = cloneTabEvent.getNewBrowserTab();
+    CaretAssert(tabContent);
     
     if (tabBarIndex >= 0){
         insertTabContentPrivate(InsertTabMode::AT_TAB_BAR_INDEX,
@@ -619,13 +728,6 @@ BrainBrowserWindowToolBar::insertAndCloneTabContentAtTabBarIndex(const BrowserTa
         insertTabContentPrivate(InsertTabMode::APPEND,
                                 tabContent,
                                 -1);
-    }
-    
-    if (browserTabContentToBeCloned != NULL) {
-        /*
-         * New tab is clone of tab that was displayed when the new tab was created.
-         */
-        tabContent->cloneBrowserTabContent(const_cast<BrowserTabContent*>(browserTabContentToBeCloned));
     }
     
     this->updateToolBar();
@@ -646,6 +748,79 @@ BrainBrowserWindowToolBar::addNewTabWithContent(BrowserTabContent* tabContent)
     insertTabContentPrivate(InsertTabMode::APPEND,
                             tabContent,
                             -1);
+}
+
+/**
+ * Replace the current browser tabs with the given browser tabs.  Tabs will be added
+ * or removed as needed.
+ *
+ * @param browserTabs
+ *     Browser tabs for this window.
+ */
+void
+BrainBrowserWindowToolBar::replaceBrowserTabs(const std::vector<BrowserTabContent*>& browserTabs)
+{
+    const int32_t numTabs = static_cast<int32_t>(browserTabs.size());
+    if (numTabs <= 0) {
+        return;
+    }
+    
+    QSignalBlocker blocker(this->tabBar);
+    
+    int32_t selectedTabIndex = this->tabBar->currentIndex();
+
+    /*
+     * Remove BrowserTabContent from all tabs since tabs may be
+     * closed and closing the tab will try to delete the BrowserTabContent
+     * in the tab but this BrowserTabContent may still be valid.
+     */
+    const int32_t beforeNumTabs = this->tabBar->count();
+    for (int32_t iTab = 0; iTab < beforeNumTabs; iTab++) {
+        this->tabBar->setTabData(iTab,
+                                 qVariantFromValue((void*)NULL));
+    }
+    
+    /*
+     * Add/remove tabs as needed
+     */
+    if (beforeNumTabs < numTabs) {
+        const int32_t numToAdd = numTabs - beforeNumTabs;
+        for (int32_t i = 0; i < numToAdd; i++) {
+            this->tabBar->addTab("");
+        }
+    }
+    else if (beforeNumTabs > numTabs) {
+        const int32_t numToRemove = beforeNumTabs - numTabs;
+        for (int32_t i = 0; i < numToRemove; i++) {
+            const int32_t lastTabIndex = this->tabBar->count() - 1;
+            this->tabBar->removeTab(lastTabIndex);
+        }
+    }
+    CaretAssert(this->tabBar->count() == numTabs);
+    
+    /*
+     * Set content and update name for each tab
+     */
+    for (int32_t iTab = 0; iTab < numTabs; iTab++) {
+        CaretAssertVectorIndex(browserTabs, iTab);
+        BrowserTabContent* btc = browserTabs[iTab];
+        CaretAssert(btc);
+        this->tabBar->setTabData(iTab,
+                                 qVariantFromValue((void*)btc));
+        this->updateTabName(iTab);
+    }
+    
+    
+    const int32_t numOpenTabs = this->tabBar->count();
+    this->tabBar->setTabsClosable(numOpenTabs > 1);
+    
+    if (selectedTabIndex >= numTabs) {
+        selectedTabIndex = numTabs - 1;
+    }
+    if (selectedTabIndex < 0) {
+        selectedTabIndex = 0;
+    }
+    this->tabBar->setCurrentIndex(selectedTabIndex);
 }
 
 /**
@@ -736,31 +911,6 @@ BrainBrowserWindowToolBar::insertTabContentPrivate(const InsertTabMode insertTab
                                                       "NewTab");
             }
             break;
-        case InsertTabMode::AT_TAB_CONTENTS_INDEX:
-        {
-            const int32_t tabContentIndex = browserTabContent->getTabNumber();
-            
-            const int32_t numTabs = this->tabBar->count();
-            if (numTabs <= 0) {
-                newTabIndex = this->tabBar->addTab("NewTab");
-            }
-            else {
-                int insertIndex = 0;
-                for (int32_t i = 0; i < numTabs; i++) {
-                    if (tabContentIndex > this->getTabContentFromTab(i)->getTabNumber()) {
-                        insertIndex = i + 1;
-                    }
-                }
-                if (insertIndex >= numTabs) {
-                    newTabIndex = this->tabBar->addTab("NewTab");
-                }
-                else {
-                    this->tabBar->insertTab(insertIndex, "NewTab");
-                    newTabIndex = insertIndex;
-                }
-            }
-        }
-            break;
     }
     
     this->tabBar->setTabData(newTabIndex,
@@ -809,10 +959,10 @@ BrainBrowserWindowToolBar::allowAddingNewTab()
      * Automatic configuration always shows all tabs
      */
     switch (browserWindowContent->getTileTabsConfigurationMode()) {
-        case TileTabsConfigurationModeEnum::AUTOMATIC:
+        case TileTabsGridModeEnum::AUTOMATIC:
             return true;
             break;
-        case TileTabsConfigurationModeEnum::CUSTOM:
+        case TileTabsGridModeEnum::CUSTOM:
             break;
     }
     
@@ -851,6 +1001,16 @@ BrainBrowserWindowToolBar::allowAddingNewTab()
     return false;
 }
 
+/**
+ * Show the macro dialog
+ */
+void
+BrainBrowserWindowToolBar::showMacroDialog()
+{
+    BrainBrowserWindow* bbw = GuiManager::get()->getBrowserWindowByWindowIndex(this->browserWindowIndex);
+    CaretAssert(bbw);
+    WuQMacroManager::instance()->showMacrosDialog(bbw);
+}
 
 /**
  * Shows/hides the toolbar.
@@ -1497,6 +1657,44 @@ BrainBrowserWindowToolBar::resetTabIndexForTileTabsHighlighting()
 }
 
 /**
+ * Called when tab bar mouse pressed.
+ */
+void
+BrainBrowserWindowToolBar::tabBarMousePressedSlot()
+{
+    /*
+     * Dragging tabs is slow because as the tab is moved, there are many graphics
+     * and user-interface updates each time the tab changes.  So, disable these updates 
+     * during the time the mouse is pressed and until it is released.  Note that we
+     * block the "all windows graphics" update but not the individual window update.
+     * The individual window graphics update is needed to draw the box around the selected tab.
+     */
+    EventManager::get()->blockEvent(EventTypeEnum::EVENT_USER_INTERFACE_UPDATE, true);
+    EventManager::get()->blockEvent(EventTypeEnum::EVENT_GRAPHICS_UPDATE_ALL_WINDOWS, true);
+}
+
+/**
+ * Called when tab bar mouse released.
+ */
+void
+BrainBrowserWindowToolBar::tabBarMouseReleasedSlot()
+{
+    /*
+     * Enable user-interface updates and graphics drawing since any tab
+     * dragging has finished.
+     */
+    EventManager::get()->blockEvent(EventTypeEnum::EVENT_USER_INTERFACE_UPDATE, false);
+    EventManager::get()->blockEvent(EventTypeEnum::EVENT_GRAPHICS_UPDATE_ALL_WINDOWS, false);
+    EventManager::get()->sendEvent(EventUserInterfaceUpdate().setWindowIndex(this->browserWindowIndex).getPointer());
+    
+    /**
+     * Causes graphics and user-interface to update.
+     * A box is drawn around selected tab.
+     */
+    selectedTabChanged(tabBar->currentIndex());
+}
+
+/**
  * Gets called when user closes a tab by clicking the tab's 'X'.
  *
  * @param tabIndex
@@ -1826,12 +2024,51 @@ BrainBrowserWindowToolBar::updateToolBarComponents(BrowserTabContent* browserTab
 QWidget* 
 BrainBrowserWindowToolBar::createViewWidget()
 {
+    WuQMacroManager* macroManager = WuQMacroManager::instance();
+    const QString objectNamePrefix(m_objectNamePrefix
+                                   + ":ViewMode");
+    
     this->viewModeChartOneRadioButton = new QRadioButton("Chart Old");
+    this->viewModeChartOneRadioButton->setToolTip("Show Old Chart View");
+    this->viewModeChartOneRadioButton->setObjectName(objectNamePrefix
+                                                     + ":ChartOld");
+    macroManager->addMacroSupportToObject(this->viewModeChartOneRadioButton,
+                                          "Select Chart Old View");
+    
     this->viewModeChartTwoRadioButton = new QRadioButton("Chart");
+    this->viewModeChartTwoRadioButton->setToolTip("Show Chart View");
+    this->viewModeChartTwoRadioButton->setObjectName(objectNamePrefix
+                                                     + ":Chart");
+    macroManager->addMacroSupportToObject(this->viewModeChartTwoRadioButton,
+                                          "Select Chart View");
+    
     this->viewModeSurfaceRadioButton = new QRadioButton("Surface");
+    this->viewModeSurfaceRadioButton->setToolTip("Show Surace View");
+    this->viewModeSurfaceRadioButton->setObjectName(objectNamePrefix
+                                                     + ":Surface");
+    macroManager->addMacroSupportToObject(this->viewModeSurfaceRadioButton,
+                                          "Select surface view");
+
     this->viewModeSurfaceMontageRadioButton = new QRadioButton("Montage");
+    this->viewModeSurfaceMontageRadioButton->setToolTip("Show Montage View");
+    this->viewModeSurfaceMontageRadioButton->setObjectName(objectNamePrefix
+                                                     + ":Montage");
+    macroManager->addMacroSupportToObject(this->viewModeSurfaceMontageRadioButton,
+                                          "Select surface montage view");
+    
     this->viewModeVolumeRadioButton = new QRadioButton("Volume");
+    this->viewModeVolumeRadioButton->setToolTip("Show Volume View");
+    this->viewModeVolumeRadioButton->setObjectName(objectNamePrefix
+                                                     + ":Volume");
+    macroManager->addMacroSupportToObject(this->viewModeVolumeRadioButton,
+                                          "Select volume view");
+    
     this->viewModeWholeBrainRadioButton = new QRadioButton("All");
+    this->viewModeWholeBrainRadioButton->setToolTip("Show All View");
+    this->viewModeWholeBrainRadioButton->setObjectName(objectNamePrefix
+                                                     + ":All");
+    macroManager->addMacroSupportToObject(this->viewModeWholeBrainRadioButton,
+                                          "Select all view");
     
     QWidget* widget = new QWidget();
     QVBoxLayout* layout = new QVBoxLayout(widget);
@@ -1947,6 +2184,11 @@ BrainBrowserWindowToolBar::updateViewWidget(BrowserTabContent* browserTabContent
 QWidget* 
 BrainBrowserWindowToolBar::createOrientationWidget()
 {
+    WuQMacroManager* macroManager = WuQMacroManager::instance();
+    CaretAssert(macroManager);
+    const QString objectNamePrefix(m_objectNamePrefix
+                                   + ":Orientation:");
+    
     this->viewOrientationLeftIcon = WuQtUtilities::loadIcon(":/ToolBar/view-left.png");
     this->viewOrientationRightIcon = WuQtUtilities::loadIcon(":/ToolBar/view-right.png");
     this->viewOrientationAnteriorIcon = WuQtUtilities::loadIcon(":/ToolBar/view-anterior.png");
@@ -1969,6 +2211,10 @@ BrainBrowserWindowToolBar::createOrientationWidget()
     else {
         this->orientationLeftOrLateralToolButtonAction->setIconText("L");
     }
+    this->orientationLeftOrLateralToolButtonAction->setObjectName(objectNamePrefix
+                                                                  + "LeftOrLateralView");
+    macroManager->addMacroSupportToObject(this->orientationLeftOrLateralToolButtonAction,
+                                          "Select left or lateral orientation");
     
     this->orientationRightOrMedialToolButtonAction = WuQtUtilities::createAction("R", 
                                                                          "View from a RIGHT perspective", 
@@ -1981,6 +2227,10 @@ BrainBrowserWindowToolBar::createOrientationWidget()
     else {
         this->orientationRightOrMedialToolButtonAction->setIconText("R");
     }
+    this->orientationRightOrMedialToolButtonAction->setObjectName(objectNamePrefix
+                                                                  + "RightOrMedialView");
+    macroManager->addMacroSupportToObject(this->orientationRightOrMedialToolButtonAction,
+                                          "Select right or medial orientation");
     
     this->orientationAnteriorToolButtonAction = WuQtUtilities::createAction("A", 
                                                                             "View from an ANTERIOR perspective", 
@@ -1993,6 +2243,10 @@ BrainBrowserWindowToolBar::createOrientationWidget()
     else {
         this->orientationAnteriorToolButtonAction->setIconText("A");
     }
+    this->orientationAnteriorToolButtonAction->setObjectName(objectNamePrefix
+                                                             + "AnteriorView");
+    macroManager->addMacroSupportToObject(this->orientationAnteriorToolButtonAction,
+                                          "Select anterior orientation");
     
     this->orientationPosteriorToolButtonAction = WuQtUtilities::createAction("P", 
                                                                              "View from a POSTERIOR perspective", 
@@ -2005,6 +2259,10 @@ BrainBrowserWindowToolBar::createOrientationWidget()
     else {
         this->orientationPosteriorToolButtonAction->setIconText("P");
     }
+    this->orientationPosteriorToolButtonAction->setObjectName(objectNamePrefix
+                                                              + "PosteriorView");
+    macroManager->addMacroSupportToObject(this->orientationPosteriorToolButtonAction,
+                                          "Select posterior orientation");
     
     this->orientationDorsalToolButtonAction = WuQtUtilities::createAction("D", 
                                                                           "View from a DORSAL perspective", 
@@ -2017,6 +2275,10 @@ BrainBrowserWindowToolBar::createOrientationWidget()
     else {
         this->orientationDorsalToolButtonAction->setIconText("D");
     }
+    this->orientationDorsalToolButtonAction->setObjectName(objectNamePrefix
+                                                           + "DorsalView");
+    macroManager->addMacroSupportToObject(this->orientationDorsalToolButtonAction,
+                                          "Select dorsal orientation");
     
     this->orientationVentralToolButtonAction = WuQtUtilities::createAction("V", 
                                                                            "View from a VENTRAL perspective", 
@@ -2029,6 +2291,10 @@ BrainBrowserWindowToolBar::createOrientationWidget()
     else {
         this->orientationVentralToolButtonAction->setIconText("V");
     }
+    this->orientationVentralToolButtonAction->setObjectName(objectNamePrefix
+                                                            + "VentralView");
+    macroManager->addMacroSupportToObject(this->orientationVentralToolButtonAction,
+                                          "Select ventral orientation");
     
     
     this->orientationLateralMedialToolButtonAction = WuQtUtilities::createAction("LM",
@@ -2036,60 +2302,85 @@ BrainBrowserWindowToolBar::createOrientationWidget()
                                                                                  this, 
                                                                                  this, 
                                                                                  SLOT(orientationLateralMedialToolButtonTriggered(bool)));
+    this->orientationLateralMedialToolButtonAction->setObjectName(objectNamePrefix
+                                                                  + "LateralMedialView");
+    macroManager->addMacroSupportToObject(this->orientationLateralMedialToolButtonAction,
+                                          "Select lateral/medial orientation");
     
     this->orientationDorsalVentralToolButtonAction = WuQtUtilities::createAction("DV",
                                                                                     "View from a Dorsal/Ventral perspective", 
                                                                                     this, 
                                                                                     this, 
                                                                                     SLOT(orientationDorsalVentralToolButtonTriggered(bool)));
+    this->orientationDorsalVentralToolButtonAction->setObjectName(objectNamePrefix
+                                                                  + "DorsalVentralView");
+    macroManager->addMacroSupportToObject(this->orientationDorsalVentralToolButtonAction,
+                                          "Select dorsal/ventral orientation");
     
     this->orientationAnteriorPosteriorToolButtonAction = WuQtUtilities::createAction("AP", 
                                                                                         "View from a Anterior/Posterior perspective", 
                                                                                         this, 
                                                                                         this, 
                                                                                         SLOT(orientationAnteriorPosteriorToolButtonTriggered(bool)));
+    this->orientationAnteriorPosteriorToolButtonAction->setObjectName(objectNamePrefix
+                                                                      + "AnteriorPosteriorView");
+    macroManager->addMacroSupportToObject(this->orientationAnteriorPosteriorToolButtonAction,
+                                          "Select anterior/posterior orientation");
     
     this->orientationResetToolButtonAction = WuQtUtilities::createAction("R\nE\nS\nE\nT",
                                                                          "Reset the view to dorsal and remove any panning or zooming", 
                                                                          this, 
                                                                          this, 
                                                                          SLOT(orientationResetToolButtonTriggered(bool)));
+    this->orientationResetToolButtonAction->setObjectName(objectNamePrefix
+                                                          + "ResetView");
+    macroManager->addMacroSupportToObject(this->orientationResetToolButtonAction,
+                                          "Reset to default orientation");
     
     this->orientationLeftOrLateralToolButton = new QToolButton();
     this->orientationLeftOrLateralToolButton->setDefaultAction(this->orientationLeftOrLateralToolButtonAction);
     WuQtUtilities::setToolButtonStyleForQt5Mac(this->orientationLeftOrLateralToolButton);
+    this->orientationLeftOrLateralToolButtonAction->setParent(this->orientationLeftOrLateralToolButton);
     
     this->orientationRightOrMedialToolButton = new QToolButton();
     this->orientationRightOrMedialToolButton->setDefaultAction(this->orientationRightOrMedialToolButtonAction);
     WuQtUtilities::setToolButtonStyleForQt5Mac(this->orientationRightOrMedialToolButton);
+    orientationRightOrMedialToolButtonAction->setParent(orientationRightOrMedialToolButton);
     
     this->orientationAnteriorToolButton = new QToolButton();
     this->orientationAnteriorToolButton->setDefaultAction(this->orientationAnteriorToolButtonAction);
     WuQtUtilities::setToolButtonStyleForQt5Mac(this->orientationAnteriorToolButton);
+    this->orientationAnteriorToolButtonAction->setParent(this->orientationAnteriorToolButton);
     
     this->orientationPosteriorToolButton = new QToolButton();
     this->orientationPosteriorToolButton->setDefaultAction(this->orientationPosteriorToolButtonAction);
     WuQtUtilities::setToolButtonStyleForQt5Mac(this->orientationPosteriorToolButton);
+    this->orientationPosteriorToolButtonAction->setParent(this->orientationPosteriorToolButton);
     
     this->orientationDorsalToolButton = new QToolButton();
     this->orientationDorsalToolButton->setDefaultAction(this->orientationDorsalToolButtonAction);
     WuQtUtilities::setToolButtonStyleForQt5Mac(this->orientationDorsalToolButton);
+    this->orientationDorsalToolButtonAction->setParent(this->orientationDorsalToolButton);
     
     this->orientationVentralToolButton = new QToolButton();
     this->orientationVentralToolButton->setDefaultAction(this->orientationVentralToolButtonAction);
     WuQtUtilities::setToolButtonStyleForQt5Mac(this->orientationVentralToolButton);
+    this->orientationVentralToolButtonAction->setParent(this->orientationVentralToolButton);
     
     this->orientationLateralMedialToolButton = new QToolButton();
     this->orientationLateralMedialToolButton->setDefaultAction(this->orientationLateralMedialToolButtonAction);
     WuQtUtilities::setToolButtonStyleForQt5Mac(this->orientationLateralMedialToolButton);
+    orientationLateralMedialToolButtonAction->setParent(orientationLateralMedialToolButton);
     
     this->orientationDorsalVentralToolButton = new QToolButton();
     this->orientationDorsalVentralToolButton->setDefaultAction(this->orientationDorsalVentralToolButtonAction);
     WuQtUtilities::setToolButtonStyleForQt5Mac(this->orientationDorsalVentralToolButton);
+    orientationDorsalVentralToolButtonAction->setParent(orientationDorsalVentralToolButton);
     
     this->orientationAnteriorPosteriorToolButton = new QToolButton();
     this->orientationAnteriorPosteriorToolButton->setDefaultAction(this->orientationAnteriorPosteriorToolButtonAction);
     WuQtUtilities::setToolButtonStyleForQt5Mac(this->orientationAnteriorPosteriorToolButton);
+    orientationAnteriorPosteriorToolButtonAction->setParent(orientationAnteriorPosteriorToolButton);
     
     WuQtUtilities::matchWidgetWidths(this->orientationLateralMedialToolButton,
                                      this->orientationDorsalVentralToolButton,
@@ -2310,12 +2601,19 @@ BrainBrowserWindowToolBar::updateOrientationWidget(BrowserTabContent* browserTab
 QWidget* 
 BrainBrowserWindowToolBar::createWholeBrainSurfaceOptionsWidget()
 {
+    WuQMacroManager* macroManager = WuQMacroManager::instance();
+    const QString objectNamePrefix(m_objectNamePrefix
+                                   + ":All:");
     
     this->wholeBrainSurfaceTypeComboBox = WuQFactory::newComboBox();
     WuQtUtilities::setToolTipAndStatusTip(this->wholeBrainSurfaceTypeComboBox,
                                           "Select the geometric type of surface for display");
     QObject::connect(this->wholeBrainSurfaceTypeComboBox, SIGNAL(currentIndexChanged(int)),
                      this, SLOT(wholeBrainSurfaceTypeComboBoxIndexChanged(int)));
+    this->wholeBrainSurfaceTypeComboBox->setObjectName(objectNamePrefix
+                                                       + "SurfaceType");
+    macroManager->addMacroSupportToObject(this->wholeBrainSurfaceTypeComboBox,
+                                          "Select all view surface type");
     
     /*
      * Left
@@ -2325,15 +2623,35 @@ BrainBrowserWindowToolBar::createWholeBrainSurfaceOptionsWidget()
                                           "Enable/Disable display of the left cortical surface");
     QObject::connect(this->wholeBrainSurfaceLeftCheckBox, SIGNAL(stateChanged(int)),
                      this, SLOT(wholeBrainSurfaceLeftCheckBoxStateChanged(int)));
+    this->wholeBrainSurfaceLeftCheckBox->setObjectName(objectNamePrefix
+                                                       + "EnableLeft");
+    macroManager->addMacroSupportToObject(this->wholeBrainSurfaceLeftCheckBox,
+                                          "Enable all view left surface");
     
-    QAction* leftSurfaceAction = WuQtUtilities::createAction("Left", 
+    QToolButton* wholeBrainLeftSurfaceToolButton = new QToolButton();
+    QAction* leftSurfaceAction = WuQtUtilities::createAction("Left",
                                                              "Select the whole brain left surface", 
-                                                             this, 
+                                                             wholeBrainLeftSurfaceToolButton,
                                                              this, 
                                                              SLOT(wholeBrainSurfaceLeftToolButtonTriggered(bool)));
-    QToolButton* wholeBrainLeftSurfaceToolButton = new QToolButton();
     WuQtUtilities::setToolButtonStyleForQt5Mac(wholeBrainLeftSurfaceToolButton);
     wholeBrainLeftSurfaceToolButton->setDefaultAction(leftSurfaceAction);
+//    leftSurfaceAction->setObjectName(objectNamePrefix
+//                                     + "SelectLeft");
+//    macroManager->addMacroSupportToObject(leftSurfaceAction,
+//                                          "Select all view left surface");
+    
+    /*
+     * Left menu is displayed when tool button is clicked
+     */
+    this->wholeBrainSurfaceLeftMenu = new QMenu(wholeBrainLeftSurfaceToolButton);
+    QObject::connect(this->wholeBrainSurfaceLeftMenu, &QMenu::triggered,
+                     this, &BrainBrowserWindowToolBar::wholeBrainSurfaceLeftMenuTriggered);
+    this->wholeBrainSurfaceLeftMenu->setObjectName(objectNamePrefix
+                                                   + "SelectLeftSurfaceMenu");
+    this->wholeBrainSurfaceLeftMenu->setToolTip("Select all view left surface");
+    macroManager->addMacroSupportToObject(this->wholeBrainSurfaceLeftMenu,
+                                          "Select all view left surface");
     
     /*
      * Right
@@ -2343,15 +2661,35 @@ BrainBrowserWindowToolBar::createWholeBrainSurfaceOptionsWidget()
                                           "Enable/Disable display of the right cortical surface");
     QObject::connect(this->wholeBrainSurfaceRightCheckBox, SIGNAL(stateChanged(int)),
                      this, SLOT(wholeBrainSurfaceRightCheckBoxStateChanged(int)));
+    this->wholeBrainSurfaceRightCheckBox->setObjectName(objectNamePrefix
+                                                        + "EnableRight");
+    macroManager->addMacroSupportToObject(this->wholeBrainSurfaceRightCheckBox,
+                                          "Enable all view right surface");
     
-    QAction* rightSurfaceAction = WuQtUtilities::createAction("Right", 
+    QToolButton* wholeBrainRightSurfaceToolButton = new QToolButton();
+    QAction* rightSurfaceAction = WuQtUtilities::createAction("Right",
                                                              "Select the whole brain right surface", 
-                                                             this,
+                                                             wholeBrainRightSurfaceToolButton,
                                                              this, 
                                                              SLOT(wholeBrainSurfaceRightToolButtonTriggered(bool)));
-    QToolButton* wholeBrainRightSurfaceToolButton = new QToolButton();
     WuQtUtilities::setToolButtonStyleForQt5Mac(wholeBrainRightSurfaceToolButton);
     wholeBrainRightSurfaceToolButton->setDefaultAction(rightSurfaceAction);
+//    rightSurfaceAction->setObjectName(objectNamePrefix
+//                                      + "SelectRight");
+//    macroManager->addMacroSupportToObject(rightSurfaceAction,
+//                                          "Select all view right surface");
+    
+    /*
+     * Right menu is displayed when tool button is clicked
+     */
+    this->wholeBrainSurfaceRightMenu = new QMenu(wholeBrainRightSurfaceToolButton);
+    QObject::connect(this->wholeBrainSurfaceRightMenu, &QMenu::triggered,
+                     this, &BrainBrowserWindowToolBar::wholeBrainSurfaceRightMenuTriggered);
+    this->wholeBrainSurfaceRightMenu->setObjectName(objectNamePrefix
+                                                   + "SelectRightSurfaceMenu");
+    this->wholeBrainSurfaceRightMenu->setToolTip("Select all view right surface");
+    macroManager->addMacroSupportToObject(this->wholeBrainSurfaceRightMenu,
+                                          "Select all view right surface");
     
     /*
      * Cerebellum
@@ -2361,16 +2699,36 @@ BrainBrowserWindowToolBar::createWholeBrainSurfaceOptionsWidget()
                                           "Enable/Disable display of the cerebellum surface");
     QObject::connect(this->wholeBrainSurfaceCerebellumCheckBox, SIGNAL(stateChanged(int)),
                      this, SLOT(wholeBrainSurfaceCerebellumCheckBoxStateChanged(int)));
+    this->wholeBrainSurfaceCerebellumCheckBox->setObjectName(objectNamePrefix
+                                                             + "EnableCerebellum");
+    macroManager->addMacroSupportToObject(this->wholeBrainSurfaceCerebellumCheckBox,
+                                          "Enable all view cerebellum");
     
-    QAction* cerebellumSurfaceAction = WuQtUtilities::createAction("Cerebellum", 
+    QToolButton* wholeBrainCerebellumSurfaceToolButton = new QToolButton();
+    QAction* cerebellumSurfaceAction = WuQtUtilities::createAction("Cerebellum",
                                                               "Select the whole brain cerebellum surface", 
-                                                              this, 
+                                                              wholeBrainCerebellumSurfaceToolButton,
                                                               this, 
                                                               SLOT(wholeBrainSurfaceCerebellumToolButtonTriggered(bool)));
-    QToolButton* wholeBrainCerebellumSurfaceToolButton = new QToolButton();
     WuQtUtilities::setToolButtonStyleForQt5Mac(wholeBrainCerebellumSurfaceToolButton);
     wholeBrainCerebellumSurfaceToolButton->setDefaultAction(cerebellumSurfaceAction);
+//    cerebellumSurfaceAction->setObjectName(objectNamePrefix
+//                                           + "SurfaceCerebellum");
+//    macroManager->addMacroSupportToObject(cerebellumSurfaceAction,
+//                                          "Select all view cerebellum surface");
 
+    /*
+     * Cerebellum menu is displayed when tool button is clicked
+     */
+    this->wholeBrainSurfaceCerebellumMenu = new QMenu(wholeBrainCerebellumSurfaceToolButton);
+    QObject::connect(this->wholeBrainSurfaceCerebellumMenu, &QMenu::triggered,
+                     this, &BrainBrowserWindowToolBar::wholeBrainSurfaceCerebellumMenuTriggered);
+    this->wholeBrainSurfaceCerebellumMenu->setObjectName(objectNamePrefix
+                                                    + "SelectCerebellumSurfaceMenu");
+    this->wholeBrainSurfaceCerebellumMenu->setToolTip("Select all view cerebellum surface");
+    macroManager->addMacroSupportToObject(this->wholeBrainSurfaceCerebellumMenu,
+                                          "Select all view cerebellum surface");
+    
     /*
      * Left/Right separation
      */
@@ -2384,6 +2742,10 @@ BrainBrowserWindowToolBar::createWholeBrainSurfaceOptionsWidget()
                                           "Adjust the separation of the left and right cortical surfaces");
     QObject::connect(this->wholeBrainSurfaceSeparationLeftRightSpinBox, SIGNAL(valueChanged(double)),
                      this, SLOT(wholeBrainSurfaceSeparationLeftRightSpinBoxValueChanged(double)));
+    this->wholeBrainSurfaceSeparationLeftRightSpinBox->setObjectName(objectNamePrefix
+                                                                     + "LeftRightSeparation");
+    macroManager->addMacroSupportToObject(this->wholeBrainSurfaceSeparationLeftRightSpinBox,
+                                          "Set all view left/right separation");
     
     /*
      * Cerebellum separation
@@ -2397,44 +2759,40 @@ BrainBrowserWindowToolBar::createWholeBrainSurfaceOptionsWidget()
                                           "Adjust the separation of the cerebellum from the left and right cortical surfaces");
     QObject::connect(this->wholeBrainSurfaceSeparationCerebellumSpinBox, SIGNAL(valueChanged(double)),
                      this, SLOT(wholeBrainSurfaceSeparationCerebellumSpinBoxSelected(double)));
+    this->wholeBrainSurfaceSeparationCerebellumSpinBox->setObjectName(objectNamePrefix
+                                                                      + "CortexCerebellumSeparation");
+    macroManager->addMacroSupportToObject(this->wholeBrainSurfaceSeparationCerebellumSpinBox,
+                                          "Set all view cerebral/cerebellum separation");
     
-    
+    this->wholeBrainSurfaceMatchCheckBox = new QCheckBox("Match");
+    WuQtUtilities::setToolTipAndStatusTip(this->wholeBrainSurfaceMatchCheckBox,
+                                          "Match position and size of all surfaces to primary anatomical.  Useful for "
+                                          "animation (surface interpolation) and recording movies.");
+    QObject::connect(this->wholeBrainSurfaceMatchCheckBox, &QCheckBox::clicked,
+                     this, &BrainBrowserWindowToolBar::wholeBrainSurfaceMatchCheckBoxClicked);
+    this->wholeBrainSurfaceMatchCheckBox->setObjectName(objectNamePrefix
+                                                                      + "MatchSurface");
+    macroManager->addMacroSupportToObject(this->wholeBrainSurfaceMatchCheckBox,
+                                          "Match position and size of all surfaces to primary anatomical");
 
-    QLabel* columnTwoSpaceLabel = new QLabel(" ");
     wholeBrainLeftSurfaceToolButton->setText("L");
     wholeBrainRightSurfaceToolButton->setText("R");
     wholeBrainCerebellumSurfaceToolButton->setText("C");
     
-    bool originalFlag = false;
     QGridLayout* gridLayout = new QGridLayout();
-    if (originalFlag) {
-        gridLayout->setVerticalSpacing(2);
-        gridLayout->setHorizontalSpacing(2);
-        gridLayout->addWidget(this->wholeBrainSurfaceTypeComboBox, 0, 0, 1, 6);
-        gridLayout->addWidget(this->wholeBrainSurfaceLeftCheckBox, 1, 0);
-        gridLayout->addWidget(wholeBrainLeftSurfaceToolButton, 1, 1);
-        gridLayout->addWidget(columnTwoSpaceLabel, 1, 2);
-        gridLayout->addWidget(this->wholeBrainSurfaceRightCheckBox, 1, 3);
-        gridLayout->addWidget(wholeBrainRightSurfaceToolButton, 1, 4);
-        gridLayout->addWidget(this->wholeBrainSurfaceSeparationLeftRightSpinBox, 1, 5);
-        gridLayout->addWidget(this->wholeBrainSurfaceCerebellumCheckBox, 2, 0);
-        gridLayout->addWidget(wholeBrainCerebellumSurfaceToolButton, 2, 1);
-        gridLayout->addWidget(this->wholeBrainSurfaceSeparationCerebellumSpinBox, 2, 5);
-    }
-    else {
-        gridLayout->setVerticalSpacing(2);
-        gridLayout->setHorizontalSpacing(2);
-        gridLayout->addWidget(this->wholeBrainSurfaceTypeComboBox, 0, 0, 1, 6);
-        gridLayout->addWidget(this->wholeBrainSurfaceLeftCheckBox, 1, 0);
-        gridLayout->addWidget(wholeBrainLeftSurfaceToolButton, 1, 1);
-        gridLayout->addWidget(this->wholeBrainSurfaceRightCheckBox, 2, 0);
-        gridLayout->addWidget(wholeBrainRightSurfaceToolButton, 2, 1);
-        gridLayout->addWidget(this->wholeBrainSurfaceCerebellumCheckBox, 3, 0);
-        gridLayout->addWidget(wholeBrainCerebellumSurfaceToolButton, 3, 1);
-        gridLayout->addWidget(this->wholeBrainSurfaceSeparationLeftRightSpinBox, 1, 2, 2, 1);
-        gridLayout->addWidget(this->wholeBrainSurfaceSeparationCerebellumSpinBox, 3, 2);
-    }
-    
+    gridLayout->setVerticalSpacing(2);
+    gridLayout->setHorizontalSpacing(2);
+    gridLayout->addWidget(this->wholeBrainSurfaceTypeComboBox, 0, 0, 1, 6);
+    gridLayout->addWidget(this->wholeBrainSurfaceLeftCheckBox, 1, 0);
+    gridLayout->addWidget(wholeBrainLeftSurfaceToolButton, 1, 1);
+    gridLayout->addWidget(this->wholeBrainSurfaceRightCheckBox, 2, 0);
+    gridLayout->addWidget(wholeBrainRightSurfaceToolButton, 2, 1);
+    gridLayout->addWidget(this->wholeBrainSurfaceCerebellumCheckBox, 3, 0);
+    gridLayout->addWidget(wholeBrainCerebellumSurfaceToolButton, 3, 1);
+    gridLayout->addWidget(this->wholeBrainSurfaceSeparationLeftRightSpinBox, 1, 2, 2, 1);
+    gridLayout->addWidget(this->wholeBrainSurfaceSeparationCerebellumSpinBox, 3, 2);
+    gridLayout->addWidget(this->wholeBrainSurfaceMatchCheckBox, 4, 0, 1, 6);
+
     QWidget* widget = new QWidget();
     QVBoxLayout* layout = new QVBoxLayout(widget);
     WuQtUtilities::setLayoutSpacingAndMargins(layout, 0, 0);
@@ -2450,6 +2808,7 @@ BrainBrowserWindowToolBar::createWholeBrainSurfaceOptionsWidget()
     this->wholeBrainSurfaceOptionsWidgetGroup->add(wholeBrainCerebellumSurfaceToolButton);
     this->wholeBrainSurfaceOptionsWidgetGroup->add(this->wholeBrainSurfaceSeparationLeftRightSpinBox);
     this->wholeBrainSurfaceOptionsWidgetGroup->add(this->wholeBrainSurfaceSeparationCerebellumSpinBox);
+    this->wholeBrainSurfaceOptionsWidgetGroup->add(this->wholeBrainSurfaceMatchCheckBox);
     
     QWidget* w = this->createToolWidget("Surface Viewing", 
                                         widget, 
@@ -2505,8 +2864,11 @@ BrainBrowserWindowToolBar::updateWholeBrainSurfaceOptionsWidget(BrowserTabConten
         this->wholeBrainSurfaceRightCheckBox->setChecked(browserTabContent->isWholeBrainRightEnabled());
         this->wholeBrainSurfaceCerebellumCheckBox->setChecked(browserTabContent->isWholeBrainCerebellumEnabled());
         
+        updateAllWholeBrainSurfaceMenus();
+
         this->wholeBrainSurfaceSeparationLeftRightSpinBox->setValue(browserTabContent->getWholeBrainLeftRightSeparation());
         this->wholeBrainSurfaceSeparationCerebellumSpinBox->setValue(browserTabContent->getWholeBrainCerebellumSeparation());
+        this->wholeBrainSurfaceMatchCheckBox->setChecked(wholeBrainModel->getBrain()->isSurfaceMatchingToAnatomical());
         
         this->wholeBrainSurfaceOptionsWidgetGroup->blockAllSignals(false);
     }
@@ -2520,7 +2882,8 @@ BrainBrowserWindowToolBar::updateWholeBrainSurfaceOptionsWidget(BrowserTabConten
 QWidget* 
 BrainBrowserWindowToolBar::createVolumeIndicesWidget()
 {
-    m_sliceSelectionComponent = new BrainBrowserWindowToolBarSliceSelection(this);
+    m_sliceSelectionComponent = new BrainBrowserWindowToolBarSliceSelection(this,
+                                                                            m_objectNamePrefix);
     QWidget* w = this->createToolWidget("Slice Indices/Coords",
                                         m_sliceSelectionComponent,
                                         WIDGET_PLACEMENT_LEFT,
@@ -2563,6 +2926,9 @@ BrainBrowserWindowToolBar::createModeWidget()
     QToolButton* inputModeAnnotationsToolButton = new QToolButton();
     inputModeAnnotationsToolButton->setDefaultAction(this->modeInputModeAnnotationsAction);
     WuQtUtilities::setToolButtonStyleForQt5Mac(inputModeAnnotationsToolButton);
+    this->modeInputModeAnnotationsAction->setObjectName(m_objectNamePrefix
+                                                  + ":Mode:Annotate");
+    
     
     /*
      * Borders 
@@ -2574,6 +2940,8 @@ BrainBrowserWindowToolBar::createModeWidget()
     QToolButton* inputModeBordersToolButton = new QToolButton();
     inputModeBordersToolButton->setDefaultAction(this->modeInputModeBordersAction);
     WuQtUtilities::setToolButtonStyleForQt5Mac(inputModeBordersToolButton);
+    this->modeInputModeBordersAction->setObjectName(m_objectNamePrefix
+                                                        + ":Mode:Border");
     
     /*
      * Foci
@@ -2585,6 +2953,8 @@ BrainBrowserWindowToolBar::createModeWidget()
     QToolButton* inputModeFociToolButton = new QToolButton();
     inputModeFociToolButton->setDefaultAction(this->modeInputModeFociAction);
     WuQtUtilities::setToolButtonStyleForQt5Mac(inputModeFociToolButton);
+    this->modeInputModeFociAction->setObjectName(m_objectNamePrefix
+                                                        + ":Mode:Foci");
     
     /*
      * Image
@@ -2600,6 +2970,8 @@ BrainBrowserWindowToolBar::createModeWidget()
         inputModeImageToolButton = new QToolButton();
         inputModeImageToolButton->setDefaultAction(this->modeInputModeImageAction);
         WuQtUtilities::setToolButtonStyleForQt5Mac(inputModeImageToolButton);
+        this->modeInputModeImageAction->setObjectName(m_objectNamePrefix
+                                                            + ":Mode:Image");
     }
     
     /*
@@ -2612,6 +2984,8 @@ BrainBrowserWindowToolBar::createModeWidget()
     QToolButton* inputModeVolumeEditButton = new QToolButton();
     inputModeVolumeEditButton->setDefaultAction(this->modeInputVolumeEditAction);
     WuQtUtilities::setToolButtonStyleForQt5Mac(inputModeVolumeEditButton);
+    this->modeInputVolumeEditAction->setObjectName(m_objectNamePrefix
+                                                        + ":Mode:Volume");
     
     /*
      * View Mode
@@ -2637,6 +3011,8 @@ BrainBrowserWindowToolBar::createModeWidget()
     QToolButton* inputModeViewToolButton = new QToolButton();
     inputModeViewToolButton->setDefaultAction(this->modeInputModeViewAction);
     WuQtUtilities::setToolButtonStyleForQt5Mac(inputModeViewToolButton);
+    this->modeInputModeViewAction->setObjectName(m_objectNamePrefix
+                                                        + ":Mode:View");
     
     WuQtUtilities::matchWidgetWidths(inputModeAnnotationsToolButton,
                                      inputModeBordersToolButton,
@@ -2686,6 +3062,25 @@ BrainBrowserWindowToolBar::createModeWidget()
                      this, SLOT(modeInputModeActionTriggered(QAction*)));
     this->modeInputModeActionGroup->setExclusive(true);
     
+    WuQMacroManager::instance()->addMacroSupportToObject(this->modeInputModeAnnotationsAction,
+                                                         "Select annotate mode");
+    WuQMacroManager::instance()->addMacroSupportToObject(this->modeInputModeBordersAction,
+                                                         "Select border mode");
+    WuQMacroManager::instance()->addMacroSupportToObject(this->modeInputModeFociAction,
+                                                         "Select foci mode");
+    if (modeInputModeImageAction != NULL) {
+        WuQMacroManager::instance()->addMacroSupportToObject(this->modeInputModeImageAction,
+                                                             "Select image mode");
+    }
+    WuQMacroManager::instance()->addMacroSupportToObject(this->modeInputModeViewAction,
+                                                         "Select view mode");
+    WuQMacroManager::instance()->addMacroSupportToObject(this->modeInputVolumeEditAction,
+                                                         "Select volume mode");
+//    this->modeInputModeActionGroup->setObjectName(m_objectNamePrefix
+//                                                  + ":Mode_Action_Group");
+//    WuQMacroManager::instance()->addMacroSupportToObject(this->modeInputModeActionGroup,
+//                                                         "Selects Mode for Mouse Operations");
+    
     QWidget* widget = new QWidget();
     QVBoxLayout* layout = new QVBoxLayout(widget);
     WuQtUtilities::setLayoutSpacingAndMargins(layout, 0, 0);
@@ -2718,12 +3113,12 @@ BrainBrowserWindowToolBar::modeInputModeActionTriggered(QAction* action)
 
     EventGetOrSetUserInputModeProcessor getInputModeEvent(this->browserWindowIndex);
     EventManager::get()->sendEvent(getInputModeEvent.getPointer());
-    const UserInputModeAbstract::UserInputMode currentMode = getInputModeEvent.getUserInputMode();
+    const UserInputModeEnum::Enum currentMode = getInputModeEvent.getUserInputMode();
     
-    UserInputModeAbstract::UserInputMode inputMode = UserInputModeAbstract::INVALID;
+    UserInputModeEnum::Enum inputMode = UserInputModeEnum::INVALID;
     
     if (action == this->modeInputModeAnnotationsAction) {
-        if (currentMode !=  UserInputModeAbstract::ANNOTATIONS) {
+        if (currentMode !=  UserInputModeEnum::ANNOTATIONS) {
             BrainBrowserWindow* bbw = GuiManager::get()->getBrowserWindowByWindowIndex(browserWindowIndex);
             CaretAssert(bbw);
             if ( ! bbw->changeInputModeToAnnotationsWarningDialog()) {
@@ -2734,10 +3129,10 @@ BrainBrowserWindowToolBar::modeInputModeActionTriggered(QAction* action)
                 return;
             }
         }
-        inputMode = UserInputModeAbstract::ANNOTATIONS;
+        inputMode = UserInputModeEnum::ANNOTATIONS;
     }
     else if (action == this->modeInputModeBordersAction) {
-        inputMode = UserInputModeAbstract::BORDERS;
+        inputMode = UserInputModeEnum::BORDERS;
         
         /*
          * If borders are not displayed, display them
@@ -2755,17 +3150,17 @@ BrainBrowserWindowToolBar::modeInputModeActionTriggered(QAction* action)
         }
     }
     else if (action == this->modeInputModeFociAction) {
-        inputMode = UserInputModeAbstract::FOCI;
+        inputMode = UserInputModeEnum::FOCI;
     }
     else if ((action == this->modeInputModeImageAction)
              && (this->modeInputModeImageAction != NULL)) {
-        inputMode = UserInputModeAbstract::IMAGE;
+        inputMode = UserInputModeEnum::IMAGE;
     }
     else if (action == this->modeInputVolumeEditAction) {
-        inputMode = UserInputModeAbstract::VOLUME_EDIT;
+        inputMode = UserInputModeEnum::VOLUME_EDIT;
     }
     else if (action == this->modeInputModeViewAction) {
-        inputMode = UserInputModeAbstract::VIEW;
+        inputMode = UserInputModeEnum::VIEW;
     }
     else {
         CaretAssertMessage(0, "Tools input mode action is invalid, new action added???");
@@ -2798,27 +3193,27 @@ BrainBrowserWindowToolBar::updateModeWidget(BrowserTabContent* /*browserTabConte
     EventManager::get()->sendEvent(getInputModeEvent.getPointer());
 
     switch (getInputModeEvent.getUserInputMode()) {
-        case UserInputModeAbstract::INVALID:
+        case UserInputModeEnum::INVALID:
             /* may get here when program is exiting and widgets are being destroyed */
             break;
-        case UserInputModeAbstract::ANNOTATIONS:
+        case UserInputModeEnum::ANNOTATIONS:
             this->modeInputModeAnnotationsAction->setChecked(true);
             break;
-        case UserInputModeAbstract::BORDERS:
+        case UserInputModeEnum::BORDERS:
             this->modeInputModeBordersAction->setChecked(true);
             break;
-        case UserInputModeAbstract::FOCI:
+        case UserInputModeEnum::FOCI:
             this->modeInputModeFociAction->setChecked(true);
             break;
-        case UserInputModeAbstract::IMAGE:
+        case UserInputModeEnum::IMAGE:
             if (this->modeInputModeImageAction != NULL) {
                 this->modeInputModeImageAction->setChecked(true);
             }
             break;
-        case UserInputModeAbstract::VOLUME_EDIT:
+        case UserInputModeEnum::VOLUME_EDIT:
             this->modeInputVolumeEditAction->setChecked(true);
             break;
-        case UserInputModeAbstract::VIEW:
+        case UserInputModeEnum::VIEW:
             this->modeInputModeViewAction->setChecked(true);
             break;
     }
@@ -2884,7 +3279,7 @@ BrainBrowserWindowToolBar::updateDisplayedModeUserInputWidget()
         }
     }
     
-    if (userInputProcessor->getUserInputMode() != UserInputModeAbstract::ANNOTATIONS) {
+    if (userInputProcessor->getUserInputMode() != UserInputModeEnum::ANNOTATIONS) {
         /*
          * Delete all selected annotations and update graphics and UI.
          */
@@ -2906,7 +3301,8 @@ BrainBrowserWindowToolBar::createTabOptionsWidget(QToolButton* toolBarLockWindow
 {
     m_tabOptionsComponent = new BrainBrowserWindowToolBarTab(this->browserWindowIndex,
                                                              toolBarLockWindowAndAllTabAspectRatioButton,
-                                                             this);
+                                                             this,
+                                                             m_objectNamePrefix);
     
     QWidget* w = this->createToolWidget("Tab",
                                         m_tabOptionsComponent, 
@@ -2942,7 +3338,8 @@ BrainBrowserWindowToolBar::updateTabOptionsWidget(BrowserTabContent* browserTabC
 QWidget*
 BrainBrowserWindowToolBar::createChartTypeWidget()
 {
-    m_chartTypeToolBarComponent = new BrainBrowserWindowToolBarChartType(this);
+    m_chartTypeToolBarComponent = new BrainBrowserWindowToolBarChartType(this,
+                                                                         m_objectNamePrefix);
     QWidget* w = this->createToolWidget("Chart Type (OLD)",
                                         m_chartTypeToolBarComponent,
                                         WIDGET_PLACEMENT_LEFT,
@@ -2977,7 +3374,8 @@ BrainBrowserWindowToolBar::updateChartTypeWidget(BrowserTabContent* browserTabCo
 QWidget*
 BrainBrowserWindowToolBar::createChartTwoTitleWidget()
 {
-    m_chartTwoTitleToolBarComponent = new BrainBrowserWindowToolBarChartTwoTitle(this);
+    m_chartTwoTitleToolBarComponent = new BrainBrowserWindowToolBarChartTwoTitle(this,
+                                                                                 m_objectNamePrefix);
     QWidget* w = this->createToolWidget("Chart Title",
                                         m_chartTwoTitleToolBarComponent,
                                         WIDGET_PLACEMENT_LEFT,
@@ -3012,7 +3410,8 @@ BrainBrowserWindowToolBar::updateChartTwoTitleWidget(BrowserTabContent* browserT
 QWidget*
 BrainBrowserWindowToolBar::createChartTypeTwoWidget()
 {
-    m_chartTwoTypeToolBarComponent = new BrainBrowserWindowToolBarChartTwoType(this);
+    m_chartTwoTypeToolBarComponent = new BrainBrowserWindowToolBarChartTwoType(this,
+                                                                               m_objectNamePrefix);
     QWidget* w = this->createToolWidget("Chart Type",
                                         m_chartTwoTypeToolBarComponent,
                                         WIDGET_PLACEMENT_LEFT,
@@ -3047,7 +3446,8 @@ BrainBrowserWindowToolBar::updateChartTypeTwoWidget(BrowserTabContent* browserTa
 QWidget*
 BrainBrowserWindowToolBar::createChartAxesWidget()
 {
-    m_chartAxisToolBarComponent = new BrainBrowserWindowToolBarChartAxes(this);
+    m_chartAxisToolBarComponent = new BrainBrowserWindowToolBarChartAxes(this,
+                                                                         m_objectNamePrefix);
     QWidget* w = this->createToolWidget("Chart Axes",
                                         m_chartAxisToolBarComponent,
                                         WIDGET_PLACEMENT_LEFT,
@@ -3082,7 +3482,8 @@ BrainBrowserWindowToolBar::updateChartAxesWidget(BrowserTabContent* browserTabCo
 QWidget*
 BrainBrowserWindowToolBar::createChartAttributesWidget()
 {
-    m_chartAttributesToolBarComponent = new BrainBrowserWindowToolBarChartAttributes(this);
+    m_chartAttributesToolBarComponent = new BrainBrowserWindowToolBarChartAttributes(this,
+                                                                                     m_objectNamePrefix);
     QWidget* w = this->createToolWidget("Chart Attributes",
                                         m_chartAttributesToolBarComponent,
                                         WIDGET_PLACEMENT_LEFT,
@@ -3116,7 +3517,8 @@ BrainBrowserWindowToolBar::updateChartAttributesWidget(BrowserTabContent* browse
 QWidget*
 BrainBrowserWindowToolBar::createChartTwoOrientationWidget()
 {
-    m_chartTwoOrientationToolBarComponent = new BrainBrowserWindowToolBarChartTwoOrientation(this);
+    m_chartTwoOrientationToolBarComponent = new BrainBrowserWindowToolBarChartTwoOrientation(this,
+                                                                                             m_objectNamePrefix);
     QWidget* w = this->createToolWidget("Chart<BR>Orientation",
                                         m_chartTwoOrientationToolBarComponent,
                                         WIDGET_PLACEMENT_LEFT,
@@ -3150,7 +3552,8 @@ BrainBrowserWindowToolBar::updateChartTwoOrientationWidget(BrowserTabContent* br
 QWidget*
 BrainBrowserWindowToolBar::createChartTwoAttributesWidget()
 {
-    this->m_chartTwoAttributesToolBarComponent = new BrainBrowserWindowToolBarChartTwoAttributes(this);
+    this->m_chartTwoAttributesToolBarComponent = new BrainBrowserWindowToolBarChartTwoAttributes(this,
+                                                                                                 m_objectNamePrefix);
     QWidget* w = this->createToolWidget("Chart<BR>Attributes",
                                         this->m_chartTwoAttributesToolBarComponent,
                                         WIDGET_PLACEMENT_LEFT,
@@ -3184,7 +3587,8 @@ BrainBrowserWindowToolBar::updateChartTwoAttributesWidget(BrowserTabContent* bro
 QWidget*
 BrainBrowserWindowToolBar::createChartTwoAxesWidget()
 {
-    this->m_chartTwoAxesToolBarComponent = new BrainBrowserWindowToolBarChartTwoAxes(this);
+    this->m_chartTwoAxesToolBarComponent = new BrainBrowserWindowToolBarChartTwoAxes(this,
+                                                                                     m_objectNamePrefix);
     QWidget* w = this->createToolWidget("Chart Axes",
                                         this->m_chartTwoAxesToolBarComponent,
                                         WIDGET_PLACEMENT_LEFT,
@@ -3219,7 +3623,14 @@ BrainBrowserWindowToolBar::createSingleSurfaceOptionsWidget()
 {
     QLabel* structureSurfaceLabel = new QLabel("Brain Structure and Surface: ");
     
-    this->surfaceSurfaceSelectionControl = new StructureSurfaceSelectionControl(false);
+    /*
+     * Note: Macro support is in StructureSurfaceSelectionControl
+     */
+    this->surfaceSurfaceSelectionControl = new StructureSurfaceSelectionControl(false,
+                                                                                m_objectNamePrefix
+                                                                                + ":Surface",
+                                                                                "surface view",
+                                                                                this);
     QObject::connect(this->surfaceSurfaceSelectionControl, 
                      SIGNAL(selectionChanged(const StructureEnum::Enum,
                                              ModelSurface*)),
@@ -3274,7 +3685,8 @@ BrainBrowserWindowToolBar::updateSingleSurfaceOptionsWidget(BrowserTabContent* b
 QWidget* 
 BrainBrowserWindowToolBar::createSurfaceMontageOptionsWidget()
 {
-    m_surfaceMontageToolBarComponent = new BrainBrowserWindowToolBarSurfaceMontage(this);
+    m_surfaceMontageToolBarComponent = new BrainBrowserWindowToolBarSurfaceMontage(this,
+                                                                                   m_objectNamePrefix);
     QWidget* w = this->createToolWidget("Montage Selection", 
                                         m_surfaceMontageToolBarComponent, 
                                         WIDGET_PLACEMENT_LEFT, 
@@ -3307,7 +3719,8 @@ QWidget*
 BrainBrowserWindowToolBar::createClippingOptionsWidget()
 {
     m_clippingToolBarComponent = new BrainBrowserWindowToolBarClipping(this->browserWindowIndex,
-                                                                       this);
+                                                                       this,
+                                                                       m_objectNamePrefix);
     QWidget* w = this->createToolWidget("Clipping",
                                         m_clippingToolBarComponent,
                                         WIDGET_PLACEMENT_LEFT,
@@ -3341,7 +3754,8 @@ BrainBrowserWindowToolBar::updateClippingOptionsWidget(BrowserTabContent* browse
 QWidget* 
 BrainBrowserWindowToolBar::createVolumeMontageWidget()
 {
-    m_volumeMontageComponent = new BrainBrowserWindowToolBarVolumeMontage(this);
+    m_volumeMontageComponent = new BrainBrowserWindowToolBarVolumeMontage(m_objectNamePrefix,
+                                                                          this);
     
     
     QWidget* w = this->createToolWidget("Montage", 
@@ -3377,7 +3791,8 @@ BrainBrowserWindowToolBar::updateVolumeMontageWidget(BrowserTabContent* browserT
 QWidget* 
 BrainBrowserWindowToolBar::createVolumePlaneWidget()
 {
-    m_slicePlaneComponent = new BrainBrowserWindowToolBarSlicePlane(this);
+    m_slicePlaneComponent = new BrainBrowserWindowToolBarSlicePlane(m_objectNamePrefix,
+                                                                    this);
     QWidget* w = this->createToolWidget("Slice Plane", 
                                         m_slicePlaneComponent, 
                                         WIDGET_PLACEMENT_LEFT, 
@@ -3662,6 +4077,15 @@ BrainBrowserWindowToolBar::orientationAnteriorPosteriorToolButtonTriggered(bool 
 }
 
 /**
+ * Called when the scene tool button is clicked to show scene dialog
+ */
+void
+BrainBrowserWindowToolBar::sceneToolButtonClicked()
+{
+    GuiManager::get()->getSceneDialogDisplayAction()->trigger();
+}
+
+/**
  * Called when custom view is triggered and displays Custom View Menu.
  */
 void
@@ -3727,6 +4151,7 @@ BrainBrowserWindowToolBar::wholeBrainSurfaceTypeComboBoxIndexChanged(int /*indx*
         if (isValid) {
             wholeBrainModel->setSelectedSurfaceType(tabIndex, surfaceType);
             this->updateVolumeIndicesWidget(btc); /* slices may get deselected */
+            this->updateAllWholeBrainSurfaceMenus();
             this->updateGraphicsWindowAndYokedWindows();
         }
     }
@@ -3750,11 +4175,34 @@ BrainBrowserWindowToolBar::wholeBrainSurfaceLeftCheckBoxStateChanged(int /*state
 }
 
 /**
- * Called when the left surface tool button is pressed.
+ * Update all whole brain surface selection menus
  */
-void 
-BrainBrowserWindowToolBar::wholeBrainSurfaceLeftToolButtonTriggered(bool /*checked*/)
+void
+BrainBrowserWindowToolBar::updateAllWholeBrainSurfaceMenus()
 {
+    updateWholeBrainSurfaceMenu(this->wholeBrainSurfaceLeftMenu,
+                                StructureEnum::CORTEX_LEFT);
+    updateWholeBrainSurfaceMenu(this->wholeBrainSurfaceRightMenu,
+                                StructureEnum::CORTEX_RIGHT);
+    updateWholeBrainSurfaceMenu(this->wholeBrainSurfaceCerebellumMenu,
+                                StructureEnum::CEREBELLUM);
+}
+
+/**
+ * Update the menu to contain surface for the given structure
+ *
+ * @param menu
+ *      Menu that is updated
+ * @param structure
+ *      Structure for surfaces
+ */
+void
+BrainBrowserWindowToolBar::updateWholeBrainSurfaceMenu(QMenu* menu,
+                                                       const StructureEnum::Enum structure)
+{
+    CaretAssert(menu);
+    menu->clear();
+    
     BrowserTabContent* btc = this->getTabContentFromSelectedTab();
     ModelWholeBrain* wholeBrainModel = btc->getDisplayedWholeBrainModel();
     if (wholeBrainModel == NULL) {
@@ -3763,7 +4211,7 @@ BrainBrowserWindowToolBar::wholeBrainSurfaceLeftToolButtonTriggered(bool /*check
     const int32_t tabIndex = btc->getTabNumber();
     
     Brain* brain = GuiManager::get()->getBrain();
-    BrainStructure* brainStructure = brain->getBrainStructure(StructureEnum::CORTEX_LEFT, false);
+    BrainStructure* brainStructure = brain->getBrainStructure(structure, false);
     if (brainStructure != NULL) {
         std::vector<Surface*> surfaces;
         brainStructure->getSurfacesOfType(wholeBrainModel->getSelectedSurfaceType(tabIndex),
@@ -3771,34 +4219,57 @@ BrainBrowserWindowToolBar::wholeBrainSurfaceLeftToolButtonTriggered(bool /*check
         
         const int32_t numSurfaces = static_cast<int32_t>(surfaces.size());
         if (numSurfaces > 0) {
-            Surface* selectedSurface = wholeBrainModel->getSelectedSurface(StructureEnum::CORTEX_LEFT,
-                                                                                tabIndex);
-            QMenu menu;
-            QActionGroup* actionGroup = new QActionGroup(&menu);
-            actionGroup->setExclusive(true);
+            Surface* selectedSurface = wholeBrainModel->getSelectedSurface(structure,
+                                                                           tabIndex);
             for (int32_t i = 0; i < numSurfaces; i++) {
                 QString name = surfaces[i]->getFileNameNoPath();
-                QAction* action = actionGroup->addAction(name);
+                QAction* action = new QAction(name);
                 action->setCheckable(true);
                 if (surfaces[i] == selectedSurface) {
                     action->setChecked(true);
                 }
-                menu.addAction(action);
-            }
-            QAction* result = menu.exec(QCursor::pos());
-            if (result != NULL) {
-                QList<QAction*> actionList = actionGroup->actions();
-                for (int32_t i = 0; i < numSurfaces; i++) {
-                    if (result == actionList.at(i)) {
-                        wholeBrainModel->setSelectedSurface(StructureEnum::CORTEX_LEFT,
-                                                                 tabIndex, 
-                                                                 surfaces[i]);
-                        this->updateGraphicsWindowAndYokedWindows();
-                        break;
-                    }
-                }
+                action->setData(qVariantFromValue((void*)surfaces[i]));
+                menu->addAction(action);
             }
         }
+    }
+}
+
+/**
+ * Called when the left surface tool button is pressed.
+ */
+void 
+BrainBrowserWindowToolBar::wholeBrainSurfaceLeftToolButtonTriggered(bool /*checked*/)
+{
+    updateAllWholeBrainSurfaceMenus();
+    if ( ! this->wholeBrainSurfaceLeftMenu->isEmpty()) {
+        this->wholeBrainSurfaceLeftMenu->exec(QCursor::pos());
+    }
+}
+
+/**
+ * Called when left surface is selected from menu
+ *
+ * @param action
+ *     Action that was selected
+ */
+void
+BrainBrowserWindowToolBar::wholeBrainSurfaceLeftMenuTriggered(QAction* action)
+{
+    BrowserTabContent* btc = this->getTabContentFromSelectedTab();
+    ModelWholeBrain* wholeBrainModel = btc->getDisplayedWholeBrainModel();
+    if (wholeBrainModel == NULL) {
+        return;
+    }
+    
+    if (action != NULL) {
+        QVariant data = action->data();
+        void* p = data.value<void*>();
+        Surface* surface = (Surface*)p;
+        wholeBrainModel->setSelectedSurface(StructureEnum::CORTEX_LEFT,
+                                            btc->getTabNumber(),
+                                            surface);
+        this->updateGraphicsWindowAndYokedWindows();
     }
 }
 
@@ -3808,52 +4279,38 @@ BrainBrowserWindowToolBar::wholeBrainSurfaceLeftToolButtonTriggered(bool /*check
 void 
 BrainBrowserWindowToolBar::wholeBrainSurfaceRightToolButtonTriggered(bool /*checked*/)
 {
+    updateAllWholeBrainSurfaceMenus();
+    if ( ! this->wholeBrainSurfaceRightMenu->isEmpty()) {
+        this->wholeBrainSurfaceRightMenu->exec(QCursor::pos());
+    }
+}
+
+/**
+ * Called when right surface is selected from menu
+ *
+ * @param action
+ *     Action that was selected
+ */
+void
+BrainBrowserWindowToolBar::wholeBrainSurfaceRightMenuTriggered(QAction* action)
+{
     BrowserTabContent* btc = this->getTabContentFromSelectedTab();
     ModelWholeBrain* wholeBrainModel = btc->getDisplayedWholeBrainModel();
     if (wholeBrainModel == NULL) {
         return;
     }
-    const int32_t tabIndex = btc->getTabNumber();
     
-    Brain* brain = GuiManager::get()->getBrain();
-    BrainStructure* brainStructure = brain->getBrainStructure(StructureEnum::CORTEX_RIGHT, false);
-    if (brainStructure != NULL) {
-        std::vector<Surface*> surfaces;
-        brainStructure->getSurfacesOfType(wholeBrainModel->getSelectedSurfaceType(tabIndex),
-                                          surfaces);
-        
-        const int32_t numSurfaces = static_cast<int32_t>(surfaces.size());
-        if (numSurfaces > 0) {
-            Surface* selectedSurface = wholeBrainModel->getSelectedSurface(StructureEnum::CORTEX_RIGHT,
-                                                                                tabIndex);
-            QMenu menu;
-            QActionGroup* actionGroup = new QActionGroup(&menu);
-            actionGroup->setExclusive(true);
-            for (int32_t i = 0; i < numSurfaces; i++) {
-                QString name = surfaces[i]->getFileNameNoPath();
-                QAction* action = actionGroup->addAction(name);
-                action->setCheckable(true);
-                if (surfaces[i] == selectedSurface) {
-                    action->setChecked(true);
-                }
-                menu.addAction(action);
-            }
-            QAction* result = menu.exec(QCursor::pos());
-            if (result != NULL) {
-                QList<QAction*> actionList = actionGroup->actions();
-                for (int32_t i = 0; i < numSurfaces; i++) {
-                    if (result == actionList.at(i)) {
-                        wholeBrainModel->setSelectedSurface(StructureEnum::CORTEX_RIGHT,
-                                                                 tabIndex, 
-                                                                 surfaces[i]);
-                        this->updateGraphicsWindowAndYokedWindows();
-                        break;
-                    }
-                }
-            }
-        }
+    if (action != NULL) {
+        QVariant data = action->data();
+        void* p = data.value<void*>();
+        Surface* surface = (Surface*)p;
+        wholeBrainModel->setSelectedSurface(StructureEnum::CORTEX_RIGHT,
+                                            btc->getTabNumber(),
+                                            surface);
+        this->updateGraphicsWindowAndYokedWindows();
     }
 }
+
 
 /** 
  * Called when the cerebellum surface tool button is pressed.
@@ -3861,52 +4318,38 @@ BrainBrowserWindowToolBar::wholeBrainSurfaceRightToolButtonTriggered(bool /*chec
 void 
 BrainBrowserWindowToolBar::wholeBrainSurfaceCerebellumToolButtonTriggered(bool /*checked*/)
 {
+    updateAllWholeBrainSurfaceMenus();
+    if ( ! this->wholeBrainSurfaceCerebellumMenu->isEmpty()) {
+        this->wholeBrainSurfaceCerebellumMenu->exec(QCursor::pos());
+    }
+}
+
+/**
+ * Called when cerebellum surface is selected from menu
+ *
+ * @param action
+ *     Action that was selected
+ */
+void
+BrainBrowserWindowToolBar::wholeBrainSurfaceCerebellumMenuTriggered(QAction* action)
+{
     BrowserTabContent* btc = this->getTabContentFromSelectedTab();
     ModelWholeBrain* wholeBrainModel = btc->getDisplayedWholeBrainModel();
     if (wholeBrainModel == NULL) {
         return;
     }
-    const int32_t tabIndex = btc->getTabNumber();
     
-    Brain* brain = GuiManager::get()->getBrain();
-    BrainStructure* brainStructure = brain->getBrainStructure(StructureEnum::CEREBELLUM, false);
-    if (brainStructure != NULL) {
-        std::vector<Surface*> surfaces;
-        brainStructure->getSurfacesOfType(wholeBrainModel->getSelectedSurfaceType(tabIndex),
-                                          surfaces);
-        
-        const int32_t numSurfaces = static_cast<int32_t>(surfaces.size());
-        if (numSurfaces > 0) {
-            Surface* selectedSurface = wholeBrainModel->getSelectedSurface(StructureEnum::CEREBELLUM,
-                                                                                tabIndex);
-            QMenu menu;
-            QActionGroup* actionGroup = new QActionGroup(&menu);
-            actionGroup->setExclusive(true);
-            for (int32_t i = 0; i < numSurfaces; i++) {
-                QString name = surfaces[i]->getFileNameNoPath();
-                QAction* action = actionGroup->addAction(name);
-                action->setCheckable(true);
-                if (surfaces[i] == selectedSurface) {
-                    action->setChecked(true);
-                }
-                menu.addAction(action);
-            }
-            QAction* result = menu.exec(QCursor::pos());
-            if (result != NULL) {
-                QList<QAction*> actionList = actionGroup->actions();
-                for (int32_t i = 0; i < numSurfaces; i++) {
-                    if (result == actionList.at(i)) {
-                        wholeBrainModel->setSelectedSurface(StructureEnum::CEREBELLUM,
-                                                                 tabIndex, 
-                                                                 surfaces[i]);
-                        this->updateGraphicsWindowAndYokedWindows();
-                        break;
-                    }
-                }
-            }
-        }
+    if (action != NULL) {
+        QVariant data = action->data();
+        void* p = data.value<void*>();
+        Surface* surface = (Surface*)p;
+        wholeBrainModel->setSelectedSurface(StructureEnum::CEREBELLUM,
+                                            btc->getTabNumber(),
+                                            surface);
+        this->updateGraphicsWindowAndYokedWindows();
     }
 }
+
 
 /**
  * Called when whole brain surface right checkbox is toggled.
@@ -3974,6 +4417,23 @@ BrainBrowserWindowToolBar::wholeBrainSurfaceSeparationCerebellumSpinBoxSelected(
     
     btc->setWholeBrainCerebellumSeparation(this->wholeBrainSurfaceSeparationCerebellumSpinBox->value());
     this->updateGraphicsWindowAndYokedWindows();
+}
+
+/**
+ * Called when match check box is clicked
+ *
+ * @param checked
+ *     New checked status.
+ */
+void
+BrainBrowserWindowToolBar::wholeBrainSurfaceMatchCheckBoxClicked(bool checked)
+{
+    Brain* brain = GuiManager::get()->getBrain();
+    CaretAssert(brain);
+    
+    brain->setSurfaceMatchingToAnatomical(checked);
+    this->updateGraphicsWindowAndYokedWindows();
+    this->updateUserInterface();
 }
 
 /**
@@ -4092,21 +4552,28 @@ BrainBrowserWindowToolBar::receiveEvent(Event* event)
         if (tileTabsEvent->getWindowIndex() == this->browserWindowIndex) {
             const int32_t browserTabIndex = tileTabsEvent->getBrowserTabIndex();
             int32_t tabBarIndex = getTabBarIndexWithBrowserTabIndex(browserTabIndex);
-            if (tabBarIndex >= 0) {
-                const EventBrowserWindowTileTabOperation::Operation operation = tileTabsEvent->getOperation();
-                switch (operation) {
-                    case EventBrowserWindowTileTabOperation::OPERATION_NEW_TAB_AFTER:
+            const EventBrowserWindowTileTabOperation::Operation operation = tileTabsEvent->getOperation();
+            switch (operation) {
+                case EventBrowserWindowTileTabOperation::OPERATION_NEW_TAB_AFTER:
+                    if (tabBarIndex >= 0) {
                         insertNewTabAtTabBarIndex(tabBarIndex + 1);
-                        break;
-                    case EventBrowserWindowTileTabOperation::OPERATION_NEW_TAB_BEFORE:
+                    }
+                    break;
+                case EventBrowserWindowTileTabOperation::OPERATION_NEW_TAB_BEFORE:
+                    if (tabBarIndex >= 0) {
                         insertNewTabAtTabBarIndex(tabBarIndex);
-                        break;
-                    case EventBrowserWindowTileTabOperation::OPERATION_SELECT_TAB:
+                    }
+                    break;
+                case EventBrowserWindowTileTabOperation::OPERATION_SELECT_TAB:
+                    if (tabBarIndex >= 0) {
                         m_tileTabsHighlightingTimerEnabledFlag = false;
                         this->tabBar->setCurrentIndex(tabBarIndex);
                         m_tileTabsHighlightingTimerEnabledFlag = true;
-                        break;
-                }
+                    }
+                    break;
+                case EventBrowserWindowTileTabOperation::OPERATION_REPLACE_TABS:
+                    replaceBrowserTabs(tileTabsEvent->getBrowserTabsForReplaceOperation());
+                    break;
             }
             
             tileTabsEvent->setEventProcessed();
@@ -4425,4 +4892,7 @@ BrainBrowserWindowToolBar::getNumberOfTabs() const
 {
     return this->tabBar->count();
 }
+
+
+
 

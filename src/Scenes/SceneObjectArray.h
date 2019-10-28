@@ -25,6 +25,10 @@
 #include "SceneObject.h"
 
 namespace caret {
+    class SceneClassArray;
+    class SceneEnumeratedTypeArray;
+    class ScenePathNameArray;
+    class ScenePrimitiveArray;
 
     class SceneObjectArray : public SceneObject {
         
@@ -33,6 +37,26 @@ namespace caret {
                          const SceneObjectDataTypeEnum::Enum dataType);
         
         virtual ~SceneObjectArray();
+        
+        virtual SceneObjectArray* castToSceneObjectArray();
+        
+        virtual const SceneObjectArray* castToSceneObjectArray() const;
+        
+        virtual SceneClassArray* castToSceneClassArray();
+        
+        virtual const SceneClassArray* castToSceneClassArray() const;
+        
+        virtual SceneEnumeratedTypeArray* castToSceneEnumeratedTypeArray();
+        
+        virtual const SceneEnumeratedTypeArray* castToSceneEnumeratedTypeArray() const;
+        
+        virtual ScenePathNameArray* castToScenePathNameArray();
+        
+        virtual const ScenePathNameArray* castToScenePathNameArray() const;
+        
+        virtual ScenePrimitiveArray* castToScenePrimitiveArray();
+        
+        virtual const ScenePrimitiveArray* castToScenePrimitiveArray() const;
         
     private:
         SceneObjectArray(const SceneObjectArray&);

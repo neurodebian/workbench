@@ -41,6 +41,14 @@ namespace caret {
 
         AnnotationOneDimensionalShape& operator=(const AnnotationOneDimensionalShape& obj);
         
+        virtual AnnotationOneDimensionalShape* castToOneDimensionalShape() override;
+        
+        virtual const AnnotationOneDimensionalShape* castToOneDimensionalShape() const override;
+        
+        virtual AnnotationTwoDimensionalShape* castToTwoDimensionalShape() override;
+        
+        virtual const AnnotationTwoDimensionalShape* castToTwoDimensionalShape() const override;
+        
         AnnotationCoordinate* getStartCoordinate();
         
         const AnnotationCoordinate* getStartCoordinate() const;
@@ -48,6 +56,8 @@ namespace caret {
         AnnotationCoordinate* getEndCoordinate();
         
         const AnnotationCoordinate* getEndCoordinate() const;
+        
+        virtual AnnotationSurfaceOffsetVectorTypeEnum::Enum getSurfaceOffsetVectorType() const override;
         
         virtual bool isModified() const;
         
@@ -93,6 +103,8 @@ namespace caret {
         bool applySpatialModificationStereotaxicSpace(const AnnotationSpatialModification& spatialModification);
         
         bool applySpatialModificationTabOrWindowSpace(const AnnotationSpatialModification& spatialModification);
+        
+        bool applySpatialModificationSpacerTabSpace(const AnnotationSpatialModification& spatialModification);
         
         CaretPointer<SceneClassAssistant> m_sceneAssistant;
         

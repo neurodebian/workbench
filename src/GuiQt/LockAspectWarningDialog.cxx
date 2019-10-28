@@ -53,7 +53,50 @@ using namespace caret;
  */
 
 /**
- * Run the lock aspect warning dialog and return the result.
+ * Run the dialog for when the user turns on the Lock Aspect button in the toolbar
+ *
+ * @param bbw
+ *     Parent brain browser window
+ * @param numberOfTabsInWindow
+ *     Number of tabs in the window
+ */
+bool
+LockAspectWarningDialog::runDialogToolBarLockAspect(BrainBrowserWindow* bbw,
+                                                    const int32_t numberOfTabsInWindow)
+{
+    CaretAssert(bbw);
+
+    /*
+     * Show warning if all of these conditions are met:
+     *
+     * (1) User has NOT set do not show again
+     * (2) Tile tabs is NOT selected
+     * (3) There is more than one tab in the window
+     */
+    if (s_doNotShowAgainLockAspectModeStatusFlag) {
+        return true;
+    }
+    if (bbw->isTileTabsSelected()) {
+        return true;
+    }
+    if (numberOfTabsInWindow <= 1) {
+        return true;
+    }
+    
+    LockAspectWarningDialog dialog(bbw,
+                                   Mode::TOOLBAR_LOCK_ASPECT);
+    
+    
+    const bool acceptedFlag = (dialog.exec() == LockAspectWarningDialog::Accepted);
+    s_doNotShowAgainLockAspectModeStatusFlag = dialog.isDoNotShowAgainChecked();
+    
+    return acceptedFlag;
+}
+
+
+/**
+ * Run the lock aspect warning dialog when the user presses the
+ * Annotation mode button and return the result.
  *
  * @param browserWindowIndex
  *     Index of the browser window.
@@ -61,7 +104,7 @@ using namespace caret;
  *     Result of user interaction with dialog.
  */
 LockAspectWarningDialog::Result
-LockAspectWarningDialog::runDialog(const int32_t browserWindowIndex)
+LockAspectWarningDialog::runDialogEnterAnnotationsMode(const int32_t browserWindowIndex)
 {
     BrainBrowserWindow* bbw = GuiManager::get()->getBrowserWindowByWindowIndex(browserWindowIndex);
     CaretAssert(bbw);
@@ -79,14 +122,15 @@ LockAspectWarningDialog::runDialog(const int32_t browserWindowIndex)
         return Result::NO_CHANGES;
     }
     
-    if (s_doNotShowAgainStatusFlag) {
+    if (s_doNotShowAgainEnterAnnotationsModeStatusFlag) {
         return Result::NO_CHANGES;
     }
     
-    LockAspectWarningDialog dialog(bbw);
+    LockAspectWarningDialog dialog(bbw,
+                                   Mode::ENTER_ANNOTATIONS_MODE);
     
     if (dialog.exec() == LockAspectWarningDialog::Accepted) {
-        s_doNotShowAgainStatusFlag = dialog.isDoNotShowAgainChecked();
+        s_doNotShowAgainEnterAnnotationsModeStatusFlag = dialog.isDoNotShowAgainChecked();
         return dialog.getOkResult();
     }
     
@@ -94,105 +138,154 @@ LockAspectWarningDialog::runDialog(const int32_t browserWindowIndex)
 }
 
 /**
+ * @return Locking aspect instruction containing importance of window sizing
+ * and locking tabs.
+ *
+ * @parm buttonText
+ *     Text of button that user has clicked
+ * @param showBestPracticesLink
+       If true, include a link to the best practices guide.
+ */
+QString
+LockAspectWarningDialog::getLockingInstructionsText(const QString& buttonText,
+                                                    const bool showBestPracticesLink)
+{
+    QString text("<html>"
+                 "Prior to locking the aspect ratio, the user should: "
+                 "<ul>"
+                 "<li> Adjust the size of the window;"
+                 "<li> Optionally enable Tile Tabs for a multi-tab view;  "
+                 "If annotating a Tile Tabs view, Tile Tabs "
+                 "(View Menu -> Enter Tile Tabs) should ALWAYS be enabled prior to "
+                 "locking the aspect ratio.  Failure to do so may cause excess, "
+                 "undesirable space around and between the drawing of tab rows."
+                 "</ul>"
+                 "If this has not been done, click the <i>Cancel</i> button, make those "
+                 "adjustments, and then click the <i>" + buttonText + "</i>  button.");
+    if (showBestPracticesLink) {
+        text.append("<P>"
+                    "View the <a href=\"Link\">Best Practices Guide</a> (this dialog "
+                    "will close).  This guide explains the importance of aspect "
+                    "locking and documents procedures for successful creation of annotations "
+                    "and scenes.");
+    }
+    text.append("</html>");
+
+    return text;
+}
+
+
+/**
  * Constructor.
  *
- * @param tabMode
- *     The mode for tabs (selected or all)
- * @param tileTabsEnabled
- *     True if tile tabs is enabled.
- * @param browserWindowAspectLocked
- *     True if window aspect is locked.
- * @param tabAspectLockedCount
- *     Count of tabs with aspect locked.
- * @param tabCount
- *     Count of tabs.
+ * @param mode
+ *     The mode for the dialog
+ * @param brainBrowserWindow
+ *     Parent window for help dialog that is linked from this dialog
  * @param parent
  *     The parent widget.
  */
-LockAspectWarningDialog::LockAspectWarningDialog(BrainBrowserWindow* brainBrowserWindow)
+LockAspectWarningDialog::LockAspectWarningDialog(BrainBrowserWindow* brainBrowserWindow,
+                                                 const Mode mode)
 : WuQDialogModal("Enter Annotations Mode",
                  brainBrowserWindow),
-m_brainBrowserWindow(brainBrowserWindow)
+m_brainBrowserWindow(brainBrowserWindow),
+m_mode(mode)
 {
-    const QString mainInstructions("Do you want to lock the aspect ratio while entering annotations mode?");
+    QString buttonName;
+    switch (m_mode) {
+        case Mode::ENTER_ANNOTATIONS_MODE:
+            setWindowTitle("Enter Annotations Mode");
+            buttonName = "Toolbar's Annotate Mode";
+            break;
+        case Mode::TOOLBAR_LOCK_ASPECT:
+            setWindowTitle("Lock Aspect Ratio");
+            buttonName = "Lock Aspect";
+            break;
+    }
     
-    const QString supplementalInstructions("<html>"
-                                           "Prior to locking the aspect ratio, the user should adjust the size "
-                                           "of the window and optionally enable Tile Tabs for a multi-tab view.  "
-                                           "If this has not been done, click the <i>Cancel</i> button, make those "
-                                           "adjustments, and then click the <i>Toolbar's Annotate Mode</i> button."
-                                           "<P>"
-                                           "View the <a href=\"Link\">Best Practices Guide</a> (this dialog "
-                                           "will close).  This guide explains the importance of aspect "
-                                           "locking and documents procedures for successful creation of annotations "
-                                           "and scenes."
-                                           "</html>");
     
-    const QString lockAspectInstructions("Locking the aspect ratio, and never unlocking the aspect "
-                                         "ratio, ensures annotations stay in the correct location.");
-    const QString leaveUnlockedInstructions("Advanced users may choose to lock and unlock the aspect ratio");
-    
-    QLabel* mainInstructionsLabel = new QLabel(mainInstructions);
-    QFont font = mainInstructionsLabel->font();
-    font.setPointSize(font.pointSize() * 1.4);
-    font.setBold(true);
-    mainInstructionsLabel->setFont(font);
-    
+    const QString supplementalInstructions(getLockingInstructionsText(buttonName,
+                                                                      true));
     QLabel* supplementalInstructionLabel = new QLabel(supplementalInstructions);
     supplementalInstructionLabel->setWordWrap(true);
     QObject::connect(supplementalInstructionLabel, &QLabel::linkActivated,
                      this, &LockAspectWarningDialog::detailsLabelLinkActivated);
     
-    QLabel* lockAspectLabel = new QLabel(lockAspectInstructions);
-    lockAspectLabel->setWordWrap(true);
-    QLabel* lockAspectRadioButtonLabel = new QLabel("Lock Aspect Ratio (Recommended)");
-    m_lockAspectRadioButton = new QRadioButton();
-    
-    QLabel* leaveUnlockedAspectRadioButtonLabel = new QLabel("Leave Aspect Ratio Unlocked");
-    m_leaveUnlockedAspectRadioButton = new QRadioButton();
-    QLabel* leaveUnlockedLabel = new QLabel(leaveUnlockedInstructions);
-    
-    QButtonGroup* buttGroup = new QButtonGroup(this);
-    buttGroup->addButton(m_lockAspectRadioButton);
-    buttGroup->addButton(m_leaveUnlockedAspectRadioButton);
-    m_lockAspectRadioButton->setChecked(true);
-    
-    m_doNotShowAgainCheckBox = new QCheckBox("Do not show again.  User will not be warned about "
+    m_doNotShowAgainCheckBox = new QCheckBox("Do not show this dialog again.  User will not be warned about "
                                              "aspect locking and unlocking.");
-    
-    /*
-     * No text is added to readio buttons since 
-     * radio buttons and labels seem to get a different
-     * height in a grid layout.
-     */
-    const int COL_RADIO_EMPTY  = 0;
-    const int COL_RADIO_BUTTON = 1;
-    const int COL_RADIO_LABEL  = 2;
-    const int COL_RADIO_INFO   = 3;
-    const int COL_RADIO_STRETCH = 4;
-    QGridLayout* buttonGridLayout = new QGridLayout();
-    buttonGridLayout->setVerticalSpacing(4);
-    buttonGridLayout->setColumnMinimumWidth(COL_RADIO_EMPTY, 20);
-    buttonGridLayout->setColumnMinimumWidth(COL_RADIO_LABEL, 20);
-    buttonGridLayout->setColumnStretch(COL_RADIO_EMPTY, 0);
-    buttonGridLayout->setColumnStretch(COL_RADIO_BUTTON, 0);
-    buttonGridLayout->setColumnStretch(COL_RADIO_STRETCH, 100);
-    int row = 0;
-    buttonGridLayout->addWidget(m_lockAspectRadioButton, row, COL_RADIO_BUTTON);
-    buttonGridLayout->addWidget(lockAspectRadioButtonLabel, row, COL_RADIO_LABEL, 1, 2);
-    row++;
-    buttonGridLayout->addWidget(lockAspectLabel, row, COL_RADIO_INFO);
-    row++;
-    buttonGridLayout->addWidget(m_leaveUnlockedAspectRadioButton, row, COL_RADIO_BUTTON);
-    buttonGridLayout->addWidget(leaveUnlockedAspectRadioButtonLabel, row, COL_RADIO_LABEL, 1, 2);
-    row++;
-    buttonGridLayout->addWidget(leaveUnlockedLabel, row, COL_RADIO_INFO);
+
     
     QWidget* dialogWidget = new QWidget;
     QVBoxLayout* dialogLayout = new QVBoxLayout(dialogWidget);
-    dialogLayout->addWidget(mainInstructionsLabel);
-    dialogLayout->addLayout(buttonGridLayout);
-    dialogLayout->addSpacing(10);
+    switch (m_mode) {
+        case Mode::ENTER_ANNOTATIONS_MODE:
+        {
+            const QString mainInstructions("Do you want to lock the aspect ratio while entering annotations mode?");
+            
+            
+            const QString lockAspectInstructions("Locking the aspect ratio, and never unlocking the aspect "
+                                                 "ratio, ensures annotations stay in the correct location.");
+            const QString leaveUnlockedInstructions("Advanced users may choose to lock and unlock the aspect ratio");
+            
+            QLabel* mainInstructionsLabel = new QLabel(mainInstructions);
+            QFont font = mainInstructionsLabel->font();
+            font.setPointSize(font.pointSize() * 1.4);
+            font.setBold(true);
+            mainInstructionsLabel->setFont(font);
+            
+            QLabel* lockAspectLabel = new QLabel(lockAspectInstructions);
+            lockAspectLabel->setWordWrap(true);
+            QLabel* lockAspectRadioButtonLabel = new QLabel("Lock Aspect Ratio (Recommended)");
+            m_lockAspectRadioButton = new QRadioButton();
+            
+            QLabel* leaveUnlockedAspectRadioButtonLabel = new QLabel("Leave Aspect Ratio Unlocked");
+            m_leaveUnlockedAspectRadioButton = new QRadioButton();
+            QLabel* leaveUnlockedLabel = new QLabel(leaveUnlockedInstructions);
+            
+            QButtonGroup* buttGroup = new QButtonGroup(this);
+            buttGroup->addButton(m_lockAspectRadioButton);
+            buttGroup->addButton(m_leaveUnlockedAspectRadioButton);
+            m_lockAspectRadioButton->setChecked(true);
+            
+            
+            /*
+             * No text is added to readio buttons since
+             * radio buttons and labels seem to get a different
+             * height in a grid layout.
+             */
+            const int COL_RADIO_EMPTY  = 0;
+            const int COL_RADIO_BUTTON = 1;
+            const int COL_RADIO_LABEL  = 2;
+            const int COL_RADIO_INFO   = 3;
+            const int COL_RADIO_STRETCH = 4;
+            QGridLayout* buttonGridLayout = new QGridLayout();
+            buttonGridLayout->setVerticalSpacing(4);
+            buttonGridLayout->setColumnMinimumWidth(COL_RADIO_EMPTY, 20);
+            buttonGridLayout->setColumnMinimumWidth(COL_RADIO_LABEL, 20);
+            buttonGridLayout->setColumnStretch(COL_RADIO_EMPTY, 0);
+            buttonGridLayout->setColumnStretch(COL_RADIO_BUTTON, 0);
+            buttonGridLayout->setColumnStretch(COL_RADIO_STRETCH, 100);
+            int row = 0;
+            buttonGridLayout->addWidget(m_lockAspectRadioButton, row, COL_RADIO_BUTTON);
+            buttonGridLayout->addWidget(lockAspectRadioButtonLabel, row, COL_RADIO_LABEL, 1, 2);
+            row++;
+            buttonGridLayout->addWidget(lockAspectLabel, row, COL_RADIO_INFO);
+            row++;
+            buttonGridLayout->addWidget(m_leaveUnlockedAspectRadioButton, row, COL_RADIO_BUTTON);
+            buttonGridLayout->addWidget(leaveUnlockedAspectRadioButtonLabel, row, COL_RADIO_LABEL, 1, 2);
+            row++;
+            buttonGridLayout->addWidget(leaveUnlockedLabel, row, COL_RADIO_INFO);
+
+            dialogLayout->addWidget(mainInstructionsLabel);
+            dialogLayout->addLayout(buttonGridLayout);
+            dialogLayout->addSpacing(10);
+        }
+            break;
+        case Mode::TOOLBAR_LOCK_ASPECT:
+            break;
+    }
+
     dialogLayout->addWidget(supplementalInstructionLabel);
     dialogLayout->addSpacing(10);
     dialogLayout->addWidget(m_doNotShowAgainCheckBox);
@@ -201,7 +294,6 @@ m_brainBrowserWindow(brainBrowserWindow)
                      WuQDialogModal::SCROLL_AREA_NEVER);
     
     setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-    
 }
 
 /**

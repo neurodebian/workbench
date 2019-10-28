@@ -31,13 +31,13 @@
 
 #include "CaretAssert.h"
 #include "CaretLogger.h"
+#include "CaretPreferenceDataValue.h"
 #include "ModelTransform.h"
 #include "TileTabsConfiguration.h"
+#include "WuQMacroGroup.h"
 
 using namespace caret;
 
-
-    
 /**
  * \class caret::CaretPreferences 
  * \brief Preferences for use in Caret.
@@ -53,9 +53,26 @@ using namespace caret;
 CaretPreferences::CaretPreferences()
 : CaretObject()
 {
+    m_macros.reset(new WuQMacroGroup("Preferences"));
+    
     this->qSettings = new QSettings("brainvis.wustl.edu",
                                     "Caret7");
     this->readPreferences();
+    
+    m_volumeCrossHairGapPreference.reset(new CaretPreferenceDataValue(this->qSettings,
+                                                                      "volumeAxesCrosshairGap",
+                                                                      CaretPreferenceDataValue::DataType::FLOAT,
+                                                                      CaretPreferenceDataValue::SavedInScene::SAVE_YES,
+                                                                      0.0));
+    m_preferenceDataValues.push_back(m_volumeCrossHairGapPreference.get());
+
+    const QString defAllSliceLayout = VolumeSliceViewAllPlanesLayoutEnum::toName(VolumeSliceViewAllPlanesLayoutEnum::ROW_LAYOUT);
+    m_volumeAllSlicePlanesLayout.reset(new CaretPreferenceDataValue(this->qSettings,
+                                                                    "volumeAllSlicePlanesLayout",
+                                                                    CaretPreferenceDataValue::DataType::STRING,
+                                                                    CaretPreferenceDataValue::SavedInScene::SAVE_NO,
+                                                                    defAllSliceLayout));
+    m_preferenceDataValues.push_back(m_volumeAllSlicePlanesLayout.get());
     
     m_colorsMode = BackgroundAndForegroundColorsModeEnum::USER_PREFERENCES;
 }
@@ -65,11 +82,39 @@ CaretPreferences::CaretPreferences()
  */
 CaretPreferences::~CaretPreferences()
 {
+    /**
+     * Note DO NOT delete items in this vector as they are pointers to items
+     * in unique_ptr's
+     */
+    m_preferenceDataValues.clear();
+    
     this->removeAllCustomViews();
     
     this->removeAllTileTabsConfigurations();
     
     delete this->qSettings;
+}
+
+/**
+ * Some preferences are temporarily overriden with a value from a scene
+ * and these 'scene overrides' are invalidated by this method
+ */
+void
+CaretPreferences::invalidateSceneDataValues()
+{
+    for (auto pdv : m_preferenceDataValues) {
+        pdv->setSceneValueValid(false);
+    }
+}
+
+/**
+ * @return The scene data value for items that are saved to
+ * and restored from scenes.   Primarily for use by SessionManager.
+ */
+std::vector<CaretPreferenceDataValue*>
+CaretPreferences::getPreferenceSceneDataValues()
+{
+    return m_preferenceDataValues;
 }
 
 /**
@@ -336,6 +381,64 @@ CaretPreferences::writeCustomViews()
     this->qSettings->sync();
 }
 
+/**
+ * Read macros from preferences
+ *
+ * @param performSync
+ *     If true, synchronize preferences before reading macros
+ */
+void
+CaretPreferences::readMacros(const bool performSync)
+{
+    if (performSync) {
+        this->qSettings->sync();
+    }
+ 
+    const QString macrosXmlString = this->getString(NAME_MACROS);
+    if (macrosXmlString.isEmpty()) {
+        m_macros->clear();
+    }
+    else {
+        QString errorMessage;
+        QString warningMessage;
+        if ( ! m_macros->readXmlFromStringOld(macrosXmlString,
+                                           errorMessage,
+                                           warningMessage)) {
+            CaretLogSevere("Reading macros from preferences: "
+                            + errorMessage);
+        }
+        else if ( ! warningMessage.isEmpty()) {
+            CaretLogWarning(warningMessage);
+        }
+    }
+}
+
+/**
+ * Write macros to preferences
+ */
+void
+CaretPreferences::writeMacros()
+{
+    if ( ! m_macros->isModified()) {
+        return;
+    }
+    
+    QString macrosXmlString;
+    
+    if (m_macros->getNumberOfMacros() > 0) {
+        QString errorMessage;
+        if ( ! m_macros->writeXmlToString(macrosXmlString,
+                                          errorMessage)) {
+            CaretLogSevere("Writing macros to preferences: "
+                            + errorMessage);
+        }
+    }
+    
+    this->setString(NAME_MACROS,
+                    macrosXmlString);
+    this->qSettings->sync();
+}
+
 
 /**
  * Remove all of the tile tabs configurations.
@@ -394,10 +497,13 @@ CaretPreferences::readTileTabsConfigurations(const bool performSync)
         this->qSettings->setArrayIndex(i);
         const AString configString = this->qSettings->value(AString::number(i)).toString();
         TileTabsConfiguration* ttc = new TileTabsConfiguration();
-        if (ttc->decodeFromXML(configString)) {
+        AString errorMessage;
+        if (ttc->decodeFromXML(configString,
+                               errorMessage)) {
             this->tileTabsConfigurations.push_back(ttc);
         }
         else {
+            CaretLogWarning(errorMessage);
             delete ttc;
         }
     }
@@ -575,6 +681,10 @@ CaretPreferences::getUserBackgroundAndForegroundColors()
 void
 CaretPreferences::setUserBackgroundAndForegroundColors(const BackgroundAndForegroundColors& colors)
 {
+    if (this->userColors == colors) {
+        return;
+    }
+    
     /*
      * "in memory" colors
      */
@@ -583,6 +693,10 @@ CaretPreferences::setUserBackgroundAndForegroundColors(const BackgroundAndForegr
     /*
      * Update preferences file with colors
      */
+    writeUnsignedByteArray(NAME_COLOR_BACKGROUND_WINDOW,
+                           this->userColors.m_colorBackgroundWindow,
+                           3);
+    
     writeUnsignedByteArray(NAME_COLOR_FOREGROUND_ALL,
                            this->userColors.m_colorForegroundAll,
                            3);
@@ -850,6 +964,10 @@ CaretPreferences::getLoggingLevel() const
 void 
 CaretPreferences::setLoggingLevel(const LogLevelEnum::Enum loggingLevel)
 {
+    if (this->loggingLevel == loggingLevel) {
+        return;
+    }
+    
     this->loggingLevel = loggingLevel;
     
     const AString name = LogLevelEnum::toName(this->loggingLevel);
@@ -883,6 +1001,10 @@ CaretPreferences::getOpenDrawingMethod() const
 void
 CaretPreferences::setOpenGLDrawingMethod(const OpenGLDrawingMethodEnum::Enum openGLDrawingMethod)
 {
+    if (this->openGLDrawingMethod == openGLDrawingMethod) {
+        return;
+    }
+    
     this->openGLDrawingMethod = openGLDrawingMethod;
     this->setString(NAME_OPENGL_DRAWING_METHOD,
                     OpenGLDrawingMethodEnum::toName(this->openGLDrawingMethod));
@@ -906,6 +1028,10 @@ CaretPreferences::getManageFilesViewFileType() const
 void
 CaretPreferences::setManageFilesViewFileType(const SpecFileDialogViewFilesTypeEnum::Enum manageFilesViewFileType)
 {
+    if (this->manageFilesViewFileType == manageFilesViewFileType) {
+        return;
+    }
+    
     this->manageFilesViewFileType = manageFilesViewFileType;
     this->setString(NAME_MANAGE_FILES_VIEW_FILE_TYPE,
                     SpecFileDialogViewFilesTypeEnum::toName(this->manageFilesViewFileType));
@@ -929,6 +1055,10 @@ CaretPreferences::isShowSurfaceIdentificationSymbols() const
 void
 CaretPreferences::setShowSurfaceIdentificationSymbols(const bool showSymbols)
 {
+    if (this->showSurfaceIdentificationSymbols == showSymbols) {
+        return;
+    }
+    
     this->showSurfaceIdentificationSymbols = showSymbols;
     this->setBoolean(NAME_SHOW_SURFACE_IDENTIFICATION_SYMBOLS,
                      this->showSurfaceIdentificationSymbols);
@@ -952,6 +1082,10 @@ CaretPreferences::isShowVolumeIdentificationSymbols() const
 void
 CaretPreferences::setShowVolumeIdentificationSymbols(const bool showSymbols)
 {
+    if (this->showVolumeIdentificationSymbols == showSymbols) {
+        return;
+    }
+    
     this->showVolumeIdentificationSymbols = showSymbols;
     this->setBoolean(NAME_SHOW_VOLUME_IDENTIFICATION_SYMBOLS,
                      this->showVolumeIdentificationSymbols);
@@ -975,6 +1109,10 @@ CaretPreferences::isDynamicConnectivityDefaultedOn() const
 void
 CaretPreferences::setDynamicConnectivityDefaultedOn(const bool defaultedOn)
 {
+    if (this->dynamicConnectivityDefaultedOn == defaultedOn) {
+        return;
+    }
+    
     this->dynamicConnectivityDefaultedOn = defaultedOn;
     this->setBoolean(NAME_DYNAMIC_CONNECTIVITY_ON,
                      defaultedOn);
@@ -999,6 +1137,10 @@ CaretPreferences::getImageCaptureMethod() const
 void
 CaretPreferences::setImageCaptureMethod(const ImageCaptureMethodEnum::Enum imageCaptureMethod)
 {
+    if (this->imageCaptureMethod == imageCaptureMethod) {
+        return;
+    }
+    
     this->imageCaptureMethod = imageCaptureMethod;
     this->setString(NAME_IMAGE_CAPTURE_METHOD,
                     ImageCaptureMethodEnum::toName(this->imageCaptureMethod));
@@ -1023,6 +1165,10 @@ CaretPreferences::isRemoteFilePasswordSaved()
 void
 CaretPreferences::setRemoteFilePasswordSaved(const bool saveRemotePasswordToPreferences)
 {
+    if (this->remoteFileLoginSaved == saveRemotePasswordToPreferences) {
+        return;
+    }
+    
     this->remoteFileLoginSaved = saveRemotePasswordToPreferences;
     this->setBoolean(NAME_REMOTE_FILE_LOGIN_SAVED,
                      this->remoteFileLoginSaved);
@@ -1058,6 +1204,11 @@ void
 CaretPreferences::setRemoteFileUserNameAndPassword(const AString& userName,
                                                    const AString& password)
 {
+    if ((this->remoteFileUserName == userName)
+        && (this->remoteFilePassword == password)) {
+        return;
+    }
+    
     this->remoteFileUserName = userName;
     this->remoteFilePassword = password;
     
@@ -1086,6 +1237,10 @@ CaretPreferences::getBalsaUserName() const
 void
 CaretPreferences::setBalsaUserName(const AString& userName)
 {
+    if (this->balsaUserName == userName) {
+        return;
+    }
+    
     this->balsaUserName = userName;
     this->setString(NAME_BALSA_USER_NAME,
                     userName);
@@ -1108,10 +1263,61 @@ CaretPreferences::isVolumeAxesCrosshairsDisplayed() const
 void 
 CaretPreferences::setVolumeAxesCrosshairsDisplayed(const bool displayed)
 {
+    if (this->displayVolumeAxesCrosshairs == displayed) {
+        return;
+    }
+
     this->displayVolumeAxesCrosshairs = displayed;
-    this->setBoolean(CaretPreferences::NAME_VOLUME_AXES_CROSSHAIRS, 
+    this->setBoolean(CaretPreferences::NAME_VOLUME_AXES_CROSSHAIRS,
                      this->displayVolumeAxesCrosshairs);
     this->qSettings->sync();
+}
+
+/**
+ * @return The volume all slice planes layout
+ */
+VolumeSliceViewAllPlanesLayoutEnum::Enum
+CaretPreferences::getVolumeAllSlicePlanesLayout() const
+{
+    QString stringValue(m_volumeAllSlicePlanesLayout->getValue().toString());
+    bool validFlag(false);
+    VolumeSliceViewAllPlanesLayoutEnum::Enum enumValue =
+       VolumeSliceViewAllPlanesLayoutEnum::fromName(stringValue, &validFlag);
+    return enumValue;
+}
+
+/**
+ * Set volume all slice planes layout
+ *
+ * @param allViewLayout
+ *     The all slice planes layout
+ */
+void
+CaretPreferences::setVolumeAllSlicePlanesLayout(const VolumeSliceViewAllPlanesLayoutEnum::Enum allViewLayout)
+{
+    const QString stringValue = VolumeSliceViewAllPlanesLayoutEnum::toName(allViewLayout);
+    m_volumeAllSlicePlanesLayout->setValue(stringValue);
+}
+
+/**
+ * @return The crosshair gap
+ */
+float
+CaretPreferences::getVolumeCrosshairGap() const
+{
+    return m_volumeCrossHairGapPreference->getValue().toFloat();
+}
+
+/**
+ * Set the volume crosshair gap
+ *
+ * @param gap
+ *     New value for crosshair gap.
+ */
+void
+CaretPreferences::setVolumeCrosshairGap(const float gap)
+{
+    return m_volumeCrossHairGapPreference->setValue(gap);
 }
 
 /**
@@ -1131,6 +1337,10 @@ CaretPreferences::isVolumeAxesLabelsDisplayed() const
 void 
 CaretPreferences::setVolumeAxesLabelsDisplayed(const bool displayed)
 {
+    if (this->displayVolumeAxesLabels == displayed) {
+        return;
+    }
+    
     this->displayVolumeAxesLabels = displayed;
     this->setBoolean(CaretPreferences::NAME_VOLUME_AXES_LABELS, 
                      this->displayVolumeAxesLabels);
@@ -1155,6 +1365,10 @@ CaretPreferences::isVolumeMontageAxesCoordinatesDisplayed() const
 void
 CaretPreferences::setVolumeMontageAxesCoordinatesDisplayed(const bool displayed)
 {
+    if (this->displayVolumeAxesCoordinates == displayed) {
+        return;
+    }
+    
     this->displayVolumeAxesCoordinates = displayed;
     this->setBoolean(CaretPreferences::NAME_VOLUME_AXES_COORDINATE,
                      this->displayVolumeAxesCoordinates);
@@ -1179,6 +1393,10 @@ CaretPreferences::getVolumeMontageGap() const
 void
 CaretPreferences::setVolumeMontageGap(const int32_t volumeMontageGap)
 {
+    if (this->volumeMontageGap == volumeMontageGap) {
+        return;
+    }
+    
     this->volumeMontageGap = volumeMontageGap;
     this->setInteger(CaretPreferences::NAME_VOLUME_MONTAGE_GAP,
                      this->volumeMontageGap);
@@ -1203,6 +1421,10 @@ CaretPreferences::getVolumeMontageCoordinatePrecision() const
 void
 CaretPreferences::setVolumeMontageCoordinatePrecision(const int32_t volumeMontageCoordinatePrecision)
 {
+    if (this->volumeMontageCoordinatePrecision == volumeMontageCoordinatePrecision) {
+        return;
+    }
+    
     this->volumeMontageCoordinatePrecision = volumeMontageCoordinatePrecision;
     this->setInteger(CaretPreferences::NAME_VOLUME_MONTAGE_COORDINATE_PRECISION,
                      this->volumeMontageCoordinatePrecision);
@@ -1226,8 +1448,12 @@ CaretPreferences::isSplashScreenEnabled() const
 void 
 CaretPreferences::setSplashScreenEnabled(const bool enabled)
 {
+    if (this->splashScreenEnabled == enabled) {
+        return;
+    }
+    
     this->splashScreenEnabled = enabled;
-    this->setBoolean(CaretPreferences::NAME_SPLASH_SCREEN, 
+    this->setBoolean(CaretPreferences::NAME_SPLASH_SCREEN,
                      this->splashScreenEnabled);
     this->qSettings->sync();
 }
@@ -1249,11 +1475,43 @@ CaretPreferences::isDevelopMenuEnabled() const
 void
 CaretPreferences::setDevelopMenuEnabled(const bool enabled)
 {
+    if (this->developMenuEnabled == enabled) {
+        return;
+    }
+    
     this->developMenuEnabled = enabled;
     this->setBoolean(CaretPreferences::NAME_DEVELOP_MENU,
                      this->developMenuEnabled);
     this->qSettings->sync();
 }
+
+/**
+ * @return Is Show Data ToolTips enabled?
+ */
+bool
+CaretPreferences::isShowDataToolTipsEnabled() const
+{
+    return this->dataToolTipsEnabled;
+}
+
+/**
+ * Set Show Data ToolTips enabled.
+ * @param enabled
+ *    New status.
+ */
+void
+CaretPreferences::setShowDataToolTipsEnabled(const bool enabled)
+{
+    if (this->dataToolTipsEnabled == enabled) {
+        return;
+    }
+    
+    this->dataToolTipsEnabled = enabled;
+    this->setBoolean(CaretPreferences::NAME_DATA_TOOL_TIPS,
+                     this->dataToolTipsEnabled);
+    this->qSettings->sync();
+}
+
 
 /**
  * @param Is yoking defaulted on ?
@@ -1271,6 +1529,10 @@ bool CaretPreferences::isYokingDefaultedOn() const
  */
 void CaretPreferences::setYokingDefaultedOn(const bool status)
 {
+    if (this->yokingDefaultedOn == status) {
+        return;
+    }
+    
     this->yokingDefaultedOn = status;
     this->setBoolean(CaretPreferences::NAME_YOKING_DEFAULT_ON,
                      this->yokingDefaultedOn);
@@ -1293,10 +1555,32 @@ bool CaretPreferences::isVolumeIdentificationDefaultedOn() const
  */
 void CaretPreferences::setVolumeIdentificationDefaultedOn(const bool status)
 {
+    if (this->volumeIdentificationDefaultedOn == status) {
+        return;
+    }
+    
     this->volumeIdentificationDefaultedOn = status;
     this->setBoolean(CaretPreferences::NAME_VOLUME_IDENTIFICATION_DEFAULTED_ON,
                      this->volumeIdentificationDefaultedOn);
     this->qSettings->sync();
+}
+
+/**
+ * @return Pointer to the macros.
+ */
+WuQMacroGroup*
+CaretPreferences::getMacros()
+{
+    return m_macros.get();
+}
+
+/**
+ * @return Const pointer to the macros.
+ */
+const WuQMacroGroup*
+CaretPreferences::getMacros() const
+{
+    return m_macros.get();
 }
 
 /**
@@ -1358,6 +1642,18 @@ CaretPreferences::readPreferences()
     userColors.reset();
     
     uint8_t colorRGB[3] = { 0, 0, 0 };
+    
+    userColors.getColorForegroundWindow(colorRGB);
+    readUnsignedByteArray(NAME_COLOR_FOREGROUND_WINDOW,
+                          colorRGB,
+                          3);
+    userColors.setColorForegroundWindow(colorRGB);
+    
+    userColors.getColorBackgroundWindow(colorRGB);
+    readUnsignedByteArray(NAME_COLOR_BACKGROUND_WINDOW,
+                          colorRGB,
+                          3);
+    userColors.setColorBackgroundWindow(colorRGB);
     
     userColors.getColorForegroundAllView(colorRGB);
     readUnsignedByteArray(NAME_COLOR_FOREGROUND_ALL,
@@ -1445,7 +1741,9 @@ CaretPreferences::readPreferences()
     
     this->readCustomViews(false);
     
-    this->readTileTabsConfigurations();
+    this->readTileTabsConfigurations(false);
+    
+    this->readMacros(false);
 
     AString levelName = this->qSettings->value(NAME_LOGGING_LEVEL,
                                           LogLevelEnum::toName(LogLevelEnum::INFO)).toString();
@@ -1454,7 +1752,9 @@ CaretPreferences::readPreferences()
     if (valid == false) {
         logLevel = LogLevelEnum::INFO;
     }
-    this->setLoggingLevel(logLevel);
+    /* Do not call setLoggingLevel() as it will cause preferences to sync */
+    this->loggingLevel = logLevel;
+    CaretLogger::getLogger()->setLevel(this->loggingLevel);
     
     ImageCaptureMethodEnum::Enum defaultCaptureType = ImageCaptureMethodEnum::IMAGE_CAPTURE_WITH_RENDER_PIXMAP;
     AString imageCaptureMethodName = this->qSettings->value(NAME_IMAGE_CAPTURE_METHOD,
@@ -1505,6 +1805,9 @@ CaretPreferences::readPreferences()
     
     this->developMenuEnabled = this->getBoolean(CaretPreferences::NAME_DEVELOP_MENU,
                                                 false);
+    
+    this->dataToolTipsEnabled = this->getBoolean(CaretPreferences::NAME_DATA_TOOL_TIPS,
+                                                 true);
 
     this->yokingDefaultedOn = this->getBoolean(CaretPreferences::NAME_YOKING_DEFAULT_ON,
                                                true);

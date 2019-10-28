@@ -118,7 +118,7 @@ void AlgorithmCiftiSeparate::useParameters(OperationParameters* myParams, Progre
         StructureEnum::Enum myStruct = StructureEnum::fromName(structName, &ok);
         if (!ok)
         {
-            throw AlgorithmException("unrecognized structure type");
+            throw AlgorithmException("unrecognized structure type: '" + structName + "'");
         }
         LabelFile* labelOut = labelInstances[i]->getOutputLabel(2);
         MetricFile* roiOut = NULL;
@@ -138,7 +138,7 @@ void AlgorithmCiftiSeparate::useParameters(OperationParameters* myParams, Progre
         StructureEnum::Enum myStruct = StructureEnum::fromName(structName, &ok);
         if (!ok)
         {
-            throw AlgorithmException("unrecognized structure type");
+            throw AlgorithmException("unrecognized structure type: '" + structName + "'");
         }
         MetricFile* metricOut = metricInstances[i]->getOutputMetric(2);
         MetricFile* roiOut = NULL;
@@ -158,7 +158,7 @@ void AlgorithmCiftiSeparate::useParameters(OperationParameters* myParams, Progre
         StructureEnum::Enum myStruct = StructureEnum::fromName(structName, &ok);
         if (!ok)
         {
-            throw AlgorithmException("unrecognized structure type");
+            throw AlgorithmException("unrecognized structure type: '" + structName + "'");
         }
         VolumeFile* volOut = volumeInstances[i]->getOutputVolume(2);
         VolumeFile* roiOut = NULL;
@@ -257,7 +257,7 @@ AlgorithmCiftiSeparate::AlgorithmCiftiSeparate(ProgressObject* myProgObj, const 
         metricOut->setNumberOfNodesAndColumns(numNodes, colSize);
         metricOut->setStructure(myStruct);
         const CiftiMappingType& myNamesMap = *(myXML.getMap(1 - myDir));
-        for (int j = 0; j < rowSize; ++j)
+        for (int j = 0; j < colSize; ++j)
         {
             metricOut->setMapName(j, myNamesMap.getIndexName(j));
         }
@@ -365,7 +365,7 @@ AlgorithmCiftiSeparate::AlgorithmCiftiSeparate(ProgressObject* myProgObj, const 
         labelOut->setNumberOfNodesAndColumns(numNodes, colSize);
         labelOut->setStructure(myStruct);
         const CiftiMappingType& myNamesMap = *(myXML.getMap(1 - myDir));
-        for (int j = 0; j < rowSize; ++j)
+        for (int j = 0; j < colSize; ++j)
         {
             labelOut->setMapName(j, myNamesMap.getIndexName(j));
         }
@@ -496,7 +496,7 @@ AlgorithmCiftiSeparate::AlgorithmCiftiSeparate(ProgressObject* myProgObj, const 
         volOut->reinitialize(newdims, mySform);
         volOut->setValueAllVoxels(0.0f);
         const CiftiMappingType& myNamesMap = *(myXML.getMap(1 - myDir));
-        for (int j = 0; j < rowSize; ++j)
+        for (int j = 0; j < colSize; ++j)
         {
             volOut->setMapName(j, myNamesMap.getIndexName(j));
         }
@@ -614,7 +614,7 @@ AlgorithmCiftiSeparate::AlgorithmCiftiSeparate(ProgressObject* myProgObj, const 
         volOut->reinitialize(newdims, mySform);
         volOut->setValueAllVoxels(0.0f);
         const CiftiMappingType& myNamesMap = *(myXML.getMap(1 - myDir));
-        for (int j = 0; j < rowSize; ++j)
+        for (int j = 0; j < colSize; ++j)
         {
             volOut->setMapName(j, myNamesMap.getIndexName(j));
         }

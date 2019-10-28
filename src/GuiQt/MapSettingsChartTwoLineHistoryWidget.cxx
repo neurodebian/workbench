@@ -25,6 +25,7 @@
 
 #include <QComboBox>
 #include <QLabel>
+#include <QPainter>
 #include <QSignalBlocker>
 #include <QSignalMapper>
 #include <QSpinBox>
@@ -73,8 +74,6 @@ MapSettingsChartTwoLineHistoryWidget::MapSettingsChartTwoLineHistoryWidget(QWidg
                                         "displayed) is limited to this value or " + maxHistoryString + ", whichever is larger.");
     
     m_removeAllHistoryIcon = WuQtUtilities::loadIcon(":/SpecFileDialog/delete_icon.png");
-    
-    m_filenameLabel = new QLabel("");
     
     QLabel* defaultColorLabel = new QLabel("Default Color: ");
     defaultColorLabel->setToolTip(defaultColorToolTip);
@@ -130,8 +129,6 @@ MapSettingsChartTwoLineHistoryWidget::MapSettingsChartTwoLineHistoryWidget(QWidg
     topLayout->setColumnStretch(3, 0);
     topLayout->setColumnStretch(4, 100);
     int gridRow = 0;
-    topLayout->addWidget(m_filenameLabel, gridRow, 0, 1, 5, Qt::AlignLeft);
-    gridRow++;
     topLayout->addWidget(defaultLineWidthLabel, gridRow, 0);
     topLayout->addWidget(m_defaultLineWidthSpinBox->getWidget(), gridRow, 1);
     topLayout->addWidget(defaultColorLabel, gridRow, 2);
@@ -218,11 +215,6 @@ MapSettingsChartTwoLineHistoryWidget::updateDialogContentPrivate()
     ChartTwoLineSeriesHistory* lineSeriesHistory = getLineSeriesHistory();
     
     if (lineSeriesHistory != NULL) {
-        const CaretMappableDataFile* mapFile = getMapFile();
-        if (mapFile != NULL) {
-            m_filenameLabel->setText("Filename: " + mapFile->getFileNameNoPath());
-            m_filenameLabel->setToolTip(mapFile->getFileName());
-        }
         m_defaultColorComboBox->setSelectedColor(lineSeriesHistory->getDefaultColor());
         m_defaultLineWidthSpinBox->blockSignals(true);
         m_defaultLineWidthSpinBox->setValue(lineSeriesHistory->getDefaultLineWidth());
@@ -329,6 +321,33 @@ MapSettingsChartTwoLineHistoryWidget::loadHistoryIntoTableWidget(ChartTwoLineSer
                                              COLUMN_REMOVE,
                                              removeHistoryLabel);
             }
+            else if (j == COLUMN_MOVE) {
+                QLabel dummyLabel("");
+                QPixmap moveDownPixmap = createIcon(&dummyLabel, IconType::ARROW_DOWN);
+                WuQImageLabel* moveDownLabel = new WuQImageLabel(moveDownPixmap,
+                                                                 "Move Down");
+                QObject::connect(moveDownLabel, &WuQImageLabel::clicked,
+                                 this, [=] { moveDownHistoryItemSelected(iRow); });
+                
+                QPixmap moveUpPixmap = createIcon(&dummyLabel, IconType::ARROW_UP);
+                WuQImageLabel* moveUpLabel = new WuQImageLabel(moveUpPixmap,
+                                                               "Move Up");
+                QObject::connect(moveUpLabel, &WuQImageLabel::clicked,
+                                 this, [=] { moveUpHistoryItemSelected(iRow); });
+
+                QWidget* moveWidget = new QWidget;
+                QHBoxLayout* moveLayout = new QHBoxLayout(moveWidget);
+                moveLayout->setContentsMargins(4, 0, 4, 0);
+                moveLayout->setSpacing(6);
+                moveLayout->addWidget(moveDownLabel);
+                moveLayout->addWidget(moveUpLabel);
+                moveWidget->setSizePolicy(QSizePolicy::Fixed,
+                                          QSizePolicy::Fixed);
+                
+                m_tableWidget->setCellWidget(iRow,
+                                             COLUMN_MOVE,
+                                             moveWidget);
+            }
             else if (j == COLUMN_COLOR) {
                 CaretColorEnumComboBox* caretColorComboBox = new CaretColorEnumComboBox(this);
                 QObject::connect(caretColorComboBox, SIGNAL(colorSelected(const CaretColorEnum::Enum)),
@@ -405,6 +424,8 @@ MapSettingsChartTwoLineHistoryWidget::loadHistoryIntoTableWidget(ChartTwoLineSer
                                                new QTableWidgetItem("View"));
         m_tableWidget->setHorizontalHeaderItem(COLUMN_REMOVE,
                                                new QTableWidgetItem("Remove"));
+        m_tableWidget->setHorizontalHeaderItem(COLUMN_MOVE,
+                                               new QTableWidgetItem("Move"));
         m_tableWidget->setHorizontalHeaderItem(COLUMN_COLOR,
                                                new QTableWidgetItem("Color"));
         m_tableWidget->setHorizontalHeaderItem(COLUMN_LINE_WIDTH,
@@ -414,6 +435,7 @@ MapSettingsChartTwoLineHistoryWidget::loadHistoryIntoTableWidget(ChartTwoLineSer
         
         m_tableWidget->resizeColumnToContents(COLUMN_VIEW);
         m_tableWidget->resizeColumnToContents(COLUMN_REMOVE);
+        m_tableWidget->resizeColumnToContents(COLUMN_MOVE);
         m_tableWidget->resizeColumnToContents(COLUMN_COLOR);
         m_tableWidget->resizeColumnToContents(COLUMN_LINE_WIDTH);
         m_tableWidget->setColumnWidth(COLUMN_DESCRIPTION,
@@ -471,6 +493,36 @@ MapSettingsChartTwoLineHistoryWidget::removeHistoryItemSelected(int rowIndex)
     
     ChartTwoLineSeriesHistory* lineSeriesHistory = getLineSeriesHistory();
     lineSeriesHistory->removeHistoryItem(rowIndex);
+    updateDialogContentPrivate();
+    EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+}
+
+/**
+ * Move a history item up
+ *
+ * @param rowIndex
+ *     Row index of item.
+ */
+void
+MapSettingsChartTwoLineHistoryWidget::moveUpHistoryItemSelected(int rowIndex)
+{
+    ChartTwoLineSeriesHistory* lineSeriesHistory = getLineSeriesHistory();
+    lineSeriesHistory->moveUpHistoryItem(rowIndex);
+    updateDialogContentPrivate();
+    EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+}
+
+/**
+ * Move a history item down
+ *
+ * @param rowIndex
+ *     Row index of item.
+ */
+void
+MapSettingsChartTwoLineHistoryWidget::moveDownHistoryItemSelected(int rowIndex)
+{
+    ChartTwoLineSeriesHistory* lineSeriesHistory = getLineSeriesHistory();
+    lineSeriesHistory->moveDownHistoryItem(rowIndex);
     updateDialogContentPrivate();
     EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
 }
@@ -581,3 +633,54 @@ MapSettingsChartTwoLineHistoryWidget::viewedMaximumSpinBoxValueChanged(int num)
         EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
     }
 }
+
+/**
+ * Create a pixmap for the given widget
+ *
+ * @param editButton
+ *     The edit button identifier
+ * @return
+ *     Pixmap for the given button
+ */
+QPixmap
+MapSettingsChartTwoLineHistoryWidget::createIcon(const QWidget* widget,
+                                                 const IconType iconType) const
+{
+    CaretAssert(widget);
+    const qreal pixmapSize = 22.0;
+    const qreal maxValue = pixmapSize / 2.0 - 1.0;
+    const qreal arrowTip = maxValue * (2.0 / 3.0);
+    
+    uint32_t pixmapOptions(static_cast<uint32_t>(WuQtUtilities::PixMapCreationOptions::TransparentBackground));
+    
+    QPixmap pixmap(static_cast<int>(pixmapSize),
+                   static_cast<int>(pixmapSize));
+    QSharedPointer<QPainter> painter = WuQtUtilities::createPixmapWidgetPainterOriginCenter(widget,
+                                                                                            pixmap,
+                                                                                            pixmapOptions);
+    QPen pen(painter->pen());
+    pen.setWidth(3);
+    painter->setPen(pen);
+    
+    switch (iconType) {
+        case IconType::ARROW_DOWN:
+            /*
+             * Down arrow
+             */
+            painter->drawLine(QPointF(0, maxValue), QPointF(0, -maxValue));
+            painter->drawLine(QPointF(0, -maxValue), QPointF(arrowTip,  -maxValue + arrowTip));
+            painter->drawLine(QPointF(0, -maxValue), QPointF(-arrowTip, -maxValue + arrowTip));
+            break;
+        case IconType::ARROW_UP:
+            /*
+             * Up arrow
+             */
+            painter->drawLine(QPointF(0, maxValue), QPointF(0, -maxValue));
+            painter->drawLine(QPointF(0, maxValue), QPointF(arrowTip,  maxValue - arrowTip));
+            painter->drawLine(QPointF(0, maxValue), QPointF(-arrowTip, maxValue - arrowTip));
+            break;
+    }
+    
+    return pixmap;
+}
+

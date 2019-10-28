@@ -1679,6 +1679,8 @@ PaletteFile::setDefaultPaletteColorMapping(PaletteColorMapping* paletteColorMapp
         case DataFileTypeEnum::METRIC:
             checkShapeFile = true;
             break;
+        case DataFileTypeEnum::METRIC_DYNAMIC:
+            break;
         case DataFileTypeEnum::PALETTE:
             invalid = true;
             break;
@@ -1699,6 +1701,8 @@ PaletteFile::setDefaultPaletteColorMapping(PaletteColorMapping* paletteColorMapp
             break;
         case DataFileTypeEnum::VOLUME:
             checkVolume = true;
+            break;
+        case DataFileTypeEnum::VOLUME_DYNAMIC:
             break;
     }
     
@@ -1780,14 +1784,14 @@ PaletteFile::setDefaultPaletteColorMapping(PaletteColorMapping* paletteColorMapp
 //            paletteColorMapping->setUserScaleNegativeMinimum(0.0);
 //            paletteColorMapping->setUserScalePositiveMinimum(0.0);
 //            paletteColorMapping->setUserScalePositiveMaximum(1.5);
-            paletteColorMapping->setScaleMode(PaletteScaleModeEnum::MODE_AUTO_SCALE_PERCENTAGE);
+            paletteColorMapping->setScaleMode(PaletteScaleModeEnum::MODE_AUTO_SCALE_ABSOLUTE_PERCENTAGE);
             paletteColorMapping->setAutoScalePercentageNegativeMaximum(98.0);
             paletteColorMapping->setAutoScalePercentageNegativeMinimum(2.0);
             paletteColorMapping->setAutoScalePercentagePositiveMinimum(2.0);
             paletteColorMapping->setAutoScalePercentagePositiveMaximum(98.0);
         }
         else {
-            paletteColorMapping->setScaleMode(PaletteScaleModeEnum::MODE_AUTO_SCALE_PERCENTAGE);
+            paletteColorMapping->setScaleMode(PaletteScaleModeEnum::MODE_AUTO_SCALE_ABSOLUTE_PERCENTAGE);
             paletteColorMapping->setAutoScalePercentageNegativeMaximum(98.0);
             paletteColorMapping->setAutoScalePercentageNegativeMinimum(2.0);
             paletteColorMapping->setAutoScalePercentagePositiveMinimum(2.0);
@@ -1803,7 +1807,7 @@ PaletteFile::setDefaultPaletteColorMapping(PaletteColorMapping* paletteColorMapp
             paletteColorMapping->setSelectedPaletteName("videen-style");
             paletteColorMapping->setSelectedPaletteName("ROY-BIG-BL");
             paletteColorMapping->setInterpolatePaletteFlag(true);
-            paletteColorMapping->setScaleMode(PaletteScaleModeEnum::MODE_AUTO_SCALE_PERCENTAGE);
+            paletteColorMapping->setScaleMode(PaletteScaleModeEnum::MODE_AUTO_SCALE_ABSOLUTE_PERCENTAGE);
             paletteColorMapping->setAutoScalePercentageNegativeMaximum(98.0);
             paletteColorMapping->setAutoScalePercentageNegativeMinimum(2.0);
             paletteColorMapping->setAutoScalePercentagePositiveMinimum(2.0);
@@ -1817,7 +1821,7 @@ PaletteFile::setDefaultPaletteColorMapping(PaletteColorMapping* paletteColorMapp
             paletteColorMapping->setSelectedPaletteName("videen-style");
             paletteColorMapping->setSelectedPaletteName("ROY-BIG-BL");
             paletteColorMapping->setInterpolatePaletteFlag(true);
-            paletteColorMapping->setScaleMode(PaletteScaleModeEnum::MODE_AUTO_SCALE_PERCENTAGE);
+            paletteColorMapping->setScaleMode(PaletteScaleModeEnum::MODE_AUTO_SCALE_ABSOLUTE_PERCENTAGE);
             paletteColorMapping->setAutoScalePercentageNegativeMaximum(98.0);
             paletteColorMapping->setAutoScalePercentageNegativeMinimum(2.0);
             paletteColorMapping->setAutoScalePercentagePositiveMinimum(2.0);

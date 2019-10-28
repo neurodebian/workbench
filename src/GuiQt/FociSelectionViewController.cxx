@@ -50,6 +50,7 @@
 #include "SceneClass.h"
 #include "WuQDataEntryDialog.h"
 #include "WuQFactory.h"
+#include "WuQMacroManager.h"
 #include "WuQTabWidget.h"
 #include "WuQTrueFalseComboBox.h"
 #include "WuQtUtilities.h"
@@ -69,10 +70,20 @@ using namespace caret;
 
 /**
  * Constructor.
+ *
+ * @param browserWindowIndex
+ *    Index of browser window
+ * @param parentObjectName
+ *    Name of parent object
+ * @param parent
+ *    The parent object
  */
 FociSelectionViewController::FociSelectionViewController(const int32_t browserWindowIndex,
-                                             QWidget* parent)
-: QWidget(parent)
+                                                         const QString& parentObjectName,
+                                                         QWidget* parent)
+: QWidget(parent),
+m_objectNamePrefix(parentObjectName
+                   + ":Foci")
 {
     m_browserWindowIndex = browserWindowIndex;
     
@@ -90,6 +101,10 @@ FociSelectionViewController::FociSelectionViewController(const int32_t browserWi
     m_fociDisplayCheckBox->setToolTip("Enable the display of foci");
     QObject::connect(m_fociDisplayCheckBox, SIGNAL(clicked(bool)),
                      this, SLOT(processAttributesChanges()));
+    m_fociDisplayCheckBox->setObjectName(m_objectNamePrefix
+                                            + ":DisplayFoci");
+    WuQMacroManager::instance()->addMacroSupportToObject(m_fociDisplayCheckBox,
+                                                         "Enable foci display");
     
     QWidget* attributesWidget = this->createAttributesWidget();
     QWidget* selectionWidget = this->createSelectionWidget();
@@ -101,6 +116,11 @@ FociSelectionViewController::FociSelectionViewController(const int32_t browserWi
     m_tabWidget->addTab(selectionWidget, 
                       "Selection");
     m_tabWidget->setCurrentWidget(attributesWidget);
+    m_tabWidget->getTabBar()->setToolTip("Select foci tab");
+    m_tabWidget->getTabBar()->setObjectName(m_objectNamePrefix
+                                            + ":Tab");
+    WuQMacroManager::instance()->addMacroSupportToObject(m_tabWidget->getTabBar(),
+                                                         "Select features toolbox foci tab");
     
     QVBoxLayout* layout = new QVBoxLayout(this);
     //WuQtUtilities::setLayoutSpacingAndMargins(layout, 2, 2);
@@ -125,11 +145,17 @@ FociSelectionViewController::~FociSelectionViewController()
     FociSelectionViewController::allFociSelectionViewControllers.erase(this);
 }
 
-
+/**
+ * @return New instance of foci selection widget
+ */
 QWidget* 
 FociSelectionViewController::createSelectionWidget()
 {
-    m_fociClassNameHierarchyViewController = new GroupAndNameHierarchyViewController(m_browserWindowIndex);
+    m_fociClassNameHierarchyViewController = new GroupAndNameHierarchyViewController(m_browserWindowIndex,
+                                                                                     (m_objectNamePrefix
+                                                                                      + ":Selection"),
+                                                                                     "foci",
+                                                                                     this);
     
     return m_fociClassNameHierarchyViewController;
 }
@@ -140,15 +166,25 @@ FociSelectionViewController::createSelectionWidget()
 QWidget*
 FociSelectionViewController::createAttributesWidget()
 {
+    WuQMacroManager* macroManager = WuQMacroManager::instance();
+
     m_fociContralateralCheckBox = new QCheckBox("Contralateral");
     m_fociContralateralCheckBox->setToolTip("Enable display of foci from contralateral brain structure");
     QObject::connect(m_fociContralateralCheckBox, SIGNAL(clicked(bool)),
                      this, SLOT(processAttributesChanges()));
+    m_fociContralateralCheckBox->setObjectName(m_objectNamePrefix
+                                                  + ":Contralateral");
+    macroManager->addMacroSupportToObject(m_fociContralateralCheckBox,
+                                          "Enable contralateral foci");
     
     m_pasteOntoSurfaceCheckBox = new QCheckBox("Paste Onto Surface");
     m_pasteOntoSurfaceCheckBox->setToolTip("Place the foci onto the surface");
     QObject::connect(m_pasteOntoSurfaceCheckBox, SIGNAL(clicked(bool)),
                      this, SLOT(processAttributesChanges()));
+    m_pasteOntoSurfaceCheckBox->setObjectName(m_objectNamePrefix
+                                               + ":PasteOntoSurface");
+    macroManager->addMacroSupportToObject(m_pasteOntoSurfaceCheckBox,
+                                          "Enable paste foci onto surface");
     
     QLabel* coloringLabel = new QLabel("Coloring");
     m_coloringTypeComboBox = new EnumComboBoxTemplate(this);
@@ -157,9 +193,18 @@ FociSelectionViewController::createAttributesWidget()
     m_coloringTypeComboBox->getWidget()->setToolTip("Select the coloring assignment for foci");
     QObject::connect(m_coloringTypeComboBox, SIGNAL(itemActivated()),
                      this, SLOT(processAttributesChanges()));
+    m_coloringTypeComboBox->getComboBox()->setObjectName(m_objectNamePrefix
+                                                     + ":ColorType");
+    macroManager->addMacroSupportToObject(m_coloringTypeComboBox->getComboBox(),
+                                          "Select foci color type");
     
     QLabel* standardColorLabel = new QLabel("Standard Color");
-    m_standardColorComboBox = new CaretColorEnumComboBox(this);
+    m_standardColorComboBox = new CaretColorEnumComboBox("",
+                                                         QIcon(),
+                                                         (m_objectNamePrefix
+                                                          + ":Color"),
+                                                         "Select foci standard color",
+                                                         this);
     m_standardColorComboBox->getWidget()->setToolTip("Select the standard color");
     QObject::connect(m_standardColorComboBox, SIGNAL(colorSelected(const CaretColorEnum::Enum)),
                      this, SLOT(processAttributesChanges()));
@@ -178,6 +223,10 @@ FociSelectionViewController::createAttributesWidget()
     m_drawTypeComboBox->setToolTip("Select the drawing style of foci");
     QObject::connect(m_drawTypeComboBox, SIGNAL(activated(int)),
                      this, SLOT(processAttributesChanges()));
+    m_drawTypeComboBox->setObjectName(m_objectNamePrefix
+                       + ":DrawingStyle");
+    macroManager->addMacroSupportToObject(m_drawTypeComboBox,
+                                          "Select foci drawing style");
     
     float minLineWidth = 0;
     float maxLineWidth = 1000;
@@ -195,6 +244,10 @@ FociSelectionViewController::createAttributesWidget()
     m_sizeSpinBox->setSuffix("mm");
     QObject::connect(m_sizeSpinBox, SIGNAL(valueChanged(double)),
                      this, SLOT(processAttributesChanges()));
+    m_sizeSpinBox->setObjectName(m_objectNamePrefix
+                       + ":Diameter");
+    macroManager->addMacroSupportToObject(m_sizeSpinBox,
+                                          "Set foci size");
     
     
     QWidget* gridWidget = new QWidget();

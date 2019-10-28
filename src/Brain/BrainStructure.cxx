@@ -45,6 +45,7 @@
 #include "SelectionManager.h"
 #include "LabelFile.h"
 #include "MathFunctions.h"
+#include "MetricDynamicConnectivityFile.h"
 #include "MetricFile.h"
 #include "ModelSurface.h"
 #include "OverlaySet.h"
@@ -249,6 +250,15 @@ BrainStructure::addMetricFile(MetricFile* metricFile,
     
     if (addFileToBrainStructure) {
         m_metricFiles.push_back(metricFile);
+
+        /*
+         * Enable dynamic connectivity using preferences
+         */
+        CaretPreferences* prefs = SessionManager::get()->getCaretPreferences();
+        MetricDynamicConnectivityFile* metricDynConn = metricFile->getMetricDynamicConnectivityFile();
+        if (metricDynConn != NULL) {
+            metricDynConn->setEnabledAsLayer(prefs->isDynamicConnectivityDefaultedOn());
+        }
     }
 }
 
@@ -1136,9 +1146,15 @@ BrainStructure::getAllDataFiles(std::vector<CaretDataFile*>& allDataFilesOut) co
     allDataFilesOut.insert(allDataFilesOut.end(),
                            m_labelFiles.begin(),
                            m_labelFiles.end());
-    allDataFilesOut.insert(allDataFilesOut.end(),
-                           m_metricFiles.begin(),
-                           m_metricFiles.end());
+    for (auto mf : m_metricFiles) {
+        allDataFilesOut.push_back(mf);
+        MetricDynamicConnectivityFile* dynFile = mf->getMetricDynamicConnectivityFile();
+        if (dynFile != NULL) {
+            if (dynFile->isDataValid()) {
+                allDataFilesOut.push_back(dynFile);
+            }
+        }
+    }
     allDataFilesOut.insert(allDataFilesOut.end(),
                            m_rgbaFiles.begin(),
                            m_rgbaFiles.end());
@@ -1526,3 +1542,24 @@ BrainStructure::restoreFromScene(const SceneAttributes* sceneAttributes,
     
 }
 
+/**
+ * Match surface sizes to the primary anatomical surface
+ *
+ * @param matchStatus
+ *     The match status
+ */
+void
+BrainStructure::matchSurfacesToPrimaryAnatomical(const bool matchStatus)
+{
+    const Surface* primaryAnatomical = getPrimaryAnatomicalSurface();
+    if (primaryAnatomical == NULL) {
+        return;
+    }
+    
+    for (auto s : m_surfaces) {
+        if (s != primaryAnatomical) {
+            s->matchToAnatomicalSurface(primaryAnatomical,
+                                        matchStatus);
+        }
+    }
+}

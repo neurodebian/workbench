@@ -200,6 +200,8 @@ BrainOpenGL::receiveEvent(Event* event)
  *
  * @param windowIndex
  *    Index of window for drawing.
+ * @param windowsUserInputMode
+ *    User input mode for window
  * @param brain
  *    The brain (must be valid!)
  * @param contextSharingGroupPointer
@@ -208,6 +210,7 @@ BrainOpenGL::receiveEvent(Event* event)
  *    Viewport info for drawing.
  */
 void BrainOpenGL::drawModels(const int32_t windowIndex,
+                             const UserInputModeEnum::Enum windowsUserInputMode,
                              Brain* brain,
                              void* contextSharingGroupPointer,
                              const std::vector<const BrainOpenGLViewportContent*>& viewportContents)
@@ -222,6 +225,7 @@ void BrainOpenGL::drawModels(const int32_t windowIndex,
     
     
     drawModelsImplementation(windowIndex,
+                             windowsUserInputMode,
                              brain,
                              vpContents);
     
@@ -235,6 +239,8 @@ void BrainOpenGL::drawModels(const int32_t windowIndex,
  *
  * @param windowIndex
  *    Index of window for selection.
+ * @param windowsUserInputMode
+ *    User input mode for window
  * @param brain
  *    The brain (must be valid!)
  * @param contextSharingGroupPointer
@@ -254,6 +260,7 @@ void BrainOpenGL::drawModels(const int32_t windowIndex,
  *    selected.
  */
 void BrainOpenGL::selectModel(const int32_t windowIndex,
+                              const UserInputModeEnum::Enum windowsUserInputMode,
                               Brain* brain,
                               void* contextSharingGroupPointer,
                               const BrainOpenGLViewportContent* viewportContent,
@@ -264,6 +271,7 @@ void BrainOpenGL::selectModel(const int32_t windowIndex,
     m_contextSharingGroupPointer = contextSharingGroupPointer;
 
     selectModelImplementation(windowIndex,
+                              windowsUserInputMode,
                               brain,
                               viewportContent,
                               mouseX,
@@ -283,6 +291,8 @@ void BrainOpenGL::selectModel(const int32_t windowIndex,
  *
  * @param windowIndex
  *    Index of window for projection
+ * @param windowsUserInputMode
+ *    User input mode for window
  * @param brain
  *    The brain (must be valid!)
  * @param contextSharingGroupPointer
@@ -297,16 +307,18 @@ void BrainOpenGL::selectModel(const int32_t windowIndex,
  *    Output with projection result.
  */
 void BrainOpenGL::projectToModel(const int32_t windowIndex,
+                                 const UserInputModeEnum::Enum windowUserInputMode,
                                  Brain* brain,
-                    void* contextSharingGroupPointer,
-                    const BrainOpenGLViewportContent* viewportContent,
-                    const int32_t mouseX,
-                    const int32_t mouseY,
-                    SurfaceProjectedItem& projectionOut)
+                                 void* contextSharingGroupPointer,
+                                 const BrainOpenGLViewportContent* viewportContent,
+                                 const int32_t mouseX,
+                                 const int32_t mouseY,
+                                 SurfaceProjectedItem& projectionOut)
 {
     m_contextSharingGroupPointer = contextSharingGroupPointer;
 
     projectToModelImplementation(windowIndex,
+                                 windowUserInputMode,
                                  brain,
                                  viewportContent,
                                  mouseX,
@@ -638,226 +650,6 @@ BrainOpenGL::getOpenGLMajorMinorVersions(const AString& versionString,
     }
 }
 
-///**
-// * Initialize the drawing mode using the most optimal drawing given
-// * the compile time and run time constraints.
-// */
-//void
-//BrainOpenGL::initializeOpenGL()
-//{
-//    AString compileVersions = "OpenGL Header File Versions Supported: ";
-//#ifdef GL_VERSION_1_1
-//    compileVersions += " 1.1";
-//#endif
-//#ifdef GL_VERSION_1_2
-//    compileVersions += " 1.2";
-//#endif
-//#ifdef GL_VERSION_1_3
-//    compileVersions += " 1.3";
-//#endif
-//#ifdef GL_VERSION_1_4
-//    compileVersions += " 1.4";
-//#endif
-//#ifdef GL_VERSION_1_5
-//    compileVersions += " 1.5";
-//#endif
-//#ifdef GL_VERSION_2_0
-//    compileVersions += " 2.0";
-//#endif
-//#ifdef GL_VERSION_2_1
-//    compileVersions += " 2.1";
-//#endif
-//#ifdef GL_VERSION_3_0
-//    compileVersions += " 3.0";
-//#endif
-//#ifdef GL_VERSION_3_1
-//    compileVersions += " 3.1";
-//#endif
-//#ifdef GL_VERSION_3_2
-//    compileVersions += " 3.2";
-//#endif
-//#ifdef GL_VERSION_3_3
-//    compileVersions += " 3.3";
-//#endif
-//#ifdef GL_VERSION_4_0
-//    compileVersions += " 4.0";
-//#endif
-//#ifdef GL_VERSION_4_1
-//    compileVersions += " 4.1";
-//#endif
-//#ifdef GL_VERSION_4_2
-//    compileVersions += " 4.2";
-//#endif
-//#ifdef GL_VERSION_4_3
-//    compileVersions += " 4.3";
-//#endif
-//#ifdef GL_VERSION_4_4
-//    compileVersions += " 4.4";
-//#endif
-//#ifdef GL_VERSION_4_4
-//    compileVersions += " 4.4";
-//#endif
-//#ifdef GL_VERSION_4_5
-//    compileVersions += " 4.5";
-//#endif
-//#ifdef GL_VERSION_5_0
-//    compileVersions += " 5.0";
-//#endif
-//    
-//#ifdef GL_OES_VERSION_1_0
-//    compileVersions += " ES_1.0";
-//#endif
-//#ifdef GL_ES_VERSION_2_0
-//    compileVersions += " ES_2.0";
-//#endif
-//#ifdef GL_ES_VERSION_3_0
-//    compileVersions += " ES_3.0";
-//#endif
-//    
-//    s_runtimeLibraryVersionOfOpenGL = QLatin1String(reinterpret_cast<const char*>(glGetString(GL_VERSION)));
-//    if (s_runtimeLibraryVersionOfOpenGL.isEmpty()) {
-//        s_runtimeLibraryVersionOfOpenGL = "1.1";
-//    }
-//    getOpenGLMajorMinorVersions(s_runtimeLibraryVersionOfOpenGL,
-//                                s_runtimeLibraryMajorVersionOfOpenGL,
-//                                s_runtimeLibraryMinorVersionOfOpenGL);
-//    
-//    //
-//    // Note: The version string might be something like 1.2.4.  std::atof()
-//    // will get just the 1.2 which is okay.
-//    //
-//    const char* vendorStr = (char*)(glGetString(GL_VENDOR));
-//    const char* renderStr = (char*)(glGetString(GL_RENDERER));
-//    AString lineInfo = (compileVersions
-//                        + "\nOpenGL Runtime Version: " + s_runtimeLibraryVersionOfOpenGL
-//                        + "\nMajor Runtime Version: " + BrainOpenGL::s_runtimeLibraryMajorVersionOfOpenGL
-//                        + "\nMinor Runtime Version: " + BrainOpenGL::s_runtimeLibraryMinorVersionOfOpenGL
-//                        + "\nOpenGL Vendor: " + AString(vendorStr)
-//                        + "\nOpenGL Renderer: " + AString(renderStr));
-//    
-//    lineInfo += "\n";
-//    lineInfo += ("\nFont Renderer: " + m_textRenderer->getName());
-//    lineInfo += "\n";
-//    
-//#ifdef GL_VERSION_2_0
-//    if (testForVersionOfOpenGLSupported("2.0")) {
-//        GLfloat values[2];
-//        glGetFloatv (GL_ALIASED_LINE_WIDTH_RANGE, values);
-//        const AString aliasedLineWidthRange = ("GL_ALIASED_LINE_WIDTH_RANGE value is "
-//                                               + AString::fromNumbers(values, 2, ", "));
-//        
-//        glGetFloatv (GL_SMOOTH_LINE_WIDTH_RANGE, values);
-//        const AString smoothLineWidthRange = ("GL_SMOOTH_LINE_WIDTH_RANGE value is "
-//                                              + AString::fromNumbers(values, 2, ", "));
-//        
-//        glGetFloatv (GL_SMOOTH_LINE_WIDTH_GRANULARITY, values);
-//        const AString smoothLineWidthGranularity = ("GL_SMOOTH_LINE_WIDTH_GRANULARITY value is "
-//                                                    + AString::number(values[0]));
-//        
-//        lineInfo += ("\n" + aliasedLineWidthRange
-//                     + "\n" + smoothLineWidthRange
-//                     + "\n" + smoothLineWidthGranularity);
-//    }
-//#endif // GL_VERSION_2_0
-////#else  // GL_VERSION_2_0
-//    GLfloat values[2];
-//    glGetFloatv (GL_LINE_WIDTH_RANGE, values);
-//    const AString lineWidthRange = ("GL_LINE_WIDTH_RANGE value is "
-//                                    + AString::fromNumbers(values, 2, ", "));
-//    
-//    glGetFloatv (GL_LINE_WIDTH_GRANULARITY, values);
-//    const AString lineWidthGranularity = ("GL_LINE_WIDTH_GRANULARITY value is "
-//                                          + AString::number(values[0]));
-//    lineInfo += ("\n" + lineWidthRange
-//                + "\n" + lineWidthGranularity);
-////#endif // GL_VERSION_2_0
-//    
-//    float sizes[2];
-//    glGetFloatv(GL_POINT_SIZE_RANGE, sizes);
-//    s_minPointSize = sizes[0];
-//    s_maxPointSize = sizes[1];
-//    glGetFloatv(GL_LINE_WIDTH_RANGE, sizes);
-//    s_minLineWidth = sizes[0];
-//    s_maxLineWidth = sizes[1];
-//    
-//    s_supportsDisplayLists = false;
-//    s_supportsImmediateMode = false;
-//    s_supportsVertexBuffers = false;
-//    
-//    GLint maximumNumberOfClipPlanes;
-//    glGetIntegerv(GL_MAX_CLIP_PLANES,
-//                  & maximumNumberOfClipPlanes);
-//    lineInfo += ("\n\nMaximum number of clipping planes is "
-//                 + AString::number(maximumNumberOfClipPlanes));
-//    
-//    GLint redBits, greenBits, blueBits, alphaBits;
-//    glGetIntegerv(GL_RED_BITS,   &redBits);
-//    glGetIntegerv(GL_GREEN_BITS, &greenBits);
-//    glGetIntegerv(GL_BLUE_BITS,  &blueBits);
-//    glGetIntegerv(GL_ALPHA_BITS, &alphaBits);
-//    lineInfo += ("\n\nBuffer bits red/green/blue/apha: ("
-//                 + AString::number(redBits) + ", "
-//                 + AString::number(greenBits) + ", "
-//                 + AString::number(blueBits) + ", "
-//                 + AString::number(alphaBits) + ")");
-//    
-//    /*
-//     * Get the OpenGL Extensions.
-//     */
-//    bool haveARBCompatibility = false;
-//    const QString extensionsString((char*)glGetString(GL_EXTENSIONS));
-//    const QStringList extensionsList = extensionsString.split(QChar(' '));
-//    QStringListIterator extensionsIterator(extensionsList);
-//    AString extInfo = ("\n\nOpenGL Extensions:");
-//    while (extensionsIterator.hasNext()) {
-//        const QString ext = extensionsIterator.next();
-//        extInfo += ("\n   " + ext);
-//        
-//        if (ext == "GL_ARB_compatibility") {
-//            haveARBCompatibility = true;
-//        }
-//    }
-//    
-//    if (testForVersionOfOpenGLSupported("3.1")) {
-//        if (haveARBCompatibility == false) {
-//            CaretLogSevere("OpenGL 3.1 or later and ARB compatibilty extensions not found.\n"
-//                           "OpenGL may fail.");
-//        }
-//    }
-//
-//#if BRAIN_OPENGL_INFO_SUPPORTS_IMMEDIATE
-//    s_supportsImmediateMode = true;
-//#endif // BRAIN_OPENGL_INFO_SUPPORTS_IMMEDIATE
-//    
-//#if BRAIN_OPENGL_INFO_SUPPORTS_DISPLAY_LISTS
-//    s_supportsDisplayLists = true;
-//#endif // BRAIN_OPENGL_INFO_SUPPORTS_DISPLAY_LISTS
-//    
-//#ifdef BRAIN_OPENGL_INFO_SUPPORTS_VERTEX_BUFFERS
-//    s_supportsVertexBuffers = true;
-//#endif // BRAIN_OPENGL_INFO_SUPPORTS_VERTEX_BUFFERS
-//    
-//    lineInfo += ("\n\nBest Drawing Mode: "
-//            + BrainOpenGL::getBestDrawingModeName());
-//    lineInfo += ("\nDisplay Lists Supported: "
-//            + AString::fromBool(s_supportsDisplayLists));
-//    lineInfo += ("\nImmediate Mode Supported: "
-//            + AString::fromBool(s_supportsImmediateMode));
-//    lineInfo += ("\nVertex Buffers Supported: "
-//            + AString::fromBool(s_supportsVertexBuffers));
-//    
-//    lineInfo += extInfo;
-//    
-//    CaretLogConfig(lineInfo);
-//    
-//    m_openGLInformation = lineInfo;
-//    
-//    /*
-//     * Call to validate the draw mode selection logic.
-//     */
-//    getBestDrawingMode();
-//}
-
 /**
  * Initialize the drawing mode using the most optimal drawing given
  * the compile time and run time constraints.
@@ -1031,6 +823,9 @@ BrainOpenGL::getOpenGLInformation()
     
 #ifdef GL_VERSION_2_0
     if (testForVersionOfOpenGLSupported("2.0")) {
+        const char* glslVersionString = (char*)glGetString(GL_SHADING_LANGUAGE_VERSION);
+        lineInfo += ("\nOpenGL Shading Language (GLSL) Version: " + AString(glslVersionString) + "\n");
+        
         GLfloat values[2];
         glGetFloatv (GL_ALIASED_LINE_WIDTH_RANGE, values);
         const AString aliasedLineWidthRange = ("GL_ALIASED_LINE_WIDTH_RANGE value is "
@@ -1118,6 +913,16 @@ BrainOpenGL::getOpenGLInformation()
     lineInfo += ("\nSamples Count: " + AString::number(sampleCount));
     lineInfo += ("\nMultisampling Enabled: " + AString::fromBool(glIsEnabled(GL_MULTISAMPLE)));
     
+    GLint textureMax, texture3DMax;
+    glGetIntegerv(GL_MAX_TEXTURE_SIZE,
+                  &textureMax);
+    glGetIntegerv(GL_MAX_3D_TEXTURE_SIZE,
+                  &texture3DMax);
+    lineInfo += "\n";
+    lineInfo += ("\nTexture Max: " + AString::number(textureMax));
+    lineInfo += ("\nTexture 3D Max: " + AString::number(texture3DMax));
+    lineInfo += "\n";
+
     lineInfo += "\n";
     lineInfo += "\n";
     lineInfo += "Note that State of OpenGL may be different when drawing objects.\n";

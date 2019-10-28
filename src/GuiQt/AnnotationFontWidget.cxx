@@ -284,7 +284,21 @@ AnnotationFontWidget::receiveEvent(Event* event)
         
         if (m_browserWindowIndex == redrawEvent->getBrowserWindowIndex()) {
             if (isVisible()) {
-                updateFontSizeControls();
+                AnnotationManager* annotationManager = GuiManager::get()->getBrain()->getAnnotationManager();
+                std::vector<Annotation*> selectedAnnotations = annotationManager->getAnnotationsSelectedForEditing(m_browserWindowIndex);
+                
+                if (selectedAnnotations.empty()) {
+                    return;
+                }
+
+                std::vector<AnnotationFontAttributesInterface*> textAnnotations;
+                for (auto ann : selectedAnnotations) {
+                    AnnotationFontAttributesInterface* textAnn = dynamic_cast<AnnotationFontAttributesInterface*>(ann);
+                    if (textAnn != NULL) {
+                        textAnnotations.push_back(textAnn);
+                    }
+                }
+                updateContent(textAnnotations);
             }
         }
     }
@@ -393,6 +407,8 @@ AnnotationFontWidget::updateFontSizeControls()
             switch (ann->getCoordinateSpace()) {
                 case AnnotationCoordinateSpaceEnum::CHART:
                     break;
+                case AnnotationCoordinateSpaceEnum::SPACER:
+                    break;
                 case AnnotationCoordinateSpaceEnum::STEREOTAXIC:
                     sizeValue /= surfaceMontageRowCount;
                     break;
@@ -443,6 +459,10 @@ AnnotationFontWidget::updateFontSizeControls()
 void
 AnnotationFontWidget::updateFontStyleControls()
 {
+    m_boldFontAction->setEnabled(false);
+    m_italicFontAction->setEnabled(false);
+    m_underlineFontAction->setEnabled(false);
+
     if ( ! m_annotationsFontStyle.empty()) {
         bool boldOnFlag        = true;
         bool italicOnFlag      = true;

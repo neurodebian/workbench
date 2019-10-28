@@ -25,6 +25,7 @@
 
 #include "AnnotationBox.h"
 #include "AnnotationColorBar.h"
+#include "AnnotationCoordinate.h"
 #include "AnnotationGroup.h"
 #include "AnnotationImage.h"
 #include "AnnotationLine.h"
@@ -37,6 +38,7 @@
 #include "CaretLogger.h"
 #include "DisplayGroupAndTabItemHelper.h"
 #include "MathFunctions.h"
+#include "Matrix4x4.h"
 #include "SceneClass.h"
 #include "SceneClassAssistant.h"
 
@@ -123,6 +125,7 @@ Annotation::copyHelperAnnotation(const Annotation& obj)
     m_uniqueKey           = -1;
     m_coordinateSpace     = obj.m_coordinateSpace;
     m_tabIndex            = obj.m_tabIndex;
+    m_spacerTabIndex      = obj.m_spacerTabIndex;
     m_windowIndex         = obj.m_windowIndex;
     m_viewportCoordinateSpaceViewport[0] = obj.m_viewportCoordinateSpaceViewport[0];
     m_viewportCoordinateSpaceViewport[1] = obj.m_viewportCoordinateSpaceViewport[1];
@@ -383,6 +386,7 @@ Annotation::initializeAnnotationMembers()
     m_coordinateSpace = AnnotationCoordinateSpaceEnum::TAB;
     
     m_tabIndex    = -1;
+    m_spacerTabIndex = SpacerTabIndex();
     m_windowIndex = -1;
     m_viewportCoordinateSpaceViewport[0] = 0;
     m_viewportCoordinateSpaceViewport[1] = 0;
@@ -536,8 +540,22 @@ Annotation::initializeAnnotationMembers()
     
     initializeProperties();
     
-    if (m_coordinateSpace == AnnotationCoordinateSpaceEnum::VIEWPORT) {
-        setPropertiesForSpecializedUsage(PropertiesSpecializedUsage::VIEWPORT_ANNOTATION);
+    switch (m_coordinateSpace) {
+        case AnnotationCoordinateSpaceEnum::CHART:
+            break;
+        case AnnotationCoordinateSpaceEnum::SPACER:
+            break;
+        case AnnotationCoordinateSpaceEnum::STEREOTAXIC:
+            break;
+        case AnnotationCoordinateSpaceEnum::SURFACE:
+            break;
+        case AnnotationCoordinateSpaceEnum::TAB:
+            break;
+        case AnnotationCoordinateSpaceEnum::VIEWPORT:
+            setPropertiesForSpecializedUsage(PropertiesSpecializedUsage::VIEWPORT_ANNOTATION);
+            break;
+        case AnnotationCoordinateSpaceEnum::WINDOW:
+            break;
     }
     
     /*
@@ -666,6 +684,380 @@ Annotation::setCoordinateSpace(const AnnotationCoordinateSpaceEnum::Enum coordin
 }
 
 /**
+ * @return Is this annotation in surface coordinate space
+ * with tangent selected for the surface offset vector?
+ */
+bool
+Annotation::isInSurfaceSpaceWithTangentOffset() const
+{
+    bool flag = false;
+    
+    switch (m_coordinateSpace) {
+        case AnnotationCoordinateSpaceEnum::CHART:
+            break;
+        case AnnotationCoordinateSpaceEnum::SPACER:
+            break;
+        case AnnotationCoordinateSpaceEnum::STEREOTAXIC:
+            break;
+        case AnnotationCoordinateSpaceEnum::SURFACE:
+            switch (getSurfaceOffsetVectorType()) {
+                case AnnotationSurfaceOffsetVectorTypeEnum::CENTROID_THRU_VERTEX:
+                    break;
+                case AnnotationSurfaceOffsetVectorTypeEnum::SURFACE_NORMAL:
+                    break;
+                case AnnotationSurfaceOffsetVectorTypeEnum::TANGENT:
+                    flag = true;
+                    break;
+            }
+            break;
+        case AnnotationCoordinateSpaceEnum::TAB:
+            break;
+        case AnnotationCoordinateSpaceEnum::VIEWPORT:
+            break;
+        case AnnotationCoordinateSpaceEnum::WINDOW:
+            break;
+    }
+    return flag;
+}
+
+/**
+ * Change a surface space annotation to TANGENT offset and update offset length.
+ * If the annotation is already TANGENT space, no changes are made.
+ */
+void
+Annotation::changeSurfaceSpaceToTangentOffset()
+{
+    std::vector<AnnotationCoordinate*> coords;
+    if (getCoordinateSpace() == AnnotationCoordinateSpaceEnum::SURFACE) {
+        AnnotationOneDimensionalShape* oneDimAnn = castToOneDimensionalShape();
+        if (oneDimAnn != NULL) {
+            coords.push_back(oneDimAnn->getStartCoordinate());
+            coords.push_back(oneDimAnn->getEndCoordinate());
+        }
+        else {
+            AnnotationTwoDimensionalShape* twoDimAnn = castToTwoDimensionalShape();
+            if (twoDimAnn != NULL) {
+                coords.push_back(twoDimAnn->getCoordinate());
+            }
+        }
+        
+        for (auto c : coords) {
+            StructureEnum::Enum structure;
+            int32_t surfaceNumberOfNodes;
+            int32_t surfaceNodeIndex;
+            float surfaceOffsetLength;
+            AnnotationSurfaceOffsetVectorTypeEnum::Enum surfaceOffsetVectorType;
+            c->getSurfaceSpace(structure,
+                               surfaceNumberOfNodes,
+                               surfaceNodeIndex,
+                               surfaceOffsetLength,
+                               surfaceOffsetVectorType);
+            if (surfaceOffsetVectorType != AnnotationSurfaceOffsetVectorTypeEnum::TANGENT) {
+                surfaceOffsetVectorType = AnnotationSurfaceOffsetVectorTypeEnum::TANGENT;
+                surfaceOffsetLength     = 1.0;
+                c->setSurfaceSpace(structure,
+                                   surfaceNumberOfNodes,
+                                   surfaceNodeIndex,
+                                   surfaceOffsetLength,
+                                   surfaceOffsetVectorType);
+            }
+        }
+    }
+}
+
+/**
+ * Get the rotation for an annotation in surface space with tangent
+ * offset using the given normal vector from the vertex to which the
+ * annotation is attached.
+ *
+ * @param structure
+ *     The surface structure.
+ * @param vertexNormal
+ *     Normal vector of surface vertex.
+ * @return
+ *     Rotation angle so text is oriented up with 'best axis'
+ */
+float
+Annotation::getSurfaceSpaceWithTangentOffsetRotation(const StructureEnum::Enum structure,
+                                                     const float vertexNormal[3]) const
+{
+    float angleOut(0.0);
+    
+    const AnnotationTwoDimensionalShape* twoDimAnn = dynamic_cast<const AnnotationTwoDimensionalShape*>(this);
+    if (twoDimAnn != NULL) {
+        if (isInSurfaceSpaceWithTangentOffset()) {
+            enum class OrientationType {
+                LEFT_TO_RIGHT         = 0,
+                RIGHT_TO_LEFT         = 1,
+                POSTERIOR_TO_ANTERIOR = 2,
+                ANTERIOR_TO_POSTERIOR = 3,
+                INFERIOR_TO_SUPERIOR  = 4,
+                SUPERIOR_TO_INFERIOR  = 5
+            };
+            
+            const OrientationType orientations[6] = {
+                OrientationType::LEFT_TO_RIGHT,
+                OrientationType::RIGHT_TO_LEFT,
+                OrientationType::POSTERIOR_TO_ANTERIOR,
+                OrientationType::ANTERIOR_TO_POSTERIOR,
+                OrientationType::INFERIOR_TO_SUPERIOR,
+                OrientationType::SUPERIOR_TO_INFERIOR
+            };
+            const float orientationVectors[6][3] {
+                {  1.0,  0.0,  0.0 },
+                { -1.0,  0.0,  0.0 },
+                {  0.0,  1.0,  0.0 },
+                {  0.0, -1.0,  0.0 },
+                {  0.0,  0.0,  1.0 },
+                {  0.0,  0.0, -1.0 }
+            };
+            
+            
+            /*
+             * Find orientation that aligns with the vertex's normal vector
+             */
+            OrientationType matchingOrientation = OrientationType::LEFT_TO_RIGHT;
+            float matchingAngle = 10000.0f;
+            for (int32_t i = 0; i < 6; i++) {
+                const float angle = MathFunctions::angleInDegreesBetweenVectors(orientationVectors[i],
+                                                                                vertexNormal);
+                if (angle < matchingAngle) {
+                    matchingAngle = angle;
+                    matchingOrientation = orientations[i];
+                }
+            }
+            
+            float surfaceUpAxisVector[3] = { 0.0f, 0.0f, 1.0f };
+            switch (matchingOrientation) {
+                case OrientationType::LEFT_TO_RIGHT:
+                    break;
+                case OrientationType::RIGHT_TO_LEFT:
+                    break;
+                case OrientationType::POSTERIOR_TO_ANTERIOR:
+                    break;
+                case OrientationType::ANTERIOR_TO_POSTERIOR:
+                    break;
+                case OrientationType::INFERIOR_TO_SUPERIOR:
+                    surfaceUpAxisVector[0] = 1.0;
+                    surfaceUpAxisVector[0] = 0.0;
+                    surfaceUpAxisVector[0] = 0.0;
+                    break;
+                case OrientationType::SUPERIOR_TO_INFERIOR:
+                    surfaceUpAxisVector[0] = -1.0;
+                    surfaceUpAxisVector[0] =  0.0;
+                    surfaceUpAxisVector[0] =  0.0;
+                    break;
+            }
+            
+            /*
+             * Vector for annotation's Y (vector from bottom to top of annotation)
+             */
+            const float annotationUpYVector[3] {
+                0.0,
+                1.0,
+                0.0
+            };
+            
+            /*
+             * Initialize the rotation angle so that the annotation's vertical axis
+             * is aligned with the screen vertical axis when the surface is in the
+             * analogous surface view.  For a text annotation, the text should be
+             * flowing left to right across screen.
+             */
+            Matrix4x4 rotationMatrix;
+            rotationMatrix.setMatrixToOpenGLRotationFromVector(vertexNormal);
+            Matrix4x4 inverseMatrix(rotationMatrix);
+            inverseMatrix.invert();
+            inverseMatrix.multiplyPoint3(surfaceUpAxisVector);
+            const float alignRotationAngle = MathFunctions::angleInDegreesBetweenVectors(annotationUpYVector,
+                                                                                         surfaceUpAxisVector);
+            float rotationAngle = alignRotationAngle;
+            switch (matchingOrientation) {
+                case OrientationType::LEFT_TO_RIGHT:
+                    rotationAngle = 360.0 - rotationAngle;
+                    break;
+                case OrientationType::RIGHT_TO_LEFT:
+                    break;
+                case OrientationType::POSTERIOR_TO_ANTERIOR:
+                    if (StructureEnum::isRight(structure)) {
+                        rotationAngle = 360.0 - rotationAngle;
+                    }
+                    break;
+                case OrientationType::ANTERIOR_TO_POSTERIOR:
+                    if (StructureEnum::isRight(structure)) {
+                        rotationAngle = 360.0 - rotationAngle;
+                    }
+                    break;
+                case OrientationType::INFERIOR_TO_SUPERIOR:
+                    if (StructureEnum::isRight(structure)) {
+                        rotationAngle += 180.0;
+                    }
+                    break;
+                case OrientationType::SUPERIOR_TO_INFERIOR:
+                    rotationAngle += 90.0;
+                    break;
+            }
+            
+            angleOut = rotationAngle;
+        }
+    }
+    
+    return angleOut;
+}
+
+/**
+ * Initialize the rotation for an annotation in surface space with tangent
+ * offset using the given normal vector from the vertex to which the 
+ * annotation is attached.
+ *
+ * @param structure
+ *     The surface structure.
+ * @param vertexNormal
+ *     Normal vector of surface vertex.
+ */
+void
+Annotation::initializeSurfaceSpaceWithTangentOffsetRotation(const StructureEnum::Enum structure,
+                                                            const float vertexNormal[3])
+{
+    return;
+    
+    
+    AnnotationTwoDimensionalShape* twoDimAnn = castToTwoDimensionalShape();
+    if (twoDimAnn != NULL) {
+        if (isInSurfaceSpaceWithTangentOffset()) {
+            const float angle = getSurfaceSpaceWithTangentOffsetRotation(structure,
+                                                                         vertexNormal);
+            twoDimAnn->setRotationAngle(angle);
+        }
+    }
+    
+    return;
+    
+    
+    
+    
+
+//     AnnotationTwoDimensionalShape* twoDimAnn = dynamic_cast<AnnotationTwoDimensionalShape*>(this);
+//    if (twoDimAnn != NULL) {
+//        if (isInSurfaceSpaceWithTangentOffset()) {
+//            enum class OrientationType {
+//                LEFT_TO_RIGHT         = 0,
+//                RIGHT_TO_LEFT         = 1,
+//                POSTERIOR_TO_ANTERIOR = 2,
+//                ANTERIOR_TO_POSTERIOR = 3,
+//                INFERIOR_TO_SUPERIOR  = 4,
+//                SUPERIOR_TO_INFERIOR  = 5
+//            };
+//            
+//            const OrientationType orientations[6] = {
+//                OrientationType::LEFT_TO_RIGHT,
+//                OrientationType::RIGHT_TO_LEFT,
+//                OrientationType::POSTERIOR_TO_ANTERIOR,
+//                OrientationType::ANTERIOR_TO_POSTERIOR,
+//                OrientationType::INFERIOR_TO_SUPERIOR,
+//                OrientationType::SUPERIOR_TO_INFERIOR
+//            };
+//            const float orientationVectors[6][3] {
+//                {  1.0,  0.0,  0.0 },
+//                { -1.0,  0.0,  0.0 },
+//                {  0.0,  1.0,  0.0 },
+//                {  0.0, -1.0,  0.0 },
+//                {  0.0,  0.0,  1.0 },
+//                {  0.0,  0.0, -1.0 }
+//            };
+//            
+//            
+//            /*
+//             * Find orientation that aligns with the vertex's normal vector
+//             */
+//            OrientationType matchingOrientation = OrientationType::LEFT_TO_RIGHT;
+//            float matchingAngle = 10000.0f;
+//            for (int32_t i = 0; i < 6; i++) {
+//                const float angle = MathFunctions::angleInDegreesBetweenVectors(orientationVectors[i],
+//                                                                                vertexNormal);
+//                if (angle < matchingAngle) {
+//                    matchingAngle = angle;
+//                    matchingOrientation = orientations[i];
+//                }
+//            }
+//            
+//            float surfaceUpAxisVector[3] = { 0.0f, 0.0f, 1.0f };
+//            switch (matchingOrientation) {
+//                case OrientationType::LEFT_TO_RIGHT:
+//                    break;
+//                case OrientationType::RIGHT_TO_LEFT:
+//                    break;
+//                case OrientationType::POSTERIOR_TO_ANTERIOR:
+//                    break;
+//                case OrientationType::ANTERIOR_TO_POSTERIOR:
+//                    break;
+//                case OrientationType::INFERIOR_TO_SUPERIOR:
+//                    surfaceUpAxisVector[0] = 1.0;
+//                    surfaceUpAxisVector[0] = 0.0;
+//                    surfaceUpAxisVector[0] = 0.0;
+//                    break;
+//                case OrientationType::SUPERIOR_TO_INFERIOR:
+//                    surfaceUpAxisVector[0] = -1.0;
+//                    surfaceUpAxisVector[0] =  0.0;
+//                    surfaceUpAxisVector[0] =  0.0;
+//                    break;
+//            }
+//            
+//            /*
+//             * Vector for annotation's Y (vector from bottom to top of annotation)
+//             */
+//            const float annotationUpYVector[3] {
+//                0.0,
+//                1.0,
+//                0.0
+//            };
+//            
+//            /*
+//             * Initialize the rotation angle so that the annotation's vertical axis
+//             * is aligned with the screen vertical axis when the surface is in the
+//             * analogous surface view.  For a text annotation, the text should be
+//             * flowing left to right across screen.
+//             */
+//            Matrix4x4 rotationMatrix;
+//            rotationMatrix.setMatrixToOpenGLRotationFromVector(vertexNormal);
+//            Matrix4x4 inverseMatrix(rotationMatrix);
+//            inverseMatrix.invert();
+//            inverseMatrix.multiplyPoint3(surfaceUpAxisVector);
+//            const float alignRotationAngle = MathFunctions::angleInDegreesBetweenVectors(annotationUpYVector,
+//                                                                                           surfaceUpAxisVector);
+//            float rotationAngle = alignRotationAngle;
+//            switch (matchingOrientation) {
+//                case OrientationType::LEFT_TO_RIGHT:
+//                    rotationAngle = 360.0 - rotationAngle;
+//                    break;
+//                case OrientationType::RIGHT_TO_LEFT:
+//                    break;
+//                case OrientationType::POSTERIOR_TO_ANTERIOR:
+//                    if (StructureEnum::isRight(structure)) {
+//                        rotationAngle = 360.0 - rotationAngle;
+//                    }
+//                    break;
+//                case OrientationType::ANTERIOR_TO_POSTERIOR:
+//                    if (StructureEnum::isRight(structure)) {
+//                        rotationAngle = 360.0 - rotationAngle;
+//                    }
+//                    break;
+//                case OrientationType::INFERIOR_TO_SUPERIOR:
+//                    if (StructureEnum::isRight(structure)) {
+//                        rotationAngle += 180.0;
+//                    }
+//                    break;
+//                case OrientationType::SUPERIOR_TO_INFERIOR:
+//                    rotationAngle += 90.0;
+//                    break;
+//            }
+//
+//            twoDimAnn->setRotationAngle(rotationAngle);
+//        }
+//    }
+}
+
+/**
  * @return The tab index.  Valid only for tab coordinate space annotations.
  */
 int32_t
@@ -684,6 +1076,30 @@ Annotation::setTabIndex(const int32_t tabIndex)
 {
     if (tabIndex != m_tabIndex) {
         m_tabIndex = tabIndex;
+        setModified();
+    }
+}
+
+/**
+ * @return Index of the spacer tab.
+ */
+SpacerTabIndex
+Annotation::getSpacerTabIndex() const
+{
+    return m_spacerTabIndex;
+}
+
+/**
+ * Set index of the spacer tab.
+ *
+ * @param spacerTabIndex
+ *     Index of the spacer tab.
+ */
+void
+Annotation::setSpacerTabIndex(const SpacerTabIndex& spacerTabIndex)
+{
+    if (spacerTabIndex != m_spacerTabIndex) {
+        m_spacerTabIndex = spacerTabIndex;
         setModified();
     }
 }
@@ -1187,7 +1603,7 @@ Annotation::initializeProperties()
     setProperty(Property::LINE_ARROWS, lineArrowsFlag);
     setProperty(Property::TEXT_ALIGNMENT, textFlag);
     setProperty(Property::TEXT_EDIT, textFlag);
-    setProperty(Property::TEXT_COLOR, textFlag);
+    setProperty(Property::TEXT_COLOR, colorBarFlag | textFlag);
     setProperty(Property::TEXT_FONT_NAME, colorBarFlag | textFlag);
     setProperty(Property::TEXT_FONT_SIZE, colorBarFlag | textFlag);
     setProperty(Property::TEXT_FONT_STYLE, textFlag);
@@ -1209,7 +1625,6 @@ Annotation::initializeProperties()
         resetProperty(Property::GROUP);
         resetProperty(Property::LINE_COLOR);
         resetProperty(Property::LINE_THICKNESS);
-        resetProperty(Property::TEXT_COLOR);
         resetProperty(Property::TEXT_EDIT);
         
         setProperty(Property::SCENE_CONTAINS_ATTRIBUTES);
@@ -1921,12 +2336,29 @@ bool
 Annotation::isItemExpanded(const DisplayGroupEnum::Enum displayGroup,
                            const int32_t tabIndex) const
 {
-    if (m_coordinateSpace == AnnotationCoordinateSpaceEnum::WINDOW) {
-        return m_displayGroupAndTabItemHelper->isExpandedInWindow(m_windowIndex);
+    switch (m_coordinateSpace) {
+        case AnnotationCoordinateSpaceEnum::CHART:
+            break;
+        case AnnotationCoordinateSpaceEnum::SPACER:
+            break;
+        case AnnotationCoordinateSpaceEnum::STEREOTAXIC:
+            break;
+        case AnnotationCoordinateSpaceEnum::SURFACE:
+            break;
+        case AnnotationCoordinateSpaceEnum::TAB:
+            break;
+        case AnnotationCoordinateSpaceEnum::VIEWPORT:
+            break;
+        case AnnotationCoordinateSpaceEnum::WINDOW:
+            return m_displayGroupAndTabItemHelper->isExpandedInWindow(m_windowIndex);
+            break;
     }
     
+    const int32_t itemTabIndex = updateDisplayGroupTabIndex(displayGroup,
+                                                            tabIndex);
+    
     return m_displayGroupAndTabItemHelper->isExpanded(displayGroup,
-                                                      tabIndex);
+                                                      itemTabIndex);
 }
 
 /**
@@ -1948,16 +2380,32 @@ Annotation::setItemExpanded(const DisplayGroupEnum::Enum displayGroup,
                             const int32_t tabIndex,
                             const bool status)
 {
-    if (m_coordinateSpace == AnnotationCoordinateSpaceEnum::WINDOW) {
-        m_displayGroupAndTabItemHelper->setExpandedInWindow(m_windowIndex,
-                                                            status);
+    switch (m_coordinateSpace) {
+        case AnnotationCoordinateSpaceEnum::CHART:
+            break;
+        case AnnotationCoordinateSpaceEnum::SPACER:
+            break;
+        case AnnotationCoordinateSpaceEnum::STEREOTAXIC:
+            break;
+        case AnnotationCoordinateSpaceEnum::SURFACE:
+            break;
+        case AnnotationCoordinateSpaceEnum::TAB:
+            break;
+        case AnnotationCoordinateSpaceEnum::VIEWPORT:
+            break;
+        case AnnotationCoordinateSpaceEnum::WINDOW:
+            m_displayGroupAndTabItemHelper->setExpandedInWindow(m_windowIndex,
+                                                                status);
+            return;
+            break;
     }
-    else {
-        m_displayGroupAndTabItemHelper->setExpanded(displayGroup,
-                                                    tabIndex,
-                                                    status);
-    }
-    
+
+    const int32_t itemTabIndex = updateDisplayGroupTabIndex(displayGroup,
+                                                                tabIndex);
+        
+    m_displayGroupAndTabItemHelper->setExpanded(displayGroup,
+                                                itemTabIndex,
+                                                status);
 }
 
 /**
@@ -1977,12 +2425,31 @@ Annotation::getItemDisplaySelected(const DisplayGroupEnum::Enum displayGroup,
                             const int32_t tabIndex) const
 {
     if (testProperty(Annotation::Property::DISPLAY_GROUP)) {
-        if (m_coordinateSpace == AnnotationCoordinateSpaceEnum::WINDOW) {
-            return m_displayGroupAndTabItemHelper->getSelectedInWindow(m_windowIndex);
+        switch (m_coordinateSpace) {
+            case AnnotationCoordinateSpaceEnum::CHART:
+                break;
+            case AnnotationCoordinateSpaceEnum::SPACER:
+                return m_displayGroupAndTabItemHelper->getSelectedInSpacerTab();
+                break;
+            case AnnotationCoordinateSpaceEnum::STEREOTAXIC:
+                break;
+            case AnnotationCoordinateSpaceEnum::SURFACE:
+                break;
+            case AnnotationCoordinateSpaceEnum::TAB:
+                break;
+            case AnnotationCoordinateSpaceEnum::VIEWPORT:
+                break;
+            case AnnotationCoordinateSpaceEnum::WINDOW:
+                return m_displayGroupAndTabItemHelper->getSelectedInWindow(m_windowIndex);
+                break;
         }
         
+        
+        const int32_t itemTabIndex = updateDisplayGroupTabIndex(displayGroup,
+                                                                tabIndex);
+        
         return m_displayGroupAndTabItemHelper->getSelected(displayGroup,
-                                                           tabIndex);
+                                                           itemTabIndex);
     }
     
     /*
@@ -2010,16 +2477,59 @@ Annotation::setItemDisplaySelected(const DisplayGroupEnum::Enum displayGroup,
                              const int32_t tabIndex,
                              const TriStateSelectionStatusEnum::Enum status)
 {
-    if (m_coordinateSpace == AnnotationCoordinateSpaceEnum::WINDOW) {
-        m_displayGroupAndTabItemHelper->setSelectedInWindow(m_windowIndex,
-                                                            status);
+    switch (m_coordinateSpace) {
+        case AnnotationCoordinateSpaceEnum::CHART:
+            break;
+        case AnnotationCoordinateSpaceEnum::SPACER:
+            m_displayGroupAndTabItemHelper->setSelectedInSpacerTab(status);
+            return;
+            break;
+        case AnnotationCoordinateSpaceEnum::STEREOTAXIC:
+            break;
+        case AnnotationCoordinateSpaceEnum::SURFACE:
+            break;
+        case AnnotationCoordinateSpaceEnum::TAB:
+            break;
+        case AnnotationCoordinateSpaceEnum::VIEWPORT:
+            break;
+        case AnnotationCoordinateSpaceEnum::WINDOW:
+            m_displayGroupAndTabItemHelper->setSelectedInWindow(m_windowIndex,
+                                                                status);
+            return;
+            break;
     }
-    else {
-        m_displayGroupAndTabItemHelper->setSelected(displayGroup,
-                                                    tabIndex,
-                                                    status);
-    }
+    
+    const int32_t itemTabIndex = updateDisplayGroupTabIndex(displayGroup,
+                                                            tabIndex);
+    
+    m_displayGroupAndTabItemHelper->setSelected(displayGroup,
+                                                itemTabIndex,
+                                                status);
 }
+
+/**
+ * Update the tab index to correspond to the tab index used for this
+ * annotation if it is in tab annotation space.  This functionality
+ * was added to resolve WB-831.
+ *
+ * @param displayGroup
+ *     The display group.
+ * @param tabIndex
+ *     Index of the tab.
+ */
+int32_t
+Annotation::updateDisplayGroupTabIndex(const DisplayGroupEnum::Enum displayGroup,
+                                       const int32_t tabIndex) const
+{
+    int32_t tabIndexOut(tabIndex);
+    if (getCoordinateSpace() == AnnotationCoordinateSpaceEnum::TAB) {
+        if (displayGroup == DisplayGroupEnum::DISPLAY_GROUP_TAB) {
+            tabIndexOut = getTabIndex();
+        }
+    }
+    return tabIndexOut;
+}
+
 
 /**
  * Is this item selected for editing in the given window?

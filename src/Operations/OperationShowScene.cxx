@@ -107,9 +107,9 @@ OperationShowScene::getParameters()
     
     ret->addStringParameter(3, "image-file-name", "output image file name");
     
-    ret->addIntegerParameter(4, "image-width", "width of output image(s)");
+    ret->addIntegerParameter(4, "image-width", "width of output image(s), in pixels");
     
-    ret->addIntegerParameter(5, "image-height", "height of output image(s)");
+    ret->addIntegerParameter(5, "image-height", "height of output image(s), in pixels");
     
     const QString windowSizeSwitch("-use-window-size");
     ret->createOptionalParameter(6, windowSizeSwitch, "Override image size with window size");
@@ -465,9 +465,7 @@ OperationShowScene::useParameters(OperationParameters* myParams,
             
             TileTabsConfiguration* tileTabsConfiguration = bwc->getSelectedTileTabsConfiguration();
             CaretAssert(tileTabsConfiguration);
-            if ((tileTabsConfiguration->getMaximumNumberOfRows() > 0)
-                && (tileTabsConfiguration->getMaximumNumberOfColumns() > 0)) {
-                
+            
                 const std::vector<int32_t> tabIndices = bwc->getSceneTabIndices();
                 if ( ! tabIndices.empty()) {
                     std::vector<BrowserTabContent*> allTabContent;
@@ -508,11 +506,13 @@ OperationShowScene::useParameters(OperationParameters* myParams,
                                                                                  bwc,
                                                                                  gapsAndMargins,
                                                                                  windowViewport,
+                                                                                 windowIndex,
                                                                                  tabIndexToHighlight);
                     
                     std::vector<const BrainOpenGLViewportContent*> constViewports(viewports.begin(),
                                                                                   viewports.end());
                     brainOpenGL->drawModels(windowIndex,
+                                            UserInputModeEnum::VIEW,
                                             brain,
                                             mesaContext,
                                             constViewports);
@@ -534,10 +534,6 @@ OperationShowScene::useParameters(OperationParameters* myParams,
                     }
                     viewports.clear();
                 }
-            }
-            else {
-                throw OperationException("Tile tabs configuration is corrupted.");
-            }
         }
         else {
             CaretPointer<BrainOpenGL> brainOpenGL(createBrainOpenGL());
@@ -566,6 +562,7 @@ OperationShowScene::useParameters(OperationParameters* myParams,
             viewportContents.push_back(content);
             
             brainOpenGL->drawModels(windowIndex,
+                                    UserInputModeEnum::VIEW,
                                     brain,
                                     mesaContext,
                                     viewportContents);
@@ -749,6 +746,7 @@ OperationShowScene::createBrainOpenGL()
      */
     BrainOpenGLTextRenderInterface* textRenderer = NULL;
     if (textRenderer == NULL) {
+#ifdef HAVE_FREETYPE
         textRenderer = new FtglFontTextRenderer();
         if (! textRenderer->isValid()) {
             delete textRenderer;
@@ -756,6 +754,10 @@ OperationShowScene::createBrainOpenGL()
             CaretLogWarning("Unable to create FTGL Font Renderer.\n"
                             "No text will be available in graphics window.");
         }
+#else
+        CaretLogWarning("Unable to create FTGL Font Renderer due to FreeType not found during configuration.\n"
+                        "No text will be available in graphics window.");
+#endif
     }
     if (textRenderer == NULL) {
         textRenderer = new DummyFontTextRenderer();

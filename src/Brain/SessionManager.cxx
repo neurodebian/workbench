@@ -32,9 +32,11 @@
 #include "BrowserWindowContent.h"
 #include "CaretAssert.h"
 #include "CaretLogger.h"
+#include "CaretPreferenceDataValue.h"
 #include "CaretPreferences.h"
 #include "CiftiConnectivityMatrixDataFileManager.h"
 #include "CiftiFiberTrajectoryManager.h"
+#include "DataToolTipsManager.h"
 #include "ElapsedTimer.h"
 #include "EventManager.h"
 #include "EventBrowserTabDelete.h"
@@ -42,6 +44,7 @@
 #include "EventBrowserTabGetAll.h"
 #include "EventBrowserTabIndicesGetAll.h"
 #include "EventBrowserTabNew.h"
+#include "EventBrowserTabNewClone.h"
 #include "EventBrowserWindowContent.h"
 #include "EventCaretPreferencesGet.h"
 #include "EventModelAdd.h"
@@ -49,15 +52,18 @@
 #include "EventModelGetAll.h"
 #include "EventModelGetAllDisplayed.h"
 #include "EventProgressUpdate.h"
+#include "EventSpacerTabGet.h"
 #include "ImageCaptureSettings.h"
 #include "LogManager.h"
 #include "MapYokingGroupEnum.h"
 #include "ModelWholeBrain.h"
+#include "MovieRecorder.h"
 #include "Scene.h"
 #include "SceneAttributes.h"
 #include "SceneClass.h"
 #include "SceneClassArray.h"
 #include "ScenePrimitiveArray.h"
+#include "SpacerTabContent.h"
 #include "VolumeSurfaceOutlineSetModel.h"
 
 
@@ -76,6 +82,7 @@ SessionManager::SessionManager()
 
     m_ciftiConnectivityMatrixDataFileManager = new CiftiConnectivityMatrixDataFileManager();
     m_ciftiFiberTrajectoryManager = new CiftiFiberTrajectoryManager();
+    m_dataToolTipsManager.reset(new DataToolTipsManager(m_caretPreferences->isShowDataToolTipsEnabled()));
     
     for (int32_t i = 0; i < BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_TABS; i++) {
         m_browserTabs[i] = NULL;
@@ -91,15 +98,18 @@ SessionManager::SessionManager()
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_BROWSER_TAB_GET_ALL);
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_BROWSER_TAB_INDICES_GET_ALL);
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_BROWSER_TAB_NEW);
+    EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_BROWSER_TAB_NEW_CLONE);
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_BROWSER_WINDOW_CONTENT);
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_CARET_PREFERENCES_GET);
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_MODEL_ADD);
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_MODEL_DELETE);
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_MODEL_GET_ALL);
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_MODEL_GET_ALL_DISPLAYED);
+    EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_SPACER_TAB_GET);
     
     Brain* brain = new Brain(m_caretPreferences);
     m_brains.push_back(brain);
+    m_movieRecorder.reset(new MovieRecorder());
 }
 
 /**
@@ -118,6 +128,8 @@ SessionManager::~SessionManager()
             m_browserTabs[i] = NULL;
         }
     }
+    
+    clearSpacerTabs();
     
     std::for_each(m_browserWindowContent.begin(),
                   m_browserWindowContent.end(),
@@ -261,6 +273,18 @@ SessionManager::getBrain(const int32_t brainIndex) const
 }
 
 /**
+ * Clear all of the spacer tabs
+ */
+void
+SessionManager::clearSpacerTabs()
+{
+    for (auto st : m_spacerTabsMap) {
+        delete st.second;
+    }
+    m_spacerTabsMap.clear();
+}
+
+/**
  * Get a description of this object's content.
  * @return String describing this object's content.
  */
@@ -297,8 +321,41 @@ SessionManager::receiveEvent(Event* event)
                 break;
             }
         }
-        if (createdTab == false) {
-            tabEvent->setErrorMessage("Workbench is exhausted.  It cannot create any more tabs.");
+        if ( ! createdTab) {
+            tabEvent->setErrorMessage("Workbench is unable to create tabs, all tabs are in use.");
+        }
+    }
+    else if (event->getEventType() == EventTypeEnum::EVENT_BROWSER_TAB_NEW_CLONE) {
+        EventBrowserTabNewClone* cloneTabEvent = dynamic_cast<EventBrowserTabNewClone*>(event);
+        CaretAssert(cloneTabEvent);
+        
+        cloneTabEvent->setEventProcessed();
+        
+        const int32_t cloneTabIndex = cloneTabEvent->getIndexOfBrowserTabThatWasCloned();
+        if ((cloneTabIndex < 0)
+            || (cloneTabIndex >= BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_TABS)) {
+            cloneTabEvent->setErrorMessage("Invalid tab for cloning index=" + AString::number(cloneTabIndex));
+            return;
+        }
+        
+        int32_t newTabIndex(-1);
+        for (int32_t i = 0; i < BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_TABS; i++) {
+            if (m_browserTabs[i] == NULL) {
+                newTabIndex = i;
+                break;
+            }
+        }
+        if (newTabIndex >= 0) {
+            CaretAssertArrayIndex(m_browserTabs, BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_TABS, cloneTabIndex);
+            CaretAssertArrayIndex(m_browserTabs, BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_TABS, newTabIndex);
+            m_browserTabs[newTabIndex] = new BrowserTabContent(newTabIndex);
+            m_browserTabs[newTabIndex]->update(m_models);
+            m_browserTabs[newTabIndex]->cloneBrowserTabContent(m_browserTabs[cloneTabIndex]);
+            cloneTabEvent->setNewBrowserTab(m_browserTabs[newTabIndex],
+                                            newTabIndex);
+        }
+        else {
+            cloneTabEvent->setErrorMessage("Workbench is unable to create tabs, all tabs are in use.");
         }
     }
     else if (event->getEventType() == EventTypeEnum::EVENT_BROWSER_TAB_DELETE) {
@@ -442,6 +499,35 @@ SessionManager::receiveEvent(Event* event)
         }
         
         getDisplayedModelsEvent->setEventProcessed();
+    }
+    else if (event->getEventType() == EventTypeEnum::EVENT_SPACER_TAB_GET) {
+        EventSpacerTabGet* spacerTabEvent = dynamic_cast<EventSpacerTabGet*>(event);
+        CaretAssert(spacerTabEvent);
+        
+        SpacerTabContent* spacerTabContent = NULL;
+        
+        SpacerTabIndex spacerTabIndex(spacerTabEvent->getWindowIndex(),
+                                      spacerTabEvent->getRowIndex(),
+                                      spacerTabEvent->getColumnIndex());
+        auto iter = m_spacerTabsMap.find(spacerTabIndex);
+        if (iter != m_spacerTabsMap.end()) {
+            spacerTabContent = iter->second;
+            CaretLogFiner("Found Spacer Tab Content: "
+                          + spacerTabContent->getTabName());
+        }
+        else {
+            spacerTabContent = new SpacerTabContent(spacerTabEvent->getWindowIndex(),
+                                                    spacerTabEvent->getRowIndex(),
+                                                    spacerTabEvent->getColumnIndex());
+            m_spacerTabsMap.insert(std::make_pair(spacerTabIndex,
+                                                  spacerTabContent));
+            CaretLogFiner("Created Spacer Tab Content: "
+                          + spacerTabContent->getTabName());
+        }
+        
+        CaretAssert(spacerTabContent);
+        spacerTabEvent->setSpacerTabContent(spacerTabContent);
+        spacerTabEvent->setEventProcessed();
     }
 }
 
@@ -590,6 +676,9 @@ SessionManager::saveToScene(const SceneAttributes* sceneAttributes,
     sceneClass->addChild(colorHelper.saveToScene(sceneAttributes,
                                                  "backgroundAndForegroundColors"));
     
+    sceneClass->addClass(savePreferencesToScene(sceneAttributes,
+                                                "ScenePreferenceDataValues"));
+
     return sceneClass;
 }
 
@@ -607,12 +696,13 @@ SessionManager::saveToScene(const SceneAttributes* sceneAttributes,
  */
 void 
 SessionManager::restoreFromScene(const SceneAttributes* sceneAttributes,
-                        const SceneClass* sceneClass)
+                                 const SceneClass* sceneClass)
 {
     /*
      * Default to user preferences for colors
      */
     m_caretPreferences->setBackgroundAndForegroundColorsMode(BackgroundAndForegroundColorsModeEnum::USER_PREFERENCES);
+    m_caretPreferences->invalidateSceneDataValues();
 
     if (sceneClass == NULL) {
         return;
@@ -801,6 +891,11 @@ SessionManager::restoreFromScene(const SceneAttributes* sceneAttributes,
     }
     
     /*
+     * Remove all spacer tabs
+     */
+    clearSpacerTabs();
+    
+    /*
      * Restore tabs
      */
     const SceneClassArray* browserTabArray = sceneClass->getClassArray("m_browserTabs");
@@ -902,6 +997,9 @@ SessionManager::restoreFromScene(const SceneAttributes* sceneAttributes,
         }
     }
     
+    restorePreferencesFromScene(sceneAttributes,
+                                sceneClass->getClass("ScenePreferenceDataValues"));
+                                
     m_imageCaptureDialogSettings->restoreFromScene(sceneAttributes,
                                                    sceneClass->getClass("m_imageCaptureDialogSettings"));
     
@@ -917,6 +1015,72 @@ SessionManager::restoreFromScene(const SceneAttributes* sceneAttributes,
         resetBrains(true);
         return;
     }    
+}
+
+/**
+ * Save items in preferences to the scene.
+ *
+ * @param sceneAttributes
+ *    Attributes for the scene.  Scenes may be of different types
+ *    (full, generic, etc) and the attributes should be checked when
+ *    saving the scene.
+ *
+ * @param instanceName
+ *    Name for the scene class
+ *
+ * @return Pointer to scene class containing preferences
+ */
+SceneClass*
+SessionManager::savePreferencesToScene(const SceneAttributes* /*sceneAttributes*/,
+                                       const AString& instanceName)
+{
+    SceneClass* sceneClass = new SceneClass(instanceName,
+                                            "ScenePreferences",
+                                            1);
+    std::vector<CaretPreferenceDataValue*> sceneDataValues = m_caretPreferences->getPreferenceSceneDataValues();
+    for (auto scv : sceneDataValues) {
+        if (scv->isSavedToScenes()) {
+            sceneClass->addString(scv->getName(),
+                                  scv->getPreferenceValue().toString());
+        }
+    }
+    
+    return sceneClass;
+}
+
+/**
+ * Restore items in preferences from the scene
+ *
+ * @param sceneAttributes
+ *    Attributes for the scene.  Scenes may be of different types
+ *    (full, generic, etc) and the attributes should be checked when
+ *    restoring the scene.
+ *
+ * @param sceneClass
+ *     sceneClass containing the preference items.
+ */
+void
+SessionManager::restorePreferencesFromScene(const SceneAttributes* /*sceneAttributes*/,
+                                            const SceneClass* sceneClass)
+{
+    if (sceneClass == NULL) {
+        return;
+    }
+    
+    const QString invalidValueName("InVaLiDvAlUe");
+    m_caretPreferences->invalidateSceneDataValues();
+    
+    std::vector<CaretPreferenceDataValue*> sceneDataValues = m_caretPreferences->getPreferenceSceneDataValues();
+    for (auto scv : sceneDataValues) {
+        if (scv->isSavedToScenes()) {
+            const QString name = scv->getName();
+            const QString value = sceneClass->getStringValue(scv->getName(),
+                                                             invalidValueName);
+            if (value != invalidValueName) {
+                scv->setSceneValue(QVariant(value));
+            }
+        }
+    }
 }
 
 /**
@@ -938,6 +1102,8 @@ SessionManager::resetBrains(const bool keepSceneFiles)
         }
     }
 
+    clearSpacerTabs();
+    
     if (numBrains > 1) {
         m_brains.resize(1);
     }
@@ -980,6 +1146,24 @@ SessionManager::getCiftiFiberTrajectoryManager() const
 }
 
 /**
+ * @return The data tool tips manager
+ */
+DataToolTipsManager*
+SessionManager::getDataToolTipsManager()
+{
+    return m_dataToolTipsManager.get();
+}
+
+/**
+ * @return The data tool tips manager (const method)
+ */
+const DataToolTipsManager*
+SessionManager::getDataToolTipsManager() const
+{
+    return m_dataToolTipsManager.get();
+}
+
+/**
  * @return Image capture settings for image capture dialog.
  */
 ImageCaptureSettings*
@@ -997,4 +1181,21 @@ SessionManager::getImageCaptureDialogSettings() const
     return m_imageCaptureDialogSettings;
 }
 
+/**
+ * @return The movie recorder
+ */
+MovieRecorder*
+SessionManager::getMovieRecorder()
+{
+    return m_movieRecorder.get();
+}
+
+/**
+ * @return The movie recorder (const method)
+ */
+const MovieRecorder*
+SessionManager::getMovieRecorder() const
+{
+    return m_movieRecorder.get();
+}
 

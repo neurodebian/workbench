@@ -25,15 +25,23 @@
 
 #include <QAction>
 #include <QActionGroup>
+#include <QDoubleSpinBox>
 #include <QHBoxLayout>
+#include <QLabel>
 #include <QMenu>
 #include <QPainter>
 #include <QToolButton>
+#include <QWidgetAction>
 
 #include "BrainBrowserWindowToolBar.h"
 #include "BrowserTabContent.h"
 #include "CaretAssert.h"
 #include "CaretLogger.h"
+#include "CaretPreferenceDataValue.h"
+#include "CaretPreferences.h"
+#include "GuiManager.h"
+#include "SessionManager.h"
+#include "WuQMacroManager.h"
 #include "WuQWidgetObjectGroup.h"
 #include "WuQtUtilities.h"
 
@@ -49,11 +57,20 @@ using namespace caret;
 
 /**
  * Constructor.
+ * 
+ * @param parentToolBar
+ *     The parent toolbar
  */
-BrainBrowserWindowToolBarSlicePlane::BrainBrowserWindowToolBarSlicePlane(BrainBrowserWindowToolBar* parentToolBar)
+BrainBrowserWindowToolBarSlicePlane::BrainBrowserWindowToolBarSlicePlane(const QString& parentObjectName,
+                                                                         BrainBrowserWindowToolBar* parentToolBar)
 : BrainBrowserWindowToolBarComponent(parentToolBar),
 m_parentToolBar(parentToolBar)
 {
+    WuQMacroManager* macroManager = WuQMacroManager::instance();
+    CaretAssert(macroManager);
+    const QString objectNamePrefix(parentObjectName
+                                   + ":SlicePlane:");
+    
     QIcon parasagittalIcon;
     const bool parasagittalIconValid =
     WuQtUtilities::loadIcon(":/ToolBar/view-plane-parasagittal.png",
@@ -77,6 +94,10 @@ m_parentToolBar(parentToolBar)
     if (parasagittalIconValid) {
         m_volumePlaneParasagittalToolButtonAction->setIcon(parasagittalIcon);
     }
+    m_volumePlaneParasagittalToolButtonAction->setObjectName(objectNamePrefix
+                                                             + "ParasagittalSliceView");
+    macroManager->addMacroSupportToObject(m_volumePlaneParasagittalToolButtonAction,
+                                          "Select parasagittal slice view");
     
     m_volumePlaneCoronalToolButtonAction = WuQtUtilities::createAction(VolumeSliceViewPlaneEnum::toGuiNameAbbreviation(VolumeSliceViewPlaneEnum::CORONAL),
                                                                            "View the CORONAL slice",
@@ -85,6 +106,10 @@ m_parentToolBar(parentToolBar)
     if (coronalIconValid) {
         m_volumePlaneCoronalToolButtonAction->setIcon(coronalIcon);
     }
+    m_volumePlaneCoronalToolButtonAction->setObjectName(objectNamePrefix
+                                                        + "CoronalSliceView");
+    macroManager->addMacroSupportToObject(m_volumePlaneCoronalToolButtonAction,
+                                          "Select coronal slice view");
     
     m_volumePlaneAxialToolButtonAction = WuQtUtilities::createAction(VolumeSliceViewPlaneEnum::toGuiNameAbbreviation(VolumeSliceViewPlaneEnum::AXIAL),
                                                                          "View the AXIAL slice",
@@ -93,13 +118,21 @@ m_parentToolBar(parentToolBar)
     if (axialIconValid) {
         m_volumePlaneAxialToolButtonAction->setIcon(axialIcon);
     }
+    m_volumePlaneAxialToolButtonAction->setObjectName(objectNamePrefix
+                                                      + "AxialSliceView");
+    macroManager->addMacroSupportToObject(m_volumePlaneAxialToolButtonAction,
+                                          "Select axial slice view");
     
     m_volumePlaneAllToolButtonAction = WuQtUtilities::createAction(VolumeSliceViewPlaneEnum::toGuiNameAbbreviation(VolumeSliceViewPlaneEnum::ALL),
                                                                    "View the PARASAGITTAL, CORONAL, and AXIAL slices\n"
                                                                    "Press arrow to display menu for layout selection",
                                                                        this);
     m_volumePlaneAllToolButtonAction->setCheckable(true);
-    m_volumePlaneAllToolButtonAction->setMenu(createViewAllSlicesLayoutMenu());
+    m_volumePlaneAllToolButtonAction->setMenu(createViewAllSlicesLayoutMenu(objectNamePrefix));
+    m_volumePlaneAllToolButtonAction->setObjectName(objectNamePrefix
+                                                    + "AllSlicesView");
+    macroManager->addMacroSupportToObject(m_volumePlaneAllToolButtonAction,
+                                          "Select all planes view");
     
     
     m_volumePlaneActionGroup = new QActionGroup(this);
@@ -117,23 +150,31 @@ m_parentToolBar(parentToolBar)
                                                                          this,
                                                                          this,
                                                                          SLOT(volumePlaneResetToolButtonTriggered(bool)));
+    m_volumePlaneResetToolButtonAction->setObjectName(objectNamePrefix
+                                                      + "ResetView");
+    macroManager->addMacroSupportToObject(m_volumePlaneResetToolButtonAction,
+                                          "Reset slice view pan/rotate/zoom");
     
     
     QToolButton* volumePlaneParasagittalToolButton = new QToolButton();
     volumePlaneParasagittalToolButton->setDefaultAction(m_volumePlaneParasagittalToolButtonAction);
     WuQtUtilities::setToolButtonStyleForQt5Mac(volumePlaneParasagittalToolButton);
+    m_volumePlaneParasagittalToolButtonAction->setParent(volumePlaneParasagittalToolButton);
     
     QToolButton* volumePlaneCoronalToolButton = new QToolButton();
     volumePlaneCoronalToolButton->setDefaultAction(m_volumePlaneCoronalToolButtonAction);
     WuQtUtilities::setToolButtonStyleForQt5Mac(volumePlaneCoronalToolButton);
+    m_volumePlaneCoronalToolButtonAction->setParent(volumePlaneCoronalToolButton);
     
     QToolButton* volumePlaneAxialToolButton = new QToolButton();
     volumePlaneAxialToolButton->setDefaultAction(m_volumePlaneAxialToolButtonAction);
     WuQtUtilities::setToolButtonStyleForQt5Mac(volumePlaneAxialToolButton);
+    m_volumePlaneAxialToolButtonAction->setParent(volumePlaneAxialToolButton);
     
     QToolButton* volumePlaneAllToolButton = new QToolButton();
     volumePlaneAllToolButton->setDefaultAction(m_volumePlaneAllToolButtonAction);
     WuQtUtilities::setToolButtonStyleForQt5Mac(volumePlaneAllToolButton);
+    m_volumePlaneAllToolButtonAction->setParent(volumePlaneAllToolButton);
     
     QToolButton* volumePlaneResetToolButton = new QToolButton();
     volumePlaneResetToolButton->setDefaultAction(m_volumePlaneResetToolButtonAction);
@@ -156,9 +197,18 @@ m_parentToolBar(parentToolBar)
     
     m_volumeAxisCrosshairsToolButtonAction = new QAction("", this);
     m_volumeAxisCrosshairsToolButtonAction->setCheckable(true);
-    m_volumeAxisCrosshairsToolButtonAction->setToolTip("Show crosshairs on slice planes");
+    m_volumeAxisCrosshairsToolButtonAction->setToolTip("<html>"
+                                                       "Show crosshairs on slice planes.<br>"
+                                                       "Press arrow to adjust gap"
+                                                       "<html>");
+    m_volumeAxisCrosshairsToolButtonAction->setMenu(createCrosshairMenu(objectNamePrefix));
     QObject::connect(m_volumeAxisCrosshairsToolButtonAction, &QAction::triggered,
                      this, &BrainBrowserWindowToolBarSlicePlane::volumeAxisCrosshairsTriggered);
+    m_volumeAxisCrosshairsToolButtonAction->setObjectName(objectNamePrefix
+                                                          + "ShowVolumeSliceCrosshairs");
+    macroManager->addMacroSupportToObject(m_volumeAxisCrosshairsToolButtonAction,
+                                          "Show slice axis crosshairs");
+    
     QToolButton* volumeCrosshairsToolButton = new QToolButton();
     QPixmap xhairPixmap = createCrosshairsIcon(volumeCrosshairsToolButton);
     volumeCrosshairsToolButton->setDefaultAction(m_volumeAxisCrosshairsToolButtonAction);
@@ -171,6 +221,11 @@ m_parentToolBar(parentToolBar)
     m_volumeAxisCrosshairLabelsToolButtonAction->setToolTip("Show crosshair slice plane labels");
     QObject::connect(m_volumeAxisCrosshairLabelsToolButtonAction, &QAction::triggered,
                      this, &BrainBrowserWindowToolBarSlicePlane::volumeAxisCrosshairLabelsTriggered);
+    m_volumeAxisCrosshairLabelsToolButtonAction->setObjectName(objectNamePrefix
+                                                               + "ShowVolumeSliceLabels");
+    macroManager->addMacroSupportToObject(m_volumeAxisCrosshairLabelsToolButtonAction,
+                                          "Show slice axis labels");
+    
     QToolButton* volumeCrosshairLabelsToolButton = new QToolButton();
     volumeCrosshairLabelsToolButton->setDefaultAction(m_volumeAxisCrosshairLabelsToolButtonAction);
     QPixmap labelsPixmap = createCrosshairLabelsIcon(volumeCrosshairLabelsToolButton);
@@ -243,28 +298,107 @@ BrainBrowserWindowToolBarSlicePlane::updateContent(BrowserTabContent* browserTab
 
 /**
  * @return A new instance of the view all slices layout menu.
+ * @param objectNamePrefix
+ *     Prefix for object names in macro system
  */
 QMenu*
-BrainBrowserWindowToolBarSlicePlane::createViewAllSlicesLayoutMenu()
+BrainBrowserWindowToolBarSlicePlane::createViewAllSlicesLayoutMenu(const QString& objectNamePrefix)
 {
     std::vector<VolumeSliceViewAllPlanesLayoutEnum::Enum> allLayouts;
     VolumeSliceViewAllPlanesLayoutEnum::getAllEnums(allLayouts);
     
-    QMenu* menu = new QMenu();
+    QMenu* menu = new QMenu(this);
+    menu->setObjectName(objectNamePrefix
+                        + "LayoutMenu");
+    menu->setToolTip("Selects layout of volume slices (column, grid, row)");
     QActionGroup* actionGroup = new QActionGroup(this);
     
     for (auto layout : allLayouts) {
         QAction* action = menu->addAction(VolumeSliceViewAllPlanesLayoutEnum::toGuiName(layout));
         action->setData((int)VolumeSliceViewAllPlanesLayoutEnum::toIntegerCode(layout));
         action->setCheckable(true);
+        action->setObjectName(objectNamePrefix
+                              + ":Layout:"
+                              + VolumeSliceViewAllPlanesLayoutEnum::toName(layout));
         m_viewAllSliceLayoutMenuActions.push_back(action);
-        
         actionGroup->addAction(action);
+
+        WuQMacroManager::instance()->addMacroSupportToObject(action,
+                                                             "Select "
+                                                             + VolumeSliceViewAllPlanesLayoutEnum::toGuiName(layout)
+                                                             + " volume slice layout");
     }
 
     QObject::connect(menu, &QMenu::triggered,
                      this, &BrainBrowserWindowToolBarSlicePlane::viewAllSliceLayoutMenuTriggered);
     return menu;
+}
+
+/**
+ * @return A new instance of the crosshair menu
+ * @param objectNamePrefix
+ *     Prefix for object names in macro system
+ * @return
+ *     Menu for crosshair button
+ */
+QMenu*
+BrainBrowserWindowToolBarSlicePlane::createCrosshairMenu(const QString& objectNamePrefix)
+{
+    m_crosshairGapSpinBox = new QDoubleSpinBox();
+    m_crosshairGapSpinBox->setMinimum(0.0);
+    m_crosshairGapSpinBox->setMaximum(100);
+    m_crosshairGapSpinBox->setSingleStep(0.1);
+    m_crosshairGapSpinBox->setDecimals(1);
+    m_crosshairGapSpinBox->setSuffix("%");
+    m_crosshairGapSpinBox->setObjectName(objectNamePrefix
+                                         + "CrossHairGapSinBox");
+    m_crosshairGapSpinBox->setToolTip("Gap for cross hairs as percentage of window height");
+    
+    QObject::connect(m_crosshairGapSpinBox, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+                     this, &BrainBrowserWindowToolBarSlicePlane::crosshairGapSpinBoxValueChanged);
+    
+    QLabel* crosshairLabel = new QLabel("Gap ");
+    
+    QWidget* crosshairWidget = new QWidget();
+    QHBoxLayout* crosshairLayout = new QHBoxLayout(crosshairWidget);
+    crosshairLayout->setContentsMargins(0, 0, 0, 0);
+    crosshairLayout->addWidget(crosshairLabel);
+    crosshairLayout->addWidget(m_crosshairGapSpinBox);
+    crosshairWidget->setSizePolicy(QSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed));
+    
+    QWidgetAction* crossHairGapWidgetAction = new QWidgetAction(this);
+    crossHairGapWidgetAction->setDefaultWidget(crosshairWidget);
+    
+    QMenu* menu = new QMenu(this);
+    QObject::connect(menu, &QMenu::aboutToShow,
+                     this, &BrainBrowserWindowToolBarSlicePlane::crosshairMenuAboutToShow);
+    menu->addAction(crossHairGapWidgetAction);
+    
+    return menu;
+}
+
+/**
+ * Called when crosshair menu is about to show
+ */
+void
+BrainBrowserWindowToolBarSlicePlane::crosshairMenuAboutToShow()
+{
+    const float gapValue = SessionManager::get()->getCaretPreferences()->getVolumeCrosshairGap();
+    QSignalBlocker blocker(m_crosshairGapSpinBox);
+    m_crosshairGapSpinBox->setValue(gapValue);
+}
+
+/**
+ * Called when crosshair gap spin box value changed
+ *
+ * @param value
+ *     New value for crosshair gap.
+ */
+void
+BrainBrowserWindowToolBarSlicePlane::crosshairGapSpinBoxValueChanged(double value)
+{
+    SessionManager::get()->getCaretPreferences()->setVolumeCrosshairGap(value);
+    GuiManager::updateGraphicsAllWindows();
 }
 
 /**
@@ -403,7 +537,8 @@ BrainBrowserWindowToolBarSlicePlane::createCrosshairsIcon(const QWidget* widget)
     QPixmap pixmap(static_cast<int>(pixmapSize),
                    static_cast<int>(pixmapSize));
     QSharedPointer<QPainter> painter = WuQtUtilities::createPixmapWidgetPainterOriginCenter(widget,
-                                                                                            pixmap);
+                                                                                            pixmap,
+                                                                                            static_cast<uint32_t>(WuQtUtilities::PixMapCreationOptions::TransparentBackground));
     const int startXY = 4;
     const int endXY   = 10;
     QPen pen(painter->pen());
@@ -441,7 +576,8 @@ BrainBrowserWindowToolBarSlicePlane::createCrosshairLabelsIcon(const QWidget* wi
     QPixmap pixmap(static_cast<int>(pixmapSize),
                    static_cast<int>(pixmapSize));
     QSharedPointer<QPainter> painter = WuQtUtilities::createPixmapWidgetPainter(widget,
-                                                                                pixmap);
+                                                                                pixmap,
+                                                                                static_cast<uint32_t>(WuQtUtilities::PixMapCreationOptions::TransparentBackground));
     QFont font = painter->font();
     font.setPixelSize(10);
     painter->setFont(font);

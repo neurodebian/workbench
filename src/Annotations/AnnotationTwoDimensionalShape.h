@@ -42,9 +42,19 @@ namespace caret {
 
         AnnotationTwoDimensionalShape& operator=(const AnnotationTwoDimensionalShape& obj);
         
+        virtual AnnotationOneDimensionalShape* castToOneDimensionalShape() override;
+        
+        virtual const AnnotationOneDimensionalShape* castToOneDimensionalShape() const override;
+        
+        virtual AnnotationTwoDimensionalShape* castToTwoDimensionalShape() override;
+        
+        virtual const AnnotationTwoDimensionalShape* castToTwoDimensionalShape() const override;
+        
         AnnotationCoordinate* getCoordinate();
         
         const AnnotationCoordinate* getCoordinate() const;
+        
+        virtual AnnotationSurfaceOffsetVectorTypeEnum::Enum getSurfaceOffsetVectorType() const override;
         
         float getHeight() const;
         
@@ -115,6 +125,8 @@ namespace caret {
         void addToXYZWithXY(float xyz[3],
                             const float addX,
                             const float addY);
+        
+        bool applySpatialModificationSpacerTabSpace(const AnnotationSpatialModification& spatialModification);
         
         bool applySpatialModificationSurfaceOrStereotaxicSpace(const AnnotationSpatialModification& spatialModification,
                                                                const AnnotationCoordinateSpaceEnum::Enum coordinateSpace);

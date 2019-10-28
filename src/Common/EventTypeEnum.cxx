@@ -142,6 +142,10 @@ EventTypeEnum::initialize()
                                      "EVENT_BROWSER_TAB_NEW", 
                                      "Create a browser tab"));
     
+    enumData.push_back(EventTypeEnum(EVENT_BROWSER_TAB_NEW_CLONE,
+                                     "EVENT_BROWSER_TAB_NEW_CLONE",
+                                     "Create a browser tab by cloning an existing browser tab"));
+    
     enumData.push_back(EventTypeEnum(EVENT_BROWSER_WINDOW_CONTENT,
                                      "EVENT_BROWSER_WINDOW_CONTENT",
                                      "Event for browser window content"));
@@ -182,6 +186,10 @@ EventTypeEnum::initialize()
                                      "EVENT_CARET_MAPPABLE_DATA_FILE_MAPS_VIEWED_IN_OVERLAYS",
                                      "Get Caret Mappable data file maps viewed in overlays"));
 
+    enumData.push_back(EventTypeEnum(EVENT_CARET_MAPPABLE_DATA_FILES_AND_MAPS_IN_DISPLAYED_OVERLAYS,
+                                     "EVENT_CARET_MAPPABLE_DATA_FILES_AND_MAPS_IN_DISPLAYED_OVERLAYS",
+                                     "Get all selected mappable data and map indices in displayed overlays"));
+                       
     enumData.push_back(EventTypeEnum(EVENT_CARET_PREFERENCES_GET,
                                      "EVENT_CARET_PREFERENCES_GET",
                                      "Get the Caret Preferences"));
@@ -254,6 +262,10 @@ EventTypeEnum::initialize()
                                      "EVENT_GET_VIEWPORT_SIZE",
                                      "Get the viewport size"));
     
+    enumData.push_back(EventTypeEnum(EVENT_GRAPHICS_TIMING_ONE_WINDOW,
+                                     "EVENT_GRAPHICS_TIMING_ONE_WINDOW",
+                                     "Graphics timing in one window"));
+    
     enumData.push_back(EventTypeEnum(EVENT_GRAPHICS_UPDATE_ALL_WINDOWS,
                                      "EVENT_GRAPHICS_UPDATE_ALL_WINDOWS", 
                                      "Update all graphics windows"));
@@ -314,6 +326,14 @@ EventTypeEnum::initialize()
                                      "EVENT_MODEL_SURFACE_GET", 
                                      "Get a specific model surface"));
     
+    enumData.push_back(EventTypeEnum(EVENT_MOVIE_RECORDING_MANUAL_MODE_CAPTURE,
+                                     "EVENT_MOVIE_RECORDING_MANUAL_MODE_CAPTURE",
+                                     "Movie recording manual mode capture"));
+    
+    enumData.push_back(EventTypeEnum(EVENT_MOVIE_RECORDING_DIALOG_UPDATE,
+                                     "EVENT_MOVIE_RECORDING_DIALOG_UPDATE",
+                                     "Update the movie recording dialog"));
+
     enumData.push_back(EventTypeEnum(EVENT_NODE_IDENTIFICATION_COLORS_GET_FROM_CHARTS,
                                      "EVENT_NODE_IDENTIFICATION_COLORS_GET_FROM_CHARTS",
                                      "Get the color for node identification symbols from all charts that contain nodes"));
@@ -342,9 +362,17 @@ EventTypeEnum::initialize()
                                      "EVENT_PALETTE_GET_BY_NAME",
                                      "Read the selected files in a spec file"));
     
+    enumData.push_back(EventTypeEnum(EVENT_SCENE_ACTIVE,
+                                     "EVENT_SCENE_ACTIVE",
+                                     "Get/Set the active scene"));
+
     enumData.push_back(EventTypeEnum(EVENT_SHOW_FILE_DATA_READ_WARNING_DIALOG,
                                      "EVENT_SHOW_FILE_DATA_READ_WARNING_DIALOG",
                                      "Show a dialog with warnings encountered reading data files"));
+    
+    enumData.push_back(EventTypeEnum(EVENT_SPACER_TAB_GET,
+                                     "EVENT_SPACER_TAB_GET",
+                                     "Get a spacer tagb"));
     
     enumData.push_back(EventTypeEnum(EVENT_SPEC_FILE_READ_DATA_FILES,
                                      "EVENT_SPEC_FILE_READ_DATA_FILES",
@@ -362,6 +390,10 @@ EventTypeEnum::initialize()
                                      "EVENT_SURFACE_STRUCTURES_VALID_GET",
                                      "GGet valid surface strucutures and their number of node"));
 
+    enumData.push_back(EventTypeEnum(EVENT_TILE_TABS_MODIFICATION,
+                                     "EVENT_TILE_TABS_MODIFICATION",
+                                     "Tile tabs modification"));
+    
     enumData.push_back(EventTypeEnum(EVENT_TOOLBOX_SELECTION_DISPLAY,
                                      "EVENT_TOOLBOX_SELECTION_DISPLAY", 
                                      "Display or hide the selection toolbox"));
@@ -386,6 +418,10 @@ EventTypeEnum::initialize()
                                      "EVENT_UPDATE_VOLUME_EDITING_TOOLBAR",
                                      "Update the volume editing toolbar"));
 
+    enumData.push_back(EventTypeEnum(EVENT_UPDATE_VOLUME_SLICE_INDICES_COORDS_TOOLBAR,
+                                     "EVENT_UPDATE_VOLUME_SLICE_INDICES_COORDS_TOOLBAR",
+                                     "Update the volume slices indices and coords in the toolbar"));
+    
     enumData.push_back(EventTypeEnum(EVENT_COUNT,
                                     "EVENT_COUNT", 
                                     "Count of events"));

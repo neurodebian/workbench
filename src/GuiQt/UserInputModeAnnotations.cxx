@@ -84,7 +84,7 @@ using namespace caret;
  * Constructor.
  */
 UserInputModeAnnotations::UserInputModeAnnotations(const int32_t windowIndex)
-: UserInputModeView(UserInputModeAbstract::ANNOTATIONS),
+: UserInputModeView(UserInputModeEnum::ANNOTATIONS),
 m_browserWindowIndex(windowIndex),
 m_annotationUnderMouse(NULL),
 m_annotationBeingDragged(NULL)
@@ -337,10 +337,16 @@ UserInputModeAnnotations::deleteSelectedAnnotations()
  *
  * @param keyEvent
  *     Key event information.
+ * @return
+ *     True if the input process recognized the key event
+ *     and the key event SHOULD NOT be propagated to parent
+ *     widgets
  */
-void
+bool
 UserInputModeAnnotations::keyPressEvent(const KeyEvent& keyEvent)
 {
+    bool keyWasProcessedFlag(false);
+    
     const int32_t keyCode = keyEvent.getKeyCode();
     switch (keyCode) {
         case Qt::Key_Backspace:
@@ -357,6 +363,7 @@ UserInputModeAnnotations::keyPressEvent(const KeyEvent& keyEvent)
                     break;
                 case MODE_SELECT:
                     deleteSelectedAnnotations();
+                    keyWasProcessedFlag = true;
                     break;
                 case MODE_SET_COORDINATE_ONE:
                     break;
@@ -391,6 +398,7 @@ UserInputModeAnnotations::keyPressEvent(const KeyEvent& keyEvent)
             if (selectModeFlag) {
                 setMode(MODE_SELECT);
                 EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+                keyWasProcessedFlag = true;
             }
         }
             break;
@@ -406,6 +414,10 @@ UserInputModeAnnotations::keyPressEvent(const KeyEvent& keyEvent)
                 switch (selectedAnnotation->getCoordinateSpace()) {
                     case AnnotationCoordinateSpaceEnum::CHART:
                         changeCoordFlag = true;
+                        break;
+                    case AnnotationCoordinateSpaceEnum::SPACER:
+                        changeCoordFlag = true;
+                        moveOnePixelFlag = true;
                         break;
                     case AnnotationCoordinateSpaceEnum::STEREOTAXIC:
                         changeCoordFlag = true;
@@ -425,6 +437,8 @@ UserInputModeAnnotations::keyPressEvent(const KeyEvent& keyEvent)
                 }
                 
                 if (changeCoordFlag) {
+                    keyWasProcessedFlag = true;
+                    
                     float distanceX = 1.0;
                     float distanceY = 1.0;
                     if (moveOnePixelFlag) {
@@ -469,6 +483,8 @@ UserInputModeAnnotations::keyPressEvent(const KeyEvent& keyEvent)
                             bool surfaceFlag = false;
                             switch (selectedAnnotation->getCoordinateSpace()) {
                                 case AnnotationCoordinateSpaceEnum::CHART:
+                                    break;
+                                case AnnotationCoordinateSpaceEnum::SPACER:
                                     break;
                                 case AnnotationCoordinateSpaceEnum::STEREOTAXIC:
                                     break;
@@ -542,6 +558,8 @@ UserInputModeAnnotations::keyPressEvent(const KeyEvent& keyEvent)
         }
             break;
     }
+    
+    return keyWasProcessedFlag;
 }
 
 /**
@@ -620,6 +638,8 @@ UserInputModeAnnotations::mouseLeftDrag(const MouseEvent& mouseEvent)
     switch (draggingCoordinateSpace) {
         case AnnotationCoordinateSpaceEnum::CHART:
             break;
+        case AnnotationCoordinateSpaceEnum::SPACER:
+            break;
         case AnnotationCoordinateSpaceEnum::STEREOTAXIC:
             break;
         case AnnotationCoordinateSpaceEnum::SURFACE:
@@ -672,6 +692,16 @@ UserInputModeAnnotations::mouseLeftDrag(const MouseEvent& mouseEvent)
                     spaceWidth   = chartVP[2];
                     spaceHeight  = chartVP[3];
                 }
+            }
+                break;
+            case AnnotationCoordinateSpaceEnum::SPACER:
+            {
+                int viewport[4];
+                vpContent->getTabViewportBeforeApplyingMargins(viewport);
+                spaceOriginX = viewport[0];
+                spaceOriginY = viewport[1];
+                spaceWidth   = viewport[2];
+                spaceHeight  = viewport[3];
             }
                 break;
             case AnnotationCoordinateSpaceEnum::STEREOTAXIC:
@@ -766,22 +796,22 @@ UserInputModeAnnotations::mouseLeftDrag(const MouseEvent& mouseEvent)
                                                         dx,
                                                         dy,
                                                         mouseEvent.isFirstDragging());
-            if (coordInfo.m_surfaceNodeValid) {
-                annSpatialMod.setSurfaceCoordinateAtMouseXY(coordInfo.m_surfaceStructure,
-                                                            coordInfo.m_surfaceNumberOfNodes,
-                                                            coordInfo.m_surfaceNodeIndex);
+            if (coordInfo.m_surfaceSpaceInfo.m_validFlag) {
+                annSpatialMod.setSurfaceCoordinateAtMouseXY(coordInfo.m_surfaceSpaceInfo.m_structure,
+                                                            coordInfo.m_surfaceSpaceInfo.m_numberOfNodes,
+                                                            coordInfo.m_surfaceSpaceInfo.m_nodeIndex);
             }
             
-            if (coordInfo.m_modelXYZValid) {
-                annSpatialMod.setStereotaxicCoordinateAtMouseXY(coordInfo.m_modelXYZ[0],
-                                                                coordInfo.m_modelXYZ[1],
-                                                                coordInfo.m_modelXYZ[2]);
+            if (coordInfo.m_modelSpaceInfo.m_validFlag) {
+                annSpatialMod.setStereotaxicCoordinateAtMouseXY(coordInfo.m_modelSpaceInfo.m_xyz[0],
+                                                                coordInfo.m_modelSpaceInfo.m_xyz[1],
+                                                                coordInfo.m_modelSpaceInfo.m_xyz[2]);
             }
             
-            if (coordInfo.m_chartXYZValid) {
-                annSpatialMod.setChartCoordinateAtMouseXY(coordInfo.m_chartXYZ[0],
-                                                          coordInfo.m_chartXYZ[1],
-                                                          coordInfo.m_chartXYZ[2]);
+            if (coordInfo.m_chartSpaceInfo.m_validFlag) {
+                annSpatialMod.setChartCoordinateAtMouseXY(coordInfo.m_chartSpaceInfo.m_xyz[0],
+                                                          coordInfo.m_chartSpaceInfo.m_xyz[1],
+                                                          coordInfo.m_chartSpaceInfo.m_xyz[2]);
             }
             
             if ((dx != 0.0)
@@ -792,10 +822,10 @@ UserInputModeAnnotations::mouseLeftDrag(const MouseEvent& mouseEvent)
                                                                                    mouseEvent.getX() - dx,
                                                                                    mouseEvent.getY() - dy,
                                                                                    previousMouseXYCoordInfo);
-                if (previousMouseXYCoordInfo.m_chartXYZValid) {
-                    annSpatialMod.setChartCoordinateAtPreviousMouseXY(previousMouseXYCoordInfo.m_chartXYZ[0],
-                                                                      previousMouseXYCoordInfo.m_chartXYZ[1],
-                                                                      previousMouseXYCoordInfo.m_chartXYZ[2]);
+                if (previousMouseXYCoordInfo.m_chartSpaceInfo.m_validFlag) {
+                    annSpatialMod.setChartCoordinateAtPreviousMouseXY(previousMouseXYCoordInfo.m_chartSpaceInfo.m_xyz[0],
+                                                                      previousMouseXYCoordInfo.m_chartSpaceInfo.m_xyz[1],
+                                                                      previousMouseXYCoordInfo.m_chartSpaceInfo.m_xyz[2]);
                 }
             }
             
@@ -1007,11 +1037,17 @@ UserInputModeAnnotations::setAnnotationUnderMouse(const MouseEvent& mouseEvent,
     }
     
     openGLWidget->updateCursor();
+    
+    /*
+     * Update graphics only if an annotation was passed to this method (WB-820)
+     */
+    if (annotationIDIn != NULL) {
 #if BRAIN_OPENGL_INFO_SUPPORTS_DISPLAY_LISTS
-    openGLWidget->updateGL();
+        openGLWidget->updateGL();
 #else
-    openGLWidget->update();
+        openGLWidget->update();
 #endif
+    }
 }
 
 /**
@@ -1222,10 +1258,10 @@ UserInputModeAnnotations::processModeSetCoordinate(const MouseEvent& mouseEvent)
         int32_t numNodes = -1;
         int32_t nodeIndex = -1;
         float surfaceOffset = 0.0;
-        AnnotationSurfaceOffsetVectorTypeEnum::Enum surfaceVector = AnnotationSurfaceOffsetVectorTypeEnum::CENTROID_THRU_VERTEX;
-        coordinate->getSurfaceSpace(structure, numNodes, nodeIndex, surfaceOffset, surfaceVector);
-        coordInfo.m_surfaceNodeOffset = surfaceOffset;
-        coordInfo.m_surfaceNodeVector = surfaceVector;
+        AnnotationSurfaceOffsetVectorTypeEnum::Enum surfaceVectorType = AnnotationSurfaceOffsetVectorTypeEnum::CENTROID_THRU_VERTEX;
+        coordinate->getSurfaceSpace(structure, numNodes, nodeIndex, surfaceOffset, surfaceVectorType);
+        coordInfo.m_surfaceSpaceInfo.m_nodeOffsetLength = surfaceOffset;
+        coordInfo.m_surfaceSpaceInfo.m_nodeVectorOffsetType = surfaceVectorType;
     }
     
     AnnotationChangeCoordinateDialog changeCoordDialog(coordInfo,

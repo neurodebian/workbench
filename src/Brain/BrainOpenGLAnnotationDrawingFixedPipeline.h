@@ -26,11 +26,13 @@
 
 #include "AnnotationCoordinateSpaceEnum.h"
 #include "AnnotationSizingHandleTypeEnum.h"
+#include "AnnotationSurfaceOffsetVectorTypeEnum.h"
 #include "BrainOpenGLFixedPipeline.h"
 #include "BrainOpenGLTextRenderInterface.h"
 #include "CaretObject.h"
 #include "CaretOpenGLInclude.h"
 #include "Plane.h"
+#include "SpacerTabIndex.h"
 
 
 namespace caret {
@@ -42,6 +44,7 @@ namespace caret {
     class AnnotationFile;
     class AnnotationImage;
     class AnnotationLine;
+    class AnnotationOneDimensionalShape;
     class AnnotationOval;
     class AnnotationText;
     class AnnotationTwoDimensionalShape;
@@ -65,13 +68,17 @@ namespace caret {
                    const float centerToEyeDistance,
                    const int32_t windowIndex,
                    const int32_t tabIndex,
-                   const WindowDrawingMode windowDrawingMode)
+                   const SpacerTabIndex &spacerTabIndex,
+                   const WindowDrawingMode windowDrawingMode,
+                   const bool annotationUserInputModeFlag)
             : m_brain(brain),
             m_drawingMode(drawingMode),
             m_centerToEyeDistance(centerToEyeDistance),
             m_windowIndex(windowIndex),
             m_tabIndex(tabIndex),
-            m_windowDrawingMode(windowDrawingMode) {
+            m_spacerTabIndex(spacerTabIndex),
+            m_windowDrawingMode(windowDrawingMode),
+            m_annotationUserInputModeFlag(annotationUserInputModeFlag) {
             }
             
             Brain* m_brain;
@@ -79,7 +86,9 @@ namespace caret {
             const float m_centerToEyeDistance;
             const int32_t m_windowIndex;
             const int32_t m_tabIndex;
+            const SpacerTabIndex m_spacerTabIndex;
             const WindowDrawingMode m_windowDrawingMode;
+            const bool m_annotationUserInputModeFlag;
         };
         
         BrainOpenGLAnnotationDrawingFixedPipeline(BrainOpenGLFixedPipeline* brainOpenGLFixedPipeline);
@@ -90,7 +99,8 @@ namespace caret {
                              const AnnotationCoordinateSpaceEnum::Enum drawingCoordinateSpace,
                              std::vector<AnnotationColorBar*>& colorBars,
                              std::vector<Annotation*>& notInFileAnnotations,
-                             const Surface* surfaceDisplayed);
+                             const Surface* surfaceDisplayed,
+                             const float surfaceViewScaling);
 
         void drawModelSpaceAnnotationsOnVolumeSlice(Inputs* inputs,
                                                     const Plane& plane,
@@ -186,6 +196,14 @@ namespace caret {
                             Annotation* annotation,
                             const Surface* surfaceDisplayed);
         
+        bool drawTwoDimAnnotationSurfaceTextureOffset(AnnotationFile* annotationFile,
+                                                      AnnotationTwoDimensionalShape* annotation,
+                                                      const Surface* surfaceDisplayed);
+        
+        bool drawOneDimAnnotationSurfaceTextureOffset(AnnotationFile* annotationFile,
+                                                      AnnotationOneDimensionalShape* annotation,
+                                                      const Surface* surfaceDisplayed);
+        
         void drawColorBar(AnnotationFile* annotationFile,
                           AnnotationColorBar* colorBar);
         
@@ -193,21 +211,47 @@ namespace caret {
                      AnnotationBox* box,
                        const Surface* surfaceDisplayed);
         
+        bool drawBoxSurfaceTangentOffset(AnnotationFile* annotationFile,
+                                         AnnotationBox* box,
+                                         const float surfaceExtentZ,
+                                         const float vertexXYZ[3]);
+
         bool drawImage(AnnotationFile* annotationFile,
                        AnnotationImage* image,
-                      const Surface* surfaceDisplayed);
+                       const Surface* surfaceDisplayed);
+        
+        bool drawImageSurfaceTangentOffset(AnnotationFile* annotationFile,
+                                           AnnotationImage* image,
+                                           const float surfaceExtentZ,
+                                           const float vertexXYZ[3]);
         
         bool drawLine(AnnotationFile* annotationFile,
                       AnnotationLine* line,
                       const Surface* surfaceDisplayed);
         
+        bool drawLineSurfaceTextureOffset(AnnotationFile* annotationFile,
+                                          AnnotationLine* line,
+                                          const Surface* surfaceDisplayed,
+                                          const float surfaceExtentZ);
+        
         bool drawOval(AnnotationFile* annotationFile,
                       AnnotationOval* oval,
                       const Surface* surfaceDisplayed);
         
+        bool drawOvalSurfaceTangentOffset(AnnotationFile* annotationFile,
+                                          AnnotationOval* oval,
+                                          const float surfaceExtentZ,
+                                          const float vertexXYZ[3]);
+        
         bool drawText(AnnotationFile* annotationFile,
                       AnnotationText* text,
                        const Surface* surfaceDisplayed);
+        
+        bool drawTextSurfaceTangentOffset(AnnotationFile* annotationFile,
+                                          AnnotationText* text,
+                                          const float surfaceExtentZ,
+                                          const float vertexXYZ[3],
+                                          const float vertexNormalXYZ[3]);
         
         void drawColorBarSections(const AnnotationColorBar* colorBar,
                                   const float bottomLeft[3],
@@ -284,14 +328,7 @@ namespace caret {
                                                        const float topLeft[3],
                                                        std::vector<float>& lineCoordinatesOut,
                                                        std::vector<float>& arrowCoordinatesOut) const;
-        
-        static void expandBox(float bottomLeft[3],
-                       float bottomRight[3],
-                       float topRight[3],
-                       float topLeft[3],
-                       const float extraSpaceX,
-                       const float extraSpaceY);
-        
+                
         void setSelectionBoxColor();
         
         void startOpenGLForDrawing(GLint* savedShadeModelOut,
@@ -311,12 +348,23 @@ namespace caret {
         
         float getLineWidthFromPercentageHeight(const float percentageHeight) const;
         
+        float getLineWidthPercentageInSelectionMode(const Annotation* annotation) const;
+        
         float estimateColorBarWidth(const AnnotationColorBar* colorBar,
                                     const float textHeightInPixels) const;
+        
+        void getSurfaceNormalVector(const Surface* surfaceDisplayed,
+                                    const int32_t vertexIndex,
+                                    float normalVectorOut[3]) const;
+        
+        bool isBackFacing(const float xyz[3],
+                          const float normal[3]) const;
         
         BrainOpenGLFixedPipeline* m_brainOpenGLFixedPipeline;
         
         Inputs* m_inputs;
+        
+        float m_surfaceViewScaling;
         
         /**
          * Dummy annotation file is used for annotations that 
@@ -358,14 +406,16 @@ namespace caret {
         
         std::unique_ptr<EventOpenGLObjectToWindowTransform> m_transformEvent;
         
-        static constexpr float s_sizingHandleLineWidthInPixels = 2.0f;
+        static const float s_sizingHandleLineWidthInPixels;
+        static const float s_selectionLineMinimumPixelWidth;
         
         // ADD_NEW_MEMBERS_HERE
 
     };
     
 #ifdef __BRAIN_OPEN_G_L_ANNOTATION_DRAWING_FIXED_PIPELINE_DECLARE__
-    // <PLACE DECLARATIONS OF STATIC MEMBERS HERE>
+    const float BrainOpenGLAnnotationDrawingFixedPipeline::s_sizingHandleLineWidthInPixels  = 2.0f;
+    const float BrainOpenGLAnnotationDrawingFixedPipeline::s_selectionLineMinimumPixelWidth = 5.0f;
 #endif // __BRAIN_OPEN_G_L_ANNOTATION_DRAWING_FIXED_PIPELINE_DECLARE__
 
 } // namespace

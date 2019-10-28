@@ -39,12 +39,14 @@ namespace caret {
         Q_OBJECT
         
     public:
-        BrainBrowserWindowToolBarSliceSelection(BrainBrowserWindowToolBar* parentToolBar);
+        BrainBrowserWindowToolBarSliceSelection(BrainBrowserWindowToolBar* parentToolBar,
+                                                const QString parentObjectName);
         
         virtual ~BrainBrowserWindowToolBarSliceSelection();
         
         virtual void updateContent(BrowserTabContent* browserTabContent);
-        
+
+        virtual void receiveEvent(Event* event) override;
 
         // ADD_NEW_METHODS_HERE
 
@@ -75,6 +77,9 @@ namespace caret {
         
         void updateObliqueMaskingButton();
         
+        QPixmap createVolumeIdentificationUpdatesSlicesIcon(const QWidget* widget);
+        
+
         BrainBrowserWindowToolBar* m_parentToolBar;
         
         WuQWidgetObjectGroup* m_volumeIndicesWidgetGroup;

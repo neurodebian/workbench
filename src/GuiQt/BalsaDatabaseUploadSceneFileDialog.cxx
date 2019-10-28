@@ -213,7 +213,7 @@ BalsaDatabaseUploadSceneFileDialog::createLoginWidget()
     /*
      * Show password tool button
      */
-    m_showPasswordAction = new QAction("Show");
+    m_showPasswordAction = new QAction("Show", this);
     m_showPasswordAction->setCheckable(true);
     m_showPasswordAction->setChecked(false);
     QObject::connect(m_showPasswordAction, &QAction::triggered,
@@ -447,9 +447,14 @@ BalsaDatabaseUploadSceneFileDialog::createUploadTab()
 QWidget*
 BalsaDatabaseUploadSceneFileDialog::createBalsaDatabaseSelectionWidget()
 {
-    QString hostName = SystemUtilities::getLocalHostName();
-    const bool isWustlDomainFlag = hostName.endsWith(".wustl.edu");
-    
+    bool isWustlDomainFlag = false;
+    /* DOES NOT WORK ON MACOS 10.14, See note in: SystemUtilities::getLocalHostName()
+       QString hostName = SystemUtilities::getLocalHostName();
+       bool isWustlDomainFlag = hostName.endsWith(".wustl.edu");
+     */
+#ifndef NDEBUG
+    isWustlDomainFlag = true;
+#endif
     /*
      * Database selection
      */

@@ -21,6 +21,7 @@
  */
 /*LICENSE_END*/
 
+#include <memory>
 #include <utility>
 
 #include "BackgroundAndForegroundColors.h"
@@ -30,14 +31,17 @@
 #include "ImageCaptureMethodEnum.h"
 #include "OpenGLDrawingMethodEnum.h"
 #include "SpecFileDialogViewFilesTypeEnum.h"
+#include "VolumeSliceViewAllPlanesLayoutEnum.h"
 
 class QSettings;
 class QStringList;
 
 namespace caret {
 
+    class CaretPreferenceDataValue;
     class ModelTransform;
     class TileTabsConfiguration;
+    class WuQMacroGroup;
     
     class CaretPreferences : public CaretObject {
         
@@ -88,6 +92,14 @@ namespace caret {
         
         void setOpenGLDrawingMethod(const OpenGLDrawingMethodEnum::Enum openGLDrawingMethod);
         
+        VolumeSliceViewAllPlanesLayoutEnum::Enum getVolumeAllSlicePlanesLayout() const;
+        
+        void setVolumeAllSlicePlanesLayout(const VolumeSliceViewAllPlanesLayoutEnum::Enum allViewLayout);
+        
+        float getVolumeCrosshairGap() const;
+        
+        void setVolumeCrosshairGap(const float gap);
+        
         bool isVolumeAxesCrosshairsDisplayed() const;
         
         void setVolumeAxesCrosshairsDisplayed(const bool displayed);
@@ -119,6 +131,10 @@ namespace caret {
         bool isDevelopMenuEnabled() const;
         
         void setDevelopMenuEnabled(const bool enabled);
+        
+        bool isShowDataToolTipsEnabled() const;
+        
+        void setShowDataToolTipsEnabled(const bool enabled);
         
         void readTileTabsConfigurations(const bool performSync = true);
         
@@ -190,6 +206,18 @@ namespace caret {
         
         void setDynamicConnectivityDefaultedOn(const bool defaultedOn);
         
+        WuQMacroGroup* getMacros();
+        
+        const WuQMacroGroup* getMacros() const;
+        
+        void readMacros(const bool performSync = true);
+        
+        void writeMacros();
+        
+        void invalidateSceneDataValues();
+        
+        std::vector<CaretPreferenceDataValue*> getPreferenceSceneDataValues();
+
     private:
         CaretPreferences(const CaretPreferences&);
 
@@ -271,6 +299,12 @@ namespace caret {
         
         int32_t volumeMontageCoordinatePrecision;
         
+        std::unique_ptr<CaretPreferenceDataValue> m_volumeAllSlicePlanesLayout;
+        
+        std::unique_ptr<CaretPreferenceDataValue> m_volumeCrossHairGapPreference;
+
+        std::vector<CaretPreferenceDataValue*> m_preferenceDataValues;
+        
         bool splashScreenEnabled;
         
         bool developMenuEnabled;
@@ -287,6 +321,8 @@ namespace caret {
         
         bool yokingDefaultedOn;
         
+        bool dataToolTipsEnabled;
+        
         AString remoteFileUserName;
         AString remoteFilePassword;
         bool remoteFileLoginSaved;
@@ -294,6 +330,8 @@ namespace caret {
         AString balsaUserName;
         
         SpecFileDialogViewFilesTypeEnum::Enum manageFilesViewFileType;
+        
+        std::unique_ptr<WuQMacroGroup> m_macros;
         
         static const AString NAME_ANIMATION_START_TIME;
         static const AString NAME_BALSA_USER_NAME;
@@ -304,6 +342,8 @@ namespace caret {
         static const AString NAME_VOLUME_MONTAGE_COORDINATE_PRECISION;
         static const AString NAME_COLOR_BACKGROUND;
         static const AString NAME_COLOR_FOREGROUND;
+        static const AString NAME_COLOR_BACKGROUND_WINDOW;
+        static const AString NAME_COLOR_FOREGROUND_WINDOW;
         static const AString NAME_COLOR_BACKGROUND_ALL;
         static const AString NAME_COLOR_FOREGROUND_ALL;
         static const AString NAME_COLOR_BACKGROUND_CHART;
@@ -315,9 +355,11 @@ namespace caret {
         static const AString NAME_COLOR_CHART_MATRIX_GRID_LINES;
         static const AString NAME_COLOR_CHART_HISTOGRAM_THRESHOLD;
         static const AString NAME_DEVELOP_MENU;
+        static const AString NAME_DATA_TOOL_TIPS;
         static const AString NAME_DYNAMIC_CONNECTIVITY_ON;
         static const AString NAME_IMAGE_CAPTURE_METHOD;
         static const AString NAME_LOGGING_LEVEL;
+        static const AString NAME_MACROS;
         static const AString NAME_MANAGE_FILES_VIEW_FILE_TYPE;
         static const AString NAME_OPENGL_DRAWING_METHOD;
         static const AString NAME_PREVIOUS_SCENE_FILES;
@@ -331,6 +373,7 @@ namespace caret {
         static const AString NAME_SHOW_SURFACE_IDENTIFICATION_SYMBOLS;
         static const AString NAME_SHOW_VOLUME_IDENTIFICATION_SYMBOLS;
         static const AString NAME_TILE_TABS_CONFIGURATIONS;
+        static const AString NAME_TILE_TABS_CONFIGURATIONS_TWO;
         static const AString NAME_VOLUME_IDENTIFICATION_DEFAULTED_ON;
         static const AString NAME_YOKING_DEFAULT_ON;
         
@@ -346,6 +389,8 @@ namespace caret {
     const AString CaretPreferences::NAME_VOLUME_MONTAGE_COORDINATE_PRECISION     = "volumeMontageCoordinatePrecision";
     const AString CaretPreferences::NAME_COLOR_BACKGROUND     = "colorBackground";
     const AString CaretPreferences::NAME_COLOR_FOREGROUND     = "colorForeground";
+    const AString CaretPreferences::NAME_COLOR_BACKGROUND_WINDOW  = "colorBackgroundWindow";
+    const AString CaretPreferences::NAME_COLOR_FOREGROUND_WINDOW  = "colorForegroundWindow";
     const AString CaretPreferences::NAME_COLOR_BACKGROUND_ALL     = "colorBackgroundAll";
     const AString CaretPreferences::NAME_COLOR_FOREGROUND_ALL     = "colorForegroundAll";
     const AString CaretPreferences::NAME_COLOR_BACKGROUND_CHART     = "colorBackgroundChart";
@@ -357,9 +402,11 @@ namespace caret {
     const AString CaretPreferences::NAME_COLOR_CHART_MATRIX_GRID_LINES = "colorChartMatrixGridLines";
     const AString CaretPreferences::NAME_COLOR_CHART_HISTOGRAM_THRESHOLD = "colorChartHistogramThreshold";
     const AString CaretPreferences::NAME_DEVELOP_MENU     = "developMenu";
+    const AString CaretPreferences::NAME_DATA_TOOL_TIPS = "dataToolTips";
     const AString CaretPreferences::NAME_DYNAMIC_CONNECTIVITY_ON = "dynamicConnectivityDefaultedOn";
     const AString CaretPreferences::NAME_IMAGE_CAPTURE_METHOD = "imageCaptureMethod";
     const AString CaretPreferences::NAME_LOGGING_LEVEL     = "loggingLevel";
+    const AString CaretPreferences::NAME_MACROS = "macros";
     const AString CaretPreferences::NAME_MANAGE_FILES_VIEW_FILE_TYPE     = "manageFilesViewFileType";
     const AString CaretPreferences::NAME_OPENGL_DRAWING_METHOD     = "openGLDrawingMethod";
     const AString CaretPreferences::NAME_PREVIOUS_SCENE_FILES     = "previousSceneFiles";
@@ -373,6 +420,7 @@ namespace caret {
     const AString CaretPreferences::NAME_SHOW_SURFACE_IDENTIFICATION_SYMBOLS = "showSurfaceIdentificationSymbols";
     const AString CaretPreferences::NAME_SHOW_VOLUME_IDENTIFICATION_SYMBOLS = "showVolumeIdentificationSymbols";
     const AString CaretPreferences::NAME_TILE_TABS_CONFIGURATIONS = "tileTabsConfigurations";
+    const AString CaretPreferences::NAME_TILE_TABS_CONFIGURATIONS_TWO = "tileTabsConfigurationsTwo";
     const AString CaretPreferences::NAME_VOLUME_IDENTIFICATION_DEFAULTED_ON = "volumeIdentificationDefaultedOn";
     const AString CaretPreferences::NAME_YOKING_DEFAULT_ON = "yokingDefaultedOn";
 #endif // __CARET_PREFERENCES_DECLARE__

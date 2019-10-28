@@ -33,6 +33,7 @@
 #include "EventManager.h"
 #include "EventMapYokingValidation.h"
 #include "Overlay.h"
+#include "WuQMacroManager.h"
 #include "WuQMessageBox.h"
 #include "WuQtUtilities.h"
 
@@ -48,17 +49,56 @@ using namespace caret;
  * Constructor.
  */
 MapYokingGroupComboBox::MapYokingGroupComboBox(QObject* parent)
+: MapYokingGroupComboBox(parent,
+                         "",
+                         "")
+{
+}
+//: WuQWidget(parent)
+//{
+//    m_comboBox = new EnumComboBoxTemplate(this);
+//    m_comboBox->setup<MapYokingGroupEnum, MapYokingGroupEnum::Enum>();
+//    m_comboBox->getWidget()->setStatusTip("Synchronize selected map indices (and selection status for overlays)");
+//    m_comboBox->getWidget()->setToolTip("Synchronize selected map indices (and selection status for overlays)");
+//#ifdef CARET_OS_MACOSX
+//    m_comboBox->getComboBox()->setFixedWidth(m_comboBox->getComboBox()->sizeHint().width() - 20);
+//#endif // CARET_OS_MACOSX
+//    QObject::connect(m_comboBox, SIGNAL(itemActivated()),
+//                     this, SLOT(comboBoxActivated()));
+//    WuQObject::watchObjectForMacroRecording(m_comboBox);
+//}
+
+/**
+ * Constructor.
+ *
+ * @param parent
+ *     Parent of this combo box
+ * @param objectName
+ *     Object name for macros
+ * @param descriptiveName
+       Descriptive name for macros
+ */
+MapYokingGroupComboBox::MapYokingGroupComboBox(QObject* parent,
+                                               const QString& objectName,
+                                               const QString& descriptiveName)
 : WuQWidget(parent)
 {
     m_comboBox = new EnumComboBoxTemplate(this);
     m_comboBox->setup<MapYokingGroupEnum, MapYokingGroupEnum::Enum>();
     m_comboBox->getWidget()->setStatusTip("Synchronize selected map indices (and selection status for overlays)");
     m_comboBox->getWidget()->setToolTip("Synchronize selected map indices (and selection status for overlays)");
+    m_comboBox->getComboBox()->setSizeAdjustPolicy(QComboBox::AdjustToContents);
 #ifdef CARET_OS_MACOSX
-    m_comboBox->getComboBox()->setFixedWidth(m_comboBox->getComboBox()->sizeHint().width() - 20);
+//    m_comboBox->getComboBox()->setFixedWidth(m_comboBox->getComboBox()->sizeHint().width() - 20);
 #endif // CARET_OS_MACOSX
     QObject::connect(m_comboBox, SIGNAL(itemActivated()),
                      this, SLOT(comboBoxActivated()));
+    if ( ! objectName.isEmpty()) {
+        QWidget* encapsulatedComboBox = m_comboBox->getWidget();
+        encapsulatedComboBox->setObjectName(objectName);
+        WuQMacroManager::instance()->addMacroSupportToObject(encapsulatedComboBox,
+                                                             "Select map yoking for " + descriptiveName);
+    }
 }
 
 /**

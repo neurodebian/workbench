@@ -22,12 +22,15 @@
 /*LICENSE_END*/
 
 #include <array>
+#include <map>
+#include <memory>
 
 #include "ApplicationTypeEnum.h"
 #include "BrainConstants.h"
 #include "CaretObject.h"
 #include "EventListenerInterface.h"
 #include "SceneableInterface.h"
+#include "SpacerTabIndex.h"
 
 namespace caret {
     
@@ -37,8 +40,11 @@ namespace caret {
     class CaretPreferences;
     class CiftiConnectivityMatrixDataFileManager;
     class CiftiFiberTrajectoryManager;
+    class DataToolTipsManager;
     class ImageCaptureSettings;
     class Model;
+    class MovieRecorder;
+    class SpacerTabContent;
     
     /// Manages a Caret session which contains 'global' brain data.
     class SessionManager : public CaretObject, public EventListenerInterface, public SceneableInterface {
@@ -68,9 +74,17 @@ namespace caret {
         
         const CiftiFiberTrajectoryManager* getCiftiFiberTrajectoryManager() const;
         
+        DataToolTipsManager* getDataToolTipsManager();
+        
+        const DataToolTipsManager* getDataToolTipsManager() const;
+        
         ImageCaptureSettings* getImageCaptureDialogSettings();
         
         const ImageCaptureSettings* getImageCaptureDialogSettings() const;
+        
+        MovieRecorder* getMovieRecorder();
+        
+        const MovieRecorder* getMovieRecorder() const;
         
         virtual SceneClass* saveToScene(const SceneAttributes* sceneAttributes,
                                         const AString& instanceName);
@@ -93,6 +107,14 @@ namespace caret {
         void updateBrowserTabContents();
         
         void resetBrains(const bool keepSceneFiles);
+        
+        void clearSpacerTabs();
+        
+        SceneClass* savePreferencesToScene(const SceneAttributes* sceneAttributes,
+                                           const AString& instanceName);
+        
+        void restorePreferencesFromScene(const SceneAttributes* sceneAttributes,
+                                         const SceneClass* sceneClass);
         
         /** The session manager */
         static SessionManager* s_singletonSessionManager;
@@ -118,9 +140,16 @@ namespace caret {
         /** Loads fiber trajectory data */
         CiftiFiberTrajectoryManager* m_ciftiFiberTrajectoryManager;
         
+        /** Data Tool Tips Manager */
+        std::unique_ptr<DataToolTipsManager> m_dataToolTipsManager;
+        
         /** Settings for image capture dialog */
         ImageCaptureSettings* m_imageCaptureDialogSettings;
         
+        /** Map to spacer tabs where key is window index, row index, column index */
+        std::map<SpacerTabIndex, SpacerTabContent*> m_spacerTabsMap;
+        
+        std::unique_ptr<MovieRecorder> m_movieRecorder;
     };
     
 #ifdef __SESSION_MANAGER_DECLARE__
