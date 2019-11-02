@@ -10,6 +10,7 @@ Build-Depends: debhelper (>= 9),
                libssl-dev, zlib1g-dev,
                libqt5opengl5-dev,
                libglib2.0-dev,
+               libglm-dev,
                xauth, xvfb,
                libftgl-dev,
 Standards-Version: 3.9.8
