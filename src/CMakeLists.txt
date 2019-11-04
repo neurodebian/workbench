@@ -266,23 +266,12 @@ IF (NOT WIN32)
     PKG_CHECK_MODULES(GLMath glm)
 ENDIF (NOT WIN32)
 IF (GLMath_FOUND)
-    SET(GLMATH_RESULT "Using OpenGL Math directory ${GLMath_INCLUDE_DIRS}")
-    INCLUDE_DIRECTORIES("${GLMath_INCLUDE_DIRS}")
+    SET(GLMATH_RESULT "Using OpenGL Math directory ${GLMath_INCLUDEDIR}")
+    INCLUDE_DIRECTORIES("${GLMath_INCLUDEDIR}")
 ELSE (GLMath_FOUND)
     SET(GLMATH_RESULT "In Workbench Source Code")
     INCLUDE_DIRECTORIES("${CMAKE_SOURCE_DIR}/GLMath")
 ENDIF (GLMath_FOUND)
-
-
-##########################################################################################
-#
-# Can Use OpenCL
-#
-SET(OPENCL_RESULT "Not found (OK, unused at this time)")
-FIND_PACKAGE(OpenCL)
-IF (OpenCL_FOUND)
-    SET(OPENCL_RESULT "Version: ${OpenCL_VERSION_STRING}")
-ENDIF (OpenCL_FOUND)
 
 ##########################################################################################
 #
@@ -629,7 +618,6 @@ IF(WB_CMAKE_VERBOSE_OUTPUT_FLAG)
     MESSAGE(${MSG_MODE} ${MSG_INDENT} "FreeType: " ${FREETYPE_RESULT})
     MESSAGE(${MSG_MODE} ${MSG_INDENT} "GLEW:     " ${GLEW_RESULT})
     MESSAGE(${MSG_MODE} ${MSG_INDENT} "GLMath:   " ${GLMATH_RESULT})
-    MESSAGE(${MSG_MODE} ${MSG_INDENT} "OpenCL:   " ${OPENCL_RESULT})
     MESSAGE(${MSG_MODE} ${MSG_INDENT} "OpenGL:   " ${OPENGL_RESULT})
     MESSAGE(${MSG_MODE} ${MSG_INDENT} "OpenMP:   " ${OPENMP_RESULT})
     MESSAGE(${MSG_MODE} ${MSG_INDENT} "OpenSSL:  " ${OPENSSL_RESULT})
