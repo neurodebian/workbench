@@ -1,6 +1,6 @@
 Source: connectome-workbench
 Section: science
-Priority: extra
+Priority: optional
 Maintainer: NeuroDebian Team <team@neuro.debian.net>
 Uploaders: Yaroslav Halchenko <debian@onerussian.com>, Michael Hanke <michael.hanke@gmail.com>
 Build-Depends: debhelper (>= 9),
@@ -14,7 +14,7 @@ Build-Depends: debhelper (>= 9),
                opencl-c-headers,
                xauth, xvfb,
                libftgl-dev,
-Standards-Version: 3.9.8
+Standards-Version: 4.4.0
 Homepage: http://www.nitrc.org/projects/workbench/
 Vcs-Git: git://github.com/neurodebian/workbench -b debian
 Vcs-Browser: http://github.com/neurodebian/workbench
