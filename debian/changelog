@@ -1,4 +1,4 @@
-connectome-workbench (1.4.0+git5-gd7e615f3a-1) unstable; urgency=medium
+connectome-workbench (1.4.1-1) unstable; urgency=medium
 
   * New upstream release
   * Updated debian/copyright from upstream
@@ -7,7 +7,7 @@ connectome-workbench (1.4.0+git5-gd7e615f3a-1) unstable; urgency=medium
       should pick up system library if available)
     - added opencl-c-headers to build-depends
 
- -- Yaroslav Halchenko <debian@onerussian.com>  Mon, 04 Nov 2019 15:03:54 -0500
+ -- Yaroslav Halchenko <debian@onerussian.com>  Tue, 05 Nov 2019 20:32:34 -0500
 
 connectome-workbench (1.3.2-2) neurodebian; urgency=medium
 
