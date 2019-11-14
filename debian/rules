@@ -4,7 +4,10 @@
 srcpkg = $(shell LC_ALL=C dpkg-parsechangelog | grep '^Source:' | cut -d ' ' -f 2,2)
 debver = $(shell LC_ALL=C dpkg-parsechangelog | grep '^Version:' | cut -d ' ' -f 2,2 )
 uver = $(shell echo $(debver) | cut -d '-' -f 1,1 )
-parallel=$(shell dpkg --print-architecture | grep -q mips && echo '' || echo '--parallel')
+
+DEB_HOST_ARCH=$(shell dpkg-architecture -qDEB_HOST_ARCH)
+do_parallel=$(shell echo $(DEB_HOST_ARCH) | grep -q mips && echo '' || echo '--parallel')
+do_help=$(shell echo $(DEB_HOST_ARCH) | grep -q -e '(mipsel|m68k|sh4)' && echo 'OFF' || echo 'ON')
 
 export  http_proxy=http://127.0.0.1:9/
 export  https_proxy=http://127.0.0.1:9/
@@ -26,7 +29,7 @@ export DH_VERBOSE=1
 
 # Default mega-rule
 %:
-	dh $@ $(parallel) --sourcedirectory=src
+	dh $@ $(do_parallel) --sourcedirectory=src
 
 override_dh_clean:
 	cat src/debian/copyright debian/copyright.debian >| debian/copyright
@@ -40,7 +43,8 @@ override_dh_auto_configure:
 	OSMESA_DIR=/usr \
      dh_auto_configure -- \
 		-DWORKBENCH_MESA_DIR=/usr \
-		-DCMAKE_SKIP_RPATH:BOOL=OFF
+		-DCMAKE_SKIP_RPATH:BOOL=OFF \
+		-DWORKBENCH_INCLUDE_HELP_HTML_RESOURCES:BOOL=$(do_help)
 #-DBUILD_SHARED_LIBS:BOOL=ON
 
 override_dh_auto_install:

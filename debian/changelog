@@ -1,10 +1,13 @@
-connectome-workbench (1.4.1-2) UNRELEASED; urgency=medium
+connectome-workbench (1.4.1-2) unstable; urgency=medium
 
   * debian/control
     - "optional" instead of "extra" priority
     - policy compliance boosted to 4.4.0 (should be all kosher)
+  * debian/{rules,patches/000*}
+    - disable building memory demanding help on mipsel, m68k, sh4
+      architectures
 
- -- Yaroslav Halchenko <debian@onerussian.com>  Wed, 06 Nov 2019 12:41:23 -0500
+ -- Yaroslav Halchenko <debian@onerussian.com>  Wed, 13 Nov 2019 23:17:53 -0500
 
 connectome-workbench (1.4.1-1) unstable; urgency=medium
 

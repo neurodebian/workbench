@@ -1,0 +1,89 @@
+From 9644479c0e43f59433ccbebcd025aaec43077a67 Mon Sep 17 00:00:00 2001
+From: John Harwell <jharwell@wustl.edu>
+Date: Mon, 11 Nov 2019 10:49:37 -0600
+Subject: [PATCH 1/2] Added cached cmake variable
+ WORKBENCH_INCLUDE_HELP_HTML_RESOURCES in src/CMakeLists.txt.  When TRUE (the
+ default) the html help information is included.  When FALSE, the help
+ resources are excluded and selection of help results in a message indicating
+ help is not available.
+
+---
+ src/CMakeLists.txt         | 12 +++++++++++-
+ src/Desktop/CMakeLists.txt |  9 +++++++--
+ src/GuiQt/GuiManager.cxx   |  7 +++++++
+ 3 files changed, 25 insertions(+), 3 deletions(-)
+
+diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
+index 97abaadd4..1ef554881 100755
+--- a/src/CMakeLists.txt
++++ b/src/CMakeLists.txt
+@@ -30,7 +30,9 @@ set (WORKBENCH_QT5_DISABLE_DEPRECATED FALSE CACHE BOOL
+      "If TRUE, use of Qt 5 deprecated functionality will cause compiler to fail")
+ set (WORKBENCH_USE_CMAKE_AUTOMOC FALSE CACHE BOOL 
+      "If TRUE, use CMAKE_AUTOMOC command for generating 'moc' files")
+-set (WORKBENCH_USE_QT5 TRUE CACHE BOOL 
++set (WORKBENCH_INCLUDE_HELP_HTML_RESOURCES TRUE CACHE BOOL
++     "If TRUE, help (html) pages in src/Resources/Help are available in wb_view")
++set (WORKBENCH_USE_QT5 TRUE CACHE BOOL
+      "If TRUE, require Qt5, else Qt4.<NEWLINE>Specify as argument to cmake: -DWORKBENCH_USE_QT5=TRUE")
+ set (WORKBENCH_USE_QT5_QOPENGL_WIDGET FALSE CACHE BOOL 
+      "With Qt5, QOpenGLWidget instead of deprecated QGLWidget")
+@@ -518,6 +520,14 @@ IF (EXISTS ${WORKBENCH_MESA_DIR})
+     ENDIF (EXISTS ${WORKBENCH_MESA_DIR}/include/GL/osmesa.h)
+ ENDIF (EXISTS ${WORKBENCH_MESA_DIR})
+ 
++##########################################################################################
++#
++# Definition for include Help Files in Resources
++#
++IF (WORKBENCH_INCLUDE_HELP_HTML_RESOURCES)
++    ADD_DEFINITIONS(-DWORKBENCH_HAVE_HELP_HTML)
++ENDIF (WORKBENCH_INCLUDE_HELP_HTML_RESOURCES)
++
+ ##########################################################################################
+ #
+ # All subdirectories that will be configured for building
+diff --git a/src/Desktop/CMakeLists.txt b/src/Desktop/CMakeLists.txt
+index cc8b7e457..061a8753c 100644
+--- a/src/Desktop/CMakeLists.txt
++++ b/src/Desktop/CMakeLists.txt
+@@ -38,11 +38,16 @@ ENDIF (UNIX)
+ 
+ #
+ # Resources
++# Help can be excluded
+ #
+ SET (RESOURCES_QRC_FILE
+      ../Resources/General/general_resources.qrc
+-     ../Resources/Gui/gui_resources.qrc
+-     ../Resources/Help/help_resources.qrc)
++     ../Resources/Gui/gui_resources.qrc)
++IF (WORKBENCH_INCLUDE_HELP_HTML_RESOURCES)
++    LIST (APPEND RESOURCES_QRC_FILE
++          ../Resources/Help/help_resources.qrc)
++ENDIF (WORKBENCH_INCLUDE_HELP_HTML_RESOURCES)
++
+ IF (Qt5_FOUND)
+     QT5_ADD_RESOURCES(IMAGE_RCS_SRCS ${RESOURCES_QRC_FILE})
+ ELSE (Qt5_FOUND)
+diff --git a/src/GuiQt/GuiManager.cxx b/src/GuiQt/GuiManager.cxx
+index 12c606fc5..1563a4289 100644
+--- a/src/GuiQt/GuiManager.cxx
++++ b/src/GuiQt/GuiManager.cxx
+@@ -2156,6 +2156,13 @@ GuiManager::showHideHelpDialog(const bool status,
+         }
+     }
+     CaretAssert(helpDialogParentWindow);
++
++#ifndef WORKBENCH_HAVE_HELP_HTML
++    const QString msg("Help not available.\n"
++                      "wb_view was configured without inclusion of Help Information.");
++    WuQMessageBox::errorOk(helpDialogParentWindow, msg);
++    return;
++#endif
+     
+     if (status) {
+         if (m_helpViewerDialog == NULL) {
+-- 
+2.24.0.rc1
+
