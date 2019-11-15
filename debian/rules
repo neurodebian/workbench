@@ -7,7 +7,7 @@ uver = $(shell echo $(debver) | cut -d '-' -f 1,1 )
 
 DEB_HOST_ARCH=$(shell dpkg-architecture -qDEB_HOST_ARCH)
 do_parallel=$(shell echo $(DEB_HOST_ARCH) | grep -q mips && echo '' || echo '--parallel')
-do_help=$(shell echo $(DEB_HOST_ARCH) | grep -q -e '(mipsel|m68k|sh4)' && echo 'OFF' || echo 'ON')
+do_help=$(shell echo $(DEB_HOST_ARCH) | grep -q -E '(mipsel|m68k|sh4)' && echo 'OFF' || echo 'ON')
 
 export  http_proxy=http://127.0.0.1:9/
 export  https_proxy=http://127.0.0.1:9/
