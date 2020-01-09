@@ -1522,6 +1522,7 @@ GuiManager::receiveEvent(Event* event)
                                                             overlayEditor);
                 }
             }
+                break;
             case EventOverlaySettingsEditorDialogRequest::MODE_UPDATE_ALL:
                 for (std::set<OverlaySettingsEditorDialog*>::iterator overlayEditorIter = m_overlaySettingsEditors.begin();
                      overlayEditorIter != m_overlaySettingsEditors.end();
@@ -1601,7 +1602,9 @@ GuiManager::receiveEvent(Event* event)
         
         showHideHelpDialog(true,
                            helpEvent->getBrainBrowserWindow());
-        m_helpViewerDialog->showHelpPageWithName(helpEvent->getHelpPageName());
+        if (m_helpViewerDialog != NULL) {
+            m_helpViewerDialog->showHelpPageWithName(helpEvent->getHelpPageName());
+        }
         
         helpEvent->setEventProcessed();
     }
@@ -2155,6 +2158,13 @@ GuiManager::showHideHelpDialog(const bool status,
         }
     }
     CaretAssert(helpDialogParentWindow);
+
+#ifndef WORKBENCH_HAVE_HELP_HTML
+    const QString msg("Help not available.\n"
+                      "wb_view was configured without inclusion of Help Information.");
+    WuQMessageBox::errorOk(helpDialogParentWindow, msg);
+    return;
+#endif
     
     if (status) {
         if (m_helpViewerDialog == NULL) {
@@ -2169,7 +2179,7 @@ GuiManager::showHideHelpDialog(const bool status,
         
         m_helpViewerDialog->showDialog();
     }
-    else {
+    else if (m_helpViewerDialog != NULL) {
         m_helpViewerDialog->close();
     }
     
