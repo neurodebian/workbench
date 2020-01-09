@@ -1,27 +1,32 @@
 Source: connectome-workbench
+Maintainer: NeuroDebian Team <team@neuro.debian.net>
+Uploaders: Yaroslav Halchenko <debian@onerussian.com>,
+           Michael Hanke <michael.hanke@gmail.com>
 Section: science
 Priority: optional
-Maintainer: NeuroDebian Team <team@neuro.debian.net>
-Uploaders: Yaroslav Halchenko <debian@onerussian.com>, Michael Hanke <michael.hanke@gmail.com>
 Build-Depends: debhelper (>= 9),
-               help2man, cmake,
+               help2man,
+               cmake,
                libosmesa6-dev,
                qtbase5-dev,
-               libssl-dev, zlib1g-dev,
+               libssl-dev,
+               zlib1g-dev,
                libqt5opengl5-dev,
                libglib2.0-dev,
                libglm-dev (>= 0.9.9.6~),
                opencl-c-headers,
-               xauth, xvfb,
-               libftgl-dev,
-Standards-Version: 4.4.0
-Homepage: http://www.nitrc.org/projects/workbench/
-Vcs-Git: git://github.com/neurodebian/workbench -b debian
+               xauth,
+               xvfb,
+               libftgl-dev
+Standards-Version: 4.4.1
 Vcs-Browser: http://github.com/neurodebian/workbench
+Vcs-Git: https://github.com/neurodebian/workbench -b debian
+Homepage: http://www.nitrc.org/projects/workbench/
 
 Package: connectome-workbench
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}
+Depends: ${shlibs:Depends},
+         ${misc:Depends}
 Recommends: caret
 Suggests: ffmpeg
 Description: brain visualization, analysis and discovery tool
@@ -37,7 +42,8 @@ Description: brain visualization, analysis and discovery tool
 Package: connectome-workbench-dbg
 Architecture: any
 Section: debug
-Depends: ${shlibs:Depends}, ${misc:Depends},
+Depends: ${shlibs:Depends},
+         ${misc:Depends},
          connectome-workbench (= ${binary:Version})
 Description: brain visualization, analysis and discovery tool -- debug symbols
  Connectome Workbench is a brain visualization, analysis and discovery
