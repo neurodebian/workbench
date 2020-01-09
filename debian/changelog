@@ -1,6 +1,7 @@
 connectome-workbench (1.4.2-1) UNRELEASED; urgency=medium
 
   * Fresh upstream
+    - removing all debian/patches/0* picked up from upstream
 
  -- Yaroslav Halchenko <debian@onerussian.com>  Wed, 08 Jan 2020 21:25:11 -0500
 
