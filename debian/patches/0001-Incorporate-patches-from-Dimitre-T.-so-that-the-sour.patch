@@ -1,0 +1,86 @@
+From ac5fcb7b05f7733ec59397a11c2545d7ea0fb289 Mon Sep 17 00:00:00 2001
+From: John Harwell <jharwell@wustl.edu>
+Date: Wed, 2 Dec 2020 09:20:45 -0600
+Subject: [PATCH] Incorporate patches from Dimitre T. so that the source will
+ compile with Qt 5.15.x.
+
+---
+ src/GuiQt/ChartTwoOverlayViewController.cxx | 1 +
+ src/Qwt/qwt_null_paintdevice.cpp            | 1 +
+ src/Qwt/qwt_painter.cpp                     | 1 +
+ src/Qwt/qwt_painter_command.h               | 1 +
+ src/Qwt/qwt_plot_panner.cpp                 | 1 +
+ src/Qwt/qwt_plot_renderer.cpp               | 1 +
+ src/Qwt/qwt_widget_overlay.cpp              | 1 +
+ 7 files changed, 7 insertions(+)
+
+--- a/src/GuiQt/ChartTwoOverlayViewController.cxx
++++ b/src/GuiQt/ChartTwoOverlayViewController.cxx
+@@ -31,6 +31,7 @@
+ #include <QMenu>
+ #include <QMessageBox>
+ #include <QPainter>
++#include <QPainterPath>
+ #include <QSpinBox>
+ #include <QToolButton>
+ 
+--- a/src/Qwt/qwt_null_paintdevice.cpp
++++ b/src/Qwt/qwt_null_paintdevice.cpp
+@@ -10,6 +10,7 @@
+ #include "qwt_null_paintdevice.h"
+ #include <qpaintengine.h>
+ #include <qpixmap.h>
++#include <QPainterPath>
+ 
+ class QwtNullPaintDevice::PrivateData
+ {
+--- a/src/Qwt/qwt_painter.cpp
++++ b/src/Qwt/qwt_painter.cpp
+@@ -27,6 +27,7 @@
+ #include <qpaintengine.h>
+ #include <qapplication.h>
+ #include <qdesktopwidget.h>
++#include <QPainterPath>
+ 
+ #if QT_VERSION >= 0x050000
+ #include <qwindow.h>
+--- a/src/Qwt/qwt_painter_command.h
++++ b/src/Qwt/qwt_painter_command.h
+@@ -15,6 +15,7 @@
+ #include <qpixmap.h>
+ #include <qimage.h>
+ #include <qpolygon.h>
++#include <QPainterPath>
+ 
+ class QPainterPath;
+ 
+--- a/src/Qwt/qwt_plot_panner.cpp
++++ b/src/Qwt/qwt_plot_panner.cpp
+@@ -14,6 +14,7 @@
+ #include <qbitmap.h>
+ #include <qstyle.h>
+ #include <qstyleoption.h>
++#include <QPainterPath>
+ 
+ static QBitmap qwtBorderMask( const QWidget *canvas, const QSize &size )
+ {
+--- a/src/Qwt/qwt_plot_renderer.cpp
++++ b/src/Qwt/qwt_plot_renderer.cpp
+@@ -23,6 +23,7 @@
+ #if QT_VERSION >= 0x050000
+ #include <QtPrintSupport/QPrinter>
+ #include <QtPrintSupport/QPrintDialog>
++#include <QPainterPath>
+ #else // QT_VERSION
+ #include <qprinter.h>
+ #include <qprintdialog.h>
+--- a/src/Qwt/qwt_widget_overlay.cpp
++++ b/src/Qwt/qwt_widget_overlay.cpp
+@@ -13,6 +13,7 @@
+ #include <qpaintengine.h>
+ #include <qimage.h>
+ #include <qevent.h>
++#include <QPainterPath>
+ 
+ static QImage::Format qwtMaskImageFormat()
+ {

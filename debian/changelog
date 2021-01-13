@@ -1,3 +1,11 @@
+connectome-workbench (1.4.2-2) unstable; urgency=medium
+
+  * debian/patches
+    + 0001-Incorporate-patches-from-Dimitre-T.-so-that-the-sour.patch
+      CPed from upstream to resolve FTBFS with recent QA (Closes: #975166)
+
+ -- Yaroslav Halchenko <debian@onerussian.com>  Wed, 13 Jan 2021 16:04:17 -0500
+
 connectome-workbench (1.4.2-1) unstable; urgency=medium
 
   * Fresh upstream
