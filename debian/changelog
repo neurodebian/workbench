@@ -1,3 +1,10 @@
+connectome-workbench (1.5.0-1) unstable; urgency=medium
+
+  * Fresh upstream release
+    - includes debian/patches/0001-Incorporate-*.patch
+
+ -- Yaroslav Halchenko <debian@onerussian.com>  Fri, 19 Feb 2021 10:02:11 -0500
+
 connectome-workbench (1.4.2-2) unstable; urgency=medium
 
   * debian/patches
