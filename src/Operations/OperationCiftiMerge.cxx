@@ -23,7 +23,9 @@
 
 #include "CaretAssert.h"
 #include "CaretPointer.h"
+#include "CaretCommandGlobalOptions.h"
 #include "CiftiFile.h"
+#include "FileInformation.h"
 
 #include <algorithm>
 
@@ -67,8 +69,10 @@ OperationParameters* OperationCiftiMerge::getParameters()
 void OperationCiftiMerge::useParameters(OperationParameters* myParams, ProgressObject* myProgObj)
 {
     LevelProgress myProgress(myProgObj);
-    CiftiFile* ciftiOut = myParams->getOutputCifti(1);
-    const vector<ParameterComponent*>& myInputs = *(myParams->getRepeatableParameterInstances(2));
+    CiftiFile* ciftiOut = myParams->getOutputCifti(1);//NOTE: doesn't actually get created until the first setRow() call
+    FileInformation ciftiOutInfo(ciftiOut->getFileName());
+    AString ciftiOutCanonicalName = ciftiOutInfo.getCanonicalFilePath();
+    const vector<ParameterComponent*>& myInputs = myParams->getRepeatableParameterInstances(2);
     int numInputs = (int)myInputs.size();
     if (numInputs == 0) throw OperationException("no inputs specified");
     vector<CiftiFile> ciftiList(numInputs);
@@ -93,13 +97,22 @@ void OperationCiftiMerge::useParameters(OperationParameters* myParams, ProgressO
         {
             ciftiList[i].openFile(myInputs[i]->getString(1));
         }
+        if (caret_global_command_options.m_ciftiReadMemory)
+        {
+            ciftiList[i].convertToInMemory();
+        } else {//if you manually read input files, you manually check for filename collision...
+            if (!ciftiOut->isInMemory() && FileInformation(myInputs[i]->getString(1)).getCanonicalFilePath() == ciftiOutCanonicalName)
+            {
+                ciftiOut->convertToInMemory();
+            }
+        }
         const CiftiFile* ciftiIn = &(ciftiList[i]);
         vector<int64_t> thisDims = ciftiIn->getDimensions();
         const CiftiXML& thisXML = ciftiIn->getCiftiXML();
         if (thisXML.getNumberOfDimensions() != 2) throw OperationException("only 2D cifti are supported");
         if (!thisXML.getMap(CiftiXML::ALONG_COLUMN)->approximateMatch(baseColMapping)) throw OperationException("file '" + ciftiIn->getFileName() + "' has non-matching mapping along columns");
         if (thisXML.getMappingType(CiftiXML::ALONG_ROW) != baseRowMapping.getType()) throw OperationException("file '" + ciftiIn->getFileName() + "' has different mapping type along rows");
-        const vector<ParameterComponent*>& columnOpts = *(myInputs[i]->getRepeatableParameterInstances(2));
+        const vector<ParameterComponent*>& columnOpts = myInputs[i]->getRepeatableParameterInstances(2);
         int numColumnOpts = (int)columnOpts.size();
         if (numColumnOpts > 0)
         {
@@ -155,7 +168,7 @@ void OperationCiftiMerge::useParameters(OperationParameters* myParams, ProgressO
         const CiftiFile* ciftiIn = &(ciftiList[i]);
         vector<int64_t> thisDims = ciftiIn->getDimensions();
         const CiftiXML& thisXML = ciftiIn->getCiftiXML();
-        const vector<ParameterComponent*>& columnOpts = *(myInputs[i]->getRepeatableParameterInstances(2));
+        const vector<ParameterComponent*>& columnOpts = myInputs[i]->getRepeatableParameterInstances(2);
         int numColumnOpts = (int)columnOpts.size();
         if (numColumnOpts > 0)
         {
@@ -274,7 +287,7 @@ void OperationCiftiMerge::useParameters(OperationParameters* myParams, ProgressO
             const CiftiFile* ciftiIn = &(ciftiList[i]);
             vector<int64_t> thisDims = ciftiIn->getDimensions();
             const CiftiXML& thisXML = ciftiIn->getCiftiXML();
-            const vector<ParameterComponent*>& columnOpts = *(myInputs[i]->getRepeatableParameterInstances(2));
+            const vector<ParameterComponent*>& columnOpts = myInputs[i]->getRepeatableParameterInstances(2);
             int numColumnOpts = (int)columnOpts.size();
             if (numColumnOpts > 0)
             {

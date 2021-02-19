@@ -61,7 +61,8 @@
 #include "SceneFile.h"
 #include "ScenePrimitiveArray.h"
 #include "SessionManager.h"
-#include "TileTabsConfiguration.h"
+#include "TileTabsLayoutGridConfiguration.h"
+#include "TileTabsLayoutManualConfiguration.h"
 #include "VolumeFile.h"
 
 //#include "workbench_png.h"
@@ -142,13 +143,14 @@ OperationShowScene::getParameters()
                      "The available image formats may vary by operating system.\n"
                      "Image formats available on this system are:\n"
                      );
-    std::vector<AString> imageFileExtensions;
+    std::vector<AString> readImageFileExtensions, writeImageFileExtensions;
     AString defaultExtension;
-    ImageFile::getImageFileExtensions(imageFileExtensions,
-                                      defaultExtension);
+    ImageFile::getWorkbenchSupportedImageFileExtensions(readImageFileExtensions,
+                                                        writeImageFileExtensions,
+                                                        defaultExtension);
     
-    for (std::vector<AString>::iterator iter = imageFileExtensions.begin();
-         iter != imageFileExtensions.end();
+    for (std::vector<AString>::iterator iter = writeImageFileExtensions.begin();
+         iter != writeImageFileExtensions.end();
          iter++) {
         const AString ext = *iter;
         helpText += ("    "
@@ -416,7 +418,8 @@ OperationShowScene::useParameters(OperationParameters* myParams,
         }
         
         int windowViewport[4] = { 0, 0, imageWidth, imageHeight };
-        
+        const int windowBeforeAspectLockingViewport[4] = { 0, 0, imageWidth, imageHeight };
+
         const int windowWidth  = windowViewport[2];
         const int windowHeight = windowViewport[3];
         
@@ -463,9 +466,22 @@ OperationShowScene::useParameters(OperationParameters* myParams,
         if (restoreToTabTiles) {
             CaretPointer<BrainOpenGL> brainOpenGL(createBrainOpenGL());
             
-            TileTabsConfiguration* tileTabsConfiguration = bwc->getSelectedTileTabsConfiguration();
-            CaretAssert(tileTabsConfiguration);
+            TileTabsLayoutGridConfiguration* gridConfig = NULL; //tileTabsConfiguration->castToGridConfiguration();
+            bool manualFlag(false);
+            switch (bwc->getTileTabsConfigurationMode()) {
+                case TileTabsLayoutConfigurationTypeEnum::AUTOMATIC_GRID:
+                    gridConfig = bwc->getCustomGridTileTabsConfiguration();
+                    break;
+                case TileTabsLayoutConfigurationTypeEnum::CUSTOM_GRID:
+                    gridConfig = bwc->getCustomGridTileTabsConfiguration();
+                    break;
+                case TileTabsLayoutConfigurationTypeEnum::MANUAL:
+                    manualFlag = true;
+                    break;
+            }
             
+            if ((gridConfig != NULL)
+                || manualFlag) {
                 const std::vector<int32_t> tabIndices = bwc->getSceneTabIndices();
                 if ( ! tabIndices.empty()) {
                     std::vector<BrowserTabContent*> allTabContent;
@@ -489,15 +505,18 @@ OperationShowScene::useParameters(OperationParameters* myParams,
                     if (numTabContent <= 0) {
                         throw OperationException("Failed to find any tab content");
                     }
-                    std::vector<int32_t> rowHeights;
-                    std::vector<int32_t> columnWidths;
-                    if ( ! tileTabsConfiguration->getRowHeightsAndColumnWidthsForWindowSize(windowWidth,
-                                                                                            windowHeight,
-                                                                                            numTabContent,
-                                                                                            bwc->getTileTabsConfigurationMode(),
-                                                                                            rowHeights,
-                                                                                            columnWidths)) {
-                        throw OperationException("Tile Tabs Row/Column sizing failed !!!");
+                    
+                    if (gridConfig != NULL) {
+                        std::vector<int32_t> rowHeights;
+                        std::vector<int32_t> columnWidths;
+                        if ( ! gridConfig->getRowHeightsAndColumnWidthsForWindowSize(windowWidth,
+                                                                                     windowHeight,
+                                                                                     numTabContent,
+                                                                                     bwc->getTileTabsConfigurationMode(),
+                                                                                     rowHeights,
+                                                                                     columnWidths)) {
+                            throw OperationException("Tile Tabs Row/Column sizing failed !!!");
+                        }
                     }
                     
                     const int32_t tabIndexToHighlight = -1;
@@ -505,6 +524,7 @@ OperationShowScene::useParameters(OperationParameters* myParams,
                     BrainOpenGLViewportContent::createViewportContentForTileTabs(allTabContent,
                                                                                  bwc,
                                                                                  gapsAndMargins,
+                                                                                 windowBeforeAspectLockingViewport,
                                                                                  windowViewport,
                                                                                  windowIndex,
                                                                                  tabIndexToHighlight);
@@ -512,7 +532,7 @@ OperationShowScene::useParameters(OperationParameters* myParams,
                     std::vector<const BrainOpenGLViewportContent*> constViewports(viewports.begin(),
                                                                                   viewports.end());
                     brainOpenGL->drawModels(windowIndex,
-                                            UserInputModeEnum::VIEW,
+                                            UserInputModeEnum::Enum::VIEW,
                                             brain,
                                             mesaContext,
                                             constViewports);
@@ -534,6 +554,10 @@ OperationShowScene::useParameters(OperationParameters* myParams,
                     }
                     viewports.clear();
                 }
+            }
+            else {
+                throw OperationException("Tile tabs configuration is neither Grid nor Manual");
+            }
         }
         else {
             CaretPointer<BrainOpenGL> brainOpenGL(createBrainOpenGL());
@@ -557,12 +581,13 @@ OperationShowScene::useParameters(OperationParameters* myParams,
                                                                                    tabContent,
                                                                                    gapsAndMargins,
                                                                                    windowIndex,
+                                                                                   windowBeforeAspectLockingViewport,
                                                                                    windowViewport));
             std::vector<const BrainOpenGLViewportContent*> viewportContents;
             viewportContents.push_back(content);
             
             brainOpenGL->drawModels(windowIndex,
-                                    UserInputModeEnum::VIEW,
+                                    UserInputModeEnum::Enum::VIEW,
                                     brain,
                                     mesaContext,
                                     viewportContents);

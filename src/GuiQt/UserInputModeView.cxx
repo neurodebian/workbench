@@ -30,16 +30,21 @@
 #include "BrainOpenGLViewportContent.h"
 #include "BrainOpenGLWidget.h"
 #include "BrowserTabContent.h"
+#include "CaretLogger.h"
 #include "ChartTwoCartesianAxis.h"
+#include "ChartTwoOverlay.h"
 #include "ChartTwoOverlaySet.h"
 #include "EventGraphicsUpdateOneWindow.h"
 #include "EventGraphicsUpdateAllWindows.h"
 #include "EventUpdateYokedWindows.h"
 #include "EventUserInterfaceUpdate.h"
 #include "EventManager.h"
+#include "GestureEvent.h"
 #include "GuiManager.h"
+#include "KeyEvent.h"
 #include "MouseEvent.h"
 #include "SelectionItemChartTwoLabel.h"
+#include "SelectionItemChartTwoLineLayerVerticalNearest.h"
 #include "SelectionManager.h"
 #include "UserInputModeViewContextMenu.h"
 #include "WuQDataEntryDialog.h"
@@ -59,9 +64,12 @@ using namespace caret;
 
 /**
  * Constructor.
+ * @param windowIndex
+ *    Index of the window
  */
-UserInputModeView::UserInputModeView()
-: UserInputModeAbstract(UserInputModeEnum::VIEW)
+UserInputModeView::UserInputModeView(const int32_t windowIndex)
+: UserInputModeAbstract(UserInputModeEnum::Enum::VIEW),
+m_browserWindowIndex(windowIndex)
 {
     
 }
@@ -69,11 +77,15 @@ UserInputModeView::UserInputModeView()
 /**
  * Constructor for subclasses.
  *
+ * @param windowIndex
+ *    Index of the window
  * @param inputMode
  *    Subclass' input mode.
  */
-UserInputModeView::UserInputModeView(const UserInputModeEnum::Enum inputMode)
-: UserInputModeAbstract(inputMode)
+UserInputModeView::UserInputModeView(const int32_t windowIndex,
+                                     const UserInputModeEnum::Enum inputMode)
+: UserInputModeAbstract(inputMode),
+m_browserWindowIndex(windowIndex)
 {
     
 }
@@ -239,6 +251,24 @@ UserInputModeView::mouseLeftClick(const MouseEvent& mouseEvent)
                                    mouseEvent.getOpenGLWidget(),
                                    mouseEvent.getX(),
                                    mouseEvent.getY());
+    
+    SelectionManager* selectionManager = GuiManager::get()->getBrain()->getSelectionManager();
+    
+    SelectionItemChartTwoLineLayerVerticalNearest* layerSelection = selectionManager->getChartTwoLineLayerVerticalNearestIdentification();
+    CaretAssert(layerSelection);
+    
+    if (layerSelection->isValid()) {
+        processChartActiveLayerAction(ChartActiveLayerMode::SELECT,
+                                      layerSelection->getChartTwoOverlay(),
+                                      layerSelection->getLineSegmentIndex());
+    }
+    else if (layerSelection->isOutsideChartBounds()) {
+        ChartTwoOverlay* invalidChartOverlay(NULL);
+        int32_t invalidLineSegmentIndex(-1);
+        processChartActiveLayerAction(ChartActiveLayerMode::DESELECT_ALL,
+                                      invalidChartOverlay,
+                                      invalidLineSegmentIndex);
+    }
 }
 
 /**
@@ -306,6 +336,24 @@ UserInputModeView::mouseLeftDrag(const MouseEvent& mouseEvent)
                                                           mouseEvent.getDy());
         EventManager::get()->sendSimpleEvent(EventTypeEnum::EVENT_UPDATE_VOLUME_SLICE_INDICES_COORDS_TOOLBAR);
     }
+    else if (browserTabContent->isChartTwoDisplayed()) {
+        const int32_t x1(mouseEvent.getPressedX());
+        const int32_t y1(mouseEvent.getPressedY());
+        const int32_t x2(mouseEvent.getX());
+        const int32_t y2(mouseEvent.getY());
+        
+        Matrix4x4 m1, m2;
+        int32_t chartViewport[4];
+        if (viewportContent->getChartDataMatricesAndViewport(m1,
+                                                             m2,
+                                                             chartViewport)) {
+            browserTabContent->applyChartTwoAxesBoundSelection(chartViewport,
+                                                               x1, y1, x2, y2);
+        }
+        else {
+            CaretLogSevere("Chart viewport is invalid");
+        }
+    }
     else {
         browserTabContent->applyMouseRotation(viewportContent,
                                               mouseEvent.getPressedX(),
@@ -355,7 +403,15 @@ UserInputModeView::mouseLeftDragWithCtrl(const MouseEvent& mouseEvent)
         return;
     }
     
-    browserTabContent->applyMouseScaling(mouseEvent.getDx(), mouseEvent.getDy());
+    int32_t modelViewport[4];
+    viewportContent->getModelViewport(modelViewport);
+    browserTabContent->applyMouseScaling(viewportContent,
+                                         mouseEvent.getPressedX(),
+                                         mouseEvent.getPressedY(),
+                                         mouseEvent.getPressedX() - modelViewport[0],
+                                         mouseEvent.getPressedY() - modelViewport[1],
+                                         mouseEvent.getDx(),
+                                         mouseEvent.getDy());
     updateGraphics(mouseEvent);
 }
 
@@ -387,6 +443,106 @@ UserInputModeView::mouseLeftDragWithShift(const MouseEvent& mouseEvent)
 }
 
 /**
+ * Process a mouse left release event.
+ *
+ * @param mouseEvent
+ *     Mouse event information.
+ */
+void
+UserInputModeView::mouseLeftRelease(const MouseEvent& mouseEvent)
+{
+    BrainOpenGLViewportContent* viewportContent = mouseEvent.getViewportContent();
+    if (viewportContent == NULL) {
+        return;
+    }
+    
+    BrowserTabContent* browserTabContent = viewportContent->getBrowserTabContent();
+    if (browserTabContent == NULL) {
+        return;
+    }
+    
+    if (browserTabContent->isChartTwoDisplayed()) {
+        const int32_t x1(mouseEvent.getPressedX());
+        const int32_t y1(mouseEvent.getPressedY());
+        const int32_t x2(mouseEvent.getX());
+        const int32_t y2(mouseEvent.getY());
+        
+        Matrix4x4 m1, m2;
+        int32_t chartViewport[4];
+        if (viewportContent->getChartDataMatricesAndViewport(m1,
+                                                             m2,
+                                                             chartViewport)) {
+            browserTabContent->finalizeChartTwoAxesBoundSelection(chartViewport,
+                                                                  x1, y1, x2, y2);
+            updateGraphics(viewportContent);
+        }
+        else {
+            CaretLogSevere("Chart viewport is invalid");
+        }
+    }
+}
+
+/**
+ * Process a mouse left press event.
+ *
+ * @param mouseEvent
+ *     Mouse event information.
+ */
+void
+UserInputModeView::mouseLeftPress(const MouseEvent& /*mouseEvent*/)
+{
+}
+
+/**
+ * Process a gesture event (pinch zoom; or rotate)
+ *
+ * @param gestureEvent
+ *     Gesture event information.
+ */
+void
+UserInputModeView::gestureEvent(const GestureEvent& gestureEvent)
+{
+    BrainOpenGLViewportContent* viewportContent = gestureEvent.getViewportContent();
+    if (viewportContent == NULL) {
+        return;
+    }
+    
+    BrowserTabContent* browserTabContent = viewportContent->getBrowserTabContent();
+    if (browserTabContent == NULL) {
+        return;
+    }
+    
+    switch (gestureEvent.getType()) {
+        case GestureEvent::Type::PINCH:
+        {
+            float deltaY(gestureEvent.getValue());
+            if (deltaY > 0.0) {
+                float scaleFactor(0.0);
+                if (deltaY > 1.0) {
+                    scaleFactor = 2.0;
+                }
+                else if (deltaY < 1.0) {
+                    scaleFactor = -2.0;
+                }
+                if (scaleFactor != 0.0) {
+                    browserTabContent->applyMouseScaling(viewportContent,
+                                                         gestureEvent.getStartCenterX(),
+                                                         gestureEvent.getStartCenterX(),
+                                                         gestureEvent.getStartCenterX(),
+                                                         gestureEvent.getStartCenterY(),
+                                                         0.0f,
+                                                         scaleFactor);
+                    updateGraphics(viewportContent);
+                }
+            }
+        }
+            break;
+        case GestureEvent::Type::ROTATE:
+            break;
+    }
+}
+
+/**
  * Show a context menu (pop-up menu at mouse location)
  *
  * @param mouseEvent
@@ -414,10 +570,56 @@ UserInputModeView::showContextMenu(const MouseEvent& mouseEvent,
                                                                       mouseY,
                                                                       false);
     
-    UserInputModeViewContextMenu contextMenu(viewportContent,
+    UserInputModeViewContextMenu contextMenu(mouseEvent,
+                                             viewportContent,
                                              idManager,
                                              openGLWidget);
     contextMenu.exec(menuPosition);
+}
+
+/**
+ * If this windows is yoked, issue an event to update other
+ * windows that are using the same yoking.
+ *
+ * @param viewportContent
+ *    Content of the viewport
+ */
+void
+UserInputModeView::updateGraphics(const BrainOpenGLViewportContent* viewportContent)
+{
+    bool issuedYokeEvent = false;
+    if (viewportContent != NULL) {
+        BrowserTabContent* browserTabContent = viewportContent->getBrowserTabContent();
+        const int32_t browserWindowIndex = viewportContent->getWindowIndex();
+        EventManager::get()->sendEvent(EventGraphicsUpdateOneWindow(browserWindowIndex).getPointer());
+        
+        YokingGroupEnum::Enum brainYokingGroup = YokingGroupEnum::YOKING_GROUP_OFF;
+        YokingGroupEnum::Enum chartYokingGroup = YokingGroupEnum::YOKING_GROUP_OFF;
+        
+        if (browserTabContent != NULL) {
+            if (browserTabContent->isBrainModelYoked()) {
+                brainYokingGroup = browserTabContent->getBrainModelYokingGroup();
+                issuedYokeEvent = true;
+            }
+            if (browserTabContent->isChartModelYoked()) {
+                chartYokingGroup = browserTabContent->getChartModelYokingGroup();
+                issuedYokeEvent = true;
+            }
+            
+            if (issuedYokeEvent) {
+                EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+                EventManager::get()->sendEvent(EventUpdateYokedWindows(brainYokingGroup,
+                                                                       chartYokingGroup).getPointer());
+            }
+        }
+    }
+    
+    /*
+     * If not yoked, just need to update graphics.
+     */
+    if ( ! issuedYokeEvent) {
+        EventManager::get()->sendEvent(EventGraphicsUpdateOneWindow(viewportContent->getWindowIndex()).getPointer());
+    }
 }
 
 /**
@@ -460,5 +662,120 @@ UserInputModeView::updateGraphics(const MouseEvent& mouseEvent)
     if ( ! issuedYokeEvent) {
         EventManager::get()->sendEvent(EventGraphicsUpdateOneWindow(mouseEvent.getBrowserWindowIndex()).getPointer());
     }
+}
+
+/**
+ * Process a key press event
+ *
+ * @param keyEvent
+ *     Key event information.
+ * @return
+ *     True if the input process recognized the key event
+ *     and the key event SHOULD NOT be propagated to parent
+ *     widgets
+ */
+bool
+UserInputModeView::keyPressEvent(const KeyEvent& keyEvent)
+{
+    bool keyWasProcessedFlag(false);
+    
+    bool decrementFlag(false);
+    bool incrementFlag(false);
+    const int32_t keyCode = keyEvent.getKeyCode();
+    switch (keyCode) {
+        case Qt::Key_Right:
+            incrementFlag = true;
+            break;
+        case Qt::Key_Left:
+            decrementFlag = true;
+            break;
+        case Qt::Key_Up:
+            incrementFlag = true;
+            break;
+        case Qt::Key_Down:
+            decrementFlag = true;
+            break;
+    }
+    
+    if (decrementFlag
+        || incrementFlag) {
+        std::array<int32_t, 2> mouseXY;
+        if (keyEvent.getMouseXY(mouseXY)) {
+            /*
+             * Increment/decrement selected point in line layer chart.
+             * Identification will fail if chart is not visible.
+             */
+            SelectionManager* selectionManager = keyEvent.getOpenGLWidget()->performIdentification(mouseXY[0],
+                                                                                                   mouseXY[1],
+                                                                                                   false);
+            
+            SelectionItemChartTwoLineLayerVerticalNearest* layerSelection = selectionManager->getChartTwoLineLayerVerticalNearestIdentification();
+            CaretAssert(layerSelection);
+            if (layerSelection->isValid()) {
+                ChartTwoOverlay* invalidChartOverlay(NULL);
+                int32_t invalidLineSegmentIndex(-1);
+                if (incrementFlag) {
+                    processChartActiveLayerAction(ChartActiveLayerMode::INCREMENT,
+                                                  invalidChartOverlay,
+                                                  invalidLineSegmentIndex);
+                }
+                else if (decrementFlag) {
+                    processChartActiveLayerAction(ChartActiveLayerMode::DECREMENT,
+                                                  invalidChartOverlay,
+                                                  invalidLineSegmentIndex);
+                }
+                else {
+                    CaretAssertMessage(0, "Invalid increment/decrement");
+                }
+            }
+        }
+    }
+    
+    return keyWasProcessedFlag;
+}
+
+/**
+ * Process a chart active layer action
+ *
+ * @param chartActiveMode
+ *    The mode
+ * @param chartOverlay
+ *    The given chart overlay
+ * @param pointIndex
+ *    Index of point selected
+ */
+void
+UserInputModeView::processChartActiveLayerAction(const ChartActiveLayerMode chartActiveMode,
+                                                 ChartTwoOverlay* chartOverlay,
+                                                 const int32_t pointIndex)
+{
+    ChartTwoOverlaySet* chartOverlaySet = NULL;
+    BrowserTabContent* browserTabContent =
+    GuiManager::get()->getBrowserTabContentForBrowserWindow(m_browserWindowIndex, true);
+    if (browserTabContent != NULL) {
+        chartOverlaySet = browserTabContent->getChartTwoOverlaySet();
+    }
+
+    if (chartOverlaySet != NULL) {
+        switch (chartActiveMode) {
+            case ChartActiveLayerMode::DECREMENT:
+                chartOverlaySet->incrementOverlayActiveLineChartPoint(-1);
+                break;
+            case ChartActiveLayerMode::DESELECT_ALL:
+                chartOverlaySet->selectOverlayActiveLineChart(NULL,
+                                                              -1);
+                break;
+            case ChartActiveLayerMode::INCREMENT:
+                chartOverlaySet->incrementOverlayActiveLineChartPoint(1);
+                break;
+            case ChartActiveLayerMode::SELECT:
+                chartOverlaySet->selectOverlayActiveLineChart(chartOverlay,
+                                                              pointIndex);
+                break;
+        }
+    }
+    
+    EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+    EventManager::get()->sendEvent(EventUserInterfaceUpdate().addToolBox().getPointer());    
 }
 

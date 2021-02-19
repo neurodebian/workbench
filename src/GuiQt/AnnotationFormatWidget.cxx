@@ -42,14 +42,18 @@ using namespace caret;
 /**
  * Constructor.
  *
+ * @param userInputMode
+ *     The user input mode
  * @param browserWindowIndex
  *     Index of the browser window.
  * @param parent
  *     Parent of this widget.
  */
-AnnotationFormatWidget::AnnotationFormatWidget(const int32_t browserWindowIndex,
-                                                 QWidget* parent)
+AnnotationFormatWidget::AnnotationFormatWidget(const UserInputModeEnum::Enum userInputMode,
+                                               const int32_t browserWindowIndex,
+                                               QWidget* parent)
 : QWidget(parent),
+m_userInputMode(userInputMode),
 m_browserWindowIndex(browserWindowIndex)
 {
     QLabel* formatLabel = new QLabel("Format");
@@ -58,7 +62,7 @@ m_browserWindowIndex(browserWindowIndex)
     
     QVBoxLayout* layout = new QVBoxLayout(this);
     WuQtUtilities::setLayoutSpacingAndMargins(layout, 2, 2);
-    layout->addWidget(formatLabel);
+    layout->addWidget(formatLabel, 0, Qt::AlignHCenter);
     layout->addWidget(arrangeButton);
     layout->addStretch();
     
@@ -76,11 +80,13 @@ AnnotationFormatWidget::~AnnotationFormatWidget()
 /**
  * Update with the given annotation.
  *
- * @param annotation.
+ * @param annotations
+ *     The selected annotations
  */
 void
-AnnotationFormatWidget::updateContent(Annotation* /*annotation*/)
+AnnotationFormatWidget::updateContent(const std::vector<Annotation*>& annotations)
 {
+    setEnabled( ! annotations.empty());
 }
 
 /**
@@ -89,7 +95,8 @@ AnnotationFormatWidget::updateContent(Annotation* /*annotation*/)
 QWidget*
 AnnotationFormatWidget::createArrangeMenuToolButton()
 {
-    AnnotationMenuArrange* arrangeMenu = new AnnotationMenuArrange(m_browserWindowIndex);
+    AnnotationMenuArrange* arrangeMenu = new AnnotationMenuArrange(m_userInputMode,
+                                                                   m_browserWindowIndex);
     
     QAction* arrangeAction = new QAction("Arrange",
                                          this);

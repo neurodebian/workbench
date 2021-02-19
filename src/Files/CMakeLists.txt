@@ -22,6 +22,7 @@ ENDIF ()
 #
 ADD_LIBRARY(Files
 AffineFile.h
+AffineSeriesFile.h
 AnnotationFile.h
 AnnotationFileXmlFormatBase.h
 AnnotationFileXmlReader.h
@@ -50,6 +51,7 @@ ChartableMatrixSeriesInterface.h
 ChartableTwoFileDelegate.h
 ChartableTwoFileBaseChart.h
 ChartableTwoFileHistogramChart.h
+ChartableTwoFileLineLayerChart.h
 ChartableTwoFileLineSeriesChart.h
 ChartableTwoFileMatrixChart.h
 CiftiBrainordinateDataSeriesFile.h
@@ -80,6 +82,7 @@ EventChartMatrixParcelYokingValidation.h
 EventGetDisplayedDataFiles.h
 EventMapYokingSelectMap.h
 EventMapYokingValidation.h
+EventMediaFilesGet.h
 EventSurfaceColoringInvalidate.h
 EventSurfaceStructuresValidGet.h
 Fiber.h
@@ -89,6 +92,8 @@ FiberOrientationTrajectory.h
 FiberTrajectoryColorModel.h
 FiberTrajectoryMapProperties.h
 FiberTrajectoryDisplayModeEnum.h
+FileIdentificationAttributes.h
+FileIdentificationMapSelectionEnum.h
 FilePathNamePrefixCompactor.h
 FociFile.h
 FociFileSaxReader.h
@@ -109,6 +114,7 @@ LabelDrawingProperties.h
 LabelDrawingTypeEnum.h
 LabelFile.h
 MapYokingGroupEnum.h
+MediaFile.h
 MetricDynamicConnectivityFile.h
 MetricFile.h
 MetricSmoothingObject.h
@@ -162,6 +168,7 @@ XmlStreamReaderHelper.h
 XmlStreamWriterHelper.h
 
 AffineFile.cxx
+AffineSeriesFile.cxx
 AnnotationFile.cxx
 AnnotationFileXmlFormatBase.cxx
 AnnotationFileXmlReader.cxx
@@ -185,6 +192,7 @@ ChartableMatrixInterface.cxx
 ChartableTwoFileDelegate.cxx
 ChartableTwoFileBaseChart.cxx
 ChartableTwoFileHistogramChart.cxx
+ChartableTwoFileLineLayerChart.cxx
 ChartableTwoFileLineSeriesChart.cxx
 ChartableTwoFileMatrixChart.cxx
 CiftiBrainordinateDataSeriesFile.cxx
@@ -215,6 +223,7 @@ EventChartMatrixParcelYokingValidation.cxx
 EventGetDisplayedDataFiles.cxx
 EventMapYokingSelectMap.cxx
 EventMapYokingValidation.cxx
+EventMediaFilesGet.cxx
 EventSurfaceColoringInvalidate.cxx
 EventSurfaceStructuresValidGet.cxx
 Fiber.cxx
@@ -224,6 +233,8 @@ FiberOrientationTrajectory.cxx
 FiberTrajectoryColorModel.cxx
 FiberTrajectoryDisplayModeEnum.cxx
 FiberTrajectoryMapProperties.cxx
+FileIdentificationAttributes.cxx
+FileIdentificationMapSelectionEnum.cxx
 FilePathNamePrefixCompactor.cxx
 FociFile.cxx
 FociFileSaxReader.cxx
@@ -244,6 +255,7 @@ LabelDrawingProperties.cxx
 LabelDrawingTypeEnum.cxx
 LabelFile.cxx
 MapYokingGroupEnum.cxx
+MediaFile.cxx
 MetricDynamicConnectivityFile.cxx
 MetricFile.cxx
 MetricSmoothingObject.cxx

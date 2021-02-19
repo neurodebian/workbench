@@ -22,6 +22,7 @@
 #include <sstream>
 #include <QtCore>
 #include "BoundingBox.h"
+#include "MathFunctions.h"
 
 using namespace caret;
 
@@ -106,6 +107,19 @@ BoundingBox::copyHelper(const BoundingBox& bo)
     for (int i = 0; i < 6; i++) {
         this->boundingBox[i] = bo.boundingBox[i];
     }
+}
+
+/**
+ * @return True if the bounding box is valid for 2D (minX < maxX and minY < maxY)
+ */
+bool
+BoundingBox::isValid2D() const
+{
+    if ((getMinX() < getMaxX())
+        && (getMinY() < getMaxY())) {
+        return true;
+    }
+    return false;
 }
 
 /**
@@ -204,6 +218,30 @@ BoundingBox::set(const float minMaxXYZ[6])
 }
 
 /**
+ * Set the bound box to the extent found in the 4 given triplets
+ * @param a
+ * First triplet
+ * @param b
+ * Second triplet
+ * @param c
+ * Third triplet
+ * @param d
+ * Fourth triplet
+ */
+void
+BoundingBox::set(const float a[3],
+                 const float b[3],
+                 const float c[3],
+                 const float d[4])
+{
+    resetForUpdate();
+    update(a);
+    update(b);
+    update(c);
+    update(d);
+}
+
+/**
  * Update the bounding box with the XYZ value passed in.  The bound box
  * must have been created with newInstanceForUpdate() or properly
  * initialized by the user.
@@ -247,6 +285,63 @@ BoundingBox::update(const float x,
     if (y > this->boundingBox[3]) this->boundingBox[3] = y;
     if (z < this->boundingBox[4]) this->boundingBox[4] = z;
     if (z > this->boundingBox[5]) this->boundingBox[5] = z;
+}
+
+/**
+ * Update the bounding box with the XYZ value passed in.  The bound box
+ * must have been created with newInstanceForUpdate() or properly
+ * initialized by the user.
+ *
+ * @param xyz - Three dimensional array containing XYZ.
+ *
+ */
+void
+BoundingBox::updateExcludeNanInf(const float xyz[3])
+{
+    if (MathFunctions::isNumeric(xyz[0])) {
+        if (xyz[0] < this->boundingBox[0]) this->boundingBox[0] = xyz[0];
+        if (xyz[0] > this->boundingBox[1]) this->boundingBox[1] = xyz[0];
+    }
+    if (MathFunctions::isNumeric(xyz[1])) {
+        if (xyz[1] < this->boundingBox[2]) this->boundingBox[2] = xyz[1];
+        if (xyz[1] > this->boundingBox[3]) this->boundingBox[3] = xyz[1];
+    }
+    if (MathFunctions::isNumeric(xyz[2])) {
+        if (xyz[2] < this->boundingBox[4]) this->boundingBox[4] = xyz[2];
+        if (xyz[2] > this->boundingBox[5]) this->boundingBox[5] = xyz[2];
+    }
+}
+
+/**
+ * Update the bounding box with the XYZ value passed in.  The bound box
+ * must have been created with newInstanceForUpdate() or properly
+ * initialized by the user.
+ *
+ * @param x
+ *    X-coordinate.
+ * @param y
+ *    Y-coordinate.
+ * @param Z
+ *    Z-coordinate.
+ *
+ */
+void
+BoundingBox::updateExcludeNanInf(const float x,
+                    const float y,
+                    const float z)
+{
+    if (MathFunctions::isNumeric(x)) {
+        if (x < this->boundingBox[0]) this->boundingBox[0] = x;
+        if (x > this->boundingBox[1]) this->boundingBox[1] = x;
+    }
+    if (MathFunctions::isNumeric(y)) {
+        if (y < this->boundingBox[2]) this->boundingBox[2] = y;
+        if (y > this->boundingBox[3]) this->boundingBox[3] = y;
+    }
+    if (MathFunctions::isNumeric(z)) {
+        if (z < this->boundingBox[4]) this->boundingBox[4] = z;
+        if (z > this->boundingBox[5]) this->boundingBox[5] = z;
+    }
 }
 
 /**
@@ -307,6 +402,18 @@ float
 BoundingBox::getDifferenceZ() const
 {
     return (this->boundingBox[5] - this->boundingBox[4]);
+}
+
+/**
+ * @return The maximum difference of the X, Y, Z differences.
+ */
+float
+BoundingBox::getMaximumDifferenceOfXYZ() const
+{
+    const float maxDiff(std::max(getDifferenceX(),
+                                 std::max(getDifferenceY(),
+                                          getDifferenceZ())));
+    return maxDiff;
 }
 
 /**
@@ -376,14 +483,12 @@ BoundingBox::getMaxZ() const
 }
 
 /**
- * Get the minimum XYZ of the bounding box.
  * @return Minimum XYZ of the bounding box.
- * in an array that the caller MUST delete[];
  */
-float*
+std::array<float, 3>
 BoundingBox::getMinXYZ() const
 {
-    float* f = new float[3];
+    std::array<float, 3> f;
     f[0] = this->boundingBox[0];
     f[1] = this->boundingBox[2];
     f[2] = this->boundingBox[4];
@@ -391,14 +496,12 @@ BoundingBox::getMinXYZ() const
 }
 
 /**
- * Get the maximum XYZ of the bounding box.
  * @return Maximum XYZ of the bounding box
- * in an array that the caller MUST delete[];
  */
-float*
+std::array<float, 3>
 BoundingBox::getMaxXYZ() const
 {
-    float* f = new float[3];
+    std::array<float, 3> f;
     f[0] = this->boundingBox[1];
     f[1] = this->boundingBox[3];
     f[2] = this->boundingBox[5];
@@ -593,4 +696,49 @@ BoundingBox::toString() const
     AString s = AString::fromStdString(str.str());
     return s;
 }
+
+/**
+ * @return True if this bounding box intersects the given bounding box
+ * using only the X and Y coordinates.
+ */
+bool
+BoundingBox::intersectsXY(const BoundingBox& bb) const
+{
+    /*
+     * Does self overlap
+     */
+    if (this == &bb) {
+        return true;
+    }
+    
+    /*
+     * Note: Since the geometry is aligned with the X- and Y-axes,
+     * we only need to test for one to be above or the the right of the other
+     *
+     * https://www.geeksforgeeks.org/find-two-rectangles-overlap/
+     * https://leetcode.com/articles/rectangle-overlap/
+     */
+    /* 'this' is on right side of 'other' */
+    if (getMinX() >= bb.getMaxX()) {
+        return false;
+    }
+    
+    /* 'other' is on right side of 'this' */
+    if (bb.getMinX() >= getMaxX()) {
+        return false;
+    }
+    
+    /* 'this' is above 'other */
+    if (getMinY() >= bb.getMaxY()) {
+        return false;
+    }
+    
+    /* 'other' is above 'this' */
+    if (bb.getMinY() >= getMaxY()) {
+        return false;
+    }
+    
+    return true;
+}
+
 

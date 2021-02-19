@@ -229,7 +229,7 @@ void MovieDialog::on_recordButton_toggled(bool checked)
 //            if(!(crop[0]&&crop[1])) GuiManager::get()->getBrowserWindowByWindowIndex(m_browserWindowIndex)->getViewportSize(crop[0],crop[1]);
     
 
-            unlink(fileName);
+            unlink(fileName.toLatin1().data());
             CaretLogInfo("Rendering movie to:" + fileName);
             AString ffmpeg = SystemUtilities::getWorkbenchHome() + AString("/ffmpeg ");            
 
@@ -263,7 +263,7 @@ void MovieDialog::on_recordButton_toggled(bool checked)
         for(int i = 0;i<frame_number;i++)
         {
             AString tempFile = tempDir + "/movie" + AString::number(i) + AString(".png");
-            unlink(tempFile);
+            unlink(tempFile.toLatin1().data());
         }
         frame_number = 0;
     }
@@ -721,16 +721,15 @@ void MovieDialog::captureFrame(AString filename)
         croppedImageY = imageFile.getAsQImage()->size().width();
     }*/
 
-    std::vector<AString> imageFileExtensions;
-    AString defaultFileExtension;
-    ImageFile::getImageFileExtensions(imageFileExtensions, 
-        defaultFileExtension);
-
-
+    std::vector<AString> readImageFileExtensions, writeImageFileExtensions;
+    AString defaultImageExtension;
+    ImageFile::getWorkbenchSupportedImageFileExtensions(readImageFileExtensions,
+                                                        writeImageFileExtensions,
+                                                        defaultImageExtension);
 
     bool validExtension = false;
-    for (std::vector<AString>::iterator extensionIterator = imageFileExtensions.begin();
-        extensionIterator != imageFileExtensions.end();
+    for (std::vector<AString>::iterator extensionIterator = writeImageFileExtensions.begin();
+        extensionIterator != writeImageFileExtensions.end();
         extensionIterator++) {
             if (filename.endsWith(*extensionIterator)) {
                 validExtension = true;
@@ -738,8 +737,8 @@ void MovieDialog::captureFrame(AString filename)
     }
 
     if (validExtension == false) {
-        if (defaultFileExtension.isEmpty() == false) {
-            filename += ("." + defaultFileExtension);
+        if (defaultImageExtension.isEmpty() == false) {
+            filename += ("." + defaultImageExtension);
         }
     }
 

@@ -28,16 +28,20 @@
 #include "CaretAssert.h"
 #include "CaretLogger.h"
 #include "CaretMappableDataFile.h"
+#include "ChartTwoDataCartesian.h"
 #include "ChartableTwoFileDelegate.h"
 #include "ChartableTwoFileHistogramChart.h"
+#include "ChartableTwoFileLineLayerChart.h"
 #include "ChartableTwoFileLineSeriesChart.h"
 #include "ChartableTwoFileMatrixChart.h"
 #include "ChartTwoLineSeriesHistory.h"
 #include "ChartTwoOverlaySet.h"
 #include "EventCaretMappableDataFilesGet.h"
-#include "EventChartOverlayValidate.h"
+#include "EventChartTwoOverlayValidate.h"
 #include "EventManager.h"
+#include "GraphicsPrimitiveV3f.h"
 #include "Histogram.h"
+#include "Matrix4x4.h"
 #include "PlainTextStringBuilder.h"
 #include "SceneClass.h"
 #include "SceneClassAssistant.h"
@@ -82,12 +86,27 @@ m_overlayIndex(overlayIndex)
     m_colorBar->setCoordinateSpace(AnnotationCoordinateSpaceEnum::TAB);
     
     m_matrixTriangularViewingMode = ChartTwoMatrixTriangularViewingModeEnum::MATRIX_VIEW_FULL;
+    m_cartesianHorizontalAxisLocation = ChartAxisLocationEnum::CHART_AXIS_LOCATION_BOTTOM;
     m_cartesianVerticalAxisLocation = ChartAxisLocationEnum::CHART_AXIS_LOCATION_LEFT;
-    
+    m_matrixOpacity = 1.0;
+
     m_selectedMapFile  = NULL;
     m_selectedHistogramMapIndex = -1;
     m_allHistogramMapsSelectedFlag = false;
 
+    m_selectedLineLayerMapIndex = -1;
+    m_lineLayerColor.setCaretColorEnum(generateDefaultColor());
+    m_lineLayerLineWidth = ChartTwoDataCartesian::getDefaultLineWidth();
+    m_selectedLineChartPointIndex = 0;
+    m_lineChartActiveMode = ChartTwoOverlayActiveModeEnum::OFF;
+    m_lineChartNewMeanEnabled = false;
+    m_lineChartNewMeanValue = 0.0;
+    m_lineChartNewDeviationEnabled = false;
+    m_lineChartNormalizationAbsoluteValueEnabled = false;
+    m_lineChartNewDeviationValue = 1.0;
+    
+    m_selectedLineChartTextOffset = CardinalDirectionEnum::AUTO;
+    
     m_sceneAssistant = std::unique_ptr<SceneClassAssistant>(new SceneClassAssistant());
     m_sceneAssistant->add("m_enabled", &m_enabled);
     m_sceneAssistant->add<MapYokingGroupEnum, MapYokingGroupEnum::Enum>("m_mapYokingGroup",
@@ -95,13 +114,34 @@ m_overlayIndex(overlayIndex)
     m_sceneAssistant->add("m_colorBar", "AnnotationColorBar", m_colorBar.get());
     m_sceneAssistant->add<ChartTwoMatrixTriangularViewingModeEnum, ChartTwoMatrixTriangularViewingModeEnum::Enum>("m_matrixTriangularViewingMode",
                                                                         &m_matrixTriangularViewingMode);
+    m_sceneAssistant->add("m_matrixOpacity",
+                          &m_matrixOpacity);
+    m_sceneAssistant->add<ChartAxisLocationEnum, ChartAxisLocationEnum::Enum>("m_cartesianHorizontalAxisLocation",
+                                                                              &m_cartesianHorizontalAxisLocation);
     m_sceneAssistant->add<ChartAxisLocationEnum, ChartAxisLocationEnum::Enum>("m_cartesianVerticalAxisLocation",
                                                                               &m_cartesianVerticalAxisLocation);
     m_sceneAssistant->add("m_selectedHistogramMapIndex", &m_selectedHistogramMapIndex);
     m_sceneAssistant->add("m_allHistogramMapsSelectedFlag", &m_allHistogramMapsSelectedFlag);
-    
+    m_sceneAssistant->add("m_selectedLineLayerMapIndex", &m_selectedLineLayerMapIndex);
+    m_sceneAssistant->add("m_lineLayerLineWidth", &m_lineLayerLineWidth);
+    m_sceneAssistant->add("m_selectedLineChartPointIndex", &m_selectedLineChartPointIndex);
+    m_sceneAssistant->add<ChartTwoOverlayActiveModeEnum, ChartTwoOverlayActiveModeEnum::Enum>("m_lineChartActiveMode",
+                                                                                              &m_lineChartActiveMode);
+    m_sceneAssistant->add<CardinalDirectionEnum, CardinalDirectionEnum::Enum>("m_selectedLineChartTextOffset",
+                                                                              &m_selectedLineChartTextOffset);
+    m_sceneAssistant->add("m_lineChartNewMeanEnabled",
+                          &m_lineChartNewMeanEnabled);
+    m_sceneAssistant->add("m_lineChartNewMeanValue",
+                          &m_lineChartNewMeanValue);
+    m_sceneAssistant->add("m_lineChartNewDeviationEnabled",
+                          &m_lineChartNewDeviationEnabled);
+    m_sceneAssistant->add("m_lineChartNormalizationAbsoluteValueEnabled",
+                          &m_lineChartNormalizationAbsoluteValueEnabled);
+    m_sceneAssistant->add("m_lineChartNewDeviationValue",
+                          &m_lineChartNewDeviationValue);
+
     EventManager::get()->addEventListener(this,
-                                          EventTypeEnum::EVENT_CHART_OVERLAY_VALIDATE);
+                                          EventTypeEnum::EVENT_CHART_TWO_OVERLAY_VALIDATE);
 }
 
 /**
@@ -147,8 +187,8 @@ ChartTwoOverlay::setWeakPointerToSelf(std::weak_ptr<ChartTwoOverlay> weakPointer
 void
 ChartTwoOverlay::receiveEvent(Event* event)
 {
-    if (event->getEventType() == EventTypeEnum::EVENT_CHART_OVERLAY_VALIDATE) {
-        EventChartOverlayValidate* eov = dynamic_cast<EventChartOverlayValidate*>(event);
+    if (event->getEventType() == EventTypeEnum::EVENT_CHART_TWO_OVERLAY_VALIDATE) {
+        EventChartTwoOverlayValidate* eov = dynamic_cast<EventChartTwoOverlayValidate*>(event);
         CaretAssert(eov);
         eov->testValidChartOverlay(this);
         eov->setEventProcessed();
@@ -235,15 +275,15 @@ ChartTwoOverlay::getChartTwoDataType() const
 /**
  * Get the chart compound data type
  */
-ChartTwoCompoundDataType
+const ChartTwoCompoundDataType*
 ChartTwoOverlay::getChartTwoCompoundDataType() const
 {
-    return m_chartCompoundDataType;
+    return &m_chartCompoundDataType;
 }
 
 /**
  * Set the compound chart type for charts displayed in this overlay.
- * MUST match simplae data type for this chart unless invalid.
+ * MUST match simple data type for this chart unless invalid.
  * Note that overlay index zero, allows any chart type.
  *
  * @param chartCompoundDataType
@@ -257,7 +297,6 @@ ChartTwoOverlay::setChartTwoCompoundDataType(const ChartTwoCompoundDataType& cha
                            " for first overlay");
         return;
     }
-//    do for overlay zero ??
         
     if (chartCompoundDataType.getChartTwoDataType() != ChartTwoDataTypeEnum::CHART_DATA_TYPE_INVALID) {
         CaretAssert(m_chartDataType == chartCompoundDataType.getChartTwoDataType());
@@ -358,11 +397,24 @@ ChartTwoOverlay::copyData(const ChartTwoOverlay* overlay)
     
     *m_colorBar = *overlay->m_colorBar;
     m_matrixTriangularViewingMode = overlay->m_matrixTriangularViewingMode;
+    m_matrixOpacity = overlay->m_matrixOpacity;
     m_cartesianVerticalAxisLocation = overlay->m_cartesianVerticalAxisLocation;
-    
+    m_cartesianHorizontalAxisLocation = overlay->m_cartesianHorizontalAxisLocation;
+
     m_selectedMapFile = overlay->m_selectedMapFile;
     m_selectedHistogramMapIndex = overlay->m_selectedHistogramMapIndex;
     m_allHistogramMapsSelectedFlag = overlay->m_allHistogramMapsSelectedFlag;
+    m_selectedLineLayerMapIndex = overlay->m_selectedLineLayerMapIndex;
+    m_lineLayerColor = overlay->m_lineLayerColor;
+    m_lineLayerLineWidth = overlay->m_lineLayerLineWidth;
+    m_selectedLineChartPointIndex = overlay->m_selectedLineChartPointIndex;
+    m_lineChartActiveMode = overlay->m_lineChartActiveMode;
+    m_selectedLineChartTextOffset = overlay->m_selectedLineChartTextOffset;
+    m_lineChartNewMeanEnabled = overlay->m_lineChartNewMeanEnabled;
+    m_lineChartNewMeanValue = overlay->m_lineChartNewMeanValue;
+    m_lineChartNewDeviationEnabled = overlay->m_lineChartNewDeviationEnabled;
+    m_lineChartNormalizationAbsoluteValueEnabled = overlay->m_lineChartNormalizationAbsoluteValueEnabled;
+    m_lineChartNewDeviationValue   = overlay->m_lineChartNewDeviationValue;
 }
 
 /**
@@ -395,6 +447,8 @@ ChartTwoOverlay::isHistorySupported() const
         case ChartTwoDataTypeEnum::CHART_DATA_TYPE_INVALID:
             break;
         case ChartTwoDataTypeEnum::CHART_DATA_TYPE_HISTOGRAM:
+            break;
+        case ChartTwoDataTypeEnum::CHART_DATA_TYPE_LINE_LAYER:
             break;
         case ChartTwoDataTypeEnum::CHART_DATA_TYPE_LINE_SERIES:
             supportedFlag = true;
@@ -455,6 +509,9 @@ ChartTwoOverlay::isMapYokingSupportedPrivate(const CaretMappableDataFile* mapFil
                 || mapFile->isVolumeMappable()) {
                 supportedFlag = true;
             }
+            break;
+        case ChartTwoDataTypeEnum::CHART_DATA_TYPE_LINE_LAYER:
+            supportedFlag = true;
             break;
         case ChartTwoDataTypeEnum::CHART_DATA_TYPE_LINE_SERIES:
             if (mapFile->getDataFileType() == DataFileTypeEnum::CONNECTIVITY_SCALAR_DATA_SERIES) {
@@ -550,7 +607,6 @@ ChartTwoOverlay::getBounds(BoundingBox& boundingBoxOut) const
             const Histogram* histogram = histogramChart->getHistogramForChartDrawing(selectedIndex,
                                                                                      (isAllMapsSupported()
                                                                                       && isAllMapsSelected()));
-            //CaretAssert(histogram);
             if (histogram != NULL) {
                 float histogramMinX = 0.0, histogramMaxX = 0.0, histogramMaxY = 0.0;
                 histogram->getRangeAndMaxDisplayHeight(histogramMinX, histogramMaxX, histogramMaxY);
@@ -565,6 +621,12 @@ ChartTwoOverlay::getBounds(BoundingBox& boundingBoxOut) const
             break;
         case ChartTwoDataTypeEnum::CHART_DATA_TYPE_INVALID:
             break;
+        case ChartTwoDataTypeEnum::CHART_DATA_TYPE_LINE_LAYER:
+        {
+            const ChartTwoDataCartesian* cartesianLine = getLineLayerChartDisplayedCartesianData();
+            validFlag = cartesianLine->getBounds(boundingBoxOut);
+        }
+            break;
         case ChartTwoDataTypeEnum::CHART_DATA_TYPE_LINE_SERIES:
         {
             const ChartableTwoFileLineSeriesChart* lineSeriesChart = chartDelegate->getLineSeriesCharting();
@@ -573,10 +635,210 @@ ChartTwoOverlay::getBounds(BoundingBox& boundingBoxOut) const
         }
             break;
         case ChartTwoDataTypeEnum::CHART_DATA_TYPE_MATRIX:
+        {
+            const ChartableTwoFileMatrixChart* matrixChart = chartDelegate->getMatrixCharting();
+            validFlag = matrixChart->getMatrixChartingGraphicsPrimitive(getMatrixTriangularViewingMode(),
+                                                                        CiftiMappableDataFile::MatrixGridMode::FILLED_TEXTURE,
+                                                                        getMatrixOpacity())->getVertexBounds(boundingBoxOut);
+        }
             break;
     }
     
     return validFlag;
+}
+
+/**
+ * @return The displayed cartesian data for a line layer chart (ChartTwoDataTypeEnum::CHART_DATA_TYPE_LINE_LAYER).
+ * This data may be normalized (if layer's new mean,deviation is enabled), otherwise the data as from the map file
+ * NULL may be returned.   NULL always returned for types other than line layer.
+ */
+const ChartTwoDataCartesian*
+ChartTwoOverlay::getLineLayerChartDisplayedCartesianData() const
+{
+    ChartTwoOverlay* nonConstThis = const_cast<ChartTwoOverlay*>(this);
+    return nonConstThis->getLineLayerChartDisplayedCartesianData();
+}
+
+/**
+ * @return The displayed cartesian data for a line layer chart (ChartTwoDataTypeEnum::CHART_DATA_TYPE_LINE_LAYER).
+ * This data may be normalized (if layer's new mean,deviation is enabled), otherwise the data as from the map file
+ * NULL may be returned.   NULL always returned for types other than line layer.
+ */
+ChartTwoDataCartesian*
+ChartTwoOverlay::getLineLayerChartDisplayedCartesianData()
+{
+    CaretMappableDataFile* mapFile = NULL;
+    SelectedIndexType selectedIndexType = SelectedIndexType::INVALID;
+    int32_t selectedIndex = -1;
+    getSelectionData(mapFile,
+                     selectedIndexType,
+                     selectedIndex);
+    
+    if (mapFile == NULL) {
+        return NULL;
+    }
+    
+    ChartTwoDataCartesian* dataOut(NULL);
+    
+    switch (m_chartDataType) {
+        case ChartTwoDataTypeEnum::CHART_DATA_TYPE_LINE_LAYER:
+        {
+            
+            
+            ChartableTwoFileDelegate* chartDelegate = mapFile->getChartingDelegate();
+            ChartableTwoFileLineLayerChart* layerChart = chartDelegate->getLineLayerCharting();
+            ChartTwoDataCartesian* cartesianLineData = layerChart->getChartMapLineForChartTwoOverlay(selectedIndex);
+            CaretAssert(cartesianLineData);
+            
+            /*
+             * Cache the data (not done yet)
+             */
+            if ((m_previousLineChartSettings.m_mapFile != mapFile)
+                || (m_previousLineChartSettings.m_mapIndex != selectedIndex)
+                || (m_previousLineChartSettings.m_numberOfMaps != mapFile->getNumberOfMaps())
+                || (m_previousLineChartSettings.m_cartesianLineData != cartesianLineData)
+                || (m_previousLineChartSettings.m_numberOfCartesianVertices != cartesianLineData->getGraphicsPrimitive()->getNumberOfVertices())
+                || (m_previousLineChartSettings.m_newMean != m_lineChartNewMeanValue)
+                || (m_previousLineChartSettings.m_newDeviation != m_lineChartNewDeviationValue)
+                || (m_previousLineChartSettings.m_newMeanEnabled != m_lineChartNewMeanEnabled)
+                || (m_previousLineChartSettings.m_newDeviationEnabled != m_lineChartNewDeviationEnabled)
+                || (m_previousLineChartSettings.m_lineChartNormalizationAbsoluteValueEnabled != m_lineChartNormalizationAbsoluteValueEnabled)) {
+                m_lineChartNormalizedCartesianData.reset();
+            }
+                
+            m_previousLineChartSettings.m_mapFile = mapFile;
+            m_previousLineChartSettings.m_mapIndex  = selectedIndex;
+            m_previousLineChartSettings.m_numberOfMaps = mapFile->getNumberOfMaps();
+            m_previousLineChartSettings.m_cartesianLineData = cartesianLineData;
+            m_previousLineChartSettings.m_numberOfCartesianVertices = cartesianLineData->getGraphicsPrimitive()->getNumberOfVertices();
+            m_previousLineChartSettings.m_newMean = m_lineChartNewMeanValue;
+            m_previousLineChartSettings.m_newDeviation = m_lineChartNewDeviationValue;
+            m_previousLineChartSettings.m_newMeanEnabled = m_lineChartNewMeanEnabled;
+            m_previousLineChartSettings.m_newDeviationEnabled = m_lineChartNewDeviationEnabled;
+            m_previousLineChartSettings.m_lineChartNormalizationAbsoluteValueEnabled = m_lineChartNormalizationAbsoluteValueEnabled;
+
+            if ( ! m_lineChartNormalizedCartesianData) {
+                /*
+                 * Need to clone the line
+                 */
+                m_lineChartNormalizedCartesianData.reset(cartesianLineData->clone());
+            }
+            else {
+                /*
+                 * Just need to replace the Y-components with original Y-components
+                 */
+                std::vector<float> yComponents;
+                cartesianLineData->getGraphicsPrimitive()->getFloatYComponents(yComponents);
+                m_lineChartNormalizedCartesianData->getGraphicsPrimitive()->setFloatYComponents(yComponents);
+            }
+            
+            
+            if (m_lineChartNewMeanEnabled
+                || m_lineChartNewDeviationEnabled
+                || m_lineChartNormalizationAbsoluteValueEnabled) {
+                /*
+                 * Apply new mean and deviation to Y-components
+                 */
+                bool haveNanInfFlag(false);
+                CaretAssert(m_lineChartNormalizedCartesianData->getGraphicsPrimitive());
+                m_lineChartNormalizedCartesianData->getGraphicsPrimitive()->applyNewMeanAndDeviationToYComponents(m_lineChartNewMeanEnabled,
+                                                                                                                  m_lineChartNewMeanValue,
+                                                                                                                  m_lineChartNewDeviationEnabled,
+                                                                                                                  m_lineChartNewDeviationValue,
+                                                                                                                  m_lineChartNormalizationAbsoluteValueEnabled,
+                                                                                                                  haveNanInfFlag);
+                
+                if (haveNanInfFlag) {
+                    /*
+                     * Issue warning but only once per file/map
+                     */
+                    auto fileMap(std::make_pair(mapFile, selectedIndex));
+                    if (m_normalizedMapFilesWithNanInf.find(fileMap) == m_normalizedMapFilesWithNanInf.end()) {
+                        m_normalizedMapFilesWithNanInf.insert(fileMap);
+                        CaretLogWarning(mapFile->getFileName()
+                                        + " Contains NaNs and/or Infs in map index="
+                                        + QString::number(selectedIndex + 1)
+                                        + " " + mapFile->getMapName(selectedIndex));
+                    }
+                }
+            }
+            
+            dataOut = m_lineChartNormalizedCartesianData.get();
+        }
+            break;
+        case ChartTwoDataTypeEnum::CHART_DATA_TYPE_HISTOGRAM:
+        case ChartTwoDataTypeEnum::CHART_DATA_TYPE_INVALID:
+        case ChartTwoDataTypeEnum::CHART_DATA_TYPE_LINE_SERIES:
+        case ChartTwoDataTypeEnum::CHART_DATA_TYPE_MATRIX:
+        {
+            const QString msg("This method should only be called when chart "
+                              "type is CHART_DATA_TYPE_LINE_LAYER.  Was called with: "
+                              + ChartTwoDataTypeEnum::toName(m_chartDataType));
+            CaretAssertMessage(0, msg);
+            CaretLogWarning(msg);
+        }
+            break;
+    }
+    
+    return dataOut;
+}
+
+/**
+ * @return The cartesian data from the map file in the layer for a line layer chart (ChartTwoDataTypeEnum::CHART_DATA_TYPE_LINE_LAYER).
+ * NULL may be returned.   NULL always returned for types other than line layer.
+ */
+const ChartTwoDataCartesian*
+ChartTwoOverlay::getLineLayerChartMapFileCartesianData() const
+{
+    ChartTwoOverlay* nonConstThis = const_cast<ChartTwoOverlay*>(this);
+    return nonConstThis->getLineLayerChartMapFileCartesianData();
+}
+
+/**
+ * @return The cartesian data from the map file in the layer for a line layer chart (ChartTwoDataTypeEnum::CHART_DATA_TYPE_LINE_LAYER).
+ * NULL may be returned.   NULL always returned for types other than line layer.
+ */
+ChartTwoDataCartesian*
+ChartTwoOverlay::getLineLayerChartMapFileCartesianData()
+{
+    CaretMappableDataFile* mapFile = NULL;
+    SelectedIndexType selectedIndexType = SelectedIndexType::INVALID;
+    int32_t selectedIndex = -1;
+    getSelectionData(mapFile,
+                     selectedIndexType,
+                     selectedIndex);
+    
+    if (mapFile == NULL) {
+        return NULL;
+    }
+    
+    ChartTwoDataCartesian* dataOut(NULL);
+    
+    switch (m_chartDataType) {
+        case ChartTwoDataTypeEnum::CHART_DATA_TYPE_LINE_LAYER:
+        {
+            ChartableTwoFileDelegate* chartDelegate = mapFile->getChartingDelegate();
+            ChartableTwoFileLineLayerChart* layerChart = chartDelegate->getLineLayerCharting();
+            dataOut = layerChart->getChartMapLineForChartTwoOverlay(selectedIndex);
+            CaretAssert(dataOut);
+            CaretAssert(dataOut->getGraphicsPrimitive());
+        }
+            break;
+        case ChartTwoDataTypeEnum::CHART_DATA_TYPE_HISTOGRAM:
+        case ChartTwoDataTypeEnum::CHART_DATA_TYPE_INVALID:
+        case ChartTwoDataTypeEnum::CHART_DATA_TYPE_LINE_SERIES:
+        case ChartTwoDataTypeEnum::CHART_DATA_TYPE_MATRIX:
+        {
+            const QString msg("This method should only be called when chart "
+                              "type is CHART_DATA_TYPE_LINE_LAYER.  Was called with: "
+                              + ChartTwoDataTypeEnum::toName(m_chartDataType));
+            CaretAssertMessage(0, msg);
+            CaretLogWarning(msg);
+        }
+            break;
+    }
+    
+    return dataOut;
 }
 
 /**
@@ -720,11 +982,11 @@ ChartTwoOverlay::getSelectionDataPrivate(std::vector<CaretMappableDataFile*>& ma
         if (chartingFile->isChartingTwoSupported()) {
             bool useIt = false;
             
-            std::vector<ChartTwoCompoundDataType> chartCompoundDataTypes;
+            std::vector<const ChartTwoCompoundDataType*> chartCompoundDataTypes;
             chartingFile->getSupportedChartTwoCompoundDataTypes(chartCompoundDataTypes);
             
             for (auto& compoundType : chartCompoundDataTypes) {
-                if (m_chartDataType == compoundType.getChartTwoDataType()) {
+                if (m_chartDataType == compoundType->getChartTwoDataType()) {
                     if (m_overlayIndex == 0) {
                         /*
                          * The first overlay displays ALL files that match the
@@ -733,7 +995,7 @@ ChartTwoOverlay::getSelectionDataPrivate(std::vector<CaretMappableDataFile*>& ma
                         useIt = true;
                     }
                     else {
-                        if (m_chartCompoundDataType == compoundType) {
+                        if (m_chartCompoundDataType == *compoundType) {
                             /*
                              * If not the first overlay, the enumerated type
                              * and dimensions must also match
@@ -802,6 +1064,9 @@ ChartTwoOverlay::getSelectionDataPrivate(std::vector<CaretMappableDataFile*>& ma
                     case ChartTwoDataTypeEnum::CHART_DATA_TYPE_HISTOGRAM:
                         m_selectedHistogramMapIndex = 0;
                         break;
+                    case ChartTwoDataTypeEnum::CHART_DATA_TYPE_LINE_LAYER:
+                        m_selectedLineLayerMapIndex = 0;
+                        break;
                     case ChartTwoDataTypeEnum::CHART_DATA_TYPE_LINE_SERIES:
                         break;
                     case ChartTwoDataTypeEnum::CHART_DATA_TYPE_MATRIX:
@@ -838,6 +1103,25 @@ ChartTwoOverlay::getSelectionDataPrivate(std::vector<CaretMappableDataFile*>& ma
                 selectedIndexOut     = m_selectedHistogramMapIndex;
             }
                 break;
+            case ChartTwoDataTypeEnum::CHART_DATA_TYPE_LINE_LAYER:
+            {
+                ChartableTwoFileLineLayerChart* lineLayerChart =
+                   m_selectedMapFile->getChartingDelegate()->getLineLayerCharting();
+                CaretAssert(lineLayerChart);
+                numMaps = lineLayerChart->getNumberOfChartMaps();
+                if (selectedFileMapNamesOut != NULL) {
+                    lineLayerChart->getChartMapNames(*selectedFileMapNamesOut);
+                }
+                if (m_selectedLineLayerMapIndex >= numMaps) {
+                    m_selectedLineLayerMapIndex = numMaps - 1;
+                }
+                if (m_selectedLineLayerMapIndex < 0) {
+                    m_selectedLineLayerMapIndex = 0;
+                }
+                selectedIndexTypeOut = SelectedIndexType::MAP;
+                selectedIndexOut     = m_selectedLineLayerMapIndex;
+            }
+                break;
             case ChartTwoDataTypeEnum::CHART_DATA_TYPE_LINE_SERIES:
             {
                 /*
@@ -862,50 +1146,6 @@ ChartTwoOverlay::getSelectionDataPrivate(std::vector<CaretMappableDataFile*>& ma
             {
                 ChartableTwoFileDelegate* chartDelegate = m_selectedMapFile->getChartingDelegate();
                 matrixChart = chartDelegate->getMatrixCharting();
-//                const ChartableTwoFileMatrixChart* matrixChart = chartDelegate->getMatrixCharting();
-//                CaretAssert(matrixChart);
-//                int32_t numRows = 0;
-//                int32_t numCols = 0;
-//                matrixChart->getMatrixDimensions(numRows, numCols);
-//                
-//                ChartTwoMatrixLoadingDimensionEnum::Enum rowColumnDimension;
-//                std::vector<int32_t> columnIndices;
-//                std::vector<int32_t> rowIndices;
-//                matrixChart->getSelectedRowColumnIndices(m_parentChartTwoOverlaySet->m_tabIndex,
-//                                                         rowColumnDimension,
-//                                                         rowIndices,
-//                                                         columnIndices);
-//                
-//                switch (rowColumnDimension) {
-//                    case ChartTwoMatrixLoadingDimensionEnum::CHART_MATRIX_LOADING_BY_COLUMN:
-//                        numMaps = numCols;
-//                        if ( ! columnIndices.empty()) {
-//                            selectedIndexTypeOut = SelectedIndexType::COLUMN;
-//                            selectedIndexOut     = columnIndices[0];
-//                        }
-//                        if (matrixChart->hasColumnSelection()) {
-//                            if (selectedFileMapNamesOut != NULL) {
-//                                for (int32_t i = 0; i < numMaps; i++) {
-//                                    selectedFileMapNamesOut->push_back(matrixChart->getColumnName(i));
-//                                }
-//                            }
-//                        }
-//                        break;
-//                    case ChartTwoMatrixLoadingDimensionEnum::CHART_MATRIX_LOADING_BY_ROW:
-//                        numMaps = numRows;
-//                        if ( ! rowIndices.empty()) {
-//                            selectedIndexTypeOut = SelectedIndexType::ROW;
-//                            selectedIndexOut     = rowIndices[0];
-//                        }
-//                        if (matrixChart->hasRowSelection()) {
-//                            if (selectedFileMapNamesOut != NULL) {
-//                                for (int32_t i = 0; i < numMaps; i++) {
-//                                    selectedFileMapNamesOut->push_back(matrixChart->getRowName(i));
-//                                }
-//                            }
-//                        }
-//                        break;
-//                }
             }
                 break;
         }
@@ -1004,6 +1244,11 @@ ChartTwoOverlay::setSelectionData(CaretMappableDataFile* selectedMapFile,
             case ChartTwoDataTypeEnum::CHART_DATA_TYPE_HISTOGRAM:
                 if (selectedMapIndex >= 0) {
                     m_selectedHistogramMapIndex = selectedMapIndex;
+                }
+                break;
+            case ChartTwoDataTypeEnum::CHART_DATA_TYPE_LINE_LAYER:
+                if (selectedMapIndex >= 0) {
+                    m_selectedLineLayerMapIndex = selectedMapIndex;
                 }
                 break;
             case ChartTwoDataTypeEnum::CHART_DATA_TYPE_LINE_SERIES:
@@ -1181,6 +1426,8 @@ ChartTwoOverlay::isAllMapsSupported() const
             }
         }
             break;
+        case ChartTwoDataTypeEnum::CHART_DATA_TYPE_LINE_LAYER:
+            break;
         case ChartTwoDataTypeEnum::CHART_DATA_TYPE_LINE_SERIES:
             break;
         case ChartTwoDataTypeEnum::CHART_DATA_TYPE_MATRIX:
@@ -1249,6 +1496,8 @@ ChartTwoOverlay::isMatrixTriangularViewingModeSupported() const
             break;
         case ChartTwoDataTypeEnum::CHART_DATA_TYPE_HISTOGRAM:
             break;
+        case ChartTwoDataTypeEnum::CHART_DATA_TYPE_LINE_LAYER:
+            break;
         case ChartTwoDataTypeEnum::CHART_DATA_TYPE_LINE_SERIES:
             break;
         case ChartTwoDataTypeEnum::CHART_DATA_TYPE_MATRIX:
@@ -1263,26 +1512,33 @@ ChartTwoOverlay::isMatrixTriangularViewingModeSupported() const
 }
 
 /**
- * @return Location of vertical cartesian axis
+ * @return The matrix opacity
  */
-ChartAxisLocationEnum::Enum
-ChartTwoOverlay::getCartesianVerticalAxisLocation() const
+float
+ChartTwoOverlay::getMatrixOpacity() const
 {
-    validateCartesianVerticalAxisLocation();
-    return m_cartesianVerticalAxisLocation;
+    return m_matrixOpacity;
 }
 
 /**
- * Set Location of vertical cartesian axis
- *
- * @param cartesianVerticalAxisLocation
- *    New value for Location of vertical cartesian axis
+ * Set the matrix opacity
+ * @param opacity
+ *    New opacity value
  */
 void
-ChartTwoOverlay::setCartesianVerticalAxisLocation(const ChartAxisLocationEnum::Enum cartesianVerticalAxisLocation)
+ChartTwoOverlay::setMatrixOpacity(const float opacity)
 {
-    m_cartesianVerticalAxisLocation = cartesianVerticalAxisLocation;
+    m_matrixOpacity = opacity;
+}
+
+/**
+ * @return Location of vertical cartesian axis from OLD scenes
+ */
+ChartAxisLocationEnum::Enum
+ChartTwoOverlay::getSceneCartesianVerticalAxisLocation() const
+{
     validateCartesianVerticalAxisLocation();
+    return m_cartesianVerticalAxisLocation;
 }
 
 /**
@@ -1319,6 +1575,9 @@ ChartTwoOverlay::isCartesianVerticalAxisLocationSupported() const
         case ChartTwoDataTypeEnum::CHART_DATA_TYPE_HISTOGRAM:
             return true;
             break;
+        case ChartTwoDataTypeEnum::CHART_DATA_TYPE_LINE_LAYER:
+            return true;
+            break;
         case ChartTwoDataTypeEnum::CHART_DATA_TYPE_LINE_SERIES:
             return true;
             break;
@@ -1329,6 +1588,432 @@ ChartTwoOverlay::isCartesianVerticalAxisLocationSupported() const
     return false;
 }
 
+/**
+ * @return Location of horizontal cartesian axis
+ */
+ChartAxisLocationEnum::Enum
+ChartTwoOverlay::getCartesianHorizontalAxisLocation() const
+{
+    validateCartesianHorizontalAxisLocation();
+    return m_cartesianHorizontalAxisLocation;
+}
+
+/**
+ * Set Location of horizontal cartesian axis
+ *
+ * @param cartesianHorizontalAxisLocation
+ *    New value for Location of horizontal cartesian axis
+ */
+void
+ChartTwoOverlay::setCartesianHorizontalAxisLocation(const ChartAxisLocationEnum::Enum cartesianHorizontalAxisLocation)
+{
+    m_cartesianHorizontalAxisLocation = cartesianHorizontalAxisLocation;
+    validateCartesianHorizontalAxisLocation();
+}
+
+/**
+ * Validate cartesian horizontal axis to valid locations (bottom and top)
+ */
+void
+ChartTwoOverlay::validateCartesianHorizontalAxisLocation() const
+{
+    
+    switch (m_cartesianHorizontalAxisLocation) {
+        case ChartAxisLocationEnum::CHART_AXIS_LOCATION_BOTTOM:
+            break;
+        case ChartAxisLocationEnum::CHART_AXIS_LOCATION_LEFT:
+            m_cartesianHorizontalAxisLocation = ChartAxisLocationEnum::CHART_AXIS_LOCATION_BOTTOM;
+            break;
+        case ChartAxisLocationEnum::CHART_AXIS_LOCATION_RIGHT:
+            m_cartesianHorizontalAxisLocation = ChartAxisLocationEnum::CHART_AXIS_LOCATION_BOTTOM;
+            break;
+        case ChartAxisLocationEnum::CHART_AXIS_LOCATION_TOP:
+            break;
+    }
+}
+
+/**
+ * @return Is the cartesian horizontal axis location supported?
+ */
+bool
+ChartTwoOverlay::isCartesianHorizontalAxisLocationSupported() const
+{
+    switch (m_chartDataType) {
+        case ChartTwoDataTypeEnum::CHART_DATA_TYPE_INVALID:
+            break;
+        case ChartTwoDataTypeEnum::CHART_DATA_TYPE_HISTOGRAM:
+            return true;
+            break;
+        case ChartTwoDataTypeEnum::CHART_DATA_TYPE_LINE_LAYER:
+            return true;
+            break;
+        case ChartTwoDataTypeEnum::CHART_DATA_TYPE_LINE_SERIES:
+            return true;
+            break;
+        case ChartTwoDataTypeEnum::CHART_DATA_TYPE_MATRIX:
+            break;
+    }
+    
+    return false;
+}
+
+/**
+ * @return The line layer color
+ */
+CaretColor
+ChartTwoOverlay::getLineLayerColor() const
+{
+    return m_lineLayerColor;
+}
+
+/**
+ * Set the line layer color
+ * @param color
+ * New color for line layer
+ */
+void
+ChartTwoOverlay::setLineLayerColor(const CaretColor& color)
+{
+    m_lineLayerColor = color;
+}
+
+/**
+ * The line layer line width
+ */
+float
+ChartTwoOverlay::getLineLayerLineWidth() const
+{
+    return m_lineLayerLineWidth;
+}
+
+/**
+ * Set the line width for a line layer
+ * @param lineWidth
+ * New value for line width
+ */
+void
+ChartTwoOverlay::setLineLayerLineWidth(const float lineWidth)
+{
+    m_lineLayerLineWidth = lineWidth;
+}
+
+/**
+ * Generate the default color.
+ */
+CaretColorEnum::Enum
+ChartTwoOverlay::generateDefaultColor()
+{
+    /*
+     * No black or white since they are used for backgrounds
+     */
+    std::vector<CaretColorEnum::Enum> colors;
+    CaretColorEnum::getColorEnumsNoBlackOrWhite(colors);
+    CaretAssert( ! colors.empty());
+    CaretColorEnum::Enum color = colors[0];
+    
+    const int32_t numColors = static_cast<int32_t>(colors.size());
+    CaretAssert(numColors > 0);
+    if (s_defaultColorIndexGenerator < 0) {
+        s_defaultColorIndexGenerator = 0;
+    }
+    else if (s_defaultColorIndexGenerator >= numColors) {
+        s_defaultColorIndexGenerator = 0;
+    }
+    
+    CaretAssertVectorIndex(colors, s_defaultColorIndexGenerator);
+    color = colors[s_defaultColorIndexGenerator];
+    
+    /* move to next color */
+    ++s_defaultColorIndexGenerator;
+    
+    return color;
+}
+
+/**
+ * @return Number of points in line layer chart
+ */
+int32_t
+ChartTwoOverlay::getSelectedLineChartNumberOfPoints() const
+{
+    CaretMappableDataFile* mapFile = NULL;
+    SelectedIndexType selectedIndexType = SelectedIndexType::INVALID;
+    int32_t selectedIndex = -1;
+    getSelectionData(mapFile,
+                     selectedIndexType,
+                     selectedIndex);
+    
+    if (mapFile == NULL) {
+        return false;
+    }
+    
+    switch (m_chartDataType) {
+        case ChartTwoDataTypeEnum::CHART_DATA_TYPE_HISTOGRAM:
+            break;
+        case ChartTwoDataTypeEnum::CHART_DATA_TYPE_INVALID:
+            break;
+        case ChartTwoDataTypeEnum::CHART_DATA_TYPE_LINE_LAYER:
+        {
+            const ChartTwoDataCartesian* cd = getLineLayerChartDisplayedCartesianData();
+            CaretAssert(cd);
+            const GraphicsPrimitive* gp(cd->getGraphicsPrimitive());
+            CaretAssert(gp);
+            return gp->getNumberOfVertices();
+        }
+            break;
+        case ChartTwoDataTypeEnum::CHART_DATA_TYPE_LINE_SERIES:
+            break;
+        case ChartTwoDataTypeEnum::CHART_DATA_TYPE_MATRIX:
+            break;
+    }
+
+    return 0;
+}
+
+/**
+ * @return Index of selected point in line chart
+ */
+int32_t
+ChartTwoOverlay::getSelectedLineChartPointIndex() const
+{
+    validateSelectedLineChartPointIndex();
+    
+    return m_selectedLineChartPointIndex;
+}
+
+/**
+ * Validate the selected line chart point index (in value range)
+ */
+void
+ChartTwoOverlay::validateSelectedLineChartPointIndex() const
+{
+    if (m_selectedLineChartPointIndex >= getSelectedLineChartNumberOfPoints()) {
+        m_selectedLineChartPointIndex = getSelectedLineChartNumberOfPoints() - 1;
+    }
+    if (m_selectedLineChartPointIndex < 0) {
+        m_selectedLineChartPointIndex = 0;
+    }
+}
+
+/**
+ * Set the index of the selected point in the line chart
+ * @param pointIndex
+ *   Index of selected point
+ */
+void
+ChartTwoOverlay::setSelectedLineChartPointIndex(const int32_t pointIndex)
+{
+    m_selectedLineChartPointIndex = pointIndex;
+}
+
+/**
+ * Increment the selected line chart point index by the given amout
+ * @param incrementValue
+ *    Amount to increment, may be negative to decrement
+ */
+void
+ChartTwoOverlay::incrementSelectedLineChartPointIndex(const int32_t incrementValue)
+{
+    m_selectedLineChartPointIndex += incrementValue;
+    validateSelectedLineChartPointIndex();
+}
+
+/**
+ * @return Active mode for this overlay
+ */
+ChartTwoOverlayActiveModeEnum::Enum
+ChartTwoOverlay::getLineChartActiveMode() const
+{
+    return m_lineChartActiveMode;;
+}
+
+/**
+ * Set the active mode for this overlay
+ * @param lineChartActiveMode
+ *    New active mode for this overlay
+ */
+void
+ChartTwoOverlay::setLineChartActiveMode(const ChartTwoOverlayActiveModeEnum::Enum lineChartActiveMode)
+{
+    m_lineChartActiveMode = lineChartActiveMode;
+}
+
+/**
+ * Get the XYZ-coordinate of the selected line chart point
+ * @param xyzOut
+ *    Output with selected point coordinate
+ * @return True if the selected point is displayed and the index is within
+ * the range of the lines points and thus the XYZ is valid for display
+ */
+bool
+ChartTwoOverlay::getSelectedLineChartPointXYZ(std::array<float, 3>& xyzOut) const
+{
+    bool validFlag(false);
+    switch (m_lineChartActiveMode) {
+        case ChartTwoOverlayActiveModeEnum::ACTIVE:
+            validFlag = true;
+            break;
+        case ChartTwoOverlayActiveModeEnum::OFF:
+            break;
+        case ChartTwoOverlayActiveModeEnum::ON:
+            validFlag = true;
+            break;
+    }
+    
+    if (validFlag) {
+        CaretMappableDataFile* mapFile = NULL;
+        SelectedIndexType selectedIndexType = SelectedIndexType::INVALID;
+        int32_t selectedIndex = -1;
+        getSelectionData(mapFile,
+                         selectedIndexType,
+                         selectedIndex);
+        
+        if (mapFile == NULL) {
+            return false;
+        }
+        
+        switch (m_chartDataType) {
+            case ChartTwoDataTypeEnum::CHART_DATA_TYPE_HISTOGRAM:
+                break;
+            case ChartTwoDataTypeEnum::CHART_DATA_TYPE_INVALID:
+                break;
+            case ChartTwoDataTypeEnum::CHART_DATA_TYPE_LINE_LAYER:
+            {
+                const ChartTwoDataCartesian* cd = getLineLayerChartDisplayedCartesianData();
+                CaretAssert(cd);
+                cd->getPointXYZ(m_selectedLineChartPointIndex,
+                                xyzOut.data());
+                return true;
+            }
+                break;
+            case ChartTwoDataTypeEnum::CHART_DATA_TYPE_LINE_SERIES:
+                break;
+            case ChartTwoDataTypeEnum::CHART_DATA_TYPE_MATRIX:
+                break;
+        }
+    }
+    
+    return false;
+}
+
+/**
+ * @return The text offset for selected line chart point
+ */
+CardinalDirectionEnum::Enum
+ChartTwoOverlay::getSelectedLineChartTextOffset() const
+{
+    return m_selectedLineChartTextOffset;
+}
+
+/**
+ * Set text offset for selected line chart point
+ * @param offset
+ *    New offset
+ */
+void
+ChartTwoOverlay::setSelectedLineChartTextOffset(const CardinalDirectionEnum::Enum offset)
+{
+    m_selectedLineChartTextOffset = offset;
+}
+
+/**
+ * @return Line chart new mean enabled
+ */
+bool
+ChartTwoOverlay::isLineChartNewMeanEnabled() const
+{
+    return m_lineChartNewMeanEnabled;
+}
+
+/**
+ * Set line chart new mean enabled
+ * @param enabled
+ *    New enabled status
+ */
+void
+ChartTwoOverlay::setLineChartNewMeanEnabled(const bool enabled)
+{
+    m_lineChartNewMeanEnabled = enabled;
+}
+
+/**
+ * @return Line chart new mean value
+ */
+float
+ChartTwoOverlay::getLineChartNewMeanValue() const
+{
+    return m_lineChartNewMeanValue;
+}
+
+/**
+ * Set the line chart new mean value
+ * @param value
+ *    New demean value
+ */
+void
+ChartTwoOverlay::setLineChartNewMeanValue(const float value)
+{
+    m_lineChartNewMeanValue = value;
+}
+
+/**
+ * @return Line chart new deviation enabled
+ */
+bool
+ChartTwoOverlay::isLineChartNewDeviationEnabled() const
+{
+    return m_lineChartNewDeviationEnabled;
+}
+
+/**
+ * Set line chart new deviation enabled
+ * @param enabled
+ *    New enabled status
+ */
+void
+ChartTwoOverlay::setLineChartNewDeviationEnabled(const bool enabled)
+{
+    m_lineChartNewDeviationEnabled = enabled;
+}
+
+/**
+ * @return Line chart normalization absolute value enabled
+ */
+bool
+ChartTwoOverlay::isLineChartNormalizationAbsoluteValueEnabled() const
+{
+    return m_lineChartNormalizationAbsoluteValueEnabled;
+}
+
+/**
+ * Set line chart normalization absolute value enabled
+ * @param enable
+ *    New status
+ */
+void
+ChartTwoOverlay::setLineChartNormalizationAbsoluteValueEnabled(const bool enabled)
+{
+    m_lineChartNormalizationAbsoluteValueEnabled = enabled;
+}
+
+/**
+ * @return Line chart new deviation value
+ */
+float
+ChartTwoOverlay::getLineChartNewDeviationValue() const
+{
+    return m_lineChartNewDeviationValue;
+}
+
+/**
+ * Set the line chart new deviation value
+ * @param value
+ *    New deviation value
+ */
+void
+ChartTwoOverlay::setLineChartNewDeviationValue(const float value)
+{
+    m_lineChartNewDeviationValue = value;
+}
 
 /**
  * Save information specific to this type of model to the scene.
@@ -1350,10 +2035,11 @@ ChartTwoOverlay::saveToScene(const SceneAttributes* sceneAttributes,
                                             1);
     m_sceneAssistant->saveMembers(sceneAttributes,
                                   sceneClass);
-    
+    sceneClass->addString("m_lineLayerColor",
+                          m_lineLayerColor.encodeInXML());
+
     std::vector<CaretMappableDataFile*> mapFiles;
     CaretMappableDataFile* selectedMapFile = NULL;
-    //AString selectedMapUniqueID;
     SelectedIndexType selectedIndexType = SelectedIndexType::INVALID;
     int32_t selectedMapIndex;
     getSelectionData(mapFiles,
@@ -1413,9 +2099,40 @@ ChartTwoOverlay::restoreFromScene(const SceneAttributes* sceneAttributes,
     if (sceneClass == NULL) {
         return;
     }
-    
     m_sceneAssistant->restoreMembers(sceneAttributes,
                                      sceneClass);
+    
+    /*
+     * Was briefly used for point display before it became OFF/ON/ACTIVE
+     */
+    const SceneObject* pointDisplayObject = sceneClass->getObjectWithName("m_selectedLineChartPointDisplayed");
+    if (pointDisplayObject != NULL) {
+        if (sceneClass->getBooleanValue("m_selectedLineChartPointDisplayed")) {
+            m_lineChartActiveMode = ChartTwoOverlayActiveModeEnum::ON;
+        }
+        else {
+            m_lineChartActiveMode = ChartTwoOverlayActiveModeEnum::OFF;
+        }
+    }
+
+    /*
+     * m_caretColor (instance of CaretColor) replaced
+     * m_color (instance CaretColorEnum)
+     */
+    const QString caretColorText = sceneClass->getStringValue("m_lineLayerColor", "");
+    if ( ! caretColorText.isEmpty()) {
+        AString errorMessage;
+          if ( ! m_lineLayerColor.decodeFromXML(caretColorText,
+                                                errorMessage)) {
+            sceneAttributes->addToErrorMessage(errorMessage);
+        }
+    }
+    else {
+        const CaretColorEnum::Enum color = sceneClass->getEnumeratedTypeValue<CaretColorEnum,CaretColorEnum::Enum>("m_color",
+                                                                                                                   CaretColorEnum::BLUE);
+        m_lineLayerColor.setCaretColorEnum(color);
+    }
+
     const MapYokingGroupEnum::Enum mapYokingGroupFromScene = m_mapYokingGroup;
     
     /*
@@ -1493,20 +2210,52 @@ ChartTwoOverlay::restoreFromScene(const SceneAttributes* sceneAttributes,
                 CaretMappableDataFile* mapFile = *iter;
                 matchedMapFile = mapFile;
                 
-                if (foundMapNameIndex < 0) {
-                    if ( ! selectedMapName.isEmpty()) {
-                        const int mapNameIndex = mapFile->getMapIndexFromName(selectedMapName);
-                        if (mapNameIndex >= 0) {
-                            foundMapNameFile  = mapFile;
-                            foundMapNameIndex = mapNameIndex;
-                        }
-                    }
-                    
+                bool useMapsFlag(false);
+                bool useLineLayerFlag(false);
+                switch (m_chartDataType) {
+                    case ChartTwoDataTypeEnum::CHART_DATA_TYPE_HISTOGRAM:
+                        useMapsFlag = true;
+                        break;
+                    case ChartTwoDataTypeEnum::CHART_DATA_TYPE_INVALID:
+                        break;
+                    case ChartTwoDataTypeEnum::CHART_DATA_TYPE_LINE_LAYER:
+                        useLineLayerFlag = true;
+                        break;
+                    case ChartTwoDataTypeEnum::CHART_DATA_TYPE_LINE_SERIES:
+                        useMapsFlag = true;
+                        break;
+                    case ChartTwoDataTypeEnum::CHART_DATA_TYPE_MATRIX:
+                        useMapsFlag = true;
+                        break;
                 }
                 
-                if (foundMapIndex < 0) {
-                    if (selectedMapIndex >= 0) {
-                        if (selectedMapIndex < mapFile->getNumberOfMaps()) {
+                if (useMapsFlag) {
+                    if (foundMapNameIndex < 0) {
+                        if ( ! selectedMapName.isEmpty()) {
+                            const int mapNameIndex = mapFile->getMapIndexFromName(selectedMapName);
+                            if (mapNameIndex >= 0) {
+                                foundMapNameFile  = mapFile;
+                                foundMapNameIndex = mapNameIndex;
+                            }
+                        }
+                        
+                    }
+                    
+                    if (foundMapIndex < 0) {
+                        if (selectedMapIndex >= 0) {
+                            if (selectedMapIndex < mapFile->getNumberOfMaps()) {
+                                foundMapIndexFile = mapFile;
+                                foundMapIndex     = selectedMapIndex;
+                            }
+                        }
+                    }
+                }
+                else if (useLineLayerFlag) {
+                    /*
+                     * Line layers are not file maps
+                     */
+                    if (foundMapIndex < 0) {
+                        if (selectedMapIndex >= 0) {
                             foundMapIndexFile = mapFile;
                             foundMapIndex     = selectedMapIndex;
                         }
@@ -1575,6 +2324,9 @@ ChartTwoOverlay::restoreFromScene(const SceneAttributes* sceneAttributes,
                         defaultMapIndex = 0;
                         break;
                     case ChartTwoDataTypeEnum::CHART_DATA_TYPE_INVALID:
+                        break;
+                    case ChartTwoDataTypeEnum::CHART_DATA_TYPE_LINE_LAYER:
+                        defaultMapIndex = 0;
                         break;
                     case ChartTwoDataTypeEnum::CHART_DATA_TYPE_LINE_SERIES:
                         defaultMapIndex = 0;

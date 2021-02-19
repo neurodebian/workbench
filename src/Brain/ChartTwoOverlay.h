@@ -21,12 +21,17 @@
  */
 /*LICENSE_END*/
 
+#include <array>
 #include <memory>
+#include <set>
 
+#include "CardinalDirectionEnum.h"
+#include "CaretColor.h"
 #include "CaretObject.h"
 #include "ChartAxisLocationEnum.h"
 #include "ChartTwoCompoundDataType.h"
 #include "ChartTwoMatrixTriangularViewingModeEnum.h"
+#include "ChartTwoOverlayActiveModeEnum.h"
 #include "EventListenerInterface.h"
 #include "MapYokingGroupEnum.h"
 #include "SceneableInterface.h"
@@ -36,7 +41,9 @@ namespace caret {
     class AnnotationColorBar;
     class BoundingBox;
     class CaretMappableDataFile;
+    class ChartTwoDataCartesian;
     class ChartTwoOverlaySet;
+    class Matrix4x4;
     class PlainTextStringBuilder;
     class SceneClassAssistant;
 
@@ -61,7 +68,7 @@ namespace caret {
         
         ChartTwoDataTypeEnum::Enum getChartTwoDataType() const;
         
-        ChartTwoCompoundDataType getChartTwoCompoundDataType() const;
+        const ChartTwoCompoundDataType* getChartTwoCompoundDataType() const;
         
         void setChartTwoCompoundDataType(const ChartTwoCompoundDataType& chartCompoundDataType);
         
@@ -101,11 +108,19 @@ namespace caret {
         
         bool isMatrixTriangularViewingModeSupported() const;
         
-        ChartAxisLocationEnum::Enum getCartesianVerticalAxisLocation() const;
+        float getMatrixOpacity() const;
         
-        void setCartesianVerticalAxisLocation(const ChartAxisLocationEnum::Enum cartesianVerticalAxisLocation);
+        void setMatrixOpacity(const float opacity);
+        
+        ChartAxisLocationEnum::Enum getSceneCartesianVerticalAxisLocation() const;
         
         bool isCartesianVerticalAxisLocationSupported() const;
+        
+        ChartAxisLocationEnum::Enum getCartesianHorizontalAxisLocation() const;
+        
+        void setCartesianHorizontalAxisLocation(const ChartAxisLocationEnum::Enum cartesianHorizontalAxisLocation);
+        
+        bool isCartesianHorizontalAxisLocationSupported() const;
         
         CaretMappableDataFile* getSelectedMapFile() const;
         
@@ -135,7 +150,61 @@ namespace caret {
         
         bool getBounds(BoundingBox& boundingBoxOut) const;
         
-        virtual void receiveEvent(Event* event);
+        ChartTwoDataCartesian* getLineLayerChartDisplayedCartesianData();
+        
+        const ChartTwoDataCartesian* getLineLayerChartDisplayedCartesianData() const;
+
+        ChartTwoDataCartesian* getLineLayerChartMapFileCartesianData();
+        
+        const ChartTwoDataCartesian* getLineLayerChartMapFileCartesianData() const;
+        
+        CaretColor getLineLayerColor() const;
+        
+        void setLineLayerColor(const CaretColor& color);
+        
+        float getLineLayerLineWidth() const;
+        
+        void setLineLayerLineWidth(const float lineWidth);
+        
+        int32_t getSelectedLineChartNumberOfPoints() const;
+        
+        int32_t getSelectedLineChartPointIndex() const;
+        
+        void setSelectedLineChartPointIndex(const int32_t pointIndex);
+        
+        void incrementSelectedLineChartPointIndex(const int32_t incrementValue);
+
+        ChartTwoOverlayActiveModeEnum::Enum getLineChartActiveMode() const;
+        
+        void setLineChartActiveMode(const ChartTwoOverlayActiveModeEnum::Enum lineChartActiveMode);
+        
+        bool getSelectedLineChartPointXYZ(std::array<float, 3>& xyzOut) const;
+        
+        CardinalDirectionEnum::Enum getSelectedLineChartTextOffset() const;
+        
+        void setSelectedLineChartTextOffset(const CardinalDirectionEnum::Enum offset);
+        
+        bool isLineChartNewMeanEnabled() const;
+        
+        void setLineChartNewMeanEnabled(const bool enabled);
+        
+        float getLineChartNewMeanValue() const;
+        
+        void setLineChartNewMeanValue(const float value);
+        
+        bool isLineChartNewDeviationEnabled() const;
+        
+        void setLineChartNewDeviationEnabled(const bool enabled);
+        
+        bool isLineChartNormalizationAbsoluteValueEnabled() const;
+        
+        void setLineChartNormalizationAbsoluteValueEnabled(const bool enabled);
+        
+        float getLineChartNewDeviationValue() const;
+        
+        void setLineChartNewDeviationValue(const float value);
+        
+       virtual void receiveEvent(Event* event);
 
         // ADD_NEW_METHODS_HERE
         
@@ -172,6 +241,12 @@ namespace caret {
         
         void validateCartesianVerticalAxisLocation() const;
         
+        void validateCartesianHorizontalAxisLocation() const;
+        
+        void validateSelectedLineChartPointIndex() const;
+        
+        static CaretColorEnum::Enum generateDefaultColor();
+        
         /** Parent chart overlay set (only used by first overlay in the set */
         ChartTwoOverlaySet* m_parentChartTwoOverlaySet;
         
@@ -185,7 +260,7 @@ namespace caret {
         
         std::unique_ptr<SceneClassAssistant> m_sceneAssistant;
 
-        /** Current 'compound chart type' of charts allowed in this overlay */
+        /** Current 'compound chart type' of charts allowed in this overlay DO NOT COPY */
         mutable ChartTwoCompoundDataType m_chartCompoundDataType;
         
         /** Name of overlay (DO NOT COPY)*/
@@ -206,15 +281,64 @@ namespace caret {
         /** histogram selected map index */
         mutable int32_t m_selectedHistogramMapIndex = -1;
         
+        mutable int32_t m_selectedLineLayerMapIndex = -1;
+        
         bool m_allHistogramMapsSelectedFlag = false;
         
         mutable ChartTwoMatrixTriangularViewingModeEnum::Enum m_matrixTriangularViewingMode;
         
+        float m_matrixOpacity = 1.0;
+        
         /** Location of vertical cartesian axis*/
         mutable ChartAxisLocationEnum::Enum m_cartesianVerticalAxisLocation;
         
+        /** Location of horizontal cartesian axis*/
+        mutable ChartAxisLocationEnum::Enum m_cartesianHorizontalAxisLocation;
+        
+        CaretColor m_lineLayerColor;
+        
+        float m_lineLayerLineWidth;
+        
+        mutable int32_t m_selectedLineChartPointIndex = 0;
+        
+        ChartTwoOverlayActiveModeEnum::Enum m_lineChartActiveMode = ChartTwoOverlayActiveModeEnum::OFF;
+        
+        CardinalDirectionEnum::Enum m_selectedLineChartTextOffset = CardinalDirectionEnum::AUTO;
+        
+        bool m_lineChartNewMeanEnabled = false;
+        
+        float m_lineChartNewMeanValue = 0.0;
+        
+        bool m_lineChartNewDeviationEnabled = false;
+        
+        bool m_lineChartNormalizationAbsoluteValueEnabled = false;
+        
+        float m_lineChartNewDeviationValue = 1.0;
+        
+        mutable std::unique_ptr<ChartTwoDataCartesian> m_lineChartNormalizedCartesianData;
+        
+        struct LineChartNormalizedSettings {
+            CaretMappableDataFile* m_mapFile = NULL;
+            int32_t m_mapIndex = -1;
+            int32_t m_numberOfMaps = -1;
+            ChartTwoDataCartesian* m_cartesianLineData = NULL;
+            int32_t m_numberOfCartesianVertices = -1;
+            float m_newMean = std::numeric_limits<float>::max();
+            float m_newDeviation = 1.0;
+            bool m_newMeanEnabled = false;
+            bool m_newDeviationEnabled = false;
+            bool m_lineChartNormalizationAbsoluteValueEnabled = false;
+        };
+        
+        LineChartNormalizedSettings m_previousLineChartSettings;
+
         /** A weak pointer to 'self' so that can be stored to safely test instance is valid and can be accessed */
         std::weak_ptr<ChartTwoOverlay> m_weakPointerToSelf;
+        
+        /** prevents excessing warnings when NaNs and/or Inf found in normalization */
+        std::set<std::pair<CaretMappableDataFile*, int32_t>> m_normalizedMapFilesWithNanInf;
+        
+        static int32_t s_defaultColorIndexGenerator;
         
         // ADD_NEW_MEMBERS_HERE
 
@@ -222,7 +346,7 @@ namespace caret {
     };
     
 #ifdef __CHART_TWO_OVERLAY_DECLARE__
-    // <PLACE DECLARATIONS OF STATIC MEMBERS HERE>
+    int32_t ChartTwoOverlay::s_defaultColorIndexGenerator = 0;
 #endif // __CHART_TWO_OVERLAY_DECLARE__
 
 } // namespace

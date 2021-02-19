@@ -198,6 +198,30 @@ SurfaceProjectedItem::unprojectToVolumeXYZ(const SurfaceFile& sf,
  * Get the projected position of this item.
  * The first valid of this positions is used: (1) Barycentric,
  * (2) VanEssen, (3) Stereotaxic.
+ *
+ * @param surfaceFile
+ *     Surface File for positioning.
+ * @param xyzOut
+ *     Output containing the projected position.
+ * @param pasteOntoSurfaceFlag
+ *     Place directly on the surface.
+ * @return  true if the position is valid, else false.
+ *
+ */
+bool
+SurfaceProjectedItem::getProjectedPosition(const SurfaceFile& surfaceFile,
+                                           float xyzOut[3],
+                                           const bool isUnprojectedOntoSurface) const
+{
+    return getProjectedPosition(&surfaceFile,
+                                xyzOut,
+                                isUnprojectedOntoSurface);
+}
+
+/**
+ * Get the projected position of this item.
+ * The first valid of this positions is used: (1) Barycentric,
+ * (2) VanEssen, (3) Stereotaxic.
  * 
  * @param surfaceFile  
  *     Surface File for positioning.
@@ -209,31 +233,33 @@ SurfaceProjectedItem::unprojectToVolumeXYZ(const SurfaceFile& sf,
  *
  */
 bool
-SurfaceProjectedItem::getProjectedPosition(const SurfaceFile& surfaceFile,
+SurfaceProjectedItem::getProjectedPosition(const SurfaceFile* surfaceFile,
                                            float xyzOut[3],
                                            const bool isUnprojectedOntoSurface) const
 {
     bool valid = false;
     
-    if (valid == false) {
-        if (this->barycentricProjection->isValid()) {
-            valid = this->barycentricProjection->unprojectToSurface(surfaceFile, 
-                                                                    xyzOut, 
-                                                                    0.0,
-                                                                    isUnprojectedOntoSurface);
+    if (surfaceFile != NULL) {
+        if ( ! valid) {
+            if (this->barycentricProjection->isValid()) {
+                valid = this->barycentricProjection->unprojectToSurface(*surfaceFile,
+                                                                        xyzOut,
+                                                                        0.0,
+                                                                        isUnprojectedOntoSurface);
+            }
+        }
+        
+        if ( ! valid) {
+            if (this->vanEssenProjection->isValid()) {
+                valid = this->vanEssenProjection->unprojectToSurface(*surfaceFile,
+                                                                     xyzOut,
+                                                                     0.0,
+                                                                     isUnprojectedOntoSurface);
+            }
         }
     }
     
-    if (valid == false) {
-        if (this->vanEssenProjection->isValid()) {
-            valid = this->vanEssenProjection->unprojectToSurface(surfaceFile,
-                                                                 xyzOut, 
-                                                                 0.0,
-                                                                 isUnprojectedOntoSurface);
-        }
-    }
-    
-    if (valid == false) {
+    if ( ! valid) {
         if (this->stereotaxicXYZValid) {
             this->getStereotaxicXYZ(xyzOut);
             valid = true;
@@ -372,9 +398,7 @@ SurfaceProjectedItem::getVolumeXYZ() const
     /*
      * If not set, return stereotaxic coordinate
      */
-    if ((volumeXYZ[0] == 0.0)
-        && (volumeXYZ[1] == 0.0)
-        && (volumeXYZ[2] == 0.0)) {
+    if ( ! isVolumeXYZValid()) {
         const float* stereoXYZ = getStereotaxicXYZ();
         return stereoXYZ;
     }
@@ -392,9 +416,7 @@ SurfaceProjectedItem::getVolumeXYZ(float xyzOut[3]) const
     /*
      * If not set, return stereotaxic coordinate
      */
-    if ((volumeXYZ[0] == 0.0)
-        && (volumeXYZ[1] == 0.0)
-        && (volumeXYZ[2] == 0.0)) {
+    if ( ! isVolumeXYZValid()) {
         getStereotaxicXYZ(xyzOut);
         return;
     }

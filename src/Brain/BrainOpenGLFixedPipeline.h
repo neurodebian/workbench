@@ -43,6 +43,8 @@
 namespace caret {
     
     class Annotation;
+    class AnnotationBrowserTab;
+    class AnnotationScaleBar;
     class AnnotationText;
     class BoundingBox;
     class Brain;
@@ -63,17 +65,18 @@ namespace caret {
     class SelectionManager;
     class IdentificationWithColor;
     class ImageFile;
-    class Plane;
-    class Surface;
     class Model;
     class ModelChart;
     class ModelChartTwo;
+    class ModelMedia;
     class ModelSurface;
     class ModelSurfaceMontage;
     class ModelVolume;
     class ModelWholeBrain;
     class Palette;
     class PaletteColorMapping;
+    class Plane;
+    class Surface;
     class SurfaceFile;
     class SurfaceMontageConfigurationCerebellar;
     class SurfaceMontageConfigurationCerebral;
@@ -168,6 +171,7 @@ namespace caret {
             float fanMultiplier;
             bool isDrawWithMagnitude;
             float minimumMagnitude;
+            float maximumUncertainty;
             float magnitudeMultiplier;
             Plane* plane;
             FiberOrientationSymbolTypeEnum::Enum symbolType;
@@ -263,6 +267,10 @@ namespace caret {
         void drawFiberTrajectories(const Plane* plane,
                                    const StructureEnum::Enum structure);
         
+        void drawMediaModel(BrowserTabContent* browserTabContent,
+                            ModelMedia* mediaModel,
+                            const int32_t viewport[4]);
+        
         void drawVolumeModel(BrowserTabContent* browserTabContent,
                                   ModelVolume* volumeModel,
                                   const int32_t viewport[4]);
@@ -275,6 +283,8 @@ namespace caret {
                                       const int32_t viewport[4]);
 
         void drawVolumeVoxelsAsCubesWholeBrain(std::vector<VolumeDrawInfo>& volumeDrawInfoIn);
+        
+        void drawVolumeVoxelsAsCubesWholeBrainOutsideFaces(std::vector<VolumeDrawInfo>& volumeDrawInfoIn);
         
         void drawVolumeOrthogonalSliceWholeBrain(const VolumeSliceViewPlaneEnum::Enum slicePlane,
                                        const int64_t sliceIndex,
@@ -507,13 +517,38 @@ namespace caret {
         
         void setTabViewport(const BrainOpenGLViewportContent* vpContent);
         
-        void setAnnotationColorBarsForDrawing(const std::vector<const BrainOpenGLViewportContent*>& viewportContents);
+        void setAnnotationColorBarsAndBrowserTabsForDrawing(const std::vector<const BrainOpenGLViewportContent*>& viewportContents,
+                                                            const bool selectionModeFlag);
 
         void drawTabHighlighting(const float width,
                                  const float height,
                                  const float rgb[3]);
         
         void applyVolumePropertiesOpacity();
+        
+        void drawSolidBackgroundInAreasOutsideWindowAspectLocking(const int32_t windowBeforeAspectLockingViewport[4],
+                                                                  const int32_t windowAfterAspectLockingViewport[4]);
+        
+        void drawStippledBackgroundInAreasOutsideWindowAspectLocking(const int32_t windowBeforeAspectLockingViewport[4],
+                                                                     const int32_t windowAfterAspectLockingViewport[4]);
+        
+        void setupScaleBarDrawingInformation(BrowserTabContent* browserTabContent);
+        
+        void setupScaleBarDrawingInformation(BrowserTabContent* browserTabContent,
+                                             const float orthographicProjectionLeft,
+                                             const float orthographicProjectionRight);
+        
+        enum class BlendDataType {
+            CHART_TWO_MATRIX,
+            FEATURE_IMAGE, /* older image display selected in Features ToolBox*/
+            FIBER_TRAJECTORIES,
+            SURFACE_PROPERTIES_OPACITY,
+            VOLUME_ALL_VIEW_CUBES,
+            VOLUME_ALL_VIEW_SLICES,
+            VOLUME_ORTHOGONAL_SLICES
+        };
+        
+        static void setupBlending(const BlendDataType blendDataType);
         
         /** Index of window */
         int32_t m_windowIndex = -1;
@@ -606,7 +641,11 @@ namespace caret {
         
         CaretPointer<BrainOpenGLAnnotationDrawingFixedPipeline> m_annotationDrawing;
         
+        std::vector<AnnotationBrowserTab*> m_annotationBrowserTabsForDrawing;
+        
         std::vector<AnnotationColorBar*> m_annotationColorBarsForDrawing;
+        
+        std::vector<AnnotationScaleBar*> m_annotationScaleBarsForDrawing;
         
         /** Some graphics using annotations for some elements so user can select and edit them */
         std::vector<Annotation*> m_specialCaseGraphicsAnnotations;
@@ -622,6 +661,7 @@ namespace caret {
         friend class BrainOpenGLAnnotationDrawingFixedPipeline;
         friend class BrainOpenGLChartDrawingFixedPipeline;
         friend class BrainOpenGLChartTwoDrawingFixedPipeline;
+        friend class BrainOpenGLMediaDrawing;
         friend class BrainOpenGLVolumeObliqueSliceDrawing;
         friend class BrainOpenGLVolumeSliceDrawing;
         friend class BrainOpenGLVolumeTextureSliceDrawing;

@@ -24,13 +24,14 @@
 #undef __ANNOTATION_WIDTH_HEIGHT_WIDGET_DECLARE__
 
 #include <QDoubleSpinBox>
+#include <QGridLayout>
 #include <QLabel>
 #include <QHBoxLayout>
 
 #include "AnnotationBox.h"
 #include "AnnotationManager.h"
 #include "AnnotationRedoUndoCommand.h"
-#include "AnnotationTwoDimensionalShape.h"
+#include "AnnotationOneCoordinateShape.h"
 #include "Brain.h"
 #include "CaretAssert.h"
 #include "EventGraphicsUpdateAllWindows.h"
@@ -60,10 +61,13 @@ using namespace caret;
  * @param parent
  *    Parent of this widget.
  */
-AnnotationWidthHeightWidget::AnnotationWidthHeightWidget(const AnnotationWidgetParentEnum::Enum parentWidgetType,
+AnnotationWidthHeightWidget::AnnotationWidthHeightWidget(const UserInputModeEnum::Enum userInputMode,
+                                                         const AnnotationWidgetParentEnum::Enum parentWidgetType,
                                                          const int32_t browserWindowIndex,
+                                                         const Qt::Orientation orientation,
                                                                          QWidget* parent)
 : QWidget(parent),
+m_userInputMode(userInputMode),
 m_parentWidgetType(parentWidgetType),
 m_browserWindowIndex(browserWindowIndex)
 {
@@ -92,12 +96,33 @@ m_browserWindowIndex(browserWindowIndex)
     WuQtUtilities::setWordWrappedToolTip(m_heightSpinBox,
                                          "Percentage height of 2D Shapes (Box, Image, Oval)");
 
-    QHBoxLayout* layout = new QHBoxLayout(this);
-    WuQtUtilities::setLayoutSpacingAndMargins(layout, 2, 2);
-    layout->addWidget(widthLabel);
-    layout->addWidget(m_widthSpinBox);
-    layout->addWidget(heightLabel);
-    layout->addWidget(m_heightSpinBox);
+    switch (orientation) {
+        case Qt::Horizontal:
+        {
+            QHBoxLayout* layout = new QHBoxLayout(this);
+            WuQtUtilities::setLayoutSpacingAndMargins(layout, 2, 2);
+            layout->addWidget(widthLabel);
+            layout->addWidget(m_widthSpinBox);
+            layout->addWidget(heightLabel);
+            layout->addWidget(m_heightSpinBox);
+        }
+            break;
+        case Qt::Vertical:
+        {
+            QLabel* sizeLabel = new QLabel("Size");
+            QGridLayout* layout = new QGridLayout(this);
+            WuQtUtilities::setLayoutSpacingAndMargins(layout, 2, 2);
+            int32_t row(0);
+            layout->addWidget(sizeLabel, row, 0, 1, 2, Qt::AlignHCenter);
+            row++;
+            layout->addWidget(widthLabel, row, 0);
+            layout->addWidget(m_widthSpinBox, row, 1);
+            row++;
+            layout->addWidget(heightLabel, row, 0);
+            layout->addWidget(m_heightSpinBox, row, 1);
+        }
+            break;
+    }
     
     setSizePolicy(QSizePolicy::Fixed,
                   QSizePolicy::Fixed);
@@ -117,9 +142,38 @@ AnnotationWidthHeightWidget::~AnnotationWidthHeightWidget()
  *    Two dimensional annotation.
  */
 void
-AnnotationWidthHeightWidget::updateContent(std::vector<AnnotationTwoDimensionalShape*>& annotations2D)
+AnnotationWidthHeightWidget::updateContent(std::vector<AnnotationOneCoordinateShape*>& annotations2D)
 {
-    m_annotations2D = annotations2D;
+    m_annotations2D.clear();
+    for (auto a2d : annotations2D) {
+        bool includeFlag(true);
+        
+        switch (a2d->getType()) {
+            case AnnotationTypeEnum::BOX:
+                break;
+            case AnnotationTypeEnum::BROWSER_TAB:
+                break;
+            case AnnotationTypeEnum::COLOR_BAR:
+                break;
+            case AnnotationTypeEnum::IMAGE:
+                break;
+            case AnnotationTypeEnum::LINE:
+                break;
+            case AnnotationTypeEnum::OVAL:
+                break;
+            case AnnotationTypeEnum::POLY_LINE:
+                break;
+            case AnnotationTypeEnum::SCALE_BAR:
+                /* Scale bar width/height not adjustable */
+                includeFlag = false;
+                break;
+            case AnnotationTypeEnum::TEXT:
+                break;
+        }
+        if (includeFlag) {
+            m_annotations2D.push_back(a2d);
+        }
+    }
     
     if ( ! m_annotations2D.empty()) {
         float widthValue = 0.0;
@@ -172,6 +226,7 @@ AnnotationWidthHeightWidget::updateContent(std::vector<AnnotationTwoDimensionalS
             else {
                 m_widthSpinBox->setSuffix("%");
             }
+            m_widthSpinBox->setEnabled(true);
             m_widthSpinBox->blockSignals(false);
             
             m_heightSpinBox->blockSignals(true);
@@ -187,8 +242,8 @@ AnnotationWidthHeightWidget::updateContent(std::vector<AnnotationTwoDimensionalS
 
             switch (m_parentWidgetType) {
                 case AnnotationWidgetParentEnum::ANNOTATION_TOOL_BAR_WIDGET:
-                    AnnotationTwoDimensionalShape::setUserDefaultWidth(widthValue);
-                    AnnotationTwoDimensionalShape::setUserDefaultHeight(heightValue);
+                    AnnotationOneCoordinateShape::setUserDefaultWidth(widthValue);
+                    AnnotationOneCoordinateShape::setUserDefaultHeight(heightValue);
                     break;
                 case AnnotationWidgetParentEnum::PARENT_ENUM_FOR_LATER_USE:
                     CaretAssert(0);
@@ -223,7 +278,8 @@ AnnotationWidthHeightWidget::heightValueChanged(double value)
                                      annotations);
     AnnotationManager* annMan = GuiManager::get()->getBrain()->getAnnotationManager();
     AString errorMessage;
-    if ( ! annMan->applyCommand(undoCommand,
+    if ( ! annMan->applyCommand(m_userInputMode,
+                                undoCommand,
                                 errorMessage)) {
         WuQMessageBox::errorOk(this,
                                errorMessage);
@@ -233,7 +289,7 @@ AnnotationWidthHeightWidget::heightValueChanged(double value)
     switch (m_parentWidgetType) {
         case AnnotationWidgetParentEnum::ANNOTATION_TOOL_BAR_WIDGET:
             
-            AnnotationTwoDimensionalShape::setUserDefaultHeight(value);
+            AnnotationOneCoordinateShape::setUserDefaultHeight(value);
             break;
         case AnnotationWidgetParentEnum::PARENT_ENUM_FOR_LATER_USE:
             CaretAssert(0);
@@ -255,12 +311,14 @@ AnnotationWidthHeightWidget::widthValueChanged(double value)
 {
     std::vector<Annotation*> annotations(m_annotations2D.begin(),
                                          m_annotations2D.end());
+    
     AnnotationRedoUndoCommand* undoCommand = new AnnotationRedoUndoCommand();
     undoCommand->setModeTwoDimWidth(value,
                                     annotations);
     AnnotationManager* annMan = GuiManager::get()->getBrain()->getAnnotationManager();
     AString errorMessage;
-    if ( ! annMan->applyCommand(undoCommand,
+    if ( ! annMan->applyCommand(m_userInputMode,
+                                undoCommand,
                                 errorMessage)) {
         WuQMessageBox::errorOk(this,
                                errorMessage);
@@ -269,7 +327,7 @@ AnnotationWidthHeightWidget::widthValueChanged(double value)
     
     switch (m_parentWidgetType) {
         case AnnotationWidgetParentEnum::ANNOTATION_TOOL_BAR_WIDGET:
-            AnnotationTwoDimensionalShape::setUserDefaultWidth(value);
+            AnnotationOneCoordinateShape::setUserDefaultWidth(value);
             break;
         case AnnotationWidgetParentEnum::PARENT_ENUM_FOR_LATER_USE:
             CaretAssert(0);

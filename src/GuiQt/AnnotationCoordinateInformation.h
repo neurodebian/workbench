@@ -31,8 +31,9 @@ class QLabel;
 namespace caret {
 
     class Annotation;
-    class AnnotationOneDimensionalShape;
-    class AnnotationTwoDimensionalShape;
+    class AnnotationTwoCoordinateShape;
+    class AnnotationOneCoordinateShape;
+    class AnnotationMultiCoordinateShape;
     class BrainOpenGLWidget;
     class BrainOpenGLViewportContent;
     class MouseEvent;
@@ -48,10 +49,12 @@ namespace caret {
         
         void reset();
         
+        static void getValidCoordinateSpaces(const std::vector<std::unique_ptr<AnnotationCoordinateInformation>>& coordInfoMulti,
+                                             std::vector<AnnotationCoordinateSpaceEnum::Enum>& spacesOut);
+        
         static void getValidCoordinateSpaces(const AnnotationCoordinateInformation* coordInfoOne,
                                              const AnnotationCoordinateInformation* coordInfoTwo,
                                              std::vector<AnnotationCoordinateSpaceEnum::Enum>& spacesOut);
-        
         static void createCoordinateInformationFromXY(const MouseEvent& mouseEvent,
                                                       AnnotationCoordinateInformation& coordInfoOut);
         
@@ -69,7 +72,8 @@ namespace caret {
         static bool setAnnotationCoordinatesForSpace(Annotation* annotation,
                                                      const AnnotationCoordinateSpaceEnum::Enum space,
                                                      const AnnotationCoordinateInformation* coordInfoOne,
-                                                     const AnnotationCoordinateInformation* coordInfoTwo);
+                                                     const AnnotationCoordinateInformation* coordInfoTwo,
+                                                     const std::vector<std::unique_ptr<AnnotationCoordinateInformation>>& coordInfoMulti);
         
         class SpaceInfo {
         public:
@@ -131,15 +135,19 @@ namespace caret {
 
         AnnotationCoordinateInformation& operator=(const AnnotationCoordinateInformation&);
         
-        static bool setOneDimAnnotationCoordinatesForSpace(AnnotationOneDimensionalShape* annotation,
+        static bool setOneDimAnnotationCoordinatesForSpace(AnnotationTwoCoordinateShape* annotation,
                                                            const AnnotationCoordinateSpaceEnum::Enum space,
                                                            const AnnotationCoordinateInformation* coordInfoOne,
                                                            const AnnotationCoordinateInformation* coordInfoTwo);
         
-        static bool setTwoDimAnnotationCoordinatesForSpace(AnnotationTwoDimensionalShape* annotation,
+        static bool setTwoDimAnnotationCoordinatesForSpace(AnnotationOneCoordinateShape* annotation,
                                                            const AnnotationCoordinateSpaceEnum::Enum space,
                                                            const AnnotationCoordinateInformation* coordInfoOne,
                                                            const AnnotationCoordinateInformation* coordInfoTwo);
+        
+        static bool setMultiDimAnnotationCoordinatesForSpace(AnnotationMultiCoordinateShape* annotation,
+                                                             const AnnotationCoordinateSpaceEnum::Enum space,
+                                                             const std::vector<std::unique_ptr<AnnotationCoordinateInformation>>& coordInfoMulti);
         // ADD_NEW_MEMBERS_HERE
 
     };

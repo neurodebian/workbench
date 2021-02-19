@@ -23,6 +23,7 @@
 #include <QAction>
 #include <QLayout>
 #include <QScrollArea>
+#include <QSplitter>
 #include <QToolBox>
 #include <QTabWidget>
 #include <QTimer>
@@ -44,6 +45,7 @@
 #include "ChartToolBoxViewController.h"
 #include "CiftiConnectivityMatrixViewController.h"
 #include "DeveloperFlagsEnum.h"
+#include "DynConnViewController.h"
 #include "EventBrowserWindowDrawingContent.h"
 #include "EventGetOrSetUserInputModeProcessor.h"
 #include "EventManager.h"
@@ -51,10 +53,13 @@
 #include "FiberOrientationSelectionViewController.h"
 #include "FociSelectionViewController.h"
 #include "GuiManager.h"
+#include "IdentificationDisplayWidget.h"
 #include "ImageSelectionViewController.h"
 #include "LabelSelectionViewController.h"
+#include "MediaOverlaySetViewController.h"
 #include "OverlaySetViewController.h"
 #include "SceneClass.h"
+#include "ScenePrimitiveArray.h"
 #include "SceneWindowGeometry.h"
 #include "SessionManager.h"
 #include "VolumeDynamicConnectivityFile.h"
@@ -148,6 +153,7 @@ BrainBrowserWindowOrientedToolBox::BrainBrowserWindowOrientedToolBox(const int32
     m_fociSelectionViewController      = NULL;
     m_imageSelectionViewController     = NULL;
     m_labelSelectionViewController     = NULL;
+    m_mediaSelectionViewController     = NULL;
     m_overlaySetViewController         = NULL;
     m_volumeSurfaceOutlineSetViewController = NULL;
 
@@ -183,6 +189,7 @@ BrainBrowserWindowOrientedToolBox::BrainBrowserWindowOrientedToolBox(const int32
     m_fociTabIndex = -1;
     m_imageTabIndex = -1;
     m_labelTabIndex = -1;
+    m_mediaTabIndex = -1;
     m_overlayTabIndex = -1;
     m_volumeSurfaceOutlineTabIndex = -1;
     
@@ -277,6 +284,15 @@ BrainBrowserWindowOrientedToolBox::BrainBrowserWindowOrientedToolBox(const int32
     }
     
     if (isOverlayToolBox) {
+        m_mediaSelectionViewController = new MediaOverlaySetViewController(orientation,
+                                                                           browserWindowIndex,
+                                                                           objectNamePrefix,
+                                                                           this);
+        m_mediaTabIndex = addToTabWidget(m_mediaSelectionViewController,
+                                         "Media");
+    }
+    
+    if (isOverlayToolBox) {
         m_volumeSurfaceOutlineSetViewController = new VolumeSurfaceOutlineSetViewController(orientation,
                                                                                             m_browserWindowIndex,
                                                                                             objectNamePrefix,
@@ -284,8 +300,26 @@ BrainBrowserWindowOrientedToolBox::BrainBrowserWindowOrientedToolBox(const int32
         m_volumeSurfaceOutlineTabIndex = addToTabWidget(m_volumeSurfaceOutlineSetViewController,
                              "Vol/Surf Outline");
     }
-        
-    setWidget(m_tabWidget);
+    
+    if (isOverlayToolBox) {
+#ifdef __SHOW_DYNCONN_PROTOTYPE__
+        DynConnViewController* dynConn = new DynConnViewController();
+        addToTabWidget(dynConn, "DynConn");
+#endif // __SHOW_DYNCONN_PROTOTYPE__
+    }
+    
+    switch (toolBoxType) {
+        case TOOL_BOX_FEATURES:
+            setWidget(m_tabWidget);
+            break;
+        case TOOL_BOX_OVERLAYS_HORIZONTAL:
+            setWidget(createSplitterAndIdentificationWidget(Qt::Horizontal));
+            break;
+        case TOOL_BOX_OVERLAYS_VERTICAL:
+            setWidget(createSplitterAndIdentificationWidget(Qt::Vertical));
+            break;
+    }
+    
 
     if (orientation == Qt::Horizontal) {
         setMinimumHeight(200);
@@ -293,7 +327,7 @@ BrainBrowserWindowOrientedToolBox::BrainBrowserWindowOrientedToolBox(const int32
     }
     else {
         if (isOverlayToolBox) {
-            setMinimumWidth(300);
+            setMinimumWidth(100);
             setMaximumWidth(800);
         }
         else {
@@ -315,6 +349,59 @@ BrainBrowserWindowOrientedToolBox::~BrainBrowserWindowOrientedToolBox()
 {
     EventManager::get()->removeAllEventsFromListener(this);
 }
+
+/**
+ * @return Widget containing splitter and identification widget
+ * @param orientation
+ *    Orientation for the widget
+ */
+QWidget*
+BrainBrowserWindowOrientedToolBox::createSplitterAndIdentificationWidget(const Qt::Orientation orientation)
+{
+    float idWidgetPercentage(0.0f);
+    CaretPreferences* prefs = SessionManager::get()->getCaretPreferences();
+    switch (prefs->getIdentificationDisplayMode()) {
+        case IdentificationDisplayModeEnum::DEBUG_MODE:
+            break;
+        case IdentificationDisplayModeEnum::DIALOG:
+            break;
+        case IdentificationDisplayModeEnum::LEGACY_DIALOG:
+            break;
+        case IdentificationDisplayModeEnum::OVERLAY_TOOLBOX:
+            switch (orientation) {
+                case Qt::Horizontal:
+                    idWidgetPercentage = 0.3f;
+                    break;
+                case Qt::Vertical:
+                    idWidgetPercentage = 0.4f;
+                    break;
+            }
+            break;
+    }
+    
+    switch (orientation) {
+        case Qt::Horizontal:
+            m_identificationWidget = new IdentificationDisplayWidget(IdentificationDisplayWidget::Location::HorizontalToolBox);
+            break;
+        case Qt::Vertical:
+            m_identificationWidget = new IdentificationDisplayWidget(IdentificationDisplayWidget::Location::VerticalToolBox);
+            break;
+    }
+    CaretAssert(m_identificationWidget);
+    
+    const int bigSize(1000);
+    const int idWidgetSize(bigSize * idWidgetPercentage);
+    const int tabWidgetSize(bigSize - idWidgetSize);
+    
+    m_splitterWidget = new QSplitter(orientation);
+    m_splitterWidget->setChildrenCollapsible(true);
+    m_splitterWidget->addWidget(m_tabWidget);
+    m_splitterWidget->addWidget(m_identificationWidget);
+    m_splitterWidget->setSizes( { tabWidgetSize, idWidgetSize } );
+    
+    return m_splitterWidget;
+}
+
 
 /**
  * Place widget into a scroll area and then into the tab widget.
@@ -490,6 +577,41 @@ BrainBrowserWindowOrientedToolBox::saveToScene(const SceneAttributes* sceneAttri
         sceneClass->addClass(m_labelSelectionViewController->saveToScene(sceneAttributes,
                                                      "m_labelSelectionViewController"));
     }
+
+    bool saveSplitterFlag(false);
+    switch (SessionManager::get()->getCaretPreferences()->getIdentificationDisplayMode()) {
+        case IdentificationDisplayModeEnum::DEBUG_MODE:
+            saveSplitterFlag = true;
+            break;
+        case IdentificationDisplayModeEnum::DIALOG:
+            break;
+        case IdentificationDisplayModeEnum::LEGACY_DIALOG:
+            break;
+        case IdentificationDisplayModeEnum::OVERLAY_TOOLBOX:
+            saveSplitterFlag = true;
+            break;
+    }
+    
+    /*
+     * Only save splitter (separates overlays and ID) if the
+     * ID mode is for overlay toolbox.  Since ID is a preference
+     * and user's may have different selections for the ID information
+     * location, we do not want to hide the id text in the toolbox.
+     */
+    if (saveSplitterFlag) {
+        if (m_splitterWidget != NULL) {
+            QList<int> splitterSizes = m_splitterWidget->sizes();
+            const int32_t numSizes = splitterSizes.size();
+            if (numSizes > 0) {
+                std::vector<int32_t> sizesVector;
+                for (int32_t i = 0; i < numSizes; i++) {
+                    sizesVector.push_back(splitterSizes[i]);
+                }
+                
+                sceneClass->addIntegerArray("splitterSizes", &sizesVector[0], sizesVector.size());
+            }
+        }
+    }
     
     return sceneClass;
 }
@@ -621,6 +743,18 @@ BrainBrowserWindowOrientedToolBox::restoreFromScene(const SceneAttributes* scene
                                SLOT(restoreMinimumAndMaximumSizesAfterSceneRestored()));
         }
 #endif
+    }
+    
+    if (m_splitterWidget != NULL) {
+        const ScenePrimitiveArray* splitterSceneArray = sceneClass->getPrimitiveArray("splitterSizes");
+        if (splitterSceneArray != NULL) {
+            const int32_t numElements = splitterSceneArray->getNumberOfArrayElements();
+            QList<int> splitterSizes;
+            for (int32_t i = 0; i < numElements; i++) {
+                splitterSizes.push_back(splitterSceneArray->integerValue(i));
+            }
+            m_splitterWidget->setSizes(splitterSizes);
+        }
     }
 }
 
@@ -762,11 +896,6 @@ BrainBrowserWindowOrientedToolBox::receiveEvent(Event* event)
                     break;
                 case DataFileTypeEnum::VOLUME_DYNAMIC:
                     haveConnFiles = true;
-//                    haveVolumes = true;
-//                    const VolumeDynamicConnectivityFile* volDynConnFile = vf->getVolumeDynamicConnectivityFile();
-//                    if (volDynConnFile != NULL) {
-//                        haveConnFiles = true;
-//                    }
                     break;
             }
         }
@@ -778,6 +907,7 @@ BrainBrowserWindowOrientedToolBox::receiveEvent(Event* event)
          */
         int defaultTabIndex = -1;
         bool enableLayers = true;
+        bool enableMedia  = false;
         bool enableVolumeSurfaceOutline = false;
         bool enableChartOne = false;
         bool enableChartTwo = false;
@@ -787,6 +917,16 @@ BrainBrowserWindowOrientedToolBox::receiveEvent(Event* event)
             if (windowContent != NULL) {
                 switch (windowContent->getSelectedModelType()) {
                     case ModelTypeEnum::MODEL_TYPE_INVALID:
+                        break;
+                    case  ModelTypeEnum::MODEL_TYPE_MULTI_MEDIA:
+                        defaultTabIndex = m_mediaTabIndex;
+                        enableMedia     = true;
+                        enableLayers = false;
+                        enableVolumeSurfaceOutline = false;
+                        haveBorders = false;
+                        haveFibers  = false;
+                        haveFoci    = false;
+                        haveLabels  = false;
                         break;
                     case ModelTypeEnum::MODEL_TYPE_SURFACE:
                         defaultTabIndex = m_overlayTabIndex;
@@ -831,9 +971,9 @@ BrainBrowserWindowOrientedToolBox::receiveEvent(Event* event)
         EventManager::get()->sendEvent(inputModeEvent.getPointer());
         const UserInputModeEnum::Enum inputMode = inputModeEvent.getUserInputMode();
         switch (inputMode) {
-            case UserInputModeEnum::ANNOTATIONS:
+            case UserInputModeEnum::Enum::ANNOTATIONS:
                 break;
-            case UserInputModeEnum::BORDERS:
+            case UserInputModeEnum::Enum::BORDERS:
                 /*
                  * Enable borders tab if the input mode is 'borders' so that user
                  * can edit border point size while drawing a border before any
@@ -841,15 +981,17 @@ BrainBrowserWindowOrientedToolBox::receiveEvent(Event* event)
                  */
                 haveBorders = true;
                 break;
-            case UserInputModeEnum::FOCI:
+            case UserInputModeEnum::Enum::FOCI:
                 break;
-            case UserInputModeEnum::IMAGE:
+            case UserInputModeEnum::Enum::IMAGE:
                 break;
-            case UserInputModeEnum::INVALID:
+            case UserInputModeEnum::Enum::INVALID:
                 break;
-            case UserInputModeEnum::VIEW:
+            case UserInputModeEnum::Enum::TILE_TABS_MANUAL_LAYOUT_EDITING:
                 break;
-            case UserInputModeEnum::VOLUME_EDIT:
+            case UserInputModeEnum::Enum::VIEW:
+                break;
+            case UserInputModeEnum::Enum::VOLUME_EDIT:
                 break;
         }
         
@@ -881,6 +1023,7 @@ BrainBrowserWindowOrientedToolBox::receiveEvent(Event* event)
         if (m_labelTabIndex >= 0) m_tabWidget->setTabEnabled(m_labelTabIndex, haveLabels);
         
         if (m_overlayTabIndex >= 0) m_tabWidget->setTabEnabled(m_overlayTabIndex, enableLayers);
+        if (m_mediaTabIndex >= 0) m_tabWidget->setTabEnabled(m_mediaTabIndex, enableMedia);
         
         if (m_annotationTabWidget != NULL) {
             const int32_t numTabs = m_annotationTabWidget->count();

@@ -21,9 +21,12 @@
  */
 /*LICENSE_END*/
 
+#include <memory>
+
 #include "AnnotationCoordinateInformation.h"
 #include "AnnotationCoordinateSpaceEnum.h"
 #include "AnnotationTypeEnum.h"
+#include "Vector3D.h"
 #include "WuQDialogModal.h"
 
 class QButtonGroup;
@@ -41,11 +44,13 @@ namespace caret {
 
     public:
         static Annotation* newAnnotationFromSpaceAndType(const MouseEvent& mouseEvent,
+                                                         const std::vector<Vector3D>& drawingCoordinates,
                                                          const AnnotationCoordinateSpaceEnum::Enum annotationSpace,
                                                          const AnnotationTypeEnum::Enum annotationType,
                                                          AnnotationFile* annotationFile);
         
         static Annotation* newAnnotationFromSpaceTypeAndBounds(const MouseEvent& mouseEvent,
+                                                               const std::vector<Vector3D>& drawingCoordinates,
                                                                const AnnotationCoordinateSpaceEnum::Enum annotationSpace,
                                                                const AnnotationTypeEnum::Enum annotationType,
                                                                AnnotationFile* annotationFile);
@@ -73,6 +78,7 @@ namespace caret {
         class NewAnnotationInfo {
         public:
             NewAnnotationInfo(const MouseEvent& mouseEvent,
+                              const std::vector<Vector3D>& drawingCoordinates,
                               const AnnotationCoordinateSpaceEnum::Enum selectedSpace,
                               const AnnotationTypeEnum::Enum annotationType,
                               const bool useBothCoordinatesFromMouseFlag,
@@ -103,6 +109,8 @@ namespace caret {
             
             AnnotationCoordinateInformation m_coordTwoInfo;
             
+            std::vector<std::unique_ptr<AnnotationCoordinateInformation>> m_coordMultiInfo;
+            
             bool m_coordTwoInfoValid;
             
             float m_percentageWidth;
@@ -113,6 +121,7 @@ namespace caret {
         
         static Annotation* newAnnotationFromSpaceTypeAndCoords(const Mode mode,
                                                                const MouseEvent& mouseEvent,
+                                                               const std::vector<Vector3D>& drawingCoordinates,
                                                                const AnnotationCoordinateSpaceEnum::Enum annotationSpace,
                                                                const AnnotationTypeEnum::Enum annotationType,
                                                                AnnotationFile* annotationFile);
@@ -150,10 +159,6 @@ namespace caret {
         
         Annotation* m_annotationThatWasCreated;
         
-//        float m_annotationFromBoundsWidth;
-//        
-//        float m_annotationFromBoundsHeight;
-        
         QButtonGroup* m_annotationSpaceButtonGroup;
         
         QTextEdit* m_textEdit;
@@ -165,10 +170,6 @@ namespace caret {
         std::vector<uint8_t> m_imageRgbaBytes;
         int32_t m_imageWidth;
         int32_t m_imageHeight;
-        
-//        AnnotationCoordinateInformation m_coordInfo;
-//        
-//        AnnotationCoordinateInformation m_coordTwoInfo;
         
         static const int s_MAXIMUM_THUMB_NAIL_SIZE;
         

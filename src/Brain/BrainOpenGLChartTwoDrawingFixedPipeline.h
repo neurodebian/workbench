@@ -24,7 +24,7 @@
 #include <memory>
 #include <set>
 #include "BrainOpenGLChartTwoDrawingInterface.h"
-#include "CaretColorEnum.h"
+#include "CaretColor.h"
 #include "ChartAxisLocationEnum.h"
 #include "ChartTwoDataTypeEnum.h"
 #include "ChartTwoMatrixTriangularViewingModeEnum.h"
@@ -38,15 +38,20 @@ namespace caret {
     class BrowserTabContent;
     class CaretPreferences;
     class ChartTwoCartesianAxis;
+    class ChartTwoCartesianOrientedAxes;
     class ChartTwoDataCartesian;
+    class ChartTwoOverlay;
     class ChartTwoOverlaySet;
     class ChartTwoTitle;
     class ChartableTwoFileHistogramChart;
+    class ChartableTwoFileLineLayerChart;
     class ChartableTwoFileLineSeriesChart;
     class ChartableTwoFileMatrixChart;
     class SelectionItemAnnotation;
     class SelectionItemChartTwoHistogram;
     class SelectionItemChartTwoLabel;
+    class SelectionItemChartTwoLineLayer;
+    class SelectionItemChartTwoLineLayerVerticalNearest;
     class SelectionItemChartTwoLineSeries;
     class SelectionItemChartTwoMatrix;
     
@@ -74,34 +79,71 @@ namespace caret {
         public:
             HistogramChartDrawingInfo(ChartableTwoFileHistogramChart* histogramChart,
                                       int32_t mapIndex,
-                                      ChartAxisLocationEnum::Enum verticalAxisLocation,
                                       const bool allMapsSelected);
             
             ChartableTwoFileHistogramChart* m_histogramChart;
             int32_t m_mapIndex;
-            ChartAxisLocationEnum::Enum m_verticalAxisLocation;
             const bool m_allMapsSelected;
             
             ~HistogramChartDrawingInfo();
         };
         
         /**
-         * Contains line chart for drawing
+         * Contains line chart for drawing line layer
+         */
+        class LineLayerChartDrawingInfo {
+        public:
+            LineLayerChartDrawingInfo(const ChartableTwoFileLineLayerChart* lineLayerChart,
+                                      ChartTwoDataCartesian* chartTwoCartesianData,
+                                      const ChartTwoOverlay* chartTwoOverlay,
+                                      const CaretColor& lineChartColor,
+                                      const float lineWidth)
+            : m_lineLayerChart(lineLayerChart),
+            m_chartTwoCartesianData(chartTwoCartesianData),
+            m_chartTwoOverlay(chartTwoOverlay),
+            m_lineChartColor(lineChartColor),
+            m_lineWidth(lineWidth) { }
+            
+            const ChartableTwoFileLineLayerChart* m_lineLayerChart;
+            ChartTwoDataCartesian* m_chartTwoCartesianData;
+            const ChartTwoOverlay* m_chartTwoOverlay;
+            const CaretColor m_lineChartColor;
+            const float m_lineWidth;
+        };
+        
+        /**
+         * Contains line chart for drawing line series
          */
         class LineSeriesChartDrawingInfo {
         public:
             LineSeriesChartDrawingInfo(const ChartableTwoFileLineSeriesChart* lineSeriesChart,
-                                       const ChartTwoDataCartesian* chartTwoCartesianData,
-                                       const ChartAxisLocationEnum::Enum verticalAxisLocation)
+                                       const ChartTwoDataCartesian* chartTwoCartesianData)
             : m_lineSeriesChart(lineSeriesChart),
-            m_chartTwoCartesianData(chartTwoCartesianData),
-            m_verticalAxisLocation(verticalAxisLocation) { }
+            m_chartTwoCartesianData(chartTwoCartesianData) { }
             
             const ChartableTwoFileLineSeriesChart* m_lineSeriesChart;
             const ChartTwoDataCartesian* m_chartTwoCartesianData;
-            const ChartAxisLocationEnum::Enum m_verticalAxisLocation;
         };
         
+        class MatrixChartDrawingInfo {
+        public:
+            MatrixChartDrawingInfo(const ChartableTwoFileMatrixChart* matrixChart,
+                                   const GraphicsPrimitive* matrixPrimitive,
+                                   const ChartTwoOverlay* chartTwoOverlay,
+                                   const ChartTwoMatrixTriangularViewingModeEnum::Enum triangularMode,
+                                   const float opacity)
+            : m_matrixChart(matrixChart),
+            m_matrixPrimitive(matrixPrimitive),
+            m_chartTwoOverlay(chartTwoOverlay),
+            m_triangularMode(triangularMode),
+            m_opacity(opacity) { }
+            
+            const ChartableTwoFileMatrixChart* m_matrixChart;
+            const GraphicsPrimitive* m_matrixPrimitive;
+            const ChartTwoOverlay* m_chartTwoOverlay;
+            const ChartTwoMatrixTriangularViewingModeEnum::Enum m_triangularMode;
+            const float m_opacity;
+        };
         /**
          * Determines size of title and draws the title
          */
@@ -143,6 +185,7 @@ namespace caret {
                             const float dataMinY,
                             const float dataMaxY,
                             const ChartAxisLocationEnum::Enum axisLocation,
+                            const ChartTwoCartesianOrientedAxes* orientedAxes,
                             const ChartTwoCartesianAxis* axis,
                             const AString& labelText,
                             const float lineWidthPercentage);
@@ -160,9 +203,7 @@ namespace caret {
                           ChartTwoOverlaySet* chartTwoOverlaySet,
                           const int32_t mouseX,
                           const int32_t mouseY,
-                          const float foregroundFloatRGBA[4],
-                          float& axisMinimumValueOut,
-                          float& axisMaximumValueOut);
+                          const float foregroundFloatRGBA[4]);
             
             std::unique_ptr<AnnotationPercentSizeText> m_labelText;
             
@@ -184,6 +225,7 @@ namespace caret {
             
         private:
             const ChartAxisLocationEnum::Enum m_axisLocation;
+            const ChartTwoCartesianOrientedAxes* m_orientedAxes;
             const ChartTwoCartesianAxis* m_axis;
             BrainOpenGLTextRenderInterface* m_textRenderer;
             const float m_tabViewportWidth = 0.0f;
@@ -226,16 +268,13 @@ namespace caret {
         
         void saveStateOfOpenGL();
         
-        void drawMatrixChart();
-        
         void drawMatrixChartContent(const ChartableTwoFileMatrixChart* matrixChart,
                                     const ChartTwoMatrixTriangularViewingModeEnum::Enum chartViewingType,
-                                    const float cellWidth,
-                                    const float cellHeight,
-                                    const float zooming,
-                                    std::vector<MatrixRowColumnHighight*>& rowColumnHighlightingOut);
+                                    const float opacity,
+                                    std::vector<MatrixRowColumnHighight*>& rowColumnHighlightingOut,
+                                    const bool blendingEnabled);
         
-        void drawHistogramOrLineSeriesChart(const ChartTwoDataTypeEnum::Enum chartDataType);
+        void drawHistogramOrLineChart(const ChartTwoDataTypeEnum::Enum chartDataType);
         
         void drawChartGraphicsBoxAndSetViewport(const float vpX,
                                                 const float vpY,
@@ -302,8 +341,12 @@ namespace caret {
         
         SelectionItemChartTwoHistogram* m_selectionItemHistogram;
         
-        SelectionItemChartTwoLineSeries* m_selectionItemLineSeries;
+        SelectionItemChartTwoLineLayer* m_selectionItemLineLayer;
 
+        SelectionItemChartTwoLineLayerVerticalNearest* m_selectionItemLineLayerVerticalNearest;
+        
+        SelectionItemChartTwoLineSeries* m_selectionItemLineSeries;
+        
         SelectionItemChartTwoMatrix* m_selectionItemMatrix;
 
         SelectionItemChartTwoLabel* m_selectionItemChartLabel;

@@ -142,8 +142,28 @@ m_lineSeriesContentType(lineSeriesContentType)
         m_lineSeriesContentType = ChartTwoLineSeriesContentTypeEnum::LINE_SERIES_CONTENT_UNSUPPORTED;
     }
     
+    /*
+     * For Cifti Files, use units from dimensions
+     */
+    CaretUnitsTypeEnum::Enum yAxisUnits = CaretUnitsTypeEnum::NONE;
+    {
+        const CiftiMappableDataFile* ciftiMapFile = getCiftiMappableDataFile();
+        if (ciftiMapFile != NULL) {
+            float start(0.0), step(0.0);
+            ciftiMapFile->getDimensionUnits(CiftiXML::ALONG_ROW,
+                                            xAxisUnits,
+                                            start,
+                                            step);
+            ciftiMapFile->getDimensionUnits(CiftiXML::ALONG_COLUMN,
+                                            yAxisUnits,
+                                            start,
+                                            step);
+        }
+    }
+    
     updateChartTwoCompoundDataTypeAfterFileChanges(ChartTwoCompoundDataType::newInstanceForLineSeries(xAxisUnits,
-                                                                                                   xAxisNumberOfElements));
+                                                                                                      yAxisUnits,
+                                                                                                      xAxisNumberOfElements));
     
     if (m_lineSeriesContentType != ChartTwoLineSeriesContentTypeEnum::LINE_SERIES_CONTENT_UNSUPPORTED) {
         EventManager::get()->addEventListener(this,
@@ -266,8 +286,8 @@ ChartableTwoFileLineSeriesChart::loadLineCharts(const EventChartTwoLoadLineSerie
         getCaretMappableDataFile()->getDataForSelector(mapFileDataSelector,
                                                        data);
         if ( ! data.empty()) {
-            const CaretUnitsTypeEnum::Enum xUnits = getChartTwoCompoundDataType().getLineChartUnitsAxisX();
-            CaretAssert(getChartTwoCompoundDataType().getLineChartNumberOfElementsAxisX() == static_cast<int32_t>(data.size()));
+            const CaretUnitsTypeEnum::Enum xUnits = getChartTwoCompoundDataType()->getLineChartUnitsAxisX();
+            CaretAssert(getChartTwoCompoundDataType()->getLineChartNumberOfElementsAxisX() == static_cast<int32_t>(data.size()));
             ChartTwoDataCartesian* cartesianData = new ChartTwoDataCartesian(ChartTwoDataTypeEnum::CHART_DATA_TYPE_LINE_SERIES,
                                                                              xUnits,
                                                                              CaretUnitsTypeEnum::NONE,
@@ -278,16 +298,11 @@ ChartableTwoFileLineSeriesChart::loadLineCharts(const EventChartTwoLoadLineSerie
             float xStep = 0.0f;
             getCaretMappableDataFile()->getMapIntervalStartAndStep(x, xStep);
             
-            /*
-             * Note: Start at index one since line segments are used
-             */
             const int32_t numData = static_cast<int32_t>(data.size());
-            for (int32_t i = 1; i < numData; i++) {
-                CaretAssertVectorIndex(data, i - 1);
-                cartesianData->addPoint(x, data[i - 1]);
+            for (int32_t i = 0; i < numData; i++) {
+                CaretAssertVectorIndex(data, i);
+                cartesianData->addPoint(x, data[i]);
                 x += xStep;
-//                CaretAssertVectorIndex(data, i);
-//                cartesianData->addPoint(x, data[i]);
             }
             
             m_lineChartHistory->addHistoryItem(cartesianData);

@@ -27,16 +27,25 @@
 
 #include "Annotation.h"
 #include "AnnotationArrangerInputs.h"
+#include "AnnotationBrowserTab.h"
 #include "AnnotationManager.h"
+#include "AnnotationStackingOrderOperation.h"
+#include "AnnotationStackingOrderTypeEnum.h"
 #include "Brain.h"
+#include "BrainBrowserWindow.h"
+#include "BrowserTabContent.h"
+#include "BrowserWindowContent.h"
 #include "CaretAssert.h"
 #include "CaretLogger.h"
 #include "DisplayPropertiesAnnotationTextSubstitution.h"
 #include "EventAnnotationGrouping.h"
+#include "EventBrowserWindowContent.h"
 #include "EventGetBrainOpenGLTextRenderer.h"
 #include "EventGraphicsUpdateAllWindows.h"
 #include "EventManager.h"
+#include "EventUserInterfaceUpdate.h"
 #include "GuiManager.h"
+#include "UserInputModeTileTabsManualLayoutContextMenu.h"
 #include "WuQMessageBox.h"
 #include "WuQtUtilities.h"
 
@@ -53,26 +62,48 @@ using namespace caret;
 /**
  * Constructor.
  *
+ * @param userInputMode
+ *     The user input mode
  * @param parent
  *     The parent widget.
  * @param browserWindowIndex
  *     Index of the browser window.
  */
-AnnotationMenuArrange::AnnotationMenuArrange(const int32_t browserWindowIndex,
+AnnotationMenuArrange::AnnotationMenuArrange(const UserInputModeEnum::Enum userInputMode,
+                                             const int32_t browserWindowIndex,
                                              QWidget* parent)
 : QMenu(parent),
+m_userInputMode(userInputMode),
 m_browserWindowIndex(browserWindowIndex)
 {
+    switch (m_userInputMode) {
+        case UserInputModeEnum::Enum::ANNOTATIONS:
+            m_menuMode = MenuMode::ANNOTATIONS;
+            break;
+        case UserInputModeEnum::Enum::TILE_TABS_MANUAL_LAYOUT_EDITING:
+            m_menuMode = MenuMode::TILE_TABS;
+            break;
+        case UserInputModeEnum::Enum::BORDERS:
+        case UserInputModeEnum::Enum::FOCI:
+        case UserInputModeEnum::Enum::IMAGE:
+        case UserInputModeEnum::Enum::INVALID:
+        case UserInputModeEnum::Enum::VIEW:
+        case UserInputModeEnum::Enum::VOLUME_EDIT:
+            CaretAssert(0);
+            return;
+            break;
+    }
+
     addAlignmentSelections();
-    
-    addSeparator();
     
     addDistributeSelections();
 
-    addSeparator();
+    addOrderingSelections();
     
     addGroupingSelections();
     
+    addTileTabsSelections();
+
     QObject::connect(this, SIGNAL(aboutToShow()),
                      this, SLOT(menuAboutToShow()));
     QObject::connect(this, SIGNAL(triggered(QAction*)),
@@ -92,6 +123,10 @@ AnnotationMenuArrange::~AnnotationMenuArrange()
 void
 AnnotationMenuArrange::addAlignmentSelections()
 {
+    if ( ! actions().isEmpty()) {
+        addSeparator();
+    }
+    
     std::vector<AnnotationAlignmentEnum::Enum> alignments;
     AnnotationAlignmentEnum::getAllEnums(alignments);
     
@@ -116,6 +151,10 @@ AnnotationMenuArrange::addAlignmentSelections()
 void
 AnnotationMenuArrange::addDistributeSelections()
 {
+    if ( ! actions().isEmpty()) {
+        addSeparator();
+    }
+    
     std::vector<AnnotationDistributeEnum::Enum> distributes;
     AnnotationDistributeEnum::getAllEnums(distributes);
     
@@ -140,6 +179,21 @@ AnnotationMenuArrange::addDistributeSelections()
 void
 AnnotationMenuArrange::addGroupingSelections()
 {
+    switch (m_menuMode) {
+        case MenuMode::ANNOTATIONS:
+            break;
+        case MenuMode::TILE_TABS:
+            /*
+             * No grouping for tile tabs
+             */
+            return;
+            break;
+    }
+    
+    if ( ! actions().isEmpty()) {
+        addSeparator();
+    }
+    
     m_groupAction = NULL;
     m_regroupAction  = NULL;
     m_ungroupAction  = NULL;
@@ -178,6 +232,47 @@ AnnotationMenuArrange::addGroupingSelections()
     CaretAssert(m_ungroupAction);
 }
 
+/**
+ * Add distribution items to the menu.
+ */
+void
+AnnotationMenuArrange::addTileTabsSelections()
+{
+    switch (m_menuMode) {
+        case MenuMode::ANNOTATIONS:
+            break;
+        case MenuMode::TILE_TABS:
+        {
+            if ( ! actions().isEmpty()) {
+                addSeparator();
+            }
+            
+            m_tileTabsShrinkAndExpandToFillAction = addAction(UserInputModeTileTabsManualLayoutContextMenu::getShinkAndExpandTabMenuItemText());
+        }
+            break;
+    }
+}
+
+/**
+ * Add ordering for tile tabs mode
+ */
+void
+AnnotationMenuArrange::addOrderingSelections()
+{
+    if ( ! actions().isEmpty()) {
+        addSeparator();
+    }
+    
+    m_orderingBringToFrontAction = addAction("Bring to Front");
+    
+    m_orderingBringForwardAction = addAction("Bring Forward");
+    
+    m_orderingSendToBackAction = addAction("Send to Back");
+    
+    m_orderingSendBackwardAction = addAction("Send Backward");
+}
+
+
 /*
  * Gets called when the menu is about to show
  * so that its menu items can be enabled/disabled.
@@ -187,14 +282,92 @@ AnnotationMenuArrange::menuAboutToShow()
 {
     AnnotationManager* annMan = GuiManager::get()->getBrain()->getAnnotationManager();
     
-    m_groupAction->setEnabled(annMan->isGroupingModeValid(m_browserWindowIndex,
-                                                          AnnotationGroupingModeEnum::GROUP));
-    m_regroupAction->setEnabled(annMan->isGroupingModeValid(m_browserWindowIndex,
-                                                            AnnotationGroupingModeEnum::REGROUP));
-    m_ungroupAction->setEnabled(annMan->isGroupingModeValid(m_browserWindowIndex,
-                                                            AnnotationGroupingModeEnum::UNGROUP));
-}
+    if (m_groupAction != NULL) {
+        m_groupAction->setEnabled(annMan->isGroupingModeValid(m_browserWindowIndex,
+                                                              AnnotationGroupingModeEnum::GROUP));
+    }
+    if (m_regroupAction != NULL) {
+        m_regroupAction->setEnabled(annMan->isGroupingModeValid(m_browserWindowIndex,
+                                                                AnnotationGroupingModeEnum::REGROUP));
+    }
+    if (m_ungroupAction != NULL) {
+        m_ungroupAction->setEnabled(annMan->isGroupingModeValid(m_browserWindowIndex,
+                                                                AnnotationGroupingModeEnum::UNGROUP));
+    }
 
+    switch (m_menuMode) {
+        case MenuMode::ANNOTATIONS:
+        {
+            bool oneAnnWithCorrectSpaceFlag(false);
+            std::vector<Annotation*> selectedAnnotations = annMan->getAnnotationsSelectedForEditing(m_browserWindowIndex);
+            if (selectedAnnotations.size() == 1) {
+                CaretAssertVectorIndex(selectedAnnotations, 0);
+                const Annotation* ann = selectedAnnotations[0];
+                CaretAssert(ann);
+                switch (ann->getCoordinateSpace()) {
+                    case AnnotationCoordinateSpaceEnum::CHART:
+                        oneAnnWithCorrectSpaceFlag = true;
+                        break;
+                    case AnnotationCoordinateSpaceEnum::SPACER:
+                        break;
+                    case AnnotationCoordinateSpaceEnum::STEREOTAXIC:
+                        break;
+                    case AnnotationCoordinateSpaceEnum::SURFACE:
+                        break;
+                    case AnnotationCoordinateSpaceEnum::TAB:
+                        oneAnnWithCorrectSpaceFlag = true;
+                        break;
+                    case AnnotationCoordinateSpaceEnum::VIEWPORT:
+                        break;
+                    case AnnotationCoordinateSpaceEnum::WINDOW:
+                        oneAnnWithCorrectSpaceFlag = true;
+                        break;
+                }
+            }
+            
+            CaretAssert(m_orderingSendToBackAction);
+            m_orderingSendToBackAction->setEnabled(oneAnnWithCorrectSpaceFlag);
+            
+            CaretAssert(m_orderingSendBackwardAction);
+            m_orderingSendBackwardAction->setEnabled(oneAnnWithCorrectSpaceFlag);
+            
+            CaretAssert(m_orderingBringForwardAction);
+            m_orderingBringForwardAction->setEnabled(oneAnnWithCorrectSpaceFlag);
+            
+            CaretAssert(m_orderingBringToFrontAction);
+            m_orderingBringToFrontAction->setEnabled(oneAnnWithCorrectSpaceFlag);
+        }
+            break;
+        case MenuMode::TILE_TABS:
+        {
+            std::unique_ptr<EventBrowserWindowContent> windowEvent = EventBrowserWindowContent::getWindowContent(m_browserWindowIndex);
+            EventManager::get()->sendEvent(windowEvent->getPointer());
+            BrowserWindowContent* bwc = windowEvent->getBrowserWindowContent();
+            CaretAssert(bwc);
+            int32_t numSelected = 0;
+            if (bwc->isManualModeTileTabsConfigurationEnabled()) {
+                numSelected = annMan->getAnnotationsSelectedForEditing(m_browserWindowIndex).size();
+            }
+            const bool oneSelectedFlag(numSelected == 1);
+            
+            CaretAssert(m_tileTabsShrinkAndExpandToFillAction);
+            m_tileTabsShrinkAndExpandToFillAction->setEnabled(oneSelectedFlag);
+            
+            CaretAssert(m_orderingSendToBackAction);
+            m_orderingSendToBackAction->setEnabled(oneSelectedFlag);
+            
+            CaretAssert(m_orderingSendBackwardAction);
+            m_orderingSendBackwardAction->setEnabled(oneSelectedFlag);
+            
+            CaretAssert(m_orderingBringForwardAction);
+            m_orderingBringForwardAction->setEnabled(oneSelectedFlag);
+            
+            CaretAssert(m_orderingBringToFrontAction);
+            m_orderingBringToFrontAction->setEnabled(oneSelectedFlag);
+        }
+            break;
+    }
+}
 
 /**
  * Gets called when the user selects a menu item.
@@ -226,6 +399,12 @@ AnnotationMenuArrange::menuActionTriggered(QAction* action)
     else if (validGroupingFlag) {
         applyGrouping(annGroup);
     }
+    else if (processTileTabsMenu(action)) {
+        /* If true returned, a tile tabs menu item was selected */
+    }
+    else if (processOrderingMenuItem(action)) {
+        /* If true returned, an ordering menu item was selected */
+    }
     else {
         const AString msg("Unrecognized Enum name in Annotation Align Menu \""
                           + enumName
@@ -234,10 +413,206 @@ AnnotationMenuArrange::menuActionTriggered(QAction* action)
         CaretLogSevere(msg);
     }
 
-    EventManager::get()->sendSimpleEvent(EventTypeEnum::EVENT_ANNOTATION_TOOLBAR_UPDATE);
     EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+    EventManager::get()->sendEvent(EventUserInterfaceUpdate().getPointer());
 }
 
+/**
+ * Process the action if it is on the Tile Tabs Menu
+ *
+ * @param actionSelected
+ *     Action selected by user
+ * @return
+ *     True if the action was on this menu, else false.
+ */
+bool
+AnnotationMenuArrange::processTileTabsMenu(QAction* actionSelected)
+{
+    bool menuSelectedFlag(false);
+    
+    if ((m_tileTabsShrinkAndExpandToFillAction != NULL)
+        && (actionSelected == m_tileTabsShrinkAndExpandToFillAction)) {
+        processShrinkAndExpandTabMenuItem();
+        menuSelectedFlag = true;
+    }
+    
+    return menuSelectedFlag;
+}
+
+/**
+ * Process the action if it is on the Tile Tabs Menu
+ *
+ * @param actionSelected
+ *     Action selected by user
+ * @return
+ *     True if the action was on this menu, else false.
+ */
+bool
+AnnotationMenuArrange::processOrderingMenuItem(QAction* actionSelected)
+{
+    bool menuSelectedFlag(false);
+    
+    switch (m_menuMode) {
+        case MenuMode::ANNOTATIONS:
+            CaretAssert(m_orderingBringToFrontAction);
+            CaretAssert(m_orderingBringForwardAction);
+            CaretAssert(m_orderingSendBackwardAction);
+            CaretAssert(m_orderingSendToBackAction);
+            
+            if (actionSelected == m_orderingBringToFrontAction) {
+                processAnnotationOrderOperation(AnnotationStackingOrderTypeEnum::BRING_TO_FRONT);
+                menuSelectedFlag = true;
+            }
+            else if (actionSelected == m_orderingBringForwardAction) {
+                processAnnotationOrderOperation(AnnotationStackingOrderTypeEnum::BRING_FORWARD);
+                menuSelectedFlag = true;
+            }
+            else if (actionSelected == m_orderingSendBackwardAction) {
+                processAnnotationOrderOperation(AnnotationStackingOrderTypeEnum::SEND_BACKWARD);
+                menuSelectedFlag = true;
+            }
+            else if (actionSelected == m_orderingSendToBackAction) {
+                processAnnotationOrderOperation(AnnotationStackingOrderTypeEnum::SEND_TO_BACK);
+                menuSelectedFlag = true;
+            }
+            break;
+        case MenuMode::TILE_TABS:
+        {
+            CaretAssert(m_orderingBringToFrontAction);
+            CaretAssert(m_orderingBringForwardAction);
+            CaretAssert(m_orderingSendBackwardAction);
+            CaretAssert(m_orderingSendToBackAction);
+
+            if (actionSelected == m_orderingBringToFrontAction) {
+                processWindowTileTabOperation(EventBrowserWindowTileTabOperation::OPERATION_ORDER_BRING_TO_FRONT);
+                menuSelectedFlag = true;
+            }
+            else if (actionSelected == m_orderingBringForwardAction) {
+                processWindowTileTabOperation(EventBrowserWindowTileTabOperation::OPERATION_ORDER_BRING_FORWARD);
+                menuSelectedFlag = true;
+            }
+            else if (actionSelected == m_orderingSendBackwardAction) {
+                processWindowTileTabOperation(EventBrowserWindowTileTabOperation::OPERATION_ORDER_SEND_BACKWARD);
+                menuSelectedFlag = true;
+            }
+            else if (actionSelected == m_orderingSendToBackAction) {
+                processWindowTileTabOperation(EventBrowserWindowTileTabOperation::OPERATION_ORDER_SEND_TO_BACK);
+                menuSelectedFlag = true;
+            }
+        }
+            break;
+    }
+    
+    return menuSelectedFlag;
+}
+
+/**
+ * Called to process an annotation order operation
+ *
+ * @param orderType
+ *     The ordering type
+ */
+void
+AnnotationMenuArrange::processAnnotationOrderOperation(const AnnotationStackingOrderTypeEnum::Enum orderType)
+{
+    AnnotationManager* annMan = GuiManager::get()->getBrain()->getAnnotationManager();
+    std::vector<Annotation*> selectedAnnotations = annMan->getAnnotationsSelectedForEditing(m_browserWindowIndex);
+    if (selectedAnnotations.size() == 1) {
+        CaretAssertVectorIndex(selectedAnnotations, 0);
+        Annotation* selectedAnn = selectedAnnotations[0];
+        std::vector<Annotation*> sameSpaceAnnotations = annMan->getAnnotationsDrawnInSameWindowAndSpace(selectedAnn,
+                                                                                                        m_browserWindowIndex);
+        if ( ! sameSpaceAnnotations.empty()) {
+            sameSpaceAnnotations.push_back(selectedAnn);
+            
+            AString errorMessage;
+            if ( ! annMan->applyStackingOrder(sameSpaceAnnotations,
+                                              selectedAnn,
+                                              orderType,
+                                              m_browserWindowIndex,
+                                              errorMessage)) {
+                WuQMessageBox::errorOk(this,
+                                       errorMessage);
+            }
+        }
+    }
+}
+
+/**
+ * Called to process a tile tab operation
+ *
+ * @param operation
+ *     The operation
+ */
+void
+AnnotationMenuArrange::processWindowTileTabOperation(const EventBrowserWindowTileTabOperation::Operation operation)
+{
+    std::vector<BrowserTabContent*> emptyBrowserTabs;
+
+    AnnotationManager* annMan = GuiManager::get()->getBrain()->getAnnotationManager();
+    BrainBrowserWindow* bbw = GuiManager::get()->getBrowserWindowByWindowIndex(m_browserWindowIndex);
+    CaretAssert(bbw);
+    BrowserWindowContent* bwc = bbw->getBrowerWindowContent();
+    CaretAssert(bwc);
+    
+    int32_t tabIndex(-1);
+    if (bwc->isManualModeTileTabsConfigurationEnabled()) {
+        std::vector<Annotation*> selectedAnnotations = annMan->getAnnotationsSelectedForEditing(m_browserWindowIndex);
+        if (selectedAnnotations.size() == 1) {
+            CaretAssertVectorIndex(selectedAnnotations, 0);
+            Annotation* ann = selectedAnnotations[0];
+            CaretAssert(ann);
+            AnnotationBrowserTab* abt = dynamic_cast<AnnotationBrowserTab*>(ann);
+            if (abt != NULL) {
+                tabIndex = abt->getTabIndex();
+            }
+            else {
+                CaretLogSevere("Program Error: Selected annotation is not a browser tab");
+            }
+        }
+        else {
+            CaretLogSevere("Program Error: Only one tab should be selected for an ordering operation");
+            return;
+        }
+    }
+
+    int windowViewport[4] { 0, 0, 10, 10 };
+    const int32_t mouseX(50);
+    const int32_t mouseY(50);
+    EventBrowserWindowTileTabOperation tileTabOperation(operation,
+                                                        bbw,
+                                                        m_browserWindowIndex,
+                                                        tabIndex,
+                                                        windowViewport,
+                                                        mouseX,
+                                                        mouseY,
+                                                        emptyBrowserTabs);
+    EventManager::get()->sendEvent(tileTabOperation.getPointer());
+}
+
+/**
+ * Expand tab selected from menu
+ */
+void
+AnnotationMenuArrange::processShrinkAndExpandTabMenuItem()
+{
+    BrainBrowserWindow* window = GuiManager::get()->getBrowserWindowByWindowIndex(m_browserWindowIndex);
+    CaretAssert(window);
+    std::vector<BrowserTabContent*> allTabContent;
+    window->getAllTabContent(allTabContent);
+    
+    AnnotationManager* annMan = GuiManager::get()->getBrain()->getAnnotationManager();
+    AString errorMessage;
+    const bool result = annMan->shrinkAndExpandSelectedBrowserTabAnnotation(allTabContent,
+                                                                            m_browserWindowIndex,
+                                                                            m_userInputMode,
+                                                                            errorMessage);
+    if ( ! result) {
+        WuQMessageBox::errorOk(this,
+                               errorMessage);
+    }
+    
+}
 
 /**
  * Apply alignment selection.
@@ -266,7 +641,8 @@ AnnotationMenuArrange::applyAlignment(const AnnotationAlignmentEnum::Enum alignm
     
     AnnotationManager* annMan = GuiManager::get()->getBrain()->getAnnotationManager();
     AString errorMessage;
-    if ( ! annMan->alignAnnotations(alignMod,
+    if ( ! annMan->alignAnnotations(m_userInputMode,
+                                    alignMod,
                                     alignment,
                                     errorMessage)) {
         WuQMessageBox::errorOk(this,
@@ -304,7 +680,8 @@ AnnotationMenuArrange::applyDistribute(const AnnotationDistributeEnum::Enum dist
     
     AnnotationManager* annMan = GuiManager::get()->getBrain()->getAnnotationManager();
     AString errorMessage;
-    if ( ! annMan->distributeAnnotations(distributeMod,
+    if ( ! annMan->distributeAnnotations(m_userInputMode,
+                                         distributeMod,
                                          distribute,
                                          errorMessage)) {
         WuQMessageBox::errorOk(this,
@@ -327,7 +704,8 @@ AnnotationMenuArrange::applyGrouping(const AnnotationGroupingModeEnum::Enum grou
     AnnotationManager* annMan = GuiManager::get()->getBrain()->getAnnotationManager();
 
     AString errorMessage;
-    if ( ! annMan->applyGroupingMode(m_browserWindowIndex,
+    if ( ! annMan->applyGroupingMode(m_userInputMode,
+                                     m_browserWindowIndex,
                                      grouping,
                                      errorMessage)) {
         WuQMessageBox::errorOk(this,
@@ -337,6 +715,7 @@ AnnotationMenuArrange::applyGrouping(const AnnotationGroupingModeEnum::Enum grou
     EventManager::get()->sendSimpleEvent(EventTypeEnum::EVENT_ANNOTATION_TOOLBAR_UPDATE);
     EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
 }
+
 
 /**
  * Create an alignment pixmap.

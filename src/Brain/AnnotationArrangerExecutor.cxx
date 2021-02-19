@@ -31,7 +31,7 @@
 #include "AnnotationArrangerInputs.h"
 #include "AnnotationCoordinate.h"
 #include "AnnotationManager.h"
-#include "AnnotationOneDimensionalShape.h"
+#include "AnnotationTwoCoordinateShape.h"
 #include "AnnotationRedoUndoCommand.h"
 #include "AnnotationText.h"
 #include "BrainOpenGLTextRenderInterface.h"
@@ -54,8 +54,9 @@ using namespace caret;
 /**
  * Constructor.
  */
-AnnotationArrangerExecutor::AnnotationArrangerExecutor()
+AnnotationArrangerExecutor::AnnotationArrangerExecutor(const UserInputModeEnum::Enum userInputMode)
 : CaretObject(),
+m_userInputMode(userInputMode),
 m_mode(MODE_NONE),
 m_annotationManager(NULL),
 m_alignment(AnnotationAlignmentEnum::ALIGN_BOTTOM),
@@ -75,6 +76,8 @@ AnnotationArrangerExecutor::~AnnotationArrangerExecutor()
 /**
  * Apply alignment modification to selected annotations
  *
+ * @param userInputMode
+ *     The current user input mode which MUST be ANNOTATIONS or TILE_TABS_MANUAL_LAYOUT_EDITING
  * @param annotationManager
  *     The annotation manager.
  * @param arrangerInputs
@@ -115,6 +118,8 @@ AnnotationArrangerExecutor::alignAnnotations(AnnotationManager* annotationManage
 /**
  * Apply distribute modification to selected annotations
  *
+ * @param userInputMode
+ *     The current user input mode which MUST be ANNOTATIONS or TILE_TABS_MANUAL_LAYOUT_EDITING
  * @param annotationManager
  *     The annotation manager.
  * @param arrangerInputs
@@ -342,7 +347,8 @@ AnnotationArrangerExecutor::distributeAnnotationsPrivate(const AnnotationArrange
                                             afterMoving);
         undoCommand->setDescription(AnnotationDistributeEnum::toGuiName(m_distribute));
         
-        validFlag = m_annotationManager->applyCommand(undoCommand,
+        validFlag = m_annotationManager->applyCommand(m_userInputMode,
+                                                      undoCommand,
                                                       errorMessage);
     }
     
@@ -452,7 +458,8 @@ AnnotationArrangerExecutor::alignAnnotationsPrivate(const AnnotationArrangerInpu
                                             afterMoving);
         undoCommand->setDescription(AnnotationAlignmentEnum::toGuiName(m_alignment));
         
-        validFlag = m_annotationManager->applyCommand(undoCommand,
+        validFlag = m_annotationManager->applyCommand(m_userInputMode,
+                                                      undoCommand,
                                                       errorMessage);
     }
     
@@ -520,8 +527,8 @@ AnnotationArrangerExecutor::initializeForArranging(const AnnotationArrangerInput
          annInfoIter++) {
         const AnnotationInfo& annInfo = *annInfoIter;
         
-        m_allAnnotationsBoundingBox.update(annInfo.m_windowBoundingBox.getMinXYZ());
-        m_allAnnotationsBoundingBox.update(annInfo.m_windowBoundingBox.getMaxXYZ());
+        m_allAnnotationsBoundingBox.update(annInfo.m_windowBoundingBox.getMinXYZ().data());
+        m_allAnnotationsBoundingBox.update(annInfo.m_windowBoundingBox.getMaxXYZ().data());
     }
 }
 
@@ -642,8 +649,8 @@ AnnotationArrangerExecutor::setupAnnotationInfo(const AnnotationArrangerInputs& 
                 break;
         }
         
-        const AnnotationOneDimensionalShape* oneDimAnn = dynamic_cast<const AnnotationOneDimensionalShape*>(annotation);
-        const AnnotationTwoDimensionalShape* twoDimAnn = dynamic_cast<const AnnotationTwoDimensionalShape*>(annotation);
+        const AnnotationTwoCoordinateShape* oneDimAnn = dynamic_cast<const AnnotationTwoCoordinateShape*>(annotation);
+        const AnnotationOneCoordinateShape* twoDimAnn = dynamic_cast<const AnnotationOneCoordinateShape*>(annotation);
         
         float viewportPixelOneXYZ[3] = { 0.0, 0.0, 0.0 };
         float viewportPixelTwoXYZ[3] = { 0.0, 0.0, 0.0 };
@@ -1037,8 +1044,8 @@ AnnotationArrangerExecutor::AnnotationInfo::moveAnnotationByXY(Annotation* annot
                                                                const float dy) const
 {
     CaretAssert(m_annotation);
-    AnnotationOneDimensionalShape* oneDimAnn = dynamic_cast<AnnotationOneDimensionalShape*>(annotation);
-    AnnotationTwoDimensionalShape* twoDimAnn = dynamic_cast<AnnotationTwoDimensionalShape*>(annotation);
+    AnnotationTwoCoordinateShape* oneDimAnn = dynamic_cast<AnnotationTwoCoordinateShape*>(annotation);
+    AnnotationOneCoordinateShape* twoDimAnn = dynamic_cast<AnnotationOneCoordinateShape*>(annotation);
     
     const float newPixelOneX = m_viewportPixelOneXY[0] + dx;
     const float relativeOneX = (newPixelOneX / m_viewport[2]) * 100.0;

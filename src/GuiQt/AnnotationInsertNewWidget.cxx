@@ -80,16 +80,19 @@ m_browserWindowIndex(browserWindowIndex)
      * Shape buttons
      */
     m_shapeActionGroup = new QActionGroup(this);
-    QToolButton* shapeBoxToolButton   = createShapeToolButton(AnnotationTypeEnum::BOX,
-                                                              m_shapeActionGroup);
-    QToolButton* shapeImageToolButton = createShapeToolButton(AnnotationTypeEnum::IMAGE,
-                                                              m_shapeActionGroup);
-    QToolButton* shapeLineToolButton  = createShapeToolButton(AnnotationTypeEnum::LINE,
-                                                              m_shapeActionGroup);
-    QToolButton* shapeOvalToolButton  = createShapeToolButton(AnnotationTypeEnum::OVAL,
-                                                              m_shapeActionGroup);
-    QToolButton* shapeTextToolButton  = createShapeToolButton(AnnotationTypeEnum::TEXT,
-                                                              m_shapeActionGroup);
+    QToolButton* shapeBoxToolButton      = createShapeToolButton(AnnotationTypeEnum::BOX,
+                                                                 m_shapeActionGroup);
+    QToolButton* shapeImageToolButton    = createShapeToolButton(AnnotationTypeEnum::IMAGE,
+                                                                 m_shapeActionGroup);
+    QToolButton* shapeLineToolButton     = createShapeToolButton(AnnotationTypeEnum::LINE,
+                                                                 m_shapeActionGroup);
+    QToolButton* shapePolyLineToolButton = createShapeToolButton(AnnotationTypeEnum::POLY_LINE,
+                                                                 m_shapeActionGroup);
+    m_polyLineToolButton = shapePolyLineToolButton;
+    QToolButton* shapeOvalToolButton     = createShapeToolButton(AnnotationTypeEnum::OVAL,
+                                                                 m_shapeActionGroup);
+    QToolButton* shapeTextToolButton     = createShapeToolButton(AnnotationTypeEnum::TEXT,
+                                                                 m_shapeActionGroup);
     QObject::connect(m_shapeActionGroup, SIGNAL(triggered(QAction*)),
                      this, SLOT(spaceOrShapeActionTriggered()));
     
@@ -125,6 +128,7 @@ m_browserWindowIndex(browserWindowIndex)
         shapeImageToolButton->setMaximumSize(mw, mh);
         shapeLineToolButton->setMaximumSize(mw, mh);
         shapeOvalToolButton->setMaximumSize(mw, mh);
+        shapePolyLineToolButton->setMaximumSize(mw, mh);
         shapeTextToolButton->setMaximumSize(mw, mh);
 
         chartSpaceToolButton->setMaximumSize(mw, mh);
@@ -197,10 +201,12 @@ m_browserWindowIndex(browserWindowIndex)
                               3, 4);
         gridLayout->addWidget(shapeLineToolButton,
                               3, 5);
-        gridLayout->addWidget(shapeOvalToolButton,
+        gridLayout->addWidget(shapePolyLineToolButton,
                               3, 6);
-        gridLayout->addWidget(shapeTextToolButton,
+        gridLayout->addWidget(shapeOvalToolButton,
                               3, 7);
+        gridLayout->addWidget(shapeTextToolButton,
+                              3, 8);
     }
     else {
         QLabel* insertLabel = new QLabel("Insert New");
@@ -249,10 +255,12 @@ m_browserWindowIndex(browserWindowIndex)
                               3, 4);
         gridLayout->addWidget(shapeLineToolButton,
                               3, 5);
-        gridLayout->addWidget(shapeOvalToolButton,
+        gridLayout->addWidget(shapePolyLineToolButton,
                               3, 6);
-        gridLayout->addWidget(shapeTextToolButton,
+        gridLayout->addWidget(shapeOvalToolButton,
                               3, 7);
+        gridLayout->addWidget(shapeTextToolButton,
+                              3, 8);
     }
     
     setSizePolicy(QSizePolicy::Fixed,
@@ -350,6 +358,8 @@ AnnotationInsertNewWidget::enableDisableSpaceActions()
                 chartSpaceValidFlag = true;
                 break;
             case ModelTypeEnum::MODEL_TYPE_INVALID:
+                break;
+            case  ModelTypeEnum::MODEL_TYPE_MULTI_MEDIA:
                 break;
             case ModelTypeEnum::MODEL_TYPE_SURFACE:
                 stereotaxicSpaceValidFlag = true;
@@ -466,8 +476,112 @@ AnnotationInsertNewWidget::createShapeToolButton(const AnnotationTypeEnum::Enum 
     
     action->setData(AnnotationTypeEnum::toIntegerCode(annotationType));
     
-    action->setToolTip(typeGuiName
-                       + " annotation");
+//    AString toolTipText(typeGuiName
+//                        + " annotation");
+    AString typeText;
+    AString clickText;
+    AString dragText;
+    switch (annotationType) {
+        case AnnotationTypeEnum::BOX:
+            typeText = "Box Annotation";
+            clickText = ("Click the mouse to create a box with a default size.  "
+                         "Change the box by moving its corners or edges.");
+            dragText = ("Press and hold the left mouse button down at a corner of the box.  "
+                        "While continuing to hold the mouse button down, drag the mouse to "
+                        "another corner of the box and release the mouse button to create the box.");
+            break;
+        case AnnotationTypeEnum::BROWSER_TAB:
+            CaretAssert(0);
+            break;
+        case AnnotationTypeEnum::COLOR_BAR:
+            CaretAssert(0);
+            break;
+        case AnnotationTypeEnum::IMAGE:
+            typeText = "Image Annotation";
+            clickText = ("Click the mouse and a dialog is displayed.  In the dialog, click the "
+                         "Choose Image File button and select an image file.  Click the OK button "
+                         "to finish creation of the image annotation.  Adjust the size of the image "
+                         "by moving the edges or corners.");
+            dragText = ("Press and hold the left mouse button down at a corner for the image.  "
+                        "While continuing to hold the mouse button down, drag the mouse to "
+                        "another corner for the image and release the mouse button.  In the "
+                        "dialog that is displayed, click the "
+                        "Choose Image File button and select an image file.  Click the OK button "
+                        "to finish creation of the image annotation.");
+            break;
+        case AnnotationTypeEnum::LINE:
+            typeText = "Line Segment Annotation";
+            clickText = ("Click the mouse to create a line with a default size.  "
+                         "Change the line by moving its end points.");
+            dragText = ("Press and hold the left mouse button down at one end of the line.  "
+                        "While continuing to hold the mouse button down, drag the mouse to "
+                        "the other end of the line and release the mouse button to create the line.");
+
+            break;
+        case AnnotationTypeEnum::OVAL:
+            typeText = "Oval Annotation";
+            clickText = ("Click the mouse to create an oval with a default size.  "
+                         "Change the oval by moving the bounds of the oval.");
+            dragText = ("Press and hold the left mouse button down at a side of the oval.  "
+                        "While continuing to hold the mouse button down, drag the mouse to "
+                        "another side of the oval and release the mouse button to create the oval.");
+            break;
+        case AnnotationTypeEnum::POLY_LINE:
+            clickText = ("Click the mouse to draw each vertex of the polyline and "
+                         "shift-click the mouse to draw the last vertex and finish the polyline.");
+            dragText = ("Move the mouse to the first vertex of the polyline. While holding "
+                        "down the left mouse button, drag the mouse to draw the polyline and "
+                        "release the left mouse button to finish the polyline.  This method will "
+                        "create a polyline with many vertices and there may be a pause when "
+                        "the mouse button is released to finish the polyline.");
+            typeText = ("Polyline Annotation.  A polyline is a series of line segments connected at their end points. "
+                        "When this button is clicked, a menu will appear for selecting the method used "
+                        "to draw the polyline.");
+            m_polyLineDrawClicksToolTipText = ("<html>" + clickText + "</html>");
+            m_polyLineDrawDragToolTipText   = ("<html>" + dragText + "<html>");
+            break;
+        case AnnotationTypeEnum::SCALE_BAR:
+            CaretAssert(0);
+            break;
+        case AnnotationTypeEnum::TEXT:
+        {
+            typeText = "Text Annotation";
+            clickText = ("Click the mouse at the location for the text.  After the mouse is clicked, "
+                         "a dialog is displayed for entry of the text.  Enter text in the dialog "
+                         "and click the OK button to finish.  The resulting text is offset from the mouse-click location using the "
+                         "current Text Alignment and Orientation selections in the toolbar.");
+            dragText = ("Press and hold the left mouse button down at a box corner for the text.  "
+                        "While continuing to hold the mouse button down, drag the mouse to "
+                        "another corner of the box and release the mouse button.  In the dialog "
+                        "that appears, enter the text and click the OK button to finish.  "
+                        "The Text Alignment and Orientation options affect the location of the "
+                        "text within the box formed by the mouse actions.");
+        }
+            break;
+    }
+    
+    AString toolTip("<html>");
+    if ( ! typeText.isEmpty()) {
+        toolTip.appendWithNewLine(typeText + "<p>");
+    }
+    if ( ( ! clickText.isEmpty())
+        && ( ! dragText.isEmpty())) {
+        toolTip.appendWithNewLine("There are two methods for creating this type of annotation:<p> ");
+        clickText.insert(0, "(1) ");
+        dragText.insert(0, "(2) ");
+    }
+    if ( ! clickText.isEmpty()) {
+        toolTip.appendWithNewLine(clickText);
+    }
+    if ( ! dragText.isEmpty()) {
+        if ( ! clickText.isEmpty()) {
+            toolTip.appendWithNewLine("<p>");
+        }
+        toolTip.appendWithNewLine(dragText);
+    }
+    toolTip.appendWithNewLine("</html>");
+    
+    action->setToolTip(toolTip);
 
     action->setCheckable(true);
     action->setChecked(false);
@@ -519,11 +633,56 @@ AnnotationInsertNewWidget::spaceOrShapeActionTriggered()
                                                                             &shapeValidFlag);
     CaretAssert(shapeValidFlag);
     
+    EventAnnotationCreateNewType::PolyLineDrawingMode polyLineDrawingMode
+    = EventAnnotationCreateNewType::PolyLineDrawingMode::DISCRETE;
+    
+    switch (annShape) {
+        case AnnotationTypeEnum::BOX:
+            break;
+        case AnnotationTypeEnum::BROWSER_TAB:
+            break;
+        case AnnotationTypeEnum::COLOR_BAR:
+            break;
+        case AnnotationTypeEnum::IMAGE:
+            break;
+        case AnnotationTypeEnum::LINE:
+            break;
+        case AnnotationTypeEnum::OVAL:
+            break;
+        case AnnotationTypeEnum::POLY_LINE:
+        {
+            CaretAssert(m_polyLineToolButton);
+            QMenu menu;
+            menu.setToolTipsVisible(true);
+            QAction* dragAction = menu.addAction("Drag (Continuous)");
+            dragAction->setToolTip(m_polyLineDrawDragToolTipText);
+            QAction* clicksAction  = menu.addAction("Clicks (Discrete)");
+            clicksAction->setToolTip(m_polyLineDrawClicksToolTipText);
+            
+            QAction* selectedAction = menu.exec(m_polyLineToolButton->mapToGlobal(QPoint(0,0)));
+            if (selectedAction == dragAction) {
+                polyLineDrawingMode = EventAnnotationCreateNewType::PolyLineDrawingMode::CONTINUOUS;
+            }
+            else if (selectedAction == clicksAction) {
+                polyLineDrawingMode = EventAnnotationCreateNewType::PolyLineDrawingMode::DISCRETE;
+            }
+            else {
+                return;
+            }
+        }
+            break;
+        case AnnotationTypeEnum::SCALE_BAR:
+            break;
+        case AnnotationTypeEnum::TEXT:
+            break;
+    }
+    
     DisplayPropertiesAnnotation* dpa = GuiManager::get()->getBrain()->getDisplayPropertiesAnnotation();
     dpa->setDisplayAnnotations(true);
     EventManager::get()->sendEvent(EventAnnotationCreateNewType(annotationFile,
                                                                 annSpace,
-                                                                annShape).getPointer());
+                                                                annShape,
+                                                                polyLineDrawingMode).getPointer());
 }
 
 /**
@@ -560,6 +719,9 @@ AnnotationInsertNewWidget::createShapePixmap(const QWidget* widget,
     switch (annotationType) {
         case AnnotationTypeEnum::BOX:
             painter->drawRect(1, 1, width - 2, height - 2);
+            break;
+        case AnnotationTypeEnum::BROWSER_TAB:
+            CaretAssertMessage(0, "No pixmap for browser tab as user does not create them like other annotations");
             break;
         case AnnotationTypeEnum::COLOR_BAR:
             CaretAssertMessage(0, "No pixmap for colorbar as user does not create them like other annotations");
@@ -613,6 +775,21 @@ AnnotationInsertNewWidget::createShapePixmap(const QWidget* widget,
             break;
         case AnnotationTypeEnum::OVAL:
             painter->drawEllipse(1, 1, width - 1, height - 1);
+            break;
+        case AnnotationTypeEnum::POLY_LINE:
+        {
+            const int hh(height / 2);
+            const int hw(width / 2);
+            QPolygon polyLine;
+            polyLine.push_back(QPoint(2, hh));
+            polyLine.push_back(QPoint(6, 3));
+            polyLine.push_back(QPoint(hw + 5, height - 3));
+            polyLine.push_back(QPoint(width - 2, hh - 3));
+            painter->drawPolyline(polyLine);
+        }
+            break;
+        case AnnotationTypeEnum::SCALE_BAR:
+            CaretAssertMessage(0, "No pixmap for scale bar as user does not create them like other annotations");
             break;
         case AnnotationTypeEnum::TEXT:
         {

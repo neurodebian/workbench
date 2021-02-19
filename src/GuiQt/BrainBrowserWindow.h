@@ -32,7 +32,7 @@
 #include "DataFileTypeEnum.h"
 #include "EventListenerInterface.h"
 #include "SceneableInterface.h"
-#include "TileTabsGridModeEnum.h"
+#include "TileTabsLayoutConfigurationTypeEnum.h"
 
 class QAction;
 class QActionGroup;
@@ -44,12 +44,14 @@ namespace caret {
     class BrainBrowserWindowToolBar;
     class BrainBrowserWindowOrientedToolBox;
     class BrainOpenGLWidget;
+    class BrainOpenGLViewportContent;
     class BrowserWindowContent;
     class BrowserTabContent;
-    class EventTileTabsConfigurationModification;
+    class EventBrowserTabReopenClosed;
+    class EventTileTabsGridConfigurationModification;
     class PlainTextStringBuilder;
     class SceneClassAssistant;
-    class TileTabsConfiguration;
+    class TileTabsLayoutBaseConfiguration;
 
     
     /**
@@ -83,6 +85,8 @@ namespace caret {
         
         void removeAndReturnAllTabs(std::vector<BrowserTabContent*>& allTabContent);
         
+        void getAllBrainOpenGLViewportContent(std::vector<const BrainOpenGLViewportContent*>& viewportContentOut) const;
+        
         int32_t getBrowserWindowIndex() const;
 
         bool isTileTabsSelected() const;
@@ -99,11 +103,24 @@ namespace caret {
             LOAD_SPEC_FILE_WITH_DIALOG_VIA_COMMAND_LINE
         };
         
+        /**
+         * For loading scene from command line
+         */
+        enum class LoadSceneFromCommandLineDialogMode {
+            /** After loading scene, show the scene dialog */
+            SHOW_YES,
+            /** After loading scene, close the scene dialog */
+            SHOW_NO
+        };
+        
         void loadFilesFromCommandLine(const std::vector<AString>& filenames,
                                       const LoadSpecFileMode loadSpecFileMode);
         
         void loadSceneFromCommandLine(const AString& sceneFileName,
-                                      const AString& sceneNameOrNumber);
+                                      const AString& sceneNameOrNumber,
+                                      const LoadSceneFromCommandLineDialogMode sceneDialogMode);
+        
+        void loadDirectoryFromCommandLine(const AString& directoryName);
         
         bool loadFilesFromNetwork(QWidget* parentForDialogs,
                                   const std::vector<AString>& filenames,
@@ -134,10 +151,6 @@ namespace caret {
         
         virtual void getDescriptionOfContent(PlainTextStringBuilder& descriptionOut) const;
         
-        static int32_t loadRecentSpecFileMenu(QMenu* recentSpecFileMenu);
-        
-        static int32_t loadRecentSceneFileMenu(QMenu* recentSpecFileMenu);
-        
         float getOpenGLWidgetAspectRatio() const;
         
         bool changeInputModeToAnnotationsWarningDialog();
@@ -150,13 +163,13 @@ namespace caret {
         
         bool isOpenGLContextSharingValid() const;
 
-        AString getTileTabsConfigurationLabelText(const TileTabsGridModeEnum::Enum configurationMode,
+        AString getTileTabsConfigurationLabelText(const TileTabsLayoutConfigurationTypeEnum::Enum configurationMode,
                                                   const bool includeRowsAndColumns) const;
 
         void resizeDockWidgets(const QList<QDockWidget *> &docks, const QList<int> &sizes, Qt::Orientation orientation);
         
-        static void setEnableMacDuplicateMenuBar(bool status);
-        
+        void reopenLastClosedTab(EventBrowserTabReopenClosed& reopenTabEvent);
+
     protected:
         void closeEvent(QCloseEvent* event);
         void keyPressEvent(QKeyEvent* event);
@@ -169,6 +182,7 @@ namespace caret {
         void processDuplicateTab();
         void processDataFileLocationOpen();
         void processDataFileOpen();
+        void processOpenRecent();
         void processManageSaveLoadedFiles();
         void processCaptureImage();
         void processMovieRecording();
@@ -185,8 +199,6 @@ namespace caret {
         void processShowIdentifyBrainordinateDialog();
         void processGapsAndMargins();
         
-        void processViewTileTabsLoadUserConfigurationMenuAboutToShow();
-        void processViewTileTabsLoadUserConfigurationMenuItemTriggered(QAction* action);
         void processViewTileTabsAutomaticCustomTriggered(QAction* action);
         
 
@@ -202,12 +214,6 @@ namespace caret {
         void processMoveSelectedTabToWindowMenuAboutToBeDisplayed();
         void processMoveSelectedTabToWindowMenuSelection(QAction*);
         
-        void processRecentSceneFileMenuAboutToBeDisplayed();
-        void processRecentSceneFileMenuSelection(QAction*);
-        
-        void processRecentSpecFileMenuAboutToBeDisplayed();
-        void processRecentSpecFileMenuSelection(QAction*);
-        
         void processShowOverlayToolBox(bool);
         void processShowFeaturesToolBox(bool);
         void processOverlayHorizontalToolBoxVisibilityChanged(bool);
@@ -216,6 +222,7 @@ namespace caret {
         void processFileMenuAboutToShow();
         void processDataMenuAboutToShow();
         void processViewMenuAboutToShow();
+        void processWindowMenuAboutToShow();
         
         void processSurfaceMenuInformation();
         void processSurfaceMenuPrimaryAnatomical();
@@ -224,6 +231,7 @@ namespace caret {
         void processConnectToConnectomeDataBase();
         
         void processHcpWebsiteInBrowser();
+        void processHcpUsersGroup();
         void processHcpFeatureRequestWebsiteInBrowser();
         void processReportWorkbenchBug();
         
@@ -231,7 +239,8 @@ namespace caret {
         void processShowVolumePropertiesDialog();
         
         void processDevelopGraphicsTiming();
-        
+        void processDevelopGraphicsTimingDuration();
+
         void processDevelopExportVtkFile();
         void developerMenuAboutToShow();
         void developerMenuFlagTriggered(QAction*);
@@ -297,7 +306,6 @@ namespace caret {
         QMenu* createMenuView();
         QMenu* createMenuViewMoveOverlayToolBox();
         QMenu* createMenuViewMoveFeaturesToolBox();
-        QMenu* createMenuViewTileTabsLoadUserConfiguration();
         QMenu* createMenuConnect();
         QMenu* createMenuData();
         QMenu* createMenuSurface();
@@ -335,7 +343,7 @@ namespace caret {
         
         void saveBrowserWindowContentForScene();
         
-        void modifyTileTabsConfiguration(EventTileTabsConfigurationModification* modEvent);
+        void modifyTileTabsConfiguration(EventTileTabsGridConfigurationModification* modEvent);
 
         /** Index of this window */
         const int32_t m_browserWindowIndex;
@@ -354,9 +362,13 @@ namespace caret {
         
         QAction* m_duplicateTabAction;
         
+        QAction* m_reopenLastClosedTabAction;
+        
         QAction* m_openFileAction;
         
         QAction* m_openLocationAction;
+        
+        QAction* m_openRecentAction;
         
         QAction* m_manageFilesAction;
         
@@ -383,7 +395,6 @@ namespace caret {
         
         QMenu* m_viewMoveFeaturesToolBoxMenu;
         QMenu* m_viewMoveOverlayToolBoxMenu;
-        QMenu* m_viewTileTabsLoadUserConfigurationMenu;
         
         QAction* m_viewFullScreenAction;
         QAction* m_viewTileTabsAction;
@@ -391,7 +402,8 @@ namespace caret {
         QAction* m_viewTileTabsConfigurationDialogAction;
         QAction* m_viewAutomaticTileTabsConfigurationAction;
         QAction* m_viewCustomTileTabsConfigurationAction;
-        std::vector<std::pair<QAction*, TileTabsConfiguration*>> m_viewCustomTileTabsConfigurationActions;
+        QAction* m_viewManualTileTabsConfigurationAction;
+        std::vector<std::pair<QAction*, AString>> m_viewCustomTileTabsConfigurationActions;
         
         QAction* m_gapsAndMarginsAction;
         
@@ -414,12 +426,14 @@ namespace caret {
         QAction* m_connectToConnectomeDatabaseAction;
 
         QAction* m_helpHcpWebsiteAction;
+        QAction* m_helpHcpUsersAction;
         QAction* m_helpHcpFeatureRequestAction;
         QAction* m_helpWorkbenchBugReportAction;
         
         QAction* m_developMenuAction;
         QActionGroup* m_developerFlagsActionGroup;
         QAction* m_developerGraphicsTimingAction;
+        QAction* m_developerGraphicsTimingDurationAction;
         QAction* m_developerExportVtkFileAction;
         
         QAction* m_overlayToolBoxAction;
@@ -433,14 +447,9 @@ namespace caret {
         
         QAction* m_dataFociProjectAction;
         QAction* m_dataBorderFilesSplitAction;
+        QAction* m_dataPaletteEditorDialogAction;
         
         QMenu* m_moveSelectedTabToWindowMenu;
-        
-        QMenu* m_recentSpecFileMenu;
-        AString m_recentSpecFileMenuOpenConfirmTitle;
-        AString m_recentSpecFileMenuLoadNoConfirmTitle;
-        
-        QMenu* m_recentSceneFileMenu;
         
         QMenu* m_editMenu;
         QAction* m_editMenuRedoAction;
@@ -477,8 +486,9 @@ namespace caret {
         
         bool m_keyEventProcessingFlag = false;
         
-        static bool s_enableMacDuplicateMenuBarFlag;
+        const float m_developerTimingDuration = 10.0;
         
+        const int32_t m_developerTimingIterations = 10;
     };
 #ifdef __BRAIN_BROWSER_WINDOW_DECLARE__
     std::set<BrainBrowserWindow*> BrainBrowserWindow::s_brainBrowserWindows;
@@ -489,8 +499,6 @@ namespace caret {
     bool BrainBrowserWindow::s_firstWindowFlag = true;
     int32_t BrainBrowserWindow::s_sceneFileFirstWindowX = -1;
     int32_t BrainBrowserWindow::s_sceneFileFirstWindowY = -1;
-
-    bool BrainBrowserWindow::s_enableMacDuplicateMenuBarFlag = false;
 #endif // __BRAIN_BROWSER_WINDOW_DECLARE__
     
 }

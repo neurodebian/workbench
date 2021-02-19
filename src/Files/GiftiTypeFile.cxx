@@ -1313,6 +1313,8 @@ GiftiTypeFile::getBrainordinateMappingMatch(const CaretMappableDataFile* mapFile
  *    Index of the node.
  * @param numberOfNodes
  *    Number of nodes in the surface.
+ * @param dataValueSeparator
+ *    Separator between multiple data values
  * @param textOut
  *    Output containing identification information.
  */
@@ -1321,6 +1323,7 @@ GiftiTypeFile::getSurfaceNodeIdentificationForMaps(const std::vector<int32_t>& m
                                                            const StructureEnum::Enum structure,
                                                            const int nodeIndex,
                                                            const int32_t numberOfNodes,
+                                                           const AString& dataValueSeparator,
                                                            AString& textOut) const
 {
     textOut.clear();
@@ -1377,9 +1380,12 @@ GiftiTypeFile::getSurfaceNodeIdentificationForMaps(const std::vector<int32_t>& m
                                                         mapIndex);
                     if (key >= 0) {
                         if ( ! valuesText.isEmpty()) {
-                            valuesText.append(", ");
+                            valuesText.append(dataValueSeparator);
                         }
                         valuesText.append(labelTable->getLabel(key)->getName());
+                        valuesText.append(" ("
+                                          + getMapName(mapIndex)
+                                          + ")");
                     }
                 }
                 
@@ -1398,7 +1404,7 @@ GiftiTypeFile::getSurfaceNodeIdentificationForMaps(const std::vector<int32_t>& m
                     const float value = mf->getValue(nodeIndex,
                                                      mapIndex);
                     if ( ! valuesText.isEmpty()) {
-                        valuesText.append(", ");
+                        valuesText.append(dataValueSeparator);
                     }
                     valuesText.append(AString::number(value, 'f', 3));
                 }

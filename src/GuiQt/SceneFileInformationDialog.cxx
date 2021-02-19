@@ -66,34 +66,18 @@ m_sceneFile(sceneFile)
     setDeleteWhenClosed(true);
     setApplyButtonText("");
     
-    AString basePathName;
-    std::vector<AString> missingDataFiles;
-    AString basePathErrorMessage;
-    const bool validBasePathFlag = sceneFile->findBaseDirectoryForDataFiles(basePathName,
-                                                                            missingDataFiles,
-                                                                            basePathErrorMessage);
-    if ( ! validBasePathFlag) {
-        basePathName = basePathErrorMessage;
-    }
     
     QLabel* basePathLabel = new QLabel("Base Path:");
     m_basePathLineEdit = new QLineEdit();
     m_basePathLineEdit->setReadOnly(true);
-    m_basePathLineEdit->setText(basePathName);
-    m_basePathLineEdit->home(true);
     
-    FileInformation sceneFileInfo(sceneFile->getFileName());
     QLabel* sceneFileNameLabel = new QLabel("Scene File Name:");
     m_sceneFileNameLineEdit = new QLineEdit();
     m_sceneFileNameLineEdit->setReadOnly(true);
-    m_sceneFileNameLineEdit->setText(sceneFileInfo.getFileName());
-    m_sceneFileNameLineEdit->home(true);
 
     QLabel* sceneFilePathLabel = new QLabel("Scene File Path:");
     m_sceneFilePathLineEdit = new QLineEdit();
     m_sceneFilePathLineEdit->setReadOnly(true);
-    m_sceneFilePathLineEdit->setText(sceneFileInfo.getPathName());
-    m_sceneFilePathLineEdit->home(true);
     
     m_textEdit = new QTextEdit();
     
@@ -105,15 +89,19 @@ m_sceneFile(sceneFile)
     tabWidget->addTab(m_textEdit, "List");
     
     QGridLayout* namesLayout = new QGridLayout();
+    int32_t nameLayoutRow(0);
     namesLayout->setColumnStretch(0, 0);
     namesLayout->setColumnStretch(1, 100);
-    namesLayout->addWidget(basePathLabel, 0, 0);
-    namesLayout->addWidget(m_basePathLineEdit, 0, 1);
-    namesLayout->addWidget(sceneFileNameLabel, 1, 0);
-    namesLayout->addWidget(m_sceneFileNameLineEdit, 1, 1);
-    namesLayout->addWidget(sceneFilePathLabel, 2, 0);
-    namesLayout->addWidget(m_sceneFilePathLineEdit, 2, 1);
-    
+    namesLayout->addWidget(basePathLabel, nameLayoutRow, 0);
+    namesLayout->addWidget(m_basePathLineEdit, nameLayoutRow, 1);
+    nameLayoutRow++;
+    namesLayout->addWidget(sceneFilePathLabel, nameLayoutRow, 0);
+    namesLayout->addWidget(m_sceneFilePathLineEdit, nameLayoutRow, 1);
+    nameLayoutRow++;
+    namesLayout->addWidget(sceneFileNameLabel, nameLayoutRow, 0);
+    namesLayout->addWidget(m_sceneFileNameLineEdit, nameLayoutRow, 1);
+    nameLayoutRow++;
+
     QWidget* dialogWidget = new QWidget();
     QVBoxLayout* dialogLayout = new QVBoxLayout(dialogWidget);
     dialogLayout->setSpacing(3);
@@ -122,10 +110,9 @@ m_sceneFile(sceneFile)
     
     setCentralWidget(dialogWidget, WuQDialog::SCROLL_AREA_NEVER);
     
-    displayFilesHierarchy();
-    displayFilesList();
-    
     setSizeOfDialogWhenDisplayed(QSize(600, 800));
+    
+    loadContentIntoDialog();
 }
 
 /**
@@ -135,103 +122,43 @@ SceneFileInformationDialog::~SceneFileInformationDialog()
 {
 }
 
-///**
-// * Setup the list of files
-// */
-//void
-//SceneFileInformationDialog::displayFilesList()
-//{
-//    const SceneDataFileInfo::SortMode sortMode = SceneDataFileInfo::SortMode::RelativeToSceneFilePath;
-//    CaretAssert(m_sceneFile);
-//    
-//    std::vector<SceneDataFileInfo> fileSceneInfo = m_sceneFile->getAllDataFileInfoFromAllScenes();
-//    SceneDataFileInfo::sort(fileSceneInfo,
-//                            sortMode);
-//    
-//    if (fileSceneInfo.empty()) {
-//        WuQMessageBox::errorOk(this,
-//                               "Scene file is empty.");
-//        return;
-//    }
-//    
-//    AString baseDirectoryName;
-//    std::vector<AString> missingFileNames;
-//    AString errorMessage;
-//    const bool validBasePathFlag = m_sceneFile->findBaseDirectoryForDataFiles(baseDirectoryName,
-//                                                                              missingFileNames,
-//                                                                              errorMessage);
-//    
-//    const AString sceneFileName = m_sceneFile->getFileName();
-//    AString text("<html>");
-//    
-//    text.appendWithNewLine("<b>Automatic Base Path</b>: "
-//                           + (validBasePathFlag ? baseDirectoryName : ("INVALID: " + errorMessage))
-//                           + "<p>");
-//    text.appendWithNewLine("<b>Scene File</b>: "
-//                           + sceneFileName
-//                           + "<p>");
-//    
-//    bool needListEndElementFlag = false;
-//    AString lastPathName("bogus ##(*&$UI()#NFGK path name");
-//    for (const auto& fileData : fileSceneInfo) {
-//        AString missingText;
-//        
-//        AString pathName;
-//        switch (sortMode) {
-//            case SceneDataFileInfo::SortMode::AbsolutePath:
-//                pathName = fileData.getAbsolutePath();
-//                break;
-//            case SceneDataFileInfo::SortMode::RelativeToBasePath:
-//                pathName = fileData.getRelativePathToBasePath();
-//                if (pathName.isEmpty()) {
-//                    pathName = "Files in Base Path";
-//                }
-//                break;
-//            case SceneDataFileInfo::SortMode::RelativeToSceneFilePath:
-//                pathName = fileData.getRelativePathToSceneFile();
-//                if (pathName.isEmpty()) {
-//                    pathName = "Files in Scene File Path";
-//                }
-//                break;
-//        }
-//        
-//        if (pathName != lastPathName) {
-//            if (needListEndElementFlag) {
-//                text.append("</ul>");
-//            }
-//            text.append("<BR></BR><B>"
-//                        + pathName
-//                        + "</B>");
-//            text.append("<ul>");
-//            needListEndElementFlag = true;
-//            lastPathName = pathName;
-//        }
-//        
-//        if (fileData.isMissing()) {
-//            missingText = "MISSING ";
-//        }
-//        
-//        text.append("<li> "
-//                    + missingText
-//                    + fileData.getDataFileName()
-//                    + " ("
-//                    + fileData.getSceneIndicesAsString()
-//                    + ")");
-//    }
-//    if (needListEndElementFlag) {
-//        text.append("</ul>");
-//    }
-//    text.append("</html>");
-//    
-//    m_textEdit->clear();
-//    m_textEdit->setHtml(text);
-//}
+void
+SceneFileInformationDialog::loadContentIntoDialog()
+{
+    CaretAssert(m_sceneFile);
+    AString basePathName;
+    SceneFileBasePathTypeEnum::Enum basePathType = SceneFileBasePathTypeEnum::AUTOMATIC;
+    {
+        AString errorMessage;
+        const bool validFlag = m_sceneFile->getSelectedBasePathTypeAndName(basePathType,
+                                                                           basePathName,
+                                                                           errorMessage);
+        if ( ! validFlag) {
+            basePathName = ("INVALID " + errorMessage);
+        }
+    }
+    
+    m_basePathLineEdit->setText(basePathName);
+    m_basePathLineEdit->home(true);
+    
+    FileInformation sceneFileInfo(m_sceneFile->getFileName());
+    m_sceneFileNameLineEdit->setText(sceneFileInfo.getFileName());
+    m_sceneFileNameLineEdit->home(true);
+    
+    m_sceneFilePathLineEdit->setText(sceneFileInfo.getPathName());
+    m_sceneFilePathLineEdit->home(true);
+    
+    displayFilesHierarchy();
+    displayFilesList(basePathType,
+                     basePathName);
+}
 
 /**
  * Setup the list of files
  */
 void
-SceneFileInformationDialog::displayFilesList()
+SceneFileInformationDialog::displayFilesList(const SceneFileBasePathTypeEnum::Enum basePathType,
+                                             const AString& basePathName)
 {
     const SceneDataFileInfo::SortMode sortMode = SceneDataFileInfo::SortMode::RelativeToSceneFilePath;
     CaretAssert(m_sceneFile);
@@ -246,19 +173,15 @@ SceneFileInformationDialog::displayFilesList()
         return;
     }
     
-    AString baseDirectoryName;
-    std::vector<AString> missingFileNames;
-    AString errorMessage;
-    const bool validBasePathFlag = m_sceneFile->findBaseDirectoryForDataFiles(baseDirectoryName,
-                                                                              missingFileNames,
-                                                                              errorMessage);
-    
-    const AString sceneFileName = m_sceneFile->getFileName();
     AString text("<html>");
-    
-    text.appendWithNewLine("<b>Automatic Base Path</b>: "
-                           + (validBasePathFlag ? baseDirectoryName : ("INVALID: " + errorMessage))
+    const AString sceneFileName = m_sceneFile->getFileName();
+
+    text.appendWithNewLine("<b>"
+                           + (SceneFileBasePathTypeEnum::toGuiName(basePathType) + " Base Path")
+                           + "</b>: "
+                           + basePathName
                            + "<p>");
+
     text.appendWithNewLine("<b>Scene File</b>: "
                            + sceneFileName
                            + "<p>");

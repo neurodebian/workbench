@@ -161,6 +161,8 @@ WuQMessageBox::warningCloseCancel(QWidget* parent,
  *    Message that is displayed.
  * @param informativeText
  *    Displayed below 'text' if this is not empty.
+ * @param defaultButton
+ *    The default button
  * @return
  *    true if the Ok button was pressed else false
  *    if the cancel button was pressed.
@@ -168,7 +170,8 @@ WuQMessageBox::warningCloseCancel(QWidget* parent,
 bool
 WuQMessageBox::warningOkCancel(QWidget* parent,
                                const QString& text,
-                               const QString& informativeText)
+                               const QString& informativeText,
+                               const DefaultButtonOkCancel defaultButton)
 {
     QMessageBox msgBox(parent);
     msgBox.setIcon(QMessageBox::Warning);
@@ -179,7 +182,14 @@ WuQMessageBox::warningOkCancel(QWidget* parent,
     }
     msgBox.addButton(QMessageBox::Ok);
     msgBox.addButton(QMessageBox::Cancel);
-    msgBox.setDefaultButton(QMessageBox::Ok);
+    switch (defaultButton) {
+        case DefaultButtonOkCancel::OK:
+            msgBox.setDefaultButton(QMessageBox::Ok);
+            break;
+        case DefaultButtonOkCancel::CANCEL:
+            msgBox.setDefaultButton(QMessageBox::Cancel);
+            break;
+    }
     msgBox.setEscapeButton(QMessageBox::Cancel);
     
     QMessageBox::StandardButton buttonPressed =
@@ -904,4 +914,46 @@ WuQMessageBox::errorOk(QWidget* parent,
     
     msgBox.exec();
 }
+
+/**
+ * Display an error message box with the
+ * given text, detailed text, and an OK button.
+ *
+ * @param parent
+ *    Parent on which message box is displayed.
+ * @param text
+ *    Message that is displayed.
+ * @param detailedText
+ *    Detailed text in a scroll region
+ */
+void
+WuQMessageBox::errorDetailedTextOk(QWidget* parent,
+                                   const QString& text,
+                                   const QString& detailedText)
+{
+    QMessageBox msgBox(parent);
+    msgBox.setIcon(QMessageBox::Critical);
+    msgBox.setWindowTitle("");
+    msgBox.setText(text);
+    msgBox.setDetailedText(detailedText);
+    msgBox.addButton(QMessageBox::Ok);
+    msgBox.setDefaultButton(QMessageBox::Ok);
+    msgBox.setEscapeButton(QMessageBox::Ok);
+    
+    /*
+     * Expaned the details region by clicking the "Show Details" button.
+     * From: https://stackoverflow.com/questions/36083551/qmessagebox-show-details/36084125#36084125
+     */
+    foreach (QAbstractButton *button, msgBox.buttons()) {
+        if (msgBox.buttonRole(button) == QMessageBox::ActionRole) {
+            if (button->text().startsWith("Show Detail")) {
+                button->click();
+            }
+            break;
+        }
+    }
+    
+    msgBox.exec();
+}
+
 

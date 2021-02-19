@@ -21,9 +21,12 @@
  */
 /*LICENSE_END*/
 
+#include <memory>
 #include <set>
 
 #include "CaretObject.h"
+#include "ChartTwoAxisOrientationTypeEnum.h"
+#include "ChartTwoAxisScaleRangeModeEnum.h"
 #include "EventListenerInterface.h"
 #include "Model.h"
 #include "ModelTypeEnum.h"
@@ -41,17 +44,22 @@
 
 namespace caret {
 
+    class AnnotationBrowserTab;
     class AnnotationColorBar;
+    class AnnotationScaleBar;
     class BrainOpenGLViewportContent;
     class CaretDataFile;
     class CaretMappableDataFile;
+    class ChartTwoCartesianOrientedAxes;
     class ChartTwoMatrixDisplayProperties;
     class ChartTwoOverlaySet;
     class ClippingPlaneGroup;
     class EventCaretMappableDataFilesAndMapsInDisplayedOverlays;
     class Matrix4x4;
+    class MediaOverlaySet;
     class ModelChart;
     class ModelChartTwo;
+    class ModelMedia;
     class ModelSurface;
     class ModelSurfaceMontage;
     class ModelSurfaceSelector;
@@ -65,6 +73,7 @@ namespace caret {
     class Surface;
     class ViewingTransformations;
     class ViewingTransformationsCerebellum;
+    class ViewingTransformationsMedia;
     class ViewingTransformationsVolume;
     class VolumeMappableInterface;
     class VolumeSliceSettings;
@@ -101,6 +110,13 @@ namespace caret {
         
         const ChartTwoOverlaySet* getChartTwoOverlaySet() const;
         
+        std::vector<ChartTwoCartesianOrientedAxes*> getYokedAxes(const ChartTwoAxisOrientationTypeEnum::Enum axisOrientation,
+                                                                 const ChartTwoAxisScaleRangeModeEnum::Enum yokingRangeMode) const;
+        
+        MediaOverlaySet* getMediaOverlaySet();
+        
+        const MediaOverlaySet* getMediaOverlaySet() const;
+        
         int32_t getTabNumber() const;
         
         ModelTypeEnum::Enum getSelectedModelType() const;
@@ -118,6 +134,10 @@ namespace caret {
         ModelChartTwo* getDisplayedChartTwoModel();
         
         const ModelChartTwo* getDisplayedChartTwoModel() const;
+        
+        ModelMedia* getDisplayedMediaModel();
+        
+        const ModelMedia* getDisplayedMediaModel() const;
         
         ModelSurface* getDisplayedSurfaceModel();
         
@@ -149,6 +169,8 @@ namespace caret {
         
         bool isVolumeSlicesDisplayed() const;
         
+        bool isMediaDisplayed() const;
+        
         bool isWholeBrainDisplayed() const;
         
         void getFilesDisplayedInTab(std::vector<CaretDataFile*>& displayedDataFilesOut);
@@ -168,6 +190,8 @@ namespace caret {
         bool isWholeBrainModelValid() const;
 
         bool isSurfaceMontageModelValid() const;
+        
+        bool isMediaModelValid() const;
         
         void getAnnotationColorBars(std::vector<AnnotationColorBar*>& colorBarsOut);
         
@@ -215,6 +239,10 @@ namespace caret {
 
         void resetClippingPlaneTransformation();
         
+        bool isClippingPlanesEnabled();
+        
+        void setClippingPlanesEnabled(const bool status);
+        
         const float* getTranslation() const;
         
         void getTranslation(float translationOut[3]) const;
@@ -237,6 +265,10 @@ namespace caret {
         
         void setObliqueVolumeRotationMatrix(const Matrix4x4& obliqueRotationMatrix);
 
+        Matrix4x4 getFlatRotationMatrix() const;
+        
+        void setFlatRotationMatrix(const Matrix4x4& flatRotationMatrix);
+        
         void getRightCortexFlatMapOffset(float& offsetX,
                                          float& offsetY) const;
         
@@ -276,7 +308,12 @@ namespace caret {
                                 const int32_t mouseDeltaX,
                                 const int32_t mouseDeltaY);
         
-        void applyMouseScaling(const int32_t mouseDX,
+        void applyMouseScaling(BrainOpenGLViewportContent* viewportContent,
+                               const int32_t mousePressX,
+                               const int32_t mousePressY,
+                               const float mouseX,
+                               const float mouseY,
+                               const int32_t mouseDX,
                                const int32_t mouseDY);
         
         void applyMouseTranslation(BrainOpenGLViewportContent* viewportContent,
@@ -290,6 +327,18 @@ namespace caret {
                                                 double rotationMatrixOut[16],
                                                 float& scalingOut) const;
         
+        void applyChartTwoAxesBoundSelection(const int32_t viewport[4],
+                                             const int32_t x1,
+                                             const int32_t y1,
+                                             const int32_t x2,
+                                             const int32_t y2);
+        
+        void finalizeChartTwoAxesBoundSelection(const int32_t viewport[4],
+                                                const int32_t x1,
+                                                const int32_t y1,
+                                                const int32_t x2,
+                                                const int32_t y2);
+
         void getTransformationsInModelTransform(ModelTransform& modelTransform) const;
         
         void setTransformationsFromModelTransform(const ModelTransform& modelTransform);
@@ -309,6 +358,8 @@ namespace caret {
         VolumeSliceDrawingTypeEnum::Enum getSliceDrawingType() const;
         
         void setSliceDrawingType(const VolumeSliceDrawingTypeEnum::Enum sliceDrawingType);
+        
+        void getValidSliceProjectionTypes(std::vector<VolumeSliceProjectionTypeEnum::Enum>& sliceProjectionTypesOut) const;
         
         VolumeSliceProjectionTypeEnum::Enum getSliceProjectionType() const;
         
@@ -441,11 +492,32 @@ namespace caret {
         
         const ViewingTransformations* getViewingTransformation() const;
         
+        AnnotationBrowserTab* getManualLayoutBrowserTabAnnotation();
+        
+        const AnnotationBrowserTab* getManualLayoutBrowserTabAnnotation() const;
+        
+        bool isDefaultManualTabGeometryBounds() const;
+        
+        AnnotationScaleBar* getScaleBar();
+        
+        const AnnotationScaleBar* getScaleBar() const;
+        
         virtual SceneClass* saveToScene(const SceneAttributes* sceneAttributes,
                                         const AString& instanceName);
         
         virtual void restoreFromScene(const SceneAttributes* sceneAttributes,
                                       const SceneClass* sceneClass);
+        
+        void setClosedStatusFromSessionManager(const bool closedStatus);
+        
+        void setClosedTabWindowTabBarPositionIndex(const int32_t tabBarPosition);
+        
+        int32_t getClosedTabWindowTabBarPositionIndex() const;
+        
+        void setClosedTabWindowIndex(const int32_t windowIndex);
+        
+        int32_t getClosedTabWindowIndex() const;
+        
     private:
         class ColorBarFileMap {
         public:
@@ -467,11 +539,6 @@ namespace caret {
         
         BrowserTabContent& operator=(const BrowserTabContent&);
         
-//        VolumeSliceViewPlaneEnum::Enum getSliceViewPlaneForVolumeAllSliceView(const int viewport[4],
-//                                                                  const int32_t mousePressX,
-//                                                                  const int32_t mousePressY,
-//                                                                              int sliceViewportOut[4]) const;
-        
         void updateBrainModelYokedBrowserTabs();
         
         void updateYokedModelBrowserTabs();
@@ -479,6 +546,13 @@ namespace caret {
         AString getDefaultName() const;
         
         AString getTabNamePrefix() const override;
+        
+        void initializeScaleBar();
+        
+        void testForRestoreSceneWarnings(const SceneAttributes* sceneAttributes,
+                                         const int32_t sceneVersion);
+        
+        static std::vector<BrowserTabContent*> getOpenBrowserTabs();
         
         /** Number of this tab */
         int32_t m_tabNumber;
@@ -506,6 +580,9 @@ namespace caret {
         
         /** The chart two model */
         ModelChartTwo* m_chartTwoModel;
+        
+        /** The multi-media model */
+        ModelMedia* m_mediaModel;
         
         /** 
          * Name requested by user interface - reflects contents 
@@ -549,6 +626,9 @@ namespace caret {
         /** Transformation for surface/all viewing */
         ViewingTransformations* m_flatSurfaceViewingTransformation;
         
+        /** Transformation for media viewing */
+        ViewingTransformationsMedia* m_mediaViewingTransformation;
+        
         /** Transformation for volume slices viewing */
         ViewingTransformationsVolume* m_volumeSliceViewingTransformation;
 
@@ -563,6 +643,8 @@ namespace caret {
         
         /** Whole brain surface settings. */
         WholeBrainSurfaceSettings* m_wholeBrainSurfaceSettings;
+        
+        std::unique_ptr<AnnotationScaleBar> m_scaleBar;
         
         /** aspect ratio */
         float m_aspectRatio;
@@ -596,7 +678,26 @@ namespace caret {
          */
         bool isExecutingConstructor;
         
-        /** Contains all active browser tab content instances */
+        /** Manual layout brower tab annotation */
+        std::unique_ptr<AnnotationBrowserTab> m_manualLayoutBrowserTabAnnotation;
+        
+        /** Default bounds of manual tab geometry */
+        float m_defaultManualTabGeometryBounds[4];
+        
+        /** True if browser tab content has been closed but is available for reopening */
+        bool m_closedFlag = false;
+        
+        /** Position in the tab bar befpre  a tab that was closed */
+        int32_t m_closedTabBarPosition = -1;
+        
+        /** Index of window before tab was closed */
+        int32_t m_closedWindowIndex = -1;
+        
+        /**
+         * NEVER access this directly as it may contain tabs that are closed but available for reopening.
+         * Instead, call getOpenBrowserTabs().
+         * Contains all active browser tab content instances
+         */
         static std::set<BrowserTabContent*> s_allBrowserTabContent;
         
     };

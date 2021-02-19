@@ -21,7 +21,9 @@
  */
 /*LICENSE_END*/
 
+#include <array>
 #include <bitset>
+#include <memory>
 
 #include "AnnotationAttributesDefaultTypeEnum.h"
 #include "AnnotationCoordinateSpaceEnum.h"
@@ -29,6 +31,7 @@
 #include "AnnotationSizingHandleTypeEnum.h"
 #include "AnnotationSurfaceOffsetVectorTypeEnum.h"
 #include "AnnotationTypeEnum.h"
+#include "BoundingBox.h"
 #include "CaretColorEnum.h"
 #include "CaretObjectTracksModification.h"
 #include "DisplayGroupAndTabItemInterface.h"
@@ -38,9 +41,12 @@
 
 
 namespace caret {
-    class AnnotationOneDimensionalShape;
-    class AnnotationTwoDimensionalShape;
+    class AnnotationScaleBar;
+    
+    class AnnotationMultiCoordinateShape;
+    class AnnotationOneCoordinateShape;
     class AnnotationSpatialModification;
+    class AnnotationTwoCoordinateShape;
     class DisplayGroupAndTabItemHelper;
     class SceneClassAssistant;
 
@@ -124,14 +130,48 @@ namespace caret {
         
         Annotation* clone() const;
         
-        virtual AnnotationOneDimensionalShape* castToOneDimensionalShape() = 0;
+        /**
+         * @return Cast to multi-coordinate (NULL if NOT multi-coordinate annotation
+         */
+        virtual AnnotationMultiCoordinateShape* castToMultiCoordinateShape() { return NULL; }
         
-        virtual const AnnotationOneDimensionalShape* castToOneDimensionalShape() const = 0;
-
-        virtual AnnotationTwoDimensionalShape* castToTwoDimensionalShape() = 0;
+        /**
+         * @return Cast to multi-coordinate (NULL if NOT multi-coordinate annotation
+        */
+        virtual const AnnotationMultiCoordinateShape* castToMultiCoordinateShape() const { return NULL; }
         
-        virtual const AnnotationTwoDimensionalShape* castToTwoDimensionalShape() const = 0;
+        /**
+         * @return Cast to one-coordinate (NULL if NOT one-coordinate annotation
+        */
+        virtual AnnotationOneCoordinateShape* castToOneCoordinateShape() { return NULL; }
+        
+        /**
+         * @return Cast to one-coordinate (NULL if NOT one-coordinate annotation
+        */
+        virtual const AnnotationOneCoordinateShape* castToOneCoordinateShape() const { return NULL; }
 
+        /**
+         * @return Cast to two-coordinate (NULL if NOT two-coordinate annotation
+        */
+        virtual AnnotationTwoCoordinateShape* castToTwoCoordinateShape()  { return NULL; }
+        
+        /**
+         * @return Cast to two-coordinate (NULL if NOT two-coordinate annotation
+        */
+        virtual const AnnotationTwoCoordinateShape* castToTwoCoordinateShape() const  { return NULL; }
+        
+        /**
+         * @return this annotation cast to AnnotationScaleBar (NULL if not a scale bar)
+         * Intended for overriding by the annotation type
+         */
+        virtual AnnotationScaleBar* castToScaleBar() { return NULL; }
+        
+        /**
+         * @return this annotation cast to AnnotationScaleBar (NULL if not a scale bar) const method
+         * Intended for overriding by the annotation type
+         */
+        virtual const AnnotationScaleBar* castToScaleBar() const { return NULL; }
+        
         bool testProperty(const Property property) const;
         
         bool testPropertiesAny(const Property propertyOne,
@@ -167,6 +207,8 @@ namespace caret {
         AnnotationCoordinateSpaceEnum::Enum getCoordinateSpace() const;
         
         void setCoordinateSpace(const AnnotationCoordinateSpaceEnum::Enum coordinateSpace);
+        
+        bool isInSameCoordinateSpace(const Annotation* annotation) const;
         
         virtual AnnotationSurfaceOffsetVectorTypeEnum::Enum getSurfaceOffsetVectorType() const = 0;
         
@@ -254,6 +296,10 @@ namespace caret {
         
         virtual float getFixedAspectRatio() const;
         
+        int32_t getStackingOrder() const;
+        
+        void setStackingOrder(const int32_t stackingOrder);
+        
         /**
          * Apply a spatial modification to an annotation.
          *
@@ -340,8 +386,21 @@ namespace caret {
         virtual bool isItemSelectedForEditingInWindow(const int32_t windowIndex);
         
         void setDrawnInWindowStatus(const int32_t windowIndex);
-          
-    protected: 
+        
+        void setDrawnInWindowBounds(const int32_t windowIndex,
+                                    const BoundingBox& bounds) const;
+        
+        BoundingBox getDrawnInWindowBounds(const int32_t windowIndex) const;
+        
+        virtual bool intersectionTest(const Annotation* other,
+                                      const int32_t windowIndex) const;
+        
+        void matchPixelPositionAndSizeInNewViewport(const int32_t oldViewport[4],
+                                                    const int32_t newViewport[4],
+                                                    const bool matchPositionFlag,
+                                                    const bool matchSizeFlag);
+        
+    protected:
         virtual void saveSubClassDataToScene(const SceneAttributes* sceneAttributes,
                                              SceneClass* sceneClass) = 0;
 
@@ -369,7 +428,7 @@ namespace caret {
         
         void textAnnotationResetName();
         
-        bool isDrawnInWindowStatus(const int32_t windowIndex);
+        bool isDrawnInWindowStatus(const int32_t windowIndex) const;
         
         void clearDrawnInWindowStatusForAllWindows();
         
@@ -421,7 +480,13 @@ namespace caret {
         
         AnnotationGroupKey m_annotationGroupKey;
         
+        /** Stacking order (depth in screen) of tab, greater value is 'in front'*/
+        int32_t m_stackingOrder = 1;
+        
         bool m_drawnInWindowStatus[BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_WINDOWS];
+        
+        /* Bounds last time annotation was drawn NOT saved to scenes or annontation file*/
+        mutable BoundingBox m_boundsFromDrawing[BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_WINDOWS];
         
         /**
          * Selection (NOT DISPLAY) status in each window.

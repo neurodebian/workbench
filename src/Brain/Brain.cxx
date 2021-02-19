@@ -23,7 +23,7 @@
 #include <limits>
 #include <new>
 
-#include "CaretAssert.h"
+#include <QCollator>
 
 #include "AnnotationFile.h"
 #include "AnnotationManager.h"
@@ -35,9 +35,13 @@
 #include "BrainordinateRegionOfInterest.h"
 #include "BrainStructure.h"
 #include "BrowserTabContent.h"
+#include "CaretAssert.h"
 #include "CaretDataFileHelper.h"
+#include "CaretHttpManager.h"
 #include "CaretLogger.h"
 #include "CaretPreferences.h"
+#include "CaretResult.h"
+#include "ChartTwoCartesianOrientedAxesYokingManager.h"
 #include "ChartingDataManager.h"
 #include "ChartableTwoFileDelegate.h"
 #include "ChartableTwoFileMatrixChart.h"
@@ -74,13 +78,16 @@
 #include "EventDataFileDelete.h"
 #include "EventDataFileRead.h"
 #include "EventDataFileReload.h"
+#include "EventDataFileReloadAll.h"
 #include "EventCaretDataFilesGet.h"
 #include "EventGetDisplayedDataFiles.h"
+#include "EventMediaFilesGet.h"
 #include "EventModelAdd.h"
 #include "EventModelDelete.h"
 #include "EventModelGetAll.h"
 #include "EventModelGetAllDisplayed.h"
 #include "EventPaletteGetByName.h"
+#include "EventPaletteGroupsGet.h"
 #include "EventProgressUpdate.h"
 #include "EventSceneActive.h"
 #include "EventSpecFileReadDataFiles.h"
@@ -97,6 +104,7 @@
 #include "MetricFile.h"
 #include "ModelChart.h"
 #include "ModelChartTwo.h"
+#include "ModelMedia.h"
 #include "ModelSurface.h"
 #include "ModelSurfaceMontage.h"
 #include "ModelVolume.h"
@@ -105,6 +113,8 @@
 #include "Overlay.h"
 #include "OverlaySet.h"
 #include "PaletteFile.h"
+#include "PaletteGroupStandardPalettes.h"
+#include "PaletteGroupUserCustomPalettes.h"
 #include "RgbaFile.h"
 #include "Scene.h"
 #include "SceneAttributes.h"
@@ -129,17 +139,39 @@
 using namespace caret;
 
 /**
+ * Sort data files by the filename and excluding the path
+ *
+ * @param dataFiles
+ *     All files of a particular data type that are loaded.
+ */
+template <class DFT>
+static void
+sortDataFileTypeByFileNameNoPath(std::vector<DFT*>& dataFiles)
+{
+    QCollator collator;
+    collator.setNumericMode(true);
+    collator.setCaseSensitivity(Qt::CaseInsensitive);
+    
+    std::sort(dataFiles.begin(),
+              dataFiles.end(),
+              [&collator](DFT* a, DFT* b) -> bool {
+        return (collator.compare(a->getFileNameNoPath(), b->getFileNameNoPath()) < 0);
+        
+    });
+}
+
+/**
  *  Constructor.
  *
  * @param caretPreferences
  *    The caret preferencers used to initialize some components.
  */
-Brain::Brain(const CaretPreferences* caretPreferences)
+Brain::Brain(CaretPreferences* caretPreferences)
 {
     m_annotationManager = new AnnotationManager(this);
-    
     m_chartingDataManager = new ChartingDataManager(this);
     m_fiberOrientationSamplesLoader = new FiberOrientationSamplesLoader();
+    m_chartTwoCartesianAxesYokingManager.reset(new ChartTwoCartesianOrientedAxesYokingManager());
     
     m_paletteFile = new PaletteFile();
     m_paletteFile->setFileName(convertFilePathNameToAbsolutePathName(m_paletteFile->getFileName()));
@@ -158,6 +190,7 @@ Brain::Brain(const CaretPreferences* caretPreferences)
     m_surfaceMontageModel = NULL;
     m_volumeSliceModel = NULL;
     m_wholeBrainModel = NULL;
+    m_mediaModel = NULL;
     
     m_displayPropertiesAnnotation = new DisplayPropertiesAnnotation(this);
     m_displayProperties.push_back(m_displayPropertiesAnnotation);
@@ -168,7 +201,7 @@ Brain::Brain(const CaretPreferences* caretPreferences)
     m_displayPropertiesBorders = new DisplayPropertiesBorders();
     m_displayProperties.push_back(m_displayPropertiesBorders);
     
-    m_displayPropertiesFiberOrientation = new DisplayPropertiesFiberOrientation();
+    m_displayPropertiesFiberOrientation = new DisplayPropertiesFiberOrientation(this);
     m_displayProperties.push_back(m_displayPropertiesFiberOrientation);
     
     m_displayPropertiesFoci = new DisplayPropertiesFoci();
@@ -198,14 +231,20 @@ Brain::Brain(const CaretPreferences* caretPreferences)
                                           EventTypeEnum::EVENT_DATA_FILE_READ);
     EventManager::get()->addEventListener(this,
                                           EventTypeEnum::EVENT_DATA_FILE_RELOAD);
+    EventManager::get()->addEventListener(this,
+                                          EventTypeEnum::EVENT_DATA_FILE_RELOAD_ALL);
     EventManager::get()->addEventListener(this, 
                                           EventTypeEnum::EVENT_CARET_MAPPABLE_DATA_FILES_GET);
     EventManager::get()->addEventListener(this,
                                           EventTypeEnum::EVENT_GET_DISPLAYED_DATA_FILES);
     EventManager::get()->addEventListener(this,
+                                          EventTypeEnum::EVENT_MEDIA_FILES_GET);
+    EventManager::get()->addEventListener(this,
                                           EventTypeEnum::EVENT_SPEC_FILE_READ_DATA_FILES);
     EventManager::get()->addEventListener(this,
                                           EventTypeEnum::EVENT_PALETTE_GET_BY_NAME);
+    EventManager::get()->addEventListener(this,
+                                          EventTypeEnum::EVENT_PALETTE_GROUPS_GET);
     EventManager::get()->addEventListener(this,
                                           EventTypeEnum::EVENT_SCENE_ACTIVE);
     
@@ -259,6 +298,9 @@ Brain::Brain(const CaretPreferences* caretPreferences)
                           m_gapsAndMargins);
     m_sceneAssistant->add("m_surfaceMatchingToAnatomicalFlag",
                           &m_surfaceMatchingToAnatomicalFlag);
+    m_sceneAssistant->add("m_chartTwoCartesianAxesYokingManager",
+                          "ChartTwoCartesianOrientedAxesYokingManager",
+                          m_chartTwoCartesianAxesYokingManager.get());
     
     m_selectionManager = new SelectionManager();
 
@@ -266,6 +308,11 @@ Brain::Brain(const CaretPreferences* caretPreferences)
     
     m_brainordinateHighlightRegionOfInterest = new BrainordinateRegionOfInterest();
     
+    m_palettesStandardGroup = std::make_shared<PaletteGroupStandardPalettes>();
+    m_palettesStandardGroup->loadPalettes();
+
+    m_palettesUserCustomGroup = std::make_shared<PaletteGroupUserCustomPalettes>(caretPreferences);
+
     updateChartModel();
 }
 
@@ -307,6 +354,9 @@ Brain::~Brain()
     }
     if (m_wholeBrainModel != NULL) {
         delete m_wholeBrainModel;
+    }
+    if (m_mediaModel != NULL) {
+        delete m_mediaModel;
     }
 
     delete m_selectionManager;
@@ -457,9 +507,6 @@ Brain::getDuplicateFileNameCounterForFileType(const DataFileTypeEnum::Enum dataF
 
     m_duplicateFileNameCounter[dataFileType] = counterValue;
     
-//    m_duplicateFileNameCounter.insert(std::make_pair(dataFileType,
-//                                                     counterValue));
-    
     return counterValue;
 }
 
@@ -502,6 +549,7 @@ Brain::resetBrain(const ResetBrainKeepSceneFiles keepSceneFiles,
 {
     m_isSpecFileBeingRead = false;
     m_activeScene = NULL;
+    SessionManager::get()->resetSceneWithChartOld();
     
     m_surfaceMatchingToAnatomicalFlag = false;
     
@@ -539,7 +587,6 @@ Brain::resetBrain(const ResetBrainKeepSceneFiles keepSceneFiles,
     m_annotationSubstitutionFiles.clear();
     
     m_sceneAnnotationFile->clear();
-    //m_sceneAnnotationFile->setFileName("Scene Annotations");
     m_sceneAnnotationFile->clearModified();
     
     for (std::vector<BorderFile*>::iterator bfi = m_borderFiles.begin();
@@ -880,14 +927,65 @@ Brain::resetBrainKeepSceneFiles()
  *    Index of target tab.
  */
 void 
-Brain::copyDisplayProperties(const int32_t sourceTabIndex,
-                             const int32_t targetTabIndex)
+Brain::copyDisplayPropertiesToTab(const int32_t sourceTabIndex,
+                                  const int32_t targetTabIndex)
 {
     for (std::vector<DisplayProperties*>::iterator iter = m_displayProperties.begin();
          iter != m_displayProperties.end();
          iter++) {
         (*iter)->copyDisplayProperties(sourceTabIndex,
                                        targetTabIndex);
+    }
+}
+
+/**
+ * Copy data file properties from the source tab to the target tab.
+ * @param sourceTabIndex
+ *    Index of source tab.
+ * @param targetTabIndex
+ *    Index of target tab.
+ */
+void
+Brain::copyFilePropertiesToTab(const int32_t sourceTabIndex,
+                               const int32_t targetTabIndex)
+{
+    const int32_t numberOfBrainStructures = getNumberOfBrainStructures();
+    for (int32_t i = 0; i < numberOfBrainStructures; i++) {
+        BrainStructure* bs = getBrainStructure(i);
+        const int32_t numLabelFiles = bs->getNumberOfLabelFiles();
+        for (int32_t j = 0; j < numLabelFiles; j++) {
+            LabelFile* labelFile = bs->getLabelFile(j);
+            labelFile->getGroupAndNameHierarchyModel()->copySelections(sourceTabIndex,
+                                                                       targetTabIndex);
+        }
+    }
+    
+    const int32_t numBorderFiles = getNumberOfBorderFiles();
+    for (int32_t i = 0; i < numBorderFiles; i++) {
+        BorderFile* bf = getBorderFile(i);
+        bf->getGroupAndNameHierarchyModel()->copySelections(sourceTabIndex,
+                                                            targetTabIndex);
+    }
+    
+    std::vector<CiftiMappableDataFile*> ciftiMapFiles;
+    getAllCiftiMappableDataFiles(ciftiMapFiles);
+    for (auto cmf : ciftiMapFiles) {
+        cmf->getGroupAndNameHierarchyModel()->copySelections(sourceTabIndex,
+                                                             targetTabIndex);
+    }
+    
+    const int32_t numFociFiles = getNumberOfFociFiles();
+    for (int32_t i = 0; i < numFociFiles; i++) {
+        FociFile* ff = getFociFile(i);
+        ff->getGroupAndNameHierarchyModel()->copySelections(sourceTabIndex,
+                                                            targetTabIndex);
+    }
+
+    const int32_t numVolumeFiles = getNumberOfVolumeFiles();
+    for (int32_t i = 0; i < numVolumeFiles; i++) {
+        VolumeFile* vf = getVolumeFile(i);
+        vf->getGroupAndNameHierarchyModel()->copySelections(sourceTabIndex,
+                                                            targetTabIndex);
     }
 }
 
@@ -3432,14 +3530,6 @@ Brain::addReadOrReloadSceneFile(const FileModeAddReadReload fileMode,
     if (readFlag) {
         try {
             try {
-                /*
-                 * Add to recent scene files
-                 */
-                if (FileInformation(filename).exists()) {
-                    CaretPreferences* prefs = SessionManager::get()->getCaretPreferences();
-                    prefs->addToPreviousSceneFiles(filename);
-                }
-                
                 sf->readFile(filename);
             }
             catch (const std::bad_alloc&) {
@@ -5016,6 +5106,40 @@ Brain::createModelChartTwo()
 }
 
 /**
+ * Update the multi-meda model.
+ */
+void
+Brain::updateMediaModel()
+{
+    bool isValid = false;
+    if ((getNumberOfImageFiles() > 0)) {
+        isValid = true;
+    }
+    
+    if (isValid) {
+        if (m_mediaModel == NULL) {
+            m_mediaModel = new ModelMedia(this);
+            EventModelAdd eventAddModel(m_mediaModel);
+            EventManager::get()->sendEvent(eventAddModel.getPointer());
+            
+            if ( ! m_isSpecFileBeingRead) {
+                m_mediaModel->initializeOverlays();
+            }
+        }
+        
+        m_mediaModel->updateModel();
+    }
+    else {
+        if (m_mediaModel != NULL) {
+            EventModelDelete eventDeleteModel(m_mediaModel);
+            EventManager::get()->sendEvent(eventDeleteModel.getPointer());
+            delete m_mediaModel;
+            m_mediaModel = NULL;
+        }
+    }
+}
+
+/**
  * Update the volume slice model.
  */
 void
@@ -5168,7 +5292,168 @@ Brain::processReloadDataFileEvent(EventDataFileReload* reloadDataFileEvent)
     updateAfterFilesAddedOrRemoved();
 }
 
-#include "CaretHttpManager.h"
+/**
+ * @return All reloadable data files.  Surfaces and Volume files are
+ * at the beginning of the vector and followed by all other files.
+ */
+std::vector<CaretDataFile*>
+Brain::getReloadableDataFiles() const
+{
+    std::vector<CaretDataFile*> allDataFiles;
+    getAllDataFiles(allDataFiles);
+    
+    std::deque<CaretDataFile*> filesToReload;
+    for (auto& df : allDataFiles) {
+        /* Surfaces and volume must be read before other files */
+        bool loadFirstFlag(false);
+        bool reloadFlag(true);
+        
+        switch (df->getDataFileType()) {
+            case DataFileTypeEnum::ANNOTATION:
+                break;
+            case DataFileTypeEnum::ANNOTATION_TEXT_SUBSTITUTION:
+                break;
+            case DataFileTypeEnum::BORDER:
+                break;
+            case DataFileTypeEnum::CONNECTIVITY_DENSE:
+                break;
+            case DataFileTypeEnum::CONNECTIVITY_DENSE_DYNAMIC:
+                reloadFlag = false;
+                break;
+            case DataFileTypeEnum::CONNECTIVITY_DENSE_LABEL:
+                break;
+            case DataFileTypeEnum::CONNECTIVITY_DENSE_PARCEL:
+                break;
+            case DataFileTypeEnum::CONNECTIVITY_DENSE_SCALAR:
+                break;
+            case DataFileTypeEnum::CONNECTIVITY_DENSE_TIME_SERIES:
+                break;
+            case DataFileTypeEnum::CONNECTIVITY_FIBER_ORIENTATIONS_TEMPORARY:
+                break;
+            case DataFileTypeEnum::CONNECTIVITY_FIBER_TRAJECTORY_TEMPORARY:
+                break;
+            case DataFileTypeEnum::CONNECTIVITY_PARCEL:
+                break;
+            case DataFileTypeEnum::CONNECTIVITY_PARCEL_DENSE:
+                break;
+            case DataFileTypeEnum::CONNECTIVITY_PARCEL_LABEL:
+                break;
+            case DataFileTypeEnum::CONNECTIVITY_PARCEL_SCALAR:
+                break;
+            case DataFileTypeEnum::CONNECTIVITY_PARCEL_SERIES:
+                break;
+            case DataFileTypeEnum::CONNECTIVITY_SCALAR_DATA_SERIES:
+                break;
+            case DataFileTypeEnum::FOCI:
+                break;
+            case DataFileTypeEnum::IMAGE:
+                break;
+            case DataFileTypeEnum::LABEL:
+                break;
+            case DataFileTypeEnum::METRIC:
+                break;
+            case DataFileTypeEnum::METRIC_DYNAMIC:
+                reloadFlag = false;
+                break;
+            case DataFileTypeEnum::PALETTE:
+                reloadFlag = false;
+                break;
+            case DataFileTypeEnum::RGBA:
+                break;
+            case DataFileTypeEnum::SCENE:
+                break;
+            case DataFileTypeEnum::SPECIFICATION:
+                reloadFlag = false;
+                break;
+            case DataFileTypeEnum::SURFACE:
+                loadFirstFlag = true;
+                break;
+            case DataFileTypeEnum::UNKNOWN:
+                reloadFlag = false;
+                break;
+            case DataFileTypeEnum::VOLUME:
+                loadFirstFlag = true;
+                break;
+            case DataFileTypeEnum::VOLUME_DYNAMIC:
+                reloadFlag = false;
+                break;
+        }
+        
+        if (reloadFlag) {
+            if (loadFirstFlag) {
+                filesToReload.push_front(df);
+            }
+            else {
+                filesToReload.push_back(df);
+            }
+        }
+    }
+
+    std::vector<CaretDataFile*> filesOut(filesToReload.begin(),
+                                         filesToReload.end());
+    return filesOut;
+}
+
+
+/**
+ * Process a reload all data files event.
+ * @param reloadAllDataFilesEvent
+ *    Event containing forreloading all files and my be updated with error messages.
+ */
+void
+Brain::processReloadAllDataFilesEvent(EventDataFileReloadAll* reloadAllDataFilesEvent)
+{
+    CaretAssert(reloadAllDataFilesEvent);
+    
+    std::vector<CaretDataFile*> filesToReload(getReloadableDataFiles());
+    
+    switch (reloadAllDataFilesEvent->getMode()) {
+        case EventDataFileReloadAll::Mode::GET_FILES:
+        {
+            for (auto& df : filesToReload) {
+                reloadAllDataFilesEvent->addReloadableFile(df);
+            }
+        }
+            break;
+        case EventDataFileReloadAll::Mode::RELOAD_FILES:
+        {
+            const int32_t numFiles = static_cast<int32_t>(filesToReload.size());
+            EventProgressUpdate progressEvent(1, numFiles, 1, "Reloading Files");
+            EventManager::get()->sendEvent(progressEvent.getPointer());
+            
+            int32_t progressCount(1);
+            AString errorMessage;
+            for (auto& df : filesToReload) {
+                progressEvent.setProgress(progressCount, "Reloading " + df->getFileNameNoPath());
+                EventManager::get()->sendEvent(progressEvent.getPointer());
+                
+                try {
+                    addReadOrReloadDataFile(FILE_MODE_RELOAD,
+                                            df,
+                                            df->getDataFileType(),
+                                            df->getStructure(),
+                                            df->getFileName(),
+                                            false);
+                }
+                catch (const DataFileException& dfe) {
+                    errorMessage.appendWithNewLine(dfe.whatString());
+                }
+            }
+            
+            if ( ! errorMessage.isEmpty()) {
+                reloadAllDataFilesEvent->setErrorMessage(errorMessage);
+            }
+            
+            progressEvent.setProgress(progressCount, "Finishing reloading of files");
+            EventManager::get()->sendEvent(progressEvent.getPointer());
+            
+            updateAfterFilesAddedOrRemoved();
+        }
+            break;
+    }
+    
+    reloadAllDataFilesEvent->setEventProcessed();
+}
 
 /**
  * Process a read data file event.
@@ -5562,6 +5847,7 @@ Brain::updateAfterFilesAddedOrRemoved()
     updateVolumeSliceModel();
     updateWholeBrainModel();
     updateChartModel();
+    updateMediaModel();
     
     updateFiberTrajectoryMatchingFiberOrientationFiles();
 }
@@ -5591,14 +5877,14 @@ Brain::loadFilesSelectedInSpecFile(EventSpecFileReadDataFiles* readSpecFileDataF
     const AString specFileName = sf->getFileName();
     if (DataFile::isFileOnNetwork(specFileName)) {
         CaretPreferences* prefs = SessionManager::get()->getCaretPreferences();
-        prefs->addToPreviousSpecFiles(specFileName);
+        prefs->addToRecentFilesAndOrDirectories(specFileName);
     }
     else {
         FileInformation specFileInfo(specFileName);
         if (specFileInfo.exists()
             && specFileInfo.isAbsolute()) {
             CaretPreferences* prefs = SessionManager::get()->getCaretPreferences();
-            prefs->addToPreviousSpecFiles(specFileName);
+            prefs->addToRecentFilesAndOrDirectories(specFileName);
         }
     }
     
@@ -5703,10 +5989,8 @@ Brain::loadFilesSelectedInSpecFile(EventSpecFileReadDataFiles* readSpecFileDataF
 //    testingAnnFile->setFileName("Testing." + DataFileTypeEnum::toFileExtension(DataFileTypeEnum::ANNOTATION));
 //    addDataFile(testingAnnFile);
     
-    
-    
-    
-    
+    sortDataFilesByFileNameNoPath();
+
     /*
      * Reset the primary anatomical surfaces since they can get set
      * incorrectly when loading files
@@ -5755,6 +6039,15 @@ Brain::loadFilesSelectedInSpecFile(EventSpecFileReadDataFiles* readSpecFileDataF
 }
 
 /**
+ * Some files are sorted by name
+ */
+void
+Brain::sortDataFilesByFileNameNoPath()
+{
+    sortDataFileTypeByFileNameNoPath(m_imageFiles);
+}
+
+/**
  * Load files from the given spec file.
  * @param specFileToLoad
  *    Spec file from which selected files are read.
@@ -5793,6 +6086,13 @@ Brain::loadSpecFileFromScene(const SceneAttributes* sceneAttributes,
         if (previousSpecFileName.endsWith(m_specFile->getFileName()) == false) {
             FileInformation oldSpecFileInfo(previousSpecFileName);
             setCurrentDirectory(oldSpecFileInfo.getPathName());
+        }
+
+        const AString sceneFileName = sceneAttributes->getSceneFileName();
+        FileInformation sceneFileInfo(sceneFileName);
+        if (sceneFileInfo.exists()) {
+            AString sceneFileDirectory = sceneFileInfo.getAbsolutePath();
+            setCurrentDirectory(sceneFileDirectory);
         }
     }
     
@@ -5890,6 +6190,8 @@ Brain::loadSpecFileFromScene(const SceneAttributes* sceneAttributes,
     /*
      * Load new files and add existing files that were previously loaded.
      */
+    const int64_t numberOfFilesToLoad(specFileToLoad->getNumberOfFilesSelectedForLoading());
+    int64_t fileLoadingCounter(1);
     const int32_t numFileGroups = specFileToLoad->getNumberOfDataFileTypeGroups();
     for (int32_t ig = 0; ig < numFileGroups; ig++) {
         const SpecFileDataFileTypeGroup* group = specFileToLoad->getDataFileTypeGroupByIndex(ig);
@@ -5925,8 +6227,14 @@ Brain::loadSpecFileFromScene(const SceneAttributes* sceneAttributes,
                     else {
                         const StructureEnum::Enum structure = fileInfo->getStructure();
                         
-                        const QString msg = ("Loading "
+                        const QString msg = ("Loading ("
+                                             + AString::number(fileLoadingCounter)
+                                             + " of "
+                                             + AString::number(numberOfFilesToLoad)
+                                             + ") "
                                              + FileInformation(filename).getFileName());
+                        ++fileLoadingCounter;
+                        
                         progressEvent.setProgressMessage(msg);
                         EventManager::get()->sendEvent(progressEvent.getPointer());
                         if (progressEvent.isCancelled()) {
@@ -6078,6 +6386,8 @@ Brain::receiveEvent(Event* event)
             addDataFileEvent->setErrorMessage(dfe.whatString());
         }
         addDataFileEvent->setEventProcessed();
+
+        sortDataFilesByFileNameNoPath();
     }
     else if (event->getEventType() == EventTypeEnum::EVENT_DATA_FILE_DELETE) {
         EventDataFileDelete* deleteDataFileEvent =
@@ -6100,6 +6410,8 @@ Brain::receiveEvent(Event* event)
         if (readDataFileEvent->getLoadIntoBrain() == this) {
             readDataFileEvent->setEventProcessed();
             processReadDataFileEvent(readDataFileEvent);
+            
+            sortDataFilesByFileNameNoPath();
         }
     }
     else if (event->getEventType() == EventTypeEnum::EVENT_DATA_FILE_RELOAD) {
@@ -6110,6 +6422,15 @@ Brain::receiveEvent(Event* event)
         if (reloadDataFileEvent->getBrain() == this) {
             reloadDataFileEvent->setEventProcessed();
             processReloadDataFileEvent(reloadDataFileEvent);
+        }
+    }
+    else if (event->getEventType() == EventTypeEnum::EVENT_DATA_FILE_RELOAD_ALL) {
+        EventDataFileReloadAll* reloadAllEvent = dynamic_cast<EventDataFileReloadAll*>(event);
+        CaretAssert(reloadAllEvent);
+        
+        if (reloadAllEvent->getBrain() == this) {
+            reloadAllEvent->setEventProcessed();
+            processReloadAllDataFilesEvent(reloadAllEvent);
         }
     }
     else if (event->getEventType() == EventTypeEnum::EVENT_CARET_DATA_FILES_GET) {
@@ -6137,6 +6458,16 @@ Brain::receiveEvent(Event* event)
         
         dataFilesEvent->setEventProcessed();
     }
+    else if (event->getEventType() == EventTypeEnum::EVENT_MEDIA_FILES_GET) {
+        EventMediaFilesGet* mediaEvent = dynamic_cast<EventMediaFilesGet*>(event);
+        CaretAssert(mediaEvent);
+        
+        for (auto f : m_imageFiles) {
+            mediaEvent->addMediaFile(f);
+        }
+        
+        mediaEvent->setEventProcessed();
+    }
     else if (event->getEventType() == EventTypeEnum::EVENT_SPEC_FILE_READ_DATA_FILES) {
         EventSpecFileReadDataFiles* readSpecFileDataFilesEvent =
         dynamic_cast<EventSpecFileReadDataFiles*>(event);
@@ -6149,6 +6480,7 @@ Brain::receiveEvent(Event* event)
         if (readSpecFileDataFilesEvent->getLoadIntoBrain() == this) {
             readSpecFileDataFilesEvent->setEventProcessed();
             loadFilesSelectedInSpecFile(readSpecFileDataFilesEvent);
+            m_displayPropertiesFiberOrientation->setMaximumUncertaintyFromFiles();
         }
     }
     else if (event->getEventType() == EventTypeEnum::EVENT_GET_DISPLAYED_DATA_FILES) {
@@ -6233,6 +6565,15 @@ Brain::receiveEvent(Event* event)
             }
         }
     }
+    else if (event->getEventType() == EventTypeEnum::EVENT_PALETTE_GROUPS_GET) {
+        EventPaletteGroupsGet* palettesEvent = dynamic_cast<EventPaletteGroupsGet*>(event);
+        CaretAssert(palettesEvent);
+        
+        palettesEvent->addPaletteGroup(m_palettesStandardGroup);
+        palettesEvent->addPaletteGroup(m_palettesUserCustomGroup);
+
+        palettesEvent->setEventProcessed();
+    }
     else if (event->getEventType() == EventTypeEnum::EVENT_SCENE_ACTIVE) {
         EventSceneActive* sceneEvent = dynamic_cast<EventSceneActive*>(event);
         CaretAssert(sceneEvent);
@@ -6306,6 +6647,24 @@ const ModelChartTwo*
 Brain::getChartTwoModel() const
 {
     return m_modelChartTwo;
+}
+
+/**
+ * @return The multi-media model (warning may be NULL)
+ */
+ModelMedia*
+Brain::getMediaModel()
+{
+    return m_mediaModel;
+}
+
+/**
+ * @return The multi-media model (warning may be NULL) const method
+ */
+const ModelMedia*
+Brain::getMediaModel() const
+{
+    return m_mediaModel;
 }
 
 /**
@@ -6496,21 +6855,6 @@ Brain::getAllDataFilesWithDataFileType(const DataFileTypeEnum::Enum dataFileType
     
     getAllDataFilesWithDataFileTypes(dataFileTypes,
                                      caretDataFilesOut);
-
-//    caretDataFilesOut.clear();
-//    
-//    std::vector<CaretDataFile*> allDataFiles;
-//    getAllDataFiles(allDataFiles,
-//                    true);
-//    
-//    for (std::vector<CaretDataFile*>::iterator iter = allDataFiles.begin();
-//         iter != allDataFiles.end();
-//         iter++) {
-//        CaretDataFile* cdf = *iter;
-//        if (cdf->getDataFileType() == dataFileType) {
-//            caretDataFilesOut.push_back(cdf);
-//        }
-//    }
 }
 
 
@@ -6566,10 +6910,6 @@ Brain::getAllDataFiles(std::vector<CaretDataFile*>& allDataFilesOut,
                            m_connectivityMatrixDenseFiles.begin(),
                            m_connectivityMatrixDenseFiles.end());
     
-//    allDataFilesOut.insert(allDataFilesOut.end(),
-//                           m_connectivityDataSeriesFiles.begin(),
-//                           m_connectivityDataSeriesFiles.end());
-    
     /*
      * By placing the dynamic connectivity file immediately after
      * its parent data-series file, they will appear in this
@@ -6589,12 +6929,6 @@ Brain::getAllDataFiles(std::vector<CaretDataFile*>& allDataFilesOut,
         }
     }
 
-//    std::vector<CiftiConnectivityMatrixDenseDynamicFile*> denseDynFiles;
-//    getConnectivityMatrixDenseDynamicFiles(denseDynFiles);
-//    allDataFilesOut.insert(allDataFilesOut.end(),
-//                           denseDynFiles.begin(),
-//                           denseDynFiles.end());
-    
     allDataFilesOut.insert(allDataFilesOut.end(),
                            m_connectivityDenseLabelFiles.begin(),
                            m_connectivityDenseLabelFiles.end());
@@ -6718,48 +7052,6 @@ Brain::getAllModifiedFiles(const std::vector<DataFileTypeEnum::Enum>& excludeThe
     }
 }
 
-
-///**
-// * Are any data files modified (including spec file)?
-// * @param excludeTheseDataTypes
-// *    Do not check the modification status of any data files whose
-// *    data type is contained in this parameter.
-// */
-//bool
-//Brain::areFilesModified(const std::vector<DataFileTypeEnum::Enum>& excludeTheseDataTypes)
-//{
-//    if (std::find(excludeTheseDataTypes.begin(),
-//                  excludeTheseDataTypes.end(),
-//                  DataFileTypeEnum::SPECIFICATION) == excludeTheseDataTypes.end()) {
-//        if (m_specFile->isModified()) {
-//            return true;
-//        }
-//    }
-//    
-//    std::vector<CaretDataFile*> dataFiles;
-//    getAllDataFiles(dataFiles);
-//    
-//    for (std::vector<CaretDataFile*>::iterator iter = dataFiles.begin();
-//         iter != dataFiles.end();
-//         iter++) {
-//        CaretDataFile* cdf = *iter;
-//        
-//        /**
-//         * Ignore files whose data type is excluded.
-//         */
-//        if (std::find(excludeTheseDataTypes.begin(),
-//                      excludeTheseDataTypes.end(),
-//                      cdf->getDataFileType()) == excludeTheseDataTypes.end()) {
-//            if (cdf->isModified()) {
-//                return true;
-//            }
-//        }
-//    }
-//    
-//    return false;
-//}
-
-
 /**
  * Write a data file.
  * @param caretDataFile
@@ -6855,10 +7147,10 @@ Brain::writeDataFile(CaretDataFile* caretDataFile)
         case DataFileTypeEnum::SCENE:
         {
             /*
-             * Add to recent scene files
+             * Add to recent scene/spec files
              */
             CaretPreferences* prefs = SessionManager::get()->getCaretPreferences();
-            prefs->addToPreviousSceneFiles(caretDataFile->getFileName());
+            prefs->addToRecentFilesAndOrDirectories(caretDataFile->getFileName());
         }
             break;
         case DataFileTypeEnum::SPECIFICATION:
@@ -7504,7 +7796,11 @@ Brain::saveToScene(const SceneAttributes* sceneAttributes,
         sceneClass->addClass(ff->getGroupAndNameHierarchyModel()->saveToScene(sceneAttributes,
                                                          ff->getFileNameNoPath()));
     }
-    
+    for (auto lf : m_volumeFiles) {
+        sceneClass->addClass(lf->getGroupAndNameHierarchyModel()->saveToScene(sceneAttributes,
+                                                                              lf->getFileNameNoPath()));
+    }
+
     sceneClass->addClass(m_identificationManager->saveToScene(sceneAttributes,
                                                               "m_identificationManager"));
     
@@ -7647,8 +7943,6 @@ Brain::restoreFromScene(const SceneAttributes* sceneAttributes,
                         bestMatchingSceneClass = const_cast<SceneClass*>(fileSceneClass);
                         bestMatchingCount      = matchCount;
                     }
-//                    caretDataFile->restoreFromScene(sceneAttributes,
-//                                                    fileSceneClass);
                 }
             }
             
@@ -7673,6 +7967,11 @@ Brain::restoreFromScene(const SceneAttributes* sceneAttributes,
         trajFile->finishRestorationOfScene();
     }
 
+    /*
+     * Some files are sorted by name
+     */
+    sortDataFilesByFileNameNoPath();
+    
     /*
      * Restore members
      */
@@ -7780,6 +8079,10 @@ Brain::restoreFromScene(const SceneAttributes* sceneAttributes,
         ff->getGroupAndNameHierarchyModel()->restoreFromScene(sceneAttributes,
                                                               sceneClass->getClass(ff->getFileNameNoPath()));
     }
+    for (auto vf : m_volumeFiles) {
+        vf->getGroupAndNameHierarchyModel()->restoreFromScene(sceneAttributes,
+                                                              sceneClass->getClass(vf->getFileNameNoPath()));
+    }
 
     m_identificationManager->restoreFromScene(sceneAttributes,
                                               sceneClass->getClass("m_identificationManager"));
@@ -7793,6 +8096,77 @@ Brain::restoreFromScene(const SceneAttributes* sceneAttributes,
     
     setSurfaceMatchingToAnatomical(m_surfaceMatchingToAnatomicalFlag);
 }
+
+/**
+ * @return The base directory for the loaded data files excluding Scene and Spec files
+ * @param validFlagOut
+ *    On output, it will be true if the returne
+ */
+std::unique_ptr<CaretResult>
+Brain::getBaseDirectoryForLoadedDataFiles(AString& baseDirectoryOut) const
+{
+    baseDirectoryOut.clear();
+    
+    std::vector<CaretDataFile*> allDataFilesOrig;
+    getAllDataFiles(allDataFilesOrig);
+    
+    std::set<SceneFile::FileAndSceneIndicesInfo> fileInfo;
+
+    AString modifiedFileNames;
+    std::vector<CaretDataFile*> allDataFiles;
+    for (auto& df : allDataFilesOrig) {
+        CaretAssert(df);
+        switch (df->getDataFileType()) {
+            case DataFileTypeEnum::SCENE:
+                break;
+            default:
+                if (df->supportsWriting()) {
+                    if (df->isModified()) {
+                        modifiedFileNames.appendWithNewLine(df->getFileNameNoPath());
+                    }
+                    allDataFiles.push_back(df);
+
+                    /*
+                     * Test to see if this file is already in the output file info
+                     */
+                    const float sceneIndex(1);
+                    const AString pathName(FileInformation(df->getFileName()).getAbsoluteFilePath());
+                    bool foundFlag = false;
+                    for (auto& dfi : fileInfo) {
+                        if (dfi.m_dataFileName == pathName) {
+                            dfi.addSceneIndex(sceneIndex);
+                            foundFlag = true;
+                            break;
+                        }
+                    }
+                    
+                    if ( ! foundFlag) {
+                        fileInfo.insert(SceneFile::FileAndSceneIndicesInfo(pathName,
+                                                                           sceneIndex));
+                    }
+                }
+                break;
+        }
+    }
+    
+    if (fileInfo.empty()) {
+        return CaretResult::newInstanceError("No data files (excluding Scene and Spec) are loaded for finding base path");
+    }
+    
+    std::vector<AString> missingFileNames;
+    AString errorMessage;
+    AString emptySceneFileName;
+    
+    if (SceneFile::findBaseDirectoryForDataFiles(emptySceneFileName,
+                                                 fileInfo,
+                                                 baseDirectoryOut,
+                                                 missingFileNames,
+                                                 errorMessage)) {
+        return CaretResult::newInstanceSuccess();
+    }
+    return CaretResult::newInstanceError(errorMessage);
+}
+
 
 /**
  * Load the default row/column for a matrix charting file.
@@ -7879,6 +8253,15 @@ Brain::getIdentificationManager()
     return m_identificationManager;
 }
 
+/**
+ * @return The identification manager.
+ */
+const IdentificationManager*
+Brain::getIdentificationManager() const
+{
+    return m_identificationManager;
+}
+
 /** Region of interest for highlighting brainordinates */
 BrainordinateRegionOfInterest*
 Brain::getBrainordinateHighlightRegionOfInterest()
@@ -7947,6 +8330,15 @@ Brain::setSurfaceMatchingToAnatomical(const bool matchStatus)
     for (auto bs : m_brainStructures) {
         bs->matchSurfacesToPrimaryAnatomical(m_surfaceMatchingToAnatomicalFlag);
     }
+}
+
+/**
+ * @return The active scene (NULL if no active scene)
+ */
+const Scene*
+Brain::getActiveScene() const
+{
+    return m_activeScene;
 }
 
 

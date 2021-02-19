@@ -22,6 +22,7 @@
 /*LICENSE_END*/
 
 #include <array>
+#include <deque>
 #include <map>
 #include <memory>
 
@@ -38,9 +39,13 @@ namespace caret {
     class BrowserTabContent;
     class BrowserWindowContent;
     class CaretPreferences;
+    class ChartTwoCartesianAxis;
+    class ChartTwoOverlaySet;
     class CiftiConnectivityMatrixDataFileManager;
     class CiftiFiberTrajectoryManager;
     class DataToolTipsManager;
+    class EventBrowserTabClose;
+    class EventBrowserTabDelete;
     class ImageCaptureSettings;
     class Model;
     class MovieRecorder;
@@ -91,6 +96,11 @@ namespace caret {
         
         virtual void restoreFromScene(const SceneAttributes* sceneAttributes,
                                       const SceneClass* sceneClass);
+        
+        bool hasSceneWithChartOld() const;
+        
+        void resetSceneWithChartOld();
+        
     private:
         SessionManager();
         
@@ -116,11 +126,36 @@ namespace caret {
         void restorePreferencesFromScene(const SceneAttributes* sceneAttributes,
                                          const SceneClass* sceneClass);
         
+        int32_t getMaximumManualTabStackOrder() const;
+        
+        std::vector<BrowserTabContent*> getActiveBrowserTabs();
+        
+        BrowserTabContent* createNewBrowserTab();
+        
+        bool closeBrowserTab(EventBrowserTabClose* closeTabEvent,
+                             AString& errorMessageOut);
+        
+        bool deleteBrowserTab(EventBrowserTabDelete* deleteTabEvent,
+                              AString& errorMessageOut);
+        
+        BrowserTabContent* reopenLastClosedTab(AString& errorMessageOut);
+        
+        void deleteAllBrowserTabs();
+        
+        bool isTabInClosedBrowserTabs(const int32_t tabIndex);
+        
         /** The session manager */
         static SessionManager* s_singletonSessionManager;
+                
+        /** Active  browser tabs */
+        std::array<BrowserTabContent*, BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_TABS> m_browserTabs;
         
-        /** The browser tabs */
-        BrowserTabContent* m_browserTabs[BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_TABS];  
+        /**
+         * Closed browser tabs
+         * Tab at front is reopened.
+         * If there is a request to create a new tab and none are available, tab at back is deleted so a new tab can be created
+         */
+        std::deque<BrowserTabContent*> m_closedBrowserTabs;
         
         /** The browser window content */
         std::array<BrowserWindowContent*, BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_WINDOWS> m_browserWindowContent;
@@ -150,6 +185,10 @@ namespace caret {
         std::map<SpacerTabIndex, SpacerTabContent*> m_spacerTabsMap;
         
         std::unique_ptr<MovieRecorder> m_movieRecorder;
+        
+        std::vector<std::unique_ptr<ChartTwoCartesianAxis>> m_chartingAxisDisplayGroups;
+        
+        bool m_sceneRestoredWithChartOldFlag = false;
     };
     
 #ifdef __SESSION_MANAGER_DECLARE__

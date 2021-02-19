@@ -31,7 +31,7 @@
 #include "AnnotationCreateDialog.h"
 #include "AnnotationFile.h"
 #include "AnnotationManager.h"
-#include "AnnotationOneDimensionalShape.h"
+#include "AnnotationTwoCoordinateShape.h"
 #include "AnnotationRedoUndoCommand.h"
 #include "AnnotationText.h"
 #include "AnnotationTextEditorDialog.h"
@@ -92,7 +92,7 @@ m_newAnnotationCreatedByContextMenu(NULL)
     const int32_t browserWindexIndex = m_mouseEvent.getBrowserWindowIndex();
     std::vector<std::pair<Annotation*, AnnotationFile*> > selectedAnnotations;
     AnnotationManager* annotationManager = GuiManager::get()->getBrain()->getAnnotationManager();
-    annotationManager->getAnnotationsSelectedForEditingIncludingLabels(browserWindexIndex,
+    annotationManager->getAnnotationsAndFilesSelectedForEditingIncludingLabels(browserWindexIndex,
                                                                        selectedAnnotations);
     
     m_annotationFile = NULL;
@@ -103,6 +103,9 @@ m_newAnnotationCreatedByContextMenu(NULL)
         allSelectedAnnotationsDeletableFlag = false;
     }
     
+    bool cutCopyValidFlag(true);
+    int32_t tabIndex(-1);
+    m_tabSpaceFileAndAnnotations.clear();
     m_threeDimCoordAnnotations.clear();
     for (std::vector<std::pair<Annotation*, AnnotationFile*> >::iterator iter = selectedAnnotations.begin();
          iter != selectedAnnotations.end();
@@ -124,6 +127,13 @@ m_newAnnotationCreatedByContextMenu(NULL)
                 threeDimCoordFlag = true;
                 break;
             case AnnotationCoordinateSpaceEnum::TAB:
+                if (tabIndex < 0) {
+                    tabIndex = ann->getTabIndex();
+                }
+                if (tabIndex == ann->getTabIndex()) {
+                    m_tabSpaceFileAndAnnotations.push_back(std::make_pair(iter->second,
+                                                                          ann));
+                }
                 break;
             case AnnotationCoordinateSpaceEnum::VIEWPORT:
                 break;
@@ -137,11 +147,25 @@ m_newAnnotationCreatedByContextMenu(NULL)
         if ( ! ann->testProperty(Annotation::Property::DELETION)) {
             allSelectedAnnotationsDeletableFlag = false;
         }
+        
+        if ( !ann->testProperty(Annotation::Property::COPY_CUT_PASTE)) {
+            cutCopyValidFlag = false;
+        }
     }
     const bool haveThreeDimCoordAnnotationsFlag = ( ! m_threeDimCoordAnnotations.empty());
 
+    /*
+     * For tab space annotations, all selected annotations MUST be in the same tab
+     */
+    if (m_tabSpaceFileAndAnnotations.size() != selectedAnnotations.size()) {
+        m_tabSpaceFileAndAnnotations.clear();
+    }
+    
+    bool oneAnnotationSelectedFlag(false);
     bool oneDeletableAnnotationSelectedFlag = false;
     if (selectedAnnotations.size() == 1) {
+        oneAnnotationSelectedFlag = true;
+        
         CaretAssertVectorIndex(selectedAnnotations, 0);
         m_annotationFile = selectedAnnotations[0].second;
         m_annotation     = selectedAnnotations[0].first;
@@ -171,14 +195,16 @@ m_newAnnotationCreatedByContextMenu(NULL)
      */
     QAction* cutAction = addAction(BrainBrowserWindowEditMenuItemEnum::toGuiName(BrainBrowserWindowEditMenuItemEnum::CUT),
                                    this, SLOT(cutAnnnotation()));
-    cutAction->setEnabled(oneDeletableAnnotationSelectedFlag);
+    cutAction->setEnabled(oneDeletableAnnotationSelectedFlag
+                          && cutCopyValidFlag);
     
     /*
      * Copy
      */
     QAction* copyAction = addAction(BrainBrowserWindowEditMenuItemEnum::toGuiName(BrainBrowserWindowEditMenuItemEnum::COPY),
                                     this, SLOT(copyAnnotationToAnnotationClipboard()));
-    copyAction->setEnabled(oneDeletableAnnotationSelectedFlag);
+    copyAction->setEnabled(oneDeletableAnnotationSelectedFlag
+                           && cutCopyValidFlag);
 
     /*
      * Delete
@@ -215,11 +241,41 @@ m_newAnnotationCreatedByContextMenu(NULL)
     addSeparator();
 
     /*
-     * Select All annotations
+     * De/Select All annotations
      */
+    QAction* deselectAction = addAction(BrainBrowserWindowEditMenuItemEnum::toGuiName(BrainBrowserWindowEditMenuItemEnum::DESELECT_ALL),
+                                        this, SLOT(deselectAllAnnotations()));
+    deselectAction->setEnabled( ! selectedAnnotations.empty());
     addAction(BrainBrowserWindowEditMenuItemEnum::toGuiName(BrainBrowserWindowEditMenuItemEnum::SELECT_ALL),
               this, SLOT(selectAllAnnotations()));
     
+    /*
+     * Separator
+     */
+    addSeparator();
+
+    /*
+     * Order Operations
+     */
+    QAction* bringToFrontAction = addAction("Bring to Front");
+    QObject::connect(bringToFrontAction, &QAction::triggered,
+                     this, [=]() { processAnnotationOrderOperation(AnnotationStackingOrderTypeEnum::BRING_TO_FRONT); });
+    QAction* bringForwardAction = addAction("Bring Forward");
+    QObject::connect(bringForwardAction, &QAction::triggered,
+                     this, [=]() { processAnnotationOrderOperation(AnnotationStackingOrderTypeEnum::BRING_FORWARD); });
+    QAction* sendToBackAction = addAction("Send to Back");
+    QObject::connect(sendToBackAction, &QAction::triggered,
+                     this, [=]() { processAnnotationOrderOperation(AnnotationStackingOrderTypeEnum::SEND_TO_BACK); });
+    QAction* sendBackwardAction = addAction("Send Backward");
+    QObject::connect(sendBackwardAction, &QAction::triggered,
+                     this, [=]() { processAnnotationOrderOperation(AnnotationStackingOrderTypeEnum::SEND_BACKWARD); });
+    
+    bringToFrontAction->setEnabled(oneAnnotationSelectedFlag);
+    bringForwardAction->setEnabled(oneAnnotationSelectedFlag);
+    sendToBackAction->setEnabled(oneAnnotationSelectedFlag);
+    sendBackwardAction->setEnabled(oneAnnotationSelectedFlag);
+    
+
     /*
      * Separator
      */
@@ -349,8 +405,9 @@ UserInputModeAnnotationsContextMenu::deleteAnnotations()
         AnnotationRedoUndoCommand* undoCommand = new AnnotationRedoUndoCommand();
         undoCommand->setModeDeleteAnnotations(selectedAnnotations);
         AString errorMessage;
-        if ( ! annotationManager->applyCommand(undoCommand,
-                                    errorMessage)) {
+        if ( ! annotationManager->applyCommand(m_userInputModeAnnotations->getUserInputMode(),
+                                               undoCommand,
+                                               errorMessage)) {
             WuQMessageBox::errorOk(this,
                                    errorMessage);
         }
@@ -378,6 +435,15 @@ UserInputModeAnnotationsContextMenu::pasteSpecialAnnotationFromAnnotationClipboa
 }
 
 /**
+ * Deselect all annotations in the window.
+ */
+void
+UserInputModeAnnotationsContextMenu::deselectAllAnnotations()
+{
+    m_userInputModeAnnotations->processDeselectAllAnnotations();
+}
+
+/**
  * Select all annotations in the window.
  */
 void
@@ -385,7 +451,6 @@ UserInputModeAnnotationsContextMenu::selectAllAnnotations()
 {
     m_userInputModeAnnotations->processSelectAllAnnotations();
 }
-
 
 /**
  * Set the text for an annotation.
@@ -475,7 +540,7 @@ UserInputModeAnnotationsContextMenu::turnOnDisplayInGroup(QAction* action)
     }
     
     if (displayGroup == DisplayGroupEnum::DISPLAY_GROUP_TAB) {
-        CaretAssert(0);  // TAB NOT ALLOWED
+        CaretAssert(0);  /* TAB NOT ALLOWED */
         return;
     }
     
@@ -520,7 +585,7 @@ UserInputModeAnnotationsContextMenu::createTurnOnInDisplayGroupMenu()
 QMenu*
 UserInputModeAnnotationsContextMenu::createDuplicateTabSpaceAnnotationMenu()
 {
-    if (m_annotation == NULL) {
+    if (m_tabSpaceFileAndAnnotations.empty()) {
         return NULL;
     }
     
@@ -528,29 +593,24 @@ UserInputModeAnnotationsContextMenu::createDuplicateTabSpaceAnnotationMenu()
     EventManager::get()->sendEvent(tabIndicesEvent.getPointer());
     const std::vector<BrowserTabContent*> allTabs = tabIndicesEvent.getAllBrowserTabs();
     
-    bool menuValidFlag = false;
-    if (m_annotation->getCoordinateSpace() == AnnotationCoordinateSpaceEnum::TAB) {
-        if (allTabs.size() > 1) {
-            menuValidFlag = true;
-        }
+    if (allTabs.size() < 1) {
+        return NULL;
     }
     
     QMenu* menu = new QMenu("Duplicate to Tab");
     QObject::connect(menu, SIGNAL(triggered(QAction*)),
                      this, SLOT(duplicateAnnotationSelected(QAction*)));
     
-    if (menuValidFlag) {
-        for (BrowserTabContent* tabContent : allTabs) {
-            if (tabContent->getTabNumber() != m_annotation->getTabIndex()) {
-                QAction* action = menu->addAction(tabContent->getTabName());
-                action->setData((int)tabContent->getTabNumber());
-            }
+    CaretAssertVectorIndex(m_tabSpaceFileAndAnnotations, 0);
+    CaretAssert(m_tabSpaceFileAndAnnotations[0].second->getCoordinateSpace() == AnnotationCoordinateSpaceEnum::TAB);
+    const int32_t tabIndex = m_tabSpaceFileAndAnnotations[0].second->getTabIndex();
+    for (BrowserTabContent* tabContent : allTabs) {
+        if (tabContent->getTabNumber() != tabIndex) {
+            QAction* action = menu->addAction(tabContent->getTabName());
+            action->setData((int)tabContent->getTabNumber());
         }
     }
-    else {
-        menu->setEnabled(false);
-    }
-    
+
     return menu;
 }
 
@@ -564,33 +624,52 @@ void
 UserInputModeAnnotationsContextMenu::duplicateAnnotationSelected(QAction* action)
 {
     CaretAssert(action);
-    CaretAssert(m_annotationFile);
-    CaretAssert(m_annotation);
+    CaretAssert(m_tabSpaceFileAndAnnotations.size() > 0);
     
     AnnotationManager* annotationManager = GuiManager::get()->getBrain()->getAnnotationManager();
     
     const int32_t tabIndex = action->data().toInt();
     
-    Annotation* annCopy = m_annotation->clone();
-    annCopy->setTabIndex(tabIndex);
+    std::vector<std::pair<AnnotationFile*, Annotation*>> fileAnnCopies;
+    for (const auto& tabAnn : m_tabSpaceFileAndAnnotations) {
+        Annotation* annCopy = tabAnn.second->clone();
+        annCopy->setTabIndex(tabIndex);
+        
+        DisplayPropertiesAnnotation* dpa = GuiManager::get()->getBrain()->getDisplayPropertiesAnnotation();
+        dpa->updateForNewAnnotation(annCopy);
+        
+        fileAnnCopies.push_back(std::make_pair(tabAnn.first,
+                                               annCopy));
+    }
     
-    DisplayPropertiesAnnotation* dpa = GuiManager::get()->getBrain()->getDisplayPropertiesAnnotation();
-    dpa->updateForNewAnnotation(annCopy);
 
     AnnotationRedoUndoCommand* undoCommand = new AnnotationRedoUndoCommand();
-    undoCommand->setModeDuplicateAnnotation(m_annotationFile,
-                                            annCopy);
+    undoCommand->setModeDuplicateAnnotations(fileAnnCopies);
     AString errorMessage;
-    if ( ! annotationManager->applyCommand(undoCommand,
+    if ( ! annotationManager->applyCommand(m_userInputModeAnnotations->getUserInputMode(),
+                                           undoCommand,
                                            errorMessage)) {
         WuQMessageBox::errorOk(this,
                                errorMessage);
     }
-    annotationManager->selectAnnotationForEditing(m_mouseEvent.getBrowserWindowIndex(),
-                                                  AnnotationManager::SELECTION_MODE_SINGLE,
-                                                  false,
-                                                  annCopy);
-    
+
+    bool firstTimeFlag(true);
+    for (auto& annCopy : fileAnnCopies) {
+        if (firstTimeFlag) {
+            firstTimeFlag = false;
+            annotationManager->selectAnnotationForEditing(m_mouseEvent.getBrowserWindowIndex(),
+                                                          AnnotationManager::SELECTION_MODE_SINGLE,
+                                                          false, /* shift key down */
+                                                          annCopy.second);
+        }
+        else {
+            annotationManager->selectAnnotationForEditing(m_mouseEvent.getBrowserWindowIndex(),
+                                                          AnnotationManager::SELECTION_MODE_EXTENDED,
+                                                          true, /* shift key down */
+                                                          annCopy.second);
+        }
+    }
+
     EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
     EventManager::get()->sendEvent(EventUserInterfaceUpdate().getPointer());
 }
@@ -634,7 +713,8 @@ UserInputModeAnnotationsContextMenu::applyGrouping(const AnnotationGroupingModeE
     AnnotationManager* annMan = GuiManager::get()->getBrain()->getAnnotationManager();
     
     AString errorMessage;
-    if ( ! annMan->applyGroupingMode(m_mouseEvent.getBrowserWindowIndex(),
+    if ( ! annMan->applyGroupingMode(m_userInputModeAnnotations->getUserInputMode(),
+                                     m_mouseEvent.getBrowserWindowIndex(),
                                      grouping,
                                      errorMessage)) {
         WuQMessageBox::errorOk(this,
@@ -643,6 +723,41 @@ UserInputModeAnnotationsContextMenu::applyGrouping(const AnnotationGroupingModeE
     
     EventManager::get()->sendSimpleEvent(EventTypeEnum::EVENT_ANNOTATION_TOOLBAR_UPDATE);
     EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+}
+
+/**
+ * Called to process an annotation order operation
+ *
+ * @param orderType
+ *     The ordering type
+ */
+void
+UserInputModeAnnotationsContextMenu::processAnnotationOrderOperation(const AnnotationStackingOrderTypeEnum::Enum orderType)
+{
+    const int32_t browserWindowIndex = m_mouseEvent.getBrowserWindowIndex();
+    
+    AnnotationManager* annMan = GuiManager::get()->getBrain()->getAnnotationManager();
+    std::vector<Annotation*> selectedAnnotations = annMan->getAnnotationsSelectedForEditing(browserWindowIndex);
+    if (selectedAnnotations.size() == 1) {
+        CaretAssertVectorIndex(selectedAnnotations, 0);
+        Annotation* selectedAnn = selectedAnnotations[0];
+        std::vector<Annotation*> sameSpaceAnnotations = annMan->getAnnotationsDrawnInSameWindowAndSpace(selectedAnn,
+                                                                                                        browserWindowIndex);
+        if ( ! sameSpaceAnnotations.empty()) {
+            sameSpaceAnnotations.push_back(selectedAnn);
+            
+            AString errorMessage;
+            if ( ! annMan->applyStackingOrder(sameSpaceAnnotations,
+                                              selectedAnn,
+                                              orderType,
+                                              browserWindowIndex,
+                                              errorMessage)) {
+                WuQMessageBox::errorOk(this,
+                                       errorMessage);
+            }
+            EventManager::get()->sendEvent(EventUserInterfaceUpdate().getPointer());
+        }
+    }
 }
 
 

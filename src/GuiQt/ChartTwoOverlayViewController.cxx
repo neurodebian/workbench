@@ -31,37 +31,47 @@
 #include <QMenu>
 #include <QMessageBox>
 #include <QPainter>
+#include <QPainterPath>
 #include <QSpinBox>
 #include <QToolButton>
-
-#include "CaretAssert.h"
-using namespace caret;
+#include <QWidgetAction>
 
 #include "AnnotationColorBar.h"
 #include "Brain.h"
+#include "BrainBrowserWindow.h"
+#include "CardinalDirectionEnumMenu.h"
+#include "CaretAssert.h"
+#include "CaretColorToolButton.h"
+#include "CaretColorEnumMenu.h"
 #include "CaretMappableDataFile.h"
+#include "ChartTwoLineLayerNormalizationWidget.h"
 #include "ChartTwoOverlay.h"
 #include "ChartableTwoFileDelegate.h"
-#include "ChartableTwoFileHistogramChart.h"
-#include "ChartableTwoFileLineSeriesChart.h"
-#include "ChartableTwoFileMatrixChart.h"
+#include "CursorDisplayScoped.h"
+#include "ElapsedTimer.h"
+#include "EnumComboBoxTemplate.h"
 #include "EventDataFileReload.h"
 #include "EventGraphicsUpdateAllWindows.h"
 #include "EventGraphicsUpdateOneWindow.h"
 #include "EventManager.h"
 #include "EventMapYokingSelectMap.h"
 #include "EventOverlaySettingsEditorDialogRequest.h"
+#include "EventProgressUpdate.h"
 #include "EventSurfaceColoringInvalidate.h"
 #include "EventUserInterfaceUpdate.h"
 #include "FileInformation.h"
 #include "FilePathNamePrefixCompactor.h"
 #include "GuiManager.h"
 #include "MapYokingGroupComboBox.h"
+#include "ProgressReportingDialog.h"
 #include "UsernamePasswordWidget.h"
+#include "WuQDoubleSpinBox.h"
 #include "WuQFactory.h"
 #include "WuQMacroManager.h"
 #include "WuQMessageBox.h"
 #include "WuQtUtilities.h"
+
+using namespace caret;
 
 /**
  * \class caret::ChartTwoOverlayViewController 
@@ -91,15 +101,16 @@ ChartTwoOverlayViewController::ChartTwoOverlayViewController(const Qt::Orientati
 : QObject(parent),
 m_browserWindowIndex(browserWindowIndex),
 m_chartOverlayIndex(chartOverlayIndex),
-m_chartOverlay(NULL)
+m_chartOverlay(NULL),
+m_parentObjectName(parentObjectName)
 {
     int minComboBoxWidth = 200;
-    int maxComboBoxWidth = 100000; //400;
+    int maxComboBoxWidth = 100000;
     if (orientation == Qt::Horizontal) {
         minComboBoxWidth = 50;
         maxComboBoxWidth = 100000;
     }
-    const QComboBox::SizeAdjustPolicy comboSizePolicy = QComboBox::AdjustToContentsOnFirstShow; //QComboBox::AdjustToContents;
+    const QComboBox::SizeAdjustPolicy comboSizePolicy = QComboBox::AdjustToContentsOnFirstShow;
     
     WuQMacroManager* macroManager = WuQMacroManager::instance();
     CaretAssert(macroManager);
@@ -112,7 +123,7 @@ m_chartOverlay(NULL)
     /*
      * Enabled Check Box
      */
-    const QString enabledCheckboxText = ((orientation == Qt::Horizontal) ? " " : "On");
+    const QString enabledCheckboxText = ((orientation == Qt::Horizontal) ? " " : "On ");
     m_enabledCheckBox = new QCheckBox(enabledCheckboxText);
     m_enabledCheckBox->setObjectName(objectNamePrefix
                                          + "OnOff");
@@ -125,7 +136,7 @@ m_chartOverlay(NULL)
     /*
      * Line Series Enabled Check Box
      */
-    const QString loadingCheckboxText = ((orientation == Qt::Horizontal) ? " " : "Load");
+    const QString loadingCheckboxText = ((orientation == Qt::Horizontal) ? " " : "Load ");
     m_lineSeriesLoadingEnabledCheckBox = new QCheckBox(loadingCheckboxText);
     QObject::connect(m_lineSeriesLoadingEnabledCheckBox, &QCheckBox::clicked,
                      this, &ChartTwoOverlayViewController::lineSeriesLoadingEnabledCheckBoxClicked);
@@ -186,20 +197,20 @@ m_chartOverlay(NULL)
     QIcon constructionIcon;
     const bool constructionIconValid = WuQtUtilities::loadIcon(":/LayersPanel/construction.png",
                                                                constructionIcon);
-    m_constructionAction = WuQtUtilities::createAction("C",
-                                                           "Add/Move/Remove Layers",
-                                                           this);
-    if (constructionIconValid) {
-        m_constructionAction->setIcon(constructionIcon);
-    }
     m_constructionToolButton = new QToolButton();
-    QMenu* constructionMenu = createConstructionMenu(m_constructionToolButton,
+    m_constructionToolButton->setToolTip("Add/Move/Remove Layers");
+    if (constructionIconValid) {
+        m_constructionToolButton->setIcon(constructionIcon);
+    }
+    else {
+        m_constructionToolButton->setText("C");
+    }
+    m_constructionMenu = createConstructionMenu(m_constructionToolButton,
                                                      (objectNamePrefix
                                                       + "ConstructionMenu:"),
                                                      descriptivePrefix);
-    m_constructionAction->setMenu(constructionMenu);
-    m_constructionToolButton->setDefaultAction(m_constructionAction);
-    m_constructionToolButton->setPopupMode(QToolButton::InstantPopup);
+    QObject::connect(m_constructionToolButton, &QToolButton::clicked,
+                     this, &ChartTwoOverlayViewController::constructionToolButtonClicked);
     
     /*
      * Matrix triangular view mode button
@@ -216,23 +227,130 @@ m_chartOverlay(NULL)
     m_matrixTriangularViewModeAction->setMenu(matrixTriangularViewModeMenu);
     m_matrixTriangularViewModeToolButton->setDefaultAction(m_matrixTriangularViewModeAction);
     m_matrixTriangularViewModeToolButton->setPopupMode(QToolButton::InstantPopup);
-    
 
     /*
-     * Axis location button
-     * Note: macro support is on each action in menu in createMatrixTriangularViewModeMenu
+     * Matrix opacity spin box
      */
-    m_axisLocationToolButton = new QToolButton();
-    m_axisLocationAction = WuQtUtilities::createAction("A",
-                                                       "Select location of vertical axis for the selected file",
-                                                       m_axisLocationToolButton);
-    QMenu* axisLocationMenu = createAxisLocationMenu(m_axisLocationToolButton,
-                                                     (objectNamePrefix
-                                                      + "VerticalAxisLocationMenu:"),
-                                                     descriptivePrefix);
-    m_axisLocationAction->setMenu(axisLocationMenu);
-    m_axisLocationToolButton->setDefaultAction(m_axisLocationAction);
-    m_axisLocationToolButton->setPopupMode(QToolButton::InstantPopup);
+    m_matrixOpacitySpinBox = new WuQDoubleSpinBox(this);
+    m_matrixOpacitySpinBox->setToolTip("Set opacity for matrix");
+    m_matrixOpacitySpinBox->setRange(0.0, 1.0);
+    m_matrixOpacitySpinBox->setDecimals(2);
+    m_matrixOpacitySpinBox->setSingleStep(0.05);
+    QObject::connect(m_matrixOpacitySpinBox, &WuQDoubleSpinBox::valueChanged,
+                     this, &ChartTwoOverlayViewController::matrixOpacityValueChanged);
+
+    /*
+     * Line layer color tool button
+     */
+    m_lineLayerColorToolButton = new CaretColorToolButton(CaretColorToolButton::CustomColorMode::EDITABLE,
+                                                          CaretColorToolButton::NoneColorMode::DISABLED);
+    QObject::connect(m_lineLayerColorToolButton, &CaretColorToolButton::colorSelected,
+                     this, &ChartTwoOverlayViewController::lineLayerColorSelected);
+    m_lineLayerColorToolButton->setToolTip("Set color for line layer charts");
+
+    /*
+     * Line layer tooltip offset button
+     */
+    const QString offTT("Set offset of tooltip containing (index, x, y) from selected point "
+                        "with cardinal and ordinal directions");
+    m_lineLayerToolTipOffsetToolButton = new QToolButton();
+    if (m_useIconInLineLayerToolTipOffsetButtonFlag) {
+        m_lineLayerToolTipOffsetToolButton->setIcon(createCardinalDirectionPixmap(m_lineLayerToolTipOffsetToolButton));
+    }
+    WuQtUtilities::setWordWrappedToolTip(m_lineLayerToolTipOffsetToolButton,
+                                         offTT);
+    QObject::connect(m_lineLayerToolTipOffsetToolButton, &QToolButton::clicked,
+                     this, &ChartTwoOverlayViewController::lineLayerToolTipOffsetToolButtonClicked);
+    
+    
+    /*
+     * Line layer normalization widget and menu
+     */
+    m_lineLayerNormalizationWidget = new ChartTwoLineLayerNormalizationWidget();
+    QWidgetAction* normalizationWidgetAction = new QWidgetAction(this);
+    normalizationWidgetAction->setDefaultWidget(m_lineLayerNormalizationWidget);
+    
+    m_lineLayerNormalizationToolButton = new QToolButton();
+    m_lineLayerNormalizationMenu = new QMenu(m_lineLayerNormalizationToolButton);
+    m_lineLayerNormalizationMenu->addAction(normalizationWidgetAction);
+    QObject::connect(m_lineLayerNormalizationMenu, &QMenu::aboutToShow,
+                     this, &ChartTwoOverlayViewController::lineLayerNormalizationMenuAboutToShow);
+    QObject::connect(m_lineLayerNormalizationMenu, &QMenu::aboutToHide,
+                     this, &ChartTwoOverlayViewController::lineLayerNormalizationMenuAboutToHide);
+
+    /*
+     * Line layer normalization action
+     */
+    const int greekMu(0x03bc);
+    const int greekSigma(0x03c3);
+    const QString normActionText(QString(greekMu)
+                                 + QString(greekSigma));
+    const QString normActionToolTipText("<html><body>"
+                                        "Transform chart data elements"
+                                        "</body></html>");
+    m_lineLayerNormalizationToolButton->setText(normActionText);
+    m_lineLayerNormalizationToolButton->setToolTip(normActionToolTipText);
+    m_lineLayerNormalizationToolButton->setObjectName(objectNamePrefix
+                                                      + ":LineLayerNormalizationToolButton");
+    WuQMacroManager::instance()->addMacroSupportToObject(m_lineLayerNormalizationToolButton,
+                                                         "Adjust Line Layer Normalization");
+
+    WuQtUtilities::setToolButtonStyleForQt5Mac(m_lineLayerNormalizationToolButton);
+    QObject::connect(m_lineLayerNormalizationToolButton, &QToolButton::clicked,
+                     this, &ChartTwoOverlayViewController::lineLayerNormalizationToolButtonClicked);
+    
+    /*
+     * Match button sizes
+     */
+    std::vector<QWidget*> toolButtons {
+        m_lineLayerColorToolButton,
+        m_lineLayerToolTipOffsetToolButton
+    } ;
+    WuQtUtilities::matchWidgetSizes(toolButtons);
+    m_lineLayerNormalizationToolButton->setFixedHeight(m_lineLayerColorToolButton->height());
+    
+    /*
+     * Line layer width
+     */
+    m_lineLayerWidthSpinBox = new WuQDoubleSpinBox(this);
+    m_lineLayerWidthSpinBox->setToolTip("Set line width for line layer charts");
+    m_lineLayerWidthSpinBox->setRangePercentage(0.0, 100.0);
+    m_lineLayerWidthSpinBox->setSingleStepPercentage(0.1);
+    m_lineLayerWidthSpinBox->setDecimals(1);
+    m_lineLayerWidthSpinBox->getWidget()->setFixedWidth(60);
+    QObject::connect(m_lineLayerWidthSpinBox, &WuQDoubleSpinBox::valueChanged,
+                     this, &ChartTwoOverlayViewController::lineLayerLineWidthChanged);
+    
+    /*
+     * Seledted point check box and spin box
+     */
+    const QString spinToolTipText("Set index of selected point.  Index may also be set "
+                                  "by clicking the mouse over the line in the chart "
+                                  "graphics.  Index can be "
+                                  "incremented by placing mouse over the "
+                                  "line in the chart graphics and pressing the right or up "
+                                  "arrow keys and decremented using the left or down "
+                                  "arrow keys (it may be necessary to click in the "
+                                  "chart graphics for the arrow keys to function).");
+    const QString activeToolTip("OFF - No symbol displayed\n"
+                                "ON  - Ring drawn at selected point\n"
+                                "ACTIVE - Circle drawn at selected point\n"
+                                "         arrow right/left arrow keys\n"
+                                "         in chart drawing region\n"
+                                "         increment/decrement point index");
+    m_lineLayerActiveComboBox = new EnumComboBoxTemplate(this);
+    m_lineLayerActiveComboBox->setup<ChartTwoOverlayActiveModeEnum,ChartTwoOverlayActiveModeEnum::Enum>();
+    QObject::connect(m_lineLayerActiveComboBox, SIGNAL(itemActivated()),
+                     this, SLOT(lineLayerActiveModeEnumComboBoxItemActivated()));
+    m_lineLayerActiveComboBox->setToolTip(activeToolTip);
+    
+    m_selectedPointIndexSpinBox = new QSpinBox();
+    m_selectedPointIndexSpinBox->setToolTip("Set index of selected point");
+    WuQtUtilities::setWordWrappedToolTip(m_selectedPointIndexSpinBox,
+                                         spinToolTipText);
+    m_selectedPointIndexSpinBox->setSingleStep(1);
+    QObject::connect(m_selectedPointIndexSpinBox, QOverload<int>::of(&QSpinBox::valueChanged),
+                     this, &ChartTwoOverlayViewController::selectedPointIndexSpinBoxValueChanged);
     
     /*
      * Map file Selection Check Box
@@ -287,7 +405,7 @@ m_chartOverlay(NULL)
     QObject::connect(m_mapRowOrColumnIndexSpinBox, SIGNAL(valueChanged(int)),
                      this, SLOT(mapRowOrColumnIndexSpinBoxValueChanged(int)));
     m_mapRowOrColumnIndexSpinBox->setToolTip("Select map/row/column by its index");
-    m_mapRowOrColumnIndexSpinBox->setRange(1, 9999); // fix size for 4 digits
+    m_mapRowOrColumnIndexSpinBox->setRange(1, 9999); /* fix size for 4 digits */
     m_mapRowOrColumnIndexSpinBox->setFixedSize(m_mapRowOrColumnIndexSpinBox->sizeHint());
     m_mapRowOrColumnIndexSpinBox->setRange(1, 1);
     m_mapRowOrColumnIndexSpinBox->setValue(1);
@@ -360,7 +478,7 @@ ChartTwoOverlayViewController::fileComboBoxSelected(int indx)
     if (m_chartOverlay == NULL) {
         return;
     }
-    
+
     void* pointer = m_mapFileComboBox->itemData(indx).value<void*>();
     CaretMappableDataFile* file = (CaretMappableDataFile*)pointer;
     m_chartOverlay->setSelectionData(file, -1);
@@ -369,6 +487,11 @@ ChartTwoOverlayViewController::fileComboBoxSelected(int indx)
     m_mapRowOrColumnYokingGroupComboBox->validateYokingChange(m_chartOverlay);
     updateUserInterfaceAndGraphicsWindow();
     updateOverlaySettingsEditor();
+    
+    /*
+     * User interface update may cause loss of focus so restore it
+     */
+    m_mapFileComboBox->setFocus();
 }
 
 /**
@@ -496,7 +619,8 @@ ChartTwoOverlayViewController::enabledCheckBoxClicked(bool checked)
         return;
     }
     m_chartOverlay->setEnabled(checked);
-    
+    updateViewController(m_chartOverlay);
+
     const MapYokingGroupEnum::Enum mapYoking = m_chartOverlay->getMapYokingGroup();
     if (mapYoking != MapYokingGroupEnum::MAP_YOKING_GROUP_OFF) {
         CaretMappableDataFile* mapFile = NULL;
@@ -717,7 +841,7 @@ ChartTwoOverlayViewController::updateViewController(ChartTwoOverlay* chartOverla
         AString dataTypeName = DataFileTypeEnum::toOverlayTypeName(dataFile->getDataFileType());
         CaretAssertVectorIndex(displayNames, i);
         m_mapFileComboBox->addItem(displayNames[i],
-                                    qVariantFromValue((void*)dataFile));
+                                    QVariant::fromValue((void*)dataFile));
         if (dataFile == selectedFile) {
             selectedFileIndex = i;
         }
@@ -756,6 +880,8 @@ ChartTwoOverlayViewController::updateViewController(ChartTwoOverlay* chartOverla
             case ChartTwoDataTypeEnum::CHART_DATA_TYPE_INVALID:
                 break;
             case ChartTwoDataTypeEnum::CHART_DATA_TYPE_HISTOGRAM:
+                break;
+            case ChartTwoDataTypeEnum::CHART_DATA_TYPE_LINE_LAYER:
                 break;
             case ChartTwoDataTypeEnum::CHART_DATA_TYPE_LINE_SERIES:
                 break;
@@ -828,6 +954,8 @@ ChartTwoOverlayViewController::updateViewController(ChartTwoOverlay* chartOverla
             break;
         case ChartTwoDataTypeEnum::CHART_DATA_TYPE_HISTOGRAM:
             break;
+        case ChartTwoDataTypeEnum::CHART_DATA_TYPE_LINE_LAYER:
+            break;
         case ChartTwoDataTypeEnum::CHART_DATA_TYPE_LINE_SERIES:
             break;
         case ChartTwoDataTypeEnum::CHART_DATA_TYPE_MATRIX:
@@ -851,11 +979,6 @@ ChartTwoOverlayViewController::updateViewController(ChartTwoOverlay* chartOverla
     m_colorBarAction->blockSignals(false);
     
     /*
-     * Update construction button
-     */
-    m_constructionAction->setEnabled(true);
-    
-    /*
      * Update matrix triangular view mode
      */
     m_matrixTriangularViewModeAction->setEnabled(false);
@@ -874,23 +997,98 @@ ChartTwoOverlayViewController::updateViewController(ChartTwoOverlay* chartOverla
             m_matrixTriangularViewModeAction->setEnabled(true);
         }
     }
+        
+    /*
+     * Update matrix opacity
+     */
+    if (validOverlayAndFileFlag) {
+        m_matrixOpacitySpinBox->setValue(m_chartOverlay->getMatrixOpacity());
+    }
     
     /*
-     * Update vertical axis location
+     * Update line layer color, offset, and width tool button
      */
-    m_axisLocationAction->setEnabled(false);
+    m_lineLayerColorToolButton->setEnabled(false);
+    m_lineLayerWidthSpinBox->getWidget()->setEnabled(false);
+    m_lineLayerToolTipOffsetToolButton->setEnabled(false);
+    m_lineLayerNormalizationToolButton->setEnabled(false);
     if (validOverlayAndFileFlag) {
-        if (m_chartOverlay->isCartesianVerticalAxisLocationSupported()) {
-            m_axisLocationAction->setEnabled(true);
-            const ChartAxisLocationEnum::Enum axisLocation = m_chartOverlay->getCartesianVerticalAxisLocation();
-            for (auto& almd : m_axisLocationMenuData) {
-                if (std::get<0>(almd) == axisLocation) {
-                    updateAxisLocationAction(axisLocation);
-                    break;
-                }
-            }
+        m_lineLayerColorToolButton->setSelectedColor(m_chartOverlay->getLineLayerColor());
+        m_lineLayerWidthSpinBox->setValue(m_chartOverlay->getLineLayerLineWidth());
+        if (m_chartOverlay->getChartTwoDataType() == ChartTwoDataTypeEnum::CHART_DATA_TYPE_LINE_LAYER) {
+            m_lineLayerColorToolButton->setEnabled(true);
+            m_lineLayerWidthSpinBox->getWidget()->setEnabled(true);
+            m_lineLayerToolTipOffsetToolButton->setEnabled(true);
+            m_lineLayerNormalizationToolButton->setEnabled(true);
         }
     }
+    updateLineLayerToolTipOffsetToolButton();
+    
+    /*
+     * Update selected point checkbox and index
+     */
+    bool pointValidFlag(false);
+    if (validOverlayAndFileFlag) {
+        m_lineLayerActiveComboBox->setSelectedItem<ChartTwoOverlayActiveModeEnum,ChartTwoOverlayActiveModeEnum::Enum>(m_chartOverlay->getLineChartActiveMode());
+        m_selectedPointIndexSpinBox->setRange(0, m_chartOverlay->getSelectedLineChartNumberOfPoints() - 1);
+        QSignalBlocker spinBlocker(m_selectedPointIndexSpinBox);
+        m_selectedPointIndexSpinBox->setValue(m_chartOverlay->getSelectedLineChartPointIndex());
+        if (m_chartOverlay->getChartTwoDataType() == ChartTwoDataTypeEnum::CHART_DATA_TYPE_LINE_LAYER) {
+            pointValidFlag = true;
+        }
+    }
+    m_lineLayerActiveComboBox->getWidget()->setEnabled(pointValidFlag);
+    m_selectedPointIndexSpinBox->setEnabled(pointValidFlag);
+
+    bool showAllMapsCheckbBoxFlag(false);
+    bool showColorBarButtonFlag(false);
+    bool showLineLayerColorButtonFlag(false);
+    bool showLineLayerOffsetButtonFlag(false);
+    bool showLineLayerWidthButtonFlag(false);
+    bool showLineLayerNormalizationButtonFlag(false);
+    bool showSelectedPointControlsFlag(false);
+    bool showLineSeriesLoadingCheckBoxFlag(false);
+    bool showMatrixDiagonalButtonFlag(false);
+    bool showMatrixOpacityFlag(false);
+    bool showSettingsButtonFlag(false);
+    switch (m_chartOverlay->getChartTwoDataType()) {
+        case ChartTwoDataTypeEnum::CHART_DATA_TYPE_HISTOGRAM:
+            showAllMapsCheckbBoxFlag = true;
+            showColorBarButtonFlag = true;
+            showSettingsButtonFlag = true;
+            break;
+        case ChartTwoDataTypeEnum::CHART_DATA_TYPE_INVALID:
+            break;
+        case ChartTwoDataTypeEnum::CHART_DATA_TYPE_LINE_LAYER:
+            showLineLayerColorButtonFlag = true;
+            showLineLayerOffsetButtonFlag = true;
+            showLineLayerWidthButtonFlag = true;
+            showLineLayerNormalizationButtonFlag = true;
+            showSelectedPointControlsFlag = true;
+            break;
+        case ChartTwoDataTypeEnum::CHART_DATA_TYPE_LINE_SERIES:
+            showLineSeriesLoadingCheckBoxFlag = true;
+            showSettingsButtonFlag = true;
+            break;
+        case ChartTwoDataTypeEnum::CHART_DATA_TYPE_MATRIX:
+            showColorBarButtonFlag = true;
+            showMatrixDiagonalButtonFlag = true;
+            showMatrixOpacityFlag = true;
+            showSettingsButtonFlag = true;
+            break;
+    }
+    m_allMapsCheckBox->setVisible(showAllMapsCheckbBoxFlag);
+    m_colorBarToolButton->setVisible(showColorBarButtonFlag);
+    m_lineLayerColorToolButton->setVisible(showLineLayerColorButtonFlag);
+    m_lineLayerToolTipOffsetToolButton->setVisible(showLineLayerOffsetButtonFlag);
+    m_lineLayerNormalizationToolButton->setVisible(showLineLayerNormalizationButtonFlag);
+    m_lineLayerWidthSpinBox->getWidget()->setVisible(showLineLayerWidthButtonFlag);
+    m_lineSeriesLoadingEnabledCheckBox->setVisible(showLineSeriesLoadingCheckBoxFlag);
+    m_matrixTriangularViewModeToolButton->setVisible(showMatrixDiagonalButtonFlag);
+    m_matrixOpacitySpinBox->getWidget()->setVisible(showMatrixOpacityFlag);
+    m_lineLayerActiveComboBox->getWidget()->setVisible(showSelectedPointControlsFlag);
+    m_selectedPointIndexSpinBox->setVisible(showSelectedPointControlsFlag);
+    m_settingsToolButton->setVisible(showSettingsButtonFlag);
 }
 
 /**
@@ -919,34 +1117,6 @@ ChartTwoOverlayViewController::updateMatrixTriangularViewModeAction(const ChartT
     }
     m_matrixTriangularViewModeAction->blockSignals(false);
 }
-
-/**
- * Update the axis location button.
- *
- * @param axisLocation
- *     Axis location.
- */
-void
-ChartTwoOverlayViewController::updateAxisLocationAction(const ChartAxisLocationEnum::Enum axisLocation)
-{
-    CaretAssert(m_axisLocationAction);
-    m_axisLocationAction->blockSignals(true);
-    for (auto& almd : m_axisLocationMenuData) {
-        if (std::get<0>(almd) == axisLocation) {
-            QPixmap pixmap = std::get<2>(almd);
-            if ( ! pixmap.isNull()) {
-                m_axisLocationAction->setIcon(pixmap);
-                m_axisLocationAction->setText("");
-            }
-            else {
-                m_axisLocationAction->setText("A");
-            }
-            break;
-        }
-    }
-    m_axisLocationAction->blockSignals(false);
-}
-
 
 /**
  * Update graphics and GUI after selections made
@@ -1058,67 +1228,155 @@ ChartTwoOverlayViewController::menuMatrixTriangularViewModeTriggered(QAction* ac
 }
 
 /**
- * Create the axis location menu.
- * @param parent
- *    Parent widget.
- * @param parentObjectName
- *    Name of parent object for macros
+ * Called when matrix opacity changed
+ * @param value
+ *    New opacity value
  */
-QMenu*
-ChartTwoOverlayViewController::createAxisLocationMenu(QWidget* widget,
-                                                      const QString& parentObjectName,
-                                                      const QString& descriptivePrefix)
+void
+ChartTwoOverlayViewController::matrixOpacityValueChanged(double value)
 {
-    std::vector<ChartAxisLocationEnum::Enum> axisLocations;
-    axisLocations.push_back(ChartAxisLocationEnum::CHART_AXIS_LOCATION_LEFT);
-    axisLocations.push_back(ChartAxisLocationEnum::CHART_AXIS_LOCATION_RIGHT);
-    
-    QMenu* menu = new QMenu(widget);
-    QObject::connect(menu, &QMenu::triggered,
-                     this, &ChartTwoOverlayViewController::menuAxisLocationTriggered);
-    
-    QActionGroup* actionGroup = new QActionGroup(this);
-    actionGroup->setExclusive(true);
-    
-    for (auto axis: axisLocations) {
-        QAction* action = menu->addAction(ChartAxisLocationEnum::toGuiName(axis));
-        action->setCheckable(true);
-        action->setData((int)ChartAxisLocationEnum::toIntegerCode(axis));
-        QPixmap pixmap = createAxisLocationPixmap(menu, axis);
-        action->setIcon(pixmap);
-        actionGroup->addAction(action);
-        
-        QString objName = (parentObjectName
-                           + ChartAxisLocationEnum::toGuiName(axis));
-        objName = objName.replace(" ", "");
-        action->setObjectName(objName);
-        WuQMacroManager::instance()->addMacroSupportToObject(action,
-                                                             "Select chart axis location for " + descriptivePrefix);
-        
-        m_axisLocationMenuData.push_back(std::make_tuple(axis, action, pixmap));
+    if (m_chartOverlay != NULL) {
+        m_chartOverlay->setMatrixOpacity(value);
+        this->updateGraphicsWindow();
     }
-    
-    return menu;
 }
 
 /**
- * Called when an item is selected on axis location menu.
- *
- * @action
- *     Action of menu item selected.
+ * Called when line layer color is changed.
+ * @param color
+ *     New color
  */
 void
-ChartTwoOverlayViewController::menuAxisLocationTriggered(QAction* action)
+ChartTwoOverlayViewController::lineLayerColorSelected(const CaretColor& caretColor)
 {
-    const QVariant itemData = action->data();
-    CaretAssert(itemData.isValid());
-    bool valid = false;
-    ChartAxisLocationEnum::Enum axisLocation = ChartAxisLocationEnum::fromIntegerCode(itemData.toInt(), &valid);
-    
-    if (valid) {
-        m_chartOverlay->setCartesianVerticalAxisLocation(axisLocation);
-        updateAxisLocationAction(axisLocation);
+    if (m_chartOverlay != NULL) {
+        m_chartOverlay->setLineLayerColor(caretColor);
         this->updateGraphicsWindow();
+    }
+}
+
+/**
+ * Called when line layer line width is changed.
+ * @param lineWidth
+ *     New line width
+ */
+void
+ChartTwoOverlayViewController::lineLayerLineWidthChanged(const float lineWidth)
+{
+    if (m_chartOverlay != NULL) {
+        m_chartOverlay->setLineLayerLineWidth(lineWidth);
+        this->updateGraphicsWindow();
+    }
+}
+
+/**
+ * Called when line cardinal direction tool button clicked
+ */
+void
+ChartTwoOverlayViewController::lineLayerToolTipOffsetToolButtonClicked()
+{
+    if (m_chartOverlay != NULL) {
+        QWidget* parentWidget(m_lineLayerToolTipOffsetToolButton->parentWidget());
+        QPoint menuXY(m_lineLayerToolTipOffsetToolButton->pos());
+
+        std::set<CardinalDirectionEnum::Options> options { CardinalDirectionEnum::Options::INCLUDE_AUTO };
+        CardinalDirectionEnumMenu menu(options);
+        menu.setSelectedCardinalDirection(m_chartOverlay->getSelectedLineChartTextOffset());
+        QAction* actionSelected = menu.exec(parentWidget->mapToGlobal(menuXY));
+        if (actionSelected != NULL) {
+            m_chartOverlay->setSelectedLineChartTextOffset(menu.getSelectedCardinalDirection());
+            updateLineLayerToolTipOffsetToolButton();
+            this->updateGraphicsWindow();
+        }
+    }
+}
+
+/**
+ * Update the line layer tooltip offset button text
+ */
+void
+ChartTwoOverlayViewController::updateLineLayerToolTipOffsetToolButton()
+{
+    if (m_chartOverlay != NULL) {
+        if (m_useIconInLineLayerToolTipOffsetButtonFlag) {
+            m_lineLayerToolTipOffsetToolButton->setText("");
+        }
+        else {
+            const AString txt = CardinalDirectionEnum::toGuiShortName(m_chartOverlay->getSelectedLineChartTextOffset());
+            m_lineLayerToolTipOffsetToolButton->setText(txt);
+        }
+    }
+}
+
+/**
+ * Called when selected point display check box changed
+ * @param selected
+ *    New selection status
+ */
+void
+ChartTwoOverlayViewController::lineLayerActiveModeEnumComboBoxItemActivated()
+{
+    if (m_chartOverlay != NULL) {
+        const ChartTwoOverlayActiveModeEnum::Enum mode = m_lineLayerActiveComboBox->getSelectedItem<ChartTwoOverlayActiveModeEnum,ChartTwoOverlayActiveModeEnum::Enum>();
+        m_chartOverlay->setLineChartActiveMode(mode);
+        updateViewController(m_chartOverlay);
+        updateGraphicsWindow();
+    }
+}
+
+/**
+ * Called when line layer normalization menu is about to hide
+ */
+void
+ChartTwoOverlayViewController::lineLayerNormalizationMenuAboutToHide()
+{
+}
+
+/**
+ * Called when line layer normalization menu is about to show
+ */
+void
+ChartTwoOverlayViewController::lineLayerNormalizationMenuAboutToShow()
+{
+    m_lineLayerNormalizationWidget->updateContent(m_chartOverlay);
+}
+
+/**
+ * Called when line layer normalization button is clicked
+ */
+void
+ChartTwoOverlayViewController::lineLayerNormalizationToolButtonClicked()
+{
+    m_lineLayerNormalizationMenu->exec(QPoint(m_lineLayerNormalizationToolButton->mapToGlobal(QPoint(0, m_lineLayerNormalizationToolButton->height()))));
+}
+
+/**
+ * Called when selected point index spin box value changed
+ * @param index
+ *    New point index
+ */
+void
+ChartTwoOverlayViewController::selectedPointIndexSpinBoxValueChanged(int index)
+{
+    if (m_chartOverlay != NULL) {
+        m_chartOverlay->setSelectedLineChartPointIndex(index);
+
+        if (m_chartOverlay->isEnabled()) {
+            /*
+             * Graphics updates are normally asynchronous (a graphics update is
+             * 'scheduled' by Qt and may take place after the graphics update
+             * event returns).   Since we are getting the window position of
+             * the selected point, and this window position is set in the
+             * graphics code, we do a 'repaint' which is synchronous
+             * (the event will not return until after the graphics have updated).
+             * If we did not do this, the window position may be 'stale' (from
+             * a previous graphics update)
+             */
+            const bool doRepaintFlag(true);
+            EventGraphicsUpdateOneWindow graphicsEvent(m_browserWindowIndex,
+                                                       doRepaintFlag);
+            EventManager::get()->sendEvent(graphicsEvent.getPointer());
+        }
     }
 }
 
@@ -1223,8 +1481,26 @@ ChartTwoOverlayViewController::createConstructionMenu(QWidget* parent,
     macroManager->addMacroSupportToObject(copyMapNameAction,
                                           "Copy map name to clipboard from " + descriptivePrefix);
     
+    menu->addSeparator();
+    QAction* preColorAllFilesAction = menu->addAction("Pre-Color All Files");
+    QObject::connect(preColorAllFilesAction, &QAction::triggered,
+                     this, &ChartTwoOverlayViewController::menuConstructionPreColorAllFiles);
+    preColorAllFilesAction->setObjectName(menuActionNamePrefix
+                                          + "PreColorAllFiles");
+    macroManager->addMacroSupportToObject(preColorAllFilesAction,
+                                          "Pre-Color All Files In Overlay");
+
     return menu;
     
+}
+
+/**
+ * Called when construction tool button is clicked
+ */
+void
+ChartTwoOverlayViewController::constructionToolButtonClicked()
+{
+    m_constructionMenu->exec(QPoint(m_constructionToolButton->mapToGlobal(QPoint(0, m_constructionToolButton->height()))));
 }
 
 /**
@@ -1407,63 +1683,6 @@ ChartTwoOverlayViewController::menuReloadFileTriggered()
 }
 
 /**
- * Create a axis location mode pixmap.
- *
- * @param widget
- *    To color the pixmap with backround and foreground,
- *    the palette from the given widget is used.
- * @param axisLocation
- *    Axis location represented by the icon.
- * @return
- *    Pixmap for matrix view mode.
- */
-QPixmap
-ChartTwoOverlayViewController::createAxisLocationPixmap(QWidget* widget,
-                                                        const ChartAxisLocationEnum::Enum axisLocation)
-{
-    CaretAssert(widget);
-    
-    /*
-     * Create a small, square pixmap that will contain
-     * the foreground color around the pixmap's perimeter.
-     */
-    const qreal iconSize = 24.0;
-    const qreal minValue = 2.0;
-    const qreal maxValue = iconSize - minValue;
-    
-    QPixmap pixmap(static_cast<int>(iconSize),
-                   static_cast<int>(iconSize));
-    QSharedPointer<QPainter> painter = WuQtUtilities::createPixmapWidgetPainterOriginBottomLeft(widget,
-                                                                                                pixmap);
-    
-    QPen pen = painter->pen();
-    pen.setWidthF(2.0);
-    painter->setPen(pen);
-    
-    const int offsetFromEdge = 3;
-    switch (axisLocation) {
-        case ChartAxisLocationEnum::CHART_AXIS_LOCATION_BOTTOM:
-            painter->drawLine(QPointF(minValue, minValue + offsetFromEdge),
-                              QPointF(maxValue, minValue + offsetFromEdge));
-            break;
-        case ChartAxisLocationEnum::CHART_AXIS_LOCATION_LEFT:
-            painter->drawLine(QPointF(minValue + offsetFromEdge, minValue),
-                              QPointF(minValue + offsetFromEdge, maxValue));
-            break;
-        case ChartAxisLocationEnum::CHART_AXIS_LOCATION_RIGHT:
-            painter->drawLine(QPointF(maxValue - offsetFromEdge, minValue),
-                              QPointF(maxValue - offsetFromEdge, maxValue));
-            break;
-        case ChartAxisLocationEnum::CHART_AXIS_LOCATION_TOP:
-            painter->drawLine(QPointF(minValue, maxValue - offsetFromEdge),
-                              QPointF(maxValue, maxValue - offsetFromEdge));
-            break;
-    }
-    
-    return pixmap;
-}
-
-/**
  * Create a matrix view mode pixmap.
  *
  * @param widget
@@ -1543,3 +1762,193 @@ ChartTwoOverlayViewController::createMatrixTriangularViewModePixmap(QWidget* wid
     return pixmap;
 }
 
+/**
+ * Create a cardinal direction pixmap.
+ *
+ * @param widget
+ *    To color the pixmap with backround and foreground,
+ *    the palette from the given widget is used.
+ * @return
+ *    Pixmap for cardinal direction.
+ */
+QPixmap
+ChartTwoOverlayViewController::createCardinalDirectionPixmap(QWidget* widget)
+{
+    CaretAssert(widget);
+    
+    /*
+     * Create a small, square pixmap that will contain
+     * the foreground color around the pixmap's perimeter.
+     */
+    const qreal iconSize = 32.0;
+    const qreal minValue = 1.0;
+    const qreal maxX((iconSize - minValue) / 2.0);
+    const qreal maxY(maxX);
+    const QPointF left(-maxX, 0.0);
+    const QPointF right(maxX, 0.0);
+    const QPointF top(0.0, maxY);
+    const QPointF bottom(0.0, -maxY);
+    
+    QPixmap pixmap(static_cast<int>(iconSize),
+                   static_cast<int>(iconSize));
+    QSharedPointer<QPainter> painter = WuQtUtilities::createPixmapWidgetPainterOriginCenter(widget,
+                                                                                            pixmap);
+    
+    QPen pen = painter->pen();
+    pen.setWidthF(2.0);
+    painter->setPen(pen);
+    
+    /*
+     * Horizontal and vertical lines
+     */
+    painter->drawLine(left, right);
+    painter->drawLine(bottom, top);
+    
+    /*
+     * Arrow tips
+     */
+    const float tip(4.0);
+    painter->drawLine(left.x(), left.y(), left.x() + tip, left.y() + tip);
+    painter->drawLine(left.x(), left.y(), left.x() + tip, left.y() - tip);
+    painter->drawLine(right.x(), right.y(), right.x() - tip, right.y() + tip);
+    painter->drawLine(right.x(), right.y(), right.x() - tip, right.y() - tip);
+    painter->drawLine(bottom.x(), bottom.y(), bottom.x() - tip, bottom.y() + tip);
+    painter->drawLine(bottom.x(), bottom.y(), bottom.x() + tip, bottom.y() + tip);
+    painter->drawLine(top.x(), top.y(), top.x() - tip, top.y() - tip);
+    painter->drawLine(top.x(), top.y(), top.x() + tip, top.y() - tip);
+
+    return pixmap;
+}
+
+/**
+ * Pre-color all files.  Some files, such as large scalar matrix files, may take
+ * time the first time they are displayed that is spent coloring the matrix
+ * and creating an OpenGL texture used when drawing.
+ */
+void
+ChartTwoOverlayViewController::menuConstructionPreColorAllFiles()
+{
+    QWidget* parentWidget(m_mapFileComboBox);
+    
+    if ( ! m_enabledCheckBox->isChecked()) {
+        WuQMessageBox::errorOk(parentWidget,
+                               "The layer must be On (checkbox on left)");
+        return;
+    }
+    
+    const int32_t numFiles = m_mapFileComboBox->count();
+    if (numFiles <= 0) {
+        return;
+    }
+    
+    QPoint dialogXY(parentWidget->x() + parentWidget->width(),
+                    parentWidget->y());
+    ProgressReportingDialog progressDialog("Pre-Color Files",
+                                           "Starting",
+                                           parentWidget);
+    progressDialog.move(parentWidget->mapToGlobal(dialogXY));
+    
+    const int32_t currentFileIndex = m_mapFileComboBox->currentIndex();
+    
+    for (int32_t i = 0; i < numFiles; i++) {
+        EventProgressUpdate progEvent(1,
+                                      numFiles,
+                                      (i + 1),
+                                      ("Coloring: "
+                                       + m_mapFileComboBox->currentText()));
+        EventManager::get()->sendEvent(progEvent.getPointer());
+        
+        if (progressDialog.wasCanceled()) {
+            break;
+        }
+        
+        QSignalBlocker blocker(m_mapFileComboBox);
+        m_mapFileComboBox->setCurrentIndex(i);
+        fileComboBoxSelected(i);
+        
+        /*
+         * Need to to a graphics update with a repaint (a synchronous
+         * graphics update) so that file is actually drawn.
+         */
+        EventGraphicsUpdateOneWindow graphicsEvent(m_browserWindowIndex,
+                                                   true);
+        EventManager::get()->sendEvent(graphicsEvent.getPointer());
+        QApplication::processEvents();
+    }
+    
+    QSignalBlocker blocker(m_mapFileComboBox);
+    m_mapFileComboBox->setCurrentIndex(currentFileIndex);
+    fileComboBoxSelected(currentFileIndex);
+    
+    m_mapFileComboBox->clearFocus();
+}
+
+/**
+ * @return a pixmap containing a normal distribution curve (bell curve)
+ * @param widget
+ *    Widget used for foreground/background colors
+ */
+QPixmap
+ChartTwoOverlayViewController::createNormalizationPixmap(QWidget* widget)
+{
+    CaretAssert(widget);
+    
+    const int32_t iconSize(24);
+    QPixmap pixmap(static_cast<int>(iconSize),
+                   static_cast<int>(iconSize));
+    QSharedPointer<QPainter> painter = WuQtUtilities::createPixmapWidgetPainterOriginBottomLeft(widget,
+                                                                                                pixmap);
+    
+    QPen pen = painter->pen();
+    pen.setWidthF(2.0);
+    painter->setPen(pen);
+ 
+    /*
+     * XY points used in bezier functions
+     */
+    float t(2.0);
+    QPoint leftEnd(t, t);
+    QPoint mid((iconSize / 2), iconSize - (t * 3));
+    QPoint rightEnd(iconSize - t, t);
+    QPoint leftMid((leftEnd.x() + mid.x()) / 2.0,
+                   (leftEnd.y() + mid.y()) / 2.0);
+    QPoint rightMid((rightEnd.x() + mid.x()) / 2.0,
+                    (rightEnd.y() + mid.y()) / 2.0);
+    
+    /*
+     * Control points for left half of curve
+     */
+    QPoint leftCP2(leftEnd.x(), mid.y());
+    QPoint leftCP1(mid.x(), leftEnd.y());
+    
+    /*
+     * Control points for right half of curve
+     */
+    QPoint rightCP2(rightEnd.x(), mid.y());
+    QPoint rightCP1(mid.x(), rightEnd.y());
+    
+    QPainterPath path;
+    
+    /*
+     * left half of curve
+     */
+    path.moveTo(leftEnd);
+    path.cubicTo(leftCP1,
+                 leftCP2,
+                 mid);
+    
+    /*
+     * right half of curve
+     */
+    path.moveTo(rightEnd);
+    path.cubicTo(rightCP1,
+                 rightCP2,
+                 mid);
+    
+    /*
+     * Drawn a curve that approximates the normal distribution (bell curve)
+     */
+    painter->drawPath(path);
+    
+    return pixmap;
+}

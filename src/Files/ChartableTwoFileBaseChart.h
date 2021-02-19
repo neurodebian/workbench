@@ -64,11 +64,11 @@ namespace caret {
 
         ChartTwoDataTypeEnum::Enum getChartTwoDataType() const;
         
-        ChartTwoCompoundDataType getChartTwoCompoundDataType() const;
+        const ChartTwoCompoundDataType* getChartTwoCompoundDataType() const;
         
-        AString getBottomAxisTitle() const;
+        AString getBottomTopAxisTitle() const;
         
-        void setBottomAxisTitle(const AString& title);
+        void setBottomTopAxisTitle(const AString& title);
         
         AString getLeftRightAxisTitle() const;
         
@@ -121,7 +121,7 @@ namespace caret {
         
         ChartTwoCompoundDataType m_compoundChartDataType;
         
-        AString m_bottomAxisTitleText;
+        AString m_bottomTopAxisTitleText;
         
         AString m_leftRightAxisTitleText;
         

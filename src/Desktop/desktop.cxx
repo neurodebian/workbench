@@ -55,218 +55,18 @@
 #include "GuiManager.h"
 #include "MacApplication.h"
 #include "ProgramParameters.h"
+#include "RecentFilesDialog.h"
+#include "RecentFilesSystemAccessModeEnum.h"
+#include "SceneDialog.h"
 #include "SessionManager.h"
-#include "SplashScreen.h"
 #include "SystemUtilities.h"
+#include "WorkbenchQtMessageHandler.h"
 #include "WuQMessageBox.h"
 #include "WuQtUtilities.h"
-
-static bool caretLoggerIsValid = false;
 
 using namespace caret;
 using namespace std;
 
-#if QT_VERSION >= 0x050000
-/**
- * Handles message produced by Qt 5
- */
-static void
-messageHandlerForQt5(QtMsgType type, const QMessageLogContext& context, const QString& msg)
-{
-    const AString backtrace = SystemUtilities::getBackTrace();
-    
-    const AString contextInfo = ("   Context Info File ("
-                                 + QString(context.file)
-                                 + ") Function (" + QString(context.function)
-                                 + ") Line (" + QString::number(context.line)
-                                 + ") Version (" + QString::number(context.version)
-                                 + ") Category (" + QString(context.category)
-                                 + ")");
-    const AString message = (AString(msg) + "\n"
-                             + contextInfo + "\n"
-                             + backtrace);
-    
-    if (caretLoggerIsValid) {
-        bool abortFlag = false;
-        bool displayedFlag = false;
-        switch (type) {
-            case QtDebugMsg:
-                CaretLogInfo(message);
-                displayedFlag = CaretLogger::getLogger()->isInfo();
-                break;
-            case QtWarningMsg:
-                CaretLogWarning(message);
-                displayedFlag = CaretLogger::getLogger()->isWarning();
-                break;
-            case QtCriticalMsg:
-                CaretLogSevere(message);
-                displayedFlag = CaretLogger::getLogger()->isSevere();
-                break;
-            case QtFatalMsg:
-                cerr << "Qt Fatal: " << message << endl;
-                abortFlag = true;//fatal will cause an abort, so always display it, bypassing logger entirely
-                displayedFlag = true;
-                break;
-#if QT_VERSION >= 0x050500
-            case QtInfoMsg:
-                CaretLogInfo(message);
-                displayedFlag = CaretLogger::getLogger()->isInfo();
-                break;
-#endif
-        }
-        
-        /*
-         * Beep to alert user about an error!!!
-         */
-        if (displayedFlag && (type != QtDebugMsg))//don't beep for debug
-        {
-            GuiManager::beep();
-        }
-#ifndef NDEBUG
-        if (!displayedFlag)
-        {
-            cerr << "DEBUG: Qt ";
-            switch (type)
-            {
-                case QtDebugMsg:
-                    cerr << "Debug ";
-                    break;
-                case QtWarningMsg:
-                    cerr << "Warning ";
-                    break;
-                case QtCriticalMsg:
-                    cerr << "Critical ";
-                    break;
-                case QtFatalMsg:
-                    cerr << "FATAL (?!?) ";//should never happen
-                    break;
-#if QT_VERSION >= 0x050500
-                case QtInfoMsg:
-                    std::cerr << "Info ";
-                    break;
-#endif
-            }
-            cerr << "message hidden" << endl;
-        }
-#endif
-        
-        if (abortFlag) {
-            std::abort();
-        }
-    }
-    else {
-        switch (type) {
-            case QtDebugMsg:
-                std::cerr << "Qt Debug: " << message << std::endl;
-                break;
-            case QtWarningMsg:
-                std::cerr << "Qt Warning: " << message << std::endl;
-                break;
-            case QtCriticalMsg:
-                std::cerr << "Qt Critical: " << message << std::endl;
-                break;
-            case QtFatalMsg:
-                std::cerr << "Qt Fatal: " << message << std::endl;
-                std::abort();
-                break;
-#if QT_VERSION >= 0x050500
-            case QtInfoMsg:
-                std::cerr << "Qt Info: " << message << std::endl;
-                break;
-#endif
-        }
-    }
-}
-
-#else // QT_VERSION
-
-/**
- * Handles message produced by Qt 4.
- */
-static void
-messageHandlerForQt4(QtMsgType type, const char* msg)
-{
-    const AString backtrace = SystemUtilities::getBackTrace();
-    
-    const AString message = (AString(msg) + "\n" + backtrace);
-    
-    if (caretLoggerIsValid) {
-        bool abortFlag = false;
-        bool displayedFlag = false;
-        switch (type) {
-            case QtDebugMsg:
-                CaretLogInfo(message);
-                displayedFlag = CaretLogger::getLogger()->isInfo();
-                break;
-            case QtWarningMsg:
-                CaretLogWarning(message);
-                displayedFlag = CaretLogger::getLogger()->isWarning();
-                break;
-            case QtCriticalMsg:
-                CaretLogSevere(message);
-                displayedFlag = CaretLogger::getLogger()->isSevere();
-                break;
-            case QtFatalMsg:
-                cerr << "Qt Fatal: " << message << endl;
-                abortFlag = true;//fatal will cause an abort, so always display it, bypassing logger entirely
-                displayedFlag = true;
-                break;
-        }
-        
-        /*
-         * Beep to alert user about an error!!!
-         */
-        if (displayedFlag && (type != QtDebugMsg))//don't beep for debug
-        {
-            GuiManager::beep();
-        }
-#ifndef NDEBUG
-        if (!displayedFlag)
-        {
-            cerr << "DEBUG: Qt ";
-            switch (type)
-            {
-                case QtDebugMsg:
-                    cerr << "Debug ";
-                    break;
-                case QtWarningMsg:
-                    cerr << "Warning ";
-                    break;
-                case QtCriticalMsg:
-                    cerr << "Critical ";
-                    break;
-                case QtFatalMsg:
-                    cerr << "FATAL (?!?) ";//should never happen
-                    break;
-            }
-            cerr << "message hidden" << endl;
-        }
-#endif
-        
-        if (abortFlag) {
-            std::abort();
-        }
-    }
-    else {
-        switch (type) {
-            case QtDebugMsg:
-                std::cerr << "Qt Debug: " << message << std::endl;
-                break;
-            case QtWarningMsg:
-                std::cerr << "Qt Warning: " << message << std::endl;
-                break;
-            case QtCriticalMsg:
-                std::cerr << "Qt Critical: " << message << std::endl;
-                break;
-            case QtFatalMsg:
-                std::cerr << "Qt Fatal: " << message << std::endl;
-                std::abort();
-                break;
-        }
-    }
-}
-
-#endif // QT_VERSION
 
 //struct for communicating stuff back to main from parseCommandLine
 struct ProgramState
@@ -276,16 +76,33 @@ struct ProgramState
     int windowPosXY[2];
     int graphicsSizeXY[2];
     bool showSplash;
+    bool macMenuFlag = false;
+    
+    AString directoryName;
     
     AString specFileNameLoadWithDialog;
     AString specFileNameLoadAll;
     
     AString sceneFileName;
+    AString sceneFileNameNoDialog;
     AString sceneNameOrNumber;
     
     ProgramState();
 };
 
+class GuiBeeper : public WorkbenchQtMessageHandler::Beeper
+{
+public:
+    GuiBeeper() { }
+    
+    ~GuiBeeper() { }
+    
+    /**
+     * Override to make the beep sound
+     */
+    virtual void makeBeep() override { GuiManager::get()->beep(); }
+    
+};
 
 //declare the functions associated with command line
 void printHelp(const AString& progName);
@@ -305,7 +122,6 @@ main(int argc, char* argv[])
         * Create the session manager.
         */
         SessionManager::createSessionManager(ApplicationTypeEnum::APPLICATION_TYPE_GRAPHICAL_USER_INTERFACE);
-        caretLoggerIsValid = true;
 
         /*
         * Parameters for the program.
@@ -399,16 +215,25 @@ main(int argc, char* argv[])
         BrainOpenGLWidget::initializeDefaultGLFormat();
 #endif
         
-#if QT_VERSION >= 0x050000
-        qInstallMessageHandler(messageHandlerForQt5);//this handler uses CaretLogger and GuiManager, so we must install it after the logger is available and the application is created
-#else // QT_VERSION
-        qInstallMsgHandler(messageHandlerForQt4);//this handler uses CaretLogger and GuiManager, so we must install it after the logger is available and the application is created
-#endif // QT_VERSION
+        /*
+         * Setup handlers (callbacks) for messages produced by Qt
+         */
+        GuiBeeper beeper;
+        WorkbenchQtMessageHandler::setupHandler(&beeper);
+
         /*
          * Log debug status
          */
+        CaretLogConfig("Version " + applicationInformation.getVersion());
         CaretLogConfig(applicationInformation.getCompiledWithDebugStatus());
 
+
+        /*
+         * Mac Option to put menus on window and not use the native tool bar
+         */
+        if (myState.macMenuFlag) {
+            app.setAttribute(Qt::AA_DontUseNativeMenuBar);
+        }
         
         /*
          * Enabled the desired splash screen based upon user preferences
@@ -468,24 +293,39 @@ main(int argc, char* argv[])
          * Show file selection splash screen if enabled via user's preferences
          */
         if (showSelectionSplashScreen) {
-            /*
-             * Show selection splash screen.
-             * Need to process events since QApplication::exec() has not
-             * been called.
-             */
-            SplashScreen splashScreen(NULL);
-            app.processEvents();
-            if (splashScreen.exec()) {
-                const QString dataFileName = splashScreen.getSelectedDataFileName();
-                if ( ! dataFileName.isEmpty()) {
-                    myState.fileList.clear();
-                    if (dataFileName.endsWith(DataFileTypeEnum::toFileExtension(DataFileTypeEnum::SPECIFICATION))) {
-                        myState.specFileNameLoadWithDialog = dataFileName;
+            AString dataFileName;
+            int32_t sceneIndex(-1);
+            RecentFilesDialog::ResultModeEnum result = RecentFilesDialog::runDialog(RecentFilesDialog::RunMode::SPLASH_SCREEN,
+                                                                                    dataFileName,
+                                                                                    sceneIndex);
+            switch (result) {
+                case RecentFilesDialog::ResultModeEnum::CANCEL:
+                    break;
+                case RecentFilesDialog::ResultModeEnum::LOAD_FILES_IN_SPEC_FILE:
+                    myState.specFileNameLoadAll = dataFileName;
+                    break;
+                case RecentFilesDialog::ResultModeEnum::LOAD_SCENE_FROM_SCENE_FILE:
+                    myState.sceneFileName     = dataFileName;
+                    myState.sceneNameOrNumber = AString::number(sceneIndex);
+                    break;
+                case RecentFilesDialog::ResultModeEnum::OPEN_DIRECTORY:
+                    myState.directoryName = dataFileName;
+                    break;
+                case RecentFilesDialog::ResultModeEnum::OPEN_FILE:
+                    if ( ! dataFileName.isEmpty()) {
+                        bool validFlag(false);
+                        if (DataFileTypeEnum::fromFileExtension(dataFileName,
+                                                                &validFlag) == DataFileTypeEnum::SPECIFICATION) {
+                            myState.specFileNameLoadWithDialog = dataFileName;
+                        }
+                        else {
+                            myState.fileList.push_back(dataFileName);
+                        }
                     }
-                    else {
-                        myState.fileList.push_back(dataFileName);
-                    }
-                }
+                    break;
+                case RecentFilesDialog::ResultModeEnum::OPEN_OTHER:
+                    myState.directoryName = dataFileName;
+                    break;
             }
         }
         
@@ -590,7 +430,18 @@ main(int argc, char* argv[])
         
         if ( ! myState.sceneFileName.isEmpty()) {
             myWindow->loadSceneFromCommandLine(myState.sceneFileName,
-                                               myState.sceneNameOrNumber);
+                                               myState.sceneNameOrNumber,
+                                               BrainBrowserWindow::LoadSceneFromCommandLineDialogMode::SHOW_YES);
+        }
+        
+        if ( ! myState.sceneFileNameNoDialog.isEmpty()) {
+            myWindow->loadSceneFromCommandLine(myState.sceneFileNameNoDialog,
+                                               myState.sceneNameOrNumber,
+                                               BrainBrowserWindow::LoadSceneFromCommandLineDialogMode::SHOW_NO);
+        }
+        
+        if ( ! myState.directoryName.isEmpty()) {
+            myWindow->loadDirectoryFromCommandLine(myState.directoryName);
         }
         
 #ifndef WORKBENCH_USE_QT5_QOPENGL_WIDGET
@@ -741,23 +592,45 @@ void printHelp(const AString& progName)
     
     cout
     << endl
-    << "    -mac-menu-duplicate" << endl
-    << "        MacOS Only - Adds menus to the top of the Browser Window " << endl
-    << "        that duplicate the menu bar at the top of the window.   " << endl
-    << "        The menus are similar to that on Linux and Windows. " << endl
-    << "        May be useful for creating tutorial images." << endl
-    << "        This functionality is EXPERIMENTAL and subject to  " << endl
-    << "        removal in future versions of wb_view." << endl
+    << "    -mac-menu-in-window" << endl
+    << "        MacOS Only - Menus are at the top of each main window  "
+    << "        similar to Linux and Window Applications.  "
+    << "        May be useful for creating tutorial images and videos." << endl
+    << endl
+    << "    -no-recent-files-dialog" << endl
+    << "         Inhibits display of Open Recent Files Dialog at wb_view startup." << endl
     << endl
     << "    -no-splash" << endl
-    << "        disable all splash screens" << endl
+    << "        (Obsolete) Replaced by \"-no-recent-files-dialog\"" << endl
+    << "        Splash screen was replaced with Open Recent Fiels Dialog." << endl
+    << endl
+    << "    -recent-files-mode <mode>" << endl
+    << "        Set the recent file's file system access mode" << endl
+    << "        (overrides and replaces value in preferences)." << endl
+    << "        Using an off mode prevents file system access for " << endl
+    << "        obtaining last modified time and file existance." << endl
+    << "        This option may be useful if recent files are on a mounted" << endl
+    << "        file system that is having problems that may cause wb_view" << endl
+    << "        to hang at startup.  Valid modes are:" << endl;
+    
+    std::vector<RecentFilesSystemAccessModeEnum::Enum> recentFilesModes;
+    RecentFilesSystemAccessModeEnum::getAllEnums(recentFilesModes);
+    for (auto rfm : recentFilesModes) {
+        std::cout  << "            " <<RecentFilesSystemAccessModeEnum::toName(rfm) << endl;
+    }
+    
+    cout
     << endl
     << "    -scene-load <scene-file-name> <scene-name-or-number>" << endl
     << "        load the specified scene file and display the scene " << endl
     << "        in the file that matches by name or number.  Name" << endl
     << "        takes precedence over number.  The scene numbers " << endl
-    << "        start at one." << endl
-    << "        " << endl
+    << "        start at one.  The scene dialog remains visible " << endl
+    << "        after loading of the scene." << endl
+    << endl
+    << "    -scene-load-hd <scene-file-name> <scene-name-of-number>" << endl
+    << "        Same as \"-scene-load\" except that the scene dialog " << endl
+    << "        is hidden after the scene has loaded." << endl
     << endl
     << "    -style <style-name>" << endl
     << "        change the window style to the specified style" << endl
@@ -825,10 +698,32 @@ void parseCommandLine(const AString& progName, ProgramParameters* myParams, Prog
                             hasFatalError = true;
                         }
                     }
-                } else if (thisParam == "-mac-menu-duplicate") {
-                    BrainBrowserWindow::setEnableMacDuplicateMenuBar(true);
-                } else if (thisParam == "-no-splash") {
+                } else if (thisParam == "-mac-menu-in-window") {
+                    myState.macMenuFlag = true;
+                } else if ((thisParam == "-no-splash")
+                           || (thisParam == "-no-recent-files-dialog")) {
                     myState.showSplash = false;
+                } else if (thisParam == "-recent-files-mode") {
+                    if (myParams->hasNext()) {
+                        const AString recentFilesModeName = myParams->nextString("Recent Files Mode").toUpper();
+                        bool valid = false;
+                        const RecentFilesSystemAccessModeEnum::Enum recentFilesMode = RecentFilesSystemAccessModeEnum::fromName(recentFilesModeName, &valid);
+                        if (valid)
+                        {
+                            CaretPreferences* prefs = SessionManager::get()->getCaretPreferences();
+                            prefs->setRecentFilesSystemAccessMode(recentFilesMode);
+                        }
+                        else {
+                            cerr << "Invalid recent files mode \""
+                            << qPrintable(recentFilesModeName)
+                            << "\" for \"-recent-files-mode\" option" << std::endl;
+                            hasFatalError = true;
+                        }
+                    }
+                    else {
+                        cerr << "Missing recent files mode for \"-recent-files-mode\" option" << std::endl;
+                        hasFatalError = true;
+                    }
                 } else if (thisParam == "-scene-load") {
                     if (myParams->hasNext()) {
                         myState.sceneFileName = myParams->nextString("Scene File Name");
@@ -836,12 +731,27 @@ void parseCommandLine(const AString& progName, ProgramParameters* myParams, Prog
                             myState.sceneNameOrNumber = myParams->nextString("Scene Name or Number");
                         }
                         else {
-                            cerr << "Missing scene name/number for \"-scene\" option" << std::endl;
+                            cerr << "Missing scene name/number for \"-scene-load\" option" << std::endl;
                             hasFatalError = true;
                         }
                     }
                     else {
-                        cerr << "Missing scene file name for \"-scene\" option" << std::endl;
+                        cerr << "Missing scene file name for \"-scene-load\" option" << std::endl;
+                        hasFatalError = true;
+                    }
+                } else if (thisParam == "-scene-load-hd") {
+                    if (myParams->hasNext()) {
+                        myState.sceneFileNameNoDialog = myParams->nextString("Scene File Name");
+                        if (myParams->hasNext()) {
+                            myState.sceneNameOrNumber = myParams->nextString("Scene Name or Number");
+                        }
+                        else {
+                            cerr << "Missing scene name/number for " << thisParam << " option" << std::endl;
+                            hasFatalError = true;
+                        }
+                    }
+                    else {
+                        cerr << "Missing scene file name for " << thisParam << " option" << std::endl;
                         hasFatalError = true;
                     }
                 } else if (thisParam == "-spec-load-all") {
@@ -969,6 +879,9 @@ void parseCommandLine(const AString& progName, ProgramParameters* myParams, Prog
     if ( ! myState.sceneFileName.isEmpty()) {
         myState.showSplash = false;
     }
+    if ( ! myState.sceneFileNameNoDialog.isEmpty()) {
+        myState.showSplash = false;
+    }
     if ( ! myState.specFileNameLoadWithDialog.isEmpty()) {
         myState.showSplash = false;
     }
@@ -980,6 +893,7 @@ void parseCommandLine(const AString& progName, ProgramParameters* myParams, Prog
 ProgramState::ProgramState()
 {
     sceneFileName = "";
+    sceneFileNameNoDialog = "";
     sceneNameOrNumber = "";
     windowSizeXY[0] = -1;
     windowSizeXY[1] = -1;
@@ -988,4 +902,5 @@ ProgramState::ProgramState()
     graphicsSizeXY[0] = -1;
     graphicsSizeXY[1] = -1;
     showSplash = true;
+    macMenuFlag = false;
 }

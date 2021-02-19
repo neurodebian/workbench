@@ -20,12 +20,14 @@
  *  51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 /*LICENSE_END*/
+
+#include <array>
 #include <memory>
 
 #include "BrainConstants.h"
 #include "CaretObject.h"
-#include "ChartAxisLocationEnum.h"
 #include "ChartTwoDataTypeEnum.h"
+#include "ChartTwoOverlaySetInterface.h"
 #include "EventListenerInterface.h"
 #include "SceneableInterface.h"
 
@@ -33,13 +35,14 @@
 namespace caret {
     class AnnotationPercentSizeText;
     class CaretMappableDataFile;
+    class ChartTwoCartesianOrientedAxes;
     class ChartTwoCartesianAxis;
     class ChartTwoOverlay;
     class ChartTwoTitle;
     class PlainTextStringBuilder;
     class SceneClassAssistant;
 
-    class ChartTwoOverlaySet : public CaretObject, public EventListenerInterface, public SceneableInterface {
+    class ChartTwoOverlaySet : public CaretObject, public ChartTwoOverlaySetInterface, public EventListenerInterface, public SceneableInterface {
         
     public:
         ChartTwoOverlaySet(const ChartTwoDataTypeEnum::Enum chartDataType,
@@ -52,6 +55,8 @@ namespace caret {
         
         void copyCartesianAxes(const ChartTwoOverlaySet* overlaySet);
         
+        ChartTwoDataTypeEnum::Enum getChartTwoDataType() const;
+
         ChartTwoOverlay* getPrimaryOverlay();
         
         const ChartTwoOverlay* getPrimaryOverlay() const;
@@ -74,6 +79,40 @@ namespace caret {
         
         void getDisplayedChartAxes(std::vector<ChartTwoCartesianAxis*>& axesOut) const;
         
+        ChartTwoCartesianOrientedAxes* getHorizontalAxes();
+        
+        const ChartTwoCartesianOrientedAxes* getHorizontalAxes() const;
+        
+        ChartTwoCartesianOrientedAxes* getVerticalAxes();
+        
+        const ChartTwoCartesianOrientedAxes* getVerticalAxes() const;
+        
+        void applyMouseTranslation(const int32_t viewport[4],
+                                   const float mouseDX,
+                                   const float mouseDY);
+        
+        void applyMouseScaling(const int32_t viewport[4],
+                               const float mouseX,
+                               const float mouseY,
+                               const float mouseDY);
+        
+        void applyChartTwoAxesBoundSelection(const int32_t viewport[4],
+                                             const int32_t x1,
+                                             const int32_t y1,
+                                             const int32_t x2,
+                                             const int32_t y2);
+        
+        void finalizeChartTwoAxesBoundSelection(const int32_t viewport[4],
+                                                const int32_t x1,
+                                                const int32_t y1,
+                                                const int32_t x2,
+                                                const int32_t y2);
+        
+        bool getChartSelectionBounds(float& minX,
+                                     float& minY,
+                                     float& maxX,
+                                     float& maxY) const;
+        
         AString getAxisLabel(const ChartTwoCartesianAxis* axis) const;
         
         void setAxisLabel(const ChartTwoCartesianAxis* axis,
@@ -81,10 +120,14 @@ namespace caret {
         
         bool isAxesSupportedByChartDataType() const;
         
-        bool getDataRangeForAxis(const ChartAxisLocationEnum::Enum chartAxisLocation,
-                                 float& minimumValueOut,
-                                 float& maximumValueOut) const;
+        virtual bool getDataRangeForAxis(const ChartAxisLocationEnum::Enum chartAxisLocation,
+                                         float& minimumValueOut,
+                                         float& maximumValueOut) const override;
         
+        virtual bool getDataRangeForAxisOrientation(const ChartTwoAxisOrientationTypeEnum::Enum axisOrientationType,
+                                                    float& minimumValueOut,
+                                                    float& maximumValueOut) const override;
+
         ChartTwoTitle* getChartTitle();
         
         const ChartTwoTitle* getChartTitle() const;
@@ -107,6 +150,11 @@ namespace caret {
         
         void setAxisLineThickness(const float axisLineThickness);
         
+        void incrementOverlayActiveLineChartPoint(const int32_t incrementValue);
+        
+        void selectOverlayActiveLineChart(ChartTwoOverlay* chartTwoOverlay,
+                                          const int32_t lineSegmentPointIndex);
+        
         // ADD_NEW_METHODS_HERE
 
         virtual AString toString() const;
@@ -121,10 +169,6 @@ namespace caret {
         virtual void restoreFromScene(const SceneAttributes* sceneAttributes,
                                       const SceneClass* sceneClass);
 
-          
-          
-          
-          
           
 // If there will be sub-classes of this class that need to save
 // and restore data from scenes, these pure virtual methods can
@@ -143,17 +187,27 @@ namespace caret {
         
         void firstOverlaySelectionChanged();
         
+        void assignUnusedColor(ChartTwoOverlay* chartOverlay);
+
+        void updateRangeScaleFromVersionOneScene(const ChartTwoAxisOrientationTypeEnum::Enum axisOrientationType,
+                                                 ChartTwoCartesianAxis* leftOrBottomAxis,
+                                                 ChartTwoCartesianAxis* rightOrTopAxis);
+        
+        void setChartTwoAxesBoundSelection(const int32_t viewport[4],
+                                           const int32_t x1,
+                                           const int32_t y1,
+                                           const int32_t x2,
+                                           const int32_t y2);
+
         SceneClassAssistant* m_sceneAssistant;
 
         std::vector<std::shared_ptr<ChartTwoOverlay>> m_overlays;
         
         const ChartTwoDataTypeEnum::Enum m_chartDataType;
         
-        std::unique_ptr<ChartTwoCartesianAxis> m_chartAxisLeft;
+        std::unique_ptr<ChartTwoCartesianOrientedAxes> m_horizontalAxes;
         
-        std::unique_ptr<ChartTwoCartesianAxis> m_chartAxisRight;
-        
-        std::unique_ptr<ChartTwoCartesianAxis> m_chartAxisBottom;
+        std::unique_ptr<ChartTwoCartesianOrientedAxes> m_verticalAxes;
         
         const AString m_name;
         
@@ -167,6 +221,10 @@ namespace caret {
         
         /** Thickness of box around chart and tick marks on axes*/
         float m_axisLineThickness = 0.5;
+        
+        std::array<float, 4> m_chartSelectionBounds;
+        
+        bool m_chartSelectionBoundsValid = false;
         
         // ADD_NEW_MEMBERS_HERE
         

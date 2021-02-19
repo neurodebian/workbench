@@ -110,6 +110,18 @@ AnnotationRedoUndoCommandModeEnum::initialize()
                                                      "INVALID",
                                                      "Invalid"));
     
+    enumData.push_back(AnnotationRedoUndoCommandModeEnum(BROWSER_TAB_BACKGROUND,
+                                                         "BROWSER_TAB_BACKGROUND",
+                                                         "Browser Tab Background"));
+    
+    enumData.push_back(AnnotationRedoUndoCommandModeEnum(BOUNDS_2D_ALL,
+                                                         "BOUNDS_2D_ALL",
+                                                         "Bounds 2D All"));
+    
+    enumData.push_back(AnnotationRedoUndoCommandModeEnum(BOUNDS_2D_SINGLE,
+                                                         "BOUNDS_2D_SINGLE",
+                                                         "Bounds 2D Single"));
+    
     enumData.push_back(AnnotationRedoUndoCommandModeEnum(COLOR_BACKGROUND,
                                                      "COLOR_BACKGROUND",
                                                      "Color - Background"));
@@ -141,6 +153,10 @@ AnnotationRedoUndoCommandModeEnum::initialize()
     enumData.push_back(AnnotationRedoUndoCommandModeEnum(DUPLICATE_ANNOTATION,
                                                          "DUPLICATE_ANNOTATION",
                                                          "Duplicate Annotation"));
+    
+    enumData.push_back(AnnotationRedoUndoCommandModeEnum(DUPLICATE_ANNOTATIONS,
+                                                         "DUPLICATE_ANNOTATIONS",
+                                                         "Duplicate Annotations"));
     
     enumData.push_back(AnnotationRedoUndoCommandModeEnum(GROUPING_GROUP,
                                                          "GROUPING_GROUP",
@@ -177,6 +193,14 @@ AnnotationRedoUndoCommandModeEnum::initialize()
     enumData.push_back(AnnotationRedoUndoCommandModeEnum(ROTATION_ANGLE,
                                                          "ROTATION_ANGLE",
                                                          "Rotation Angle"));
+    
+    enumData.push_back(AnnotationRedoUndoCommandModeEnum(STACKING_ORDER_ANNOTATIONS,
+                                                         "STACKING_ORDER_ANNOTATIONS",
+                                                         "Stacking Order for Annotation"));
+    
+    enumData.push_back(AnnotationRedoUndoCommandModeEnum(STACKING_ORDER_BROWSER_TAB,
+                                                         "STACKING_ORDER_BROWSER_TAB",
+                                                         "Stacking Order for Browser Tab"));
     
     enumData.push_back(AnnotationRedoUndoCommandModeEnum(TEXT_ALIGNMENT_HORIZONTAL,
                                                      "TEXT_ALIGNMENT_HORIZONTAL",

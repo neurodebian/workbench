@@ -21,6 +21,7 @@
  */
 /*LICENSE_END*/
 
+#include <memory>
 #include <vector>
 #include <stdint.h>
 
@@ -49,6 +50,8 @@ namespace caret {
     class CaretDataFile;
     class CaretMappableDataFile;
     class CaretPreferences;
+    class CaretResult;
+    class ChartTwoCartesianOrientedAxesYokingManager;
     class ChartingDataManager;
     class ChartableLineSeriesBrainordinateInterface;
     class ChartableMatrixInterface;
@@ -80,6 +83,7 @@ namespace caret {
     class DisplayPropertiesVolume;
     class EventDataFileRead;
     class EventDataFileReload;
+    class EventDataFileReloadAll;
     class EventSpecFileReadDataFiles;
     class GapsAndMargins;
     class IdentificationManager;
@@ -89,10 +93,13 @@ namespace caret {
     class MetricDynamicConnectivityFile;
     class ModelChart;
     class ModelChartTwo;
+    class ModelMedia;
     class ModelSurfaceMontage;
     class ModelVolume;
     class ModelWholeBrain;
     class PaletteFile;
+    class PaletteGroupStandardPalettes;
+    class PaletteGroupUserCustomPalettes;
     class RgbaFile;
     class SceneClassAssistant;
     class Scene;
@@ -108,7 +115,7 @@ namespace caret {
     class Brain : public CaretObject, public EventListenerInterface, public SceneableInterface {
 
     public:
-        Brain(const CaretPreferences* caretPreferences);
+        Brain(CaretPreferences* caretPreferences);
         
         ~Brain();
         
@@ -215,6 +222,10 @@ namespace caret {
         ChartingDataManager* getChartingDataManager();
         
         const ChartingDataManager* getChartingDataManager() const;
+        
+        ModelMedia* getMediaModel();
+        
+        const ModelMedia* getMediaModel() const;
         
         void getAllCiftiMappableDataFiles(std::vector<CiftiMappableDataFile*>& allCiftiMappableDataFilesOut) const;
         
@@ -414,8 +425,11 @@ namespace caret {
         
         const DisplayPropertiesLabels* getDisplayPropertiesLabels() const;
         
-        void copyDisplayProperties(const int32_t sourceTabIndex,
-                                   const int32_t targetTabIndex);
+        void copyDisplayPropertiesToTab(const int32_t sourceTabIndex,
+                                        const int32_t targetTabIndex);
+        
+        void copyFilePropertiesToTab(const int32_t sourceTabIndex,
+                                     const int32_t targetTabIndex);
         
         virtual SceneClass* saveToScene(const SceneAttributes* sceneAttributes,
                                         const AString& instanceName);
@@ -429,6 +443,8 @@ namespace caret {
         
         IdentificationManager* getIdentificationManager();
 
+        const IdentificationManager* getIdentificationManager() const;
+        
         SelectionManager* getSelectionManager();
         
         BrainordinateRegionOfInterest* getBrainordinateHighlightRegionOfInterest();
@@ -446,6 +462,10 @@ namespace caret {
         bool isSurfaceMatchingToAnatomical() const;
         
         void setSurfaceMatchingToAnatomical(const bool matchStatus);
+        
+        std::unique_ptr<CaretResult> getBaseDirectoryForLoadedDataFiles(AString& baseDirectoryOut) const;
+        
+        const Scene* getActiveScene() const;
         
     private:
         /**
@@ -502,10 +522,14 @@ namespace caret {
         
         void processReloadDataFileEvent(EventDataFileReload* reloadDataFileEvent);
         
+        void processReloadAllDataFilesEvent(EventDataFileReloadAll* reloadAllDataFilesEvent);
+        
         CaretDataFile* readDataFile(const DataFileTypeEnum::Enum dataFileType,
                           const StructureEnum::Enum structure,
                           const AString& dataFileName,
                           const bool markDataFileAsModified);
+        
+        void sortDataFilesByFileNameNoPath();
         
         void createModelChartTwo();
         
@@ -728,6 +752,8 @@ namespace caret {
         
         void updateSurfaceMontageModel();
         
+        void updateMediaModel();
+        
         void updateBrainStructures();
         
         void updateFiberTrajectoryMatchingFiberOrientationFiles();
@@ -737,6 +763,8 @@ namespace caret {
         int32_t getDuplicateFileNameCounterForFileType(const DataFileTypeEnum::Enum dataFileType);
         
         void resetDuplicateFileNameCounter(const bool preserveSceneFileCounter);
+        
+        std::vector<CaretDataFile*> getReloadableDataFiles() const;
         
         std::vector<BrainStructure*> m_brainStructures;
         
@@ -798,11 +826,15 @@ namespace caret {
         
         ModelWholeBrain* m_wholeBrainModel;
         
+        ModelMedia* m_mediaModel = NULL;
+        
         ModelSurfaceMontage* m_surfaceMontageModel;
         
         ChartingDataManager* m_chartingDataManager;
         
         AnnotationManager* m_annotationManager;
+        
+        std::unique_ptr<ChartTwoCartesianOrientedAxesYokingManager> m_chartTwoCartesianAxesYokingManager;
         
         /** contains all display properties */
         std::vector<DisplayProperties*> m_displayProperties;
@@ -885,6 +917,10 @@ namespace caret {
         Scene* m_activeScene = NULL;
         
         bool m_surfaceMatchingToAnatomicalFlag = false;
+        
+        std::shared_ptr<PaletteGroupStandardPalettes> m_palettesStandardGroup;
+        
+        std::shared_ptr<PaletteGroupUserCustomPalettes> m_palettesUserCustomGroup;
     };
 
 } // namespace

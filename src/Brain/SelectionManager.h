@@ -39,6 +39,8 @@ namespace caret {
     class SelectionItemChartTimeSeries;
     class SelectionItemChartTwoHistogram;
     class SelectionItemChartTwoLabel;
+    class SelectionItemChartTwoLineLayer;
+    class SelectionItemChartTwoLineLayerVerticalNearest;
     class SelectionItemChartTwoLineSeries;
     class SelectionItemChartTwoMatrix;
     class SelectionItemCiftiConnectivityMatrixRowColumn;
@@ -52,7 +54,8 @@ namespace caret {
     class SelectionItemVoxel;
     class SelectionItemVoxelEditing;
     class SelectionItemVoxelIdentificationSymbol;
-    class IdentificationTextGenerator;
+    class IdentificationFormattedTextGenerator;
+    class IdentificationSimpleTextGenerator;
     class Surface;
     
     class SelectionManager : public CaretObject, public EventListenerInterface {
@@ -138,6 +141,14 @@ namespace caret {
         
         const SelectionItemChartTwoHistogram* getChartTwoHistogramIdentification() const;
         
+        SelectionItemChartTwoLineLayer* getChartTwoLineLayerIdentification();
+        
+        const SelectionItemChartTwoLineLayer* getChartTwoLineLayerIdentification() const;
+        
+        SelectionItemChartTwoLineLayerVerticalNearest* getChartTwoLineLayerVerticalNearestIdentification();
+        
+        const SelectionItemChartTwoLineLayerVerticalNearest* getChartTwoLineLayerVerticalNearestIdentification() const;
+        
         SelectionItemChartTwoLineSeries* getChartTwoLineSeriesIdentification();
         
         const SelectionItemChartTwoLineSeries* getChartTwoLineSeriesIdentification() const;
@@ -150,7 +161,10 @@ namespace caret {
         
         const SelectionItemChartTwoMatrix* getChartTwoMatrixIdentification() const;
         
-        AString getIdentificationText(const Brain* brain) const;
+        AString getSimpleIdentificationText(const Brain* brain) const;
+        
+        AString getFormattedIdentificationText(const Brain* brain,
+                                               const int32_t tabIndex) const;
         
         void filterSelections(const bool applySelectionBackgroundFiltering);
         
@@ -203,6 +217,10 @@ namespace caret {
         
         std::unique_ptr<SelectionItemChartTwoLineSeries> m_chartTwoLineSeriesIdentification;
         
+        std::unique_ptr<SelectionItemChartTwoLineLayer> m_chartTwoLineLayerIdentification;
+        
+        std::unique_ptr<SelectionItemChartTwoLineLayerVerticalNearest> m_chartTwoLineLayerVerticalNearestIdentification;
+        
         std::unique_ptr<SelectionItemChartTwoLabel> m_chartTwoLabelIdentification;
         
         std::unique_ptr<SelectionItemChartTwoMatrix>     m_chartTwoMatrixIdentification;
@@ -223,7 +241,9 @@ namespace caret {
         
         SelectionItemSurfaceTriangle* m_surfaceTriangleIdentification;
         
-        IdentificationTextGenerator* m_idTextGenerator;
+        IdentificationSimpleTextGenerator* m_idTextGenerator;
+        
+        std::unique_ptr<IdentificationFormattedTextGenerator> m_idFormattedTextGenerator;
         
         SelectionItemVoxel* m_voxelIdentification;
         

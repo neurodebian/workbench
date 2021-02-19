@@ -46,19 +46,22 @@ namespace caret {
     class BrowserTabContent;
     class BugReportDialog;
     class ChartTwoLineSeriesHistoryDialog;
-    class ClippingPlanesDialog;
     class CursorManager;
     class CustomViewDialog;
+    class EventOperatingSystemRequestOpenDataFile;
     class GapsAndMarginsDialog;
     class HelpViewerDialog;
     class IdentifyBrainordinateDialog;
+    class IdentificationDisplayDialog;
     class ImageFile;
     class ImageCaptureDialog;
     class InformationDisplayDialog;
     class MovieRecordingDialog;
     class OverlaySettingsEditorDialog;
+    class MacDockMenu;
     class Model;
     class PaletteColorMappingEditorDialog;
+    class PaletteEditorDialog;
     class PreferencesDialog;
     class Scene;
     class SceneDialog;
@@ -92,6 +95,10 @@ namespace caret {
         static void updateGraphicsOneWindow(const int32_t windowIndex);
         
         static void updateSurfaceColoring();
+        
+        static bool startNewWbViewInstance(const QStringList& parameters,
+                                           const QString& workingDirectory,
+                                           QWidget* parent);
         
         Brain* getBrain() const;
         
@@ -142,7 +149,6 @@ namespace caret {
         
         void processShowBugReportDialog(BrainBrowserWindow* browserWindow,
                                         const AString& openGLInformation);
-        void processShowClippingPlanesDialog(BrainBrowserWindow* browserWindow);
         void processShowCustomViewDialog(BrainBrowserWindow* browserWindow);
         void processShowGapsAndMarginsDialog(BrainBrowserWindow* browserWindow);
         void processShowImageCaptureDialog(BrainBrowserWindow* browserWindow);
@@ -170,6 +176,8 @@ namespace caret {
         
         void updateAnimationStartTime(double value);
         
+        void processShowPaletteEditorDialog(BrainBrowserWindow* browserWindow);
+        
         virtual SceneClass* saveToScene(const SceneAttributes* sceneAttributes,
                                         const AString& instanceName);
         
@@ -182,6 +190,9 @@ namespace caret {
                                    SelectionManager* selectionManager,
                                    QWidget* parentWidget);
         
+        void processReopenLastClosedTab(BrainBrowserWindow* parentWindow);
+        
+
         /*
          * Mode used when testing for modified files
          */
@@ -210,6 +221,12 @@ namespace caret {
         void showIdentifyBrainordinateDialogActionToggled(bool);
         
         void sceneDialogDisplayActionTriggered(bool);
+        
+        void sceneDialogDisplayMenuHovered(QAction* action);
+        
+        void sceneDialogDisplayMenuTriggered(QAction* action);
+        
+        void sceneDialogDisplayMenuAboutToShow();
         
         void showHelpDialogActionToggled(bool);
         
@@ -252,6 +269,10 @@ namespace caret {
         
         QPixmap createDataToolTipsIcon(const QWidget* widget);
         
+        void processOpenDataFileEvent(EventOperatingSystemRequestOpenDataFile* openDataFileEvent);
+        
+        void updateInformationDisplayDialogAction();
+
         /** One instance of the GuiManager */
         static GuiManager* singletonGuiManager;
         
@@ -267,11 +288,11 @@ namespace caret {
         /** Editor for palette color mapping editing */
         PaletteColorMappingEditorDialog* m_paletteColorMappingEditor;
         
+        PaletteEditorDialog* m_paletteEditorDialog = NULL;
+       
         ChartTwoLineSeriesHistoryDialog* m_chartTwoLineSeriesHistoryDialog;
         
         TileTabsConfigurationDialog* m_tileTabsConfigurationDialog;
-        
-        ClippingPlanesDialog* m_clippingPlanesDialog;
         
         CustomViewDialog* m_customViewDialog;
         
@@ -289,9 +310,13 @@ namespace caret {
         
         IdentifyBrainordinateDialog* m_identifyBrainordinateDialog;
         
+        IdentificationDisplayDialog* m_identificationDisplayDialog = NULL;
+        
         SceneDialog* sceneDialog;
         
         QAction* m_sceneDialogDisplayAction;
+        
+        QMenu* m_sceneDialogDisplayActionMenu;
         
         SurfacePropertiesEditorDialog* m_surfacePropertiesEditorDialog;
         
@@ -312,6 +337,8 @@ namespace caret {
         QAction* m_helpViewerDialogDisplayAction;
         
         HelpViewerDialog* m_helpViewerDialog;
+        
+        MacDockMenu* m_mackDockMenu = NULL;
         
         /** 
          * Tracks non-modal dialogs that are created only one time

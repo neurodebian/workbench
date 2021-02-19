@@ -37,6 +37,8 @@ public:
     enum Enum {
         /** Box */
         BOX,
+        /** Browser Tab */
+        BROWSER_TAB,
         /** Colorbar */
         COLOR_BAR,
         /** Image */
@@ -45,6 +47,10 @@ public:
         LINE,
         /** Oval */
         OVAL,
+        /** Poly Line */
+        POLY_LINE,
+        /** Scale Bar */
+        SCALE_BAR,
         /** Text */
         TEXT
     };

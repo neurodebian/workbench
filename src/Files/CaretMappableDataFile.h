@@ -37,6 +37,7 @@ namespace caret {
     class ChartDataCartesian;
     class ChartableTwoFileDelegate;
     class FastStatistics;
+    class FileIdentificationAttributes;
     class GiftiMetaData;
     class GiftiLabelTable;
     class Histogram;
@@ -508,16 +509,21 @@ namespace caret {
                                                          const StructureEnum::Enum structure,
                                                          const int nodeIndex,
                                                          const int32_t numberOfNodes,
+                                                         const AString& dataValueSeparator,
                                                          AString& textOut) const;
         
         virtual bool getVolumeVoxelIdentificationForMaps(const std::vector<int32_t>& mapIndices,
                                                          const float xyz[3],
+                                                         const AString& dataValueSeparator,
                                                          int64_t ijkOut[3],
                                                          AString& textOut) const;
         
-
         void updateAfterFileDataChanges();
         
+        FileIdentificationAttributes* getFileIdentificationAttributes();
+        
+        const FileIdentificationAttributes* getFileIdentificationAttributes() const;
+
     protected:
         CaretMappableDataFile(const CaretMappableDataFile&);
 
@@ -550,6 +556,8 @@ namespace caret {
         mutable std::unique_ptr<ChartableTwoFileDelegate> m_chartingDelegate;
         
         std::vector<std::unique_ptr<CaretMappableDataFileAndMapSelectionModel>> m_mapThresholdFileSelectionModels;
+        
+        std::unique_ptr<FileIdentificationAttributes> m_fileIdentificationAttributes;
         
         /** 
          * Added by WB-781 Apply to All Maps for ColorBar.

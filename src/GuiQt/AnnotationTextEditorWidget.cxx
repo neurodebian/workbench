@@ -38,6 +38,7 @@
 #include "EventGraphicsUpdateAllWindows.h"
 #include "EventManager.h"
 #include "GuiManager.h"
+#include "UserInputModeEnum.h"
 #include "WuQDataEntryDialog.h"
 #include "WuQMessageBox.h"
 #include "WuQtUtilities.h"
@@ -82,6 +83,13 @@ m_browserWindowIndex(browserWindowIndex)
     QObject::connect(m_annotationTextConnectTypeEnumComboBox, SIGNAL(itemActivated()),
                      this, SLOT(annotationTextConnectTypeEnumComboBoxItemActivated()));
     
+    /*
+     * Limit text edit width to width of combo box
+     */
+    const int32_t width = m_annotationTextConnectTypeEnumComboBox->getWidget()->sizeHint().width();
+    m_annotationTextConnectTypeEnumComboBox->getWidget()->setFixedWidth(width);
+    m_textLineEdit->setFixedWidth(width);
+    
     QVBoxLayout* layout = new QVBoxLayout(this);
     WuQtUtilities::setLayoutSpacingAndMargins(layout, 2, 2);
     layout->addWidget(textLabel, 0, Qt::AlignHCenter);
@@ -90,7 +98,6 @@ m_browserWindowIndex(browserWindowIndex)
     
     setSizePolicy(sizePolicy().horizontalPolicy(),
                   QSizePolicy::Fixed);
-    setMaximumWidth(200);
 }
 
 /**
@@ -196,7 +203,8 @@ AnnotationTextEditorWidget::annotationTextChanged()
     undoCommand->setModeTextCharacters(s, selectedAnnotations);
     AnnotationManager* annMan = GuiManager::get()->getBrain()->getAnnotationManager();
     AString errorMessage;
-    if ( ! annMan->applyCommand(undoCommand,
+    if ( ! annMan->applyCommand(UserInputModeEnum::Enum::ANNOTATIONS,
+                                undoCommand,
                                 errorMessage)) {
         WuQMessageBox::errorOk(this,
                                errorMessage);
@@ -241,7 +249,8 @@ AnnotationTextEditorWidget::annotationTextConnectTypeEnumComboBoxItemActivated()
                                                    selectedAnnotations);
     AnnotationManager* annMan = GuiManager::get()->getBrain()->getAnnotationManager();
     AString errorMessage;
-    if ( ! annMan->applyCommand(undoCommand,
+    if ( ! annMan->applyCommand(UserInputModeEnum::Enum::ANNOTATIONS,
+                                undoCommand,
                                 errorMessage)) {
         WuQMessageBox::errorOk(this,
                                errorMessage);

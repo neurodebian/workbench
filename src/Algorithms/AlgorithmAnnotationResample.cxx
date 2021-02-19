@@ -28,8 +28,8 @@
 #include "AnnotationCoordinate.h"
 #include "AnnotationFile.h"
 #include "AnnotationGroup.h"
-#include "AnnotationOneDimensionalShape.h"
-#include "AnnotationTwoDimensionalShape.h"
+#include "AnnotationTwoCoordinateShape.h"
+#include "AnnotationOneCoordinateShape.h"
 #include "DataFileException.h"
 #include "SurfaceFile.h"
 
@@ -114,7 +114,7 @@ AlgorithmAnnotationResample::useParameters(OperationParameters* myParams,
     
     std::vector<const SurfaceFile*> sourceSurfaces;
     std::vector<const SurfaceFile*> targetSurfaces;
-    for (auto instance : *(myParams->getRepeatableParameterInstances(3))) {
+    for (auto instance : myParams->getRepeatableParameterInstances(3)) {
         sourceSurfaces.push_back(instance->getSurface(1));
         targetSurfaces.push_back(instance->getSurface(2));
     }
@@ -191,8 +191,8 @@ AlgorithmAnnotationResample::resampleAnnotation(Annotation* ann)
     CaretAssert(ann);
     CaretAssert(ann->getCoordinateSpace() == AnnotationCoordinateSpaceEnum::SURFACE);
     
-    AnnotationOneDimensionalShape* oneDimAnn = ann->castToOneDimensionalShape();
-    AnnotationTwoDimensionalShape* twoDimAnn = ann->castToTwoDimensionalShape();
+    AnnotationTwoCoordinateShape* oneDimAnn = ann->castToTwoCoordinateShape();
+    AnnotationOneCoordinateShape* twoDimAnn = ann->castToOneCoordinateShape();
     
     std::vector<AnnotationCoordinate*> coordinates;
     if (oneDimAnn != NULL) {

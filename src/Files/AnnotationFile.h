@@ -33,7 +33,7 @@
 #include "DisplayGroupAndTabItemInterface.h"
 #include "EventAnnotationGrouping.h"
 #include "EventListenerInterface.h"
-#include "EventTileTabsConfigurationModification.h"
+#include "EventTileTabsGridConfigurationModification.h"
 
 namespace caret {
 
@@ -66,7 +66,14 @@ namespace caret {
              * "Brain" for the scene annotation file that is only saved
              * to scenes and never saved to a file.
              */
-            ANNOTATION_FILE_SAVE_TO_SCENE
+            ANNOTATION_FILE_SAVE_TO_SCENE,
+            
+            /**
+             * A dummy file is used when drawing annotations as
+             * some data types (color bars) are drawn as annotations
+             * but are not in an annotation file
+             */
+            ANNOTATION_FILE_DUMMY_FOR_DRAWING
         };
         
         AnnotationFile();
@@ -209,6 +216,14 @@ namespace caret {
                                           const int32_t toTabIndex);
         
         bool removeAnnotationsInTab(const int32_t tabIndex);
+
+        static void removeAnnotationsInTabGroupAux(const int32_t tabIndex,
+                                                   std::vector<QSharedPointer<AnnotationGroup>>& annotationsGroups,
+                                                   std::vector<QSharedPointer<AnnotationGroup>>& removedGroupsOut);
+        
+        void preserveAnnotationsInClosedTab(const int32_t tabIndex);
+        
+        void restoreAnnotationsInReopendTab(const int32_t tabIndex);
         
         int32_t generateUniqueKey();
         
@@ -218,7 +233,7 @@ namespace caret {
         
         AnnotationGroup* getSpaceAnnotationGroup(const Annotation* annotation);
         
-        void updateSpacerAnnotationsAfterTileTabsModification(const EventTileTabsConfigurationModification* modEvent);
+        void updateSpacerAnnotationsAfterTileTabsModification(const EventTileTabsGridConfigurationModification* modEvent);
         
         const AnnotationFileSubType m_fileSubType;
         
@@ -230,7 +245,9 @@ namespace caret {
         
         int32_t m_uniqueKeyGenerator;
         
-        std::vector<QSharedPointer<AnnotationGroup> > m_annotationGroups;
+        std::vector<QSharedPointer<AnnotationGroup>> m_annotationGroups;
+        
+        std::vector<QSharedPointer<AnnotationGroup>> m_closedTabAnnotationGroups;
         
         /**
          * Contains annotation that have been delete/removed so that
@@ -242,13 +259,20 @@ namespace caret {
         
         typedef std::vector<QSharedPointer<AnnotationGroup> >::const_iterator AnnotationGroupConstIterator;
         
+        /**
+         * If true: When an browser tab is closed, any tab-space annotations are moved to 'm_removedAnnotations' and if the
+         * tab is reopend, the annotations are moved back to 'm_annotationGroups'.
+         * If false, When a browser tab is closed, no changes are made with annotations.
+         */
+        static bool s_preserveRestoreDeletedTabFlag;
+        
         // ADD_NEW_MEMBERS_HERE
 
         friend class AnnotationFileXmlReader;
     };
     
 #ifdef __ANNOTATION_FILE_DECLARE__
-    // <PLACE DECLARATIONS OF STATIC MEMBERS HERE>
+    bool AnnotationFile::s_preserveRestoreDeletedTabFlag = true;
 #endif // __ANNOTATION_FILE_DECLARE__
 
 } // namespace

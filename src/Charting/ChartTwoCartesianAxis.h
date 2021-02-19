@@ -25,21 +25,24 @@
 
 #include "CaretObject.h"
 #include "ChartAxisLocationEnum.h"
-#include "CaretUnitsTypeEnum.h"
 #include "ChartTwoAxisScaleRangeModeEnum.h"
+#include "ChartTwoCartesianSubdivisionsModeEnum.h"
 #include "ChartTwoNumericSubdivisionsModeEnum.h"
+#include "CaretUnitsTypeEnum.h"
+#include "DisplayGroupEnum.h"
 #include "NumericFormatModeEnum.h"
 #include "SceneableInterface.h"
 
 
 namespace caret {
-    class ChartTwoOverlaySet;
+    class ChartTwoCartesianCustomSubdivisions;
+    class ChartTwoOverlaySetInterface;
     class SceneClassAssistant;
 
     class ChartTwoCartesianAxis : public CaretObject, public SceneableInterface {
         
     public:
-        ChartTwoCartesianAxis(const ChartTwoOverlaySet* parentChartOverlaySet,
+        ChartTwoCartesianAxis(const ChartTwoOverlaySetInterface* parentChartOverlaySetInterface,
                               const ChartAxisLocationEnum::Enum axisLocation);
         
         virtual ~ChartTwoCartesianAxis();
@@ -48,30 +51,32 @@ namespace caret {
 
         ChartTwoCartesianAxis& operator=(const ChartTwoCartesianAxis& obj);
         
+        void reset();
+        
+        void copyAxisParameters(const ChartTwoCartesianAxis* axis);
+        
         ChartAxisLocationEnum::Enum getAxisLocation() const;
         
         bool isDisplayedByUser() const;
         
         void setDisplayedByUser(const bool displayed);
         
+        DisplayGroupEnum::Enum getDisplayGroup() const;
+        
+        void setDisplayGroup(const DisplayGroupEnum::Enum displayGroup);
+        
         void getDataRange(float& rangeMinimumOut,
                           float& rangeMaximumOut) const;
         
-        float getUserScaleMinimumValue() const;
+        float getSceneUserScaleMinimumValue() const;
         
-        void setUserScaleMinimumValue(const float value);
+        float getSceneUserScaleMaximumValue() const;
         
-        float getUserScaleMaximumValue() const;
-        
-        void setUserScaleMaximumValue(const float value);
-
         int32_t getUserDigitsRightOfDecimal() const;
         
         void setUserDigitsRightOfDecimal(const int32_t digitsRightOfDecimal);
         
-        ChartTwoAxisScaleRangeModeEnum::Enum getScaleRangeMode() const;
-        
-        void setScaleRangeMode(const ChartTwoAxisScaleRangeModeEnum::Enum scaleRangeMode);
+        ChartTwoAxisScaleRangeModeEnum::Enum getSceneScaleRangeMode() const;
         
         CaretUnitsTypeEnum::Enum getUnits() const;
         
@@ -89,10 +94,6 @@ namespace caret {
         
         void setUserNumberOfSubdivisions(const int32_t numberOfSubdivisions);
         
-        bool isEnabledByChart() const;
-        
-        void setEnabledByChart(const bool enabled);
-
         bool isShowTickmarks() const;
 
         void setShowTickmarks(const bool showTickmarks);
@@ -121,13 +122,13 @@ namespace caret {
         
         void setPaddingSize(const float paddingSize);
         
-        bool getScaleValuesAndOffsets(const float minimumDataValue,
-                                      const float maximumDataValue,
-                                      const float axisLength,
-                                      float& minimumOut,
-                                      float& maximumOut,
-                                      std::vector<float>& scaleValuesOffsetInPixelsOut,
-                                      std::vector<AString>& scaleValuesOut) const;
+        ChartTwoCartesianCustomSubdivisions* getCustomSubdivisions();
+        
+        const ChartTwoCartesianCustomSubdivisions* getCustomSubdivisions() const;
+        
+        ChartTwoCartesianSubdivisionsModeEnum::Enum getSubdivisionsMode() const;
+        
+        void setSubdivisionsMode(const ChartTwoCartesianSubdivisionsModeEnum::Enum subdivisionsMode);
         
         int32_t getLabelOverlayIndex(const int32_t maximumNumberOfOverlays) const;
         
@@ -143,11 +144,6 @@ namespace caret {
         virtual void restoreFromScene(const SceneAttributes* sceneAttributes,
                                       const SceneClass* sceneClass);
 
-          
-          
-          
-          
-          
 // If there will be sub-classes of this class that need to save
 // and restore data from scenes, these pure virtual methods can
 // be uncommented to force their implementation by sub-classes.
@@ -161,20 +157,17 @@ namespace caret {
     private:
         void copyHelperChartTwoCartesianAxis(const ChartTwoCartesianAxis& obj);
 
-        bool getAutoRangeMinimumAndMaximum(const float minimumValue,
-                                           const float maximumValue,
-                                           float& minimumOut,
-                                           float& maximumOut,
-                                           float& stepValueOut,
-                                           int32_t& digitsRightOfDecimalOut) const;
-
-        void limitUserScaleMinMaxToValidRange();
+        const ChartTwoCartesianAxis* getDisplayGroupOrThisAxisForGet() const;
         
-        const ChartTwoOverlaySet* m_parentChartOverlaySet;
+        ChartTwoCartesianAxis* getDisplayGroupOrThisAxisForSet();
+        
+        const ChartTwoOverlaySetInterface* m_parentChartOverlaySetInterface;
         
         const ChartAxisLocationEnum::Enum m_axisLocation;
         
         std::unique_ptr<SceneClassAssistant> m_sceneAssistant;
+        
+        DisplayGroupEnum::Enum m_displayGroup = DisplayGroupEnum::DISPLAY_GROUP_TAB;
         
         mutable float m_userScaleMinimumValue = -100.0f;
         
@@ -197,6 +190,10 @@ namespace caret {
 
         int32_t m_userNumberOfSubdivisions = 2;
         
+        std::unique_ptr<ChartTwoCartesianCustomSubdivisions> m_customSubdivisions;
+        
+        ChartTwoCartesianSubdivisionsModeEnum::Enum m_subdivisionsMode = ChartTwoCartesianSubdivisionsModeEnum::STANDARD;
+        
         /** size of label text*/
         float m_labelTextSize = 2.5f;
         
@@ -212,12 +209,10 @@ namespace caret {
         /** size of padding*/
         float m_paddingSize = 0.0f;
         
-        bool m_enabledByChart = false;
-
         bool m_showTickmarks = true;
         
         /** show axis label*/
-        bool m_showLabel;
+        bool m_showLabel = true;
         
         /** user display the axis*/
         bool m_displayedByUser = true;

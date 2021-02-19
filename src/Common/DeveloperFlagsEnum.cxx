@@ -135,11 +135,30 @@ DeveloperFlagsEnum::initialize()
                                                 CheckableEnum::YES,
                                                 false));
 
+    checkableItems.push_back(DeveloperFlagsEnum(DEVELOPER_FLAG_VOXEL_CUBES_TEST,
+                                                "DEVELOPER_FLAG_VOXEL_CUBES_TEST",
+                                                "Voxel Cubes Drawing Test",
+                                                CheckableEnum::YES,
+                                                true));
+    
+    checkableItems.push_back(DeveloperFlagsEnum(DEVELOPER_FLAG_CHART_OPENGL_LINES,
+                                                "DEVELOPER_FLAG_CHART_OPENGL_LINES",
+                                                "Draw Chart Lines with OpenGL Lines",
+                                                CheckableEnum::YES,
+                                                true));
+    
+    checkableItems.push_back(DeveloperFlagsEnum(DEVELOPER_FLAG_BLENDING,
+                                                "DEVELOPER_FLAG_BLENDING",
+                                                "Separate RGB / Alpha Opacity",
+                                                CheckableEnum::YES,
+                                                true));
+#ifdef HAVE_WEBKIT
     checkableItems.push_back(DeveloperFlagsEnum(DEVELOPER_FLAG_BALSA,
                                                 "DEVELOPER_FLAG_BALSA",
                                                 "Visit BALSA...",
                                                 CheckableEnum::NO,
                                                 false));
+#endif
     
     std::vector<DeveloperFlagsEnum> notCheckableItems;
 

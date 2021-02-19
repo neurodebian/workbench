@@ -21,6 +21,8 @@
  */
 /*LICENSE_END*/
 
+#include <array>
+
 #include "DisplayProperties.h"
 #include "SurfaceDrawingTypeEnum.h"
 
@@ -68,6 +70,16 @@ namespace caret {
         
         void setOpacity(const float opacity);
         
+        void setDefaultColorRGB(const std::array<uint8_t, 3>& defaultColorRGB);
+        
+        std::array<uint8_t, 3> getDefaultColorRGB() const;
+        
+        void resetDefaultColorRGB();
+        
+        bool isBackfaceCullingEnabled() const;
+        
+        void setBackfaceCullingEnabled(const bool enabled);
+        
     private:
         DisplayPropertiesSurface(const DisplayPropertiesSurface&);
 
@@ -82,6 +94,10 @@ namespace caret {
         SurfaceDrawingTypeEnum::Enum m_surfaceDrawingType;
         
         float m_opacity;
+        
+        std::array<uint8_t, 3> m_defaultColorRGB;
+        
+        bool m_backfaceCullingEnabled = false;
     };
     
 #ifdef __DISPLAY_PROPERTIES_SURFACE_DECLARE__

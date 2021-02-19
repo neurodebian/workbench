@@ -83,6 +83,12 @@ namespace caret {
                                        BrainOpenGLFixedPipeline* fixedPipelineDrawing,
                                        const bool useNegativePolygonOffsetFlag);
         
+        static void drawIdentificationSymbols(BrainOpenGLFixedPipeline* fixedPipelineDrawing,
+                                              Brain* brain,
+                                              const VolumeMappableInterface* volume,
+                                              const Plane& plane,
+                                              const float sliceThickness);
+        
         // ADD_NEW_METHODS_HERE
         
     private:
@@ -228,10 +234,6 @@ namespace caret {
                                            const float sliceCoordinates[3],
                                            const int32_t viewport[4]);
         
-        void drawOrthogonalSlice_LPI_ONLY(const VolumeSliceViewPlaneEnum::Enum sliceViewPlane,
-                                          const float sliceCoordinates[3],
-                                          const Plane& plane);
-        
         void drawOrthogonalSlice(const VolumeSliceViewPlaneEnum::Enum sliceViewPlane,
                                  const float sliceCoordinates[3],
                                  const Plane& plane);
@@ -340,7 +342,9 @@ namespace caret {
         bool getVoxelCoordinateBoundsAndSpacing(float boundsOut[6],
                                                 float spacingOut[3]);
         
-        void drawIdentificationSymbols(const Plane& plane);
+        void drawIdentificationSymbols(const VolumeMappableInterface* volume,
+                                       const Plane& plane,
+                                       const float sliceThickness);
         
         void addVoxelToIdentification(const int32_t volumeIndex,
                                       const int32_t mapIndex,
@@ -361,7 +365,7 @@ namespace caret {
                                                         const float sliceCoordinates[3],
                                                         const float sliceNormalVector[3]);
         
-        void processIdentification();
+        void processIdentification(const bool doNotReplaceUnderlayFlag);
         
         void resetIdentification();
         

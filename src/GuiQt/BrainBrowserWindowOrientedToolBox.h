@@ -28,6 +28,7 @@
 #include "EventListenerInterface.h"
 #include "SceneableInterface.h"
 
+class QSplitter;
 class QTabWidget;
 
 namespace caret {
@@ -39,8 +40,10 @@ namespace caret {
     class CiftiConnectivityMatrixViewController;
     class FiberOrientationSelectionViewController;
     class FociSelectionViewController;
+    class IdentificationDisplayWidget;
     class ImageSelectionViewController;
     class LabelSelectionViewController;
+    class MediaOverlaySetViewController;
     class OverlaySetViewController;
     class VolumeSurfaceOutlineSetViewController;
     class WuQTabWidgetWithSizeHint;
@@ -89,6 +92,8 @@ namespace caret {
         int addToTabWidget(QWidget* page,
                            const QString& label);
         
+        QWidget* createSplitterAndIdentificationWidget(const Qt::Orientation orientation);
+        
         OverlaySetViewController* m_overlaySetViewController;
         
         AnnotationSelectionViewController* m_annotationViewController;
@@ -110,6 +115,8 @@ namespace caret {
         ImageSelectionViewController* m_imageSelectionViewController;
         
         LabelSelectionViewController* m_labelSelectionViewController;
+        
+        MediaOverlaySetViewController* m_mediaSelectionViewController;
         
         VolumeSurfaceOutlineSetViewController* m_volumeSurfaceOutlineSetViewController;
         
@@ -141,7 +148,13 @@ namespace caret {
         
         int32_t m_labelTabIndex;
         
+        int32_t m_mediaTabIndex;
+        
         int32_t m_volumeSurfaceOutlineTabIndex;
+        
+        QSplitter* m_splitterWidget = NULL;
+        
+        IdentificationDisplayWidget* m_identificationWidget = NULL;
         
         int m_sizeHintWidth = -1;
         

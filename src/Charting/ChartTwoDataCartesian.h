@@ -21,7 +21,7 @@
  */
 /*LICENSE_END*/
 
-#include "CaretColorEnum.h"
+#include "CaretColor.h"
 #include "CaretObjectTracksModification.h"
 #include "CaretUnitsTypeEnum.h"
 #include "ChartTwoDataTypeEnum.h"
@@ -34,6 +34,7 @@ namespace caret {
     class ChartPoint;
     class GraphicsPrimitiveV3f;
     class MapFileDataSelector;
+    class Matrix4x4Interface;
     class SceneClassAssistant;
     
     class ChartTwoDataCartesian : public CaretObjectTracksModification, public SceneableInterface {
@@ -48,12 +49,17 @@ namespace caret {
         
         virtual ChartTwoDataCartesian* clone() const;
         
+        virtual ChartTwoDataCartesian* clone(const Matrix4x4Interface& matrix) const;
+        
         bool isSelected() const;
         
         void setSelected(const bool selectionStatus);
         
         void addPoint(const float x,
                       const float y);
+        
+        void getPointXYZ(const int32_t pointIndex,
+                         float xyzOut[3]) const;
         
         bool getBounds(BoundingBox& boundingBoxOut) const;
         
@@ -67,9 +73,13 @@ namespace caret {
         
         CaretUnitsTypeEnum::Enum getDataAxisUnitsY();
         
-        CaretColorEnum::Enum getColor() const;
+        CaretColor getColor() const;
         
-        void setColor(const CaretColorEnum::Enum color);
+        CaretColorEnum::Enum getColorEnum() const;
+        
+        void setColorEnum(const CaretColorEnum::Enum colorEnum);
+        
+        void setColor(const CaretColor& color);
         
         float getLineWidth() const;
         
@@ -96,13 +106,13 @@ namespace caret {
          */
         static float getDefaultLineWidth() { return 0.5f; }
         
-    protected:
-//        virtual void saveSubClassDataToScene(const SceneAttributes* sceneAttributes,
-//                                             SceneClass* sceneClass);
-//        
-//        virtual void restoreSubClassDataFromScene(const SceneAttributes* sceneAttributes,
-//                                                  const SceneClass* sceneClass);
+        bool getVerticalDistanceToXY(const float x,
+                                     const float y,
+                                     float& distanceOut,
+                                     int32_t& pointIndexOut,
+                                     float chartXYZOut[3]) const;
         
+    protected:
         
     private:
         ChartTwoDataCartesian(const ChartTwoDataCartesian& obj);
@@ -115,6 +125,8 @@ namespace caret {
         
         std::unique_ptr<GraphicsPrimitiveV3f> createGraphicsPrimitive();
         
+        int32_t getLineSegmentIndexContainingX(const float x) const;
+
         std::unique_ptr<MapFileDataSelector> m_mapFileDataSelector;
         
         std::unique_ptr<GraphicsPrimitiveV3f> m_graphicsPrimitive;
@@ -127,13 +139,17 @@ namespace caret {
         
         bool m_selectionStatus;
         
-        CaretColorEnum::Enum m_color;
+        CaretColor m_caretColor;
         
         float m_lineWidth;
         
         float m_timeStartInSecondsAxisX;
         
         float m_timeStepInSecondsAxisX;
+        
+        mutable int32_t m_selectedPointIndex = 0;
+        
+        bool m_selectedPointDisplayed = false;
         
         static int32_t caretColorIndex;
         

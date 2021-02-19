@@ -20,6 +20,7 @@
 /*LICENSE_END*/
 
 #include <cstdlib>
+#include <iostream>
 
 #define __WU_Q_IMAGE_LABEL_DECLARE__
 #include "WuQImageLabel.h"
@@ -196,6 +197,28 @@ WuQImageLabel::mouseMoveEvent(QMouseEvent* ev)
  *    The mouse event.
  */
 void
+WuQImageLabel::mouseDoubleClickEvent(QMouseEvent *event)
+{
+    if (event->button() == Qt::LeftButton) {
+        const int dx = std::abs(m_mouseMaxX - m_mouseMinX);
+        const int dy = std::abs(m_mouseMaxY - m_mouseMinY);
+        
+        const int tolerance = 5;
+        
+        if ((dx < tolerance)
+            && (dy < tolerance)) {
+            emit doubleClicked();
+        }
+    }
+}
+
+/**
+ * Called when the mouse button is pressed.
+ *
+ * @param ev
+ *    The mouse event.
+ */
+void
 WuQImageLabel::mousePressEvent(QMouseEvent* ev)
 {
     if (ev->button() == Qt::LeftButton) {
@@ -224,6 +247,7 @@ WuQImageLabel::mouseReleaseEvent(QMouseEvent* ev)
         if ((dx < tolerance)
             && (dy < tolerance)) {
             emit clicked();
+            emit clickedXY(ev->x(), ev->y());
         }
     }
 }

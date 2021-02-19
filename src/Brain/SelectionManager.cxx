@@ -31,6 +31,8 @@
 #include "SelectionManager.h"
 #undef __SELECTION_MANAGER_DECLARE__
 
+#include "IdentificationFormattedTextGenerator.h"
+#include "IdentificationSimpleTextGenerator.h"
 #include "SelectionItemAnnotation.h"
 #include "SelectionItemBorderSurface.h"
 #include "SelectionItemChartDataSeries.h"
@@ -39,6 +41,8 @@
 #include "SelectionItemChartTimeSeries.h"
 #include "SelectionItemChartTwoHistogram.h"
 #include "SelectionItemChartTwoLabel.h"
+#include "SelectionItemChartTwoLineLayer.h"
+#include "SelectionItemChartTwoLineLayerVerticalNearest.h"
 #include "SelectionItemChartTwoLineSeries.h"
 #include "SelectionItemChartTwoMatrix.h"
 #include "SelectionItemCiftiConnectivityMatrixRowColumn.h"
@@ -52,7 +56,6 @@
 #include "SelectionItemVoxel.h"
 #include "SelectionItemVoxelEditing.h"
 #include "SelectionItemVoxelIdentificationSymbol.h"
-#include "IdentificationTextGenerator.h"
 #include "Surface.h"
 
 using namespace caret;
@@ -78,6 +81,8 @@ SelectionManager::SelectionManager()
     m_chartMatrixIdentification     = new SelectionItemChartMatrix();
     m_chartTwoHistogramIdentification = std::unique_ptr<SelectionItemChartTwoHistogram>(new SelectionItemChartTwoHistogram());
     m_chartTwoLabelIdentification = std::unique_ptr<SelectionItemChartTwoLabel>(new SelectionItemChartTwoLabel());
+    m_chartTwoLineLayerIdentification = std::unique_ptr<SelectionItemChartTwoLineLayer>(new SelectionItemChartTwoLineLayer());
+    m_chartTwoLineLayerVerticalNearestIdentification = std::unique_ptr<SelectionItemChartTwoLineLayerVerticalNearest>(new SelectionItemChartTwoLineLayerVerticalNearest());
     m_chartTwoLineSeriesIdentification = std::unique_ptr<SelectionItemChartTwoLineSeries>(new SelectionItemChartTwoLineSeries());
     m_chartTwoMatrixIdentification = std::unique_ptr<SelectionItemChartTwoMatrix>(new SelectionItemChartTwoMatrix());
     
@@ -102,6 +107,8 @@ SelectionManager::SelectionManager()
     m_allSelectionItems.push_back(m_chartTimeSeriesIdentification);
     m_allSelectionItems.push_back(m_chartTwoHistogramIdentification.get());
     m_allSelectionItems.push_back(m_chartTwoLabelIdentification.get());
+    m_allSelectionItems.push_back(m_chartTwoLineLayerIdentification.get());
+    m_allSelectionItems.push_back(m_chartTwoLineLayerVerticalNearestIdentification.get());
     m_allSelectionItems.push_back(m_chartTwoLineSeriesIdentification.get());
     m_allSelectionItems.push_back(m_chartTwoMatrixIdentification.get());
     m_allSelectionItems.push_back(m_ciftiConnectivityMatrixRowColumnIdentfication);
@@ -126,7 +133,8 @@ SelectionManager::SelectionManager()
     m_volumeSelectedItems.push_back(m_voxelEditingIdentification);
     m_volumeSelectedItems.push_back(m_volumeFocusIdentification);
     
-    m_idTextGenerator = new IdentificationTextGenerator();
+    m_idTextGenerator = new IdentificationSimpleTextGenerator();
+    m_idFormattedTextGenerator.reset(new IdentificationFormattedTextGenerator());
     
     m_lastSelectedItem = NULL;
     
@@ -212,17 +220,20 @@ SelectionManager::receiveEvent(Event* /*event*/)
 void 
 SelectionManager::filterSelections(const bool applySelectionBackgroundFiltering)
 {
-    AString logText;
-    for (std::vector<SelectionItem*>::iterator iter = m_allSelectionItems.begin();
-         iter != m_allSelectionItems.end();
-         iter++) {
-        SelectionItem* item = *iter;
-        if (item->isValid()) {
-            logText += ("\n" + item->toString() + "\n");
+    const bool debugFlag(false);
+    if (debugFlag) {
+        AString logText;
+        for (std::vector<SelectionItem*>::iterator iter = m_allSelectionItems.begin();
+             iter != m_allSelectionItems.end();
+             iter++) {
+            SelectionItem* item = *iter;
+            if (item->isValid()) {
+                logText += ("\n" + item->toString() + "\n");
+            }
         }
+        std::cout << "Selected Items BEFORE filtering: " << logText << std::endl;
     }
-    CaretLogFine("Selected Items BEFORE filtering: " + logText);
-    
+
     SelectionItemSurfaceTriangle* triangleID = m_surfaceTriangleIdentification;
     SelectionItemSurfaceNode* nodeID = m_surfaceNodeIdentification;
     
@@ -302,16 +313,18 @@ SelectionManager::filterSelections(const bool applySelectionBackgroundFiltering)
          clearDistantSelections();
     }
     
-    logText = "";
-    for (std::vector<SelectionItem*>::iterator iter = m_allSelectionItems.begin();
-         iter != m_allSelectionItems.end();
-         iter++) {
-        SelectionItem* item = *iter;
-        if (item->isValid()) {
-            logText += ("\n" + item->toString() + "\n");
+    if (debugFlag) {
+        AString logText;
+        for (std::vector<SelectionItem*>::iterator iter = m_allSelectionItems.begin();
+             iter != m_allSelectionItems.end();
+             iter++) {
+            SelectionItem* item = *iter;
+            if (item->isValid()) {
+                logText += ("\n" + item->toString() + "\n");
+            }
         }
+        std::cout << "Selected Items BEFORE filtering: " << logText << std::endl;
     }
-    CaretLogFine("Selected Items AFTER filtering: " + logText);
 }
 
 /**
@@ -438,16 +451,34 @@ SelectionManager::setAllSelectionsEnabled(const bool status)
 }
 
 /**
- * Get text describing the current identification data.
+ * Get simple text describing the current identification data.
  * @param brain
  *    Brain containing the data.
  */
 AString 
-SelectionManager::getIdentificationText(const Brain* brain) const
+SelectionManager::getSimpleIdentificationText(const Brain* brain) const
 {
     CaretAssert(brain);
     const AString text = m_idTextGenerator->createIdentificationText(this, 
                                                                          brain);
+    return text;
+}
+
+/**
+ * Get formatted text describing the current identification data.
+ * @param brain
+ *    Brain containing the data.
+ * @param tabIndex
+ *    Index of tab where identication took place
+ */
+AString
+SelectionManager::getFormattedIdentificationText(const Brain* brain,
+                                                 const int32_t tabIndex) const
+{
+    CaretAssert(brain);
+    const AString text = m_idFormattedTextGenerator->createIdentificationText(this,
+                                                                              brain,
+                                                                              tabIndex);
     return text;
 }
 
@@ -751,6 +782,42 @@ const SelectionItemChartTwoHistogram*
 SelectionManager::getChartTwoHistogramIdentification() const
 {
     return m_chartTwoHistogramIdentification.get();
+}
+
+/**
+ * @return Identification for chart two line layer identification
+ */
+SelectionItemChartTwoLineLayer*
+SelectionManager::getChartTwoLineLayerIdentification()
+{
+    return m_chartTwoLineLayerIdentification.get();
+}
+
+/**
+ * @return Identification for chart two line layer identification
+ */
+const SelectionItemChartTwoLineLayer*
+SelectionManager::getChartTwoLineLayerIdentification() const
+{
+    return m_chartTwoLineLayerIdentification.get();
+}
+
+/**
+ * @return Identification for chart two line layer nearest vertical identification
+ */
+SelectionItemChartTwoLineLayerVerticalNearest*
+SelectionManager::getChartTwoLineLayerVerticalNearestIdentification()
+{
+    return m_chartTwoLineLayerVerticalNearestIdentification.get();
+}
+
+/**
+ * @return Identification for chart two line layer nearest vertical identification
+ */
+const SelectionItemChartTwoLineLayerVerticalNearest*
+SelectionManager::getChartTwoLineLayerVerticalNearestIdentification() const
+{
+    return m_chartTwoLineLayerVerticalNearestIdentification.get();
 }
 
 /**

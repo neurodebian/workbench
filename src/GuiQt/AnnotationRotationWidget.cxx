@@ -32,9 +32,9 @@
 
 
 #include "AnnotationManager.h"
-#include "AnnotationOneDimensionalShape.h"
+#include "AnnotationTwoCoordinateShape.h"
 #include "AnnotationRedoUndoCommand.h"
-#include "AnnotationTwoDimensionalShape.h"
+#include "AnnotationOneCoordinateShape.h"
 #include "Brain.h"
 #include "CaretAssert.h"
 #include "EventGetViewportSize.h"
@@ -64,9 +64,11 @@ using namespace caret;
  * @param parent
  *    Parent of this widget.
  */
-AnnotationRotationWidget::AnnotationRotationWidget(const int32_t browserWindowIndex,
+AnnotationRotationWidget::AnnotationRotationWidget(const UserInputModeEnum::Enum userInputMode,
+                                                   const int32_t browserWindowIndex,
                                                    QWidget* parent)
 : QWidget(parent),
+m_userInputMode(userInputMode),
 m_browserWindowIndex(browserWindowIndex)
 {
     QLabel* rotationLabel = new QLabel(" R:");
@@ -102,10 +104,10 @@ AnnotationRotationWidget::~AnnotationRotationWidget()
  *     stereotaxic space for rotation angle.
  *
  */
-AnnotationOneDimensionalShape*
+AnnotationTwoCoordinateShape*
 AnnotationRotationWidget::getValidOneDimAnnotation(Annotation* annotation)
 {
-    AnnotationOneDimensionalShape* oneDimAnn = dynamic_cast<AnnotationOneDimensionalShape*>(annotation);
+    AnnotationTwoCoordinateShape* oneDimAnn = dynamic_cast<AnnotationTwoCoordinateShape*>(annotation);
     
     if (oneDimAnn != NULL) {
         bool validSpaceFlag = false;
@@ -158,8 +160,8 @@ AnnotationRotationWidget::updateContent(std::vector<Annotation*>& annotations)
             Annotation* ann = annotations[i];
             if (ann->testProperty(Annotation::Property::ROTATION)) {
                 if (ann->isSizeHandleValid(AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_ROTATION)) {
-                    AnnotationTwoDimensionalShape* twoDimAnn = dynamic_cast<AnnotationTwoDimensionalShape*>(ann);
-                    AnnotationOneDimensionalShape* oneDimAnn = getValidOneDimAnnotation(ann);
+                    AnnotationOneCoordinateShape* twoDimAnn = dynamic_cast<AnnotationOneCoordinateShape*>(ann);
+                    AnnotationTwoCoordinateShape* oneDimAnn = getValidOneDimAnnotation(ann);
                     
                     float angle = 0.0;
                     float angleValid = false;
@@ -273,7 +275,8 @@ AnnotationRotationWidget::rotationValueChanged(double value)
                                           m_annotations);
         AnnotationManager* annMan = GuiManager::get()->getBrain()->getAnnotationManager();
         AString errorMessage;
-        if ( ! annMan->applyCommand(undoCommand,
+        if ( ! annMan->applyCommand(m_userInputMode,
+                                    undoCommand,
                                     errorMessage)) {
             WuQMessageBox::errorOk(this,
                                    errorMessage);

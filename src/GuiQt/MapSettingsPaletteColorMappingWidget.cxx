@@ -61,6 +61,7 @@
 #include "Palette.h"
 #include "PaletteColorMapping.h"
 #include "PaletteFile.h"
+#include "PalettePixmapPainter.h"
 #include "ThresholdingSetMapsDialog.h"
 #include "VolumeFile.h"
 #include "WuQWidgetObjectGroup.h"
@@ -157,6 +158,8 @@ MapSettingsPaletteColorMappingWidget::MapSettingsPaletteColorMappingWidget(QWidg
     this->setLayoutSpacingAndMargins(layout);
     layout->addWidget(leftWidget, 0);
     layout->addWidget(rightWidget, 100);
+    
+    updatePaletteNameComboBox();
     
     setSizePolicy(QSizePolicy::Fixed,
                   QSizePolicy::Fixed);
@@ -848,14 +851,12 @@ MapSettingsPaletteColorMappingWidget::createHistogramControlSection()
                                                            colorBarIcon);
     
     QLabel* barsColorLabel = new QLabel("Bars Color");
+    m_histogramBarsColorComboBox = new CaretColorEnumComboBox(CaretColorEnumComboBox::CustomColorModeEnum::FIXED,
+                                                              CaretColorEnumComboBox::NoneColorModeEnum::DISABLED,
+                                                              this);
+    m_histogramBarsColorComboBox->setCustomColorName("Palette");
     if (colorBarIconValid) {
-        m_histogramBarsColorComboBox = new CaretColorEnumComboBox("Palette",
-                                                                  colorBarIcon,
-                                                                  this);
-    }
-    else {
-        m_histogramBarsColorComboBox = new CaretColorEnumComboBox("Palette",
-                                                                  this);
+        m_histogramBarsColorComboBox->setCustomColorIcon(colorBarIcon);
     }
     WuQtUtilities::setToolTipAndStatusTip(m_histogramBarsColorComboBox->getWidget(),
                                           "Set histogram bars coloring");
@@ -863,14 +864,12 @@ MapSettingsPaletteColorMappingWidget::createHistogramControlSection()
                      this, SLOT(applyAndUpdate()));
     
     QLabel* envelopeColorLabel = new QLabel("Envelope");
+    m_histogramEnvelopeColorComboBox = new CaretColorEnumComboBox(CaretColorEnumComboBox::CustomColorModeEnum::FIXED,
+                                                                  CaretColorEnumComboBox::NoneColorModeEnum::DISABLED,
+                                                                  this);
+    m_histogramEnvelopeColorComboBox->setCustomColorName("Palette");
     if (colorBarIconValid) {
-        m_histogramEnvelopeColorComboBox = new CaretColorEnumComboBox("Palette",
-                                                                  colorBarIcon,
-                                                                  this);
-    }
-    else {
-        m_histogramEnvelopeColorComboBox = new CaretColorEnumComboBox("Palette",
-                                                                  this);
+        m_histogramEnvelopeColorComboBox->setCustomColorIcon(colorBarIcon);
     }
     WuQtUtilities::setToolTipAndStatusTip(m_histogramEnvelopeColorComboBox->getWidget(),
                                           "Set histogram envelope coloring");
@@ -1384,8 +1383,12 @@ MapSettingsPaletteColorMappingWidget::createPaletteSection()
     /*
      * Spin box width (fixed may have much larger data values)
      */
-    const int percentSpinBoxWidth = 75;
-    const int fixedSpinBoxWidth   = 82;
+    const int fixedSpinBoxWidth   = 90;
+    const int percentageDigitsRightOfDecimal(2);
+    const int fixedDigitsRightOfDecimal(4);
+    const QSizePolicy fixedPolicy(QSizePolicy::Fixed,
+                                  QSizePolicy::Fixed);
+    
     /*
      * Percentage mapping 
      */
@@ -1393,53 +1396,53 @@ MapSettingsPaletteColorMappingWidget::createPaletteSection()
        WuQFactory::newDoubleSpinBoxWithMinMaxStepDecimalsSignalDouble(0.0,
                                                                    100.0,
                                                                    1.0,
-                                                                   2,
+                                                                   percentageDigitsRightOfDecimal,
                                                                    this,
                                                                    SLOT(scaleAutoPercentageNegativeMaximumValueChanged(double)));
 
     WuQtUtilities::setToolTipAndStatusTip(this->scaleAutoPercentageNegativeMaximumSpinBox,
                                           "Map percentile (NOT percentage) most negative value to -1.0 in palette");
     this->paletteWidgetGroup->add(this->scaleAutoPercentageNegativeMaximumSpinBox);
-    this->scaleAutoPercentageNegativeMaximumSpinBox->setFixedWidth(percentSpinBoxWidth);
+    this->scaleAutoPercentageNegativeMaximumSpinBox->setSizePolicy(fixedPolicy);
     
     this->scaleAutoPercentageNegativeMinimumSpinBox =
     WuQFactory::newDoubleSpinBoxWithMinMaxStepDecimalsSignalDouble(0.0,
                                                                    100.0,
                                                                    1.0,
-                                                                   2,
+                                                                   percentageDigitsRightOfDecimal,
                                                                    this,
                                                                    SLOT(scaleAutoPercentageNegativeMinimumValueChanged(double)));
 
     WuQtUtilities::setToolTipAndStatusTip(this->scaleAutoPercentageNegativeMinimumSpinBox,
                                           "Map percentile (NOT percentage) least negative value to 0.0 in palette");
     this->paletteWidgetGroup->add(this->scaleAutoPercentageNegativeMinimumSpinBox);
-    this->scaleAutoPercentageNegativeMinimumSpinBox->setFixedWidth(percentSpinBoxWidth);
+    this->scaleAutoPercentageNegativeMinimumSpinBox->setSizePolicy(fixedPolicy);
     
     this->scaleAutoPercentagePositiveMinimumSpinBox =
     WuQFactory::newDoubleSpinBoxWithMinMaxStepDecimalsSignalDouble(0.0,
                                                                    100.0,
                                                                    1.0,
-                                                                   2,
+                                                                   percentageDigitsRightOfDecimal,
                                                                    this,
                                                                    SLOT(scaleAutoPercentagePositiveMinimumValueChanged(double)));
 
     WuQtUtilities::setToolTipAndStatusTip(this->scaleAutoPercentagePositiveMinimumSpinBox,
                                           "Map percentile (NOT percentage) least positive value to 0.0 in palette");
     this->paletteWidgetGroup->add(this->scaleAutoPercentagePositiveMinimumSpinBox);
-    this->scaleAutoPercentagePositiveMinimumSpinBox->setFixedWidth(percentSpinBoxWidth);
+    this->scaleAutoPercentagePositiveMinimumSpinBox->setSizePolicy(fixedPolicy);
     
     this->scaleAutoPercentagePositiveMaximumSpinBox =
     WuQFactory::newDoubleSpinBoxWithMinMaxStepDecimalsSignalDouble(0.0,
                                                                    100.0,
                                                                    1.0,
-                                                                   2,
+                                                                   percentageDigitsRightOfDecimal,
                                                                    this,
                                                                    SLOT(scaleAutoPercentagePositiveMaximumValueChanged(double)));
 
     WuQtUtilities::setToolTipAndStatusTip(this->scaleAutoPercentagePositiveMaximumSpinBox,
                                           "Map percentile (NOT percentage) most positive value to 1.0 in palette");
     this->paletteWidgetGroup->add(this->scaleAutoPercentagePositiveMaximumSpinBox);
-    this->scaleAutoPercentagePositiveMaximumSpinBox->setFixedWidth(percentSpinBoxWidth);
+    this->scaleAutoPercentagePositiveMaximumSpinBox->setSizePolicy(fixedPolicy);
     
     /*
      * Absolute percentage mapping
@@ -1448,27 +1451,26 @@ MapSettingsPaletteColorMappingWidget::createPaletteSection()
     WuQFactory::newDoubleSpinBoxWithMinMaxStepDecimalsSignalDouble(0.0,
                                                                    100.0,
                                                                    1.0,
-                                                                   2,
+                                                                   percentageDigitsRightOfDecimal,
                                                                    this,
                                                                    SLOT(scaleAutoAbsolutePercentageMinimumValueChanged(double)));
     
     WuQtUtilities::setToolTipAndStatusTip(this->scaleAutoAbsolutePercentageMinimumSpinBox,
                                           "Map percentile (NOT percentage) least absolute value to 0.0 in palette");
     this->paletteWidgetGroup->add(this->scaleAutoAbsolutePercentageMinimumSpinBox);
-    this->scaleAutoAbsolutePercentageMinimumSpinBox->setFixedWidth(percentSpinBoxWidth);
-    
+    scaleAutoAbsolutePercentageMinimumSpinBox->setSizePolicy(fixedPolicy);
     this->scaleAutoAbsolutePercentageMaximumSpinBox =
     WuQFactory::newDoubleSpinBoxWithMinMaxStepDecimalsSignalDouble(0.0,
                                                                    100.0,
                                                                    1.0,
-                                                                   2,
+                                                                   percentageDigitsRightOfDecimal,
                                                                    this,
                                                                    SLOT(scaleAutoAbsolutePercentageMaximumValueChanged(double)));
     
     WuQtUtilities::setToolTipAndStatusTip(this->scaleAutoAbsolutePercentageMaximumSpinBox,
                                           "Map percentile (NOT percentage) most absolute value to 1.0 in palette");
     this->paletteWidgetGroup->add(this->scaleAutoAbsolutePercentageMaximumSpinBox);
-    this->scaleAutoAbsolutePercentageMaximumSpinBox->setFixedWidth(percentSpinBoxWidth);
+    this->scaleAutoAbsolutePercentageMaximumSpinBox->setSizePolicy(fixedPolicy);
 
     /*
      * Fixed mapping
@@ -1477,7 +1479,7 @@ MapSettingsPaletteColorMappingWidget::createPaletteSection()
     WuQFactory::newDoubleSpinBoxWithMinMaxStepDecimalsSignalDouble(-BIG_NUMBER,
                                                                    0.0,
                                                                    1.0,
-                                                                   2,
+                                                                   fixedDigitsRightOfDecimal,
                                                                    this,
                                                                    SLOT(scaleFixedNegativeMaximumValueChanged(double)));
 
@@ -1490,7 +1492,7 @@ MapSettingsPaletteColorMappingWidget::createPaletteSection()
     WuQFactory::newDoubleSpinBoxWithMinMaxStepDecimalsSignalDouble(-BIG_NUMBER,
                                                                    0.0,
                                                                    1.0,
-                                                                   2,
+                                                                   fixedDigitsRightOfDecimal,
                                                                    this,
                                                                    SLOT(scaleFixedNegativeMinimumValueChanged(double)));
 
@@ -1503,7 +1505,7 @@ MapSettingsPaletteColorMappingWidget::createPaletteSection()
     WuQFactory::newDoubleSpinBoxWithMinMaxStepDecimalsSignalDouble(0.0,
                                                                    BIG_NUMBER,
                                                                    1.0,
-                                                                   2,
+                                                                   fixedDigitsRightOfDecimal,
                                                                    this,
                                                                    SLOT(scaleFixedPositiveMinimumValueChanged(double)));
 
@@ -1516,7 +1518,7 @@ MapSettingsPaletteColorMappingWidget::createPaletteSection()
     WuQFactory::newDoubleSpinBoxWithMinMaxStepDecimalsSignalDouble(0.0,
                                                                    BIG_NUMBER,
                                                                    1.0,
-                                                                   2,
+                                                                   fixedDigitsRightOfDecimal,
                                                                    this,
                                                                    SLOT(scaleFixedPositiveMaximumValueChanged(double)));
 
@@ -1540,9 +1542,9 @@ MapSettingsPaletteColorMappingWidget::createPaletteSection()
     QWidget* colorMappingWidget = new QWidget();
     QGridLayout* colorMappingLayout = new QGridLayout(colorMappingWidget);
     colorMappingLayout->setColumnStretch(0, 0);
-    colorMappingLayout->setColumnStretch(1, 100);
-    colorMappingLayout->setColumnStretch(2, 100);
-    colorMappingLayout->setColumnStretch(3, 100);
+    colorMappingLayout->setColumnStretch(1, 0);
+    colorMappingLayout->setColumnStretch(2, 0);
+    colorMappingLayout->setColumnStretch(3, 0);
     colorMappingLayout->setColumnStretch(4, 100);
     this->setLayoutSpacingAndMargins(colorMappingLayout);
     colorMappingLayout->addWidget(this->scaleAutoRadioButton, 0, 0, Qt::AlignHCenter);
@@ -1615,7 +1617,7 @@ MapSettingsPaletteColorMappingWidget::createPaletteSection()
     this->setLayoutSpacingAndMargins(paletteLayout);
     paletteLayout->addWidget(paletteSelectionWidget);
     paletteLayout->addWidget(WuQtUtilities::createHorizontalLineWidget());
-    paletteLayout->addWidget(colorMappingWidget);
+    paletteLayout->addWidget(colorMappingWidget, 0, Qt::AlignLeft);
     paletteLayout->addWidget(WuQtUtilities::createHorizontalLineWidget());
     paletteLayout->addWidget(displayModeWidget);
     paletteGroupBox->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
@@ -1771,10 +1773,57 @@ MapSettingsPaletteColorMappingWidget::updatePaletteMappedToDataValueLabels()
         }
     }
     
-    this->scalePositiveMaximumValueLabel->setText(QString::number(posMaxLabelValue, 'f', 2));
-    this->scalePositiveMinimumValueLabel->setText(QString::number(posMinLabelValue, 'f', 2));
-    this->scaleNegativeMinimumValueLabel->setText(QString::number(negMinLabelValue, 'f', 2));
-    this->scaleNegativeMaximumValueLabel->setText(QString::number(negMaxLabelValue, 'f', 2));
+    const int32_t digitsRightOfDecimal(4);
+    this->scalePositiveMaximumValueLabel->setText(QString::number(posMaxLabelValue, 'f', digitsRightOfDecimal));
+    this->scalePositiveMinimumValueLabel->setText(QString::number(posMinLabelValue, 'f', digitsRightOfDecimal));
+    this->scaleNegativeMinimumValueLabel->setText(QString::number(negMinLabelValue, 'f', digitsRightOfDecimal));
+    this->scaleNegativeMaximumValueLabel->setText(QString::number(negMaxLabelValue, 'f', digitsRightOfDecimal));
+}
+
+void
+MapSettingsPaletteColorMappingWidget::updatePaletteNameComboBox()
+{
+    this->paletteNameComboBox->clear();
+
+    PaletteFile* paletteFile = GuiManager::get()->getBrain()->getPaletteFile();
+    
+    bool firstValidPixmapFlag(true);
+    const int32_t numPalettes = paletteFile->getNumberOfPalettes();
+    for (int32_t i = 0; i < numPalettes; i++) {
+        Palette* palette = paletteFile->getPalette(i);
+        const AString name = palette->getName();
+        /*
+         * Second parameter is user data.  In the future, there may be user-editable
+         * palettes and it is possible there may be palettes with the same name.
+         * Thus, the user-data may change to a unique-identifier that is different
+         * than the palette name.
+         */
+        const AString paletteUniqueID(name);
+        
+        const bool showColorMappingFlag(true);
+        if (showColorMappingFlag) {
+            PalettePixmapPainter palettePainter(palette,
+                                                PalettePixmapPainter::Mode::INTERPOLATE_ON);
+            QPixmap pixmap = palettePainter.getPixmap();
+            if (pixmap.isNull()) {
+                this->paletteNameComboBox->addItem(name,
+                                                   paletteUniqueID);
+            }
+            else {
+                if (firstValidPixmapFlag) {
+                    firstValidPixmapFlag = false;
+                    this->paletteNameComboBox->setIconSize(pixmap.size());
+                }
+                this->paletteNameComboBox->addItem(pixmap,
+                                                   " " + name,
+                                                   paletteUniqueID);
+            }
+        }
+        else {
+            this->paletteNameComboBox->addItem(name,
+                                               paletteUniqueID);
+        }
+    }
 }
 
 /**
@@ -1811,28 +1860,19 @@ MapSettingsPaletteColorMappingWidget::updateEditorInternal(CaretMappableDataFile
     + this->caretMappableDataFile->getMapName(this->mapFileIndex);
     this->setWindowTitle(title);
     
-    this->paletteNameComboBox->clear();
-
-    
-    this->paletteColorMapping = this->caretMappableDataFile->getMapPaletteColorMapping(this->mapFileIndex); 
+    this->paletteColorMapping = this->caretMappableDataFile->getMapPaletteColorMapping(this->mapFileIndex);
     
     if (this->paletteColorMapping != NULL) {
-        PaletteFile* paletteFile = GuiManager::get()->getBrain()->getPaletteFile();
-        
-        int defaultIndex = 0;
-        const int32_t numPalettes = paletteFile->getNumberOfPalettes();
-        for (int32_t i = 0; i < numPalettes; i++) {
-            Palette* palette = paletteFile->getPalette(i);
-            const AString name = palette->getName();
-            if (name == this->paletteColorMapping->getSelectedPaletteName()) {
-                defaultIndex = i;
+        int32_t paletteComboBoxIndex(0);
+        const AString paletteName = this->paletteColorMapping->getSelectedPaletteName();
+        for (int32_t i = 0; i < this->paletteNameComboBox->count(); i++) {
+            if (this->paletteNameComboBox->itemData(i).toString() == paletteName) {
+                paletteComboBoxIndex = i;
+                break;
             }
-            this->paletteNameComboBox->addItem(name,
-                                               name);
         }
-        
-        if (defaultIndex < this->paletteNameComboBox->count()) {
-            this->paletteNameComboBox->setCurrentIndex(defaultIndex);
+        if (paletteComboBoxIndex < this->paletteNameComboBox->count()) {
+            this->paletteNameComboBox->setCurrentIndex(paletteComboBoxIndex);
         }
         
         bool isPercentageSpinBoxesEnabled = false;

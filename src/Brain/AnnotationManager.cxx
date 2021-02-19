@@ -25,26 +25,34 @@
 
 #include "Annotation.h"
 #include "AnnotationArrangerExecutor.h"
+#include "AnnotationBrowserTab.h"
 #include "AnnotationColorBar.h"
 #include "AnnotationFile.h"
 #include "AnnotationGroup.h"
-#include "AnnotationOneDimensionalShape.h"
+#include "AnnotationTwoCoordinateShape.h"
 #include "AnnotationRedoUndoCommand.h"
 #include "AnnotationEditingSelectionInformation.h"
-#include "AnnotationTwoDimensionalShape.h"
+#include "AnnotationScaleBar.h"
+#include "AnnotationStackingOrderOperation.h"
+#include "AnnotationOneCoordinateShape.h"
+#include "BrowserTabContent.h"
+#include "BrowserWindowContent.h"
 #include "Brain.h"
 #include "CaretAssert.h"
 #include "CaretLogger.h"
 #include "CaretUndoStack.h"
 #include "DisplayPropertiesAnnotation.h"
 #include "EventAnnotationChartLabelGet.h"
-#include "EventAnnotationColorBarGet.h"
+#include "EventAnnotationBarsGet.h"
 #include "EventAnnotationGroupGetWithKey.h"
+#include "EventAnnotationValidate.h"
+#include "EventBrowserTabGetAll.h"
+#include "EventBrowserWindowContent.h"
 #include "EventGetDisplayedDataFiles.h"
 #include "EventManager.h"
 #include "SceneClass.h"
 #include "SceneClassAssistant.h"
-
+#include "EventUserInputModeGet.h"
 
 using namespace caret;
 
@@ -68,8 +76,11 @@ m_brain(brain)
     m_clipboardAnnotationFile = NULL;
     m_clipboardAnnotation.grabNew(NULL);
     
-    m_annotationRedoUndoStack.grabNew(new CaretUndoStack());
-    m_annotationRedoUndoStack->setUndoLimit(500);
+    m_annotationsExceptBrowserTabsRedoUndoStack.grabNew(new CaretUndoStack());
+    m_annotationsExceptBrowserTabsRedoUndoStack->setUndoLimit(500);
+    
+    m_browserTabAnnotationsRedoUndoStack.grabNew(new CaretUndoStack());
+    m_browserTabAnnotationsRedoUndoStack->setUndoLimit(100);
     
     for (int32_t i = 0; i < BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_WINDOWS; i++) {
         m_annotationBeingDrawnInWindow[i] = NULL;
@@ -77,6 +88,8 @@ m_brain(brain)
     }
 
     m_sceneAssistant = new SceneClassAssistant();
+    
+    EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_ANNOTATION_VALIDATE);
 }
 
 /**
@@ -94,7 +107,8 @@ AnnotationManager::~AnnotationManager()
         delete m_selectionInformation[i];
     }
 
-    m_annotationRedoUndoStack->clear();
+    m_annotationsExceptBrowserTabsRedoUndoStack->clear();
+    m_browserTabAnnotationsRedoUndoStack->clear();
     
     delete m_sceneAssistant;
 }
@@ -105,7 +119,8 @@ AnnotationManager::~AnnotationManager()
 void
 AnnotationManager::reset()
 {
-    m_annotationRedoUndoStack->clear();
+    m_annotationsExceptBrowserTabsRedoUndoStack->clear();
+    m_browserTabAnnotationsRedoUndoStack->clear();
 }
 
 /**
@@ -113,16 +128,22 @@ AnnotationManager::reset()
  * the command, the command is placed on the undo stack so that the
  * user can undo or redo the command.
  *
+ * @param userInputMode
+ *     The current user input mode which MUST be ANNOTATIONS or TILE_TABS_MANUAL_LAYOUT_EDITING
  * @param command
  *     Command that will be applied to the selected annotations.
  *     Annotation manager will take ownership of the command and
  *     destroy it at the appropriate time.
+ * @param errorMessageOut
+ *     Output with error information if command fails.
  */
 bool
-AnnotationManager::applyCommand(AnnotationRedoUndoCommand* command,
+AnnotationManager::applyCommand(const UserInputModeEnum::Enum userInputMode,
+                                AnnotationRedoUndoCommand* command,
                                 AString& errorMessageOut)
 {
-    return applyCommandInWindow(command,
+    return applyCommandInWindow(userInputMode,
+                                command,
                                 -1,
                                 errorMessageOut);
 }
@@ -132,15 +153,20 @@ AnnotationManager::applyCommand(AnnotationRedoUndoCommand* command,
  * the command, the command is placed on the undo stack so that the
  * user can undo or redo the command.
  *
+ * @param userInputMode
+ *     The current user input mode which MUST be ANNOTATIONS or TILE_TABS_MANUAL_LAYOUT_EDITING
  * @param command
  *     Command that will be applied to the selected annotations.
  *     Annotation manager will take ownership of the command and
  *     destroy it at the appropriate time.
  * @param windowIndex
  *     Index of window in which command was requested.
+ * @param errorMessageOut
+ *     Output with error information if command fails.
  */
 bool
-AnnotationManager::applyCommandInWindow(AnnotationRedoUndoCommand* command,
+AnnotationManager::applyCommandInWindow(const UserInputModeEnum::Enum userInputMode,
+                                        AnnotationRedoUndoCommand* command,
                                         const int32_t windowIndex,
                                         AString& errorMessageOut)
 {
@@ -160,9 +186,9 @@ AnnotationManager::applyCommandInWindow(AnnotationRedoUndoCommand* command,
     /*
      * "Redo" the command and add it to the undo stack
      */
-    const bool result = m_annotationRedoUndoStack->pushAndRedo(command,
-                                                               windowIndex,
-                                                               errorMessageOut);
+    const bool result = getCommandRedoUndoStack(userInputMode)->pushAndRedo(command,
+                                                                            windowIndex,
+                                                                            errorMessageOut);
     return result;
 }
 
@@ -188,9 +214,9 @@ AnnotationManager::deselectAllAnnotationsForEditing(const int32_t windowIndex)
                                         false);
     }
 
-    EventAnnotationColorBarGet colorBarEvent;
-    EventManager::get()->sendEvent(colorBarEvent.getPointer());
-    std::vector<AnnotationColorBar*> colorBars = colorBarEvent.getAnnotationColorBars();
+    EventAnnotationBarsGet barsEvent;
+    EventManager::get()->sendEvent(barsEvent.getPointer());
+    std::vector<AnnotationColorBar*> colorBars = barsEvent.getAnnotationColorBars();
 
     for (std::vector<AnnotationColorBar*>::iterator iter = colorBars.begin();
          iter != colorBars.end();
@@ -200,12 +226,26 @@ AnnotationManager::deselectAllAnnotationsForEditing(const int32_t windowIndex)
                                   false);
     }
     
+    std::vector<AnnotationScaleBar*> scaleBars = barsEvent.getAnnotationScaleBars();
+    for (auto sb : scaleBars) {
+        sb->setSelectedForEditing(windowIndex,
+                                  false);
+    }
+    
     EventAnnotationChartLabelGet chartLabelEvent;
     EventManager::get()->sendEvent(chartLabelEvent.getPointer());
     std::vector<Annotation*> chartLabels = chartLabelEvent.getAnnotationChartLabels();
     for (auto label : chartLabels) {
         label->setSelectedForEditing(windowIndex,
                                      false);
+    }
+    
+    EventBrowserTabGetAll allTabsEvent;
+    EventManager::get()->sendEvent(allTabsEvent.getPointer());
+    std::vector<BrowserTabContent*> allTabs = allTabsEvent.getAllBrowserTabs();
+    for (auto tab : allTabs) {
+        tab->getManualLayoutBrowserTabAnnotation()->setSelectedForEditing(windowIndex,
+                                                                          false);
     }
 }
 
@@ -433,14 +473,18 @@ AnnotationManager::getAllAnnotations() const
         }
     }
 
-    EventAnnotationColorBarGet colorBarEvent;
-    EventManager::get()->sendEvent(colorBarEvent.getPointer());
-    std::vector<AnnotationColorBar*> colorBars = colorBarEvent.getAnnotationColorBars();
-    
+    EventAnnotationBarsGet barsEvent;
+    EventManager::get()->sendEvent(barsEvent.getPointer());
+    std::vector<AnnotationColorBar*> colorBars = barsEvent.getAnnotationColorBars();
     for (std::vector<AnnotationColorBar*>::iterator iter = colorBars.begin();
          iter != colorBars.end();
          iter++) {
         allAnnotations.push_back(*iter);
+    }
+    
+    std::vector<AnnotationScaleBar*> scaleBars = barsEvent.getAnnotationScaleBars();
+    for (auto sb : scaleBars) {
+        allAnnotations.push_back(sb);
     }
 
     EventAnnotationChartLabelGet chartLabelEvent;
@@ -450,7 +494,45 @@ AnnotationManager::getAllAnnotations() const
                           chartLabels.begin(),
                           chartLabels.end());
     
+    EventBrowserTabGetAll allTabsEvent;
+    EventManager::get()->sendEvent(allTabsEvent.getPointer());
+    std::vector<BrowserTabContent*> allTabs = allTabsEvent.getAllBrowserTabs();
+    for (auto tab : allTabs) {
+        allAnnotations.push_back(tab->getManualLayoutBrowserTabAnnotation());
+    }
+    
     return allAnnotations;
+}
+
+/**
+ * Get all annotations that were drawn in the window with the given index and are in the same
+ * coordinate space (for tab/window also same tab/window).
+ *
+ * @param annotation
+ * Annotation for space comparison
+ * @param windowIndex
+ * Index of window
+ */
+std::vector<Annotation*>
+AnnotationManager::getAnnotationsDrawnInSameWindowAndSpace(const Annotation* annotation,
+                                                                 const int32_t windowIndex) const
+{
+    CaretAssert(annotation);
+    
+    std::vector<Annotation*> allAnnotations = getAllAnnotations();
+    
+    std::vector<Annotation*> annotationsOut;
+    for (auto a : allAnnotations) {
+        if (a == annotation) {
+            continue;
+        }
+        if (a->isDrawnInWindowStatus(windowIndex)) {
+            if (annotation->isInSameCoordinateSpace(a)) {
+                annotationsOut.push_back(a);
+            }
+        }
+    }
+    return annotationsOut;
 }
 
 /**
@@ -467,6 +549,10 @@ AnnotationManager::getAnnotationEditingSelectionInformation(const int32_t window
 {
     CaretAssertArrayIndex(m_selectionInformation, BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_WINDOWS, windowIndex);
     
+    EventUserInputModeGet modeEvent(windowIndex);
+    EventManager::get()->sendEvent(modeEvent.getPointer());
+    const bool tileModeFlag = (modeEvent.getUserInputMode() == UserInputModeEnum::Enum::TILE_TABS_MANUAL_LAYOUT_EDITING);
+
     AnnotationEditingSelectionInformation* asi = m_selectionInformation[windowIndex];
     
     std::vector<Annotation*> allAnnotations = getAllAnnotations();
@@ -474,10 +560,16 @@ AnnotationManager::getAnnotationEditingSelectionInformation(const int32_t window
     for (std::vector<Annotation*>::iterator annIter = allAnnotations.begin();
          annIter != allAnnotations.end();
          annIter++) {
-        Annotation* annotation = *annIter;
-        
+        Annotation* annotation = *annIter;        
         if (annotation->isSelectedForEditing(windowIndex)) {
-            selectedAnnotations.push_back(annotation);
+            if (tileModeFlag) {
+                if (annotation->getType() == AnnotationTypeEnum::BROWSER_TAB) {
+                    selectedAnnotations.push_back(annotation);
+                }
+            }
+            else if (annotation->getType() != AnnotationTypeEnum::BROWSER_TAB) {
+                selectedAnnotations.push_back(annotation);
+            }
         }
     }
     
@@ -546,11 +638,18 @@ AnnotationManager::getAnnotationsSelectedForEditingInSpaces(const int32_t window
  *    A 'pair' containing a selected annotation and the file that contains the annotation.
  */
 void
-AnnotationManager::getAnnotationsSelectedForEditing(const int32_t windowIndex,
+AnnotationManager::getAnnotationsAndFilesSelectedForEditing(const int32_t windowIndex,
                                           std::vector<std::pair<Annotation*, AnnotationFile*> >& annotationsAndFileOut) const
 {
     annotationsAndFileOut.clear();
 
+    EventUserInputModeGet modeEvent(windowIndex);
+    EventManager::get()->sendEvent(modeEvent.getPointer());
+    if (modeEvent.getUserInputMode() == UserInputModeEnum::Enum::TILE_TABS_MANUAL_LAYOUT_EDITING) {
+        /* In Tile Editing mode and browser tabs are not in files */
+        return;
+    }
+    
     std::vector<AnnotationFile*> annotationFiles;
     m_brain->getAllAnnotationFilesIncludingSceneAnnotationFile(annotationFiles);
     
@@ -571,7 +670,6 @@ AnnotationManager::getAnnotationsSelectedForEditing(const int32_t windowIndex,
             }
         }
     }
-    
 }
 
 /**
@@ -584,10 +682,19 @@ AnnotationManager::getAnnotationsSelectedForEditing(const int32_t windowIndex,
  *    A 'pair' containing a selected annotation and the file that contains the annotation.
  */
 void
-AnnotationManager::getAnnotationsSelectedForEditingIncludingLabels(const int32_t windowIndex,
+AnnotationManager::getAnnotationsAndFilesSelectedForEditingIncludingLabels(const int32_t windowIndex,
                                                      std::vector<std::pair<Annotation*, AnnotationFile*> >& annotationsAndFileOut) const
 {
-    getAnnotationsSelectedForEditing(windowIndex,
+    annotationsAndFileOut.clear();
+    
+    EventUserInputModeGet modeEvent(windowIndex);
+    EventManager::get()->sendEvent(modeEvent.getPointer());
+    if (modeEvent.getUserInputMode() == UserInputModeEnum::Enum::TILE_TABS_MANUAL_LAYOUT_EDITING) {
+        /* In Tile Editing mode and browser tabs are not in files */
+        return;
+    }
+
+    getAnnotationsAndFilesSelectedForEditing(windowIndex,
                                      annotationsAndFileOut);
     
     EventAnnotationChartLabelGet chartLabelEvent;
@@ -604,6 +711,8 @@ AnnotationManager::getAnnotationsSelectedForEditingIncludingLabels(const int32_t
 /**
  * Align annotations.
  * 
+ * @param userInputMode
+ *     The current user input mode which MUST be ANNOTATIONS or TILE_TABS_MANUAL_LAYOUT_EDITING
  * @param arrangerInputs
  *    Inputs to algorithm that aligns the annotations.
  * @param errorMessageOut
@@ -612,11 +721,12 @@ AnnotationManager::getAnnotationsSelectedForEditingIncludingLabels(const int32_t
  *    True if successful, false if error.
  */
 bool
-AnnotationManager::alignAnnotations(const AnnotationArrangerInputs& arrangerInputs,
+AnnotationManager::alignAnnotations(const UserInputModeEnum::Enum userInputMode,
+                                    const AnnotationArrangerInputs& arrangerInputs,
                                     const AnnotationAlignmentEnum::Enum alignment,
                                     AString& errorMessageOut)
 {
-    AnnotationArrangerExecutor arranger;
+    AnnotationArrangerExecutor arranger(userInputMode);
     
     return arranger.alignAnnotations(this,
                                      arrangerInputs,
@@ -627,6 +737,8 @@ AnnotationManager::alignAnnotations(const AnnotationArrangerInputs& arrangerInpu
 /**
  * Align annotations.
  *
+ * @param userInputMode
+ *     The current user input mode which MUST be ANNOTATIONS or TILE_TABS_MANUAL_LAYOUT_EDITING
  * @param arrangerInputs
  *    Inputs to algorithm that aligns the annotations.
  * @param errorMessageOut
@@ -635,11 +747,12 @@ AnnotationManager::alignAnnotations(const AnnotationArrangerInputs& arrangerInpu
  *    True if successful, false if error.
  */
 bool
-AnnotationManager::distributeAnnotations(const AnnotationArrangerInputs& arrangerInputs,
+AnnotationManager::distributeAnnotations(const UserInputModeEnum::Enum userInputMode,
+                                         const AnnotationArrangerInputs& arrangerInputs,
                                          const AnnotationDistributeEnum::Enum distribute,
                                          AString& errorMessageOut)
 {
-    AnnotationArrangerExecutor arranger;
+    AnnotationArrangerExecutor arranger(userInputMode);
     
     return arranger.distributeAnnotations(this,
                                      arrangerInputs,
@@ -650,6 +763,8 @@ AnnotationManager::distributeAnnotations(const AnnotationArrangerInputs& arrange
 /**
  * Apply given grouping mode valid in the given window.
  *
+ * @param userInputMode
+ *     The current user input mode which MUST be ANNOTATIONS or TILE_TABS_MANUAL_LAYOUT_EDITING
  * @param windowIndex
  *     Index of the window.
  * @param groupingMode
@@ -660,7 +775,8 @@ AnnotationManager::distributeAnnotations(const AnnotationArrangerInputs& arrange
  *     True if successful, else false.
  */
 bool
-AnnotationManager::applyGroupingMode(const int32_t windowIndex,
+AnnotationManager::applyGroupingMode(const UserInputModeEnum::Enum userInputMode,
+                                     const int32_t windowIndex,
                                      const AnnotationGroupingModeEnum::Enum groupingMode,
                                      AString& errorMessageOut)
 {
@@ -699,7 +815,8 @@ AnnotationManager::applyGroupingMode(const int32_t windowIndex,
             AnnotationRedoUndoCommand* command = new AnnotationRedoUndoCommand();
             command->setModeGroupingGroupAnnotations(annotationGroupKey,
                                                      annotations);
-            validFlag = applyCommandInWindow(command,
+            validFlag = applyCommandInWindow(userInputMode,
+                                             command,
                                              windowIndex,
                                              errorMessageOut);
         }
@@ -719,7 +836,8 @@ AnnotationManager::applyGroupingMode(const int32_t windowIndex,
             AnnotationRedoUndoCommand* command = new AnnotationRedoUndoCommand();
             command->setModeGroupingRegroupAnnotations(annotationGroupKey);
             
-            validFlag = applyCommandInWindow(command,
+            validFlag = applyCommandInWindow(userInputMode,
+                                             command,
                                              windowIndex,
                                              errorMessageOut);
         }
@@ -740,7 +858,8 @@ AnnotationManager::applyGroupingMode(const int32_t windowIndex,
             AnnotationRedoUndoCommand* command = new AnnotationRedoUndoCommand();
             command->setModeGroupingUngroupAnnotations(annotationGroupKey);
             
-            validFlag = applyCommandInWindow(command,
+            validFlag = applyCommandInWindow(userInputMode,
+                                             command,
                                              windowIndex,
                                              errorMessageOut);
         }
@@ -765,6 +884,215 @@ AnnotationManager::isGroupingModeValid(const int32_t windowIndex,
     return getAnnotationEditingSelectionInformation(windowIndex)->isGroupingModeValid(groupingMode);
 }
 
+/**
+ * Apply a stacking order change
+ *
+ * @param annotations
+ *     The annotations that are reordered
+ * @param selectedAnnotation
+ *     The selected annotation that is moved in order relative to other annotations
+ * @param orderType
+ *     Type of ordering
+ * @param windowIndex
+ *     Index of window
+ * @param errorMessageOut
+ *     Output with error information
+ * @return True is successful, else false
+ */
+bool
+AnnotationManager::applyStackingOrder(const std::vector<Annotation*>& annotations,
+                                      const Annotation* selectedAnnotation,
+                                      const AnnotationStackingOrderTypeEnum::Enum orderType,
+                                      const int32_t windowIndex,
+                                      AString& errorMessageOut)
+{
+    AnnotationStackingOrderOperation operation(AnnotationStackingOrderOperation::Mode::MODE_REQUEST_NEW_ORDER_VALUES,
+                                               annotations,
+                                               selectedAnnotation,
+                                               windowIndex);
+    if ( ! operation.runOrdering(orderType,
+                                 errorMessageOut)) {
+        return false;
+    }
+
+    std::vector<AnnotationStackingOrderOperation::NewStackingOrder> results = operation.getNewStackingOrderResults();
+    if (results.empty()) {
+        return true;
+    }
+    
+    std::vector<Annotation*> stackAnns;
+    std::vector<float> stackOrders;
+    for (auto& nso : results) {
+        stackAnns.push_back(nso.m_annotation);
+        stackOrders.push_back(nso.m_newStackOrder);
+    }
+    
+    AnnotationRedoUndoCommand* command = new AnnotationRedoUndoCommand();
+    command->setModeStackingOrderAnnotations(stackAnns,
+                                             stackOrders,
+                                             orderType);
+
+    const float resultFlag = applyCommandInWindow(UserInputModeEnum::Enum::ANNOTATIONS,
+                                                  command,
+                                                  windowIndex,
+                                                  errorMessageOut);
+    return resultFlag;
+}
+
+/**
+ * @return All annotations in the same space as the given annotation.  If the annotation
+ * is a browser tab annotation, ALL browser tab annotations are returned.
+ * @param annotation
+ * The annotation for space matching and NOT in the return annotations.
+ */
+std::vector<Annotation*>
+AnnotationManager::getAnnotationsInSameSpace(const Annotation* annotation)
+{
+    std::vector<Annotation*> sameSpaceAnns;
+    std::vector<Annotation*> allAnns = getAllAnnotations();
+    if (annotation->getType() == AnnotationTypeEnum::BROWSER_TAB) {
+        EventBrowserTabGetAll tabEvent;
+        EventManager::get()->sendEvent(tabEvent.getPointer());
+        std::vector<BrowserTabContent*> allTabs = tabEvent.getAllBrowserTabs();
+        for (auto tab : allTabs) {
+            AnnotationBrowserTab* abt = tab->getManualLayoutBrowserTabAnnotation();
+            if (abt != annotation) {
+                sameSpaceAnns.push_back(abt);
+            }
+        }
+    }
+    else {
+        switch (annotation->getCoordinateSpace()) {
+            case AnnotationCoordinateSpaceEnum::CHART:
+            case AnnotationCoordinateSpaceEnum::SPACER:
+            case AnnotationCoordinateSpaceEnum::STEREOTAXIC:
+            case AnnotationCoordinateSpaceEnum::SURFACE:
+            case AnnotationCoordinateSpaceEnum::VIEWPORT:
+                CaretAssert("Supports only annotations in Tab or Window Space");
+                return sameSpaceAnns;
+                break;
+            case AnnotationCoordinateSpaceEnum::TAB:
+            {
+                const int32_t tabIndex = annotation->getTabIndex();
+                for (auto a : allAnns) {
+                    if (a == annotation) {
+                        continue;
+                    }
+                    if (a->getCoordinateSpace() == AnnotationCoordinateSpaceEnum::TAB) {
+                        if (a->getTabIndex() == tabIndex) {
+                            sameSpaceAnns.push_back(a);
+                        }
+                    }
+                }
+            }
+                break;
+            case AnnotationCoordinateSpaceEnum::WINDOW:
+            {
+                const int32_t windowIndex = annotation->getWindowIndex();
+                for (auto a : allAnns) {
+                    if (a == annotation) {
+                        continue;
+                    }
+                    if (a->getCoordinateSpace() == AnnotationCoordinateSpaceEnum::WINDOW) {
+                        if (a->getWindowIndex() == windowIndex) {
+                            sameSpaceAnns.push_back(a);
+                        }
+                    }
+                }
+            }
+                break;
+        }
+    }
+
+    return sameSpaceAnns;
+}
+
+/**
+ * Move the given window or tab annotation so that it is in front of all other annotations in the same tab or window.
+ * The stack ordering algorithm uses the undo system and we do want this operation to be undoable.
+ *
+ * @param annotation
+ *     The  annotation that is moved in front
+ * @param errorMessageOut
+ *     Output with error information
+ * @return True is successful, else false
+ */
+bool
+AnnotationManager::moveTabOrWindowAnnotationToFront(Annotation* annotation,
+                                                    AString& errorMessageOut)
+{
+    CaretAssert(annotation);
+    errorMessageOut.clear();
+    
+    std::vector<Annotation*> sameSpaceAnns = getAnnotationsInSameSpace(annotation);
+    if (sameSpaceAnns.empty()) {
+        return true;
+    }
+    
+    std::map<float, Annotation*> stackOrderAnnotationMap;
+    for (auto a : sameSpaceAnns) {
+        AnnotationBrowserTab* abt = dynamic_cast<AnnotationBrowserTab*>(a);
+        if (abt != NULL) {
+            stackOrderAnnotationMap.emplace(static_cast<float>(abt->getStackingOrder()),
+                                            a);
+        }
+        else {
+            float z(1.0);
+            AnnotationTwoCoordinateShape* oneDim = a->castToTwoCoordinateShape();
+            if (oneDim != NULL) {
+                float xyz[3];
+                oneDim->getStartCoordinate()->getXYZ(xyz);
+                z = xyz[2];
+            }
+            else {
+                AnnotationOneCoordinateShape* twoDim = a->castToOneCoordinateShape();
+                if (twoDim != NULL) {
+                    float xyz[3];
+                    twoDim->getCoordinate()->getXYZ(xyz);
+                    z = xyz[2];
+                }
+            }
+            stackOrderAnnotationMap.emplace(z,
+                                            a);
+        }
+    }
+    
+    stackOrderAnnotationMap.emplace(-1,
+                                    annotation);
+    int32_t orderIndex(1);
+    for (auto& soa : stackOrderAnnotationMap) {
+        Annotation* a(soa.second);
+        AnnotationBrowserTab* abt = dynamic_cast<AnnotationBrowserTab*>(a);
+        if (abt != NULL) {
+            abt->setStackingOrder(orderIndex);
+        }
+        else {
+            AnnotationTwoCoordinateShape* oneDim = a->castToTwoCoordinateShape();
+            if (oneDim != NULL) {
+                float xyz[3];
+                oneDim->getStartCoordinate()->getXYZ(xyz);
+                xyz[2] = orderIndex;
+                oneDim->getStartCoordinate()->setXYZ(xyz);
+                oneDim->getEndCoordinate()->getXYZ(xyz);
+                xyz[2] = orderIndex;
+                oneDim->getEndCoordinate()->setXYZ(xyz);
+            }
+            else {
+                AnnotationOneCoordinateShape* twoDim = a->castToOneCoordinateShape();
+                if (twoDim != NULL) {
+                    float xyz[3];
+                    twoDim->getCoordinate()->getXYZ(xyz);
+                    xyz[2] = orderIndex;
+                    twoDim->getCoordinate()->setXYZ(xyz);
+                }
+            }
+        }
+
+        orderIndex++;
+    }
+    
+    return true;
+}
 
 /**
  * Receive an event.
@@ -773,8 +1101,21 @@ AnnotationManager::isGroupingModeValid(const int32_t windowIndex,
  *    An event for which this instance is listening.
  */
 void
-AnnotationManager::receiveEvent(Event* /*event*/)
+AnnotationManager::receiveEvent(Event* event)
 {
+    if (event->getEventType() == EventTypeEnum::EVENT_ANNOTATION_VALIDATE) {
+        EventAnnotationValidate* annEvent = dynamic_cast<EventAnnotationValidate*>(event);
+        CaretAssert(annEvent);
+        const Annotation* validateAnnotation = annEvent->getAnnotation();
+        
+        std::vector<Annotation*> allAnns = getAllAnnotations();
+        for (const auto ann : allAnns) {
+            if (ann == validateAnnotation) {
+                annEvent->setAnnotationValid();
+                annEvent->setEventProcessed();
+            }
+        }
+    }
 }
 
 /**
@@ -961,11 +1302,32 @@ AnnotationManager::getDisplayedAnnotationFiles(EventGetDisplayedDataFiles* displ
 
 /**
  * @return Pointer to the command redo undo stack
+ *
+ * @param userInputMode
+ *     The current user input mode which MUST be ANNOTATIONS or TILE_TABS_MANUAL_LAYOUT_EDITING
  */
 CaretUndoStack*
-AnnotationManager::getCommandRedoUndoStack()
+AnnotationManager::getCommandRedoUndoStack(const UserInputModeEnum::Enum userInputMode)
 {
-    return m_annotationRedoUndoStack;
+    CaretUndoStack* undoStackOut(NULL);
+    switch (userInputMode) {
+        case UserInputModeEnum::Enum::ANNOTATIONS:
+            undoStackOut = m_annotationsExceptBrowserTabsRedoUndoStack;
+            break;
+        case UserInputModeEnum::Enum::TILE_TABS_MANUAL_LAYOUT_EDITING:
+            undoStackOut = m_browserTabAnnotationsRedoUndoStack;
+            break;
+        case UserInputModeEnum::Enum::BORDERS:
+        case UserInputModeEnum::Enum::FOCI:
+        case UserInputModeEnum::Enum::IMAGE:
+        case UserInputModeEnum::Enum::INVALID:
+        case UserInputModeEnum::Enum::VIEW:
+        case UserInputModeEnum::Enum::VOLUME_EDIT:
+            CaretAssert(0);
+            break;
+    }
+    
+    return undoStackOut;
 }
 
 /**
@@ -1024,3 +1386,70 @@ AnnotationManager::restoreFromScene(const SceneAttributes* sceneAttributes,
     
 }
 
+/**
+ * Shrink and expand selected browser tab to fill available space in the window. MANUAL TILE LAYOUT MODE ONLY !
+ *
+ * @param tabsInWindow
+ *     Tabs displayed in the window (may or may not include selected tab)
+ * @param windowIndex
+ *     Index of window
+ * @param userInputMode
+ *     The current user input mode (browser tab always)
+ * @param errorMessageOut
+ *     Contains error information if expansion has error (inability to expand is NOT an error)
+ * @return
+ *     True no error, else false.
+ */
+bool
+AnnotationManager::shrinkAndExpandSelectedBrowserTabAnnotation(const std::vector<BrowserTabContent*>& tabsInWindow,
+                                                               const int32_t windowIndex,
+                                                               const UserInputModeEnum::Enum userInputMode,
+                                                               AString& errorMessageOut)
+{
+    errorMessageOut.clear();
+    
+    AnnotationBrowserTab* selectedTabAnnotation(NULL);
+    std::vector<Annotation*> selectedAnnotations = getAnnotationsSelectedForEditing(windowIndex);
+    if (selectedAnnotations.size() == 1) {
+        CaretAssertVectorIndex(selectedAnnotations, 0);
+        selectedTabAnnotation = dynamic_cast<AnnotationBrowserTab*>(selectedAnnotations[0]);
+    }
+    
+    CaretAssert(selectedTabAnnotation);
+    
+    if (selectedTabAnnotation != NULL) {
+        std::vector<const AnnotationBrowserTab*> tabAnnotations;
+        for (auto btc : tabsInWindow) {
+            const AnnotationBrowserTab* ta = btc->getManualLayoutBrowserTabAnnotation();
+            CaretAssert(ta);
+            if (ta != selectedTabAnnotation) {
+                tabAnnotations.push_back(ta);
+            }
+        }
+        
+        std::array<float, 4> newBounds;
+        if (AnnotationBrowserTab::shrinkAndExpandToFillEmptySpace(tabAnnotations,
+                                                                  selectedTabAnnotation,
+                                                                  newBounds)) {
+            AnnotationRedoUndoCommand* undoCommand = new AnnotationRedoUndoCommand();
+            undoCommand->setBoundsAll(newBounds[0],
+                                      newBounds[1],
+                                      newBounds[2],
+                                      newBounds[3],
+                                      selectedTabAnnotation);
+            if (applyCommand(userInputMode,
+                             undoCommand,
+                             errorMessageOut)) {
+                return true;
+            }
+        }
+        else {
+            errorMessageOut = "Unable to move/resize tab";
+        }
+    }
+    else {
+        errorMessageOut = "Either no annotation is selected or selected annotation is not a browser tab";
+    }
+    
+    return false;
+}

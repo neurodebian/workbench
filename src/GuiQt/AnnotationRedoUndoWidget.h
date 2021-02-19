@@ -26,21 +26,24 @@
 
 #include <QWidget>
 
-
+#include "UserInputModeEnum.h"
 
 namespace caret {
+    class Annotation;
 
     class AnnotationRedoUndoWidget : public QWidget {
         
         Q_OBJECT
 
     public:
-        AnnotationRedoUndoWidget(const int32_t browserWindowIndex,
+        AnnotationRedoUndoWidget(const Qt::Orientation orientation,
+                                 const UserInputModeEnum::Enum userInputMode,
+                                 const int32_t browserWindowIndex,
                                  QWidget* parent = 0);
         
         virtual ~AnnotationRedoUndoWidget();
         
-        void updateContent();
+        void updateContent(const std::vector<Annotation*>& annotations);
         
     private slots:
         void redoActionTriggered();
@@ -54,6 +57,8 @@ namespace caret {
         AnnotationRedoUndoWidget(const AnnotationRedoUndoWidget&);
 
         AnnotationRedoUndoWidget& operator=(const AnnotationRedoUndoWidget&);
+        
+        const UserInputModeEnum::Enum m_userInputMode;
         
         const int32_t m_browserWindowIndex;
         

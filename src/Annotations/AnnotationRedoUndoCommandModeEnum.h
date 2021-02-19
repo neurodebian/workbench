@@ -37,6 +37,12 @@ public:
     enum Enum {
         /** Invalid mode */
         INVALID,
+        /** background for annotation browser tab */
+        BROWSER_TAB_BACKGROUND,
+        /** Set all of the bounds in 2D */
+        BOUNDS_2D_ALL,
+        /** Set one of the bounds in 2D */
+        BOUNDS_2D_SINGLE,
         /** Color - Background */
         COLOR_BACKGROUND,
         /** Color - Foreground */
@@ -47,6 +53,8 @@ public:
         COORDINATE_ONE_AND_TWO,
         /** Coordinate Two */
         COORDINATE_TWO,
+        /** Coordinates in Multi-Coord Annotation */
+        COORDINATE_MULTI,
         /** Create an annotation */
         CREATE_ANNOTATION,
         /** Cut Annotation */
@@ -55,6 +63,8 @@ public:
         DELETE_ANNOTATIONS,
         /** Duplicate Annotation */
         DUPLICATE_ANNOTATION,
+        /** Duplicate Annotations  */
+        DUPLICATE_ANNOTATIONS,
         /** Group Annotations */
         GROUPING_GROUP,
         /** Regroup Annotations */
@@ -73,6 +83,10 @@ public:
         PASTE_ANNOTATION,
         /** Rotation Angle */
         ROTATION_ANGLE,
+        /** Stacking order for annotations (except browser tabs) */
+        STACKING_ORDER_ANNOTATIONS,
+        /** Stacking order for browser tab */
+        STACKING_ORDER_BROWSER_TAB,
         /** Text Alignment Horizontal */
         TEXT_ALIGNMENT_HORIZONTAL,
         /** Text Alignment Vertical */
