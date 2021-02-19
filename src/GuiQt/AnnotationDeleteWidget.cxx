@@ -152,6 +152,28 @@ AnnotationDeleteWidget::deleteActionTriggered()
     std::vector<Annotation*> deleteAnnotations;
     for (auto a : selectedAnnotations) {
         if (a->testProperty(Annotation::Property::DELETION)) {
+            switch (a->getType()) {
+                case AnnotationTypeEnum::BOX:
+                    break;
+                case AnnotationTypeEnum::BROWSER_TAB:
+                    CaretAssert(0);
+                    break;
+                case AnnotationTypeEnum::COLOR_BAR:
+                    break;
+                case AnnotationTypeEnum::IMAGE:
+                    break;
+                case AnnotationTypeEnum::LINE:
+                    break;
+                case AnnotationTypeEnum::OVAL:
+                    break;
+                case AnnotationTypeEnum::POLY_LINE:
+                    break;
+                case AnnotationTypeEnum::SCALE_BAR:
+                    break;
+                case AnnotationTypeEnum::TEXT:
+                    break;
+            }
+            
             deleteAnnotations.push_back(a);
         }
     }
@@ -161,8 +183,9 @@ AnnotationDeleteWidget::deleteActionTriggered()
         undoCommand->setModeDeleteAnnotations(deleteAnnotations);
 
         AString errorMessage;
-        if ( ! annotationManager->applyCommand(undoCommand,
-                                    errorMessage)) {
+        if ( ! annotationManager->applyCommand(UserInputModeEnum::Enum::ANNOTATIONS,
+                                               undoCommand,
+                                               errorMessage)) {
             WuQMessageBox::errorOk(this,
                                    errorMessage);
         }

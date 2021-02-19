@@ -22,6 +22,7 @@
 /*LICENSE_END*/
 
 
+#include "IdentificationSymbolSizeTypeEnum.h"
 #include "IdentifiedItem.h"
 
 
@@ -33,7 +34,8 @@ namespace caret {
     public:
         IdentifiedItemVoxel();
 
-        IdentifiedItemVoxel(const AString& text,
+        IdentifiedItemVoxel(const AString& simpleText,
+                            const AString& formattedText,
                             const float xyz[3]);
         
         virtual ~IdentifiedItemVoxel();
@@ -55,6 +57,10 @@ namespace caret {
         void setSymbolRGB(const float* rgb);
         
         void setSymbolSize(const float symbolSize);
+        
+        IdentificationSymbolSizeTypeEnum::Enum getIdentificationSymbolSizeType() const;
+        
+        void setIdentificationSymbolSizeType(const IdentificationSymbolSizeTypeEnum::Enum sizeType);
         
         virtual AString toString() const;
         
@@ -92,6 +98,8 @@ namespace caret {
         float m_symbolRGB[3];
         
         float m_symbolSize;
+        
+        IdentificationSymbolSizeTypeEnum::Enum m_identificationSymbolSizeType = IdentificationSymbolSizeTypeEnum::MILLIMETERS;
         
         SceneClassAssistant* m_sceneAssistant;
 

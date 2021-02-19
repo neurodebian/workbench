@@ -35,10 +35,11 @@
 #include "AnnotationCoordinateInformation.h"
 #include "AnnotationImage.h"
 #include "AnnotationManager.h"
-#include "AnnotationOneDimensionalShape.h"
+#include "AnnotationMultiCoordinateShape.h"
+#include "AnnotationTwoCoordinateShape.h"
 #include "AnnotationPercentSizeText.h"
 #include "AnnotationRedoUndoCommand.h"
-#include "AnnotationTwoDimensionalShape.h"
+#include "AnnotationOneCoordinateShape.h"
 #include "Brain.h"
 #include "BrainStructure.h"
 #include "CaretAssert.h"
@@ -95,6 +96,9 @@ m_optionalSecondCoordInfo(optionalSecondCoordInfo)
             enableModelSpaceFlag   = true;
             enableSurfaceSpaceFlag = true;
             break;
+        case AnnotationTypeEnum::BROWSER_TAB:
+            enableTabSpaceFlag = false;
+            break;
         case AnnotationTypeEnum::COLOR_BAR:
             break;
         case AnnotationTypeEnum::IMAGE:
@@ -111,6 +115,13 @@ m_optionalSecondCoordInfo(optionalSecondCoordInfo)
             enableChartSpaceFlag   = true;
             enableModelSpaceFlag   = true;
             enableSurfaceSpaceFlag = true;
+            break;
+        case AnnotationTypeEnum::POLY_LINE:
+            enableChartSpaceFlag   = true;
+            enableModelSpaceFlag   = true;
+            enableSurfaceSpaceFlag = true;
+            break;
+        case AnnotationTypeEnum::SCALE_BAR:
             break;
         case AnnotationTypeEnum::TEXT:
             enableChartSpaceFlag   = true;
@@ -532,8 +543,8 @@ AnnotationCoordinateSelectionWidget::changeAnnotationCoordinate(Annotation* anno
 
     CaretPointer<Annotation> redoAnnotation(annotation->clone());
     
-    AnnotationOneDimensionalShape* oneDimShape = dynamic_cast<AnnotationOneDimensionalShape*>(redoAnnotation.getPointer());
-    AnnotationTwoDimensionalShape* twoDimShape = dynamic_cast<AnnotationTwoDimensionalShape*>(redoAnnotation.getPointer());
+    AnnotationTwoCoordinateShape* oneDimShape = dynamic_cast<AnnotationTwoCoordinateShape*>(redoAnnotation.getPointer());
+    AnnotationOneCoordinateShape* twoDimShape = dynamic_cast<AnnotationOneCoordinateShape*>(redoAnnotation.getPointer());
 
     
     AnnotationCoordinate* coordinate = NULL;
@@ -752,9 +763,32 @@ AnnotationCoordinateSelectionWidget::changeAnnotationCoordinate(Annotation* anno
     command->setDescription("Change Coordinate");
     AnnotationManager* annotationManager = GuiManager::get()->getBrain()->getAnnotationManager();
  
+    switch (m_annotationType) {
+        case AnnotationTypeEnum::BOX:
+            break;
+        case AnnotationTypeEnum::BROWSER_TAB:
+            CaretAssert(0);
+            break;
+        case AnnotationTypeEnum::COLOR_BAR:
+            break;
+        case AnnotationTypeEnum::IMAGE:
+            break;
+        case AnnotationTypeEnum::LINE:
+            break;
+        case AnnotationTypeEnum::OVAL:
+            break;
+        case AnnotationTypeEnum::POLY_LINE:
+            break;
+        case AnnotationTypeEnum::SCALE_BAR:
+            break;
+        case AnnotationTypeEnum::TEXT:
+            break;
+    }
+    
     AString errorMessage;
-    if ( ! annotationManager->applyCommand(command,
-                                errorMessage)) {
+    if ( ! annotationManager->applyCommand(UserInputModeEnum::Enum::ANNOTATIONS,
+                                           command,
+                                           errorMessage)) {
         WuQMessageBox::errorOk(this,
                                errorMessage);
     }
@@ -787,25 +821,35 @@ AnnotationCoordinateSelectionWidget::setCoordinateForNewAnnotation(Annotation* a
         return false;
     }
     
-    AnnotationOneDimensionalShape* oneDimAnn = dynamic_cast<AnnotationOneDimensionalShape*>(annotation);
-    AnnotationTwoDimensionalShape* twoDimAnn = dynamic_cast<AnnotationTwoDimensionalShape*>(annotation);
+    AnnotationTwoCoordinateShape* oneDimAnn = annotation->castToTwoCoordinateShape();
+    AnnotationOneCoordinateShape* twoDimAnn = annotation->castToOneCoordinateShape();
+    AnnotationMultiCoordinateShape* multiCoordAnn = annotation->castToMultiCoordinateShape();
     
     bool validCoordsFlag = false;
     
     if (oneDimAnn != NULL) {
         validCoordsFlag = AnnotationCoordinateInformation::setAnnotationCoordinatesForSpace(oneDimAnn,
-                                                                   coordinateSpace,
-                                                                   &m_coordInfo,
-                                                                   m_optionalSecondCoordInfo);
+                                                                                            coordinateSpace,
+                                                                                            &m_coordInfo,
+                                                                                            m_optionalSecondCoordInfo,
+                                                                                            m_optionalMultiCoordInfo);
     }
     else if (twoDimAnn != NULL) {
         validCoordsFlag = AnnotationCoordinateInformation::setAnnotationCoordinatesForSpace(twoDimAnn,
-                                                                   coordinateSpace,
-                                                                   &m_coordInfo,
-                                                                   m_optionalSecondCoordInfo);
+                                                                                            coordinateSpace,
+                                                                                            &m_coordInfo,
+                                                                                            m_optionalSecondCoordInfo,
+                                                                                            m_optionalMultiCoordInfo);
+    }
+    else if (multiCoordAnn != NULL) {
+        validCoordsFlag = AnnotationCoordinateInformation::setAnnotationCoordinatesForSpace(multiCoordAnn,
+                                                                                            coordinateSpace,
+                                                                                            &m_coordInfo,
+                                                                                            m_optionalSecondCoordInfo,
+                                                                                            m_optionalMultiCoordInfo);
     }
     else {
-        const QString msg("PROGRAM ERROR: Annotation is neither one nor two dimensional");
+        const QString msg("PROGRAM ERROR: Annotation is of unknown base type");
         CaretAssertMessage(0, msg);
         CaretLogSevere(msg);
         errorMessageOut = msg;
@@ -813,7 +857,7 @@ AnnotationCoordinateSelectionWidget::setCoordinateForNewAnnotation(Annotation* a
     }
     
     if ( ! validCoordsFlag) {
-        errorMessageOut = "Failed to set coordinates for annotatin.";
+        errorMessageOut = "Failed to set coordinates for annotation.";
     }
     
     updateAnnotationDisplayProperties(annotation);

@@ -26,7 +26,9 @@
 #include "CaretAssert.h"
 #include "CaretLogger.h"
 #include "ChartScaleAutoRanging.h"
-#include "EventChartTwoAxisGetDataRange.h"
+#include "ChartTwoCartesianCustomSubdivisions.h"
+#include "ChartTwoOverlaySetInterface.h"
+#include "EventChartTwoCartesianAxisDisplayGroup.h"
 #include "EventManager.h"
 #include "MathFunctions.h"
 #include "NumericTextFormatting.h"
@@ -46,29 +48,25 @@ using namespace caret;
 /**
  * Constructor.
  *
+ * @param parentChartOverlaySet
+ *     Parent of this axis. (may be NULL)
  * @param axisLocation
  *     Location of the axis (left, right, bottom, top)
- * @param parentChartOverlaySet
- *     Parent of this axis.
  */
-ChartTwoCartesianAxis::ChartTwoCartesianAxis(const ChartTwoOverlaySet* parentChartOverlaySet,
+ChartTwoCartesianAxis::ChartTwoCartesianAxis(const ChartTwoOverlaySetInterface* parentChartOverlaySetInterface,
                                              const ChartAxisLocationEnum::Enum axisLocation)
 : CaretObject(),
 SceneableInterface(),
-m_parentChartOverlaySet(parentChartOverlaySet),
+m_parentChartOverlaySetInterface(parentChartOverlaySetInterface),
 m_axisLocation(axisLocation)
 {
-    /*
-     * Note: Parent chart overlay set is used for sending an event
-     * to the parent to get the range of data.  Note that parent
-     * chart overlay is in 'Brain' module which we have no access.
-     */
-    CaretAssert(m_parentChartOverlaySet);
+    m_customSubdivisions.reset(new ChartTwoCartesianCustomSubdivisions());
     
-    m_showTickmarks = true;
-    m_showLabel     = true;
+    reset();
     
     m_sceneAssistant = std::unique_ptr<SceneClassAssistant>(new SceneClassAssistant());
+    m_sceneAssistant->add<DisplayGroupEnum,DisplayGroupEnum::Enum>("m_displayGroup",
+                                                                   &m_displayGroup);
     m_sceneAssistant->add("m_displayedByUser",
                           &m_displayedByUser);
     m_sceneAssistant->add("m_userScaleMinimumValue",
@@ -90,8 +88,6 @@ m_axisLocation(axisLocation)
                                                                              &m_numericSubdivsionsMode);
     m_sceneAssistant->add("m_userNumberOfSubdivisions",
                           &m_userNumberOfSubdivisions);
-    m_sceneAssistant->add("m_enabledByChart",
-                          &m_enabledByChart);
     m_sceneAssistant->add("m_showTickmarks",
                           &m_showTickmarks);
     m_sceneAssistant->add("m_showLabel",
@@ -108,6 +104,11 @@ m_axisLocation(axisLocation)
                           &m_numericsTextRotated);
     m_sceneAssistant->add("m_paddingSize",
                           &m_paddingSize);
+    m_sceneAssistant->add("m_customSubdivisions",
+                          "ChartTwoCartesianCustomSubdivisions",
+                          m_customSubdivisions.get());
+    m_sceneAssistant->add<ChartTwoCartesianSubdivisionsModeEnum,ChartTwoCartesianSubdivisionsModeEnum::Enum>("m_subdivisionsMode",
+                                                                                                             &m_subdivisionsMode);
 }
 
 /**
@@ -155,28 +156,72 @@ ChartTwoCartesianAxis::operator=(const ChartTwoCartesianAxis& obj)
 void 
 ChartTwoCartesianAxis::copyHelperChartTwoCartesianAxis(const ChartTwoCartesianAxis& obj)
 {
-    CaretAssert(m_axisLocation == obj.m_axisLocation);
+    copyAxisParameters(&obj);
+}
+
+/**
+ * Copy the parameters from the given axis to this axis.
+ * @param axis
+ *    Axis whose parameters are copied to this axis
+ */
+void
+ChartTwoCartesianAxis::copyAxisParameters(const ChartTwoCartesianAxis* axis)
+{
+    CaretAssert(axis);
     
-    m_titleOverlayIndex         = obj.m_titleOverlayIndex;
-    m_displayedByUser           = obj.m_displayedByUser;
-    m_userScaleMinimumValue     = obj.m_userScaleMinimumValue;
-    m_userScaleMaximumValue     = obj.m_userScaleMaximumValue;
-    m_axisLabelsStepValue       = obj.m_axisLabelsStepValue;
-    m_userDigitsRightOfDecimal  = obj.m_userDigitsRightOfDecimal;
-    m_scaleRangeMode            = obj.m_scaleRangeMode;
-    m_units                     = obj.m_units;
-    m_userNumericFormat         = obj.m_userNumericFormat;
-    m_numericSubdivsionsMode    = obj.m_numericSubdivsionsMode;
-    m_userNumberOfSubdivisions  = obj.m_userNumberOfSubdivisions;
-    m_enabledByChart            = obj.m_enabledByChart;
-    m_showTickmarks             = obj.m_showTickmarks;
-    m_showLabel                 = obj.m_showLabel;
-    m_labelTextSize             = obj.m_labelTextSize;
-    m_numericsTextSize          = obj.m_numericsTextSize;
-    m_numericsTextDisplayed     = obj.m_numericsTextDisplayed;
-    m_numericsTextRotated       = obj.m_numericsTextRotated;
-    m_paddingSize               = obj.m_paddingSize;
-    limitUserScaleMinMaxToValidRange();
+    /*
+     * Do not copy:
+     * m_displayGroup
+     */
+    m_userScaleMinimumValue     = axis->m_userScaleMinimumValue;
+    m_userScaleMaximumValue     = axis->m_userScaleMaximumValue;
+    m_axisLabelsStepValue       = axis->m_axisLabelsStepValue;
+    m_userDigitsRightOfDecimal  = axis->m_userDigitsRightOfDecimal;
+    m_titleOverlayIndex         = axis->m_titleOverlayIndex;
+    m_scaleRangeMode            = axis->m_scaleRangeMode;
+    m_units                     = axis->m_units;
+    m_userNumericFormat         = axis->m_userNumericFormat;
+    m_numericSubdivsionsMode    = axis->m_numericSubdivsionsMode;
+    m_userNumberOfSubdivisions  = axis->m_userNumberOfSubdivisions;
+    m_labelTextSize             = axis->m_labelTextSize;
+    m_numericsTextSize          = axis->m_numericsTextSize;
+    m_numericsTextDisplayed     = axis->m_numericsTextDisplayed;
+    m_numericsTextRotated       = axis->m_numericsTextRotated;
+    m_paddingSize               = axis->m_paddingSize;
+    m_showTickmarks             = axis->m_showTickmarks;
+    m_showLabel                 = axis->m_showLabel;
+    m_displayedByUser           = axis->m_displayedByUser;
+    *m_customSubdivisions       = *axis->m_customSubdivisions;
+    m_subdivisionsMode          = axis->m_subdivisionsMode;
+}
+
+/*
+ * Reset axis to its defaults
+ */
+void
+ChartTwoCartesianAxis::reset()
+{
+    m_displayGroup = DisplayGroupEnum::DISPLAY_GROUP_TAB;
+    m_userScaleMinimumValue = -100.0f;
+    m_userScaleMaximumValue = 100.0f;
+    m_axisLabelsStepValue = 1.0f;
+    m_userDigitsRightOfDecimal = 1;
+    m_titleOverlayIndex = 0;
+    m_scaleRangeMode = ChartTwoAxisScaleRangeModeEnum::AUTO;
+    m_units = CaretUnitsTypeEnum::NONE;
+    m_userNumericFormat = NumericFormatModeEnum::AUTO;
+    m_numericSubdivsionsMode = ChartTwoNumericSubdivisionsModeEnum::AUTO;
+    m_userNumberOfSubdivisions = 2;
+    m_labelTextSize = 2.5f;
+    m_numericsTextSize = 2.5f;
+    m_numericsTextDisplayed = true;
+    m_numericsTextRotated = false;
+    m_paddingSize = 0.0f;
+    m_showTickmarks = true;
+    m_showLabel = true;
+    m_displayedByUser = true;
+    m_customSubdivisions->reset();
+    m_subdivisionsMode = ChartTwoCartesianSubdivisionsModeEnum::STANDARD;
 }
 
 /**
@@ -207,6 +252,28 @@ ChartTwoCartesianAxis::setDisplayedByUser(const bool displayedByUser)
 {
     m_displayedByUser = displayedByUser;
 }
+
+/**
+ * @return The display group
+ */
+DisplayGroupEnum::Enum
+ChartTwoCartesianAxis::getDisplayGroup() const
+{
+    return m_displayGroup;
+}
+
+/**
+ * Set the display group
+ * @param displayGroup
+ *    New display group
+ */
+void
+ChartTwoCartesianAxis::setDisplayGroup(const DisplayGroupEnum::Enum displayGroup)
+{
+    m_displayGroup = displayGroup;
+}
+
+
 /**
  * Get the range of data for this axis.
  *
@@ -219,34 +286,15 @@ void
 ChartTwoCartesianAxis::getDataRange(float& rangeMinimumOut,
                                     float& rangeMaximumOut) const
 {
-    EventChartTwoAxisGetDataRange rangeEvent(m_parentChartOverlaySet,
-                                             m_axisLocation);
-    EventManager::get()->sendEvent(rangeEvent.getPointer());
-    
-    if ( ! rangeEvent.getMinimumAndMaximumValues(rangeMinimumOut,
-                                                 rangeMaximumOut)) {
-        rangeMinimumOut = 0.0f;
-        rangeMaximumOut = 0.0f;
+    CaretAssert(m_parentChartOverlaySetInterface);
+    if (m_parentChartOverlaySetInterface != NULL) {
+        if ( ! m_parentChartOverlaySetInterface->getDataRangeForAxis(m_axisLocation,
+                                                                     rangeMinimumOut,
+                                                                     rangeMaximumOut)) {
+            rangeMinimumOut = 0.0;
+            rangeMaximumOut = 0.0;
+        }
     }
-}
-
-/**
- * Limit the user scale min/max values to be within the valid range.
- */
-void
-ChartTwoCartesianAxis::limitUserScaleMinMaxToValidRange()
-{
-//    float minimumValue = 0.0f;
-//    float maximumValue = 0.0f;
-//    getDataRange(minimumValue,
-//                 maximumValue);
-//    
-//    m_userScaleMinimumValue = MathFunctions::limitRange(m_userScaleMinimumValue,
-//                                                        minimumValue,
-//                                                        maximumValue);
-//    m_userScaleMaximumValue = MathFunctions::limitRange(m_userScaleMaximumValue,
-//                                                        minimumValue,
-//                                                        maximumValue);
 }
 
 /**
@@ -255,7 +303,7 @@ ChartTwoCartesianAxis::limitUserScaleMinMaxToValidRange()
 int32_t
 ChartTwoCartesianAxis::getUserDigitsRightOfDecimal() const
 {
-    return m_userDigitsRightOfDecimal;
+    return getDisplayGroupOrThisAxisForGet()->m_userDigitsRightOfDecimal;
 }
 
 /**
@@ -267,7 +315,7 @@ ChartTwoCartesianAxis::getUserDigitsRightOfDecimal() const
 void
 ChartTwoCartesianAxis::setUserDigitsRightOfDecimal(const int32_t digitsRightOfDecimal)
 {
-    m_userDigitsRightOfDecimal = digitsRightOfDecimal;
+    getDisplayGroupOrThisAxisForSet()->m_userDigitsRightOfDecimal = digitsRightOfDecimal;
 }
 
 
@@ -277,7 +325,7 @@ ChartTwoCartesianAxis::setUserDigitsRightOfDecimal(const int32_t digitsRightOfDe
 int32_t
 ChartTwoCartesianAxis::getUserNumberOfSubdivisions() const
 {
-    return m_userNumberOfSubdivisions;
+    return getDisplayGroupOrThisAxisForGet()->m_userNumberOfSubdivisions;
 }
 
 /**
@@ -288,7 +336,7 @@ ChartTwoCartesianAxis::getUserNumberOfSubdivisions() const
 void
 ChartTwoCartesianAxis::setUserNumberOfSubdivisions(const int32_t numberOfSubdivisions)
 {
-    m_userNumberOfSubdivisions = numberOfSubdivisions;
+    getDisplayGroupOrThisAxisForSet()->m_userNumberOfSubdivisions = numberOfSubdivisions;
 }
 
 /**
@@ -297,7 +345,7 @@ ChartTwoCartesianAxis::setUserNumberOfSubdivisions(const int32_t numberOfSubdivi
 ChartTwoNumericSubdivisionsModeEnum::Enum
 ChartTwoCartesianAxis::getNumericSubdivsionsMode() const
 {
-    return m_numericSubdivsionsMode;
+    return getDisplayGroupOrThisAxisForGet()->m_numericSubdivsionsMode;
 }
 
 /**
@@ -309,70 +357,63 @@ ChartTwoCartesianAxis::getNumericSubdivsionsMode() const
 void
 ChartTwoCartesianAxis::setNumericSubdivsionsMode(const ChartTwoNumericSubdivisionsModeEnum::Enum numericSubdivsionsMode)
 {
-    m_numericSubdivsionsMode = numericSubdivsionsMode;
+    getDisplayGroupOrThisAxisForSet()->m_numericSubdivsionsMode = numericSubdivsionsMode;
 }
 
 /**
- * @return User scale's minimum value
+ * @return The custom subdivisions
+ */
+ChartTwoCartesianCustomSubdivisions*
+ChartTwoCartesianAxis::getCustomSubdivisions()
+{
+    return getDisplayGroupOrThisAxisForSet()->m_customSubdivisions.get();
+}
+
+/**
+ * @return The custom subdivisions (const method)
+ */
+const ChartTwoCartesianCustomSubdivisions*
+ChartTwoCartesianAxis::getCustomSubdivisions() const
+{
+    return getDisplayGroupOrThisAxisForGet()->m_customSubdivisions.get();
+}
+
+/**
+ * @return The subdivisions mode
+ */
+ChartTwoCartesianSubdivisionsModeEnum::Enum
+ChartTwoCartesianAxis::getSubdivisionsMode() const
+{
+    return getDisplayGroupOrThisAxisForGet()->m_subdivisionsMode;
+}
+
+/**
+ * Set the subdivisions mode
+ * @param subdivisionsMode
+ *    New subdivisions mode
+ */
+void
+ChartTwoCartesianAxis::setSubdivisionsMode(const ChartTwoCartesianSubdivisionsModeEnum::Enum subdivisionsMode)
+{
+    getDisplayGroupOrThisAxisForSet()->m_subdivisionsMode = subdivisionsMode;
+}
+
+/**
+ * @return User scale's minimum value form scene
  */
 float
-ChartTwoCartesianAxis::getUserScaleMinimumValue() const
+ChartTwoCartesianAxis::getSceneUserScaleMinimumValue() const
 {
     return m_userScaleMinimumValue;
 }
 
 /**
- * @return User scale's maximum value
+ * @return User scale's maximum value from scene
  */
 float
-ChartTwoCartesianAxis::getUserScaleMaximumValue() const
+ChartTwoCartesianAxis::getSceneUserScaleMaximumValue() const
 {
     return m_userScaleMaximumValue;
-}
-
-/**
- * Set User scale's maximum value
- * @param userScaleMaximumValue
- *    New value for User scale's maximum value
- */
-void
-ChartTwoCartesianAxis::setUserScaleMaximumValue(const float userScaleMaximumValue)
-{
-    m_userScaleMaximumValue = userScaleMaximumValue;
-    limitUserScaleMinMaxToValidRange();
-}
-
-/**
- * Set User scale's minimum value
- * @param userScaleMinimumValue
- *    New value for User scale's minimum value
- */
-void
-ChartTwoCartesianAxis::setUserScaleMinimumValue(const float userScaleMinimumValue)
-{
-    m_userScaleMinimumValue = userScaleMinimumValue;
-    limitUserScaleMinMaxToValidRange();
-}
-
-/**
- * @return Is the axis enabled because a chart is using it
- */
-bool
-ChartTwoCartesianAxis::isEnabledByChart() const
-{
-    return m_enabledByChart;
-}
-
-/**
- * Set the axis enabled because a chart is using it
- *
- * @param enabled
- *    New enabled status
- */
-void
-ChartTwoCartesianAxis::setEnabledByChart(const bool enabled)
-{
-    m_enabledByChart = enabled;
 }
 
 /**
@@ -381,7 +422,7 @@ ChartTwoCartesianAxis::setEnabledByChart(const bool enabled)
 bool
 ChartTwoCartesianAxis::isShowTickmarks() const
 {
-    return m_showTickmarks;
+    return getDisplayGroupOrThisAxisForGet()->m_showTickmarks;
 }
 
 /**
@@ -392,7 +433,7 @@ ChartTwoCartesianAxis::isShowTickmarks() const
 void
 ChartTwoCartesianAxis::setShowTickmarks(const bool showTickmarks)
 {
-    m_showTickmarks = showTickmarks;
+    getDisplayGroupOrThisAxisForSet()->m_showTickmarks = showTickmarks;
 }
 
 /**
@@ -401,7 +442,7 @@ ChartTwoCartesianAxis::setShowTickmarks(const bool showTickmarks)
 bool
 ChartTwoCartesianAxis::isShowLabel() const
 {
-    return m_showLabel;
+    return getDisplayGroupOrThisAxisForGet()->m_showLabel;
 }
 
 /**
@@ -412,28 +453,16 @@ ChartTwoCartesianAxis::isShowLabel() const
 void
 ChartTwoCartesianAxis::setShowLabel(const bool showLabel)
 {
-    m_showLabel = showLabel;
+    getDisplayGroupOrThisAxisForSet()->m_showLabel = showLabel;
 }
 
 /**
- * @return Scale Range Mode
+ * @return Scale Range Mode from Scene
  */
 ChartTwoAxisScaleRangeModeEnum::Enum
-ChartTwoCartesianAxis::getScaleRangeMode() const
+ChartTwoCartesianAxis::getSceneScaleRangeMode() const
 {
     return m_scaleRangeMode;
-}
-
-/**
- * Set Scale Range Mode
- *
- * @param scaleRangeMode
- *    New value for Scale Range Mode
- */
-void
-ChartTwoCartesianAxis::setScaleRangeMode(const ChartTwoAxisScaleRangeModeEnum::Enum scaleRangeMode)
-{
-    m_scaleRangeMode = scaleRangeMode;
 }
 
 /**
@@ -463,7 +492,7 @@ ChartTwoCartesianAxis::setUnits(const CaretUnitsTypeEnum::Enum units)
 NumericFormatModeEnum::Enum
 ChartTwoCartesianAxis::getUserNumericFormat() const
 {
-    return m_userNumericFormat;
+    return getDisplayGroupOrThisAxisForGet()->m_userNumericFormat;
 }
 
 /**
@@ -475,7 +504,7 @@ ChartTwoCartesianAxis::getUserNumericFormat() const
 void
 ChartTwoCartesianAxis::setUserNumericFormat(const NumericFormatModeEnum::Enum numericFormat)
 {
-    m_userNumericFormat = numericFormat;
+    getDisplayGroupOrThisAxisForSet()->m_userNumericFormat = numericFormat;
 }
 
 /**
@@ -525,7 +554,7 @@ ChartTwoCartesianAxis::setLabelOverlayIndex(const int32_t labelOverlayIndex)
 float
 ChartTwoCartesianAxis::getLabelTextSize() const
 {
-    return m_labelTextSize;
+    return getDisplayGroupOrThisAxisForGet()->m_labelTextSize;
 }
 
 /**
@@ -537,7 +566,7 @@ ChartTwoCartesianAxis::getLabelTextSize() const
 void
 ChartTwoCartesianAxis::setLabelTextSize(const float labelTextSize)
 {
-    m_labelTextSize = labelTextSize;
+    getDisplayGroupOrThisAxisForSet()->m_labelTextSize = labelTextSize;
 }
 
 /**
@@ -546,7 +575,7 @@ ChartTwoCartesianAxis::setLabelTextSize(const float labelTextSize)
 float
 ChartTwoCartesianAxis::getNumericsTextSize() const
 {
-    return m_numericsTextSize;
+    return getDisplayGroupOrThisAxisForGet()->m_numericsTextSize;
 }
 
 /**
@@ -558,7 +587,7 @@ ChartTwoCartesianAxis::getNumericsTextSize() const
 void
 ChartTwoCartesianAxis::setNumericsTextSize(const float numericsTextSize)
 {
-    m_numericsTextSize = numericsTextSize;
+    getDisplayGroupOrThisAxisForSet()->m_numericsTextSize = numericsTextSize;
 }
 
 /**
@@ -567,7 +596,7 @@ ChartTwoCartesianAxis::setNumericsTextSize(const float numericsTextSize)
 bool
 ChartTwoCartesianAxis::isNumericsTextDisplayed() const
 {
-    return m_numericsTextDisplayed;
+    return getDisplayGroupOrThisAxisForGet()->m_numericsTextDisplayed;
 }
 
 /**
@@ -579,7 +608,7 @@ ChartTwoCartesianAxis::isNumericsTextDisplayed() const
 void
 ChartTwoCartesianAxis::setNumericsTextDisplayed(const bool numericsTextDisplayed)
 {
-    m_numericsTextDisplayed = numericsTextDisplayed;
+    getDisplayGroupOrThisAxisForSet()->m_numericsTextDisplayed = numericsTextDisplayed;
 }
 
 /**
@@ -588,7 +617,7 @@ ChartTwoCartesianAxis::setNumericsTextDisplayed(const bool numericsTextDisplayed
 bool
 ChartTwoCartesianAxis::isNumericsTextRotated() const
 {
-    return m_numericsTextRotated;
+    return getDisplayGroupOrThisAxisForGet()->m_numericsTextRotated;
 }
 
 /**
@@ -600,7 +629,7 @@ ChartTwoCartesianAxis::isNumericsTextRotated() const
 void
 ChartTwoCartesianAxis::setNumericsTextRotated(const bool numericsTextRotated)
 {
-    m_numericsTextRotated = numericsTextRotated;
+    getDisplayGroupOrThisAxisForSet()->m_numericsTextRotated = numericsTextRotated;
 }
 
 /**
@@ -609,7 +638,7 @@ ChartTwoCartesianAxis::setNumericsTextRotated(const bool numericsTextRotated)
 float
 ChartTwoCartesianAxis::getPaddingSize() const
 {
-    return m_paddingSize;
+    return getDisplayGroupOrThisAxisForGet()->m_paddingSize;
 }
 
 /**
@@ -621,7 +650,7 @@ ChartTwoCartesianAxis::getPaddingSize() const
 void
 ChartTwoCartesianAxis::setPaddingSize(const float paddingSize)
 {
-    m_paddingSize = paddingSize;
+    getDisplayGroupOrThisAxisForSet()->m_paddingSize = paddingSize;
 }
 
 /**
@@ -671,347 +700,91 @@ ChartTwoCartesianAxis::restoreFromScene(const SceneAttributes* sceneAttributes,
         return;
     }
     
-    // may not be in older scenes
+    /* may not be in older scenes */
+    m_displayGroup          = DisplayGroupEnum::DISPLAY_GROUP_TAB;
     m_displayedByUser       = true;
     m_numericsTextDisplayed = true;
     m_numericsTextRotated   = false;
     
     m_sceneAssistant->restoreMembers(sceneAttributes,
-                                     sceneClass);    
+                                     sceneClass);
     
     //Uncomment if sub-classes must restore from scene
     //restoreSubClassDataFromScene(sceneAttributes,
     //                             sceneClass);
-    
 }
 
 /**
- * Given the bounds of the data, determine the auto range minimum and maximum values.
- *
- * @param minimumValue
- *     Minimum data value
- * @param maximumValue
- *     Maximum data value
- * @param minimumOut
- *     Output minimum value for autoranging.
- * @param maximumOut
- *     Output maximum value for autoranging.
- * @param stepValueOut
- *     Output step value for scale.
- * @param digitsRightOfDecimalOut
- *     Output with digits right of decimal.
- * @return
- *     True if output values are valid, else false.
+ * @return Axis from current display group selection.  When the
+ * active display group is 'TAB', 'this' axis is returned.  When a
+ * group is selected, the axis for that group's attributes is returned.
  */
-bool
-ChartTwoCartesianAxis::getAutoRangeMinimumAndMaximum(const float minimumValue,
-                                                     const float maximumValue,
-                                                     float& minimumOut,
-                                                     float& maximumOut,
-                                                     float& stepValueOut,
-                                                     int32_t& digitsRightOfDecimalOut) const
+ChartTwoCartesianAxis*
+ChartTwoCartesianAxis::getDisplayGroupOrThisAxisForSet()
 {
-    float minValue = minimumValue;
-    float maxValue = maximumValue;
-    
-    if (maxValue > minValue) {
-        double scaleStep = 0.0;
-        double scaleMin  = 0.0;
-        double scaleMax  = 0.0;
-        int32_t digitsRightOfDecimal = 0;
-        
-        ChartScaleAutoRanging::createAutoScale(minValue,
-                                               maxValue,
-                                               scaleMin,
-                                               scaleMax,
-                                               scaleStep,
-                                               digitsRightOfDecimal);
-        minimumOut   = scaleMin;
-        maximumOut   = scaleMax;
-        stepValueOut = scaleStep;
-        digitsRightOfDecimalOut   = digitsRightOfDecimal;
-        
-        //m_rangeMinimumValue = minimumOut;
-        //m_rangeMaximumValue = maximumOut;
-        
-        return true;
-    }
-    
-    return false;
-}
-
-/**
- * Get the axis scale text values and their positions for drawing the scale.
- *
- * @param minimumDataValue
- *     Minimum data value
- * @param maximumDataValue
- *     Maximum data value
- * @param axisLength
- *     Length of axis (no specific unit type is assumed)
- * @param minimumOut
- *     Output minimum value for autoranging.
- * @param maximumOut
- *     Output maximum value for autoranging.
- * @param scaleValuesOffsetInPixelsOut
- *     Output containing offset in pixels for the scale values.
- * @param scaleValuesOut
- *     Output containing text for scale values.
- * @return
- *     True if output data is valid, else false.
- */
-bool
-ChartTwoCartesianAxis::getScaleValuesAndOffsets(const float minimumDataValue,
-                                                const float maximumDataValue,
-                                                const float axisLength,
-                                                float& minimumOut,
-                                                float& maximumOut,
-                                                std::vector<float>& scaleValuesOffsetInPixelsOut,
-                                                std::vector<AString>& scaleValuesOut) const
-{
-    float minimumValue = minimumDataValue;
-    float maximumValue = maximumDataValue;
-    
-    minimumOut = 0.0;
-    maximumOut = 0.0;
-    scaleValuesOffsetInPixelsOut.clear();
-    scaleValuesOut.clear();
-    
-    if (axisLength <= 0.0) {
-        CaretAssert(0);
-        return false;
-    }
-    
-    float labelsStart = 0.0;
-    float labelsEnd   = 0.0;
-    float labelsStep  = 1.0;
-    int32_t labelsDigitsRightOfDecimal = 0;
-    
-    switch (m_scaleRangeMode) {
-        case ChartTwoAxisScaleRangeModeEnum::AUTO:
-            break;
-        case ChartTwoAxisScaleRangeModeEnum::DATA:
-            break;
-        case ChartTwoAxisScaleRangeModeEnum::USER:
-            switch (m_axisLocation) {
-                case ChartAxisLocationEnum::CHART_AXIS_LOCATION_BOTTOM:
-                    minimumValue = m_userScaleMinimumValue;
-                    maximumValue = m_userScaleMaximumValue;
-                    break;
-                case ChartAxisLocationEnum::CHART_AXIS_LOCATION_LEFT:
-                    minimumValue = m_userScaleMinimumValue;
-                    maximumValue = m_userScaleMaximumValue;
-                    break;
-                case ChartAxisLocationEnum::CHART_AXIS_LOCATION_RIGHT:
-                    minimumValue = m_userScaleMinimumValue;
-                    maximumValue = m_userScaleMaximumValue;
-                    break;
-                case ChartAxisLocationEnum::CHART_AXIS_LOCATION_TOP:
-                    minimumValue = m_userScaleMinimumValue;
-                    maximumValue = m_userScaleMaximumValue;
-                    break;
-            }
-            break;
-    }
-
-    if ( ! getAutoRangeMinimumAndMaximum(minimumValue,
-                                         maximumValue,
-                                         labelsStart,
-                                         labelsEnd,
-                                         labelsStep,
-                                         labelsDigitsRightOfDecimal)) {
-        return false;
-    }
-    
-    switch (m_scaleRangeMode) {
-        case ChartTwoAxisScaleRangeModeEnum::AUTO:
-            m_userScaleMinimumValue = labelsStart;
-            m_userScaleMaximumValue = labelsEnd;
-            break;
-        case ChartTwoAxisScaleRangeModeEnum::DATA:
-        {
-            const double range = maximumDataValue - minimumDataValue;
-            if (range > 0.0) {
-                const int32_t numSteps = MathFunctions::round((labelsEnd - labelsStart) / labelsStep);
-                if (numSteps > 0) {
-                    labelsStart = minimumDataValue;
-                    labelsEnd   = maximumDataValue;
-                    labelsStep  = range / numSteps;
-                    m_userScaleMinimumValue = labelsStart;
-                    m_userScaleMaximumValue = labelsEnd;
-                }
-            }
-        }
-            break;
-        case ChartTwoAxisScaleRangeModeEnum::USER:
-//            labelsStart = m_userScaleMinimumValue;
-//            labelsEnd   = m_userScaleMaximumValue;
-        {
-            const double range = m_userScaleMaximumValue - m_userScaleMinimumValue;
-            if (range > 0.0) {
-                const int32_t numSteps = MathFunctions::round((labelsEnd - labelsStart) / labelsStep);
-                if (numSteps > 0) {
-                    labelsStart = m_userScaleMinimumValue;
-                    labelsEnd   = m_userScaleMaximumValue;
-                    labelsStep  = range / numSteps;
-                    m_userScaleMinimumValue = labelsStart;
-                    m_userScaleMaximumValue = labelsEnd;
-                }
-            }
-        }
-            break;
-    }
-    
-    switch (m_numericSubdivsionsMode) {
-        case ChartTwoNumericSubdivisionsModeEnum::AUTO:
-            break;
-        case ChartTwoNumericSubdivisionsModeEnum::USER:
-        {
-            const float labelsRange = labelsEnd - labelsStart;
-            if (labelsRange <= 0.0) {
-                return false;
-            }
-            const float dividend = (1.0 + m_userNumberOfSubdivisions);
-            labelsStep = labelsRange / dividend;
-        }
-            break;
-    }
-    
-    minimumOut = labelsStart;
-    maximumOut = labelsEnd;
+    ChartTwoCartesianAxis* axis(this);
     
     /*
-     * If the "labels end" or "labels start" value is not valid (infinity or not-a-number) there
-     * are invalid values in the data and will cause the labels processing later
-     * in this method to fail.  So, alert the user that there is a problem in
-     * the data.
-     *
-     * A set is used to track those models for which the user has
-     * already been alerted.  Otherwise, the alert message will be
-     * displayed every time this method is called (which is many) and
-     * the user will receive endless pop-ups.
+     * if parent overlay set interface is NULL, then
+     * 'this' is a display group axes
      */
-    if ( (! MathFunctions::isNumeric(labelsStart))
-        || (! MathFunctions::isNumeric(labelsEnd))) {
-        const AString msg("Invalid numbers (infinity or not-a-number) found when trying to create chart.  "
-                          "Run \"wb_command -file-information\" on files being charted to find the file "
-                          "that contains invalid data so that the file can be fixed.");
-        CaretLogWarning(msg);
-        return false;
-    }
-    
-    float labelsRange = (labelsEnd - labelsStart);
-    if (labelsRange <= 0.0) {
-        return false;
-    }
-    
-    const float tickLabelsStep = labelsStep;
-    if (tickLabelsStep <= 0.0) {
-        return false;
-    }
-    
-    const float onePercentRange = labelsRange * 0.01f;
-    
-    std::vector<float> labelNumericValues;
-    
-    float labelValue  = labelsStart;
-    while (labelValue <= labelsEnd) {
-        float labelParametricValue = (labelValue - labelsStart) / labelsRange;
-        
-        float labelValueForText = labelValue;
-        
-        if (labelsRange >= 10.0) {
-            /*
-             * Is this the first label?
-             */
-            if (labelValue <= labelsStart) {
+    if (m_parentChartOverlaySetInterface != NULL) {
+        switch (m_displayGroup) {
+            case DisplayGroupEnum::DISPLAY_GROUP_A:
+            case DisplayGroupEnum::DISPLAY_GROUP_B:
+            case DisplayGroupEnum::DISPLAY_GROUP_C:
+            case DisplayGroupEnum::DISPLAY_GROUP_D:
                 /*
-                 * Handles case when the minimum DATA value is just a little
-                 * bit greater than the minimum value for axis labels such
-                 * as in Data-Series data when the minimum data value is "1"
-                 * and the minimum axis label value is "0".  Without this
-                 * code no value is displayed at the left edge of the axis.
+                 *
                  */
-                if (labelParametricValue < 0.0) {
-                    const float nextParametricValue = ((labelValue + tickLabelsStep) - labelsStart) / labelsRange;
-                    if (nextParametricValue > 0.05) {
-                        labelParametricValue = 0.0;
-                        labelValueForText = labelsStart;
-                    }
-                }
-            }
-            
-            if (labelParametricValue < 0.0) {
-                if (labelParametricValue >= -0.01) {
-                    labelParametricValue = 0.0;
-                }
-            }
-            
-            /*
-             * Is this the last label?
-             */
-            if (labelValue >= labelsEnd) {
-                /*
-                 * Like above, ensures a value is displayed at the right
-                 * edge of the axis.
-                 */
-                if (labelParametricValue > 1.0) {
-                    const float prevParametricValue = ((labelValue - tickLabelsStep) - labelsStart) / labelsRange;
-                    if (prevParametricValue < 0.95) {
-                        labelParametricValue = 1.0;
-                        labelValueForText = labelsEnd;
-                    }
-                }
-            }
-            
-            if (labelParametricValue > 1.0) {
-                if (labelParametricValue < 1.01) {
-                    labelParametricValue = 1.0;
-                }
-            }
-        }
-        
-        if ((labelParametricValue >= 0.0)
-            && (labelParametricValue <= 1.0)) {
-            const float labelPixelsPosition = axisLength * labelParametricValue;
-            labelNumericValues.push_back(labelValueForText);
-            scaleValuesOffsetInPixelsOut.push_back(labelPixelsPosition);
-        }
-        else {
-            //            std::cout << "Label value=" << labelValue << " parametric=" << labelParametricValue << " failed." << std::endl;
-        }
-        
-        labelValue  += tickLabelsStep;
-        
-        /*
-         * It is possible that 'labelValue' may be slightly greater than 'labelsEnd'
-         * for the last label which results in the last label not displayed.
-         * So, if the 'labelValue' is slightly greater than 'labelsEnd', 
-         * limit 'labelValue' so that the label at the end of the data range
-         * is displayed.
-         *
-         * Example: labelValue = 73.9500046
-         *          labelsEnd  = 73.9499969
-         */
-        if (labelValue > labelsEnd) {
-            const float diff = labelValue - labelsEnd;
-            if (diff < onePercentRange) {
-                labelValue = labelsEnd;
-            }
+                axis = EventChartTwoCartesianAxisDisplayGroup::getAxisForDisplayGroup(m_displayGroup);
+                break;
+            case DisplayGroupEnum::DISPLAY_GROUP_TAB:
+                axis = this;
+                break;
         }
     }
+    CaretAssert(axis);
     
-    const int32_t numValues = static_cast<int32_t>(labelNumericValues.size());
-    if (numValues > 0) {
-        scaleValuesOut.resize(numValues);
-        NumericTextFormatting::formatValueRange(m_userNumericFormat,
-                                                m_userDigitsRightOfDecimal,
-                                                &labelNumericValues[0],
-                                                &scaleValuesOut[0],
-                                                labelNumericValues.size());
-    }
-    
-    CaretAssert(scaleValuesOffsetInPixelsOut.size() == scaleValuesOut.size());
-    return ( ! scaleValuesOut.empty());
+    return axis;
 }
 
+/**
+ * @return Axis from current display group selection.  When the
+ * active display group is 'TAB', 'this' axis is returned.  When a
+ * group is selected, the axis for that group's attributes is returned.
+ */
+const ChartTwoCartesianAxis*
+ChartTwoCartesianAxis::getDisplayGroupOrThisAxisForGet() const
+{
+    const ChartTwoCartesianAxis* axis(this);
+    
+    /*
+     * if parent overlay set interface is NULL, then
+     * 'this' is a display group axes
+     */
+    if (m_parentChartOverlaySetInterface != NULL) {
+        switch (m_displayGroup) {
+            case DisplayGroupEnum::DISPLAY_GROUP_A:
+            case DisplayGroupEnum::DISPLAY_GROUP_B:
+            case DisplayGroupEnum::DISPLAY_GROUP_C:
+            case DisplayGroupEnum::DISPLAY_GROUP_D:
+            {
+                /*
+                 * Copy the yoked axis to this axis so that if the user switches back
+                 * to TAB, the axes will remain the same
+                 */
+                ChartTwoCartesianAxis* yokedAxis = EventChartTwoCartesianAxisDisplayGroup::getAxisForDisplayGroup(m_displayGroup);
+                CaretAssert(yokedAxis);
+                const_cast<ChartTwoCartesianAxis*>(this)->copyAxisParameters(yokedAxis);
+            }
+                break;
+            case DisplayGroupEnum::DISPLAY_GROUP_TAB:
+                axis = this;
+                break;
+        }
+    }
+    CaretAssert(axis);
+    
+    return axis;
+}

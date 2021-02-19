@@ -110,6 +110,10 @@ AnnotationTypeEnum::initialize()
                                           "BOX",
                                           "Box"));
     
+    enumData.push_back(AnnotationTypeEnum(BROWSER_TAB,
+                                          "BROWSER_TAB",
+                                          "Browser Tab"));
+    
     enumData.push_back(AnnotationTypeEnum(COLOR_BAR,
                                           "COLOR_BAR",
                                           "Color Bar"));
@@ -125,6 +129,14 @@ AnnotationTypeEnum::initialize()
     enumData.push_back(AnnotationTypeEnum(OVAL,
                                           "OVAL",
                                           "Oval"));
+    
+    enumData.push_back(AnnotationTypeEnum(POLY_LINE,
+                                          "POLY_LINE",
+                                          "Poly Line"));
+    
+    enumData.push_back(AnnotationTypeEnum(SCALE_BAR,
+                                          "SCALE_BAR",
+                                          "Scale Bar"));
     
     enumData.push_back(AnnotationTypeEnum(TEXT,
                                           "TEXT",

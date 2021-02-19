@@ -63,16 +63,17 @@
 #include "DataFileException.h"
 #include "DeveloperFlagsEnum.h"
 #include "DisplayPropertiesImages.h"
-#include "DisplayPropertiesVolume.h"
 #include "EventBrowserWindowNew.h"
 #include "CaretLogger.h"
 #include "ElapsedTimer.h"
 #include "EventGetViewportSize.h"
+#include "EventBrowserTabReopenAvailable.h"
 #include "EventBrowserWindowCreateTabs.h"
 #include "EventBrowserWindowContent.h"
+#include "EventBrowserWindowGetTabs.h"
+#include "EventBrowserTabIndicesGetAllViewed.h"
 #include "EventCaretMappableDataFilesAndMapsInDisplayedOverlays.h"
 #include "EventDataFileRead.h"
-#include "EventMacDockMenuUpdate.h"
 #include "EventManager.h"
 #include "EventModelGetAll.h"
 #include "EventGetOrSetUserInputModeProcessor.h"
@@ -81,7 +82,7 @@
 #include "EventGraphicsUpdateOneWindow.h"
 #include "EventSpecFileReadDataFiles.h"
 #include "EventSurfaceColoringInvalidate.h"
-#include "EventTileTabsConfigurationModification.h"
+#include "EventTileTabsGridConfigurationModification.h"
 #include "EventUserInterfaceUpdate.h"
 #include "FileInformation.h"
 #include "FociProjectionDialog.h"
@@ -93,6 +94,7 @@
 #include "ModelWholeBrain.h"
 #include "PlainTextStringBuilder.h"
 #include "ProgressReportingDialog.h"
+#include "RecentFilesDialog.h"
 #include "SceneAttributes.h"
 #include "SceneClass.h"
 #include "SceneClassArray.h"
@@ -109,8 +111,9 @@
 #include "Surface.h"
 #include "SurfaceMontageConfigurationAbstract.h"
 #include "SurfaceSelectionViewController.h"
-#include "TileTabsConfiguration.h"
-#include "TileTabsConfigurationModifier.h"
+#include "TileTabsLayoutGridConfiguration.h"
+#include "TileTabsLayoutManualConfiguration.h"
+#include "TileTabsGridConfigurationModifier.h"
 #include "WuQDataEntryDialog.h"
 #include "WuQDoubleSpinBox.h"
 #include "WuQMacroManager.h"
@@ -246,12 +249,6 @@ m_browserWindowIndex(browserWindowIndex)
     
     createMenus();
     
-    if (s_enableMacDuplicateMenuBarFlag) {
-        s_enableMacDuplicateMenuBarFlag = false;
-        
-        m_toolbar->insertDuplicateMenuBar(this);
-    }
-    
     m_toolbar->updateToolBar();
 
     processShowOverlayToolBox(m_overlayToolBoxAction->isChecked());
@@ -270,6 +267,8 @@ m_browserWindowIndex(browserWindowIndex)
     m_defaultWindowComponentStatus.isToolBarDisplayed = m_showToolBarAction->isChecked();
     
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_BROWSER_WINDOW_MENUS_UPDATE);
+    EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_BROWSER_WINDOW_GET_TABS);
+    EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_BROWSER_TAB_INDICES_GET_ALL_VIEWED);
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_CARET_MAPPABLE_DATA_FILES_AND_MAPS_IN_DISPLAYED_OVERLAYS);
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_GET_VIEWPORT_SIZE);
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_GRAPHICS_UPDATE_ALL_WINDOWS);
@@ -340,6 +339,38 @@ BrainBrowserWindow::receiveEvent(Event* event)
             m_developMenuAction->setVisible(prefs->isDevelopMenuEnabled());
             event->setEventProcessed();
         }
+    }
+    else if (event->getEventType() == EventTypeEnum::EVENT_BROWSER_WINDOW_GET_TABS) {
+        EventBrowserWindowGetTabs* tabEvent = dynamic_cast<EventBrowserWindowGetTabs*>(event);
+        CaretAssert(tabEvent);
+        if (tabEvent->getBrowserWindowIndex() == m_browserWindowIndex) {
+            std::vector<BrowserTabContent*> tabContent;
+            m_toolbar->getAllTabContent(tabContent);
+            for (auto tab : tabContent) {
+                tabEvent->addBrowserTab(tab);
+            }
+            tabEvent->setEventProcessed();
+        }
+    }
+    else if (event->getEventType() == EventTypeEnum::EVENT_BROWSER_TAB_INDICES_GET_ALL_VIEWED) {
+        EventBrowserTabIndicesGetAllViewed* allViewedEvent = dynamic_cast<EventBrowserTabIndicesGetAllViewed*>(event);
+        CaretAssert(allViewedEvent);
+        
+        std::vector<BrowserTabContent*> tabContent;
+        if (isTileTabsSelected()) {
+            m_toolbar->getAllTabContent(tabContent);
+        }
+        else {
+            BrowserTabContent* btc = getBrowserTabContent();
+            if (btc != NULL) {
+                tabContent.push_back(btc);
+            }
+        }
+        for (auto tab : tabContent) {
+            CaretAssert(tab);
+            allViewedEvent->addBrowserTabIndex(tab->getTabNumber());
+        }
+        allViewedEvent->setEventProcessed();
     }
     else if (event->getEventType()== EventTypeEnum::EVENT_CARET_MAPPABLE_DATA_FILES_AND_MAPS_IN_DISPLAYED_OVERLAYS) {
         EventCaretMappableDataFilesAndMapsInDisplayedOverlays* filesEvent = dynamic_cast<EventCaretMappableDataFilesAndMapsInDisplayedOverlays*>(event);
@@ -510,6 +541,26 @@ BrainBrowserWindow::receiveEvent(Event* event)
                     }
                 }
                 break;
+            case EventGetViewportSize::MODE_WINDOW_FROM_TAB_INDEX:
+                for (std::vector<const BrainOpenGLViewportContent*>::iterator vpIter = allViewportContent.begin();
+                     vpIter != allViewportContent.end();
+                     vpIter++) {
+                    const BrainOpenGLViewportContent* vpContent = *vpIter;
+                    if (vpContent != NULL) {
+                        BrowserTabContent* btc = vpContent->getBrowserTabContent();
+                        if (btc != NULL) {
+                            if (btc->getTabNumber() == viewportSizeEvent->getIndex()) {
+                                /*
+                                 * Found Tab so report Window viewport containing tab
+                                 */
+                                vpContent->getWindowViewport(viewport);
+                                viewportValid = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+                break;
         }
 
         if ( ! viewportValid) {
@@ -535,10 +586,11 @@ BrainBrowserWindow::receiveEvent(Event* event)
         
         if (viewportValid) {
             viewportSizeEvent->setViewportSize(viewport);
+            viewportSizeEvent->setEventProcessed();
         }
     }
     else if (event->getEventType() == EventTypeEnum::EVENT_TILE_TABS_MODIFICATION) {
-        EventTileTabsConfigurationModification* modEvent = dynamic_cast<EventTileTabsConfigurationModification*>(event);
+        EventTileTabsGridConfigurationModification* modEvent = dynamic_cast<EventTileTabsGridConfigurationModification*>(event);
         CaretAssert(modEvent);
         
         if (modEvent->getWindowIndex() == this->m_browserWindowIndex) {
@@ -1344,6 +1396,17 @@ BrainBrowserWindow::createActions()
     WuQMacroManager::instance()->addMacroSupportToObject(m_duplicateTabAction,
                                                          ("Duplicate tab in Window " + QString::number(m_browserWindowIndex + 1)));
 
+
+    m_reopenLastClosedTabAction =
+    WuQtUtilities::createAction("Reopen Last Closed Tab",
+                                "Reopen the last closed tab",
+                                Qt::CTRL + Qt::SHIFT + Qt::Key_T,
+                                this);
+    QObject::connect(m_reopenLastClosedTabAction, &QAction::triggered,
+                     this, [=] { guiManager->processReopenLastClosedTab(this); });
+    m_reopenLastClosedTabAction->setObjectName(m_objectNamePrefix
+                                               + ":Menu:ReopenLastClosedTabAction"); /* NOTE: No Macro support for this item */
+    
     m_openFileAction =
     WuQtUtilities::createAction("Open File...", 
                                 "Open a data file including a spec file located on the computer",
@@ -1361,6 +1424,14 @@ BrainBrowserWindow::createActions()
                                 this,
                                 SLOT(processDataFileLocationOpen()));
     m_openLocationAction->setShortcutContext(Qt::ApplicationShortcut);
+    
+    m_openRecentAction =
+    WuQtUtilities::createAction("Open Recent...",
+                                "Open a recent file or directory",
+                                Qt::CTRL + Qt::SHIFT + Qt::Key_O,
+                                this,
+                                this,
+                                SLOT(processOpenRecent()));
     
     m_manageFilesAction =
     WuQtUtilities::createAction("Save/Manage Files...", 
@@ -1384,7 +1455,7 @@ BrainBrowserWindow::createActions()
                                 Qt::CTRL + Qt::Key_W,
                                 this,
                                 m_toolbar,
-                                SLOT(closeSelectedTab()));
+                                SLOT(closeSelectedTabFromFileMenu()));
     
     m_closeWithoutConfirmationFlag = false;
     m_closeWindowActionConfirmTitle  = "Close Window...";
@@ -1446,7 +1517,11 @@ BrainBrowserWindow::createActions()
                                 this,
                                 this,
                                 SLOT(processSplitBorderFiles()));
-    
+
+    m_dataPaletteEditorDialogAction = new QAction("Palette Editor...");
+    QObject::connect(m_dataPaletteEditorDialogAction, &QAction::triggered,
+                     guiManager, [=]() { guiManager->processShowPaletteEditorDialog(this); } );
+
     m_viewFullScreenAction = WuQtUtilities::createAction("Full Screen",
                                                          "View using all of screen",
                                                          Qt::CTRL+Qt::Key_F,
@@ -1492,10 +1567,15 @@ BrainBrowserWindow::createActions()
                                                           this);
     m_viewCustomTileTabsConfigurationAction->setCheckable(true);
     
+    m_viewManualTileTabsConfigurationAction = new QAction("Manual",
+                                                          this);
+    m_viewManualTileTabsConfigurationAction->setCheckable(true);
+    
     QActionGroup* autoCustomGroup = new QActionGroup(this);
     autoCustomGroup->setExclusive(true);
     autoCustomGroup->addAction(m_viewAutomaticTileTabsConfigurationAction);
     autoCustomGroup->addAction(m_viewCustomTileTabsConfigurationAction);
+    autoCustomGroup->addAction(m_viewManualTileTabsConfigurationAction);
     QObject::connect(autoCustomGroup, &QActionGroup::triggered,
                      this, &BrainBrowserWindow::processViewTileTabsAutomaticCustomTriggered);
     
@@ -1571,6 +1651,13 @@ BrainBrowserWindow::createActions()
                                 this,
                                 SLOT(processHcpWebsiteInBrowser()));
     
+    m_helpHcpUsersAction =
+    WuQtUtilities::createAction("Workbench Support (Ask a Question)...",
+                                "Get Workbench Support at HCP Users Group",
+                                this,
+                                this,
+                                SLOT(processHcpUsersGroup()));
+
     m_helpHcpFeatureRequestAction =
     WuQtUtilities::createAction("Submit HCP Software Feature Request...",
                                 "Go to HCP Feature Request Website in your computer's web browser",
@@ -1602,13 +1689,24 @@ BrainBrowserWindow::createActions()
     m_connectToConnectomeDatabaseAction->setEnabled(false);
     
     m_developerGraphicsTimingAction =
-    WuQtUtilities::createAction("Time Graphics Update",
+    WuQtUtilities::createAction(("Time Graphics Update for "
+                                 + AString::number(m_developerTimingIterations)
+                                 + " Iterations"),
                                 "Show the average time for updating the windows graphics",
                                 this,
                                 this,
                                 SLOT(processDevelopGraphicsTiming()));
     
-    m_developerExportVtkFileAction = 
+    m_developerGraphicsTimingDurationAction =
+    WuQtUtilities::createAction(("Time Graphics Update for "
+                                 + AString::number(m_developerTimingDuration, 'f', 0)
+                                 + " Seconds"),
+                                "Show the average time for updating the windows graphics",
+                                this,
+                                this,
+                                SLOT(processDevelopGraphicsTimingDuration()));
+    
+    m_developerExportVtkFileAction =
     WuQtUtilities::createAction("Export to VTK File",
                                 "Export model(s) to VTK File",
                                 this,
@@ -1628,6 +1726,7 @@ BrainBrowserWindow::createMenus()
      * Create the menu bar and add menus to it.
      */
     QMenuBar* menubar = menuBar();
+    
     menubar->addMenu(createMenuFile());
     
     menubar->addMenu(createMenuEdit());
@@ -1679,6 +1778,7 @@ BrainBrowserWindow::createMenuDevelop()
     m_developerExportVtkFileAction->setVisible(false);
     
     menu->addAction(m_developerGraphicsTimingAction);
+    menu->addAction(m_developerGraphicsTimingDurationAction);
     
     std::vector<DeveloperFlagsEnum::Enum> developerFlags;
     DeveloperFlagsEnum::getAllEnums(developerFlags);
@@ -1714,6 +1814,8 @@ BrainBrowserWindow::createMenuDevelop()
         }
     }
     
+    menu->addAction(m_dataPaletteEditorDialogAction);
+
     return menu;
 }
 
@@ -1787,6 +1889,7 @@ BrainBrowserWindow::developerMenuFlagTriggered(QAction* action)
             CaretAssert(balsaDialog);
             balsaDialog->show();
         }
+#endif
         
         /*
          * Update graphics and GUI
@@ -1794,12 +1897,6 @@ BrainBrowserWindow::developerMenuFlagTriggered(QAction* action)
         EventManager::get()->sendEvent(EventSurfaceColoringInvalidate().getPointer());
         EventManager::get()->sendEvent(EventUserInterfaceUpdate().getPointer());
         EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
-#else
-        if (enumValue == DeveloperFlagsEnum::DEVELOPER_FLAG_BALSA) {
-            WuQMessageBox::informationOk(this,
-                                         "Software was built without Qt WebKit, BALSA test not available, see src/CMakeLists.txt");
-        }
-#endif
     }
     else {
         CaretLogSevere("Failed to find develper flag for reading menu: "
@@ -1827,25 +1924,11 @@ BrainBrowserWindow::createMenuFile()
     menu->addAction(m_newWindowAction);
     menu->addAction(m_newTabAction);
     menu->addAction(m_duplicateTabAction);
+    menu->addAction(m_reopenLastClosedTabAction);
     menu->addSeparator();
     menu->addAction(m_openFileAction);
+    menu->addAction(m_openRecentAction);
     menu->addAction(m_openLocationAction);
-    
-    m_recentSpecFileMenuOpenConfirmTitle = "Open Recent Spec File";
-    m_recentSpecFileMenuLoadNoConfirmTitle = "Load All Files in Recent Spec File";
-
-    m_recentSpecFileMenu = menu->addMenu(m_recentSpecFileMenuOpenConfirmTitle);
-    QObject::connect(m_recentSpecFileMenu, SIGNAL(aboutToShow()),
-                     this, SLOT(processRecentSpecFileMenuAboutToBeDisplayed()));
-    QObject::connect(m_recentSpecFileMenu, SIGNAL(triggered(QAction*)),
-                     this, SLOT(processRecentSpecFileMenuSelection(QAction*)));
-    
-    m_recentSceneFileMenu = menu->addMenu("Open Recent Scene File");
-    QObject::connect(m_recentSceneFileMenu, SIGNAL(aboutToShow()),
-                     this, SLOT(processRecentSceneFileMenuAboutToBeDisplayed()));
-    QObject::connect(m_recentSceneFileMenu, SIGNAL(triggered(QAction*)),
-                     this, SLOT(processRecentSceneFileMenuSelection(QAction*)));
-    
     menu->addAction(m_manageFilesAction);
     menu->addAction(m_closeSpecFileAction);
     menu->addSeparator();
@@ -1918,16 +2001,18 @@ BrainBrowserWindow::createMenuEdit()
                       BrainBrowserWindowEditMenuItemEnum::DELETER);
     
     
-    QAction* selectAllAction = NULL;
+    QAction* deselectAllAction = NULL;
     const bool addSelectAllFlag = true;
     if (addSelectAllFlag) {
-        selectAllAction = addItemToEditMenu(m_editMenu,
-                                            BrainBrowserWindowEditMenuItemEnum::SELECT_ALL);
+        deselectAllAction = addItemToEditMenu(m_editMenu,
+                                            BrainBrowserWindowEditMenuItemEnum::DESELECT_ALL);
+        addItemToEditMenu(m_editMenu,
+                          BrainBrowserWindowEditMenuItemEnum::SELECT_ALL);
     }
     
     m_editMenu->insertSeparator(cutAction);
-    if (selectAllAction != NULL) {
-        m_editMenu->insertSeparator(selectAllAction);
+    if (deselectAllAction != NULL) {
+        m_editMenu->insertSeparator(deselectAllAction);
     }
     
     QObject::connect(m_editMenu, SIGNAL(aboutToShow()),
@@ -2029,6 +2114,8 @@ BrainBrowserWindow::processEditMenuAboutToShow()
                             case BrainBrowserWindowEditMenuItemEnum::CUT:
                                 break;
                             case BrainBrowserWindowEditMenuItemEnum::DELETER:
+                                break;
+                            case BrainBrowserWindowEditMenuItemEnum::DESELECT_ALL:
                                 break;
                             case BrainBrowserWindowEditMenuItemEnum::PASTE:
                                 if (pasteText.isEmpty()) {
@@ -2154,12 +2241,14 @@ BrainBrowserWindow::processFileMenuAboutToShow()
 {
     if (isMacOptionKeyDown()) {
         m_closeWindowAction->setText(m_closeWindowActionNoConfirmTitle);
-        m_recentSpecFileMenu->setTitle(m_recentSpecFileMenuLoadNoConfirmTitle);
     }
     else {
         m_closeWindowAction->setText(m_closeWindowActionConfirmTitle);
-        m_recentSpecFileMenu->setTitle(m_recentSpecFileMenuOpenConfirmTitle);
     }
+    
+    EventBrowserTabReopenAvailable reopenAvailableEvent;
+    EventManager::get()->sendEvent(reopenAvailableEvent.getPointer());
+    m_reopenLastClosedTabAction->setEnabled(reopenAvailableEvent.isReopenValid());
 }
 
 void
@@ -2198,235 +2287,6 @@ BrainBrowserWindow::isMacOptionKeyDown() const
     return keyDown;
 }
 
-
-/**
- * Called when Open Recent Spec File Menu is about to be displayed
- * and creates the content of the menu.
- */
-void  
-BrainBrowserWindow::processRecentSpecFileMenuAboutToBeDisplayed()
-{
-    m_recentSpecFileMenu->clear();
-    
-    const int32_t numRecentSpecFiles = BrainBrowserWindow::loadRecentSpecFileMenu(m_recentSpecFileMenu);
-    
-    if (numRecentSpecFiles > 0) {
-        m_recentSpecFileMenu->addSeparator();
-        QAction* action = new QAction("Clear Menu",
-                                      m_recentSpecFileMenu);
-        action->setData("CLEAR_CLEAR");
-        m_recentSpecFileMenu->addAction(action);
-    }
-}
-
-/**
- * Load a menu with recent spec files.  This method only ADDS
- * items to the menu, nothing is removed or cleared.
- *
- * @param recentSpecFileMenu
- *    Menu to which recent spec files are added.
- * @return
- *    Returns the number of recent spec files added to the menu.
- */
-int32_t
-BrainBrowserWindow::loadRecentSpecFileMenu(QMenu* recentSpecFileMenu)
-{
-    CaretPreferences* prefs = SessionManager::get()->getCaretPreferences();
-    std::vector<AString> recentSpecFiles;
-    prefs->getPreviousSpecFiles(recentSpecFiles);
-    
-    const int32_t numRecentSpecFiles = static_cast<int>(recentSpecFiles.size());
-    for (int32_t i = 0; i < numRecentSpecFiles; i++) {
-        AString actionName;
-        AString actionFullPath;
-        if (DataFile::isFileOnNetwork(recentSpecFiles[i])) {
-            actionName     = recentSpecFiles[i];
-            actionFullPath = recentSpecFiles[i];
-        }
-        else {
-            FileInformation fileInfo(recentSpecFiles[i]);
-            QString path = fileInfo.getPathName();
-            QString name = fileInfo.getFileName();
-            if (path.isEmpty() == false) {
-                name += (" (" + path + ")");
-            }
-            actionName = name;
-            actionFullPath = fileInfo.getAbsoluteFilePath();
-        }
-        
-        QAction* action = new QAction(actionName,
-                                      recentSpecFileMenu);
-        /*
-         * If this "setData()" action changes you will need to update:
-         * (1) BrainBrowserWindow::processRecentSpecFileMenuSelection
-         * (2) MacDockMenu::menuActionTriggered
-         */
-        action->setData(actionFullPath);
-        recentSpecFileMenu->addAction(action);
-    }
-    
-    return numRecentSpecFiles;
-}
-
-/**
- * Called when an item is selected from the recent spec file
- * menu.
- * @param itemAction
- *    Action of the menu item that was selected.
- */
-void 
-BrainBrowserWindow::processRecentSpecFileMenuSelection(QAction* itemAction)
-{
-    const AString specFileName = itemAction->data().toString();
-    if (specFileName == "CLEAR_CLEAR") {
-        CaretPreferences* prefs = SessionManager::get()->getCaretPreferences();
-        prefs->clearPreviousSpecFiles();
-        return;
-    }
-    
-    if ( ! specFileName.isEmpty()) {
-        
-        SpecFile specFile;
-        try {
-            specFile.readFile(specFileName);
-            SessionManager::get()->getCaretPreferences()->addToPreviousSpecFiles(specFileName);
-
-            
-            if (m_recentSpecFileMenu->title() == m_recentSpecFileMenuOpenConfirmTitle) {
-                if (GuiManager::get()->processShowOpenSpecFileDialog(&specFile,
-                                                                     this)) {
-                    m_toolbar->addDefaultTabsAfterLoadingSpecFile();
-                }
-            }
-            else if (m_recentSpecFileMenu->title() == m_recentSpecFileMenuLoadNoConfirmTitle) {
-                std::vector<AString> fileNamesToLoad;
-                fileNamesToLoad.push_back(specFileName);
-                loadFilesFromCommandLine(fileNamesToLoad,
-                                         BrainBrowserWindow::LOAD_SPEC_FILE_CONTENTS_VIA_COMMAND_LINE);
-                m_toolbar->addDefaultTabsAfterLoadingSpecFile();
-            }
-            else {
-                CaretAssert(0);
-            }
-        }
-        catch (const DataFileException& e) {
-            QMessageBox::critical(this,
-                                  "ERROR",
-                                  e.whatString());
-            return;
-        }
-
-        EventManager::get()->sendEvent(EventSurfaceColoringInvalidate().getPointer());
-        EventManager::get()->sendEvent(EventUserInterfaceUpdate().getPointer());
-        EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
-    }
-}
-
-
-
-/**
- * Called when Open Recent Scene File Menu is about to be displayed
- * and creates the content of the menu.
- */
-void
-BrainBrowserWindow::processRecentSceneFileMenuAboutToBeDisplayed()
-{
-    m_recentSceneFileMenu->clear();
-    
-    const int32_t numRecentSceneFiles = BrainBrowserWindow::loadRecentSceneFileMenu(m_recentSceneFileMenu);
-    
-    if (numRecentSceneFiles > 0) {
-        m_recentSceneFileMenu->addSeparator();
-        QAction* action = new QAction("Clear Menu",
-                                      m_recentSceneFileMenu);
-        action->setData("CLEAR_CLEAR");
-        m_recentSceneFileMenu->addAction(action);
-    }
-}
-
-/**
- * Load a menu with recent scene files.  This method only ADDS
- * items to the menu, nothing is removed or cleared.
- *
- * @param recentSceneFileMenu
- *    Menu to which recent scene files are added.
- * @return
- *    Returns the number of recent scene files added to the menu.
- */
-int32_t
-BrainBrowserWindow::loadRecentSceneFileMenu(QMenu* recentSceneFileMenu)
-{
-    CaretPreferences* prefs = SessionManager::get()->getCaretPreferences();
-    std::vector<AString> recentSceneFiles;
-    prefs->getPreviousSceneFiles(recentSceneFiles);
-    
-    const int32_t numRecentSceneFiles = static_cast<int>(recentSceneFiles.size());
-    for (int32_t i = 0; i < numRecentSceneFiles; i++) {
-        AString actionName;
-        AString actionFullPath;
-        if (DataFile::isFileOnNetwork(recentSceneFiles[i])) {
-            actionName     = recentSceneFiles[i];
-            actionFullPath = recentSceneFiles[i];
-        }
-        else {
-            FileInformation fileInfo(recentSceneFiles[i]);
-            QString path = fileInfo.getPathName();
-            QString name = fileInfo.getFileName();
-            if (path.isEmpty() == false) {
-                name += (" (" + path + ")");
-            }
-            actionName = name;
-            actionFullPath = fileInfo.getAbsoluteFilePath();
-        }
-        
-        QAction* action = new QAction(actionName,
-                                      recentSceneFileMenu);
-        /*
-         * If this "setData()" action changes you will need to update:
-         * (1) BrainBrowserWindow::processRecentSceneFileMenuSelection
-         * (2) MacDockMenu::menuActionTriggered
-         */
-        action->setData(actionFullPath);
-        recentSceneFileMenu->addAction(action);
-    }
-    
-    return numRecentSceneFiles;
-}
-
-/**
- * Called when an item is selected from the recent scene file
- * menu.
- * @param itemAction
- *    Action of the menu item that was selected.
- */
-void
-BrainBrowserWindow::processRecentSceneFileMenuSelection(QAction* itemAction)
-{
-    const AString sceneFileName = itemAction->data().toString();
-    if (sceneFileName == "CLEAR_CLEAR") {
-        CaretPreferences* prefs = SessionManager::get()->getCaretPreferences();
-        prefs->clearPreviousSceneFiles();
-        return;
-    }
-    
-    if ( ! sceneFileName.isEmpty()) {
-        std::vector<AString> filenamesVector;
-        filenamesVector.push_back(sceneFileName);
-        std::vector<DataFileTypeEnum::Enum> dataFileTypes;
-        dataFileTypes.push_back(DataFileTypeEnum::SCENE);
-        loadFiles(this,
-                  filenamesVector,
-                  dataFileTypes,
-                  LOAD_SPEC_FILE_CONTENTS_VIA_COMMAND_LINE,
-                  "",
-                  "");
-        
-        EventManager::get()->sendEvent(EventSurfaceColoringInvalidate().getPointer());
-        EventManager::get()->sendEvent(EventUserInterfaceUpdate().getPointer());
-        EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
-    }
-}
-
 /**
  * Called when view menu is about to show.
  */
@@ -2450,18 +2310,23 @@ BrainBrowserWindow::processViewMenuAboutToShow()
         m_viewTileTabsAction->setText("Enter Tile Tabs");
     }
 
-    m_viewAutomaticTileTabsConfigurationAction->setText(getTileTabsConfigurationLabelText(TileTabsGridModeEnum::AUTOMATIC,
-                                                                                      true));
-    m_viewCustomTileTabsConfigurationAction->setText(getTileTabsConfigurationLabelText(TileTabsGridModeEnum::CUSTOM,
-                                                                                   true));
-    
+    m_viewAutomaticTileTabsConfigurationAction->setText(getTileTabsConfigurationLabelText(TileTabsLayoutConfigurationTypeEnum::AUTOMATIC_GRID,
+                                                                                          true));
+    m_viewCustomTileTabsConfigurationAction->setText(getTileTabsConfigurationLabelText(TileTabsLayoutConfigurationTypeEnum::CUSTOM_GRID,
+                                                                                       true));
+    m_viewManualTileTabsConfigurationAction->setText(getTileTabsConfigurationLabelText(TileTabsLayoutConfigurationTypeEnum::MANUAL,
+                                                                                       true));
+
     BrowserWindowContent* bwc = getBrowerWindowContent();
     switch (bwc->getTileTabsConfigurationMode()) {
-        case TileTabsGridModeEnum::AUTOMATIC:
+        case TileTabsLayoutConfigurationTypeEnum::AUTOMATIC_GRID:
             m_viewAutomaticTileTabsConfigurationAction->setChecked(true);
             break;
-        case TileTabsGridModeEnum::CUSTOM:
+        case TileTabsLayoutConfigurationTypeEnum::CUSTOM_GRID:
             m_viewCustomTileTabsConfigurationAction->setChecked(true);
+            break;
+        case TileTabsLayoutConfigurationTypeEnum::MANUAL:
+            m_viewManualTileTabsConfigurationAction->setChecked(true);
             break;
     }
 }
@@ -2476,17 +2341,20 @@ BrainBrowserWindow::processViewMenuAboutToShow()
  *     Include the number of rows and columns.
  */
 AString
-BrainBrowserWindow::getTileTabsConfigurationLabelText(const TileTabsGridModeEnum::Enum configurationMode,
+BrainBrowserWindow::getTileTabsConfigurationLabelText(const TileTabsLayoutConfigurationTypeEnum::Enum configurationMode,
                                                       const bool includeRowsAndColumnsIn) const
 {
     bool includeRowsAndColumns = includeRowsAndColumnsIn;
     AString modeLabel;
     switch (configurationMode) {
-        case TileTabsGridModeEnum::AUTOMATIC:
-            modeLabel = "Automatic";
+        case TileTabsLayoutConfigurationTypeEnum::AUTOMATIC_GRID:
+            modeLabel = "Automatic Grid";
             break;
-        case TileTabsGridModeEnum::CUSTOM:
-            modeLabel = "Custom";
+        case TileTabsLayoutConfigurationTypeEnum::CUSTOM_GRID:
+            modeLabel = "Custom Grid";
+            break;
+        case TileTabsLayoutConfigurationTypeEnum::MANUAL:
+            modeLabel = "Manual";
             break;
     }
     
@@ -2496,35 +2364,52 @@ BrainBrowserWindow::getTileTabsConfigurationLabelText(const TileTabsGridModeEnum
     
     const int32_t windowTabCount = static_cast<int32_t>(windowTabIndices.size());
     AString errorText;
+    bool customGridDefaultFlag(false);
     switch (configurationMode) {
-        case TileTabsGridModeEnum::AUTOMATIC:
-            TileTabsConfiguration::getRowsAndColumnsForNumberOfTabs(windowTabCount,
+        case TileTabsLayoutConfigurationTypeEnum::AUTOMATIC_GRID:
+            TileTabsLayoutGridConfiguration::getRowsAndColumnsForNumberOfTabs(windowTabCount,
                                                                     configRowCount,
                                                                     configColCount);
             break;
-        case TileTabsGridModeEnum::CUSTOM:
+        case TileTabsLayoutConfigurationTypeEnum::CUSTOM_GRID:
         {
-            const TileTabsConfiguration* customConfig = getBrowerWindowContent()->getCustomTileTabsConfiguration();
-            configRowCount = customConfig->getNumberOfRows();
-            configColCount = customConfig->getNumberOfColumns();
-            const int32_t customTabCount = (configRowCount
-                                            * configColCount);
-            const int32_t hiddenCount = windowTabCount - customTabCount;
-            if (hiddenCount > 0) {
-                errorText = " (configuration too small for all tabs)";
-                includeRowsAndColumns = false;
+            const TileTabsLayoutGridConfiguration* customConfig = getBrowerWindowContent()->getCustomGridTileTabsConfiguration();
+            if (customConfig->isCustomDefaultFlag()) {
+                customGridDefaultFlag = true;
+                TileTabsLayoutGridConfiguration::getRowsAndColumnsForNumberOfTabs(windowTabCount,
+                                                                                  configRowCount,
+                                                                                  configColCount);
+            }
+            else {
+                configRowCount = customConfig->getNumberOfRows();
+                configColCount = customConfig->getNumberOfColumns();
+                const int32_t customTabCount = (configRowCount
+                                                * configColCount);
+                const int32_t hiddenCount = windowTabCount - customTabCount;
+                if (hiddenCount > 0) {
+                    errorText = " (configuration too small for all tabs)";
+                    includeRowsAndColumns = false;
+                }
             }
         }
+            break;
+        case TileTabsLayoutConfigurationTypeEnum::MANUAL:
+            includeRowsAndColumns = false;
             break;
     }
     
     AString rowsColumnsText;
     if (includeRowsAndColumns) {
-        rowsColumnsText = (" ("
-                           + AString::number(configRowCount)
-                           + " Rows, "
-                           + AString::number(configColCount)
-                           + " Columns)");
+        if (customGridDefaultFlag) {
+            rowsColumnsText = " (Defaults to automatic grid when selected)";
+        }
+        else {
+            rowsColumnsText = (" ("
+                               + AString::number(configRowCount)
+                               + " Rows, "
+                               + AString::number(configColCount)
+                               + " Columns)");
+        }
     }
     
     const AString textLabel(modeLabel
@@ -2541,7 +2426,7 @@ BrainBrowserWindow::getTileTabsConfigurationLabelText(const TileTabsGridModeEnum
  *     Event with modification information.
  */
 void
-BrainBrowserWindow::modifyTileTabsConfiguration(EventTileTabsConfigurationModification* modEvent)
+BrainBrowserWindow::modifyTileTabsConfiguration(EventTileTabsGridConfigurationModification* modEvent)
 {
     CaretAssert(modEvent);
     
@@ -2554,8 +2439,9 @@ BrainBrowserWindow::modifyTileTabsConfiguration(EventTileTabsConfigurationModifi
         vpContent = m_openGLWidget->getViewportContent();
     }
     
-    TileTabsConfigurationModifier modifier(vpContent,
-                                           modEvent);
+    TileTabsGridConfigurationModifier modifier(vpContent,
+                                               m_browserWindowIndex,
+                                               modEvent);
     
     AString errorMessage;
     if (! modifier.run(errorMessage)) {
@@ -2574,27 +2460,6 @@ BrainBrowserWindow::modifyTileTabsConfiguration(EventTileTabsConfigurationModifi
 }
 
 /**
- * Update the tile tabs configuration menu just before it is shown.
- */
-void
-BrainBrowserWindow::processViewTileTabsLoadUserConfigurationMenuAboutToShow()
-{
-    /*
-     * QMenu::clear will delete the actions that were in the menu
-     */
-    m_viewTileTabsLoadUserConfigurationMenu->clear();
-    m_viewCustomTileTabsConfigurationActions.clear();
-    
-    const CaretPreferences* prefs = SessionManager::get()->getCaretPreferences();
-    std::vector<const TileTabsConfiguration*> tileTabsConfigs = prefs->getTileTabsConfigurationsSortedByName();
-    for (auto config : tileTabsConfigs) {
-        QAction* action = m_viewTileTabsLoadUserConfigurationMenu->addAction(config->getName());
-        m_viewCustomTileTabsConfigurationActions.push_back(std::make_pair(action,
-                                                                          const_cast<TileTabsConfiguration*>(config)));
-    }
-}
-
-/**
  * Called when automatic/custom menu item is selected.
  * 
  * @param action
@@ -2605,10 +2470,13 @@ BrainBrowserWindow::processViewTileTabsAutomaticCustomTriggered(QAction* action)
 {
     BrowserWindowContent* bwc = getBrowerWindowContent();
     if (action == m_viewAutomaticTileTabsConfigurationAction) {
-        bwc->setTileTabsConfigurationMode(TileTabsGridModeEnum::AUTOMATIC);
+        bwc->setTileTabsConfigurationMode(TileTabsLayoutConfigurationTypeEnum::AUTOMATIC_GRID);
     }
     else if (action == m_viewCustomTileTabsConfigurationAction) {
-        bwc->setTileTabsConfigurationMode(TileTabsGridModeEnum::CUSTOM);
+        bwc->setTileTabsConfigurationMode(TileTabsLayoutConfigurationTypeEnum::CUSTOM_GRID);
+    }
+    else if (action == m_viewManualTileTabsConfigurationAction) {
+        bwc->setTileTabsConfigurationMode(TileTabsLayoutConfigurationTypeEnum::MANUAL);
     }
     else {
         CaretAssert(0);
@@ -2616,49 +2484,6 @@ BrainBrowserWindow::processViewTileTabsAutomaticCustomTriggered(QAction* action)
 
     EventManager::get()->sendEvent(EventUserInterfaceUpdate().getPointer());
     EventManager::get()->sendEvent(EventGraphicsUpdateOneWindow(getBrowserWindowIndex()).getPointer());
-}
-
-/**
- * Process an item selected from the tile tabs configuration menu.
- */
-void
-BrainBrowserWindow::processViewTileTabsLoadUserConfigurationMenuItemTriggered(QAction* action)
-{
-    CaretAssert(action);
-    
-    BrowserWindowContent* bwc = getBrowerWindowContent();
-    bwc->setTileTabsConfigurationMode(TileTabsGridModeEnum::CUSTOM);
-    
-    TileTabsConfiguration* tileTabsConfig = NULL;
-    for (auto& config : m_viewCustomTileTabsConfigurationActions) {
-        if (config.first == action) {
-            tileTabsConfig = config.second;
-            CaretAssert(tileTabsConfig);
-            break;
-        }
-    }
-    
-    CaretAssert(tileTabsConfig);
-    
-    bwc->getCustomTileTabsConfiguration()->copy(*tileTabsConfig);
-    
-    EventManager::get()->sendEvent(EventUserInterfaceUpdate().getPointer());
-    EventManager::get()->sendEvent(EventGraphicsUpdateOneWindow(getBrowserWindowIndex()).getPointer());
-}
-
-/**
- * @return Instance of the tile tabs configuration menu.
- */
-QMenu*
-BrainBrowserWindow::createMenuViewTileTabsLoadUserConfiguration()
-{
-    QMenu* menu = new QMenu("Load Custom With User Configuration");
-    QObject::connect(menu, &QMenu::aboutToShow,
-                     this, &BrainBrowserWindow::processViewTileTabsLoadUserConfigurationMenuAboutToShow);
-    QObject::connect(menu, &QMenu::triggered,
-                     this, &BrainBrowserWindow::processViewTileTabsLoadUserConfigurationMenuItemTriggered);
-    
-    return menu;
 }
 
 /**
@@ -2671,15 +2496,18 @@ BrainBrowserWindow::createMenuView()
     QMenu* menu = new QMenu("View", this);
     QObject::connect(menu, SIGNAL(aboutToShow()),
                      this, SLOT(processViewMenuAboutToShow()));
-    
-    QMenu* tileTabsModeMenu = new QMenu("Tile Tabs Configuration Mode");
-    tileTabsModeMenu->addAction(m_viewAutomaticTileTabsConfigurationAction);
-    tileTabsModeMenu->addAction(m_viewCustomTileTabsConfigurationAction);
+   
+    const bool showTileTabsModeMenuFlag(false);
+    QMenu* tileTabsModeMenu(NULL);
+    if (showTileTabsModeMenuFlag) {
+        tileTabsModeMenu = new QMenu("Tile Tabs Configuration Layout");
+        tileTabsModeMenu->addAction(m_viewAutomaticTileTabsConfigurationAction);
+        tileTabsModeMenu->addAction(m_viewCustomTileTabsConfigurationAction);
+        tileTabsModeMenu->addAction(m_viewManualTileTabsConfigurationAction);
+    }
     
     m_viewMoveFeaturesToolBoxMenu = createMenuViewMoveFeaturesToolBox();
     m_viewMoveOverlayToolBoxMenu = createMenuViewMoveOverlayToolBox();
-    
-    m_viewTileTabsLoadUserConfigurationMenu = createMenuViewTileTabsLoadUserConfiguration();
     
     menu->addAction(m_showToolBarAction);
     menu->addMenu(m_viewMoveFeaturesToolBoxMenu);
@@ -2692,8 +2520,9 @@ BrainBrowserWindow::createMenuView()
     menu->addSeparator();
     menu->addAction(m_viewTileTabsAction);
     menu->addAction(m_viewTileTabsConfigurationDialogAction);
-    menu->addMenu(tileTabsModeMenu);
-    menu->addMenu(m_viewTileTabsLoadUserConfigurationMenu);
+    if (tileTabsModeMenu != NULL) {
+        menu->addMenu(tileTabsModeMenu);
+    }
     
     return menu;
 }
@@ -2805,17 +2634,24 @@ BrainBrowserWindow::createMenuSurface()
 {
     QMenu* menu = new QMenu("Surface", this);
     
-    menu->addAction("Information...", 
-                    this, 
-                    SLOT(processSurfaceMenuInformation()));
+
+    QAction* infoAction = menu->addAction("Information...",
+                                          this,
+                                          SLOT(processSurfaceMenuInformation()));
+    infoAction->setToolTip("Display information about the surface(s) in the selected tab including: "
+                           "Surface Type, Number of Triangles/Vertices, and Extent.");
     
-    menu->addAction("Properties...",
-                    this,
-                    SLOT(processShowSurfacePropertiesDialog()));
+    QAction* propertiesAction = menu->addAction("Properties...",
+                                                this,
+                                                SLOT(processShowSurfacePropertiesDialog()));
+    propertiesAction->setToolTip("Edit surface properties including opacity and default color.");
     
-    menu->addAction("Primary Anatomical...", 
-                    this, 
-                    SLOT(processSurfaceMenuPrimaryAnatomical()));
+    QAction* primaryAnatAction = menu->addAction("Primary Anatomical...",
+                                                 this,
+                                                 SLOT(processSurfaceMenuPrimaryAnatomical()));
+    primaryAnatAction->setToolTip("Set surfaces used for border projection, foci projection, and "
+                                  "selection of surfaces for coordinate translation to and from "
+                                  "volumes.");
     
     return menu;
 }
@@ -2964,7 +2800,19 @@ BrainBrowserWindow::createMenuWindow()
     menu->addAction(m_bringAllToFrontAction);
     menu->addAction(m_tileWindowsAction);
     
+    QObject::connect(menu, &QMenu::aboutToShow,
+                     this, &BrainBrowserWindow::processWindowMenuAboutToShow);
+    
     return menu;
+}
+
+/**
+ * Called when window window menu is about to show
+ */
+void
+BrainBrowserWindow::processWindowMenuAboutToShow()
+{
+    m_informationDialogAction->setEnabled(GuiManager::get()->getInformationDisplayDialogEnabledAction()->isEnabled());
 }
 
 /**
@@ -2985,6 +2833,7 @@ BrainBrowserWindow::createMenuHelp()
     QAction* helpAction = GuiManager::get()->getHelpViewerDialogDisplayAction();
     menu->addAction(helpAction->text(),
                     this, SLOT(processShowHelpInformation()));
+    menu->addAction(m_helpHcpUsersAction);
     menu->addSeparator();
     menu->addAction(m_helpHcpWebsiteAction);
     menu->addAction(m_helpWorkbenchBugReportAction);
@@ -3034,12 +2883,11 @@ BrainBrowserWindow::processDevelopGraphicsTiming()
     ElapsedTimer et;
     et.start();
     
-    const float numTimes(10.0);
-    for (int32_t i = 0; i < numTimes; i++) {
+    for (int32_t i = 0; i < m_developerTimingIterations; i++) {
         EventManager::get()->sendEvent(EventGraphicsTimingOneWindow(m_browserWindowIndex).getPointer());
     }
     
-    const float time = et.getElapsedTimeSeconds() / numTimes;
+    const float time = et.getElapsedTimeSeconds() / m_developerTimingIterations;
     const AString timeString = AString::number(time, 'f', 5);
     
     AString fpsString;
@@ -3055,6 +2903,38 @@ BrainBrowserWindow::processDevelopGraphicsTiming()
     WuQMessageBox::informationOk(this, msg);
 }
 
+/**
+ * Time the graphics drawing for duration
+ */
+void
+BrainBrowserWindow::processDevelopGraphicsTimingDuration()
+{
+    ElapsedTimer durationTimer;
+    durationTimer.start();
+    
+    int32_t iterations(0);
+    while (durationTimer.getElapsedTimeSeconds() < m_developerTimingDuration) {
+        EventManager::get()->sendEvent(EventGraphicsTimingOneWindow(m_browserWindowIndex).getPointer());
+        iterations++;
+    }
+    const float actualDuration(durationTimer.getElapsedTimeSeconds());
+    
+    if (iterations > 0) {
+        const float fps(iterations / actualDuration);
+        const float frameTime(actualDuration / iterations);
+        
+        const AString text("Frames Per Second: "
+                           + AString::number(fps, 'f', 6)
+                           + "\nAverage Time: "
+                           + AString::number(frameTime, 'f', 6)
+                           + "\nIterations: "
+                           + AString::number(iterations)
+                           + "\nDuration (s): "
+                           + AString::number(actualDuration, 'f', 3));
+        WuQMessageBox::informationOk(this,
+                                     text);
+    }
+}
 
 /**
  * Export to VTK file.
@@ -3094,7 +2974,8 @@ BrainBrowserWindow::processDevelopExportVtkFile()
         if (surfaceFiles.empty() == false) {
             QString vtkSurfaceFileFilter = "VTK Poly Data File (*.vtp)";
             
-            CaretFileDialog cfd(this,
+            CaretFileDialog cfd(CaretFileDialog::Mode::MODE_SAVE,
+                                this,
                                 "Export to VTK File",
                                 GuiManager::get()->getBrain()->getCurrentDirectory(),
                                 vtkSurfaceFileFilter);
@@ -3284,7 +3165,7 @@ BrainBrowserWindow::processDataFileOpen()
 {
     if (s_previousOpenFileNameFilter.isEmpty()) {
         s_previousOpenFileNameFilter = 
-            DataFileTypeEnum::toQFileDialogFilter(DataFileTypeEnum::SPECIFICATION);
+            DataFileTypeEnum::toQFileDialogFilterForReading(DataFileTypeEnum::SPECIFICATION);
     }
     
     /*
@@ -3298,24 +3179,36 @@ BrainBrowserWindow::processDataFileOpen()
     for (std::vector<DataFileTypeEnum::Enum>::const_iterator iter = dataFileTypes.begin();
          iter != dataFileTypes.end();
          iter++) {
-        AString filterName = DataFileTypeEnum::toQFileDialogFilter(*iter);
+        AString filterName = DataFileTypeEnum::toQFileDialogFilterForReading(*iter);
         filenameFilterList.append(filterName);
     }
     
     /*
      * Setup file selection dialog.
      */
-    CaretFileDialog fd(this);
+    CaretFileDialog fd(CaretFileDialog::Mode::MODE_OPEN,
+                       this);
     fd.setAcceptMode(CaretFileDialog::AcceptOpen);
     fd.setNameFilters(filenameFilterList);
     fd.setFileMode(CaretFileDialog::ExistingFiles);
-    fd.setViewMode(CaretFileDialog::List);
     fd.selectNameFilter(s_previousOpenFileNameFilter);
-    if (s_previousOpenFileDirectory.isEmpty() == false) {
+    if ( ! s_previousOpenFileDirectory.isEmpty()) {
         FileInformation fileInfo(s_previousOpenFileDirectory);
         if (fileInfo.exists()) {
             fd.setDirectory(s_previousOpenFileDirectory);
         }
+    }
+    
+    /*
+     * First time dialog is displayed, use list order.
+     * Subsequent usage will use "details" or "list" from
+     * whatever user last selected.  This functionality is
+     * handled by the default implementation of QFileDialog.
+     */
+    static bool firstTimeFlag(true);
+    if (firstTimeFlag) {
+        firstTimeFlag = false;
+        fd.setViewMode(CaretFileDialog::List);
     }
     
     if ( ! s_previousOpenFileGeometry.isEmpty()) {
@@ -3337,17 +3230,78 @@ BrainBrowserWindow::processDataFileOpen()
                 filenamesVector.push_back(name);
             }
             
-                std::vector<DataFileTypeEnum::Enum> dataFileTypesDummyNotUsed;
-                loadFiles(this,
-                          filenamesVector,
-                          dataFileTypesDummyNotUsed,
-                          LOAD_SPEC_FILE_WITH_DIALOG,
-                          "",
-                          "");
+            std::vector<DataFileTypeEnum::Enum> dataFileTypesDummyNotUsed;
+            loadFiles(this,
+                      filenamesVector,
+                      dataFileTypesDummyNotUsed,
+                      LOAD_SPEC_FILE_WITH_DIALOG,
+                      "",
+                      "");
+            
+            for (auto name : filenamesVector) {
+                CaretPreferences* prefs = SessionManager::get()->getCaretPreferences();
+                prefs->addToRecentFilesAndOrDirectories(name);
+            }
         }
         s_previousOpenFileNameFilter = fd.selectedNameFilter();
         s_previousOpenFileDirectory  = fd.directory().absolutePath();
         s_previousOpenFileGeometry   = fd.saveGeometry();
+    }
+}
+
+/**
+ * Process the Open Recent menu item
+ */
+void
+BrainBrowserWindow::processOpenRecent()
+{
+    AString directoryOrFileName;
+    int32_t sceneIndex(-1);
+    const RecentFilesDialog::ResultModeEnum result = RecentFilesDialog::runDialog(RecentFilesDialog::RunMode::OPEN_RECENT,
+                                                                                  directoryOrFileName,
+                                                                                  sceneIndex,
+                                                                                  this);
+    
+    switch (result) {
+        case RecentFilesDialog::ResultModeEnum::CANCEL:
+            break;
+        case RecentFilesDialog::ResultModeEnum::LOAD_FILES_IN_SPEC_FILE:
+            loadFilesFromCommandLine({ directoryOrFileName },
+                                     BrainBrowserWindow::LOAD_SPEC_FILE_CONTENTS_VIA_COMMAND_LINE);
+            break;
+        case RecentFilesDialog::ResultModeEnum::LOAD_SCENE_FROM_SCENE_FILE:
+            loadSceneFromCommandLine(directoryOrFileName,
+                                     AString::number(sceneIndex),
+                                     BrainBrowserWindow::LoadSceneFromCommandLineDialogMode::SHOW_YES);
+            break;
+        case RecentFilesDialog::ResultModeEnum::OPEN_DIRECTORY:
+            s_previousOpenFileDirectory = directoryOrFileName;
+            processDataFileOpen();
+            break;
+        case RecentFilesDialog::ResultModeEnum::OPEN_FILE:
+        {
+            bool validFlag(false);
+            DataFileTypeEnum::fromFileExtension(directoryOrFileName, &validFlag);
+            if ( ! validFlag) {
+                WuQMessageBox::errorOk(this, ("File is not a supported file type: "
+                                              + directoryOrFileName));
+            }
+            else {
+                std::vector<AString> filenames;
+                filenames.push_back(directoryOrFileName);
+                std::vector<DataFileTypeEnum::Enum> dataFileTypesDummyNotUsed;
+                loadFiles(this,
+                          filenames,
+                          dataFileTypesDummyNotUsed,
+                          LOAD_SPEC_FILE_WITH_DIALOG,
+                          "",
+                          "");
+            }
+        }
+            break;
+        case RecentFilesDialog::ResultModeEnum::OPEN_OTHER:
+            processDataFileOpen();
+            break;
     }
 }
 
@@ -3421,6 +3375,12 @@ BrainBrowserWindow::loadFilesFromCommandLine(const std::vector<AString>& filenam
               loadSpecFileMode,
               userName,
               password);
+    
+    for (auto name : filenames) {
+        CaretPreferences* prefs = SessionManager::get()->getCaretPreferences();
+        prefs->addToRecentFilesAndOrDirectories(name);
+    }
+
 }
 
 /**
@@ -3430,10 +3390,13 @@ BrainBrowserWindow::loadFilesFromCommandLine(const std::vector<AString>& filenam
  * @param sceneNameOrNumber
  *    Name or number of scene.  Name takes precedence over number. 
  *    Scene numbers start at one.
+ * @param sceneDialogMode
+ *    Mode for showing/closing scene dialog after scene loads
  */
 void
 BrainBrowserWindow::loadSceneFromCommandLine(const AString& sceneFileName,
-                                             const AString& sceneNameOrNumber)
+                                             const AString& sceneNameOrNumber,
+                                             const LoadSceneFromCommandLineDialogMode sceneDialogMode)
 {
     std::vector<AString> filenames;
     filenames.push_back(sceneFileName);
@@ -3466,7 +3429,14 @@ BrainBrowserWindow::loadSceneFromCommandLine(const AString& sceneFileName,
             }
             
             if (scene != NULL) {
-                const bool showSceneDialogFlag(true);
+                bool showSceneDialogFlag(false);
+                switch (sceneDialogMode) {
+                    case LoadSceneFromCommandLineDialogMode::SHOW_NO:
+                        break;
+                    case LoadSceneFromCommandLineDialogMode::SHOW_YES:
+                        showSceneDialogFlag = true;
+                        break;
+                }
                 GuiManager::get()->processShowSceneDialogAndScene(this,
                                                                   sf,
                                                                   scene,
@@ -3493,6 +3463,15 @@ BrainBrowserWindow::loadSceneFromCommandLine(const AString& sceneFileName,
     /* NOTE: File warning dialog is performed by scene dialog */
 }
 
+/**
+ * Load the given directory in the Open Data File Dialog
+ */
+void
+BrainBrowserWindow::loadDirectoryFromCommandLine(const AString& directoryName)
+{
+    s_previousOpenFileDirectory = directoryName;
+    processDataFileOpen();
+}
 
 /**
  * Load data files.  If there are errors, an error message dialog
@@ -3645,7 +3624,7 @@ BrainBrowserWindow::loadFiles(QWidget* parentForDialogs,
                 specFileName = fileInfo.getAbsoluteFilePath();
             }
             if (fileInfo.exists()) {
-                SessionManager::get()->getCaretPreferences()->addToPreviousSpecFiles(specFileName);
+                SessionManager::get()->getCaretPreferences()->addToRecentFilesAndOrDirectories(specFileName);
             }
             specFile.readFile(specFileName);
             
@@ -3840,8 +3819,6 @@ BrainBrowserWindow::loadFiles(QWidget* parentForDialogs,
     if (sceneFileWasLoaded) {
         GuiManager::get()->processShowSceneDialog(this);
     }
-    
-    EventManager::get()->sendEvent(EventMacDockMenuUpdate().getPointer());
     
     showDataFileReadWarningsDialog();
     
@@ -4058,6 +4035,17 @@ BrainBrowserWindow::processDuplicateTab()
 }
 
 /**
+ * Reopen the last closed tab in this window
+ * @param reopenTabEvent
+ * The reopen event
+ */
+void
+BrainBrowserWindow::reopenLastClosedTab(EventBrowserTabReopenClosed& reopenTabEvent)
+{
+   m_toolbar->reopenLastClosedTab(reopenTabEvent);
+}
+
+/**
  * Called when move all tabs to one window is selected.
  */
 void 
@@ -4103,7 +4091,7 @@ BrainBrowserWindow::processMoveSelectedTabToWindowMenuAboutToBeDisplayed()
     if (m_toolbar->tabBar->count() > 1) {
         QAction* toNewWindowAction = new QAction("New Window",
                                                  m_moveSelectedTabToWindowMenu);
-        toNewWindowAction->setData(qVariantFromValue((void*)NULL));
+        toNewWindowAction->setData(QVariant::fromValue((void*)NULL));
         m_moveSelectedTabToWindowMenu->addAction(toNewWindowAction);
     }
     
@@ -4112,7 +4100,7 @@ BrainBrowserWindow::processMoveSelectedTabToWindowMenuAboutToBeDisplayed()
         if (browserWindows[i] != this) {
             QAction* action = new QAction(browserWindows[i]->windowTitle(),
                                           m_moveSelectedTabToWindowMenu);
-            action->setData(qVariantFromValue((void*)browserWindows[i]));
+            action->setData(QVariant::fromValue((void*)browserWindows[i]));
             m_moveSelectedTabToWindowMenu->addAction(action);
         }
     }    
@@ -4427,6 +4415,20 @@ BrainBrowserWindow::getBrowerWindowContent() const
 }
 
 /**
+ * Get the Brain OpenGL Viewport content for all tabs
+ *
+ * @param viewportContentOut
+ *     Contains viewport content on exit
+ */
+void
+BrainBrowserWindow::getAllBrainOpenGLViewportContent(std::vector<const BrainOpenGLViewportContent*>& viewportContentOut) const
+{
+    viewportContentOut.clear();
+    
+    viewportContentOut = m_openGLWidget->getViewportContent();
+}
+
+/**
  * Returns a popup menu for the main window.
  * Overrides that in QMainWindow and prevents the 
  * default context menu from appearing.
@@ -4464,6 +4466,16 @@ void
 BrainBrowserWindow::processHcpWebsiteInBrowser()
 {
     QUrl url("https://humanconnectome.org");
+    QDesktopServices::openUrl(url);
+}
+
+/**
+ * Load the HCP Website into the user's web browser.
+ */
+void
+BrainBrowserWindow::processHcpUsersGroup()
+{
+    QUrl url("https://groups.google.com/a/humanconnectome.org/g/hcp-users");
     QDesktopServices::openUrl(url);
 }
 
@@ -4974,17 +4986,3 @@ BrainBrowserWindow::showDataFileReadWarningsDialog()
                                          this);
     }
 }
-
-/**
- * Set the enabled status for enabling mac duplicate menu bar for
- * the next created toolbar.
- */
-void
-BrainBrowserWindow::setEnableMacDuplicateMenuBar(bool status)
-{
-    s_enableMacDuplicateMenuBarFlag = status;
-}
-
-
-
-

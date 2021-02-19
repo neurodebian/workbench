@@ -28,6 +28,7 @@
 
 #include <QJsonDocument>
 
+#include "ApplicationInformation.h"
 #include "BalsaUserRoles.h"
 #include "CaretAssert.h"
 #include "CaretHttpManager.h"
@@ -340,7 +341,7 @@ BalsaDatabaseManager::verifyUploadFileResponse(const std::map<AString, AString>&
             errorMessageOut = ("Upload failed.  (Http Code="
                                + AString::number(responseHttpCode)
                                + ").\n\n"
-                               "Either you do now have ownership/permission to edit the study or "
+                               "Either you do not have ownership/permission to edit the study or "
                                "the study has been submitted for curation.\n\n"
                                "Use your web browser to login to BALSA to view the study and "
                                "check its permissions.  If the the study has been submitted for "
@@ -1441,7 +1442,7 @@ BalsaDatabaseManager::isStudyIDValid(const AString& studyID)
     
     if (getAllStudyInformation(studyInformation,
                                errorMessage)) {
-        for (const auto info : studyInformation) {
+        for (const auto& info : studyInformation) {
             if (info.getStudyID() == studyID) {
                 return true;
             }
@@ -1551,6 +1552,8 @@ BalsaDatabaseManager::uploadZippedSceneFile(SceneFile* sceneFile,
         return false;
     }
     
+    CaretLogFine("Uploading to BALSA with Version " + ApplicationInformation().getVersion());
+
     enum ProgressEnum {
         PROGRESS_NONE,
         PROGRESS_LOGIN,

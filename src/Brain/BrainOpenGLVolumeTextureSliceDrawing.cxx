@@ -894,7 +894,8 @@ BrainOpenGLVolumeTextureSliceDrawing::drawVolumeSliceViewProjection(const BrainO
             }
         }
     }
-    const bool annotationModeFlag = (m_fixedPipelineDrawing->m_windowUserInputMode == UserInputModeEnum::ANNOTATIONS);
+    const bool annotationModeFlag = (m_fixedPipelineDrawing->m_windowUserInputMode == UserInputModeEnum::Enum::ANNOTATIONS);
+    const bool tileTabsEditModeFlag = (m_fixedPipelineDrawing->m_windowUserInputMode == UserInputModeEnum::Enum::TILE_TABS_MANUAL_LAYOUT_EDITING);
     BrainOpenGLAnnotationDrawingFixedPipeline::Inputs inputs(this->m_brain,
                                                              m_fixedPipelineDrawing->mode,
                                                              BrainOpenGLFixedPipeline::s_gluLookAtCenterFromEyeOffsetDistance,
@@ -902,7 +903,8 @@ BrainOpenGLVolumeTextureSliceDrawing::drawVolumeSliceViewProjection(const BrainO
                                                              m_fixedPipelineDrawing->windowTabIndex,
                                                              SpacerTabIndex(),
                                                              BrainOpenGLAnnotationDrawingFixedPipeline::Inputs::WINDOW_DRAWING_NO,
-                                                             annotationModeFlag);
+                                                             annotationModeFlag,
+                                                             tileTabsEditModeFlag);
     m_fixedPipelineDrawing->m_annotationDrawing->drawModelSpaceAnnotationsOnVolumeSlice(&inputs,
                                                                                         slicePlane,
                                                                                         sliceThickness);
@@ -1401,7 +1403,7 @@ BrainOpenGLVolumeTextureSliceDrawing::drawVolumeSliceFoci(const Plane& plane)
                                            m_fixedPipelineDrawing->windowTabIndex) == false) {
         return;
     }
-    const float focusDiameter = fociDisplayProperties->getFociSize(displayGroup,
+    const float focusDiameter = fociDisplayProperties->getFociSizeMillimeters(displayGroup,
                                                                    m_fixedPipelineDrawing->windowTabIndex);
     const FeatureColoringTypeEnum::Enum fociColoringType = fociDisplayProperties->getColoringType(displayGroup,
                                                                                                   m_fixedPipelineDrawing->windowTabIndex);
@@ -3164,9 +3166,14 @@ BrainOpenGLVolumeTextureSliceDrawing::drawObliqueSliceWithOutlines(const VolumeS
 
     if ((bottomLeftToTopLeftDistance > 0)
         && (bottomRightToTopRightDistance > 0)) {
+        const DisplayPropertiesVolume* dsv = m_brain->getDisplayPropertiesVolume();
+        const bool allowBlendingFlag(dsv->getOpacity() >= 1.0);
+        
         glPushAttrib(GL_COLOR_BUFFER_BIT);
-        glEnable(GL_BLEND);
-        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        if (allowBlendingFlag) {
+            glEnable(GL_BLEND);
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        }
         
         if (m_modelWholeBrain != NULL) {
             glAlphaFunc(GL_GEQUAL, 0.95);
@@ -3191,11 +3198,15 @@ BrainOpenGLVolumeTextureSliceDrawing::drawObliqueSliceWithOutlines(const VolumeS
                      * Using GL_ONE prevents an edge artifact
                      * (narrow line on texture edges).
                      */
-                    glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+                    if (allowBlendingFlag) {
+                        glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+                    }
                     firstFlag = false;
                 }
                 else {
-                    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+                    if (allowBlendingFlag) {
+                        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+                    }
                 }
                 std::array<float, 3> maxStr = { 1.0, 1.0, 1.0 };
                 GLuint textureID = 0;

@@ -55,6 +55,8 @@ GraphicsPrimitiveV3fN3f::GraphicsPrimitiveV3fN3f(const PrimitiveType primitiveTy
                     ColorDataType::FLOAT_RGBA,
                     VertexColorType::SOLID_RGBA,
                     TextureDataType::NONE,
+                    TextureWrappingType::CLAMP,
+                    TextureFilteringType::LINEAR,
                     primitiveType)
 {
     m_floatSolidRGBA[0] = rgba[0];
@@ -78,6 +80,8 @@ GraphicsPrimitiveV3fN3f::GraphicsPrimitiveV3fN3f(const PrimitiveType primitiveTy
                     ColorDataType::UNSIGNED_BYTE_RGBA,
                     VertexColorType::SOLID_RGBA,
                     TextureDataType::NONE,
+                    TextureWrappingType::CLAMP,
+                    TextureFilteringType::LINEAR,
                     primitiveType)
 {
     m_unsignedByteSolidRGBA[0] = rgba[0];

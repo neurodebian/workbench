@@ -32,6 +32,7 @@ namespace caret {
 
     class CaretMappableDataFile;
     class ChartableTwoFileHistogramChart;
+    class ChartableTwoFileLineLayerChart;
     class ChartableTwoFileLineSeriesChart;
     class ChartableTwoFileMatrixChart;
     
@@ -59,6 +60,10 @@ namespace caret {
         
         const ChartableTwoFileHistogramChart* getHistogramCharting() const;
         
+        ChartableTwoFileLineLayerChart* getLineLayerCharting();
+        
+        const ChartableTwoFileLineLayerChart* getLineLayerCharting() const;
+        
         ChartableTwoFileLineSeriesChart* getLineSeriesCharting();
         
         const ChartableTwoFileLineSeriesChart* getLineSeriesCharting() const;
@@ -75,7 +80,7 @@ namespace caret {
         
         void getSupportedChartTwoDataTypes(std::vector<ChartTwoDataTypeEnum::Enum>& chartDataTypesOut) const;
         
-        void getSupportedChartTwoCompoundDataTypes(std::vector<ChartTwoCompoundDataType>& chartCompoundDataTypesOut) const;
+        void getSupportedChartTwoCompoundDataTypes(std::vector<const ChartTwoCompoundDataType*>& chartCompoundDataTypesOut) const;
         
         bool getChartTwoCompoundDataTypeForChartTwoDataType(const ChartTwoDataTypeEnum::Enum chartDataType,
                                                       ChartTwoCompoundDataType& chartCompoundDataTypeOut) const;
@@ -100,6 +105,8 @@ namespace caret {
         CaretMappableDataFile* m_caretMappableDataFile = NULL;
         
         std::unique_ptr<ChartableTwoFileHistogramChart> m_histogramCharting;
+        
+        std::unique_ptr<ChartableTwoFileLineLayerChart> m_lineLayerCharting;
         
         std::unique_ptr<ChartableTwoFileLineSeriesChart> m_lineSeriesCharting;
         

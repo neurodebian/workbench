@@ -95,6 +95,77 @@ PaletteFile::clear()
 }
 
 /**
+ * Add a scalar and RGB INTEGER color to a palette.  Palette MUST have a name.
+ * @param palette
+ *    Palette that receives scalar and color
+ * @param scalar
+ *    The scalar value
+ * @param red
+ *    Red component [0, 255]
+ * @param green
+ *    Green component [0, 255]
+ * @param blue
+ *    Blue component [0, 255]
+ */
+void
+PaletteFile::addPaletteScalarAndColor(Palette& palette,
+                                      const float scalar,
+                                      const int32_t red,
+                                      const int32_t green,
+                                      const int32_t blue)
+{
+    AString name(palette.getName());
+    if (name.isEmpty()) {
+        CaretAssertMessage(0, "Palette is missing name.  Palette will be invalid.");
+        return;
+    }
+    
+    /*
+     * Name of color is name of palette followed by index of color
+     */
+    name.append("_" + AString::number(palette.getNumberOfScalarsAndColors()));
+    
+#ifndef NDEBUG
+    if (this->labelTable.getLabel(name) != NULL) {
+        CaretAssertMessage(0, ("Generation of color name failed.  Color \""
+                               + name
+                               + "\" already exists."));
+    }
+#endif
+    
+    this->addColor(name, red, green, blue);
+    
+    palette.addScalarAndColor(scalar, name);
+}
+
+/**
+ * Add a scalar and RGB FLOAT color to a palette.  Palette MUST have a name.
+ * @param palette
+ *    Palette that receives scalar and color
+ * @param scalar
+ *    The scalar value
+ * @param red
+ *    Red component [0, 1]
+ * @param green
+ *    Green component [0, 1]
+ * @param blue
+ *    Blue component [0, 1]
+ */
+void
+PaletteFile::addPaletteScalarAndColorFloat(Palette& palette,
+                                           const float scalar,
+                                           const float red,
+                                           const float green,
+                                           const float blue)
+{
+    addPaletteScalarAndColor(palette,
+                             scalar,
+                             red * 255.0,
+                             green * 255.0,
+                             blue * 255.0);
+}
+
+/**
  * Add a palette color.
  * 
  * @param pc - color to add.
@@ -805,6 +876,94 @@ PaletteFile::addDefaultPalettes()
         powerSurf.addScalarAndColor( 0.0, "_ps_0");
         addPalette(powerSurf);
     }
+
+    //black to color versions of three of the fsl palettes below
+    if (this->getPaletteByName("black-red") == NULL) {
+        Palette blackRed;
+        blackRed.setName("black-red");
+        this->addColor("black-red_0", 0, 0, 0);
+        this->addColor("black-red_05", 127, 0, 0); //provide a zero color for neg to pos palette, for sanity
+        this->addColor("black-red_1", 255, 0, 0);
+        blackRed.addScalarAndColor(1.0f, "black-red_1");
+        blackRed.addScalarAndColor(0.0f, "black-red_05");
+        blackRed.addScalarAndColor(-1.0f, "black-red_0");
+        addPalette(blackRed);
+
+        Palette blackGreen;
+        blackGreen.setName("black-green");
+        this->addColor("black-green_0", 0, 0, 0);
+        this->addColor("black-green_05", 0, 127, 0);
+        this->addColor("black-green_1", 0, 255, 0);
+        //this->addColor("black-green_05", 0, 90, 0); //experimental option to try to match brightness across color options
+        //this->addColor("black-green_1", 0, 180, 0);
+        blackGreen.addScalarAndColor(1.0f, "black-green_1");
+        blackGreen.addScalarAndColor(0.0f, "black-green_05");
+        blackGreen.addScalarAndColor(-1.0f, "black-green_0");
+        addPalette(blackGreen);
+
+        Palette blackBlue;
+        blackBlue.setName("black-blue");
+        this->addColor("black-blue_0", 0, 0, 0);
+        this->addColor("black-blue_05", 0, 0, 127);
+        this->addColor("black-blue_1", 0, 0, 255);
+        //this->addColor("black-blue_05", 50, 50, 127); //experimental option to try to match brightness across color options
+        //this->addColor("black-blue_1", 100, 100, 255);
+        blackBlue.addScalarAndColor(1.0f, "black-blue_1");
+        blackBlue.addScalarAndColor(0.0f, "black-blue_05");
+        blackBlue.addScalarAndColor(-1.0f, "black-blue_0");
+        addPalette(blackBlue);
+
+        Palette blackRedPos;
+        blackRedPos.setName("black-red-positive");
+        blackRedPos.addScalarAndColor(1.0f, "black-red_1");
+        blackRedPos.addScalarAndColor(0.0f, "black-red_0");
+        addPalette(blackRedPos);
+        
+        Palette blackGreenPositive;
+        blackGreenPositive.setName("black-green-positive");
+        blackGreenPositive.addScalarAndColor(1.0f, "black-green_1");
+        blackGreenPositive.addScalarAndColor(0.0f, "black-green_0");
+        addPalette(blackGreenPositive);
+        
+        Palette blackBluePositive;
+        blackBluePositive.setName("black-blue-positive");
+        blackBluePositive.addScalarAndColor(1.0f, "black-blue_1");
+        blackBluePositive.addScalarAndColor(0.0f, "black-blue_0");
+        addPalette(blackBluePositive);
+    }
+
+    if (this->getPaletteByName("blue-black-green") == NULL) {
+        Palette bbg;
+        bbg.setName("blue-black-green");
+        
+        addPaletteScalarAndColor(bbg,  1.0, 0, 255,   0); /* green */
+        addPaletteScalarAndColor(bbg,  0.0, 0,   0,   0); /* black */
+        addPaletteScalarAndColor(bbg, -1.0, 0,   0, 255); /* blue */
+
+        addPalette(bbg);
+    }
+    
+    if (this->getPaletteByName("blue-black-red") == NULL) {
+        Palette bbr;
+        bbr.setName("blue-black-red");
+        
+        addPaletteScalarAndColor(bbr,  1.0, 255, 0,   0); /* red */
+        addPaletteScalarAndColor(bbr,  0.0,   0, 0,   0); /* black */
+        addPaletteScalarAndColor(bbr, -1.0,   0, 0, 255); /* blue */
+        
+        addPalette(bbr);
+    }
+    
+    if (this->getPaletteByName("red-black-green") == NULL) {
+        Palette rbg;
+        rbg.setName("red-black-green");
+        
+        addPaletteScalarAndColor(rbg,  1.0,   0, 255, 0); /* green */
+        addPaletteScalarAndColor(rbg,  0.0,   0,   0, 0); /* black */
+        addPaletteScalarAndColor(rbg, -1.0, 255,   0, 0); /* red */
+        
+        addPalette(rbg);
+    }
     
     /*
      * FSL Red palette from WB-289
@@ -1122,12 +1281,12 @@ PaletteFile::addDefaultPalettes()
     // Psych palette
     //
     if (this->getPaletteByName("PSYCH") == NULL) {
-        this->addColor("_pyell-oran",  0xff, 0xcc, 0x00 );
+        /*this->addColor("_pyell-oran",  0xff, 0xcc, 0x00 );//don't add colors repeatedly, since GiftiLabelTable now warns about everything
         this->addColor("_poran-red",  0xff, 0x44, 0x00 );
         this->addColor("_pblue",  0x00, 0x44, 0xff );
         this->addColor("_pltblue1",  0x00, 0x69, 0xff );
         this->addColor("_pltblue2",  0x00, 0x99, 0xff );
-        this->addColor("_pbluecyan",  0x00, 0xcc, 0xff );
+        this->addColor("_pbluecyan",  0x00, 0xcc, 0xff );//*/
         
         Palette psych;
         psych.setName("PSYCH");
@@ -1149,12 +1308,12 @@ PaletteFile::addDefaultPalettes()
     // Psych no-none palette
     //
     if (this->getPaletteByName("PSYCH-NO-NONE") == NULL) {
-        this->addColor("_pyell-oran",  0xff, 0xcc, 0x00 );
+        /*this->addColor("_pyell-oran",  0xff, 0xcc, 0x00 );
         this->addColor("_poran-red",  0xff, 0x44, 0x00 );
         this->addColor("_pblue",  0x00, 0x44, 0xff );
         this->addColor("_pltblue1",  0x00, 0x69, 0xff );
         this->addColor("_pltblue2",  0x00, 0x99, 0xff );
-        this->addColor("_pbluecyan",  0x00, 0xcc, 0xff );
+        this->addColor("_pbluecyan",  0x00, 0xcc, 0xff );//*/
         
         Palette psychNoNone;
         psychNoNone.setName("PSYCH-NO-NONE");
@@ -1299,12 +1458,12 @@ PaletteFile::addDefaultPalettes()
     //
     // Colors by Russ H.
     //
-    int _rbgyr20_10[3] = { 0x00, 0xff, 0x00 };
+    /*int _rbgyr20_10[3] = { 0x00, 0xff, 0x00 };
     this->addColor("_rbgyr20_10", _rbgyr20_10);
     int _rbgyr20_15[3] = { 0xff, 0xff, 0x00 };
     this->addColor("_rbgyr20_15", _rbgyr20_15);
     int _rbgyr20_20[3] = { 0xff, 0x00, 0x00 };
-    this->addColor("_rbgyr20_20", _rbgyr20_20);
+    this->addColor("_rbgyr20_20", _rbgyr20_20);//*/
     
     int _rbgyr20_21[3] = { 0x9d, 0x22, 0xc1 };
     this->addColor("_rbgyr20_21", _rbgyr20_21);
@@ -1511,8 +1670,8 @@ PaletteFile::addDefaultPalettes()
     // Positive/Negative palette
     //
     if (this->getPaletteByName("POS_NEG") == NULL) {
-        this->addColor("pos_neg_blue",  0x00, 0x00, 0xff );
-        this->addColor("pos_neg_red",  0xff, 0x00, 0x00 );
+        /*this->addColor("pos_neg_blue",  0x00, 0x00, 0xff );
+        this->addColor("pos_neg_red",  0xff, 0x00, 0x00 );//*/
         
         Palette posNeg;
         posNeg.setName("POS_NEG");

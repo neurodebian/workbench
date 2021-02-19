@@ -29,6 +29,7 @@
 #include "EventListenerInterface.h"
 #include "StructureEnum.h"
 #include "UserInputModeView.h"
+#include "Vector3D.h"
 
 namespace caret {
 
@@ -36,8 +37,8 @@ namespace caret {
     class AnnotationCoordinate;
     class AnnotationCoordinateInformation;
     class AnnotationFile;
-    class AnnotationOneDimensionalShape;
-    class AnnotationTwoDimensionalShape;
+    class AnnotationTwoCoordinateShape;
+    class AnnotationOneCoordinateShape;
     class KeyEvent;
     class MouseEvent;
     class SelectionItemAnnotation;
@@ -50,10 +51,14 @@ namespace caret {
          * Annotation mode
          */
         enum Mode {
-            /** Mouse creates an annotation by clicking */
-            MODE_NEW_WITH_CLICK,
-            /** Mouse creates an annotation by draggin from one point to another */
+            /** Mouse updates new annotation as mouse is clicked */
+            MODE_NEW_WITH_CLICK_SERIES,
+            /** Mouse starts a new annotaiton with a series of clicks (used with polyline) */
+            MODE_NEW_WITH_CLICK_SERIES_START,
+            /** Mouse updates new annotation as mouse is dragged */
             MODE_NEW_WITH_DRAG,
+            /** Mouse starts new annotation drawn by dragging */
+            MODE_NEW_WITH_DRAG_START,
             /** User selected Paste from Edit Menu, user may need to click mouse to paste the annotation */
             MODE_PASTE,
             /** User selected Paste Special from Edit Menu, user may need to click mouse to paste the annotation */
@@ -106,6 +111,8 @@ namespace caret {
 
         virtual void mouseMoveWithShift(const MouseEvent& mouseEvent);
         
+        virtual void gestureEvent(const GestureEvent& gestureEvent);
+        
         virtual void showContextMenu(const MouseEvent& mouseEvent,
                                      const QPoint& menuPosition,
                                      BrainOpenGLWidget* openGLWidget);
@@ -124,6 +131,18 @@ namespace caret {
         
         // ADD_NEW_METHODS_HERE
 
+    protected:
+        UserInputModeAnnotations(const UserInputModeEnum::Enum userInputMode,
+                                 const int32_t windowIndex);
+        
+        virtual void processMouseSelectAnnotation(const MouseEvent& mouseEvent,
+                                                  const bool shiftKeyDownFlag,
+                                                  const bool singleSelectionModeFlag);
+        
+        void processDeselectAllAnnotations();
+        
+        void processSelectAllAnnotations();
+        
     private:
         class NewMouseDragCreateAnnotation {
         public:
@@ -134,7 +153,8 @@ namespace caret {
             
             ~NewMouseDragCreateAnnotation();
             
-            void update(const int32_t mouseWindowX,
+            void update(const MouseEvent& mouseEvent,
+                        const int32_t mouseWindowX,
                         const int32_t mouseWindowY);
             
             void setCoordinate(AnnotationCoordinate* coordinate,
@@ -143,6 +163,8 @@ namespace caret {
             
             const Annotation* getAnnotation() const;
 
+            const std::vector<Vector3D>& getDrawingCoordinates() const;
+            
         private:
             AnnotationFile* m_annotationFile;
             
@@ -159,6 +181,8 @@ namespace caret {
             float m_windowWidth;
             
             float m_windowHeight;
+            
+            std::vector<Vector3D> m_drawingCoordinates;
         };
         
         class NewAnnotationFileSpaceAndType {
@@ -183,9 +207,6 @@ namespace caret {
         
         void processModeNewMouseLeftClick(const MouseEvent& mouseEvent);
         
-        void processMouseSelectAnnotation(const MouseEvent& mouseEvent,
-                                          const bool shiftKeyDownFlag);
-        
         void processModeSetCoordinate(const MouseEvent& mouseEvent);
         
         void setAnnotationUnderMouse(const MouseEvent& mouseEvent,
@@ -195,15 +216,15 @@ namespace caret {
         
         void userDrawingAnnotationFromMouseDrag(const MouseEvent& mouseEvent);
         
+        void initializeUserDrawingNewAnnotation(const MouseEvent& mouseEvent);
+
         void selectAnnotation(Annotation* annotation);
         
         Annotation* getSingleSelectedAnnotation();
         
         void cutAnnotation();
         
-        void deleteSelectedAnnotations();
-        
-        void processSelectAllAnnotations();
+        virtual void deleteSelectedAnnotations();
         
         void resetAnnotationUnderMouse();
         
@@ -213,9 +234,8 @@ namespace caret {
         
         void pasteAnnotationFromAnnotationClipboardAndChangeSpace(const MouseEvent& mouseEvent);
         
-//        bool pasteOneDimensionalShape(AnnotationOneDimensionalShape* oneDimShape,
-//                                      AnnotationCoordinateInformation& coordInfo);
-        
+        void resetAnnotationBeingCreated();
+
         UserInputModeAnnotationsWidget* m_annotationToolsWidget;
         
         Mode m_mode;
@@ -225,6 +245,8 @@ namespace caret {
         Annotation* m_annotationUnderMouse;
         
         AnnotationSizingHandleTypeEnum::Enum m_annotationUnderMouseSizeHandleType;
+        
+        int32_t m_annotationUnderMousePolyLineCoordinateIndex;
         
         Annotation* m_annotationBeingDragged;
         
@@ -236,7 +258,6 @@ namespace caret {
         
         bool m_allowMultipleSelectionModeFlag;
         
-        //static const AString s_pasteSpecialMenuItemText;
         // ADD_NEW_MEMBERS_HERE
 
         /*
@@ -244,6 +265,8 @@ namespace caret {
          */
         friend class UserInputModeAnnotationsContextMenu;
         friend class UserInputModeAnnotationsWidget;
+        friend class UserInputModeTileTabsManualLayout;
+        friend class UserInputModeTileTabsManualLayoutContextMenu;
     };
     
 #ifdef __USER_INPUT_MODE_ANNOTATIONS_DECLARE__

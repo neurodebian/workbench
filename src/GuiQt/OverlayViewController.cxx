@@ -174,8 +174,8 @@ OverlayViewController::OverlayViewController(const Qt::Orientation orientation,
                                               + "Opacity");
     this->opacityDoubleSpinBox->setMinimum(0.0);
     this->opacityDoubleSpinBox->setMaximum(1.0);
-    this->opacityDoubleSpinBox->setSingleStep(0.10);
-    this->opacityDoubleSpinBox->setDecimals(1);
+    this->opacityDoubleSpinBox->setSingleStep(0.05);
+    this->opacityDoubleSpinBox->setDecimals(2);
     this->opacityDoubleSpinBox->setFixedWidth(50);
     QObject::connect(this->opacityDoubleSpinBox, SIGNAL(valueChanged(double)),
                      this, SLOT(opacityDoubleSpinBoxValueChanged(double)));
@@ -697,7 +697,7 @@ OverlayViewController::updateViewController(Overlay* overlay)
         AString dataTypeName = DataFileTypeEnum::toOverlayTypeName(dataFile->getDataFileType());
         CaretAssertVectorIndex(displayNames, i);
         this->fileComboBox->addItem(displayNames[i],
-                                    qVariantFromValue((void*)dataFile));
+                                    QVariant::fromValue((void*)dataFile));
         if (dataFile == selectedFile) {
             selectedFileIndex = i;
         }

@@ -25,6 +25,8 @@
 #include "SessionManager.h"
 #undef __SESSION_MANAGER_DECLARE__
 
+#include "AnnotationBrowserTab.h"
+#include "AnnotationManager.h"
 #include "ApplicationInformation.h"
 #include "BackgroundAndForegroundColorsSceneHelper.h"
 #include "Brain.h"
@@ -34,24 +36,32 @@
 #include "CaretLogger.h"
 #include "CaretPreferenceDataValue.h"
 #include "CaretPreferences.h"
+#include "ChartTwoCartesianAxis.h"
+#include "ChartTwoOverlaySet.h"
 #include "CiftiConnectivityMatrixDataFileManager.h"
 #include "CiftiFiberTrajectoryManager.h"
 #include "DataToolTipsManager.h"
 #include "ElapsedTimer.h"
 #include "EventManager.h"
+#include "EventBrowserTabClose.h"
 #include "EventBrowserTabDelete.h"
 #include "EventBrowserTabGet.h"
 #include "EventBrowserTabGetAll.h"
 #include "EventBrowserTabIndicesGetAll.h"
 #include "EventBrowserTabNew.h"
 #include "EventBrowserTabNewClone.h"
+#include "EventBrowserTabReopenAvailable.h"
+#include "EventBrowserTabReopenClosed.h"
 #include "EventBrowserWindowContent.h"
 #include "EventCaretPreferencesGet.h"
+#include "EventChartTwoCartesianAxisDisplayGroup.h"
+#include "EventChartTwoCartesianOrientedAxesYoking.h"
 #include "EventModelAdd.h"
 #include "EventModelDelete.h"
 #include "EventModelGetAll.h"
 #include "EventModelGetAllDisplayed.h"
 #include "EventProgressUpdate.h"
+#include "EventRecentFilesSystemAccessMode.h"
 #include "EventSpacerTabGet.h"
 #include "ImageCaptureSettings.h"
 #include "LogManager.h"
@@ -84,27 +94,41 @@ SessionManager::SessionManager()
     m_ciftiFiberTrajectoryManager = new CiftiFiberTrajectoryManager();
     m_dataToolTipsManager.reset(new DataToolTipsManager(m_caretPreferences->isShowDataToolTipsEnabled()));
     
-    for (int32_t i = 0; i < BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_TABS; i++) {
-        m_browserTabs[i] = NULL;
-    }
+    m_browserTabs.fill(NULL);
     
     for (int32_t i = 0; i < BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_WINDOWS; i++) {
         CaretAssertStdArrayIndex(m_browserWindowContent, i);
         m_browserWindowContent[i] = new BrowserWindowContent(i);
     }
     
+    /*
+     * Axes for display group yoking to chart axes
+     */
+    for (int32_t i = 0; i < DisplayGroupEnum::NUMBER_OF_GROUPS; i++) {
+        ChartTwoOverlaySet* nullChartOverlaySet(NULL);
+        ChartTwoCartesianAxis* axis = new ChartTwoCartesianAxis(nullChartOverlaySet,
+                                                                ChartAxisLocationEnum::CHART_AXIS_LOCATION_BOTTOM);
+        m_chartingAxisDisplayGroups.push_back(std::unique_ptr<ChartTwoCartesianAxis>(axis));
+    }
+
+    EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_BROWSER_TAB_CLOSE);
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_BROWSER_TAB_DELETE);
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_BROWSER_TAB_GET);
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_BROWSER_TAB_GET_ALL);
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_BROWSER_TAB_INDICES_GET_ALL);
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_BROWSER_TAB_NEW);
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_BROWSER_TAB_NEW_CLONE);
+    EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_BROWSER_TAB_REOPEN_AVAILBLE);
+    EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_BROWSER_TAB_REOPEN_CLOSED);
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_BROWSER_WINDOW_CONTENT);
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_CARET_PREFERENCES_GET);
+    EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_CHART_TWO_CARTEISAN_AXIS_DISPLAY_GROUP);
+    EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_CHART_TWO_CARTESIAN_ORIENTED_AXES_YOKING);
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_MODEL_ADD);
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_MODEL_DELETE);
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_MODEL_GET_ALL);
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_MODEL_GET_ALL_DISPLAYED);
+    EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_RECENT_FILES_SYSTEM_ACCESS_MODE);
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_SPACER_TAB_GET);
     
     Brain* brain = new Brain(m_caretPreferences);
@@ -122,12 +146,7 @@ SessionManager::~SessionManager()
      * as browser tabs are closed.  However, command line does not issue
      * commands to delete tabs so this code will do so.
      */
-    for (int32_t i = 0; i < BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_TABS; i++) {
-        if (m_browserTabs[i] != NULL) {
-            delete m_browserTabs[i];
-            m_browserTabs[i] = NULL;
-        }
-    }
+    deleteAllBrowserTabs();
     
     clearSpacerTabs();
     
@@ -295,6 +314,25 @@ SessionManager::toString() const
 }
 
 /**
+ * Get the maximum stack order from all tabs
+ */
+int32_t
+SessionManager::getMaximumManualTabStackOrder() const
+{
+    int32_t maxStackOrder(0);
+    
+    for (const auto bt : m_browserTabs) {
+        if (bt != NULL) {
+            maxStackOrder = std::max(bt->getManualLayoutBrowserTabAnnotation()->getStackingOrder(),
+                                     maxStackOrder);
+        }
+    }
+    
+    return maxStackOrder;
+}
+
+
+/**
  * Receive events.
  *
  * @param event
@@ -310,18 +348,11 @@ SessionManager::receiveEvent(Event* event)
         
         tabEvent->setEventProcessed();
         
-        bool createdTab = false;
-        for (int32_t i = 0; i < BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_TABS; i++) {
-            if (m_browserTabs[i] == NULL) {
-                BrowserTabContent* tab = new BrowserTabContent(i);
-                tab->update(m_models);
-                m_browserTabs[i] = tab;
-                tabEvent->setBrowserTab(tab);
-                createdTab = true;
-                break;
-            }
+        BrowserTabContent* newTab = createNewBrowserTab();
+        if (newTab != NULL) {
+            tabEvent->setBrowserTab(newTab);
         }
-        if ( ! createdTab) {
+        else {
             tabEvent->setErrorMessage("Workbench is unable to create tabs, all tabs are in use.");
         }
     }
@@ -338,42 +369,40 @@ SessionManager::receiveEvent(Event* event)
             return;
         }
         
-        int32_t newTabIndex(-1);
-        for (int32_t i = 0; i < BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_TABS; i++) {
-            if (m_browserTabs[i] == NULL) {
-                newTabIndex = i;
-                break;
-            }
-        }
-        if (newTabIndex >= 0) {
-            CaretAssertArrayIndex(m_browserTabs, BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_TABS, cloneTabIndex);
-            CaretAssertArrayIndex(m_browserTabs, BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_TABS, newTabIndex);
-            m_browserTabs[newTabIndex] = new BrowserTabContent(newTabIndex);
-            m_browserTabs[newTabIndex]->update(m_models);
-            m_browserTabs[newTabIndex]->cloneBrowserTabContent(m_browserTabs[cloneTabIndex]);
-            cloneTabEvent->setNewBrowserTab(m_browserTabs[newTabIndex],
-                                            newTabIndex);
+        BrowserTabContent* newTab = createNewBrowserTab();
+        if (newTab != NULL) {
+            CaretAssertStdArrayIndex(m_browserTabs, cloneTabIndex);
+            newTab->cloneBrowserTabContent(m_browserTabs[cloneTabIndex]);
+            cloneTabEvent->setNewBrowserTab(newTab,
+                                            newTab->getTabNumber());
         }
         else {
             cloneTabEvent->setErrorMessage("Workbench is unable to create tabs, all tabs are in use.");
         }
+    }
+    else if (event->getEventType() == EventTypeEnum::EVENT_BROWSER_TAB_CLOSE) {
+        EventBrowserTabClose* closeTabEvent =
+        dynamic_cast<EventBrowserTabClose*>(event);
+        CaretAssert(closeTabEvent);
+        
+        AString errorMessage;
+        if ( ! closeBrowserTab(closeTabEvent,
+                               errorMessage)) {
+            closeTabEvent->setErrorMessage(errorMessage);
+        }
+        closeTabEvent->setEventProcessed();
     }
     else if (event->getEventType() == EventTypeEnum::EVENT_BROWSER_TAB_DELETE) {
         EventBrowserTabDelete* tabEvent =
         dynamic_cast<EventBrowserTabDelete*>(event);
         CaretAssert(tabEvent);
         
-        
-        BrowserTabContent* tab = tabEvent->getBrowserTab();
-        
-        for (int32_t i = 0; i < BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_TABS; i++) {
-            if (m_browserTabs[i] == tab) {
-                delete m_browserTabs[i];
-                m_browserTabs[i] = NULL;
-                tabEvent->setEventProcessed();
-                break;
-            }
+        AString errorMessage;
+        if ( ! deleteBrowserTab(tabEvent,
+                                errorMessage)) {
+            tabEvent->setErrorMessage(errorMessage);
         }
+        tabEvent->setEventProcessed();
     }
     else if (event->getEventType() == EventTypeEnum::EVENT_BROWSER_TAB_GET) {
         EventBrowserTabGet* tabEvent =
@@ -383,8 +412,7 @@ SessionManager::receiveEvent(Event* event)
         tabEvent->setEventProcessed();
         
         const int32_t tabNumber = tabEvent->getTabNumber();
-        CaretAssertArrayIndex(m_browserTabs, BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_TABS, tabNumber);
-        
+        CaretAssertStdArrayIndex(m_browserTabs, tabNumber);
         tabEvent->setBrowserTab(m_browserTabs[tabNumber]);
     }
     else if (event->getEventType() == EventTypeEnum::EVENT_BROWSER_TAB_GET_ALL) {
@@ -394,10 +422,9 @@ SessionManager::receiveEvent(Event* event)
         
         tabEvent->setEventProcessed();
         
-        for (int32_t i = 0; i < BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_TABS; i++) {
-            if (m_browserTabs[i] != NULL) {
-                tabEvent->addBrowserTab(m_browserTabs[i]);
-            }
+        std::vector<BrowserTabContent*> activeTabs = getActiveBrowserTabs();
+        for (auto bt : activeTabs) {
+            tabEvent->addBrowserTab(bt);
         }
     }
     else if (event->getEventType() == EventTypeEnum::EVENT_BROWSER_TAB_INDICES_GET_ALL) {
@@ -407,11 +434,36 @@ SessionManager::receiveEvent(Event* event)
         
         tabEvent->setEventProcessed();
         
-        for (int32_t i = 0; i < BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_TABS; i++) {
-            if (m_browserTabs[i] != NULL) {
-                tabEvent->addBrowserTabIndex(m_browserTabs[i]->getTabNumber());
-            }
+        std::vector<BrowserTabContent*> activeTabs = getActiveBrowserTabs();
+        for (auto bt : activeTabs) {
+            tabEvent->addBrowserTabIndex(bt->getTabNumber());
         }
+    }
+    else if (event->getEventType() == EventTypeEnum::EVENT_BROWSER_TAB_REOPEN_AVAILBLE) {
+        EventBrowserTabReopenAvailable* tabEvent = dynamic_cast<EventBrowserTabReopenAvailable*>(event);
+        CaretAssert(tabEvent);
+        if ( ! m_closedBrowserTabs.empty()) {
+            BrowserTabContent* tab = m_closedBrowserTabs.front();
+            CaretAssert(tab);
+            tabEvent->setTabIndexAndName(tab->getTabNumber(),
+                                         tab->getTabName());
+        }
+        tabEvent->setEventProcessed();
+    }
+    else if (event->getEventType() == EventTypeEnum::EVENT_BROWSER_TAB_REOPEN_CLOSED) {
+        EventBrowserTabReopenClosed* lastTabEvent = dynamic_cast<EventBrowserTabReopenClosed*>(event);
+        CaretAssert(lastTabEvent);
+        
+        AString errorMessage;
+        BrowserTabContent* tab = reopenLastClosedTab(errorMessage);
+        if (tab != NULL) {
+            lastTabEvent->setBrowserTabContent(tab,
+                                               tab->getTabNumber());
+        }
+        else {
+            lastTabEvent->setErrorMessage(errorMessage);
+        }
+        lastTabEvent->setEventProcessed();
     }
     else if (event->getEventType() == EventTypeEnum::EVENT_BROWSER_WINDOW_CONTENT) {
         EventBrowserWindowContent* windowEvent =
@@ -445,6 +497,37 @@ SessionManager::receiveEvent(Event* event)
         
         preferencesEvent->setCaretPreferences(m_caretPreferences);
         preferencesEvent->setEventProcessed();
+    }
+    else if (event->getEventType() == EventTypeEnum::EVENT_CHART_TWO_CARTESIAN_ORIENTED_AXES_YOKING) {
+        EventChartTwoCartesianOrientedAxesYoking* axesEvent = dynamic_cast<EventChartTwoCartesianOrientedAxesYoking*>(event);
+        CaretAssert(axesEvent);
+        
+        switch (axesEvent->getMode()) {
+            case EventChartTwoCartesianOrientedAxesYoking::Mode::GET_MINIMUM_AND_MAXIMUM_VALUES:
+                break;
+            case EventChartTwoCartesianOrientedAxesYoking::Mode::GET_YOKED_AXES:
+            {
+                const ChartTwoAxisScaleRangeModeEnum::Enum rangeMode = axesEvent->getYokingRangeMode();
+                if (ChartTwoAxisScaleRangeModeEnum::isYokingRangeMode(rangeMode)) {
+                    std::vector<BrowserTabContent*> activeTabs = getActiveBrowserTabs();
+                    for (auto bt : activeTabs) {
+                        std::vector<ChartTwoCartesianOrientedAxes*> tabAxes = bt->getYokedAxes(axesEvent->getAxisOrientation(),
+                                                                                               axesEvent->getYokingRangeMode());
+                        for (auto axes : tabAxes) {
+                            axesEvent->addYokedAxes(axes);
+                        }
+                    }
+                    
+                    axesEvent->setEventProcessed();
+                }
+            }
+                break;
+            case EventChartTwoCartesianOrientedAxesYoking::Mode::SET_MINIMUM_VALUE:
+            case EventChartTwoCartesianOrientedAxesYoking::Mode::SET_MAXIMUM_VALUE:
+            case EventChartTwoCartesianOrientedAxesYoking::Mode::SET_MINIMUM_AND_MAXIMUM_VALUES:
+                /* Nothing */
+                break;
+        }
     }
     else if (event->getEventType() == EventTypeEnum::EVENT_MODEL_ADD) {
         EventModelAdd* addModelsEvent =
@@ -492,13 +575,18 @@ SessionManager::receiveEvent(Event* event)
         dynamic_cast<EventModelGetAllDisplayed*>(event);
         CaretAssert(getDisplayedModelsEvent);
         
-        for (const auto tab : m_browserTabs) {
-            if (tab != NULL) {
-                getDisplayedModelsEvent->addModel(tab->getModelForDisplay());
-            }
+        std::vector<BrowserTabContent*> activeTabs = getActiveBrowserTabs();
+        for (auto bt : activeTabs) {
+            getDisplayedModelsEvent->addModel(bt->getModelForDisplay());
         }
         
         getDisplayedModelsEvent->setEventProcessed();
+    }
+    else if (event->getEventType() == EventTypeEnum::EVENT_RECENT_FILES_SYSTEM_ACCESS_MODE) {
+        EventRecentFilesSystemAccessMode* modeEvent = dynamic_cast<EventRecentFilesSystemAccessMode*>(event);
+        CaretAssert(modeEvent);
+        modeEvent->setMode(m_caretPreferences->getRecentFilesSystemAccessMode());
+        modeEvent->setEventProcessed();
     }
     else if (event->getEventType() == EventTypeEnum::EVENT_SPACER_TAB_GET) {
         EventSpacerTabGet* spacerTabEvent = dynamic_cast<EventSpacerTabGet*>(event);
@@ -529,6 +617,24 @@ SessionManager::receiveEvent(Event* event)
         spacerTabEvent->setSpacerTabContent(spacerTabContent);
         spacerTabEvent->setEventProcessed();
     }
+    else if (event->getEventType() == EventTypeEnum::EVENT_CHART_TWO_CARTEISAN_AXIS_DISPLAY_GROUP) {
+        EventChartTwoCartesianAxisDisplayGroup* dgEvent = dynamic_cast<EventChartTwoCartesianAxisDisplayGroup*>(event);
+        CaretAssert(dgEvent);
+        
+        switch (dgEvent->getMode()) {
+            case EventChartTwoCartesianAxisDisplayGroup::Mode::GET_ALL_YOKED_AXES:
+                break;
+            case EventChartTwoCartesianAxisDisplayGroup::Mode::GET_DISPLAY_GROUP_AXIS:
+            {
+                const DisplayGroupEnum::Enum displayGroup = dgEvent->getDisplayGroup();
+                const int32_t displayGroupIndex = DisplayGroupEnum::toIntegerCode(displayGroup);
+                CaretAssertVectorIndex(m_chartingAxisDisplayGroups, displayGroupIndex);
+                dgEvent->setAxis(m_chartingAxisDisplayGroups[displayGroupIndex].get());
+                dgEvent->setEventProcessed();
+            }
+                break;
+        }
+    }
 }
 
 /**
@@ -537,10 +643,17 @@ SessionManager::receiveEvent(Event* event)
 void 
 SessionManager::updateBrowserTabContents()
 {
-    for (int32_t i = 0; i < BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_TABS; i++) {
-        if (m_browserTabs[i] != NULL) {
-            m_browserTabs[i]->update(m_models);
-        }
+    std::vector<BrowserTabContent*> activeTabs = getActiveBrowserTabs();
+    for (auto bt : activeTabs) {
+        bt->update(m_models);
+    }
+    
+    /*
+     * Update the closed tabs so that they do not
+     * reference and data that is no longer valid
+     */
+    for (auto bt : m_closedBrowserTabs) {
+        bt->update(m_models);
     }
 }
 
@@ -635,15 +748,13 @@ SessionManager::saveToScene(const SceneAttributes* sceneAttributes,
      * Save browser tabs
      */
     std::vector<SceneClass*> browserTabSceneClasses;
-    for (int32_t tabIndex = 0; tabIndex < BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_TABS; tabIndex++) {
+    std::vector<BrowserTabContent*> validTabs = getActiveBrowserTabs();
+    for (auto tab : validTabs) {
         if (std::find(tabIndicesForScene.begin(),
                       tabIndicesForScene.end(),
-                      tabIndex) != tabIndicesForScene.end()) {
-            BrowserTabContent* btc = m_browserTabs[tabIndex];
-            if (btc != NULL) {
-                browserTabSceneClasses.push_back(btc->saveToScene(sceneAttributes,
-                                                                  "m_browserTabs"));
-            }
+                      tab->getTabNumber()) != tabIndicesForScene.end()) {
+            browserTabSceneClasses.push_back(tab->saveToScene(sceneAttributes,
+                                                              "m_browserTabs"));
         }
     }
     sceneClass->addChild(new SceneClassArray("m_browserTabs",
@@ -679,6 +790,21 @@ SessionManager::saveToScene(const SceneAttributes* sceneAttributes,
     sceneClass->addClass(savePreferencesToScene(sceneAttributes,
                                                 "ScenePreferenceDataValues"));
 
+    /*
+     * Save axis display groups
+     */
+    std::vector<SceneClass*> axisSceneClasses;
+    const int32_t numAxis = static_cast<int32_t>(m_chartingAxisDisplayGroups.size());
+    for (int32_t i = 0; i < numAxis; i++) {
+        CaretAssertVectorIndex(m_chartingAxisDisplayGroups, i);
+        SceneClass* sc = m_chartingAxisDisplayGroups[i]->saveToScene(sceneAttributes,
+                                                                     "m_chartingAxisDisplayGroups" + AString::number(i));
+        axisSceneClasses.push_back(sc);
+    }
+    SceneClassArray* axisArray = new SceneClassArray("m_chartingAxisDisplayGroups",
+                                                     axisSceneClasses);
+    sceneClass->addChild(axisArray);
+    
     return sceneClass;
 }
 
@@ -704,6 +830,8 @@ SessionManager::restoreFromScene(const SceneAttributes* sceneAttributes,
     m_caretPreferences->setBackgroundAndForegroundColorsMode(BackgroundAndForegroundColorsModeEnum::USER_PREFERENCES);
     m_caretPreferences->invalidateSceneDataValues();
 
+    m_sceneRestoredWithChartOldFlag = false;
+    
     if (sceneClass == NULL) {
         return;
     }
@@ -735,6 +863,23 @@ SessionManager::restoreFromScene(const SceneAttributes* sceneAttributes,
             break;
     }
     
+    
+    /*
+     * Restore axis display groups
+     */
+    for (auto& a : m_chartingAxisDisplayGroups) {
+        a->reset();
+    }
+    
+    const SceneClassArray* axisArray = sceneClass->getClassArray("m_chartingAxisDisplayGroups");
+    if (axisArray != NULL) {
+        const int32_t numElem = std::min(static_cast<int32_t>(m_chartingAxisDisplayGroups.size()),
+                                         axisArray->getNumberOfArrayElements());
+        for (int32_t i = 0; i < numElem; i++) {
+            CaretAssertVectorIndex(m_chartingAxisDisplayGroups, i);
+            m_chartingAxisDisplayGroups[i]->restoreFromScene(sceneAttributes, axisArray->getClassAtIndex(i));
+        }
+    }
     
     {
         /*
@@ -883,12 +1028,7 @@ SessionManager::restoreFromScene(const SceneAttributes* sceneAttributes,
     /*
      * Remove all tabs
      */
-    for (int32_t iTab = 0; iTab < BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_TABS; iTab++) {
-        if (m_browserTabs[iTab] != NULL) {
-            delete m_browserTabs[iTab];
-            m_browserTabs[iTab] = NULL;
-        }
-    }
+    deleteAllBrowserTabs();
     
     /*
      * Remove all spacer tabs
@@ -911,7 +1051,28 @@ SessionManager::restoreFromScene(const SceneAttributes* sceneAttributes,
                               browserTabClass);
         const int32_t tabIndex = tab->getTabNumber();
         CaretAssert(tabIndex >= 0);
+        CaretAssertStdArrayIndex(m_browserTabs, tabIndex);
         m_browserTabs[tabIndex] = tab;
+        
+        switch (tab->getSelectedModelType()) {
+            case ModelTypeEnum::MODEL_TYPE_CHART:
+                m_sceneRestoredWithChartOldFlag = true;
+                break;
+            case ModelTypeEnum::MODEL_TYPE_CHART_TWO:
+                break;
+            case ModelTypeEnum::MODEL_TYPE_INVALID:
+                break;
+            case ModelTypeEnum::MODEL_TYPE_MULTI_MEDIA:
+                break;
+            case ModelTypeEnum::MODEL_TYPE_SURFACE:
+                break;
+            case ModelTypeEnum::MODEL_TYPE_SURFACE_MONTAGE:
+                break;
+            case ModelTypeEnum::MODEL_TYPE_VOLUME_SLICES:
+                break;
+            case ModelTypeEnum::MODEL_TYPE_WHOLE_BRAIN:
+                break;
+        }
     }
     
     /*
@@ -1198,4 +1359,266 @@ SessionManager::getMovieRecorder() const
 {
     return m_movieRecorder.get();
 }
+
+/**
+ * @return Active browser tabs in a vector
+ */
+std::vector<BrowserTabContent*>
+SessionManager::getActiveBrowserTabs()
+{
+    std::vector<BrowserTabContent*> tabs;
+    
+    for (auto bt: m_browserTabs) {
+        if (bt != NULL) {
+            tabs.push_back(bt);
+        }
+    }
+    
+    return tabs;
+}
+
+/**
+ * @return a new browser tab or NULL if a tab cannot be created
+ */
+BrowserTabContent*
+SessionManager::createNewBrowserTab()
+{
+    BrowserTabContent* newTab(NULL);
+    
+    /*
+     * Try to find an unused tab index
+     */
+    for (int32_t i = 0; i < BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_TABS; i++) {
+        CaretAssertStdArrayIndex(m_browserTabs, i);
+        if (m_browserTabs[i] == NULL) {
+            if ( ! isTabInClosedBrowserTabs(i)) {
+                newTab = new BrowserTabContent(i);
+                break;
+            }
+        }
+    }
+    
+    /*
+     * If no available tabs, remove the oldest tab in the closed tabs, delete the
+     * closed tab, and use its index for a new tab
+     */
+    if (newTab == NULL) {
+        if ( ! m_closedBrowserTabs.empty()) {
+            BrowserTabContent* btc = m_closedBrowserTabs.back();
+            CaretAssert(btc);
+            const int32_t tabIndex = btc->getTabNumber();
+            if (m_browserTabs[tabIndex] == NULL) {
+                m_closedBrowserTabs.pop_back();
+                delete btc;
+                btc = NULL;
+                
+                newTab = new BrowserTabContent(tabIndex);
+            }
+            else {
+                CaretLogSevere("Program Error: Trying to delete closed tab with index="
+                               + AString::number(tabIndex)
+                               + " but there is a currently open tab at that index");
+            }
+        }
+    }
+   
+    if (newTab != NULL) {
+        const int32_t tabIndex = newTab->getTabNumber();
+        m_browserTabs[tabIndex] = newTab;
+        newTab->update(m_models);
+        newTab->getManualLayoutBrowserTabAnnotation()->setStackingOrder(getMaximumManualTabStackOrder() + 1);
+        
+        std::vector<BrowserTabContent*> tabs = getActiveBrowserTabs();
+        std::vector<AnnotationBrowserTab*> anns;
+        for (auto t : tabs) {
+            AnnotationBrowserTab* abt = t->getManualLayoutBrowserTabAnnotation();
+            CaretAssert(abt);
+            anns.push_back(abt);
+        }
+        
+        CaretAssert(m_brains[0]);
+        AnnotationManager* annMan = m_brains[0]->getAnnotationManager();
+        AString errorMessage;
+        const bool resultFlag = annMan->moveTabOrWindowAnnotationToFront(newTab->getManualLayoutBrowserTabAnnotation(),
+                                                                         errorMessage);
+        if ( ! resultFlag) {
+            CaretLogWarning("Moving to front after creation of new tab error: "
+                            + errorMessage);
+        }
+    }
+    
+    return newTab;
+}
+
+/**
+ * Close the given tab in the given window that may be reopened later
+ *
+ * @param closeTabEvent
+ *    The delete tab event
+ * @param errorMessageOut
+ *    Contains error information
+ * @return True if tab was closed, else false
+ */
+bool
+SessionManager::closeBrowserTab(EventBrowserTabClose* closeTabEvent,
+                                 AString& errorMessageOut)
+{
+    BrowserTabContent* tab = closeTabEvent->getBrowserTab();
+    const int32_t windowIndex = closeTabEvent->getWindowIndex();
+    CaretAssert(tab);
+    CaretAssertStdArrayIndex(m_browserWindowContent, windowIndex);
+    
+    const int32_t tabIndex = tab->getTabNumber();
+    if ((tabIndex < 0)
+        || (tabIndex >= BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_TABS)) {
+        errorMessageOut = ("Tab for closing has invalid tabIndex="
+                           + AString::number(tabIndex));
+        return false;
+    }
+    
+    CaretAssertStdArrayIndex(m_browserTabs, tabIndex);
+    if (tab != m_browserTabs[tabIndex]) {
+        errorMessageOut = ("Tab for closing with tabIndex="
+                           + AString::number(tabIndex)
+                           + " is not at that index in array of tabs.");
+        return false;
+    }
+    
+    tab->setClosedStatusFromSessionManager(true);
+    tab->setClosedTabWindowTabBarPositionIndex(closeTabEvent->getWindowTabBarPositionIndex());
+    tab->setClosedTabWindowIndex(windowIndex);
+    m_closedBrowserTabs.push_front(tab);
+    m_browserTabs[tabIndex] = NULL;
+    
+    return true;
+}
+
+/**
+ * Delete the given tab in the given window
+ *
+ * @param deleteTabEvent
+ *    The delete tab event
+ * @param errorMessageOut
+ *    Contains error information
+ * @return True if tab was closed, else false
+ */
+bool
+SessionManager::deleteBrowserTab(EventBrowserTabDelete* deleteTabEvent,
+                                AString& errorMessageOut)
+{
+    BrowserTabContent* tab = deleteTabEvent->getBrowserTab();
+    CaretAssert(tab);
+    
+    const int32_t tabIndex = tab->getTabNumber();
+    if ((tabIndex < 0)
+        || (tabIndex >= BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_TABS)) {
+        errorMessageOut = ("Tab for deleting has invalid tabIndex="
+                           + AString::number(tabIndex));
+        return false;
+    }
+    
+    CaretAssertStdArrayIndex(m_browserTabs, tabIndex);
+    if (tab != m_browserTabs[tabIndex]) {
+        errorMessageOut = ("Tab for deleting with tabIndex="
+                           + AString::number(tabIndex)
+                           + " is not at that index in array of tabs.");
+        CaretAssertMessage(0, errorMessageOut);
+        return false;
+    }
+
+    delete m_browserTabs[tabIndex];
+    m_browserTabs[tabIndex] = NULL;
+    
+    return true;
+}
+
+/**
+ * Reopen that last tab closed in the  given window
+ *
+ * @param windowIndex
+ *    Index of window containing the tab
+ * @param errorMessageOut
+ *    Contains error information
+ * @return Tab that was reopened or NULL if no tab was reopened
+ */
+BrowserTabContent*
+SessionManager::reopenLastClosedTab(AString& errorMessageOut)
+{
+    if ( ! m_closedBrowserTabs.empty()) {
+        BrowserTabContent* btc = m_closedBrowserTabs.front();
+        CaretAssert(btc);
+        const int32_t tabIndex = btc->getTabNumber();
+        if (m_browserTabs[tabIndex] == NULL) {
+            m_browserTabs[tabIndex] = btc;
+            m_closedBrowserTabs.pop_front();
+            btc->update(m_models);
+            btc->setClosedStatusFromSessionManager(false);
+            return btc;
+        }
+        else {
+            errorMessageOut = ("Program Error: Trying to reopen tab with index="
+                               + AString::number(tabIndex)
+                               + " but there is a currently open tab at that index");
+        }
+    }
+    
+    errorMessageOut = "No tabs are available for reopening";
+    
+    return NULL;
+}
+
+/**
+ * Delete all browser tabs both active and recently closed
+ */
+void
+SessionManager::deleteAllBrowserTabs()
+{
+    for (auto bt : m_browserTabs) {
+        if (bt != NULL) {
+            delete bt;
+        }
+    }
+    m_browserTabs.fill(NULL);
+    
+    for (auto bt : m_closedBrowserTabs) {
+        delete bt;
+    }
+    m_closedBrowserTabs.clear();
+}
+
+/**
+ * @return True if a tab with the given index in the closed browser tabs
+ * @param tabIndex
+ *    Index of the browser tab
+ */
+bool
+SessionManager::isTabInClosedBrowserTabs(const int32_t tabIndex)
+{
+    for (auto bt : m_closedBrowserTabs) {
+        CaretAssert(bt);
+        if (tabIndex == bt->getTabNumber()) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
+ * @return True if a scene was loaded that contains a chart old
+ */
+bool
+SessionManager::hasSceneWithChartOld() const
+{
+    return m_sceneRestoredWithChartOldFlag;
+}
+
+/**
+ * Reset the scene contains an old chart model
+ */
+void
+SessionManager::resetSceneWithChartOld()
+{
+    m_sceneRestoredWithChartOldFlag = false;
+}
+
 

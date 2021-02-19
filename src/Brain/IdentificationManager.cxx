@@ -30,6 +30,9 @@
 #include "CaretPreferences.h"
 #include "EventBrowserTabGetAll.h"
 #include "EventManager.h"
+#include "IdentificationFilter.h"
+#include "IdentificationHistoryManager.h"
+#include "IdentificationHistoryRecord.h"
 #include "IdentifiedItemNode.h"
 #include "IdentifiedItemVoxel.h"
 #include "MathFunctions.h"
@@ -61,19 +64,35 @@ IdentificationManager::IdentificationManager(const CaretPreferences* caretPrefer
     m_contralateralIdentificationEnabled = false;
     m_identificationSymbolColor = CaretColorEnum::WHITE;
     m_identificationContralateralSymbolColor = CaretColorEnum::LIME;
+    m_identificationSymbolSizeType = IdentificationSymbolSizeTypeEnum::MILLIMETERS;
     m_identifcationSymbolSize = 3.0;
     m_identifcationMostRecentSymbolSize = 5.0;
+    m_identifcationSymbolPercentageSize = 3.0;
+    m_identifcationMostRecentSymbolPercentageSize = 5.0;
     m_showSurfaceIdentificationSymbols = caretPreferences->isShowSurfaceIdentificationSymbols();
     m_showVolumeIdentificationSymbols  = caretPreferences->isShowVolumeIdentificationSymbols();
+    m_identificationFilter.reset(new IdentificationFilter());
+    m_identificationHistoryManager.reset(new IdentificationHistoryManager());
+    
+    m_chartLineLayerSymbolSize         = 4.0;
+    m_chartLineLayerToolTipTextSize    = 4.0;
     
     m_sceneAssistant->add("m_contralateralIdentificationEnabled",
                           &m_contralateralIdentificationEnabled);
     
+    m_sceneAssistant->add<IdentificationSymbolSizeTypeEnum, IdentificationSymbolSizeTypeEnum::Enum>("m_identificationSymbolSizeType",
+                                                                                                    &m_identificationSymbolSizeType);
     m_sceneAssistant->add("m_identifcationSymbolSize",
                           &m_identifcationSymbolSize);
     
     m_sceneAssistant->add("m_identifcationMostRecentSymbolSize",
                           &m_identifcationMostRecentSymbolSize);
+    
+    m_sceneAssistant->add("m_identifcationSymbolPercentageSize",
+                          &m_identifcationSymbolPercentageSize);
+    
+    m_sceneAssistant->add("m_identifcationMostRecentSymbolPercentageSize",
+                          &m_identifcationMostRecentSymbolPercentageSize);
     
     m_sceneAssistant->add<CaretColorEnum, CaretColorEnum::Enum>("m_identificationSymbolColor",
                                                                 &m_identificationSymbolColor);
@@ -85,6 +104,17 @@ IdentificationManager::IdentificationManager(const CaretPreferences* caretPrefer
                           &m_showSurfaceIdentificationSymbols);
     m_sceneAssistant->add("m_showVolumeIdentificationSymbols",
                           &m_showVolumeIdentificationSymbols);
+    m_sceneAssistant->add("m_identificationFilter",
+                          "IdentificationFilter",
+                          m_identificationFilter.get());
+    m_sceneAssistant->add("m_identificationHistoryManager",
+                          "m_identificationHistoryManager",
+                          m_identificationHistoryManager.get());
+    
+    m_sceneAssistant->add("m_chartLineLayerSymbolSize",
+                          &m_chartLineLayerSymbolSize);
+    m_sceneAssistant->add("m_chartLineLayerToolTipTextSize",
+                          &m_chartLineLayerToolTipTextSize);
     
     removeAllIdentifiedItems();
 }
@@ -120,7 +150,9 @@ IdentificationManager::addIdentifiedItem(IdentifiedItem* item)
         }
     }
     
-    addIdentifiedItemPrivate(item);
+    const bool restoringSceneFlag(false);
+    addIdentifiedItemPrivate(item,
+                             restoringSceneFlag);
 }
 
 /**
@@ -128,14 +160,23 @@ IdentificationManager::addIdentifiedItem(IdentifiedItem* item)
  * @param item
  *    Identified item that is added.
  *    NOTE: Takes ownership of this item and will delete, at the appropriate time.
+ * @param restoringSceneFlag
+ *    If true, item is from a scene
  */
 void
-IdentificationManager::addIdentifiedItemPrivate(IdentifiedItem* item)
+IdentificationManager::addIdentifiedItemPrivate(IdentifiedItem* item,
+                                                const bool restoringSceneFlag)
 {
     CaretAssert(item);
     m_mostRecentIdentifiedItem = item;
     
     m_identifiedItems.push_back(item);
+    
+    if ( ! restoringSceneFlag) {
+        IdentificationHistoryRecord* historyRecord = new IdentificationHistoryRecord();
+        historyRecord->setText(item->getFormattedText());
+        m_identificationHistoryManager->addHistoryRecord(historyRecord);
+    }
 }
 
 /**
@@ -153,7 +194,7 @@ IdentificationManager::getIdentificationText() const
         if (text.isEmpty() == false) {
             text += "<P></P>";
         }
-        text += item->getText();
+        text += item->getSimpleText();
     }
 
     return text;
@@ -227,11 +268,26 @@ IdentificationManager::getNodeIdentifiedItemsForSurface(const StructureEnum::Enu
                         nodeID.setSymbolRGB(symbolRGB);
                         const float* contralateralSymbolRGB = CaretColorEnum::toRGB(m_identificationContralateralSymbolColor);
                         nodeID.setContralateralSymbolRGB(contralateralSymbolRGB);
+                        nodeID.setIdentificationSymbolSizeType(m_identificationSymbolSizeType);
                         if (item == m_mostRecentIdentifiedItem) {
-                            nodeID.setSymbolSize(m_identifcationMostRecentSymbolSize);
+                            switch (m_identificationSymbolSizeType) {
+                                case IdentificationSymbolSizeTypeEnum::MILLIMETERS:
+                                    nodeID.setSymbolSize(m_identifcationMostRecentSymbolSize);
+                                    break;
+                                case IdentificationSymbolSizeTypeEnum::PERCENTAGE:
+                                    nodeID.setSymbolSize(m_identifcationMostRecentSymbolPercentageSize);
+                                    break;
+                            }
                         }
                         else {
-                            nodeID.setSymbolSize(m_identifcationSymbolSize);
+                            switch (m_identificationSymbolSizeType) {
+                                case IdentificationSymbolSizeTypeEnum::MILLIMETERS:
+                                    nodeID.setSymbolSize(m_identifcationSymbolSize);
+                                    break;
+                                case IdentificationSymbolSizeTypeEnum::PERCENTAGE:
+                                    nodeID.setSymbolSize(m_identifcationSymbolPercentageSize);
+                                    break;
+                            }
                         }
                         nodeItemsOut.push_back(nodeID);
                     }
@@ -261,7 +317,15 @@ IdentificationManager::getIdentifiedItemsForVolume() const
                 IdentifiedItemVoxel voxelID(*voxelItem);
                 const float* symbolRGB = CaretColorEnum::toRGB(m_identificationSymbolColor);
                 voxelID.setSymbolRGB(symbolRGB);
-                voxelID.setSymbolSize(m_identifcationSymbolSize);
+                voxelID.setIdentificationSymbolSizeType(m_identificationSymbolSizeType);
+                switch (m_identificationSymbolSizeType) {
+                    case IdentificationSymbolSizeTypeEnum::MILLIMETERS:
+                        voxelID.setSymbolSize(m_identifcationSymbolSize);
+                        break;
+                    case IdentificationSymbolSizeTypeEnum::PERCENTAGE:
+                        voxelID.setSymbolSize(m_identifcationSymbolPercentageSize);
+                        break;
+                }
                 itemsOut.push_back(voxelID);
             }
         }
@@ -352,6 +416,8 @@ IdentificationManager::removeAllIdentifiedItems()
         delete item;
     }
     
+    m_identificationHistoryManager->clearHistory();
+    
     m_identifiedItems.clear();
     
     m_mostRecentIdentifiedItem = NULL;
@@ -382,7 +448,8 @@ IdentificationManager::removeAllIdentifiedSymbols()
                 m_mostRecentIdentifiedItem = NULL;
             }
             
-            itemToKeep = new IdentifiedItem(item->getText());
+            itemToKeep = new IdentifiedItem(item->getSimpleText(),
+                                            item->getFormattedText());
             delete item;
         }
         else {
@@ -390,7 +457,8 @@ IdentificationManager::removeAllIdentifiedSymbols()
         }
         
         if (itemToKeep != NULL) {
-            if (itemToKeep->getText().isEmpty()) {
+            if (itemToKeep->getSimpleText().isEmpty()
+                && itemToKeep->getFormattedText().isEmpty()) {
                 delete itemToKeep;
                 itemToKeep = NULL;
             }
@@ -421,6 +489,26 @@ void
 IdentificationManager::setContralateralIdentificationEnabled(const bool enabled)
 {
     m_contralateralIdentificationEnabled = enabled;
+}
+
+/**
+ * @param The identification symbol size type
+ */
+IdentificationSymbolSizeTypeEnum::Enum
+IdentificationManager::getIdentificationSymbolSizeType() const
+{
+    return m_identificationSymbolSizeType;
+}
+
+/**
+ * Set the identification size type
+ * @param sizeType
+ *    The new size type
+ */
+void
+IdentificationManager::setIdentificationSymbolSizeType(const IdentificationSymbolSizeTypeEnum::Enum sizeType)
+{
+    m_identificationSymbolSizeType = sizeType;
 }
 
 /**
@@ -461,6 +549,46 @@ void
 IdentificationManager::setMostRecentIdentificationSymbolSize(const float symbolSize)
 {
     m_identifcationMostRecentSymbolSize = symbolSize;
+}
+
+/**
+ * @return The percentage size of the identification symbol
+ */
+float
+IdentificationManager::getIdentificationSymbolPercentageSize() const
+{
+    return m_identifcationSymbolPercentageSize;
+}
+
+/**
+ * Set the percentage size of the identification symbol
+ * @param symbolSize
+ *    New size of symbol.
+ */
+void
+IdentificationManager::setIdentificationSymbolPercentageSize(const float symbolSize)
+{
+    m_identifcationSymbolPercentageSize = symbolSize;
+}
+
+/**
+ * @return The percentage size of the most recent identification symbol
+ */
+float
+IdentificationManager::getMostRecentIdentificationSymbolPercentageSize() const
+{
+    return m_identifcationMostRecentSymbolPercentageSize;
+}
+
+/**
+ * Set the percentage size of the most recent identification symbol
+ * @param symbolSize
+ *    New size of symbol.
+ */
+void
+IdentificationManager::setMostRecentIdentificationSymbolPercentageSize(const float symbolSize)
+{
+    m_identifcationMostRecentSymbolPercentageSize = symbolSize;
 }
 
 /**
@@ -546,6 +674,46 @@ IdentificationManager::setShowVolumeIdentificationSymbols(const bool showVolumeI
 }
 
 /**
+ * @return Size for chart line layer symbols, except selected layer (percentage of viewport height)
+ */
+float
+IdentificationManager::getChartLineLayerSymbolSize() const
+{
+    return m_chartLineLayerSymbolSize;
+}
+
+/**
+ * Set size for chart line layer symbols, except selected layer (percentage of viewport height)
+ * @param symbolSize
+ *    New size for symbol
+ */
+void
+IdentificationManager::setChartLineLayerSymbolSize(const float symbolSize)
+{
+    m_chartLineLayerSymbolSize = symbolSize;
+}
+
+/**
+ * @return Size for chart line layer tooltip text (percentage of viewport height)
+ */
+float
+IdentificationManager::getChartLineLayerToolTipTextSize() const
+{
+    return m_chartLineLayerToolTipTextSize;
+}
+
+/**
+ * Set size for chart line layer tooltip text (percentage of viewport height)
+ * @param textSize
+ *    New size for text
+ */
+void
+IdentificationManager::setChartLineLayerToolTipTextSize(const float textSize)
+{
+    m_chartLineLayerToolTipTextSize = textSize;
+}
+
+/**
  * Create a scene for an instance of a class.
  *
  * @param sceneAttributes
@@ -606,11 +774,13 @@ IdentificationManager::restoreFromScene(const SceneAttributes* sceneAttributes,
         return;
     }
     
+    m_identificationSymbolSizeType = IdentificationSymbolSizeTypeEnum::MILLIMETERS;
     removeAllIdentifiedItems();
     
     m_sceneAssistant->restoreMembers(sceneAttributes,
                                      sceneClass);
     
+    const bool restoringSceneFlag(true);
     const int32_t numChildren = sceneClass->getNumberOfObjects();
     for (int32_t i = 0; i < numChildren; i++) {
         const SceneObject* so = sceneClass->getObjectAtIndex(i);
@@ -622,7 +792,8 @@ IdentificationManager::restoreFromScene(const SceneAttributes* sceneAttributes,
                     IdentifiedItem* item = new IdentifiedItem();
                     item->restoreFromScene(sceneAttributes, sc);
                     if (item->isValid()) {
-                        addIdentifiedItemPrivate(item);
+                        addIdentifiedItemPrivate(item,
+                                                 restoringSceneFlag);
                     }
                     else {
                         delete item;
@@ -632,7 +803,8 @@ IdentificationManager::restoreFromScene(const SceneAttributes* sceneAttributes,
                     IdentifiedItemNode* item = new IdentifiedItemNode();
                     item->restoreFromScene(sceneAttributes, sc);
                     if (item->isValid()) {
-                        addIdentifiedItemPrivate(item);
+                        addIdentifiedItemPrivate(item,
+                                                 restoringSceneFlag);
                     }
                     else {
                         delete item;
@@ -642,7 +814,8 @@ IdentificationManager::restoreFromScene(const SceneAttributes* sceneAttributes,
                     IdentifiedItemVoxel* item = new IdentifiedItemVoxel();
                     item->restoreFromScene(sceneAttributes, sc);
                     if (item->isValid()) {
-                        addIdentifiedItemPrivate(item);
+                        addIdentifiedItemPrivate(item,
+                                                 restoringSceneFlag);
                     }
                     else {
                         delete item;
@@ -681,3 +854,41 @@ IdentificationManager::restoreFromScene(const SceneAttributes* sceneAttributes,
         }
     }
 }
+
+/**
+ * @return Pointer to the identification filter (const method)
+ */
+const IdentificationFilter*
+IdentificationManager::getIdentificationFilter() const
+{
+    return m_identificationFilter.get();
+}
+
+/**
+ * @return Pointer to the identification filter
+ */
+IdentificationFilter*
+IdentificationManager::getIdentificationFilter()
+{
+    return m_identificationFilter.get();
+}
+
+/**
+ * @return Pointer to the identification history manager
+ */
+const IdentificationHistoryManager*
+IdentificationManager::getIdentificationHistoryManager() const
+{
+    return m_identificationHistoryManager.get();
+}
+
+/**
+ * @return Pointer to the identification history manager
+ */
+IdentificationHistoryManager*
+IdentificationManager::getIdentificationHistoryManager()
+{
+    return m_identificationHistoryManager.get();
+}
+
+

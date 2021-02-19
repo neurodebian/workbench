@@ -23,16 +23,24 @@
 #include "GraphicsPrimitive.h"
 #undef __GRAPHICS_PRIMITIVE_DECLARE__
 
+#include <algorithm>
+#include <cmath>
+#include <numeric>
+
 #include "BoundingBox.h"
 #include "CaretAssert.h"
 #include "CaretLogger.h"
+#include "DescriptiveStatistics.h"
 #include "EventManager.h"
 #include "GraphicsEngineDataOpenGL.h"
 #include "GraphicsPrimitiveV3f.h"
 #include "GraphicsPrimitiveV3fC4f.h"
 #include "GraphicsPrimitiveV3fC4ub.h"
 #include "GraphicsPrimitiveV3fN3f.h"
+#include "GraphicsPrimitiveV3fN3fC4ub.h"
 #include "GraphicsPrimitiveV3fT3f.h"
+#include "MathFunctions.h"
+#include "Matrix4x4Interface.h"
 
 using namespace caret;
 
@@ -58,6 +66,10 @@ using namespace caret;
  *     Type of vertex coloring
  * @param textureDataType
  *     Data type of texture coordinates.
+ * @param textureWrappingType
+ *     Type of texture wrapping
+ * @param textureFilteringType
+ *     Type of texture filtering
  * @param primitiveType
  *     Type of primitive drawn (triangles, lines, etc.)
  */
@@ -66,6 +78,8 @@ GraphicsPrimitive::GraphicsPrimitive(const VertexDataType       vertexDataType,
                                      const ColorDataType        colorDataType,
                                      const VertexColorType      vertexColorType,
                                      const TextureDataType      textureDataType,
+                                     const TextureWrappingType  textureWrappingType,
+                                     const TextureFilteringType textureFilteringType,
                                      const PrimitiveType        primitiveType)
 : CaretObject(),
  EventListenerInterface(),
@@ -74,10 +88,12 @@ GraphicsPrimitive::GraphicsPrimitive(const VertexDataType       vertexDataType,
  m_colorDataType(colorDataType),
  m_vertexColorType(vertexColorType),
  m_textureDataType(textureDataType),
+ m_textureWrappingType(textureWrappingType),
+ m_textureFilteringType(textureFilteringType),
  m_primitiveType(primitiveType),
  m_boundingBoxValid(false)
 {
-    
+    invalidateVertexMeasurements();
 }
 
 /**
@@ -101,9 +117,12 @@ GraphicsPrimitive::GraphicsPrimitive(const GraphicsPrimitive& obj)
  m_colorDataType(obj.m_colorDataType),
  m_vertexColorType(obj.m_vertexColorType),
  m_textureDataType(obj.m_textureDataType),
+ m_textureWrappingType(obj.m_textureWrappingType),
+ m_textureFilteringType(obj.m_textureFilteringType),
  m_primitiveType(obj.m_primitiveType),
  m_boundingBoxValid(false)
 {
+    invalidateVertexMeasurements();
     this->copyHelperGraphicsPrimitive(obj);
 }
 
@@ -131,6 +150,8 @@ GraphicsPrimitive::copyHelperGraphicsPrimitive(const GraphicsPrimitive& obj)
     m_textureImageBytesRGBA       = obj.m_textureImageBytesRGBA;
     m_textureImageWidth           = obj.m_textureImageWidth;
     m_textureImageHeight          = obj.m_textureImageHeight;
+    invalidateVertexMeasurements();
+
 
     m_graphicsEngineDataForOpenGL.reset();
 }
@@ -180,8 +201,8 @@ GraphicsPrimitive::reserveForNumberOfVertices(const int32_t numberOfVertices)
             m_floatTextureSTR.reserve(numberOfVertices * 3);
             break;
     }
-    
-    m_boundingBoxValid = false;
+
+    invalidateVertexMeasurements();
 }
 
 /**
@@ -293,6 +314,19 @@ GraphicsPrimitive::setUsageTypeTextureCoordinates(const UsageType usageType)
 bool
 GraphicsPrimitive::isValid() const
 {
+    switch (m_releaseInstanceDataMode) {
+        case ReleaseInstanceDataMode::COMPLETED:
+            /*
+             * Instance data has been removed
+             */
+            return true;
+            break;
+        case ReleaseInstanceDataMode::DISABLED:
+            break;
+        case ReleaseInstanceDataMode::ENABLED:
+            break;
+    }
+    
     switch (m_vertexDataType) {
         case VertexDataType::FLOAT_XYZ:
             break;
@@ -853,8 +887,8 @@ GraphicsPrimitive::addVertexProtected(const float xyz[3],
             break;
     }
     
-    m_boundingBoxValid = false;
-    
+    invalidateVertexMeasurements();
+
     /*
      * The triangle strip primitve vertces are filled after two
      * vertices are added after requesting a restart
@@ -895,6 +929,23 @@ GraphicsPrimitive::getVertexFloatXYZ(const int32_t vertexIndex,
 void
 GraphicsPrimitive::replaceFloatXYZ(const std::vector<float>& xyz)
 {
+    switch (m_releaseInstanceDataMode) {
+        case ReleaseInstanceDataMode::COMPLETED:
+            {
+                const QString msg("All XYZ Data in primitive cannot be replaced with different sized data.  "
+                                  "Instance data was removed to save memory.  "
+                                  "setReleaseInstanceDataMode() should not be called for this primitive.");
+                CaretAssertMessage(0, msg);
+                CaretLogSevere(msg);
+                return;
+            }
+            break;
+        case ReleaseInstanceDataMode::DISABLED:
+            break;
+        case ReleaseInstanceDataMode::ENABLED:
+            break;
+    }
+    
     if (xyz.size() == m_xyz.size()) {
         m_xyz = xyz;
         
@@ -908,7 +959,58 @@ GraphicsPrimitive::replaceFloatXYZ(const std::vector<float>& xyz)
         CaretAssertMessage(0, msg);
     }
     
-    m_boundingBoxValid = false;
+    invalidateVertexMeasurements();
+}
+
+/**
+ * Get the Y-components from the XYZ coordinates
+ * @param yComponentsOut
+ *    Output containing the Y-components (this method will resize to correct number of elements)
+ */
+void
+GraphicsPrimitive::getFloatYComponents(std::vector<float>& yComponentsOut) const
+{
+    const int32_t numXYZ = getNumberOfVertices();
+    yComponentsOut.resize(numXYZ);
+    
+    for (int32_t i = 0; i < numXYZ; i++) {
+        const int32_t i3 = (i * 3);
+        CaretAssertVectorIndex(yComponentsOut, i);
+        CaretAssertVectorIndex(m_xyz, i3 + 1);
+        yComponentsOut[i] = m_xyz[i3 + 1];
+    }
+}
+
+/**
+ * Set the Y-components from the XYZ coordinates
+ * @param yComponents
+ *    The Y-components
+ */
+void
+GraphicsPrimitive::setFloatYComponents(const std::vector<float>& yComponents)
+{
+    const int32_t numXYZ = getNumberOfVertices();
+    if (numXYZ != static_cast<int32_t>(yComponents.size())) {
+        const QString msg("Number of XYZ="
+                          + QString::number(numXYZ)
+                          + " but number of input Y-components="
+                          + QString::number(yComponents.size()));
+        CaretLogSevere(msg);
+        CaretAssertMessage(0, msg);
+        return;
+    }
+    
+    for (int32_t i = 0; i < numXYZ; i++) {
+        const int32_t i3 = (i * 3);
+        CaretAssertVectorIndex(yComponents, i);
+        CaretAssertVectorIndex(m_xyz, i3 + 1);
+        m_xyz[i3 + 1] = yComponents[i];
+    }
+    
+    invalidateVertexMeasurements();
+    if (m_graphicsEngineDataForOpenGL != NULL) {
+        m_graphicsEngineDataForOpenGL->invalidateCoordinates();
+    }
 }
 
 /**
@@ -923,6 +1025,23 @@ void
 GraphicsPrimitive::replaceVertexFloatXYZ(const int32_t vertexIndex,
                                          const float xyz[3])
 {
+    switch (m_releaseInstanceDataMode) {
+        case ReleaseInstanceDataMode::COMPLETED:
+        {
+            const QString msg("A vertex's XYZ Data in primitive cannot be replaced.  "
+                              "Instance data was removed to save memory.  "
+                              "setReleaseInstanceDataMode() should not be called for this primitive.");
+            CaretAssertMessage(0, msg);
+            CaretLogSevere(msg);
+            return;
+        }
+            break;
+        case ReleaseInstanceDataMode::DISABLED:
+            break;
+        case ReleaseInstanceDataMode::ENABLED:
+            break;
+    }
+
     const int32_t offset = vertexIndex * 3;
     CaretAssertVectorIndex(m_xyz, offset + 2);
     m_xyz[offset]     = xyz[0];
@@ -931,6 +1050,47 @@ GraphicsPrimitive::replaceVertexFloatXYZ(const int32_t vertexIndex,
 
     if (m_graphicsEngineDataForOpenGL != NULL) {
         m_graphicsEngineDataForOpenGL->invalidateCoordinates();
+    }
+}
+
+/**
+ * Replace the XYZ vertices in this primitive with vertices from other primitive
+ * and also transform the vertex using the given matrix.
+ *
+ * @param primitive
+ *     Primitive whose vertices are copied.
+ * @param matrix
+ *     Matrix used for transforming vertices
+ */
+void
+GraphicsPrimitive::replaceAndTransformVertices(const GraphicsPrimitive* primitive,
+                                               const Matrix4x4Interface& matrix)
+{
+    CaretAssert(primitive);
+    const int32_t numVertices = std::min(getNumberOfVertices(),
+                                         primitive->getNumberOfVertices());
+    for (int32_t i = 0; i < numVertices; i++) {
+        const std::vector<float>& primitiveXYZ = primitive->getFloatXYZ();
+        const int32_t i3(i * 3);
+        float xyz[3] { primitiveXYZ[i3], primitiveXYZ[i3 + 1], primitiveXYZ[i3 + 2] };
+        matrix.multiplyPoint3(xyz);
+        replaceVertexFloatXYZ(i, xyz);
+    }
+}
+
+
+/**
+ * Transform all vertices using the given matrix.
+ * @param matrix
+ *    Matrix for transformation of vertices
+ */
+void
+GraphicsPrimitive::transformVerticesFloatXYZ(const Matrix4x4Interface& matrix)
+{
+    const float numVertices = getNumberOfVertices();
+    for (int32_t i = 0; i < numVertices; i++) {
+        const int32_t i3(i * 3);
+        matrix.multiplyPoint3(&m_xyz[i3]);
     }
 }
 
@@ -977,6 +1137,23 @@ void
 GraphicsPrimitive::replaceVertexFloatRGBA(const int32_t vertexIndex,
                                           const float rgba[4])
 {
+    switch (m_releaseInstanceDataMode) {
+        case ReleaseInstanceDataMode::COMPLETED:
+        {
+            const QString msg("A vertex's RGBA Data in primitive cannot be replaced.  "
+                              "Instance data was removed to save memory.  "
+                              "setReleaseInstanceDataMode() should not be called for this primitive.");
+            CaretAssertMessage(0, msg);
+            CaretLogSevere(msg);
+            return;
+        }
+            break;
+        case ReleaseInstanceDataMode::DISABLED:
+            break;
+        case ReleaseInstanceDataMode::ENABLED:
+            break;
+    }
+
     const int32_t i4 = vertexIndex * 4;
     switch (m_colorDataType) {
         case ColorDataType::NONE:
@@ -1043,6 +1220,23 @@ void
 GraphicsPrimitive::replaceVertexByteRGBA(const int32_t vertexIndex,
                                          const uint8_t rgba[4])
 {
+    switch (m_releaseInstanceDataMode) {
+        case ReleaseInstanceDataMode::COMPLETED:
+        {
+            const QString msg("A vertex's RGBA Data in primitive cannot be replaced.  "
+                              "Instance data was removed to save memory.  "
+                              "setReleaseInstanceDataMode() should not be called for this primitive.");
+            CaretAssertMessage(0, msg);
+            CaretLogSevere(msg);
+            return;
+        }
+            break;
+        case ReleaseInstanceDataMode::DISABLED:
+            break;
+        case ReleaseInstanceDataMode::ENABLED:
+            break;
+    }
+
     const int32_t i4 = vertexIndex * 4;
     switch (m_colorDataType) {
         case ColorDataType::NONE:
@@ -1075,6 +1269,23 @@ GraphicsPrimitive::replaceVertexByteRGBA(const int32_t vertexIndex,
 void
 GraphicsPrimitive::replaceAllVertexSolidByteRGBA(const uint8_t rgba[4])
 {
+    switch (m_releaseInstanceDataMode) {
+        case ReleaseInstanceDataMode::COMPLETED:
+        {
+            const QString msg("All RGBA Data in primitive cannot be replaced.  "
+                              "Instance data was removed to save memory.  "
+                              "setReleaseInstanceDataMode() should not be called for this primitive.");
+            CaretAssertMessage(0, msg);
+            CaretLogSevere(msg);
+            return;
+        }
+            break;
+        case ReleaseInstanceDataMode::DISABLED:
+            break;
+        case ReleaseInstanceDataMode::ENABLED:
+            break;
+    }
+
     switch (m_colorDataType) {
         case ColorDataType::NONE:
             CaretAssert(0);
@@ -1111,6 +1322,23 @@ GraphicsPrimitive::replaceAllVertexSolidByteRGBA(const uint8_t rgba[4])
 void
 GraphicsPrimitive::replaceAllVertexSolidFloatRGBA(const float rgba[4])
 {
+    switch (m_releaseInstanceDataMode) {
+        case ReleaseInstanceDataMode::COMPLETED:
+        {
+            const QString msg("All RGBA Data in primitive cannot be replaced.  "
+                              "Instance data was removed to save memory.  "
+                              "setReleaseInstanceDataMode() should not be called for this primitive.");
+            CaretAssertMessage(0, msg);
+            CaretLogSevere(msg);
+            return;
+        }
+            break;
+        case ReleaseInstanceDataMode::DISABLED:
+            break;
+        case ReleaseInstanceDataMode::ENABLED:
+            break;
+    }
+
     switch (m_colorDataType) {
         case ColorDataType::NONE:
             CaretAssert(0);
@@ -1163,10 +1391,10 @@ GraphicsPrimitive::getVertexBounds(BoundingBox& boundingBoxOut) const
         for (int32_t i = 0; i < numberOfVertices; i++) {
             const int32_t i3 = i * 3;
             CaretAssertVectorIndex(m_xyz, i3 + 2);
-            m_boundingBox->update(&m_xyz[i3]);
+            m_boundingBox->updateExcludeNanInf(&m_xyz[i3]);
         }
         
-        m_boundingBoxValid = true;
+        m_boundingBoxValid = m_boundingBox->isValid2D();
     }
     
     boundingBoxOut = *m_boundingBox;
@@ -1330,7 +1558,7 @@ GraphicsPrimitive::copyVertex(const int32_t copyFromIndex,
         }
     }
     
-    m_boundingBoxValid = false;
+    invalidateVertexMeasurements();
 }
 
 /**
@@ -1674,6 +1902,315 @@ GraphicsPrimitive::simplfyLines(const int32_t skipVertexCount)
 }
 
 /**
+ * Get the mean and standard deviation for the Y-values
+ * @param yMeanOut
+ *    Output with mean
+ * @param yStandardDeviationOut
+ *    Output with standard deviation
+ */
+void
+GraphicsPrimitive::getMeanAndStandardDeviationForY(float& yMeanOut,
+                                                   float& yStandardDeviationOut) const
+{
+    /*
+     * Standard deviation is always non-negative so use
+     * a negative values as invalid or not-computed
+     */
+    if (m_yStandardDeviation < 0.0) {
+        const int32_t numVertices = getNumberOfVertices();
+        if (numVertices <= 0) {
+            yMeanOut = 0.0;
+            yStandardDeviationOut = 1.0;
+            return;
+        }
+        
+        std::vector<float> yValues;
+        yValues.resize(numVertices);
+        for (int32_t i = 0; i < numVertices; i++) {
+            yValues[i] = m_xyz[(i * 3) + 1];
+        }
+        
+        DescriptiveStatistics stats;
+        stats.update(yValues);
+        m_yMean = stats.getMean();
+        m_yStandardDeviation = stats.getPopulationStandardDeviation();
+    }
+    
+    yMeanOut              = m_yMean;
+    yStandardDeviationOut = m_yStandardDeviation;
+}
+
+/**
+ * Apply a new mean and/or deviation to the Y-components
+ * @param applyNewMeanFlag
+ *   Apply the new mean
+ * @param newMean
+ *   Value for new mean
+ * @param applyNewDeviationFlag
+ *   Apply the new deviation
+ * @param newDeviation
+ *   Value for new deviation
+ * @param applyAbsoluteValueFlag
+ *   Make result absolute value
+ * @param haveNanInfFlagOut
+ *   Output: True if Not a Number or Infinity found in the data
+ */
+void
+GraphicsPrimitive::applyNewMeanAndDeviationToYComponents(const bool applyNewMeanFlag,
+                                                         const float newMean,
+                                                         const bool applyNewDeviationFlag,
+                                                         const float newDeviation,
+                                                         const bool applyAbsoluteValueFlag,
+                                                         bool& haveNanInfFlagOut)
+{
+    haveNanInfFlagOut = false;
+    if ( ! (applyNewMeanFlag
+            || applyNewDeviationFlag
+            || applyAbsoluteValueFlag)) {
+        return;
+    }
+    
+    std::vector<float> data;
+    getFloatYComponents(data);
+    
+    for (auto& d : data) {
+        if ( ! MathFunctions::isNumeric(d)) {
+            haveNanInfFlagOut = true;
+            break;
+        }
+    }
+    
+    if (haveNanInfFlagOut) {
+        applyNewMeanAndDeviationToYComponentsWithNaNs(data,
+                                                      applyNewMeanFlag,
+                                                      newMean,
+                                                      applyNewDeviationFlag,
+                                                      newDeviation,
+                                                      applyAbsoluteValueFlag);
+    }
+    else {
+        applyNewMeanAndDeviationToYComponentsNoNaNs(data,
+                                                    applyNewMeanFlag,
+                                                    newMean,
+                                                    applyNewDeviationFlag,
+                                                    newDeviation,
+                                                    applyAbsoluteValueFlag);
+    }
+    
+    setFloatYComponents(data);
+}
+
+/**
+ * Apply a new mean and/or deviation to the Y-components that have NaNs or INFs
+ * @param applyNewMeanFlag
+ *   Apply the new mean
+ * @param newMean
+ *   Value for new mean
+ * @param applyNewDeviationFlag
+ *   Apply the new deviation
+ * @param newDeviation
+ *   Value for new deviation
+ * @param applyAbsoluteValueFlag
+ *   Make result absolute value
+ */
+void
+GraphicsPrimitive::applyNewMeanAndDeviationToYComponentsWithNaNs(std::vector<float>& data,
+                                                                 const bool applyNewMeanFlag,
+                                                                 const float newMean,
+                                                                 const bool applyNewDeviationFlag,
+                                                                 const float newDeviation,
+                                                                 const bool applyAbsoluteValueFlag)
+{
+
+    /*
+     * Sum of data while excluding invalid numbers
+     */
+    int32_t numData(0);
+    double dataSum(0.0);
+    for (auto& d : data) {
+        if (MathFunctions::isNumeric(d)) {
+            if (applyAbsoluteValueFlag) {
+                if (d < 0.0) {
+                    d = -d;
+                }
+            }
+            dataSum += d;
+            numData++;
+        }
+    }
+    
+    if (numData <= 0) {
+        /*
+         * All data is NaN of INF
+         */
+        return;
+    }
+    
+    /*
+     * Compute mean
+     */
+    const double numValuesDouble(numData);
+    const double dataMean(dataSum / numValuesDouble);
+
+    /*
+     * Subtract mean from data
+     */
+    for (auto& d : data) {
+        d -= dataMean;
+    }
+
+    if (applyNewDeviationFlag) {
+        /*
+         * Compute deviation of data.
+         * Note: mean has been already been subtracted from data
+         */
+        double sumSQ(0.0);
+        for (auto& d : data) {
+            if (MathFunctions::isNumeric(d)) {
+                sumSQ += (d * d);
+            }
+        }
+        const double variance(sumSQ / numValuesDouble);
+        const double dataDeviation((variance > 0.0)
+                                   ? (std::sqrt(variance))
+                                   : 0.0);
+
+        /*
+         * Data = (Data / dataDeviation) * newDevation
+         *      => Data * (newDeviation / dataDeviation);
+         */
+        const double deviationRatio((dataDeviation != 0.0)
+                                    ? (newDeviation / dataDeviation)
+                                    : newDeviation);
+        for (auto& d : data) {
+            d *= deviationRatio;
+        }
+    }
+
+    if (applyNewMeanFlag) {
+        for (auto& d : data) {
+            d += newMean;
+        }
+    }
+    else {
+        for (auto& d : data) {
+            d += dataMean;
+        }
+    }
+}
+
+/**
+ * Apply a new mean and/or deviation to the Y-components that DO NOT have NaNs or INFs
+ * @param applyNewMeanFlag
+ *   Apply the new mean
+ * @param newMean
+ *   Value for new mean
+ * @param applyNewDeviationFlag
+ *   Apply the new deviation
+ * @param newDeviation
+ *   Value for new deviation
+ * @param applyAbsoluteValueFlag
+ *   Make result absolute value
+ */
+void
+GraphicsPrimitive::applyNewMeanAndDeviationToYComponentsNoNaNs(std::vector<float>& data,
+                                                               const bool applyNewMeanFlag,
+                                                               const float newMean,
+                                                               const bool applyNewDeviationFlag,
+                                                               const float newDeviation,
+                                                               const bool applyAbsoluteValueFlag)
+{
+    const int32_t num = static_cast<int32_t>(data.size());
+    if (num < 1) {
+        return;
+    }
+    const double numValuesDouble(num);
+    
+    /*
+     * Compute mean
+     */
+    double dataSum(0.0);
+    for (auto& d : data) {
+        if (applyAbsoluteValueFlag) {
+            if (d < 0.0) {
+                d = -d;
+            }
+        }
+        dataSum += d;
+    }
+    const double dataMean(dataSum / numValuesDouble);
+    
+    /*
+     * Subtract mean from data
+     */
+    for (auto& d : data) {
+        d -= dataMean;
+    }
+    
+    if (applyNewDeviationFlag) {
+        /*
+         * Compute deviation of data.
+         * Note: mean has been already been subtracted from data
+         */
+        double sumSQ(0.0);
+        for (auto& d : data) {
+            sumSQ += (d * d);
+        }
+        const double variance(sumSQ / numValuesDouble);
+        const double dataDeviation((variance > 0.0)
+                                   ? (std::sqrt(variance))
+                                   : 0.0);
+        
+        /*
+         * Data = (Data / dataDeviation) * newDevation
+         *      => Data * (newDeviation / dataDeviation);
+         */
+        const double deviationRatio((dataDeviation != 0.0)
+                                    ? (newDeviation / dataDeviation)
+                                    : newDeviation);
+        for (auto& d : data) {
+            d *= deviationRatio;
+        }
+    }
+    
+    if (applyNewMeanFlag) {
+        for (auto& d : data) {
+            d += newMean;
+        }
+    }
+    else {
+        for (auto& d : data) {
+            d += dataMean;
+        }
+    }
+}
+
+/**
+ * @return A description of the mean/deviation operations.
+ */
+AString
+GraphicsPrimitive::getNewMeanDeviationOperationDescriptionInHtml()
+{
+    AString txt;
+    
+    txt.appendWithNewLine("<html>");
+    txt.appendWithNewLine("Order of data elements transformation");
+    txt.appendWithNewLine("<ol>");
+    txt.appendWithNewLine("<li> If <i>Absolute Values</i> is checked, convert data elements to absolute values.");
+    txt.appendWithNewLine("<li> Subtract <i>Data Mean</i> from data elements.");
+    txt.appendWithNewLine("<li> if <i>New Deviation</i> is checked, multiply data elements by "
+                          "<i>(New Deviation</i> / <i>Data Deviation></i>).");
+    txt.appendWithNewLine("<li> If <i>New Mean</i> is checked, add <i>New Mean</i> to data elements.  "
+                          "Otherwise, add <i>Data Mean</i> to data elements.");
+    txt.appendWithNewLine("</ol>");
+    txt.appendWithNewLine("Note: NaNs are ignored in all computations.");
+    txt.appendWithNewLine("</html>");
+    
+    return txt;
+}
+
+
+/**
  * Get the OpenGL graphics engine data in this instance.
  *
  * @return
@@ -1749,6 +2286,20 @@ GraphicsPrimitive::newPrimitiveV3fN3f(const GraphicsPrimitive::PrimitiveType pri
 }
 
 /**
+ * @return A new primitive for XYZ with normals and RGBS.  Caller is responsible
+ * for deleting the returned pointer.
+ *
+ * @param primitiveType
+ *     Type of primitive drawn (triangles, lines, etc.)
+ */
+GraphicsPrimitiveV3fN3fC4ub*
+GraphicsPrimitive::newPrimitiveV3fN3fC4ub(const GraphicsPrimitive::PrimitiveType primitiveType)
+{
+    GraphicsPrimitiveV3fN3fC4ub* primitive = new GraphicsPrimitiveV3fN3fC4ub(primitiveType);
+    return primitive;
+}
+
+/**
  * @return A new primitive for XYZ with solid color unsigned byte RGBA.  Caller is responsible
  * for deleting the returned pointer.
  *
@@ -1792,16 +2343,84 @@ GraphicsPrimitive::newPrimitiveV3fC4ub(const GraphicsPrimitive::PrimitiveType pr
     return primitive;
 }
 
+/**
+ * @return A new primitive with XYZ and texture STR.  Caller is responsible for
+ * deleting the returned pointer.
+ *
+ * @param primitiveType
+ *     Type of primitive drawn (triangles, lines, etc.)
+ * @param imageBytesRGBA
+ *     Bytes containing the image data.
+ * @param imageWidth
+ *     Width of the actual image.
+ * @param imageHeight
+ *     Height of the image.
+ * @param textureWrappingType
+ *     Type of texture wrapping
+ * @param textureFilteringType
+ *     Type of texture filtering
+ */
 GraphicsPrimitiveV3fT3f*
 GraphicsPrimitive::newPrimitiveV3fT3f(const GraphicsPrimitive::PrimitiveType primitiveType,
-                                                   const uint8_t* imageBytesRGBA,
-                                                   const int32_t imageWidth,
-                                                   const int32_t imageHeight)
+                                      const uint8_t* imageBytesRGBA,
+                                      const int32_t imageWidth,
+                                      const int32_t imageHeight,
+                                      const TextureWrappingType textureWrappingType,
+                                      const TextureFilteringType textureFilteringType)
 {
     GraphicsPrimitiveV3fT3f* primitive = new GraphicsPrimitiveV3fT3f(primitiveType,
                                                                      imageBytesRGBA,
                                                                      imageWidth,
-                                                                     imageHeight);
+                                                                     imageHeight,
+                                                                     textureWrappingType,
+                                                                     textureFilteringType);
     return primitive;
 }
+
+/**
+ * Called after buffers have been loaded and may release instance data.
+ * If NOT called after buffers have been loaded, bad things may happen.
+ */
+void
+GraphicsPrimitive::setOpenGLBuffersHaveBeenLoadedByGraphicsEngine()
+{
+    switch (m_releaseInstanceDataMode) {
+        case ReleaseInstanceDataMode::COMPLETED:
+            return;
+            break;
+        case ReleaseInstanceDataMode::DISABLED:
+            return;
+            break;
+        case ReleaseInstanceDataMode::ENABLED:
+        {
+            /*
+             * Note: calling ".clear()" on a vector will set the size
+             * of the vector to zero but does not free the memory.  Instead,
+             * use swap() which causes deallocation of the memory.
+             * See http://www.cplusplus.com/reference/vector/vector/clear/
+             */
+            std::vector<float>().swap(m_xyz);
+            std::vector<float>().swap(m_floatRGBA);
+            std::vector<float>().swap(m_floatNormalVectorXYZ);
+            std::vector<uint8_t>().swap(m_unsignedByteRGBA);
+            std::vector<float>().swap(m_floatTextureSTR);
+            std::vector<uint8_t>().swap(m_textureImageBytesRGBA);
+            
+            m_releaseInstanceDataMode = ReleaseInstanceDataMode::COMPLETED;
+        }
+            break;
+    }
+}
+
+/**
+ * Invalidate vertex measurements
+ */
+void
+GraphicsPrimitive::invalidateVertexMeasurements()
+{
+    m_boundingBoxValid  = false;
+    m_yMean              = 0.0;
+    m_yStandardDeviation = -1.0;
+}
+
 

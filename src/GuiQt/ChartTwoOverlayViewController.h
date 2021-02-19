@@ -25,7 +25,6 @@
 #include <QObject>
 #include <QPixmap>
 
-#include "ChartAxisLocationEnum.h"
 #include "ChartTwoMatrixTriangularViewingModeEnum.h"
 
 class QAction;
@@ -37,8 +36,13 @@ class QSpinBox;
 class QToolButton;
 
 namespace caret {
+    class CaretColor;
+    class CaretColorToolButton;
+    class ChartTwoLineLayerNormalizationWidget;
     class ChartTwoOverlay;
+    class EnumComboBoxTemplate;
     class MapYokingGroupComboBox;
+    class WuQDoubleSpinBox;
     class WuQGridLayoutGroup;
 
     class ChartTwoOverlayViewController : public QObject {
@@ -105,9 +109,29 @@ namespace caret {
         
         void menuConstructionAboutToShow();
 
+        void menuConstructionPreColorAllFiles();
+        
         void menuMatrixTriangularViewModeTriggered(QAction* action);
         
-        void menuAxisLocationTriggered(QAction* action);
+        void matrixOpacityValueChanged(double value);
+        
+        void constructionToolButtonClicked();
+        
+        void lineLayerColorSelected(const CaretColor& caretColor);
+        
+        void lineLayerLineWidthChanged(const float lineWidth);
+        
+        void lineLayerToolTipOffsetToolButtonClicked();
+        
+        void lineLayerActiveModeEnumComboBoxItemActivated();
+        
+        void lineLayerNormalizationMenuAboutToHide();
+        
+        void lineLayerNormalizationMenuAboutToShow();
+        
+        void lineLayerNormalizationToolButtonClicked();
+        
+        void selectedPointIndexSpinBoxValueChanged(int index);
         
     private:
         ChartTwoOverlayViewController(const ChartTwoOverlayViewController&);
@@ -128,10 +152,6 @@ namespace caret {
                                                   const QString& parentObjectName,
                                                   const QString& descriptivePrefix);
         
-        QMenu* createAxisLocationMenu(QWidget* widget,
-                                      const QString& parentObjectName,
-                                      const QString& descriptivePrefix);
-        
         void validateYokingSelection();
         
         void updateOverlaySettingsEditor();
@@ -139,18 +159,21 @@ namespace caret {
         QPixmap createMatrixTriangularViewModePixmap(QWidget* widget,
                                                      const ChartTwoMatrixTriangularViewingModeEnum::Enum matrixViewMode);
 
-        QPixmap createAxisLocationPixmap(QWidget* widget,
-                                         const ChartAxisLocationEnum::Enum axisLocation);
+        QPixmap createCardinalDirectionPixmap(QWidget* widget);
         
         void updateMatrixTriangularViewModeAction(const ChartTwoMatrixTriangularViewingModeEnum::Enum matrixViewMode);
         
-        void updateAxisLocationAction(const ChartAxisLocationEnum::Enum axisLocation);
+        void updateLineLayerToolTipOffsetToolButton();
+        
+        QPixmap createNormalizationPixmap(QWidget *widget);
         
         const int32_t m_browserWindowIndex;
         
         const int32_t m_chartOverlayIndex;
         
         ChartTwoOverlay* m_chartOverlay;
+        
+        const AString m_parentObjectName;
         
         QCheckBox* m_enabledCheckBox;
         
@@ -164,20 +187,26 @@ namespace caret {
         
         QAction* m_colorBarAction;
         
-        QAction* m_constructionAction;
+        QMenu* m_constructionMenu;
         
         QToolButton* m_matrixTriangularViewModeToolButton;
         
         QAction* m_matrixTriangularViewModeAction;
         
-        QAction* m_axisLocationAction;
+        CaretColorToolButton* m_lineLayerColorToolButton;
         
-        QToolButton* m_axisLocationToolButton;
+        QToolButton* m_lineLayerToolTipOffsetToolButton;
+        
+        bool m_useIconInLineLayerToolTipOffsetButtonFlag = false;
+        
+        QToolButton* m_lineLayerNormalizationToolButton;
+        
+        ChartTwoLineLayerNormalizationWidget* m_lineLayerNormalizationWidget;
+        
+        QMenu* m_lineLayerNormalizationMenu;
         
         std::vector<std::tuple<ChartTwoMatrixTriangularViewingModeEnum::Enum, QAction*,QPixmap>> m_matrixViewMenuData;
 
-        std::vector<std::tuple<ChartAxisLocationEnum::Enum, QAction*,QPixmap>> m_axisLocationMenuData;
-        
         QComboBox* m_mapFileComboBox;
         
         MapYokingGroupComboBox* m_mapRowOrColumnYokingGroupComboBox;
@@ -191,6 +220,14 @@ namespace caret {
         QToolButton* m_constructionToolButton;
         
         QAction* m_constructionReloadFileAction;
+        
+        WuQDoubleSpinBox* m_lineLayerWidthSpinBox = NULL;
+
+        EnumComboBoxTemplate* m_lineLayerActiveComboBox = NULL;
+        
+        WuQDoubleSpinBox* m_matrixOpacitySpinBox = NULL;
+        
+        QSpinBox* m_selectedPointIndexSpinBox = NULL;
         
         // ADD_NEW_MEMBERS_HERE
 

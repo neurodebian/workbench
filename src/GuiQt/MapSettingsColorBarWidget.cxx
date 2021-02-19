@@ -34,7 +34,9 @@
 #include "CaretAssert.h"
 #include "CaretMappableDataFile.h"
 #include "EnumComboBoxTemplate.h"
+#include "EventGetViewportSize.h"
 #include "EventGraphicsUpdateAllWindows.h"
+#include "EventUserInterfaceUpdate.h"
 #include "EventManager.h"
 #include "MapSettingsColorBarPaletteOptionsWidget.h"
 #include "NumericFormatModeEnum.h"
@@ -157,7 +159,7 @@ MapSettingsColorBarWidget::updateContentPrivate()
         std::vector<Annotation*> annotationVector;
         annotationVector.push_back(m_colorBar);
         
-        std::vector<AnnotationTwoDimensionalShape*> annotationTwoDimVector;
+        std::vector<AnnotationOneCoordinateShape*> annotationTwoDimVector;
         annotationTwoDimVector.push_back(m_colorBar);
 
         m_paletteOptionsWidget->updateEditor(m_caretMappableDataFile,
@@ -218,10 +220,66 @@ MapSettingsColorBarWidget::annotationColorBarPositionModeEnumComboBoxItemActivat
 void
 MapSettingsColorBarWidget::annotationCoordinateSpaceEnumComboBoxItemActivated()
 {
-    const AnnotationCoordinateSpaceEnum::Enum coordinateSpace = m_annotationCoordinateSpaceEnumComboBox->getSelectedItem<AnnotationCoordinateSpaceEnum,AnnotationCoordinateSpaceEnum::Enum>();
+    const AnnotationCoordinateSpaceEnum::Enum newCoordinateSpace = m_annotationCoordinateSpaceEnumComboBox->getSelectedItem<AnnotationCoordinateSpaceEnum,AnnotationCoordinateSpaceEnum::Enum>();
     if (m_colorBar != NULL) {
-        m_colorBar->setCoordinateSpace(coordinateSpace);
+        if (m_colorBar->getPositionMode() == AnnotationColorBarPositionModeEnum::MANUAL) {
+            bool tabToWindowFlag(false);
+            bool windowToTabFlag(false);
+            if ((m_colorBar->getCoordinateSpace() == AnnotationCoordinateSpaceEnum::TAB)
+                && (newCoordinateSpace == AnnotationCoordinateSpaceEnum::WINDOW)) {
+                tabToWindowFlag = true;
+            }
+            if ((m_colorBar->getCoordinateSpace() == AnnotationCoordinateSpaceEnum::WINDOW)
+                && (newCoordinateSpace == AnnotationCoordinateSpaceEnum::TAB)) {
+                windowToTabFlag = true;
+            }
+            
+            if (tabToWindowFlag
+                || windowToTabFlag) {
+                /*
+                 * Transitioning  between TAB to WINDOW space
+                 * Change percentage width/height so pixel width/height
+                 * does not change
+                 */
+                const int32_t tabIndex = m_colorBar->getTabIndex();
+                EventGetViewportSize tabSizeEvent(EventGetViewportSize::MODE_TAB_AFTER_MARGINS_INDEX,
+                                                  tabIndex);
+                EventManager::get()->sendEvent(tabSizeEvent.getPointer());
+                if (tabSizeEvent.getEventProcessCount() > 0) {
+                    EventGetViewportSize windowSizeEvent(EventGetViewportSize::MODE_WINDOW_FROM_TAB_INDEX,
+                                                         tabIndex);
+                    EventManager::get()->sendEvent(windowSizeEvent.getPointer());
+                    if (windowSizeEvent.getEventProcessCount() > 0) {
+                        int32_t tabViewport[4];
+                        tabSizeEvent.getViewportSize(tabViewport);
+                        int32_t windowViewport[4];
+                        windowSizeEvent.getViewportSize(windowViewport);
+                        
+                        const bool matchPositionFlag(true);
+                        const bool matchSizeFlag(true);
+                        if (tabToWindowFlag) {
+                            m_colorBar->matchPixelPositionAndSizeInNewViewport(tabViewport,
+                                                                               windowViewport,
+                                                                               matchPositionFlag,
+                                                                               matchSizeFlag);
+                        }
+                        else if (windowToTabFlag) {
+                            m_colorBar->matchPixelPositionAndSizeInNewViewport(windowViewport,
+                                                                               tabViewport,
+                                                                               matchPositionFlag,
+                                                                               matchSizeFlag);
+                        }
+                        else {
+                            CaretAssert(0);
+                        }
+                    }
+                }
+            }
+        }
+
+        m_colorBar->setCoordinateSpace(newCoordinateSpace);
         EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+        EventManager::get()->sendEvent(EventUserInterfaceUpdate().getPointer());
     }
 }
 
@@ -252,7 +310,7 @@ MapSettingsColorBarWidget::createLocationPositionSection()
                                                                      "   region in the graphics area\n"
                                                                      "WINDOW - Allows colorbar in any\n"
                                                                      "   location in the graphics area");
-    
+        
     QWidget* modeSpaceWidget = new QWidget();
     QGridLayout* modeSpaceLayout = new QGridLayout(modeSpaceWidget);
     modeSpaceLayout->setContentsMargins(0, 0, 0, 0);

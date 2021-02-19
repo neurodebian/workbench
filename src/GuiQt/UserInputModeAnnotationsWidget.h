@@ -32,14 +32,18 @@ class QComboBox;
 namespace caret {
 
     class Annotation;
+    class AnnotationBackgroundTypeWidget;
+    class AnnotationBoundsWidget;
     class AnnotationColorWidget;
+    class AnnotationCoordinateCenterXYWidget;
     class AnnotationCoordinateSpaceWidget;
-    class AnnotationCoordinateWidget;
+    class AnnotationCoordinatesWidget;
     class AnnotationDeleteWidget;
     class AnnotationFontWidget;
     class AnnotationFormatWidget;
     class AnnotationInsertNewWidget;
     class AnnotationLineArrowTipsWidget;
+    class AnnotationNameWidget;
     class AnnotationRedoUndoWidget;
     class AnnotationRotationWidget;
     class AnnotationTextAlignmentWidget;
@@ -75,43 +79,53 @@ namespace caret {
 
         UserInputModeAnnotationsWidget& operator=(const UserInputModeAnnotationsWidget&);
         
+        void createAnnotationWidget();
+        
+        void createTileTabsEditingWidget();
+        
         QWidget* createInsertMenuToolButton();
         
         QWidget* createTextEditorWidget();
         
-        const int32_t m_browserWindowIndex;
+        const int32_t m_browserWindowIndex = -1;
         
-        UserInputModeAnnotations* m_inputModeAnnotations;
+        UserInputModeAnnotations* m_inputModeAnnotations = NULL;
         
-        AnnotationCoordinateSpaceWidget* m_coordinateSpaceWidget;
+        AnnotationNameWidget* m_nameWidget = NULL;
         
-        AnnotationCoordinateWidget* m_coordinateOneWidget;
+        AnnotationBoundsWidget* m_boundsWidget = NULL;
         
-        AnnotationCoordinateWidget* m_coordinateTwoWidget;
+        AnnotationCoordinateSpaceWidget* m_coordinateSpaceWidget = NULL;
         
-        AnnotationWidthHeightWidget* m_widthHeightWidget;
+        AnnotationCoordinateCenterXYWidget* m_coordinateCenterXYWidget = NULL;
         
-        AnnotationRotationWidget* m_rotationWidget;
+        AnnotationCoordinatesWidget* m_coordinatesWidget = NULL;
         
-        AnnotationLineArrowTipsWidget* m_lineArrowTipsWidget;
+        AnnotationWidthHeightWidget* m_widthHeightWidget = NULL;
         
-        AnnotationFontWidget* m_fontWidget;
+        AnnotationRotationWidget* m_rotationWidget = NULL;
         
-        AnnotationColorWidget* m_colorWidget;
+        AnnotationLineArrowTipsWidget* m_lineArrowTipsWidget = NULL;
         
-        AnnotationTextAlignmentWidget* m_textAlignmentWidget;
+        AnnotationFontWidget* m_fontWidget = NULL;
         
-        AnnotationFormatWidget* m_formatWidget;
+        AnnotationColorWidget* m_colorWidget = NULL;
         
-        AnnotationTextEditorWidget* m_textEditorWidget;
+        AnnotationTextAlignmentWidget* m_textAlignmentWidget = NULL;
         
-        AnnotationTextOrientationWidget* m_textOrientationWidget;
+        AnnotationBackgroundTypeWidget* m_backgroundTypeWidget = NULL;
         
-        AnnotationInsertNewWidget* m_insertDeleteWidget;
+        AnnotationFormatWidget* m_formatWidget = NULL;
         
-        AnnotationDeleteWidget* m_deleteWidget;
+        AnnotationTextEditorWidget* m_textEditorWidget = NULL;
         
-        AnnotationRedoUndoWidget* m_redoUndoWidget;
+        AnnotationTextOrientationWidget* m_textOrientationWidget = NULL;
+        
+        AnnotationInsertNewWidget* m_insertNewWidget = NULL;
+        
+        AnnotationDeleteWidget* m_deleteWidget = NULL;
+        
+        AnnotationRedoUndoWidget* m_redoUndoWidget = NULL;
         
         // ADD_NEW_MEMBERS_HERE
 

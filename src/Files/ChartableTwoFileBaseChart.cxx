@@ -76,8 +76,8 @@ m_parentCaretMappableDataFile(parentCaretMappableDataFile)
     setDefaultAxisTitles();
     
     m_sceneAssistant = new SceneClassAssistant();
-    m_sceneAssistant->add("m_bottomAxisTitleText",
-                          &m_bottomAxisTitleText);
+    m_sceneAssistant->add("m_bottomAxisTitleText", // Continue to use OLD name before top axis was added
+                          &m_bottomTopAxisTitleText);
     m_sceneAssistant->add("m_leftRightAxisTitleText",
                           &m_leftRightAxisTitleText);
     
@@ -99,7 +99,7 @@ ChartableTwoFileBaseChart::~ChartableTwoFileBaseChart()
 void
 ChartableTwoFileBaseChart::setDefaultAxisTitles()
 {
-    m_bottomAxisTitleText    = setDefaultAxisTitle(ChartAxisLocationEnum::CHART_AXIS_LOCATION_BOTTOM);
+    m_bottomTopAxisTitleText = setDefaultAxisTitle(ChartAxisLocationEnum::CHART_AXIS_LOCATION_BOTTOM);
     m_leftRightAxisTitleText = setDefaultAxisTitle(ChartAxisLocationEnum::CHART_AXIS_LOCATION_LEFT);
 }
 
@@ -123,6 +123,24 @@ ChartableTwoFileBaseChart::setDefaultAxisTitle(const ChartAxisLocationEnum::Enum
                 case ChartTwoDataTypeEnum::CHART_DATA_TYPE_HISTOGRAM:
                     title = "Data";
                     break;
+                case ChartTwoDataTypeEnum::CHART_DATA_TYPE_LINE_LAYER:
+                    title = CaretUnitsTypeEnum::toGuiName(m_compoundChartDataType.getLineChartUnitsAxisX());
+                    switch (m_compoundChartDataType.getLineChartUnitsAxisX()) {
+                        case CaretUnitsTypeEnum::NONE:
+                            title = "Data";
+                            break;
+                        case CaretUnitsTypeEnum::HERTZ:
+                            break;
+                        case CaretUnitsTypeEnum::METERS:
+                            break;
+                        case CaretUnitsTypeEnum::PARTS_PER_MILLION:
+                            break;
+                        case CaretUnitsTypeEnum::RADIANS:
+                            break;
+                        case CaretUnitsTypeEnum::SECONDS:
+                            break;
+                    }
+                    break;
                 case ChartTwoDataTypeEnum::CHART_DATA_TYPE_LINE_SERIES:
                     title = CaretUnitsTypeEnum::toGuiName(m_compoundChartDataType.getLineChartUnitsAxisX());
                     switch (m_compoundChartDataType.getLineChartUnitsAxisX()) {
@@ -142,6 +160,22 @@ ChartableTwoFileBaseChart::setDefaultAxisTitle(const ChartAxisLocationEnum::Enum
                     }
                     break;
                 case ChartTwoDataTypeEnum::CHART_DATA_TYPE_MATRIX:
+                    title = CaretUnitsTypeEnum::toGuiName(m_compoundChartDataType.getLineChartUnitsAxisX());
+                    switch (m_compoundChartDataType.getLineChartUnitsAxisX()) {
+                        case CaretUnitsTypeEnum::NONE:
+                            title = "Data";
+                            break;
+                        case CaretUnitsTypeEnum::HERTZ:
+                            break;
+                        case CaretUnitsTypeEnum::METERS:
+                            break;
+                        case CaretUnitsTypeEnum::PARTS_PER_MILLION:
+                            break;
+                        case CaretUnitsTypeEnum::RADIANS:
+                            break;
+                        case CaretUnitsTypeEnum::SECONDS:
+                            break;
+                    }
                     break;
             }
             break;
@@ -154,10 +188,14 @@ ChartableTwoFileBaseChart::setDefaultAxisTitle(const ChartAxisLocationEnum::Enum
                 case ChartTwoDataTypeEnum::CHART_DATA_TYPE_HISTOGRAM:
                     title = "Counts";
                     break;
+                case ChartTwoDataTypeEnum::CHART_DATA_TYPE_LINE_LAYER:
+                    title = "Value";
+                    break;
                 case ChartTwoDataTypeEnum::CHART_DATA_TYPE_LINE_SERIES:
                     title = "Value";
                     break;
                 case ChartTwoDataTypeEnum::CHART_DATA_TYPE_MATRIX:
+                    title = "Value";
                     break;
             }
         }
@@ -239,13 +277,13 @@ ChartableTwoFileBaseChart::getChartTwoDataType() const
 /**
  * @return Chart compound data type supported by subclass.
  */
-ChartTwoCompoundDataType
+const ChartTwoCompoundDataType*
 ChartableTwoFileBaseChart::getChartTwoCompoundDataType() const
 {
     CaretAssertMessage((m_compoundChartDataType.getChartTwoDataType() != ChartTwoDataTypeEnum::CHART_DATA_TYPE_INVALID),
                        "Data type is invalid, was updateChartCompoundDataTypeAfterFileChanges() called by "
                        "implementing class.");
-    return m_compoundChartDataType;
+    return &m_compoundChartDataType;
 }
 
 /**
@@ -267,25 +305,25 @@ ChartableTwoFileBaseChart::updateChartTwoCompoundDataTypeAfterFileChanges(const 
 }
 
 /**
- * @return Annotation for the bottom axis title (const method)
+ * @return Annotation for the bottom top axis title (const method)
  */
 AString
-ChartableTwoFileBaseChart::getBottomAxisTitle() const
+ChartableTwoFileBaseChart::getBottomTopAxisTitle() const
 {
-    return m_bottomAxisTitleText;
+    return m_bottomTopAxisTitleText;
 }
 
 /**
- * Set the bottom axis title.
+ * Set the bottom top axis title.
  *
  * @param title
  *     New bottom axis title.
  */
 void
-ChartableTwoFileBaseChart::setBottomAxisTitle(const AString& title)
+ChartableTwoFileBaseChart::setBottomTopAxisTitle(const AString& title)
 {
-    if (title != m_bottomAxisTitleText) {
-        m_bottomAxisTitleText = title;
+    if (title != m_bottomTopAxisTitleText) {
+        m_bottomTopAxisTitleText = title;
         setModified();
     }
 }
@@ -370,12 +408,12 @@ ChartableTwoFileBaseChart::restoreFromScene(const SceneAttributes* sceneAttribut
                                  sceneClass);
     
     if (sceneClass->getVersionNumber() <= 2) {
-        AnnotationPercentSizeText bottomTitle(AnnotationAttributesDefaultTypeEnum::NORMAL,
-                                         AnnotationTextFontSizeTypeEnum::PERCENTAGE_OF_VIEWPORT_HEIGHT);
-        bottomTitle.restoreFromScene(sceneAttributes,
-                                     sceneClass->getClass("m_bottomAxisTitle"));
-        if ( ! bottomTitle.getText().isEmpty()) {
-            m_bottomAxisTitleText = bottomTitle.getText();
+        AnnotationPercentSizeText bottomTopTitle(AnnotationAttributesDefaultTypeEnum::NORMAL,
+                                                 AnnotationTextFontSizeTypeEnum::PERCENTAGE_OF_VIEWPORT_HEIGHT);
+        bottomTopTitle.restoreFromScene(sceneAttributes,
+                                        sceneClass->getClass("m_bottomAxisTitle")); // Use OLD name before top axis was added
+        if ( ! bottomTopTitle.getText().isEmpty()) {
+            m_bottomTopAxisTitleText = bottomTopTitle.getText();
         }
         
         AnnotationPercentSizeText leftRightTitle(AnnotationAttributesDefaultTypeEnum::NORMAL,

@@ -21,7 +21,7 @@
  */
 /*LICENSE_END*/
 
-
+#include <array>
 #include <CaretObject.h>
 
 #include <AString.h>
@@ -47,6 +47,8 @@ public:
     virtual ~BoundingBox();
 
 public:
+    bool isValid2D() const;
+    
     void resetZeros();
 
     void resetWithMaximumExtent();
@@ -64,12 +66,23 @@ public:
 
     void set(const float minMaxXYZ[6]);
 
+    void set(const float a[3],
+             const float b[3],
+             const float c[3],
+             const float d[4]);
+    
     void update(const float xyz[]);
 
     void update(const float x,
                 const float y,
                 const float z);
     
+    void updateExcludeNanInf(const float xyz[]);
+    
+    void updateExcludeNanInf(const float x,
+                             const float y,
+                             const float z);
+
     const float* getBounds() const;
 
     void getBounds(float bounds[6]) const;
@@ -80,6 +93,8 @@ public:
 
     float getDifferenceZ() const;
 
+    float getMaximumDifferenceOfXYZ() const;
+    
     float getMinX() const;
 
     float getMaxX() const;
@@ -92,9 +107,9 @@ public:
 
     float getMaxZ() const;
 
-    float* getMinXYZ() const;
+    std::array<float, 3> getMinXYZ() const;
 
-    float* getMaxXYZ() const;
+    std::array<float, 3> getMaxXYZ() const;
 
     void setMinX(const float value);
 
@@ -121,6 +136,8 @@ public:
     void limitCoordinateToBoundingBox(float xyz[3]) const;
     
     void limitCoordinateToBoundingBox(double xyz[3]) const;
+    
+    bool intersectsXY(const BoundingBox& bb) const;
     
     AString toString() const;
 

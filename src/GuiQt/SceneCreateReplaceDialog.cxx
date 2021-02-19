@@ -233,6 +233,7 @@ SceneCreateReplaceDialog::SceneCreateReplaceDialog(const AString& dialogTitle,
             break;
     }
     
+    
     m_nameLineEdit->setFocus();
     m_nameLineEdit->selectAll();
     

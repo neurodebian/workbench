@@ -21,14 +21,16 @@
  */
 /*LICENSE_END*/
 
-#include "CaretObject.h"
-
+#include <array>
 #include <stdint.h>
+
+#include "CaretObject.h"
 
 class QKeyEvent;
 
 namespace caret {
     
+    class BrainOpenGLViewportContent;
     class BrainOpenGLWidget;
     
     /**
@@ -37,9 +39,13 @@ namespace caret {
     class KeyEvent : public CaretObject {
         
     public:
-        KeyEvent(BrainOpenGLWidget* openGLWidget,
+        KeyEvent(const BrainOpenGLViewportContent* viewportContent,
+                 BrainOpenGLWidget* openGLWidget,
                  const int32_t browserWindowIndex,
                  const int32_t keyCode,
+                 const int32_t mouseX,
+                 const int32_t mouseY,
+                 const bool mouseValidFlag,
                  const bool firstKeyPressFlag,
                  const bool shiftKeyDownFlag);
         
@@ -55,6 +61,8 @@ namespace caret {
     public:
         AString toString() const;
         
+        BrainOpenGLViewportContent* getViewportContent() const;
+        
         BrainOpenGLWidget* getOpenGLWidget() const;
 
         int32_t getBrowserWindowIndex() const;
@@ -65,16 +73,27 @@ namespace caret {
         
         bool isShiftKeyDownFlag() const;
         
+        bool getMouseXY(std::array<int32_t, 2>& mouseXYOut) const;
+        
     private:
+        BrainOpenGLViewportContent* m_viewportContent;
+        
         BrainOpenGLWidget* m_openGLWidget;
         
         const int32_t m_browserWindowIndex;
         
         const int32_t m_keyCode;
         
+        int32_t m_mouseX = -1;
+        
+        int32_t m_mouseY = -1;
+        
+        bool m_mouseXYValid = false;
+
         const bool m_firstKeyPressFlag;
         
         const bool m_shiftKeyDownFlag;
+        
     };
     
 } // namespace

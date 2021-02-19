@@ -24,6 +24,7 @@
 #undef __ANNOTATION_DECLARE__
 
 #include "AnnotationBox.h"
+#include "AnnotationBrowserTab.h"
 #include "AnnotationColorBar.h"
 #include "AnnotationCoordinate.h"
 #include "AnnotationGroup.h"
@@ -32,6 +33,8 @@
 #include "AnnotationOval.h"
 #include "AnnotationPercentSizeText.h"
 #include "AnnotationPointSizeText.h"
+#include "AnnotationPolyLine.h"
+#include "AnnotationScaleBar.h"
 #include "AnnotationText.h"
 #include "BrainConstants.h"
 #include "CaretAssert.h"
@@ -144,6 +147,8 @@ Annotation::copyHelperAnnotation(const Annotation& obj)
     m_customColorLine[2]  = obj.m_customColorLine[2];
     m_customColorLine[3]  = obj.m_customColorLine[3];
 
+    m_stackingOrder = obj.m_stackingOrder;
+    
     m_properties = obj.m_properties;
     
     *m_displayGroupAndTabItemHelper = *obj.m_displayGroupAndTabItemHelper;
@@ -179,6 +184,13 @@ Annotation::clone() const
             myClone = new AnnotationBox(*box);
         }
             break;
+        case AnnotationTypeEnum::BROWSER_TAB:
+        {
+            const AnnotationBrowserTab* browserTab = dynamic_cast<const AnnotationBrowserTab*>(this);
+            CaretAssert(browserTab);
+            myClone = new AnnotationBrowserTab(*browserTab);
+        }
+            break;
         case AnnotationTypeEnum::COLOR_BAR:
         {
             const AnnotationColorBar* colorBar = dynamic_cast<const AnnotationColorBar*>(this);
@@ -205,6 +217,20 @@ Annotation::clone() const
             const AnnotationOval* oval = dynamic_cast<const AnnotationOval*>(this);
             CaretAssert(oval);
             myClone = new AnnotationOval(*oval);
+        }
+            break;
+        case AnnotationTypeEnum::POLY_LINE:
+        {
+            const AnnotationPolyLine* polyLine = dynamic_cast<const AnnotationPolyLine*>(this);
+            CaretAssert(polyLine);
+            myClone = new AnnotationPolyLine(*polyLine);
+        }
+            break;
+        case AnnotationTypeEnum::SCALE_BAR:
+        {
+            const AnnotationScaleBar* scaleBar = dynamic_cast<const AnnotationScaleBar*>(this);
+            CaretAssert(scaleBar);
+            myClone = new AnnotationScaleBar(*scaleBar);
         }
             break;
         case AnnotationTypeEnum::TEXT:
@@ -348,6 +374,9 @@ Annotation::newAnnotationOfType(const AnnotationTypeEnum::Enum annotationType,
         case AnnotationTypeEnum::BOX:
             annotation = new AnnotationBox(attributeDefaultType);
             break;
+        case AnnotationTypeEnum::BROWSER_TAB:
+            annotation = new AnnotationBrowserTab(attributeDefaultType);
+            break;
         case AnnotationTypeEnum::COLOR_BAR:
             annotation = new AnnotationColorBar(attributeDefaultType);
             break;
@@ -359,6 +388,12 @@ Annotation::newAnnotationOfType(const AnnotationTypeEnum::Enum annotationType,
             break;
         case AnnotationTypeEnum::OVAL:
             annotation = new AnnotationOval(attributeDefaultType);
+            break;
+        case AnnotationTypeEnum::POLY_LINE:
+            annotation = new AnnotationPolyLine(attributeDefaultType);
+            break;
+        case AnnotationTypeEnum::SCALE_BAR:
+            annotation = new AnnotationScaleBar(attributeDefaultType);
             break;
         case AnnotationTypeEnum::TEXT:
             annotation = new AnnotationPercentSizeText(attributeDefaultType);
@@ -418,6 +453,9 @@ Annotation::initializeAnnotationMembers()
             switch (m_type) {
                 case AnnotationTypeEnum::BOX:
                     break;
+                case AnnotationTypeEnum::BROWSER_TAB:
+                    m_colorBackground = CaretColorEnum::NONE;
+                    break;
                 case AnnotationTypeEnum::COLOR_BAR:
                     m_colorBackground = CaretColorEnum::BLACK;
                     break;
@@ -426,6 +464,11 @@ Annotation::initializeAnnotationMembers()
                 case AnnotationTypeEnum::LINE:
                     break;
                 case AnnotationTypeEnum::OVAL:
+                    break;
+                case AnnotationTypeEnum::POLY_LINE:
+                    break;
+                case AnnotationTypeEnum::SCALE_BAR:
+                    m_colorBackground = CaretColorEnum::BLACK;
                     break;
                 case AnnotationTypeEnum::TEXT:
                     m_colorBackground = CaretColorEnum::NONE;
@@ -470,6 +513,9 @@ Annotation::initializeAnnotationMembers()
                         m_colorBackground = defaultColor;
                     }
                     break;
+                case AnnotationTypeEnum::BROWSER_TAB:
+                    m_colorBackground = CaretColorEnum::NONE;
+                    break;
                 case AnnotationTypeEnum::COLOR_BAR:
                     break;
                 case AnnotationTypeEnum::IMAGE:
@@ -483,6 +529,13 @@ Annotation::initializeAnnotationMembers()
                     if (lineBackNoneFlag) {
                         m_colorBackground = defaultColor;
                     }
+                    break;
+                case AnnotationTypeEnum::POLY_LINE:
+                    if (m_colorLine == CaretColorEnum::NONE) {
+                        m_colorLine = defaultColor;
+                    }
+                    break;
+                case AnnotationTypeEnum::SCALE_BAR:
                     break;
                 case AnnotationTypeEnum::TEXT:
                     m_colorLine          = s_userDefaultForTextColorLine;
@@ -515,6 +568,9 @@ Annotation::initializeAnnotationMembers()
     switch (m_type) {
         case AnnotationTypeEnum::BOX:
             break;
+        case AnnotationTypeEnum::BROWSER_TAB:
+            disallowLineColorNoneFlag = true;
+            break;
         case AnnotationTypeEnum::COLOR_BAR:
             disallowLineColorNoneFlag = true;
             break;
@@ -524,6 +580,12 @@ Annotation::initializeAnnotationMembers()
             disallowLineColorNoneFlag = true;
             break;
         case AnnotationTypeEnum::OVAL:
+            break;
+        case AnnotationTypeEnum::POLY_LINE:
+            disallowLineColorNoneFlag = true;
+            break;
+        case AnnotationTypeEnum::SCALE_BAR:
+            disallowLineColorNoneFlag = true;
             break;
         case AnnotationTypeEnum::TEXT:
             break;
@@ -581,6 +643,9 @@ Annotation::initializeAnnotationMembers()
         m_sceneAssistant->add<CaretColorEnum, CaretColorEnum::Enum>("m_colorLine",
                                                                     &m_colorLine);
         m_sceneAssistant->addArray("m_customColorLine", m_customColorLine, 4, 0.0);
+        
+        m_sceneAssistant->add("m_stackingOrder",
+                              &m_stackingOrder);
     }
 }
 
@@ -623,6 +688,8 @@ Annotation::getTextForPasteMenuItems(AString& pasteMenuItemText,
     switch (m_type) {
         case AnnotationTypeEnum::BOX:
             break;
+        case AnnotationTypeEnum::BROWSER_TAB:
+            break;
         case AnnotationTypeEnum::COLOR_BAR:
             break;
         case AnnotationTypeEnum::IMAGE:
@@ -630,6 +697,10 @@ Annotation::getTextForPasteMenuItems(AString& pasteMenuItemText,
         case AnnotationTypeEnum::LINE:
             break;
         case AnnotationTypeEnum::OVAL:
+            break;
+        case AnnotationTypeEnum::POLY_LINE:
+            break;
+        case AnnotationTypeEnum::SCALE_BAR:
             break;
         case AnnotationTypeEnum::TEXT:
         {
@@ -684,6 +755,103 @@ Annotation::setCoordinateSpace(const AnnotationCoordinateSpaceEnum::Enum coordin
 }
 
 /**
+ * @return True if the given annotation is in the same coordinate space as this
+ * annotation.  For spacer, tab, and window they must have the same indices. For
+ * surface space structure and number of vertices must match.
+ * @param annotation
+ * Annotation for comparison.
+ */
+bool
+Annotation::isInSameCoordinateSpace(const Annotation* annotation) const
+{
+    CaretAssert(annotation);
+    
+    if (getCoordinateSpace() != annotation->getCoordinateSpace()) {
+        return false;
+    }
+    
+    bool sameSpaceFlag(false);
+        
+    switch (annotation->getCoordinateSpace()) {
+        case AnnotationCoordinateSpaceEnum::CHART:
+            sameSpaceFlag = true;
+            break;
+        case AnnotationCoordinateSpaceEnum::SPACER:
+            if (getSpacerTabIndex() == annotation->getSpacerTabIndex()) {
+                sameSpaceFlag = true;
+            }
+            break;
+        case AnnotationCoordinateSpaceEnum::STEREOTAXIC:
+            sameSpaceFlag = true;
+            break;
+        case AnnotationCoordinateSpaceEnum::SURFACE:
+        {
+            StructureEnum::Enum myStructure = StructureEnum::INVALID;
+            int32_t myNumberOfVertices(-1);
+            const AnnotationTwoCoordinateShape* oneDimAnn = castToTwoCoordinateShape();
+            if (oneDimAnn != NULL) {
+                int32_t vertexIndex(-1);
+                oneDimAnn->getStartCoordinate()->getSurfaceSpace(myStructure,
+                                                                 myNumberOfVertices,
+                                                                 vertexIndex);
+            }
+            else {
+                const AnnotationOneCoordinateShape* twoDimAnn = castToOneCoordinateShape();
+                if (twoDimAnn != NULL) {
+                    int32_t vertexIndex(-1);
+                    twoDimAnn->getCoordinate()->getSurfaceSpace(myStructure,
+                                                                myNumberOfVertices,
+                                                                vertexIndex);
+                }
+            }
+            
+            StructureEnum::Enum otherStructure = StructureEnum::INVALID;
+            int32_t otherSurfaceNumberOfVertices(-1);
+            const AnnotationTwoCoordinateShape* otherOneDimAnn = annotation->castToTwoCoordinateShape();
+            if (otherOneDimAnn != NULL) {
+                int32_t vertexIndex(-1);
+                otherOneDimAnn->getStartCoordinate()->getSurfaceSpace(otherStructure,
+                                                                 otherSurfaceNumberOfVertices,
+                                                                 vertexIndex);
+            }
+            else {
+                const AnnotationOneCoordinateShape* otherTwoDimAnn = annotation->castToOneCoordinateShape();
+                if (otherTwoDimAnn != NULL) {
+                    int32_t vertexIndex(-1);
+                    otherTwoDimAnn->getCoordinate()->getSurfaceSpace(otherStructure,
+                                                                otherSurfaceNumberOfVertices,
+                                                                vertexIndex);
+                }
+            }
+            
+            if (myNumberOfVertices > 0) {
+                if ((myStructure == otherStructure)
+                    && (myNumberOfVertices == otherSurfaceNumberOfVertices)) {
+                    sameSpaceFlag = true;
+                }
+            }
+        }
+            break;
+        case AnnotationCoordinateSpaceEnum::TAB:
+            if (getTabIndex() == annotation->getTabIndex()) {
+                sameSpaceFlag = true;
+            }
+            break;
+        case AnnotationCoordinateSpaceEnum::VIEWPORT:
+            sameSpaceFlag = true;
+            break;
+        case AnnotationCoordinateSpaceEnum::WINDOW:
+            if (getWindowIndex() == annotation->getWindowIndex()) {
+                sameSpaceFlag = true;
+            }
+            break;
+    }
+    
+    return sameSpaceFlag;
+}
+
+
+/**
  * @return Is this annotation in surface coordinate space
  * with tangent selected for the surface offset vector?
  */
@@ -729,13 +897,13 @@ Annotation::changeSurfaceSpaceToTangentOffset()
 {
     std::vector<AnnotationCoordinate*> coords;
     if (getCoordinateSpace() == AnnotationCoordinateSpaceEnum::SURFACE) {
-        AnnotationOneDimensionalShape* oneDimAnn = castToOneDimensionalShape();
+        AnnotationTwoCoordinateShape* oneDimAnn = castToTwoCoordinateShape();
         if (oneDimAnn != NULL) {
             coords.push_back(oneDimAnn->getStartCoordinate());
             coords.push_back(oneDimAnn->getEndCoordinate());
         }
         else {
-            AnnotationTwoDimensionalShape* twoDimAnn = castToTwoDimensionalShape();
+            AnnotationOneCoordinateShape* twoDimAnn = castToOneCoordinateShape();
             if (twoDimAnn != NULL) {
                 coords.push_back(twoDimAnn->getCoordinate());
             }
@@ -783,7 +951,7 @@ Annotation::getSurfaceSpaceWithTangentOffsetRotation(const StructureEnum::Enum s
 {
     float angleOut(0.0);
     
-    const AnnotationTwoDimensionalShape* twoDimAnn = dynamic_cast<const AnnotationTwoDimensionalShape*>(this);
+    const AnnotationOneCoordinateShape* twoDimAnn = dynamic_cast<const AnnotationOneCoordinateShape*>(this);
     if (twoDimAnn != NULL) {
         if (isInSurfaceSpaceWithTangentOffset()) {
             enum class OrientationType {
@@ -922,7 +1090,7 @@ Annotation::initializeSurfaceSpaceWithTangentOffsetRotation(const StructureEnum:
     return;
     
     
-    AnnotationTwoDimensionalShape* twoDimAnn = castToTwoDimensionalShape();
+    AnnotationOneCoordinateShape* twoDimAnn = castToOneCoordinateShape();
     if (twoDimAnn != NULL) {
         if (isInSurfaceSpaceWithTangentOffset()) {
             const float angle = getSurfaceSpaceWithTangentOffsetRotation(structure,
@@ -932,129 +1100,6 @@ Annotation::initializeSurfaceSpaceWithTangentOffsetRotation(const StructureEnum:
     }
     
     return;
-    
-    
-    
-    
-
-//     AnnotationTwoDimensionalShape* twoDimAnn = dynamic_cast<AnnotationTwoDimensionalShape*>(this);
-//    if (twoDimAnn != NULL) {
-//        if (isInSurfaceSpaceWithTangentOffset()) {
-//            enum class OrientationType {
-//                LEFT_TO_RIGHT         = 0,
-//                RIGHT_TO_LEFT         = 1,
-//                POSTERIOR_TO_ANTERIOR = 2,
-//                ANTERIOR_TO_POSTERIOR = 3,
-//                INFERIOR_TO_SUPERIOR  = 4,
-//                SUPERIOR_TO_INFERIOR  = 5
-//            };
-//            
-//            const OrientationType orientations[6] = {
-//                OrientationType::LEFT_TO_RIGHT,
-//                OrientationType::RIGHT_TO_LEFT,
-//                OrientationType::POSTERIOR_TO_ANTERIOR,
-//                OrientationType::ANTERIOR_TO_POSTERIOR,
-//                OrientationType::INFERIOR_TO_SUPERIOR,
-//                OrientationType::SUPERIOR_TO_INFERIOR
-//            };
-//            const float orientationVectors[6][3] {
-//                {  1.0,  0.0,  0.0 },
-//                { -1.0,  0.0,  0.0 },
-//                {  0.0,  1.0,  0.0 },
-//                {  0.0, -1.0,  0.0 },
-//                {  0.0,  0.0,  1.0 },
-//                {  0.0,  0.0, -1.0 }
-//            };
-//            
-//            
-//            /*
-//             * Find orientation that aligns with the vertex's normal vector
-//             */
-//            OrientationType matchingOrientation = OrientationType::LEFT_TO_RIGHT;
-//            float matchingAngle = 10000.0f;
-//            for (int32_t i = 0; i < 6; i++) {
-//                const float angle = MathFunctions::angleInDegreesBetweenVectors(orientationVectors[i],
-//                                                                                vertexNormal);
-//                if (angle < matchingAngle) {
-//                    matchingAngle = angle;
-//                    matchingOrientation = orientations[i];
-//                }
-//            }
-//            
-//            float surfaceUpAxisVector[3] = { 0.0f, 0.0f, 1.0f };
-//            switch (matchingOrientation) {
-//                case OrientationType::LEFT_TO_RIGHT:
-//                    break;
-//                case OrientationType::RIGHT_TO_LEFT:
-//                    break;
-//                case OrientationType::POSTERIOR_TO_ANTERIOR:
-//                    break;
-//                case OrientationType::ANTERIOR_TO_POSTERIOR:
-//                    break;
-//                case OrientationType::INFERIOR_TO_SUPERIOR:
-//                    surfaceUpAxisVector[0] = 1.0;
-//                    surfaceUpAxisVector[0] = 0.0;
-//                    surfaceUpAxisVector[0] = 0.0;
-//                    break;
-//                case OrientationType::SUPERIOR_TO_INFERIOR:
-//                    surfaceUpAxisVector[0] = -1.0;
-//                    surfaceUpAxisVector[0] =  0.0;
-//                    surfaceUpAxisVector[0] =  0.0;
-//                    break;
-//            }
-//            
-//            /*
-//             * Vector for annotation's Y (vector from bottom to top of annotation)
-//             */
-//            const float annotationUpYVector[3] {
-//                0.0,
-//                1.0,
-//                0.0
-//            };
-//            
-//            /*
-//             * Initialize the rotation angle so that the annotation's vertical axis
-//             * is aligned with the screen vertical axis when the surface is in the
-//             * analogous surface view.  For a text annotation, the text should be
-//             * flowing left to right across screen.
-//             */
-//            Matrix4x4 rotationMatrix;
-//            rotationMatrix.setMatrixToOpenGLRotationFromVector(vertexNormal);
-//            Matrix4x4 inverseMatrix(rotationMatrix);
-//            inverseMatrix.invert();
-//            inverseMatrix.multiplyPoint3(surfaceUpAxisVector);
-//            const float alignRotationAngle = MathFunctions::angleInDegreesBetweenVectors(annotationUpYVector,
-//                                                                                           surfaceUpAxisVector);
-//            float rotationAngle = alignRotationAngle;
-//            switch (matchingOrientation) {
-//                case OrientationType::LEFT_TO_RIGHT:
-//                    rotationAngle = 360.0 - rotationAngle;
-//                    break;
-//                case OrientationType::RIGHT_TO_LEFT:
-//                    break;
-//                case OrientationType::POSTERIOR_TO_ANTERIOR:
-//                    if (StructureEnum::isRight(structure)) {
-//                        rotationAngle = 360.0 - rotationAngle;
-//                    }
-//                    break;
-//                case OrientationType::ANTERIOR_TO_POSTERIOR:
-//                    if (StructureEnum::isRight(structure)) {
-//                        rotationAngle = 360.0 - rotationAngle;
-//                    }
-//                    break;
-//                case OrientationType::INFERIOR_TO_SUPERIOR:
-//                    if (StructureEnum::isRight(structure)) {
-//                        rotationAngle += 180.0;
-//                    }
-//                    break;
-//                case OrientationType::SUPERIOR_TO_INFERIOR:
-//                    rotationAngle += 90.0;
-//                    break;
-//            }
-//
-//            twoDimAnn->setRotationAngle(rotationAngle);
-//        }
-//    }
 }
 
 /**
@@ -1575,12 +1620,19 @@ Annotation::initializeProperties()
     CaretAssert(m_properties.size() >= static_cast<std::underlying_type<Property>::type>(Property::COUNT_FOR_BITSET));
     m_properties.set();
     
+    bool browserTabFlag(false);
     bool colorBarFlag = false;
     bool fillColorFlag = true;
     bool lineArrowsFlag = false;
+    bool polyLineFlag(false);
+    bool scaleBarFlag = false;
     bool textFlag = false;
     switch (m_type) {
         case AnnotationTypeEnum::BOX:
+            break;
+        case AnnotationTypeEnum::BROWSER_TAB:
+            browserTabFlag = true;
+            fillColorFlag = false;
             break;
         case AnnotationTypeEnum::COLOR_BAR:
             colorBarFlag = true;
@@ -1594,6 +1646,13 @@ Annotation::initializeProperties()
             break;
         case AnnotationTypeEnum::OVAL:
             break;
+        case AnnotationTypeEnum::POLY_LINE:
+            fillColorFlag = false;
+            polyLineFlag  = true;
+            break;
+        case AnnotationTypeEnum::SCALE_BAR:
+            scaleBarFlag = true;
+            break;
         case AnnotationTypeEnum::TEXT:
             textFlag = true;
             break;
@@ -1603,9 +1662,9 @@ Annotation::initializeProperties()
     setProperty(Property::LINE_ARROWS, lineArrowsFlag);
     setProperty(Property::TEXT_ALIGNMENT, textFlag);
     setProperty(Property::TEXT_EDIT, textFlag);
-    setProperty(Property::TEXT_COLOR, colorBarFlag | textFlag);
-    setProperty(Property::TEXT_FONT_NAME, colorBarFlag | textFlag);
-    setProperty(Property::TEXT_FONT_SIZE, colorBarFlag | textFlag);
+    setProperty(Property::TEXT_COLOR, colorBarFlag | scaleBarFlag | textFlag);
+    setProperty(Property::TEXT_FONT_NAME, colorBarFlag | scaleBarFlag | textFlag);
+    setProperty(Property::TEXT_FONT_SIZE, colorBarFlag | scaleBarFlag | textFlag);
     setProperty(Property::TEXT_FONT_STYLE, textFlag);
     setProperty(Property::TEXT_ORIENTATION, textFlag);
     
@@ -1617,6 +1676,17 @@ Annotation::initializeProperties()
     resetProperty(Property::INVALID);
     resetProperty(Property::COUNT_FOR_BITSET);
     
+    if (browserTabFlag) {
+        resetProperty(Property::COPY_CUT_PASTE);
+        resetProperty(Property::DELETION);
+        resetProperty(Property::DISPLAY_GROUP);
+        resetProperty(Property::GROUP);
+        resetProperty(Property::LINE_COLOR);
+        resetProperty(Property::LINE_THICKNESS);
+        resetProperty(Property::TEXT_COLOR);
+        resetProperty(Property::TEXT_EDIT);
+    }
+    
     if (colorBarFlag) {
         resetProperty(Property::ARRANGE);
         resetProperty(Property::COPY_CUT_PASTE);
@@ -1625,6 +1695,22 @@ Annotation::initializeProperties()
         resetProperty(Property::GROUP);
         resetProperty(Property::LINE_COLOR);
         resetProperty(Property::LINE_THICKNESS);
+        resetProperty(Property::TEXT_EDIT);
+        
+        setProperty(Property::SCENE_CONTAINS_ATTRIBUTES);
+    }
+    
+    if (polyLineFlag) {
+        /* Disables cut/copy for polyline until that functionality can be implemeted */
+        resetProperty(Property::COPY_CUT_PASTE);
+    }
+    
+    if (scaleBarFlag) {
+        resetProperty(Property::ARRANGE);
+        resetProperty(Property::COPY_CUT_PASTE);
+        resetProperty(Property::DELETION);
+        resetProperty(Property::DISPLAY_GROUP);
+        resetProperty(Property::GROUP);
         resetProperty(Property::TEXT_EDIT);
         
         setProperty(Property::SCENE_CONTAINS_ATTRIBUTES);
@@ -1912,6 +1998,8 @@ Annotation::textAnnotationResetName()
     switch (m_type) {
         case AnnotationTypeEnum::BOX:
             break;
+        case AnnotationTypeEnum::BROWSER_TAB:
+            break;
         case AnnotationTypeEnum::COLOR_BAR:
             break;
         case AnnotationTypeEnum::IMAGE:
@@ -1919,6 +2007,10 @@ Annotation::textAnnotationResetName()
         case AnnotationTypeEnum::LINE:
             break;
         case AnnotationTypeEnum::OVAL:
+            break;
+        case AnnotationTypeEnum::POLY_LINE:
+            break;
+        case AnnotationTypeEnum::SCALE_BAR:
             break;
         case AnnotationTypeEnum::TEXT:
         {
@@ -1975,7 +2067,7 @@ Annotation::setDrawnInWindowStatus(const int32_t windowIndex)
  * the drawn status set.
  */
 bool
-Annotation::isDrawnInWindowStatus(const int32_t windowIndex)
+Annotation::isDrawnInWindowStatus(const int32_t windowIndex) const
 {
     CaretAssertArrayIndex(m_drawnInWindowStatus, BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_WINDOWS, windowIndex);
     return m_drawnInWindowStatus[windowIndex];
@@ -2001,6 +2093,28 @@ Annotation::clearDrawnInWindowStatusForAllWindows()
         CaretAssertArrayIndex(m_drawnInWindowStatus, BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_WINDOWS, iWindow);
         m_drawnInWindowStatus[iWindow] = false;
     }
+}
+
+/**
+ * @return Stacking order (depth in screen) of tab, greater value is 'in front'
+ */
+int32_t
+Annotation::getStackingOrder() const
+{
+    return m_stackingOrder;
+}
+
+/**
+ * Set Stacking order (depth in screen) of tab, greater value is 'in front'
+ *
+ * @param stackingOrder
+ *    New value for Stacking order (depth in screen) of tab, greater value is 'in front'
+ */
+void
+Annotation::setStackingOrder(const int32_t stackingOrder)
+{
+    m_stackingOrder = stackingOrder;
+    setModified();
 }
 
 
@@ -2636,5 +2750,187 @@ void
 Annotation::setUserDefaultLineWidthPercentage(const float lineWidthPercentage)
 {
     s_userDefaultLineWidthPercentage = lineWidthPercentage;
+}
+
+/**
+ * @return true if this and the given annotation intersect using bounding box from when drawn in the given window
+ *         NOTE: if 'other' is 'this' true is returned (overlaps self) but this
+ *         could change so it is best to avoid testing overlap of self.
+ *         NOTE: Display status is ignored
+ *
+ * @param other
+ *     Other annotation for intersection test
+ * @param windowIndex
+ *     Index of window
+ */
+bool
+Annotation::intersectionTest(const Annotation* other,
+                             const int32_t windowIndex) const
+{
+    if ( ! isInSameCoordinateSpace(other)) {
+        return false;
+    }
+
+    if (isDrawnInWindowStatus(windowIndex)
+         && other->isDrawnInWindowStatus(windowIndex)) {
+        if (m_boundsFromDrawing[windowIndex].intersectsXY(other->m_boundsFromDrawing[windowIndex])) {
+            return true;
+        }
+    }
+    
+    return false;
+}
+
+/**
+ * Resize the annotation so that it is the same size, in pixels, in the new viewport.
+ * @param oldViewport
+ *    Current viewport of annotation
+ * @param newViewport
+ *    New viewport for annotation
+ * @param matchPositionFlag
+ *     If true, try to match position, but may require moving the annotion
+ * @param matchSizeFlag
+ *     If true, match the size of the annotaiton
+ */
+void
+Annotation::matchPixelPositionAndSizeInNewViewport(const int32_t oldViewport[4],
+                                                   const int32_t newViewport[4],
+                                                   const bool matchPositionFlag,
+                                                   const bool matchSizeFlag)
+{
+    const float newViewportWidth(newViewport[2]);
+    if (newViewportWidth <= 0.0) {
+        return;
+    }
+    const float newViewportHeight(newViewport[3]);
+    if (newViewportHeight <= 0.0) {
+        return;
+    }
+
+    bool tabOrWindowFlag(false);
+    switch (getCoordinateSpace()) {
+        case AnnotationCoordinateSpaceEnum::CHART:
+            break;
+        case AnnotationCoordinateSpaceEnum::SPACER:
+            break;
+        case AnnotationCoordinateSpaceEnum::STEREOTAXIC:
+            break;
+        case AnnotationCoordinateSpaceEnum::SURFACE:
+            break;
+        case AnnotationCoordinateSpaceEnum::TAB:
+            tabOrWindowFlag = true;
+            break;
+        case AnnotationCoordinateSpaceEnum::VIEWPORT:
+            break;
+        case AnnotationCoordinateSpaceEnum::WINDOW:
+            tabOrWindowFlag = true;
+            break;
+    }
+    
+    if ( ! tabOrWindowFlag) {
+        return;
+    }
+    
+    AnnotationTwoCoordinateShape* oneDimAnn = castToTwoCoordinateShape();
+    if (oneDimAnn != NULL) {
+        const AnnotationCoordinate* coordOne = oneDimAnn->getStartCoordinate();
+        CaretAssert(coordOne);
+        const AnnotationCoordinate* coordTwo = oneDimAnn->getEndCoordinate();
+        CaretAssert(coordTwo);
+        const float length = MathFunctions::distance3D(coordOne->getXYZ(),
+                                                       coordTwo->getXYZ());
+        if (length > 0.0) {
+        }
+        CaretLogWarning("Matching size not supported for one-dimensional annotations");
+    }
+    else {
+        AnnotationOneCoordinateShape* twoDimAnn = castToOneCoordinateShape();
+        if (twoDimAnn) {
+            if (twoDimAnn->isFixedAspectRatio()) {
+                CaretLogWarning("Matching size not supported for fixed aspect ratio two-dimensional annotations");
+            }
+            else {
+                const float oldViewportWidth(oldViewport[2]);
+                const float oldViewportHeight(oldViewport[3]);
+                const float widthPixels((twoDimAnn->getWidth() / 100.0) * oldViewportWidth);
+                const float heightPixels((twoDimAnn->getHeight() / 100.0) * oldViewportHeight);
+                const float newWidthPct((widthPixels / newViewportWidth) * 100.0);
+                const float newHeightPct((heightPixels / newViewportHeight) * 100.0);
+                if (matchSizeFlag) {
+                    twoDimAnn->setWidth(newWidthPct);
+                    twoDimAnn->setHeight(newHeightPct);
+                }
+                
+                if (matchPositionFlag) {
+                    float oldXYZ[3];
+                    twoDimAnn->getCoordinate()->getXYZ(oldXYZ);
+                    const float oldPixelX(((oldXYZ[0] / 100.0) * oldViewportWidth)  + oldViewport[0]);
+                    const float oldPixelY(((oldXYZ[1] / 100.0) * oldViewportHeight) + oldViewport[1]);
+                    const float newPixelX(oldPixelX - newViewport[0]);
+                    const float newPixelY(oldPixelY - newViewport[1]);
+                    float newPctX((newPixelX / newViewportWidth) * 100.0);
+                    if (newPctX <= 0.0) {
+                        newPctX = std::min((twoDimAnn->getWidth() / 2.0), 99.0);
+                    }
+                    else if (newPctX >= 100.0) {
+                        newPctX = std::max((100.0 - (twoDimAnn->getWidth() / 2.0)), 1.0);
+                    }
+                    float newPctY((newPixelY / newViewportHeight) * 100.0);
+                    if (newPctY <= 0.0) {
+                        newPctY = std::min((twoDimAnn->getHeight() / 2.0), 99.0);
+                    }
+                    else if (newPctY >= 100.0) {
+                        newPctY = std::max((100.0 - (twoDimAnn->getHeight() / 2.0)), 1.0);
+                    }
+                    twoDimAnn->getCoordinate()->setXYZ(newPctX,
+                                                       newPctY,
+                                                       oldXYZ[2]);
+                }
+                
+                AnnotationColorBar* colorBar = dynamic_cast<AnnotationColorBar*>(twoDimAnn);
+                if (colorBar != NULL) {
+                    const float oldFontHeightPixels((colorBar->getFontPercentViewportSize() / 100.0) * oldViewport[3]);
+                    const float newFontHeightPct((oldFontHeightPixels / newViewportHeight) * 100.0);
+                    if (matchSizeFlag) {
+                        colorBar->setFontPercentViewportSize(newFontHeightPct);
+                    }
+                }
+            }
+        }
+        else {
+            CaretAssertMessage(0, "Annotation is neither one- nor two-dimensional");
+        }
+    }
+}
+
+/**
+ * Set the bounds from last time annotation was drawn
+ * @param windowIndex
+ * Index of window
+ * @param bounds
+ * The bounds parallel to screen axes (elements are min-x, max-x, min-y, max-y, min-z, max-z)
+ */
+void
+Annotation::setDrawnInWindowBounds(const int32_t windowIndex,
+                                   const BoundingBox& bounds) const
+{
+    CaretAssert((windowIndex >= 0)
+                && (windowIndex < BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_WINDOWS));
+    m_boundsFromDrawing[windowIndex] = bounds;
+}
+
+/**
+ * Get the bounds from last time annotation was drawn
+ * @param windowIndex
+ * Index of window
+ * @@return
+ * The bounds parallel to screen axes (elements are min-x, max-x, min-y, max-y, average Z)
+ */
+BoundingBox
+Annotation::getDrawnInWindowBounds(const int32_t windowIndex) const
+{
+    CaretAssert((windowIndex >= 0)
+                && (windowIndex < BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_WINDOWS));
+    return m_boundsFromDrawing[windowIndex];
 }
 

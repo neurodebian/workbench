@@ -33,6 +33,7 @@
 
 class QAction;
 class QBoxLayout;
+class QComboBox;
 class QDialog;
 class QIcon;
 class QKeySequence;
@@ -186,6 +187,8 @@ namespace caret {
                                        QWidget* w9 = 0,
                                        QWidget* w10 = 0);
         
+        static void matchWidgetHeights(std::vector<QWidget*>& widgets);
+        
         static void matchWidgetWidths(QWidget* w1,
                                        QWidget* w2,
                                        QWidget* w3 = 0,
@@ -196,6 +199,10 @@ namespace caret {
                                        QWidget* w8 = 0,
                                        QWidget* w9 = 0,
                                        QWidget* w10 = 0);
+        
+        static void matchWidgetWidths(std::vector<QWidget*>& widgets);
+        
+        static void matchWidgetSizes(std::vector<QWidget*>& widgets);
         
         static void setLayoutSpacingAndMargins(QLayout* layout,
                                      const int spacing,
@@ -227,6 +234,10 @@ namespace caret {
         static Qt::CheckState boolToCheckState(const bool value);
         
         static void setToolButtonStyleForQt5Mac(QToolButton* toolButton);
+        
+        static void replaceComboBoxItemNames(QComboBox* comboBox,
+                                             const QString& before,
+                                             const QString& after);
         
     private:
         static QSharedPointer<QPainter> createPixmapWidgetPainterPrivate(const QWidget* widget,

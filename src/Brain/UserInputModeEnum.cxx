@@ -106,31 +106,35 @@ UserInputModeEnum::initialize()
     }
     initializedFlag = true;
 
-    enumData.push_back(UserInputModeEnum(INVALID, 
+    enumData.push_back(UserInputModeEnum(Enum::INVALID,
                                     "INVALID", 
                                     "Invalid"));
     
-    enumData.push_back(UserInputModeEnum(ANNOTATIONS, 
+    enumData.push_back(UserInputModeEnum(Enum::ANNOTATIONS,
                                     "ANNOTATIONS", 
                                     "Annotations"));
     
-    enumData.push_back(UserInputModeEnum(BORDERS, 
+    enumData.push_back(UserInputModeEnum(Enum::BORDERS,
                                     "BORDERS", 
                                     "Borders"));
     
-    enumData.push_back(UserInputModeEnum(FOCI, 
+    enumData.push_back(UserInputModeEnum(Enum::FOCI,
                                     "FOCI", 
                                     "Foci"));
     
-    enumData.push_back(UserInputModeEnum(IMAGE, 
+    enumData.push_back(UserInputModeEnum(Enum::IMAGE,
                                     "IMAGE", 
                                     "Image"));
     
-    enumData.push_back(UserInputModeEnum(VIEW, 
+    enumData.push_back(UserInputModeEnum(Enum::TILE_TABS_MANUAL_LAYOUT_EDITING,
+                                         "TILE_TABS_MANUAL_LAYOUT_EDITING",
+                                         "Tile Tabs Manual Layout Editing"));
+    
+    enumData.push_back(UserInputModeEnum(Enum::VIEW,
                                     "VIEW", 
                                     "View"));
     
-    enumData.push_back(UserInputModeEnum(VOLUME_EDIT, 
+    enumData.push_back(UserInputModeEnum(Enum::VOLUME_EDIT, 
                                     "VOLUME_EDIT", 
                                     "Volume Edit"));
     

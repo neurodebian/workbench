@@ -26,6 +26,7 @@
 #include "BorderFile.h"
 #include "CaretAssert.h"
 #include "CaretCommandLine.h"
+#include "CaretCommandGlobalOptions.h"
 #include "CaretDataFileHelper.h"
 #include "CaretLogger.h"
 #include "CiftiFile.h"
@@ -56,10 +57,10 @@ CommandParser::CommandParser(AutoOperationInterface* myAutoOper) :
     OperationParserInterface(myAutoOper)
 {
     m_doProvenance = true;
-    m_ciftiScale = false;
-    m_ciftiDType = NIFTI_TYPE_FLOAT32;
-    m_ciftiMax = -1.0;//these values won't get used, but don't leave them uninitialized
-    m_ciftiMin = -1.0;
+    m_volumeScale = m_ciftiScale = false;
+    m_volumeDType = m_ciftiDType = NIFTI_TYPE_FLOAT32;
+    m_volumeMax = m_ciftiMax = -1.0;//these values won't get used, but don't leave them uninitialized
+    m_volumeMin = m_ciftiMin = -1.0;
 }
 
 void CommandParser::disableProvenance()
@@ -81,6 +82,22 @@ void CommandParser::setCiftiOutputDTypeNoScale(const int16_t& dtype)
     m_ciftiMax = -1.0;//for sanity, don't keep any previous value around
     m_ciftiMin = -1.0;
     m_ciftiScale = false;
+}
+
+void CommandParser::setVolumeOutputDTypeAndScale(const int16_t& dtype, const double& minVal, const double& maxVal)
+{
+    m_volumeDType = dtype;
+    m_volumeMin = minVal;
+    m_volumeMax = maxVal;
+    m_volumeScale = true;
+}
+
+void CommandParser::setVolumeOutputDTypeNoScale(const int16_t& dtype)
+{
+    m_volumeDType = dtype;
+    m_volumeMax = -1.0;//for sanity, don't keep any previous value around
+    m_volumeMin = -1.0;
+    m_volumeScale = false;
 }
 
 void CommandParser::executeOperation(ProgramParameters& parameters)
@@ -219,7 +236,12 @@ void CommandParser::parseComponent(ParameterComponent* myComponent, ProgramParam
                     FileInformation myInfo(nextArg);
                     CaretPointer<CiftiFile> myFile(new CiftiFile());
                     myFile->openFile(nextArg);
-                    m_inputCiftiNames[myInfo.getCanonicalFilePath()] = myFile;//track input cifti, so we can check their size
+                    if (caret_global_command_options.m_ciftiReadMemory)
+                    {
+                        myFile->convertToInMemory();
+                    } else {
+                        m_inputCiftiOnDiskMap[myInfo.getCanonicalFilePath()] = myFile;//track name and file, to additionally check file size to avoid warning for small files
+                    }
                     if (m_doProvenance)//just an optimization, if we aren't going to write provenance, don't generate it, either
                     {
                         const GiftiMetaData* md = myFile->getCiftiXML().getFileMetaData();
@@ -546,6 +568,7 @@ bool CommandParser::parseOption(const AString& mySwitch, ParameterComponent* myC
                 cout << "Now parsing repeatable option " << myComponent->m_repeatableOptions[i]->m_optionSwitch << endl;
             }
             myComponent->m_repeatableOptions[i]->m_instances.push_back(new ParameterComponent(myComponent->m_repeatableOptions[i]->m_template));
+            myComponent->m_repeatableOptions[i]->m_positions.push_back(parameters.getParameterIndex() - 1);//parameters is on the next argument already
             parseComponent(myComponent->m_repeatableOptions[i]->m_instances.back(), parameters, outAssociation, debug);
             if (debug)
             {
@@ -989,8 +1012,8 @@ void CommandParser::makeOnDiskOutputs(const vector<OutputAssoc>& outAssociation)
             {
                 CiftiParameter* myCiftiParam = (CiftiParameter*)myParam;
                 FileInformation myInfo(outAssociation[i].m_fileName);
-                map<AString, const CiftiFile*>::iterator iter = m_inputCiftiNames.find(myInfo.getCanonicalFilePath());
-                if (iter != m_inputCiftiNames.end())
+                map<AString, const CiftiFile*>::iterator iter = m_inputCiftiOnDiskMap.find(myInfo.getCanonicalFilePath());
+                if (iter != m_inputCiftiOnDiskMap.end())
                 {
                     vector<int64_t> dims = iter->second->getDimensions();
                     int64_t totalSize = sizeof(float);
@@ -1080,6 +1103,12 @@ void CommandParser::writeOutput(const vector<OutputAssoc>& outAssociation)
             case OperationParametersEnum::VOLUME:
             {
                 VolumeFile* myFile = ((VolumeParameter*)myParam)->m_parameter;
+                if (m_volumeScale)
+                {
+                    myFile->setWritingDataTypeAndScaling(m_volumeDType, m_volumeMin, m_volumeMax);
+                } else {
+                    myFile->setWritingDataTypeNoScaling(m_volumeDType);
+                }
                 myFile->writeFile(outAssociation[i].m_fileName);
                 break;
             }

@@ -19,10 +19,12 @@
 /*LICENSE_END*/
 
 #include <cmath>
+#include <cstdint>
 
 #include <QBuffer>
 #include <QColor>
 #include <QImage>
+#include <QImageReader>
 #include <QImageWriter>
 #include <QTime>
 
@@ -31,8 +33,10 @@
 #include "ControlPointFile.h"
 #include "ControlPoint3D.h"
 #include "DataFileException.h"
+#include "DataFileContentInformation.h"
 #include "FileInformation.h"
 #include "GiftiMetaData.h"
+#include "GraphicsUtilitiesOpenGL.h"
 #include "ImageCaptureSettings.h"
 #include "ImageFile.h"
 #include "Matrix4x4.h"
@@ -48,7 +52,7 @@ const float ImageFile::s_defaultWindowDepthPercentage = 990;
  * Constructor.
  */
 ImageFile::ImageFile()
-: CaretDataFile(DataFileTypeEnum::IMAGE)
+: MediaFile(DataFileTypeEnum::IMAGE)
 {
     m_controlPointFile.grabNew(new ControlPointFile());
     
@@ -63,7 +67,7 @@ ImageFile::ImageFile()
  *    QImage that is copied to this image file.
  */
 ImageFile::ImageFile(const QImage& qimage)
-: CaretDataFile(DataFileTypeEnum::IMAGE)
+: MediaFile(DataFileTypeEnum::IMAGE)
 {
     m_controlPointFile.grabNew(new ControlPointFile());
     
@@ -89,7 +93,7 @@ ImageFile::ImageFile(const unsigned char* imageDataRGBA,
                      const int imageWidth,
                      const int imageHeight,
                      const IMAGE_DATA_ORIGIN_LOCATION imageOrigin)
-: CaretDataFile(DataFileTypeEnum::IMAGE)
+: MediaFile(DataFileTypeEnum::IMAGE)
 {
     m_controlPointFile.grabNew(new ControlPointFile());
     
@@ -162,23 +166,15 @@ ImageFile::clear()
 }
 
 /**
- * @return The structure for this file.
+ * @return Number of frames in the file
  */
-StructureEnum::Enum
-ImageFile::getStructure() const
+int32_t
+ImageFile::getNumberOfFrames() const
 {
-    return StructureEnum::INVALID;
-}
-
-/**
- * Set the structure for this file.
- * @param structure
- *   New structure for this file.
- */
-void
-ImageFile::setStructure(const StructureEnum::Enum /*structure */)
-{
-    /* File does not support structures */
+    if (m_image != NULL) {
+        return 1;
+    }
+    return 0;
 }
 
 /**
@@ -208,17 +204,6 @@ ImageFile::isEmpty() const
 {
     return (m_image->width() <= 0);
 }
-
-///**
-// * @return A pointer to the QImage in this file.
-// * Note that manipulating the pointer's data will
-// * alter the contents of this file.
-// */
-//QImage*
-//ImageFile::getAsQImage()
-//{
-//    return m_image;
-//}
 
 /**
  * @return A pointer to the QImage in this file.
@@ -994,76 +979,7 @@ ImageFile::writeFile(const AString& filename)
 }
 
 /**
- * Get the image file extensions for the supported image types.
- * The extensions do not include the leading period.
- *
- * @param imageFileExtensions
- *    Output filled with extensions for supported image types.
- * @param defaultExtension
- *    The default extension (preference is png, jpg, jpeg)
- */
-void
-ImageFile::getImageFileExtensions(std::vector<AString>& imageFileExtensions,
-                                  AString& defaultExtension)
-{
-    imageFileExtensions.clear();
-    defaultExtension = "";
-    
-    QString firstExtension;
-    QString pngExtension;
-    QString jpegExtension;
-    QString jpgExtension;
-    QString tifExtension;
-    QString tiffExtension;
-    
-    QList<QByteArray> imageFormats = QImageWriter::supportedImageFormats();
-    const int numFormats = imageFormats.count();
-    for (int i = 0; i < numFormats; i++) {
-        AString extension = QString(imageFormats.at(i)).toLower();
-        imageFileExtensions.push_back(extension);
-        
-        if (i == 0) {
-            firstExtension = extension;
-        }
-        if (extension == "png") {
-            pngExtension = extension;
-        }
-        else if (extension == "jpg") {
-            jpgExtension = extension;
-        }
-        else if (extension == "jpeg") {
-            jpegExtension = extension;
-        }
-        else if (extension == "tif") {
-            tifExtension = extension;
-        }
-        else if (extension == "tiff") {
-            tiffExtension = extension;
-        }
-    }
-    
-    if (pngExtension.isEmpty() == false) {
-        defaultExtension = pngExtension;
-    }
-    else if (jpgExtension.isEmpty() == false) {
-        defaultExtension = jpgExtension;
-    }
-    else if (jpegExtension.isEmpty() == false) {
-        defaultExtension = jpegExtension;
-    }
-    else if (tifExtension.isEmpty() == false) {
-        defaultExtension = tifExtension;
-    }
-    else if (tiffExtension.isEmpty() == false) {
-        defaultExtension = tiffExtension;
-    }
-    else {
-        defaultExtension = firstExtension;
-    }
-}
-
-/**
- * Get the image file filters for the supported image types.
+ * Get the image file filters for the supported image types for saving image files
  *
  * @param imageFileFilters
  *    Output filled with the filters for supported image types.
@@ -1071,36 +987,11 @@ ImageFile::getImageFileExtensions(std::vector<AString>& imageFileExtensions,
  *    Filter for the preferred image type.
  */
 void
-ImageFile::getImageFileFilters(std::vector<AString>& imageFileFilters,
-                               AString& defaultFilter)
+ImageFile::getSaveQFileDialogImageFilters(std::vector<AString>& imageFileFilters,
+                                          AString& defaultFilter)
 {
-    imageFileFilters.clear();
-    defaultFilter.clear();
-    
-    std::vector<AString> imageFileExtensions;
-    AString defaultExtension;
-    ImageFile::getImageFileExtensions(imageFileExtensions,
-                                      defaultExtension);
-    
-    const int32_t numExtensions = static_cast<int32_t>(imageFileExtensions.size());
-    for (int32_t i = 0; i < numExtensions; i++) {
-        const AString ext = imageFileExtensions[i];
-        const AString filter = (ext.toUpper()
-                                + " Image File (*."
-                                + ext
-                                + ")");
-        imageFileFilters.push_back(filter);
-        
-        if (ext == defaultExtension) {
-            defaultFilter = filter;
-        }
-    }
-    
-    if (defaultFilter.isEmpty()) {
-        if (imageFileFilters.empty() == false) {
-            defaultFilter = imageFileFilters[0];
-        }
-    }
+    DataFileTypeEnum::getSaveQFileDialogImageFilters(imageFileFilters,
+                                                     defaultFilter);
 }
 
 /**
@@ -1708,6 +1599,100 @@ ImageFile::getControlPointFile() const
 }
 
 /**
+ * @return The graphics primitive for drawing the image as a texture in media drawing model.
+ */
+GraphicsPrimitiveV3fT3f*
+ImageFile::getGraphicsPrimitiveForMediaDrawing() const
+{
+    if (m_image == NULL) {
+        return NULL;
+    }
+    
+    if (m_graphicsPrimitiveForMediaDrawing == NULL) {
+        std::vector<uint8_t> bytesRGBA;
+        int32_t width(0);
+        int32_t height(0);
+        
+        /*
+         * If image is too big for OpenGL texture limits, scale image to acceptable size
+         */
+        const int32_t maxTextureWidthHeight = GraphicsUtilitiesOpenGL::getTextureWidthHeightMaximumDimension();
+        if (maxTextureWidthHeight > 0) {
+            const int32_t excessWidth(m_image->width() - maxTextureWidthHeight);
+            const int32_t excessHeight(m_image->height() - maxTextureWidthHeight);
+            if ((excessWidth > 0)
+                || (excessHeight > 0)) {
+                if (excessWidth > excessHeight) {
+                    CaretLogWarning(getFileName()
+                                    + " is too big for texture.  Maximum width/height is: "
+                                    + AString::number(maxTextureWidthHeight)
+                                    + " Image Width: "
+                                    + AString::number(m_image->width())
+                                    + " Image Height: "
+                                    + AString::number(m_image->height()));
+                }
+            }
+        }
+
+        /*
+         * Some images may use a color table so convert images
+         * if there are not in preferred format prior to
+         * getting colors of pixels
+         */
+        bool validRGBA(false);
+        if (m_image->format() != QImage::Format_RGB32) {
+            QImage image = m_image->convertToFormat(QImage::Format_RGB32);
+            if (! image.isNull()) {
+                ImageFile convImageFile;
+                convImageFile.setFromQImage(image);
+                validRGBA = convImageFile.getImageBytesRGBA(IMAGE_DATA_ORIGIN_AT_BOTTOM,
+                                                            bytesRGBA,
+                                                            width,
+                                                            height);
+            }
+        }
+        else {
+            validRGBA = getImageBytesRGBA(IMAGE_DATA_ORIGIN_AT_BOTTOM,
+                                          bytesRGBA,
+                                          width,
+                                          height);
+        }
+        
+        if (validRGBA) {
+            GraphicsPrimitiveV3fT3f* primitive = GraphicsPrimitive::newPrimitiveV3fT3f(GraphicsPrimitive::PrimitiveType::OPENGL_TRIANGLE_STRIP,
+                                                                                       &bytesRGBA[0],
+                                                                                       width,
+                                                                                       height,
+                                                                                       GraphicsPrimitive::TextureWrappingType::CLAMP,
+                                                                                       GraphicsPrimitive::TextureFilteringType::LINEAR);
+            /*
+             * A Triangle Strip (consisting of two triangles) is used
+             * for drawing the image.  At this time, the XYZ coordinates
+             * do not matter and they will be updated when the annotation
+             * is drawn by a call to ::setVertexBounds().
+             * The order of the vertices in the triangle strip is
+             * Top Left, Bottom Left, Top Right, Bottom Right.  If this
+             * order changes, ::setVertexBounds must be updated.
+             *
+             * Zeros are used for the X- and Y-coordinates.
+             * The third and fourth parameters are the texture
+             * S and T coordinates.
+             */
+            const float halfWidth(width * 0.5);
+            const float halfHeight(height * 0.5);
+            primitive->addVertex(-halfWidth,  halfHeight, 0, 1);  /* Top Left */
+            primitive->addVertex(-halfWidth, -halfHeight, 0, 0);  /* Bottom Left */
+            primitive->addVertex(halfWidth,   halfHeight, 1, 1);  /* Top Right */
+            primitive->addVertex(halfWidth,  -halfHeight, 1, 0);  /* Bottom Right */
+            
+            m_graphicsPrimitiveForMediaDrawing.reset(primitive);
+        }
+    }
+    
+    return m_graphicsPrimitiveForMediaDrawing.get();
+}
+
+/**
  * Save file data from the scene.  For subclasses that need to
  * save to a scene, this method should be overriden.  sceneClass
  * will be valid and any scene data should be added to it.
@@ -1724,6 +1709,9 @@ void
 ImageFile::saveFileDataToScene(const SceneAttributes* sceneAttributes,
                                    SceneClass* sceneClass)
 {
+    MediaFile::saveFileDataToScene(sceneAttributes,
+                                   sceneClass);
+    
     if (m_controlPointFile != NULL) {
         sceneClass->addClass(m_controlPointFile->saveToScene(sceneAttributes,
                                                              "m_controlPointFile"));
@@ -1748,8 +1736,81 @@ void
 ImageFile::restoreFileDataFromScene(const SceneAttributes* sceneAttributes,
                                         const SceneClass* sceneClass)
 {
+    MediaFile::restoreFileDataFromScene(sceneAttributes,
+                                        sceneClass);
+    
     m_controlPointFile->restoreFromScene(sceneAttributes,
                                          sceneClass->getClass("m_controlPointFile"));
 }
 
+/**
+ * @return File casted to an image file (avoids use of dynamic_cast that can be slow)
+ */
+ImageFile*
+ImageFile::castToImageFile()
+{
+    return this;
+}
 
+/**
+ * @return File casted to an image file (avoids use of dynamic_cast that can be slow)
+ * Overidden in ImageFile
+ */
+const ImageFile*
+ImageFile::castToImageFile() const
+{
+    return this;
+}
+
+/**
+ * @param dataFileInformation
+ *    Item to which information is added.
+ */
+void
+ImageFile::addToDataFileContentInformation(DataFileContentInformation& dataFileInformation)
+{
+    MediaFile::addToDataFileContentInformation(dataFileInformation);
+    
+    if (m_image != NULL) {
+        dataFileInformation.addNameAndValue("Width", m_image->width());
+        dataFileInformation.addNameAndValue("Height", m_image->height());
+        dataFileInformation.addNameAndValue("Color Table", (m_image->colorTable().empty()
+                                                            ? "No"
+                                                            : "Yes"));
+    }
+}
+
+/**
+ * Get all image file extensions supported by Qt for reading and writing image files.
+ * @param readableExtensionsOut
+ *    Output contains all readable image file extensions
+ * @param writableExtensionsOut
+ *    Output contains all writable image file extensions
+ */
+void
+ImageFile::getQtSupportedImageFileExtensions(std::vector<AString>& readableExtensionsOut,
+                                             std::vector<AString>& writableExtensionsOut)
+{
+    DataFileTypeEnum::getQtSupportedImageFileExtensions(readableExtensionsOut,
+                                                        writableExtensionsOut);
+}
+
+/**
+ * Get all image file extensions supported by Workbench for reading and writing image files.
+ * These are a subset of the extensions supported by Qt.
+ * @param readableExtensionsOut
+ *    Output contains all readable image file extensions
+ * @param writableExtensionsOut
+ *    Output contains all writable image file extensions
+ * @param defaultWritableExtension
+ *    The default file extension
+ */
+void
+ImageFile::getWorkbenchSupportedImageFileExtensions(std::vector<AString>& readableExtensionsOut,
+                                                    std::vector<AString>& writableExtensionsOut,
+                                                    AString& defaultWritableExtension)
+{
+    DataFileTypeEnum::getWorkbenchSupportedImageFileExtensions(readableExtensionsOut,
+                                                               writableExtensionsOut,
+                                                               defaultWritableExtension);
+}

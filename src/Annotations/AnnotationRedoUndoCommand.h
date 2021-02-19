@@ -22,11 +22,12 @@
 /*LICENSE_END*/
 
 #include "AnnotationCoordinate.h"
+#include "AnnotationStackingOrderTypeEnum.h"
 #include "AnnotationRedoUndoCommandModeEnum.h"
 #include "AnnotationText.h"
 #include "CaretColorEnum.h"
 #include "CaretUndoCommand.h"
-
+#include "TileTabsLayoutBackgroundTypeEnum.h"
 
 
 namespace caret {
@@ -49,6 +50,27 @@ namespace caret {
         
         virtual bool mergeWith(const CaretUndoCommand* command);
         
+        void setBoundsAll(const float minX,
+                          const float maxX,
+                          const float minY,
+                          const float maxY,
+                          Annotation* annotation);
+        
+        void setBrowserTabBackground(const TileTabsLayoutBackgroundTypeEnum::Enum backgroundType,
+                                     const std::vector<Annotation*>& annotations);
+        
+        void setBoundsMinX2D(const float minX,
+                             const std::vector<Annotation*>& annotations);
+        
+        void setBoundsMaxX2D(const float maxX,
+                             const std::vector<Annotation*>& annotations);
+        
+        void setBoundsMinY2D(const float minY,
+                             const std::vector<Annotation*>& annotations);
+        
+        void setBoundsMaxY2D(const float maxY,
+                             const std::vector<Annotation*>& annotations);
+        
         void setModeCoordinateOne(const AnnotationCoordinate& coordinate,
                                   const std::vector<Annotation*>& annotations);
         
@@ -58,6 +80,9 @@ namespace caret {
         
         void setModeCoordinateTwo(const AnnotationCoordinate& coordinate,
                                   const std::vector<Annotation*>& annotations);
+        
+        void setModeCoordinateMulti(const std::vector<std::unique_ptr<const AnnotationCoordinate>>& coordinates,
+                                    const std::vector<Annotation*>& annotations);
         
         void setModeLineArrowStart(const bool newStatus,
                                    const std::vector<Annotation*>& annotations);
@@ -99,8 +124,13 @@ namespace caret {
         void setModeDuplicateAnnotation(AnnotationFile* annotationFile,
                                         Annotation* annotation);
         
+        void setModeDuplicateAnnotations(std::vector<std::pair<AnnotationFile*, Annotation*>>& fileAndAnnotations);
+        
         void setModeRotationAngle(const float newRotationAngle,
                                   const std::vector<Annotation*>& annotations);
+        
+        void setModeStackingOrderBrowserTab(const int32_t newStackingOrder,
+                                            const std::vector<Annotation*>& annotations);
         
         void setModeTextAlignmentHorizontal(const AnnotationTextAlignHorizontalEnum::Enum newHorizontalAlignment,
                                             const std::vector<Annotation*>& annotations);
@@ -149,9 +179,22 @@ namespace caret {
         void setModeTwoDimWidth(const float newWidth,
                                 const std::vector<Annotation*>& annotations);
         
+        void setModeStackingOrderAnnotations(const std::vector<Annotation*>& annotations,
+                                             const std::vector<float>& stackingOrders,
+                                             const AnnotationStackingOrderTypeEnum::Enum orderType);
         // ADD_NEW_METHODS_HERE
 
     private:
+        /**
+         * Used with bounds 2D helper
+         */
+        enum class BoundsType2D {
+            MIN_X,
+            MAX_X,
+            MIN_Y,
+            MAX_Y
+        };
+        
         /**
          * The annotation memento contains copies of the
          * annotation before and after its modification.
@@ -246,6 +289,10 @@ namespace caret {
 
         static bool lessThanAnnotationMemento(const AnnotationMemento* am1,
                                               const AnnotationMemento* am2);
+        
+        void setBounds2DHelper(const BoundsType2D boundsType,
+                               const float value,
+                               const std::vector<Annotation*>& annotations);
         
         AnnotationRedoUndoCommandModeEnum::Enum m_mode;
         

@@ -21,6 +21,8 @@
  */
 /*LICENSE_END*/
 
+#include <array>
+
 #include "EventListenerInterface.h"
 #include "SceneableInterface.h"
 #include "WuQDialogNonModal.h"
@@ -51,12 +53,23 @@ namespace caret {
         virtual void restoreFromScene(const SceneAttributes* sceneAttributes,
                                       const SceneClass* sceneClass);
         
+    private slots:
+        void surfaceSetColorToolButtonClicked();
+        
+        void surfaceResetColorToolButtonClicked();
+
+        void backfaceCullingCheckBoxClicked(bool checked);
+        
     private:
         SurfacePropertiesEditorDialog(const SurfacePropertiesEditorDialog&);
 
         SurfacePropertiesEditorDialog& operator=(const SurfacePropertiesEditorDialog&);
         
+        void updateDefaultSurfaceColorWidget();
+        
         QCheckBox* m_displayNormalVectorsCheckBox;
+        
+        QCheckBox* m_backfaceCullingCheckBox;
         
         QDoubleSpinBox* m_linkSizeSpinBox;
         
@@ -65,6 +78,8 @@ namespace caret {
         QComboBox* m_surfaceDrawingTypeComboBox;
         
         QDoubleSpinBox* m_opacitySpinBox;
+        
+        QWidget* m_surfaceColorWidget;
         
         bool m_updateInProgress;
         

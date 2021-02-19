@@ -22,14 +22,18 @@
 /*LICENSE_END*/
 
 #include <list>
+#include <memory>
 
 #include "CaretColorEnum.h"
+#include "IdentificationSymbolSizeTypeEnum.h"
 #include "SceneableInterface.h"
 #include "StructureEnum.h"
 
 namespace caret {
 
     class CaretPreferences;
+    class IdentificationFilter;
+    class IdentificationHistoryManager;
     class IdentifiedItem;
     class IdentifiedItemNode;
     class IdentifiedItemVoxel;
@@ -45,6 +49,14 @@ namespace caret {
         void addIdentifiedItem(IdentifiedItem* item);
         
         AString getIdentificationText() const;
+        
+        const IdentificationFilter* getIdentificationFilter() const;
+        
+        IdentificationFilter* getIdentificationFilter();
+        
+        const IdentificationHistoryManager* getIdentificationHistoryManager() const;
+        
+        IdentificationHistoryManager* getIdentificationHistoryManager();
         
         std::vector<IdentifiedItemNode> getNodeIdentifiedItemsForSurface(const StructureEnum::Enum structure,
                                                                          const int32_t surfaceNumberOfNodes) const;
@@ -67,6 +79,10 @@ namespace caret {
         
         void setContralateralIdentificationEnabled(const bool enabled);
         
+        IdentificationSymbolSizeTypeEnum::Enum getIdentificationSymbolSizeType() const;
+        
+        void setIdentificationSymbolSizeType(const IdentificationSymbolSizeTypeEnum::Enum sizeType);
+        
         float getIdentificationSymbolSize() const;
         
         void setIdentificationSymbolSize(const float symbolSize);
@@ -74,6 +90,14 @@ namespace caret {
         float getMostRecentIdentificationSymbolSize() const;
         
         void setMostRecentIdentificationSymbolSize(const float symbolSize);
+        
+        float getIdentificationSymbolPercentageSize() const;
+        
+        void setIdentificationSymbolPercentageSize(const float symbolSize);
+        
+        float getMostRecentIdentificationSymbolPercentageSize() const;
+        
+        void setMostRecentIdentificationSymbolPercentageSize(const float symbolSize);
         
         CaretColorEnum::Enum getIdentificationSymbolColor() const;
         
@@ -91,6 +115,14 @@ namespace caret {
         
         void setShowVolumeIdentificationSymbols(const bool showVolumeIdentificationSymbols);
         
+        float getChartLineLayerSymbolSize() const;
+        
+        void setChartLineLayerSymbolSize(const float symbolSize);
+        
+        float getChartLineLayerToolTipTextSize() const;
+        
+        void setChartLineLayerToolTipTextSize(const float textSize);
+
         virtual SceneClass* saveToScene(const SceneAttributes* sceneAttributes,
                                         const AString& instanceName);
         
@@ -108,7 +140,8 @@ namespace caret {
 
     private:
 
-        void addIdentifiedItemPrivate(IdentifiedItem* item);
+        void addIdentifiedItemPrivate(IdentifiedItem* item,
+                                      const bool restoringSceneFlag);
         
         // ADD_NEW_MEMBERS_HERE
 
@@ -122,14 +155,28 @@ namespace caret {
         
         bool m_contralateralIdentificationEnabled;
         
+        IdentificationSymbolSizeTypeEnum::Enum m_identificationSymbolSizeType = IdentificationSymbolSizeTypeEnum::MILLIMETERS;
+        
         float m_identifcationSymbolSize;
         
         float m_identifcationMostRecentSymbolSize;
+        
+        float m_identifcationSymbolPercentageSize;
+        
+        float m_identifcationMostRecentSymbolPercentageSize;
         
         CaretColorEnum::Enum m_identificationSymbolColor;
         
         CaretColorEnum::Enum m_identificationContralateralSymbolColor;
 
+        float m_chartLineLayerSymbolSize = 2.0;
+        
+        float m_chartLineLayerToolTipTextSize = 2.0;
+        
+        std::unique_ptr<IdentificationFilter> m_identificationFilter;
+        
+        std::unique_ptr<IdentificationHistoryManager> m_identificationHistoryManager;
+        
         /** show surface identification symbols*/
         bool m_showSurfaceIdentificationSymbols;
         

@@ -70,6 +70,8 @@ namespace caret {
         
         void processAttributesChanges();
         
+        void symbolSizeTypeComboBoxActivated();
+        
     private:
         FociSelectionViewController(const FociSelectionViewController&);
 
@@ -97,11 +99,15 @@ namespace caret {
         
         DisplayGroupEnumComboBox* m_fociDisplayGroupComboBox;
 
+        EnumComboBoxTemplate* m_drawingProjectionTypeComboBox;
+        
         EnumComboBoxTemplate* m_coloringTypeComboBox;
         
         CaretColorEnumComboBox* m_standardColorComboBox;
         
         QDoubleSpinBox* m_lineWidthSpinBox;
+        
+        EnumComboBoxTemplate* m_symbolSizeTypeComboBox;
         
         QDoubleSpinBox* m_sizeSpinBox;
         

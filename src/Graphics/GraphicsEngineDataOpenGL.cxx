@@ -31,11 +31,14 @@
 #include "EventOpenGLObjectToWindowTransform.h"
 #include "EventManager.h"
 #include "GraphicsOpenGLBufferObject.h"
+#include "GraphicsOpenGLError.h"
 #include "GraphicsOpenGLPolylineTriangles.h"
 #include "GraphicsOpenGLTextureName.h"
 #include "GraphicsPrimitive.h"
 #include "GraphicsPrimitiveSelectionHelper.h"
+#include "GraphicsPrimitiveV3f.h"
 #include "GraphicsShape.h"
+#include "GraphicsUtilitiesOpenGL.h"
 #include "Matrix4x4.h"
 
 using namespace caret;
@@ -142,7 +145,7 @@ GraphicsEngineDataOpenGL::loadCoordinateBuffer(GraphicsPrimitive* primitive)
     switch (primitive->m_vertexDataType) {
         case GraphicsPrimitive::VertexDataType::FLOAT_XYZ:
             m_coordinateDataType = GL_FLOAT;
-            m_coordinatesPerVertex = 3; // X, Y, Z
+            m_coordinatesPerVertex = 3; /* X, Y, Z */
             
             coordinateCount = primitive->m_xyz.size();
             const GLuint xyzSizeBytes = coordinateCount * sizeof(float);
@@ -384,11 +387,37 @@ GraphicsEngineDataOpenGL::loadTextureImageDataBuffer(GraphicsPrimitive* primitiv
             glBindTexture(GL_TEXTURE_2D, openGLTextureName);
             
             bool useMipMapFlag = true;
+            switch (primitive->getTextureFilteringType()) {
+                case GraphicsPrimitive::TextureFilteringType::LINEAR:
+                    break;
+                case GraphicsPrimitive::TextureFilteringType::NEAREST:
+                    useMipMapFlag = false;
+                    break;
+            }
+            
             if (useMipMapFlag) {
-                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
-                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
-                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+                switch (primitive->getTextureWrappingType()) {
+                    case GraphicsPrimitive::TextureWrappingType::CLAMP:
+                        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
+                        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+                        break;
+                    case GraphicsPrimitive::TextureWrappingType::REPEAT:
+                        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+                        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+                        break;
+                }
+                
+                switch (primitive->getTextureFilteringType()) {
+                    case GraphicsPrimitive::TextureFilteringType::LINEAR:
+                        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+                        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+                        break;
+                    case GraphicsPrimitive::TextureFilteringType::NEAREST:
+                        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+                        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+                        useMipMapFlag = false;
+                        break;
+                }
                 
                 /*
                  * This code seems to work if OpenGL 3.0 or later and
@@ -427,11 +456,27 @@ GraphicsEngineDataOpenGL::loadTextureImageDataBuffer(GraphicsPrimitive* primitiv
             }
             
             if ( ! useMipMapFlag) {
-                CaretAssert(0);   // image must be 2^N by 2^M
-                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
-                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
-                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+                switch (primitive->getTextureWrappingType()) {
+                    case GraphicsPrimitive::TextureWrappingType::CLAMP:
+                        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
+                        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+                        break;
+                    case GraphicsPrimitive::TextureWrappingType::REPEAT:
+                        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+                        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+                        break;
+                }
+                
+                switch (primitive->getTextureFilteringType()) {
+                    case GraphicsPrimitive::TextureFilteringType::LINEAR:
+                        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+                        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+                        break;
+                    case GraphicsPrimitive::TextureFilteringType::NEAREST:
+                        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+                        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+                        break;
+                }
                 
                 glTexImage2D(GL_TEXTURE_2D,     // MUST BE GL_TEXTURE_2D
                              0,                 // level of detail 0=base, n is nth mipmap reduction
@@ -442,6 +487,16 @@ GraphicsEngineDataOpenGL::loadTextureImageDataBuffer(GraphicsPrimitive* primitiv
                              GL_RGBA,           // format of the pixel data
                              GL_UNSIGNED_BYTE,  // data type of pixel data
                              imageBytesRGBA);   // pointer to image data
+                
+                const auto errorGL = GraphicsUtilitiesOpenGL::getOpenGLError();
+                if (errorGL) {
+                    CaretLogSevere("OpenGL error after glTexImage2D(), width="
+                                   + AString::number(imageWidth)
+                                   + ", height="
+                                   + AString::number(imageHeight)
+                                   + ": "
+                                   + errorGL->getVerboseDescription());
+                }
             }
 
             glBindTexture(GL_TEXTURE_2D, 0);
@@ -464,11 +519,9 @@ GraphicsEngineDataOpenGL::draw(GraphicsPrimitive* primitive)
 {
     CaretAssert(primitive);
     
-    if (primitive->getNumberOfVertices() <= 0) {
-        return;
-    }
     if ( ! primitive->isValid()) {
-        CaretLogWarning("Attempting to draw invalid Graphics Primitive");
+        CaretLogFine("Attempting to draw invalid Graphics Primitive");
+        return;
     }
     
     GraphicsPrimitive* primitiveToDraw = primitive;
@@ -521,6 +574,56 @@ GraphicsEngineDataOpenGL::draw(GraphicsPrimitive* primitive)
         case GraphicsPrimitive::PrimitiveType::SPHERES:
             spheresFlag = true;
             break;
+    }
+    
+    if (modelSpaceLineFlag
+        || windowSpaceLineFlag) {
+        if (primitive->getNumberOfVertices() == 1) {
+            spheresFlag = true;
+            
+            uint8_t rgba[4];
+            switch (primitive->getColorDataType()) {
+                case GraphicsPrimitive::ColorDataType::FLOAT_RGBA:
+                {
+                    float rgbaFloat[4];
+                    primitive->getVertexFloatRGBA(0, rgbaFloat);
+                    for (int32_t i = 0; i < 4; i++) {
+                        rgba[i] = static_cast<uint8_t>(rgbaFloat[i] / 255.0);
+                    }
+                }
+                    break;
+                case GraphicsPrimitive::ColorDataType::NONE:
+                    break;
+                case GraphicsPrimitive::ColorDataType::UNSIGNED_BYTE_RGBA:
+                    primitive->getVertexByteRGBA(0, rgba);
+                    break;
+            }
+            float sphereXYZ[3];
+            primitive->getVertexFloatXYZ(0, sphereXYZ);
+            GraphicsPrimitive::LineWidthType lineWidthType;
+            float lineWidth;
+            primitive->getLineWidth(lineWidthType, lineWidth);
+            std::unique_ptr<GraphicsPrimitiveV3f> pointPrimitive(GraphicsPrimitive::newPrimitiveV3f(GraphicsPrimitive::PrimitiveType::OPENGL_POINTS,
+                                                                                                     rgba));
+            pointPrimitive->addVertex(sphereXYZ);
+            
+            GraphicsPrimitive::PointSizeType pointSizeType(GraphicsPrimitive::PointSizeType::PIXELS);
+            switch (lineWidthType) {
+                case GraphicsPrimitive::LineWidthType::PERCENTAGE_VIEWPORT_HEIGHT:
+                    pointSizeType = GraphicsPrimitive::PointSizeType::PERCENTAGE_VIEWPORT_HEIGHT;
+                    break;
+                case GraphicsPrimitive::LineWidthType::PIXELS:
+                    pointSizeType = GraphicsPrimitive::PointSizeType::PIXELS;
+                    break;
+            }
+            pointPrimitive->setPointDiameter(pointSizeType,
+                                             lineWidth);
+
+            drawPrivate(PrivateDrawMode::DRAW_NORMAL,
+                        pointPrimitive.get(),
+                        NULL);
+            return;
+        }
     }
     
     if (millimeterPointsFlag) {
@@ -848,6 +951,8 @@ GraphicsEngineDataOpenGL::drawWithSelection(GraphicsPrimitive* primitive,
 {
     CaretAssert(primitive);
     
+    bool modelSpaceLineFlag = false;
+    bool windowSpaceLineFlag = false;
     switch (primitive->m_primitiveType) {
         case GraphicsPrimitive::PrimitiveType::OPENGL_LINE_LOOP:
             break;
@@ -868,14 +973,14 @@ GraphicsEngineDataOpenGL::drawWithSelection(GraphicsPrimitive* primitive,
         case GraphicsPrimitive::PrimitiveType::MODEL_SPACE_POLYGONAL_LINE_STRIP_BEVEL_JOIN:
         case GraphicsPrimitive::PrimitiveType::MODEL_SPACE_POLYGONAL_LINE_STRIP_MITER_JOIN:
         case GraphicsPrimitive::PrimitiveType::MODEL_SPACE_POLYGONAL_LINES:
+            modelSpaceLineFlag = true;
             break;
         case GraphicsPrimitive::PrimitiveType::POLYGONAL_LINE_LOOP_BEVEL_JOIN:
         case GraphicsPrimitive::PrimitiveType::POLYGONAL_LINE_LOOP_MITER_JOIN:
-            break;
         case GraphicsPrimitive::PrimitiveType::POLYGONAL_LINE_STRIP_BEVEL_JOIN:
         case GraphicsPrimitive::PrimitiveType::POLYGONAL_LINE_STRIP_MITER_JOIN:
-            break;
         case GraphicsPrimitive::PrimitiveType::POLYGONAL_LINES:
+            windowSpaceLineFlag = true;
             break;
         case GraphicsPrimitive::PrimitiveType::SPHERES:
             CaretAssertMessage(0, "Not yet implemented");
@@ -888,6 +993,13 @@ GraphicsEngineDataOpenGL::drawWithSelection(GraphicsPrimitive* primitive,
     GLint viewport[4];
     glGetIntegerv(GL_VIEWPORT,
                   viewport);
+    
+    /*
+     * Must clear color and depth buffers
+     */
+    glClear(GL_COLOR_BUFFER_BIT
+            | GL_DEPTH_BUFFER_BIT);
+    
     if ((pixelX    >= viewport[0])
         && (pixelX <  (viewport[0] + viewport[2]))
         && (pixelY >= viewport[1])
@@ -901,11 +1013,50 @@ GraphicsEngineDataOpenGL::drawWithSelection(GraphicsPrimitive* primitive,
         glShadeModel(GL_FLAT);
         glDisable(GL_LIGHTING);
         
-        GraphicsPrimitiveSelectionHelper selectionHelper(primitive);
-        selectionHelper.setupSelectionBeforeDrawing();
-        drawPrivate(PrivateDrawMode::DRAW_SELECTION,
-                    primitive,
-                    &selectionHelper);
+        std::vector<int32_t> triangleVertexIndicesToLineVertexIndices;
+        std::unique_ptr<GraphicsPrimitiveSelectionHelper> selectionHelper;
+        if (modelSpaceLineFlag
+            || windowSpaceLineFlag) {
+            AString errorMessage;
+            
+            std::unique_ptr<GraphicsPrimitive> primitiveToDraw(GraphicsOpenGLPolylineTriangles::convertWorkbenchLinePrimitiveTypeToOpenGL(primitive,
+                                                                                                                                          &triangleVertexIndicesToLineVertexIndices,
+                                                                                                                                          errorMessage));
+            if (primitiveToDraw == NULL) {
+                const AString msg("For developer: "
+                                  + errorMessage);
+#ifdef NDEBUG
+                CaretLogFine(msg);
+#else
+                CaretLogSevere(msg);
+#endif
+                return;
+            }
+            SpaceMode spaceMode = SpaceMode::WINDOW;
+            if (modelSpaceLineFlag) {
+                spaceMode = SpaceMode::MODEL;
+            }
+            else if (windowSpaceLineFlag) {
+                spaceMode = SpaceMode::WINDOW;
+            }
+            else {
+                CaretAssert(0);
+            }
+            
+            selectionHelper.reset(new GraphicsPrimitiveSelectionHelper(primitiveToDraw.get()));
+            selectionHelper->setupSelectionBeforeDrawing();
+            drawModelOrWindowSpace(spaceMode,
+                                   PrivateDrawMode::DRAW_SELECTION,
+                                   primitiveToDraw.get(),
+                                   selectionHelper.get());
+        }
+        else {
+            selectionHelper.reset(new GraphicsPrimitiveSelectionHelper(primitive));
+            selectionHelper->setupSelectionBeforeDrawing();
+            drawPrivate(PrivateDrawMode::DRAW_SELECTION,
+                        primitive,
+                        selectionHelper.get());
+        }
         
         /*
          * QOpenGLWidget Note: The QOpenGLWidget always renders in a
@@ -922,7 +1073,7 @@ GraphicsEngineDataOpenGL::drawWithSelection(GraphicsPrimitive* primitive,
 
         glPixelStorei(GL_PACK_SKIP_ROWS, 0);
         glPixelStorei(GL_PACK_SKIP_PIXELS, 0);
-        glPixelStorei(GL_PACK_ALIGNMENT, 1); // bytes
+        glPixelStorei(GL_PACK_ALIGNMENT, 1); /* bytes */
         glReadPixels(pixelX,
                      pixelY,
                      1,
@@ -934,7 +1085,7 @@ GraphicsEngineDataOpenGL::drawWithSelection(GraphicsPrimitive* primitive,
         /*
          * Get depth from depth buffer
          */
-        glPixelStorei(GL_PACK_ALIGNMENT, 4); // float
+        glPixelStorei(GL_PACK_ALIGNMENT, 4); /* float */
         glReadPixels(pixelX,
                      pixelY,
                      1,
@@ -946,7 +1097,31 @@ GraphicsEngineDataOpenGL::drawWithSelection(GraphicsPrimitive* primitive,
         glPopAttrib();
         glPopClientAttrib();
         
-        selectedPrimitiveIndexOut = selectionHelper.getPrimitiveIndexFromEncodedRGBA(pixelRGBA);
+        CaretAssert(selectionHelper.get());
+        selectedPrimitiveIndexOut = selectionHelper->getPrimitiveIndexFromEncodedRGBA(pixelRGBA);
+        
+        if (modelSpaceLineFlag
+            || windowSpaceLineFlag) {
+            if ((selectedPrimitiveIndexOut >= 0)
+                && selectedPrimitiveIndexOut < static_cast<int32_t>(triangleVertexIndicesToLineVertexIndices.size())) {
+                CaretAssertVectorIndex(triangleVertexIndicesToLineVertexIndices, selectedPrimitiveIndexOut);
+                selectedPrimitiveIndexOut = triangleVertexIndicesToLineVertexIndices[selectedPrimitiveIndexOut];
+                
+                if (selectedPrimitiveIndexOut >= primitive->getNumberOfVertices()) {
+                    selectedPrimitiveIndexOut = -1;
+                }
+            }
+            else {
+                selectedPrimitiveIndexOut = -1;
+            }
+        }
+        else {
+            if (selectedPrimitiveIndexOut >= 0) {
+                if (selectedPrimitiveIndexOut >= primitive->getNumberOfVertices()) {
+                    selectedPrimitiveIndexOut = -1;
+                }
+            }
+        }
     }
 }
 
@@ -1001,6 +1176,11 @@ GraphicsEngineDataOpenGL::drawPrivate(const PrivateDrawMode drawMode,
     }
     
     openglData->loadTextureImageDataBuffer(primitive);
+    
+    /*
+     * Primitive may want to delete its instance data to save memory
+     */
+    primitive->setOpenGLBuffersHaveBeenLoadedByGraphicsEngine();
     
     const GLuint coordBufferID = openglData->m_coordinateBufferObject->getBufferObjectName();
     CaretAssert(coordBufferID);
@@ -1078,18 +1258,18 @@ GraphicsEngineDataOpenGL::drawPrivate(const PrivateDrawMode drawMode,
                     const GLenum colorDataType = GL_UNSIGNED_BYTE;
                     
                     const std::vector<uint8_t> selectionRGBA = primitiveSelectionHelper->getSelectionEncodedRGBA();
-                    CaretAssert((selectionRGBA.size() / 4) == numberOfVertices);
-                    
-                    const GLuint colorSizeBytes = selectionRGBA.size() * sizeof(GLubyte);
-                    const GLvoid* colorDataPointer = (const GLvoid*)&selectionRGBA[0];
-                    glBindBuffer(GL_ARRAY_BUFFER,
-                                 localColorBufferName);
-                    glBufferData(GL_ARRAY_BUFFER,
-                                 colorSizeBytes,
-                                 colorDataPointer,
-                                 GL_STREAM_DRAW);
-                    glEnableClientState(GL_COLOR_ARRAY);
-                    glColorPointer(componentsPerColor, colorDataType, 0, (GLvoid*)0);
+                    if (static_cast<int32_t>(selectionRGBA.size() / 4) == numberOfVertices) {
+                        const GLuint colorSizeBytes = selectionRGBA.size() * sizeof(GLubyte);
+                        const GLvoid* colorDataPointer = (const GLvoid*)&selectionRGBA[0];
+                        glBindBuffer(GL_ARRAY_BUFFER,
+                                     localColorBufferName);
+                        glBufferData(GL_ARRAY_BUFFER,
+                                     colorSizeBytes,
+                                     colorDataPointer,
+                                     GL_STREAM_DRAW);
+                        glEnableClientState(GL_COLOR_ARRAY);
+                        glColorPointer(componentsPerColor, colorDataType, 0, (GLvoid*)0);
+                    }
                 }
             }
                 break;

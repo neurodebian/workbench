@@ -50,6 +50,9 @@ OperationParameters* AlgorithmCiftiMergeDense::getParameters()
     
     ParameterComponent* ciftiOpt = ret->createRepeatableParameter(3, "-cifti", "specify an input cifti file");
     ciftiOpt->addCiftiParameter(1, "cifti-in", "a cifti file to merge");
+
+    OptionalParameter* collideOpt = ret->createOptionalParameter(4, "-label-collision", "how to handle conflicts between label keys");
+    collideOpt->addStringParameter(1, "action", "'ERROR', 'FIRST', or 'LEGACY', default 'ERROR', use 'LEGACY' to match v1.4.2 and earlier");
     
     ret->setHelpText(
         AString("The input cifti files must have matching mappings along the direction not specified, and the mapping along the specified direction must be brain models.")
@@ -70,17 +73,34 @@ void AlgorithmCiftiMergeDense::useParameters(OperationParameters* myParams, Prog
         throw AlgorithmException("incorrect string for direction, use ROW or COLUMN");
     }
     CiftiFile* myCiftiOut = myParams->getOutputCifti(2);
-    const vector<ParameterComponent*>& myInstances = *(myParams->getRepeatableParameterInstances(3));
+    const vector<ParameterComponent*>& myInstances = myParams->getRepeatableParameterInstances(3);
     vector<const CiftiFile*> ciftiList;
     int numCifti = (int)myInstances.size();
     for (int i = 0; i < numCifti; ++i)
     {
         ciftiList.push_back(myInstances[i]->getCifti(1));
     }
-    AlgorithmCiftiMergeDense(myProgObj, myDir, ciftiList, myCiftiOut);
+    OptionalParameter* collideOpt = myParams->getOptionalParameter(4);
+    LabelConflictLogic conflictLogic = ERROR;
+    if (collideOpt->m_present)
+    {
+        AString collideStr = collideOpt->getString(1);
+        if (collideStr == "ERROR")
+        {
+            conflictLogic = ERROR;
+        } else if (collideStr == "FIRST") {
+            conflictLogic = FIRST;
+        } else if (collideStr == "LEGACY") {
+            conflictLogic = LEGACY;
+        } else {
+            throw AlgorithmException("incorrect string for label collision option");
+        }
+    }
+    AlgorithmCiftiMergeDense(myProgObj, myDir, ciftiList, myCiftiOut, conflictLogic);
 }
 
-AlgorithmCiftiMergeDense::AlgorithmCiftiMergeDense(ProgressObject* myProgObj, const int& myDir, const vector<const CiftiFile*>& ciftiList, CiftiFile* myCiftiOut) : AbstractAlgorithm(myProgObj)
+AlgorithmCiftiMergeDense::AlgorithmCiftiMergeDense(ProgressObject* myProgObj, const int& myDir, const vector<const CiftiFile*>& ciftiList, CiftiFile* myCiftiOut,
+                                                   const LabelConflictLogic conflictLogic) : AbstractAlgorithm(myProgObj)
 {
     LevelProgress myProgress(myProgObj);
     if (ciftiList.size() == 0) throw AlgorithmException("no input files specified");
@@ -90,20 +110,22 @@ AlgorithmCiftiMergeDense::AlgorithmCiftiMergeDense(ProgressObject* myProgObj, co
     const CiftiXMLOld& baseXML = ciftiList[0]->getCiftiXMLOld();
     if (baseXML.getMappingType(myDir) != CIFTI_INDEX_TYPE_BRAIN_MODELS) throw AlgorithmException("mapping type along specified dimension is not brain models");
     bool isLabel = (baseXML.getMappingType(otherDir) == CIFTI_INDEX_TYPE_LABELS);
-    CiftiXMLOld outXML = baseXML;
+    CiftiXMLOld outXML;
+    if (conflictLogic == FIRST)
+    {
+        outXML = ciftiList.back()->getCiftiXMLOld();//reduce warning spam by making the first replace not produce a conflict
+    } else {
+        outXML = baseXML;
+    }
+    outXML.resetColumnsToBrainModels();
     VolumeSpace baseSpace;
     bool haveVolSpace = false;
-    if (baseXML.hasVolumeData(myDir))
-    {
-        haveVolSpace = true;
-        baseXML.getVolumeSpace(baseSpace);
-    }
-    vector<int> sourceCifti(baseXML.getNumberOfBrainModels(myDir), 0);
-    for (int i = 1; i < (int)ciftiList.size(); ++i)
+    vector<int> sourceCifti;
+    for (int i = 0; i < (int)ciftiList.size(); ++i)
     {
         CaretAssert(ciftiList[i] != NULL);
         const CiftiXMLOld& otherXML = ciftiList[i]->getCiftiXMLOld();
-        if (!ciftiList[0]->getCiftiXML().getMap(otherDir)->approximateMatch(*(ciftiList[i]->getCiftiXML().getMap(otherDir))))
+        if (i != 0 && !ciftiList[0]->getCiftiXML().getMap(otherDir)->approximateMatch(*(ciftiList[i]->getCiftiXML().getMap(otherDir))))
         {
             throw AlgorithmException("mappings along other dimension do not match");
         }
@@ -169,8 +191,13 @@ AlgorithmCiftiMergeDense::AlgorithmCiftiMergeDense(ProgressObject* myProgObj, co
     }
     CaretAssert((int)sourceCifti.size() == outXML.getNumberOfBrainModels(myDir));
     myCiftiOut->setCiftiXML(outXML);
-    for (int i = 0; i < (int)sourceCifti.size(); ++i)
+    for (int i_raw = 0; i_raw < (int)sourceCifti.size(); ++i_raw)
     {
+        int i = i_raw;
+        if (conflictLogic == FIRST)
+        {
+            i = int(sourceCifti.size()) - i_raw - 1;//loop through Replaces backwards to give precedence to first model (which comes from the first argument)
+        }
         CiftiBrainModelInfo myInfo = outXML.getBrainModelInfo(myDir, i);
         switch (myInfo.m_type)
         {
@@ -178,9 +205,10 @@ AlgorithmCiftiMergeDense::AlgorithmCiftiMergeDense(ProgressObject* myProgObj, co
             {
                 if (isLabel)
                 {
+                    //is a generic message from ciftireplace/table::append good enough?
                     LabelFile tempFile;
                     AlgorithmCiftiSeparate(NULL, ciftiList[sourceCifti[i]], myDir, myInfo.m_structure, &tempFile);//using this because dealing with label tables is nasty, but doesn't happen on large files
-                    AlgorithmCiftiReplaceStructure(NULL, myCiftiOut, myDir, myInfo.m_structure, &tempFile);
+                    AlgorithmCiftiReplaceStructure(NULL, myCiftiOut, myDir, myInfo.m_structure, &tempFile, false, (conflictLogic == ERROR));
                 } else {//for everything else, just use rows directly, because making large metric files in-memory is problematic
                     vector<CiftiSurfaceMap> inMap, outMap;
                     const CiftiXMLOld& otherXML = ciftiList[sourceCifti[i]]->getCiftiXMLOld();

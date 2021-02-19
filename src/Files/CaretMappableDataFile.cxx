@@ -34,6 +34,7 @@
 #include "DataFileContentInformation.h"
 #include "EventManager.h"
 #include "FastStatistics.h"
+#include "FileIdentificationAttributes.h"
 #include "FileInformation.h"
 #include "GiftiLabelTable.h"
 #include "GiftiMetaDataXmlElements.h"
@@ -109,6 +110,7 @@ void
 CaretMappableDataFile::initializeCaretMappableDataFileInstance(const DataFileTypeEnum::Enum /*dataFileType*/)
 {
     m_labelDrawingProperties = std::unique_ptr<LabelDrawingProperties>(new LabelDrawingProperties());
+    m_fileIdentificationAttributes.reset(new FileIdentificationAttributes());
     m_applyToAllMapsSelected = false;
 }
 
@@ -361,7 +363,9 @@ CaretMappableDataFile::saveFileDataToScene(const SceneAttributes* sceneAttribute
     sceneClass->addClass(m_labelDrawingProperties->saveToScene(sceneAttributes,
                                                                "m_labelDrawingProperties"));
     
-    
+    sceneClass->addClass(m_fileIdentificationAttributes->saveToScene(sceneAttributes,
+                                                                     "m_fileIdentificationAttributes"));
+
     if (m_chartingDelegate != NULL) {
         SceneClass* chartDelegateScene = m_chartingDelegate->saveToScene(sceneAttributes,
                                                                          "m_chartingDelegate");
@@ -389,9 +393,26 @@ CaretMappableDataFile::saveFileDataToScene(const SceneAttributes* sceneAttribute
                                m_applyToAllMapsSelected);
         
         if (sceneAttributes->isModifiedPaletteSettingsSavedToScene()) {
+            /*
+             * WB-916 Scene files very large for series type files with
+             * modified palette color mapping
+             *
+             * When one palette coloring mapping is used for a file,
+             * we only need to save the palette color mapping for the
+             * first map.  Only some CIFTI files, particularly
+             * series type files, use one palette color mapping for all
+             * maps.   Until 12 Oct 2020, palette color mapping was
+             * always written for all maps which greatly bloated the
+             * scene file for scalar data-series files with many rows.
+             */
+            int32_t numMaps = getNumberOfMaps();
+            if (numMaps > 0) {
+                if (isOnePaletteUsedForAllMaps()) {
+                    numMaps = 1;
+                }
+            }
+
             std::vector<SceneClass*> pcmClassVector;
-            
-            const int32_t numMaps = getNumberOfMaps();
             for (int32_t i = 0; i < numMaps; i++) {
                 const PaletteColorMapping* pcmConst = getMapPaletteColorMapping(i);
                 bool savePaletteFlag = false;
@@ -491,6 +512,9 @@ CaretMappableDataFile::restoreFileDataFromScene(const SceneAttributes* sceneAttr
     
     m_labelDrawingProperties->restoreFromScene(sceneAttributes,
                                                sceneClass->getClass("m_labelDrawingProperties"));
+    m_fileIdentificationAttributes->restoreFromScene(sceneAttributes,
+                                                     sceneClass->getClass("m_fileIdentificationAttributes"));
+    
     const SceneClass* chartingDelegateClass = sceneClass->getClass("m_chartingDelegate");
     ChartableTwoFileDelegate* chartDelegate = getChartingDelegate();
     chartDelegate->updateAfterFileChanged();
@@ -1484,6 +1508,8 @@ const CiftiXML CaretMappableDataFile::getCiftiXML() const
  *    Index of the node.
  * @param numberOfNodes
  *    Number of nodes in the surface.
+ * @param dataValueSeparator
+ *    Separator between multiple data values
  * @param textOut
  *    Output containing identification information.
  */
@@ -1492,6 +1518,7 @@ CaretMappableDataFile::getSurfaceNodeIdentificationForMaps(const std::vector<int
                                                            const StructureEnum::Enum /*structure*/,
                                                            const int /*nodeIndex*/,
                                                            const int32_t /*numberOfNodes*/,
+                                                           const AString& /*dataValueSeparator*/,
                                                            AString& textOut) const
 {
     textOut.clear();
@@ -1507,17 +1534,38 @@ CaretMappableDataFile::getSurfaceNodeIdentificationForMaps(const std::vector<int
  *     Coordinate of voxel.
  * @param ijkOut
  *     Voxel indices of value.
+ * @param dataValueSeparator
+ *    Separator between multiple data values
  * @param textOut
  *    Output containing identification information.
  */
 bool
 CaretMappableDataFile::getVolumeVoxelIdentificationForMaps(const std::vector<int32_t>& /*mapIndices*/,
                                                            const float* /*xyz[3]*/,
+                                                           const AString& /*dataValueSeparator*/,
                                                            int64_t* /*ijkOut[3]*/,
                                                            AString& textOut) const
 {
     textOut.clear();
     return false;
+}
+
+/**
+ * @return The file identification attributes
+ */
+FileIdentificationAttributes*
+CaretMappableDataFile::getFileIdentificationAttributes()
+{
+    return m_fileIdentificationAttributes.get();
+}
+
+/**
+ * @return The file identification attributes (const method)
+ */
+const FileIdentificationAttributes*
+CaretMappableDataFile::getFileIdentificationAttributes() const
+{
+    return m_fileIdentificationAttributes.get();
 }
 
 

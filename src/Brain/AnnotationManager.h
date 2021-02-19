@@ -25,22 +25,25 @@
 #include "AnnotationCoordinateSpaceEnum.h"
 #include "AnnotationDistributeEnum.h"
 #include "AnnotationGroupingModeEnum.h"
+#include "AnnotationStackingOrderTypeEnum.h"
 #include "BrainConstants.h"
 #include "CaretObject.h"
 #include "CaretUndoCommand.h"
 #include "CaretPointer.h"
 #include "EventListenerInterface.h"
 #include "SceneableInterface.h"
-
+#include "UserInputModeEnum.h"
 
 namespace caret {
     class Annotation;
     class AnnotationArrangerInputs;
+    class AnnotationBrowserTab;
     class AnnotationFile;
     class AnnotationGroupKey;
     class AnnotationRedoUndoCommand;
     class AnnotationEditingSelectionInformation;
     class Brain;
+    class BrowserTabContent;
     class CaretUndoStack;
     class EventGetDisplayedDataFiles;
     class SceneClassAssistant;
@@ -70,10 +73,12 @@ namespace caret {
         
         virtual ~AnnotationManager();
 
-        bool applyCommand(AnnotationRedoUndoCommand* command,
+        bool applyCommand(const UserInputModeEnum::Enum userInputMode,
+                          AnnotationRedoUndoCommand* command,
                           AString& errorMessageOut);
         
-        bool applyCommandInWindow(AnnotationRedoUndoCommand* command,
+        bool applyCommandInWindow(const UserInputModeEnum::Enum userInputMode,
+                                  AnnotationRedoUndoCommand* command,
                                   const int32_t windowIndex,
                                   AString& errorMessageOut);
         
@@ -93,6 +98,9 @@ namespace caret {
         
         std::vector<Annotation*> getAllAnnotations() const;
         
+        std::vector<Annotation*> getAnnotationsDrawnInSameWindowAndSpace(const Annotation* annotation,
+                                                                         const int32_t windowIndex) const;
+        
         const AnnotationEditingSelectionInformation* getAnnotationEditingSelectionInformation(const int32_t windowIndex) const;
         
         std::vector<Annotation*> getAnnotationsSelectedForEditing(const int32_t windowIndex) const;
@@ -100,10 +108,10 @@ namespace caret {
         std::vector<Annotation*> getAnnotationsSelectedForEditingInSpaces(const int32_t windowIndex,
                                                                 const std::vector<AnnotationCoordinateSpaceEnum::Enum>& spaces) const;
         
-        void getAnnotationsSelectedForEditing(const int32_t windowIndex,
+        void getAnnotationsAndFilesSelectedForEditing(const int32_t windowIndex,
                                     std::vector<std::pair<Annotation*, AnnotationFile*> >& annotationsAndFileOut) const;
         
-        void getAnnotationsSelectedForEditingIncludingLabels(const int32_t windowIndex,
+        void getAnnotationsAndFilesSelectedForEditingIncludingLabels(const int32_t windowIndex,
                                               std::vector<std::pair<Annotation*, AnnotationFile*> >& annotationsAndFileOut) const;
         
         bool isAnnotationOnClipboardValid() const;
@@ -122,25 +130,44 @@ namespace caret {
         void setAnnotationBeingDrawnInWindow(const int32_t windowIndex,
                                              const Annotation* annotation);
         
-        CaretUndoStack* getCommandRedoUndoStack();
+        CaretUndoStack* getCommandRedoUndoStack(const UserInputModeEnum::Enum userInputMode);
         
         void getDisplayedAnnotationFiles(EventGetDisplayedDataFiles* displayedFilesEvent,
                                          std::vector<AnnotationFile*>& displayedAnnotationFilesOut) const;
         
-        bool alignAnnotations(const AnnotationArrangerInputs& arrangerInputs,
+        bool alignAnnotations(const UserInputModeEnum::Enum userInputMode,
+                              const AnnotationArrangerInputs& arrangerInputs,
                               const AnnotationAlignmentEnum::Enum alignment,
                               AString& errorMessageOut);
         
-        bool distributeAnnotations(const AnnotationArrangerInputs& arrangerInputs,
-                              const AnnotationDistributeEnum::Enum distribute,
-                              AString& errorMessageOut);
-        
-        bool applyGroupingMode(const int32_t windowIndex,
+        bool distributeAnnotations(const UserInputModeEnum::Enum userInputMode,
+                                   const AnnotationArrangerInputs& arrangerInputs,
+                                   const AnnotationDistributeEnum::Enum distribute,
+                                   AString& errorMessageOut);
+
+        bool applyGroupingMode(const UserInputModeEnum::Enum userInputMode,
+                               const int32_t windowIndex,
                                const AnnotationGroupingModeEnum::Enum groupingMode,
                                AString& errorMessageOut);
         
         bool isGroupingModeValid(const int32_t windowIndex,
                                  const AnnotationGroupingModeEnum::Enum groupingMode) const;
+        
+        bool applyStackingOrder(const std::vector<Annotation*>& annotations,
+                                const Annotation* selectedAnnotation,
+                                const AnnotationStackingOrderTypeEnum::Enum orderType,
+                                const int32_t windowIndex,
+                                AString& errorMessageOut);
+        
+        bool moveTabOrWindowAnnotationToFront(Annotation* annotation,
+                                              AString& errorMessageOut);
+        
+        bool shrinkAndExpandSelectedBrowserTabAnnotation(const std::vector<BrowserTabContent*>& tabsInWindow,
+                                                         const int32_t windowIndex,
+                                                         const UserInputModeEnum::Enum userInputMode,
+                                                         AString& errorMessageOut);
+
+        std::vector<Annotation*> getAnnotationsInSameSpace(const Annotation* annotation);
         
         // ADD_NEW_METHODS_HERE
 
@@ -204,8 +231,9 @@ namespace caret {
         
         CaretPointer<Annotation> m_clipboardAnnotation;
         
-        CaretPointer<CaretUndoStack> m_annotationRedoUndoStack;
+        CaretPointer<CaretUndoStack> m_annotationsExceptBrowserTabsRedoUndoStack;
         
+        CaretPointer<CaretUndoStack> m_browserTabAnnotationsRedoUndoStack;
         // ADD_NEW_MEMBERS_HERE
 
     };

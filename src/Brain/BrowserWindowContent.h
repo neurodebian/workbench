@@ -28,11 +28,12 @@
 #include "CaretObject.h"
 
 #include "SceneableInterface.h"
-#include "TileTabsGridModeEnum.h"
+#include "TileTabsLayoutConfigurationTypeEnum.h"
 
 namespace caret {
     class SceneClassAssistant;
-    class TileTabsConfiguration;
+    class TileTabsLayoutBaseConfiguration;
+    class TileTabsLayoutGridConfiguration;
     
     class BrowserWindowContent : public CaretObject, public SceneableInterface {
         
@@ -65,21 +66,27 @@ namespace caret {
         
         void setTileTabsEnabled(const bool tileTabsEnabled);
 
-        TileTabsConfiguration* getSelectedTileTabsConfiguration();
+        TileTabsLayoutBaseConfiguration* getSelectedTileTabsGridConfiguration();
         
-        const TileTabsConfiguration* getSelectedTileTabsConfiguration() const;
+        const TileTabsLayoutBaseConfiguration* getSelectedTileTabsGridConfiguration() const;
         
-        TileTabsConfiguration* getAutomaticTileTabsConfiguration();
+        TileTabsLayoutGridConfiguration* getAutomaticGridTileTabsConfiguration();
         
-        const TileTabsConfiguration* getAutomaticTileTabsConfiguration() const;
+        const TileTabsLayoutGridConfiguration* getAutomaticGridTileTabsConfiguration() const;
         
-        TileTabsConfiguration* getCustomTileTabsConfiguration();
+        TileTabsLayoutGridConfiguration* getCustomGridTileTabsConfiguration();
         
-        const TileTabsConfiguration* getCustomTileTabsConfiguration() const;
+        const TileTabsLayoutGridConfiguration* getCustomGridTileTabsConfiguration() const;
         
-        TileTabsGridModeEnum::Enum getTileTabsConfigurationMode() const;
+        void setCustomGridTileTabsConfiguration(const TileTabsLayoutGridConfiguration* gridConfiguration);
         
-        void setTileTabsConfigurationMode(const TileTabsGridModeEnum::Enum configMode);
+        TileTabsLayoutConfigurationTypeEnum::Enum getTileTabsConfigurationMode() const;
+        
+        void setTileTabsConfigurationMode(const TileTabsLayoutConfigurationTypeEnum::Enum configMode);
+        
+        bool isManualModeTileTabsConfigurationEnabled() const;
+        
+        void setManualConfigurationFromGridConfiguration(TileTabsLayoutGridConfiguration* gridConfiguration);
         
         int32_t getSceneGraphicsWidth() const;
         
@@ -96,6 +103,10 @@ namespace caret {
         std::vector<int32_t> getSceneTabIndices() const;
         
         void setSceneWindowTabIndices(const std::vector<int32_t>& sceneTabIndices);
+        
+        int32_t getWindowAnnotationsStackingOrder() const;
+        
+        void setWindowAnnotationsStackingOrder(const int32_t stackingOrder);
         
         // ADD_NEW_METHODS_HERE
 
@@ -128,6 +139,8 @@ namespace caret {
 
         BrowserWindowContent& operator=(const BrowserWindowContent&);
         
+        void setCustomGridConfigurationToDefault();
+        
         std::unique_ptr<SceneClassAssistant> m_sceneAssistant;
 
         bool m_validFlag;
@@ -142,19 +155,21 @@ namespace caret {
         
         bool m_tileTabsEnabled = false;
         
-        TileTabsGridModeEnum::Enum m_tileTabsConfigurationMode = TileTabsGridModeEnum::AUTOMATIC;
+        TileTabsLayoutConfigurationTypeEnum::Enum m_tileTabsConfigurationMode = TileTabsLayoutConfigurationTypeEnum::AUTOMATIC_GRID;
         
         int32_t m_sceneGraphicsWidth = 0;
         
         int32_t m_sceneGraphicsHeight = 0;
         
-        std::unique_ptr<TileTabsConfiguration> m_automaticTileTabsConfiguration;
+        std::unique_ptr<TileTabsLayoutGridConfiguration> m_automaticGridTileTabsConfiguration;
         
-        std::unique_ptr<TileTabsConfiguration> m_customTileTabsConfiguration;
+        std::unique_ptr<TileTabsLayoutGridConfiguration> m_customGridTileTabsConfiguration;
         
         int32_t m_sceneSelectedTabIndex = 0;
         
         std::vector<int32_t> m_sceneTabIndices;
+        
+        int32_t m_windowAnnotationsStackingOrder = -1000;
         
         friend class BrainBrowserWindow;
 

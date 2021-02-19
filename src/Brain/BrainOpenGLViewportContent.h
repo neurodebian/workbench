@@ -32,7 +32,8 @@ namespace caret {
     class BrowserWindowContent;
     class GapsAndMargins;
     class SpacerTabContent;
-    class TileTabsConfiguration;
+    class TileTabsLayoutGridConfiguration;
+    class TileTabsLayoutManualConfiguration;
     
     class BrainOpenGLViewportContent : public CaretObject {
         
@@ -59,7 +60,11 @@ namespace caret {
         
         void getTabViewportBeforeApplyingMargins(int tabViewportOut[4]) const;
         
+        void getTabViewportManualLayoutBeforeAspectLocking(int tabViewportOut[4]) const;
+        
         void getWindowViewport(int windowViewportOut[4]) const;
+        
+        void getWindowBeforeAspectLockingViewport(int windowBeforeAspectLockingViewportOut[4]) const;
         
         int getWindowIndex() const;
         
@@ -81,6 +86,7 @@ namespace caret {
         static std::vector<BrainOpenGLViewportContent*> createViewportContentForTileTabs(std::vector<BrowserTabContent*>& tabContents,
                                                                                          BrowserWindowContent* browserWindowContent,
                                                                                          const GapsAndMargins* gapsAndMargins,
+                                                                                         const int32_t windowBeforeAspectLockingViewport[4],
                                                                                          const int32_t windowViewport[4],
                                                                                          const int32_t windowIndex,
                                                                                          const int32_t highlightTabIndex);
@@ -89,6 +95,7 @@ namespace caret {
                                                                       BrowserTabContent* selectedTabContent,
                                                                       const GapsAndMargins* gapsAndMargins,
                                                                       const int32_t windowIndex,
+                                                                      const int32_t windowBeforeAspectLockingViewport[4],
                                                                       const int32_t windowViewport[4]);
         
         static void getSliceAllViewViewport(const int32_t tabViewport[4],
@@ -133,7 +140,9 @@ namespace caret {
             int32_t m_height;
         };
         
-        BrainOpenGLViewportContent(const int windowViewport[4],
+        BrainOpenGLViewportContent(const int32_t windowBeforeAspectLockingViewport[4],
+                                   const int windowViewport[4],
+                                   const int tabViewportManualLayoutBeforeAspectLocking[4],
                                    const int tabViewport[4],
                                    const int modelViewport[4],
                                    const int windowIndex,
@@ -153,6 +162,23 @@ namespace caret {
         void updateTabLockedAspectRatios(const int32_t windowIndex,
                                          const int32_t windowViewport[4]);
 
+        static std::vector<BrainOpenGLViewportContent*> createViewportContentForGridTileTabs(std::vector<BrowserTabContent*>& tabContents,
+                                                                                             BrowserWindowContent* browserWindowContent,
+                                                                                             TileTabsLayoutGridConfiguration* gridConfiguration,
+                                                                                             const GapsAndMargins* gapsAndMargins,
+                                                                                             const int32_t windowBeforeAspectLockingViewport[4],
+                                                                                             const int32_t windowViewport[4],
+                                                                                             const int32_t windowIndex,
+                                                                                             const int32_t highlightTabIndex);
+
+        static std::vector<BrainOpenGLViewportContent*> createViewportContentForManualTileTabs(std::vector<BrowserTabContent*>& tabContents,
+                                                                                               BrowserWindowContent* browserWindowContent,
+                                                                                               const GapsAndMargins* gapsAndMargins,
+                                                                                               const int32_t windowBeforeAspectLockingViewport[4],
+                                                                                               const int32_t windowViewport[4],
+                                                                                               const int32_t windowIndex,
+                                                                                               const int32_t highlightTabIndex);
+
         const int m_windowIndex;
         
         const bool m_highlightTab;
@@ -165,6 +191,9 @@ namespace caret {
         int m_tabWidth;
         /** Tab viewport's Height */
         int m_tabHeight;
+        
+        /** Manual layout tab viewport before aspect locking is applied */
+        int m_tabViewportManualLayoutBeforeAspectLocking[4];
         
         /** Chart data viewport's X-coordinate */
         mutable int m_chartDataX;
@@ -202,6 +231,15 @@ namespace caret {
         BrowserTabContent* m_browserTabContent;
         
         SpacerTabContent* m_spacerTabContent;
+        
+        /** Window viewport's X-coordinate */
+        int m_windowBeforeAspectLockingX;
+        /** Window viewport's Y-coordinate */
+        int m_windowBeforeAspectLockingY;
+        /** Window viewport's Width */
+        int m_windowBeforeAspectLockingWidth;
+        /** Window viewport's Height */
+        int m_windowBeforeAspectLockingHeight;
         
     public:
         virtual AString toString() const;

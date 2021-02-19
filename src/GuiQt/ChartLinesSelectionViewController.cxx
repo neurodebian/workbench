@@ -46,7 +46,6 @@
 #include "EventGraphicsUpdateAllWindows.h"
 #include "EventGraphicsUpdateOneWindow.h"
 #include "EventPaletteColorMappingEditorDialogRequest.h"
-#include "EventSurfaceColoringInvalidate.h"
 #include "EventUserInterfaceUpdate.h"
 #include "GuiManager.h"
 #include "MapYokingGroupComboBox.h"
@@ -222,7 +221,7 @@ ChartLinesSelectionViewController::updateSelectionViewController()
             
             const bool checkBoxStatus = chartBrainFile->isLineSeriesChartingEnabled(browserTabIndex);
             
-            QVariant brainordinateFilePointerVariant = qVariantFromValue((void*)chartBrainFile);
+            QVariant brainordinateFilePointerVariant = QVariant::fromValue((void*)chartBrainFile);
             
             CaretMappableDataFile* caretMappableDataFile = chartBrainFile->getLineSeriesChartCaretMappableDataFile();
             

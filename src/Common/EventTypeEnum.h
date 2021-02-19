@@ -44,8 +44,8 @@ public:
         EVENT_ANNOTATION_ADD_TO_REMOVE_FROM_FILE,
         /** Get annnotation chart labels */
         EVENT_ANNOTATION_CHART_LABEL_GET,
-        /** Get color bars from tab(s) */
-        EVENT_ANNOTATION_COLOR_BAR_GET,
+        /** Get color and scale bars from tab(s) */
+        EVENT_ANNOTATION_BARS_GET,
         /** Annotation create new of a particular type */
         EVENT_ANNOTATION_CREATE_NEW_TYPE,
         /** Get the annotations drawn in a window */
@@ -54,36 +54,58 @@ public:
         EVENT_ANNOTATION_GROUP_GET_WITH_KEY,
         /** Annotation grouping (group, regroup, ungroup) operation */
         EVENT_ANNOTATION_GROUPING,
+        /** Get the bounds of annotation text */
+        EVENT_ANNOTATION_TEXT_GET_BOUNDS,
         /** Get annotation text substitutions */
         EVENT_ANNOTATION_TEXT_SUBSTITUTION_GET,
         /** Invalid annotation text substitutions */
         EVENT_ANNOTATION_TEXT_SUBSTITUTION_INVALIDATE,
         /** Annotation toolbar update */
         EVENT_ANNOTATION_TOOLBAR_UPDATE,
+        /** Test a pointer to an annotation to verify that it is still valid (exists) */
+        EVENT_ANNOTATION_VALIDATE,
         /** Inform that Brain has been reset (new spec or scene loaded) */
         EVENT_BRAIN_RESET,
         /** Get all brain structures */
         EVENT_BRAIN_STRUCTURE_GET_ALL,
+        /** Close a browser tab but may reopen later. */
+        EVENT_BROWSER_TAB_CLOSE,
+        /** Close (for possible later reopening) a browser tab from within the toolbar */
+        EVENT_BROWSER_TAB_CLOSE_IN_TOOL_BAR,
         /** Delete a browser tab. */
         EVENT_BROWSER_TAB_DELETE,
+        /** Delete a browser tab from within the toolbar */
+        EVENT_BROWSER_TAB_DELETE_IN_TOOL_BAR,
         /** Get a browser tab by tab number */
         EVENT_BROWSER_TAB_GET,
         /** Get indices of all valid browser tabs */
         EVENT_BROWSER_TAB_INDICES_GET_ALL,
+        /** Get indices of all viewed browser tabs */
+        EVENT_BROWSER_TAB_INDICES_GET_ALL_VIEWED,
         /** Get ALL (both viewed and not viewed) browser tabs */
         EVENT_BROWSER_TAB_GET_ALL,
         /** Get ALL VIEWED browser tabs (tabs that are viewed in windows) */
         EVENT_BROWSER_TAB_GET_ALL_VIEWED,
         /** Create a new browser tab */
         EVENT_BROWSER_TAB_NEW,
+        /** Create a new browser tab from code within the GUI so toolbar is updated */
+        EVENT_BROWSER_TAB_NEW_IN_GUI,
         /** Create a new browser tab by cloning an existing browser tab */
         EVENT_BROWSER_TAB_NEW_CLONE,
+        /** Reopen a closed tab */
+        EVENT_BROWSER_TAB_REOPEN_AVAILBLE,
+        /** Reopen a closed tab */
+        EVENT_BROWSER_TAB_REOPEN_CLOSED,
+        /** Select  a  tab in a window */
+        EVENT_BROWSER_TAB_SELECT_IN_WINDOW,
         /** Event for browser window content */
         EVENT_BROWSER_WINDOW_CONTENT,
         /** Get the content of a browser window */
         EVENT_BROWSER_WINDOW_DRAWING_CONTENT_GET,
         /** Create tabs after loading a file */
         EVENT_BROWSER_WINDOW_CREATE_TABS,
+        /** Get tabs in a browser window */
+        EVENT_BROWSER_WINDOW_GET_TABS,
         /** Issued after a browser window's graphicshave been redrawn */
         EVENT_BROWSER_WINDOW_GRAPHICS_HAVE_BEEN_REDRAWN,
         /** Issued when displayed browser window menu's may change */
@@ -104,14 +126,14 @@ public:
         EVENT_CARET_PREFERENCES_GET,
         /** Event for yoking the loading of matrix chart rows/columns */
         EVENT_CHART_MATRIX_YOKING_VALIDATION,
-        /** Validate that chart overlay is valid (it exists). */
-        EVENT_CHART_OVERLAY_VALIDATE,
-        /** GUI notification of the change in chart two atttributes */
-        EVENT_CHART_TWO_ATTRIBUTES_CHANGED,
-        /** Get the range of data for a chart two axis */
-        EVENT_CHART_TWO_AXIS_GET_DATA_RANGE,
+        /** Get a chart cartesian axis for a display group */
+        EVENT_CHART_TWO_CARTEISAN_AXIS_DISPLAY_GROUP,
+        /** Event for yoking of chart two cartesian oriented axes */
+        EVENT_CHART_TWO_CARTESIAN_ORIENTED_AXES_YOKING,
         /** Load chart two line series data */
         EVENT_CHART_TWO_LOAD_LINE_SERIES_DATA,
+        /** Validate that chart two overlay is valid (it exists). */
+        EVENT_CHART_TWO_OVERLAY_VALIDATE,
         /** Add a data file into the Brain*/
         EVENT_DATA_FILE_ADD,
         /** Delete a data file from the brain */
@@ -120,6 +142,8 @@ public:
         EVENT_DATA_FILE_READ,
         /** Reload (replace) a data file with its saved version in the brain*/
         EVENT_DATA_FILE_RELOAD,
+        /** Reload (replace) a data file with its saved version in the brain*/
+        EVENT_DATA_FILE_RELOAD_ALL,
         /** Get data files that are display in windows/tabs */
         EVENT_GET_DISPLAYED_DATA_FILES,
         /** Get node data files */
@@ -128,6 +152,8 @@ public:
         EVENT_GET_OR_SET_USER_INPUT_MODE,
         /** Get the text renderer for a window */
         EVENT_GET_TEXT_RENDERER_FOR_WINDOW,
+        /** Get the user input mode for a window */
+        EVENT_GET_USER_INPUT_MODE,
         /** Get the viewport size for model, tab, window */
         EVENT_GET_VIEWPORT_SIZE,
         /** Create a buffer object for an OpenGL context */
@@ -144,6 +170,8 @@ public:
         EVENT_GRAPHICS_UPDATE_ALL_WINDOWS,
         /** Update graphics in a window */
         EVENT_GRAPHICS_UPDATE_ONE_WINDOW,
+        /** Show tooltip in graphics window */
+        EVENT_GRAPHICS_WINDOW_SHOW_TOOL_TIP,
         /** Display the help viewer */
         EVENT_HELP_VIEWER_DISPLAY,
         /** Highlight location when an identification occurs */
@@ -154,12 +182,12 @@ public:
         EVENT_IDENTIFICATION_SYMBOL_REMOVAL,
         /** Browser window image capture */
         EVENT_IMAGE_CAPTURE,
-        /** Update the Mac Dock Menu */
-        EVENT_MAC_DOCK_MENU_UPDATE,
         /** Validate when adding a mapped file to mapped yoking */
         EVENT_MAP_YOKING_SELECT_MAP,
         /** Select a map for mapped yoked files */
         EVENT_MAP_YOKING_VALIDATION,
+        /** Get media files */
+        EVENT_MEDIA_FILES_GET,
         /** model - ADD */
         EVENT_MODEL_ADD,
         /** model  - DELETE */
@@ -188,6 +216,10 @@ public:
         EVENT_PALETTE_COLOR_MAPPING_EDITOR_SHOW,
         /** Get a palette by name from a palette file */
         EVENT_PALETTE_GET_BY_NAME,
+        /** Get palette groups */
+        EVENT_PALETTE_GROUPS_GET,
+        /** Get the file system access mode for recent files */
+        EVENT_RECENT_FILES_SYSTEM_ACCESS_MODE,
         /** Get the active scene */
         EVENT_SCENE_ACTIVE,
         /** Show a dialog containing warnings encountered when reading data files */
@@ -204,6 +236,8 @@ public:
         EVENT_SURFACE_STRUCTURES_VALID_GET,
         /** Tile tabs modification */
         EVENT_TILE_TABS_MODIFICATION,
+        /** Update the toolbar's chart two oriented axes controls */
+        EVENT_TOOLBAR_CHART_ORIENTED_AXES_UPDATE,
         /** Display/Hide the selection toolbox */
         EVENT_TOOLBOX_SELECTION_DISPLAY,
         /** Update the User-Interface */

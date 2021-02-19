@@ -45,14 +45,16 @@
 #include "BrainOpenGLWindowContent.h"
 #include "CaretPointer.h"
 #include "EventListenerInterface.h"
+#include "MouseEvent.h"
+#include "UserInputModeEnum.h"
 #include "WuQMacroMouseEventWidgetInterface.h"
 
+class QGestureEvent;
 class QMouseEvent;
 class QWidget;
 
 namespace caret {
 
-    class Border;
     class BrainOpenGL;
     class BrainOpenGLViewportContent;
     class BrowserTabContent;
@@ -60,14 +62,7 @@ namespace caret {
     class SelectionItemAnnotation;
     class SelectionManager;
     class Model;
-    class MouseEvent;
     class SurfaceProjectedItem;
-    class UserInputModeAnnotations;
-    class UserInputModeBorders;
-    class UserInputModeFoci;
-    class UserInputModeImage;
-    class UserInputModeView;
-    class UserInputModeVolumeEdit;
     class UserInputModeAbstract;
     class VolumeFile;
     
@@ -102,8 +97,6 @@ namespace caret {
                                const int y,
                                SurfaceProjectedItem& projectionOut);
  
-        Border* getBorderBeingDrawn();
-        
         static void initializeDefaultGLFormat();
         
         QString getOpenGLInformation();
@@ -148,6 +141,9 @@ namespace caret {
         
         virtual void leaveEvent(QEvent* e);
         
+    private slots:
+        void showSelectedChartPointToolTip();
+        
     private:
         
         std::vector<BrainOpenGLViewportContent*> getDrawingViewportContent(const int32_t windowViewportIn[4]) const;
@@ -160,6 +156,9 @@ namespace caret {
         const BrainOpenGLViewportContent* getViewportContentAtXY(const int x,
                                                            const int y);
         
+        const BrainOpenGLViewportContent* getViewportContentManualLayoutWithoutLockAspectAtXY(const int x,
+                                                                                              const int y);
+        
         void checkForMiddleMouseButton(Qt::MouseButtons& mouseButtons,
                                        Qt::MouseButton& button,
                                        Qt::KeyboardModifiers& keyModifiers,
@@ -168,6 +167,12 @@ namespace caret {
         void captureImage(EventImageCapture* imageCaptureEvent);
         
         void repaintGraphics();
+        
+        bool processGestureEvent(QGestureEvent* gestureEvent);
+        
+        UserInputModeAbstract* getSelectedInputProcessor() const;
+        
+        UserInputModeEnum::Enum getSelectedInputMode() const;
         
         const int32_t windowIndex;
         
@@ -193,17 +198,9 @@ namespace caret {
         
         int lastMouseY;
         
+        std::vector<MouseEvent::XY> m_mouseHistoryXY;
+        
         bool m_newKeyPressStartedFlag;
-        
-        UserInputModeAbstract* selectedUserInputProcessor;
-        UserInputModeAnnotations* userInputAnnotationsModeProcessor;
-        UserInputModeView* userInputViewModeProcessor;
-        UserInputModeBorders* userInputBordersModeProcessor;
-        UserInputModeFoci* userInputFociModeProcessor;
-        UserInputModeImage* userInputImageModeProcessor;
-        UserInputModeVolumeEdit* userInputVolumeEditModeProcessor;
-        
-        Border* borderBeingDrawn;
         
         bool    m_mousePositionValid;
         CaretPointer<MouseEvent> m_mousePositionEvent;
@@ -211,6 +208,13 @@ namespace caret {
         bool m_openGLContextSharingValid = false;
         
         void* m_contextShareGroupPointer = NULL;
+        
+        struct SelectedChartPointToolTipInfo {
+            QPoint m_position;
+            QString  m_text;
+        };
+        
+        SelectedChartPointToolTipInfo m_selectedChartPointToolTipInfo;
         
         static bool s_defaultGLFormatInitialized;
         

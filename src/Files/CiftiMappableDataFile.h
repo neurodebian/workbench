@@ -24,6 +24,7 @@
 #include "CaretMappableDataFile.h"
 #include "CaretPointer.h"
 #include "CaretObjectTracksModification.h"
+#include "CaretUnitsTypeEnum.h"
 #include "ChartTwoMatrixTriangularViewingModeEnum.h"
 #include "CiftiMappingType.h"
 #include "CiftiXMLElements.h"
@@ -40,9 +41,12 @@ namespace caret {
     class ChartDataCartesian;
     class CiftiFile;
     class CiftiParcelsMap;
+    class CiftiScalarsMap;
     class CiftiXML;
     class FastStatistics;
+    class GraphicsPrimitive;
     class GraphicsPrimitiveV3fC4f;
+    class GraphicsPrimitiveV3fT3f;
     class GroupAndNameHierarchyModel;
     class Histogram;
     class SparseVolumeIndexer;
@@ -241,6 +245,8 @@ namespace caret {
         
         const CiftiParcelsMap* getCiftiParcelsMapForDirection(const int direction) const;
         
+        const CiftiScalarsMap* getCiftiScalarsMapForDirection(const int direction) const;
+        
         virtual bool isMappedWithLabelTable() const;
         
         virtual GiftiLabelTable* getMapLabelTable(const int32_t mapIndex);
@@ -371,6 +377,7 @@ namespace caret {
         
         virtual bool getMapVolumeVoxelValues(const std::vector<int32_t> mapIndices,
                                              const float xyz[3],
+                                             const AString& dataValueSeparator,
                                              int64_t ijkOut[3],
                                              std::vector<float>& numericalValuesOut,
                                              std::vector<bool>& numericalValuesOutValid,
@@ -393,8 +400,9 @@ namespace caret {
         
         virtual bool getVolumeVoxelIdentificationForMaps(const std::vector<int32_t>& mapIndices,
                                                          const float xyz[3],
+                                                         const AString& dataValueSeparator,
                                                          int64_t ijkOut[3],
-                                                         AString& textOut) const;
+                                                         AString& textOut) const override;
         
         std::vector<int32_t> getUniqueLabelKeysUsedInMap(const int32_t mapIndex) const;
         
@@ -414,6 +422,7 @@ namespace caret {
                                              const StructureEnum::Enum structure,
                                              const int nodeIndex,
                                              const int32_t numberOfNodes,
+                                             const AString& dataValueSeparator,
                                              std::vector<float>& numericalValuesOut,
                                              std::vector<bool>& numericalValuesOutValid,
                                              AString& textValueOut) const;
@@ -422,6 +431,7 @@ namespace caret {
                                                             const StructureEnum::Enum structure,
                                                             const int nodeIndex,
                                                             const int32_t numberOfNodes,
+                                                            const AString& dataValueSeparator,
                                                             AString& textOut) const override;
         
         int32_t getMappingSurfaceNumberOfNodes(const StructureEnum::Enum structure) const;
@@ -445,6 +455,11 @@ namespace caret {
         
         virtual NiftiTimeUnitsEnum::Enum getMapIntervalUnits() const;
         
+        void getDimensionUnits(const int32_t dimensionIndex,
+                               CaretUnitsTypeEnum::Enum& unitsOut,
+                               float& startValueOut,
+                               float& stepValueOut) const;
+        
         virtual void getMapIntervalStartAndStep(float& firstMapUnitsValueOut,
                                                 float& mapIntervalStepValueOut) const;
         
@@ -465,6 +480,16 @@ namespace caret {
                                                     const int64_t &selectionIndex) const;
         
         void invalidateColoringInAllMaps();
+        
+        bool getRowColumnIndexFromVolumeXYZ(const float xyz[3],
+                                            int64_t& rowIndexOut,
+                                            int64_t& columnIndexOut) const;
+        
+        bool getRowColumnIndexFromSurfaceVertex(const StructureEnum::Enum structure,
+                                                const int64_t surfaceNumberOfVertices,
+                                                const int64_t vertexIndex,
+                                                int64_t& rowIndexOut,
+                                                int64_t& columnIndexOut) const;
         
         void getBrainordinateFromRowIndex(const int64_t rowIndex,
                                           StructureEnum::Enum& surfaceStructureOut,
@@ -497,7 +522,8 @@ namespace caret {
         
     public:
         enum class MatrixGridMode {
-            FILLED,
+            FILLED_TRIANGLES,
+            FILLED_TEXTURE,
             OUTLINE
         };
         
@@ -513,8 +539,9 @@ namespace caret {
                                       int32_t& numberOfColumnsOut,
                                       std::vector<float>& rgbaOut) const;
         
-        GraphicsPrimitiveV3fC4f* getMatrixChartingGraphicsPrimitive(const ChartTwoMatrixTriangularViewingModeEnum::Enum matrixViewMode,
-                                                                    const MatrixGridMode gridMode) const;
+        GraphicsPrimitive* getMatrixChartingGraphicsPrimitive(const ChartTwoMatrixTriangularViewingModeEnum::Enum matrixViewMode,
+                                                              const MatrixGridMode gridMode,
+                                                              const float opacity) const;
         
         /** Identifier for the matrix primitives alternative color used for the grid coloring */
         int32_t getMatrixChartGraphicsPrimitiveGridColorIdentifier() const { return 1; }
@@ -777,13 +804,18 @@ namespace caret {
         /** Histogram used when statistics computed on all data in file */
         CaretPointer<Histogram> m_fileHistogram;
         
-        /** Primitive for matrix cells */
-        mutable std::unique_ptr<GraphicsPrimitiveV3fC4f> m_matrixGraphicsPrimitive;
+        /** Primitive for matrix cells drawn with triangles*/
+        mutable std::unique_ptr<GraphicsPrimitiveV3fC4f> m_matrixGraphicsTrianglesPrimitive;
+        
+        /** Primitive for matrix cells drawn using a texture */
+        mutable std::unique_ptr<GraphicsPrimitiveV3fT3f> m_matrixGraphicsTexturePrimitive;
         
         /** Primitive for grid outline around matrix cells */
         mutable std::unique_ptr<GraphicsPrimitiveV3fC4f> m_matrixGraphicsOutlinePrimitive;
         
         mutable uint8_t m_previousMatrixGridRGBA[4] = { 0, 1, 2, 3 };
+        
+        mutable float m_previousMatrixOpacity = -1.0;
         
         int32_t m_fileHistogramNumberOfBuckets = 100;
         

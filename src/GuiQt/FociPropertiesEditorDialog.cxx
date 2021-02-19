@@ -409,7 +409,7 @@ FociPropertiesEditorDialog::loadFociFileComboBox(const FociFile* selectedFociFil
         FociFile* fociFile = brain->getFociFile(i);
         const AString name = fociFile->getFileNameNoPath();
         m_fociFileSelectionComboBox->addItem(name,
-                                                   qVariantFromValue((void*)fociFile));
+                                                   QVariant::fromValue((void*)fociFile));
         if (selectedFociFile == fociFile) {
             defaultFileComboIndex = m_fociFileSelectionComboBox->count() - 1;
         }
@@ -543,18 +543,13 @@ FociPropertiesEditorDialog::okButtonClicked()
         const int32_t unassignedNameKey = fociFile->getNameColorTable()->getUnassignedLabelKey();
         const int32_t selectedNameKey = m_nameComboBox->getSelectedLabelKey();
         if (selectedNameKey == unassignedNameKey) {
-            errorMessage += "Choose or create a name for the border";
+            errorMessage += "Choose or create a name for the focus.\n";
         }
     }
     
     
     const QString className = m_classComboBox->getSelectedLabelName();
     
-    if ((m_xCoordSpinBox->value() == 0.0)
-        && (m_yCoordSpinBox->value() == 0.0)
-        && (m_zCoordSpinBox->value() == 0.0)) {
-        errorMessage += "Coordinates are invalid (all zeros)\n";
-    }
     /*
      * Error?
      */

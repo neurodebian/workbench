@@ -25,13 +25,18 @@
 
 #include <cmath>
 
+#include "AnnotationBrowserTab.h"
 #include "AnnotationFontAttributesInterface.h"
 #include "AnnotationLine.h"
 #include "AnnotationPercentSizeText.h"
 #include "AnnotationPointSizeText.h"
-#include "AnnotationTwoDimensionalShape.h"
+#include "AnnotationPolyLine.h"
+#include "AnnotationStackingOrderOperation.h"
+#include "AnnotationOneCoordinateShape.h"
+#include "CaretLogger.h"
 #include "EventAnnotationAddToRemoveFromFile.h"
 #include "EventAnnotationGrouping.h"
+#include "EventAnnotationValidate.h"
 #include "EventGetViewportSize.h"
 #include "EventManager.h"
 #include "CaretAssert.h"
@@ -88,10 +93,53 @@ AnnotationRedoUndoCommand::applyRedoOrUndo(Annotation* annotation,
                                            const Annotation* annotationValue) const
 {
     CaretAssert(annotation);
+    
+    /*
+     * Test the validity of the annotation (it still exists) to
+     * avoid a crash.
+     */
+    EventAnnotationValidate validateEvent(annotation);
+    EventManager::get()->sendEvent(validateEvent.getPointer());
+    if ( ! validateEvent.isAnnotationValid()) {
+        CaretLogFine("Failed to validate annotation for redo/undo.  Annotation was likely deleted (not an error).");
+        return;
+    }
+    
+    
     const AnnotationTypeEnum::Enum annType = annotation->getType();
    
     switch (m_mode) {
         case AnnotationRedoUndoCommandModeEnum::INVALID:
+            break;
+        case AnnotationRedoUndoCommandModeEnum::BROWSER_TAB_BACKGROUND:
+        {
+            CaretAssert(annotation);
+            CaretAssert(annotationValue);
+            
+            AnnotationBrowserTab* annotationBrowserTab = dynamic_cast<AnnotationBrowserTab*>(annotation);
+            const AnnotationBrowserTab* annotationBrowserTabValue = dynamic_cast<const AnnotationBrowserTab*>(annotationValue);
+            CaretAssert(annotationBrowserTab);
+            CaretAssert(annotationBrowserTabValue);
+            
+            const TileTabsLayoutBackgroundTypeEnum::Enum backgroundType = annotationBrowserTabValue->getBackgroundType();
+            annotationBrowserTab->setBackgroundType(backgroundType);
+        }
+            break;
+        case AnnotationRedoUndoCommandModeEnum::BOUNDS_2D_ALL:
+        case AnnotationRedoUndoCommandModeEnum::BOUNDS_2D_SINGLE:
+        {
+            CaretAssert(annotation);
+            CaretAssert(annotationValue);
+            
+            AnnotationBrowserTab* annotationBrowserTab = dynamic_cast<AnnotationBrowserTab*>(annotation);
+            const AnnotationBrowserTab* annotationBrowserTabValue = dynamic_cast<const AnnotationBrowserTab*>(annotationValue);
+            CaretAssert(annotationBrowserTab);
+            CaretAssert(annotationBrowserTabValue);
+            
+            float minX(0.0), maxX(0.0), minY(0.0), maxY(0.0);
+            annotationBrowserTabValue->getBounds2D(minX, maxX, minY, maxY);
+            annotationBrowserTab->setBounds2D(minX, maxX, minY, maxY);
+        }
             break;
         case AnnotationRedoUndoCommandModeEnum::COLOR_BACKGROUND:
         {
@@ -113,11 +161,11 @@ AnnotationRedoUndoCommand::applyRedoOrUndo(Annotation* annotation,
             break;
         case AnnotationRedoUndoCommandModeEnum::COORDINATE_ONE:
         {
-            AnnotationOneDimensionalShape* oneDimShape = dynamic_cast<AnnotationOneDimensionalShape*>(annotation);
-            AnnotationTwoDimensionalShape* twoDimShape = dynamic_cast<AnnotationTwoDimensionalShape*>(annotation);
+            AnnotationTwoCoordinateShape* oneDimShape = dynamic_cast<AnnotationTwoCoordinateShape*>(annotation);
+            AnnotationOneCoordinateShape* twoDimShape = dynamic_cast<AnnotationOneCoordinateShape*>(annotation);
 
-            const AnnotationOneDimensionalShape* valueOneDimShape = dynamic_cast<const AnnotationOneDimensionalShape*>(annotationValue);
-            const AnnotationTwoDimensionalShape* valueTwoDimShape = dynamic_cast<const AnnotationTwoDimensionalShape*>(annotationValue);
+            const AnnotationTwoCoordinateShape* valueOneDimShape = dynamic_cast<const AnnotationTwoCoordinateShape*>(annotationValue);
+            const AnnotationOneCoordinateShape* valueTwoDimShape = dynamic_cast<const AnnotationOneCoordinateShape*>(annotationValue);
             
             if ((oneDimShape != NULL)
                 && (valueOneDimShape != NULL)) {
@@ -138,9 +186,9 @@ AnnotationRedoUndoCommand::applyRedoOrUndo(Annotation* annotation,
             break;
         case AnnotationRedoUndoCommandModeEnum::COORDINATE_ONE_AND_TWO:
         {
-            AnnotationOneDimensionalShape* oneDimShape = dynamic_cast<AnnotationOneDimensionalShape*>(annotation);
+            AnnotationTwoCoordinateShape* oneDimShape = dynamic_cast<AnnotationTwoCoordinateShape*>(annotation);
             
-            const AnnotationOneDimensionalShape* valueOneDimShape = dynamic_cast<const AnnotationOneDimensionalShape*>(annotationValue);
+            const AnnotationTwoCoordinateShape* valueOneDimShape = dynamic_cast<const AnnotationTwoCoordinateShape*>(annotationValue);
             
             if ((oneDimShape != NULL)
                 && (valueOneDimShape != NULL)) {
@@ -159,14 +207,30 @@ AnnotationRedoUndoCommand::applyRedoOrUndo(Annotation* annotation,
             break;
         case AnnotationRedoUndoCommandModeEnum::COORDINATE_TWO:
         {
-            AnnotationOneDimensionalShape* oneDimShape = dynamic_cast<AnnotationOneDimensionalShape*>(annotation);
-            const AnnotationOneDimensionalShape* valueOneDimShape = dynamic_cast<const AnnotationOneDimensionalShape*>(annotationValue);
+            AnnotationTwoCoordinateShape* oneDimShape = dynamic_cast<AnnotationTwoCoordinateShape*>(annotation);
+            const AnnotationTwoCoordinateShape* valueOneDimShape = dynamic_cast<const AnnotationTwoCoordinateShape*>(annotationValue);
             
             if ((oneDimShape != NULL)
                 && (valueOneDimShape != NULL)) {
                 AnnotationCoordinate* coordDest = oneDimShape->getEndCoordinate();
                 const AnnotationCoordinate* coordFrom = valueOneDimShape->getEndCoordinate();
                 *coordDest = *coordFrom;
+            }
+            else {
+                CaretAssert(0);
+            }
+        }
+            break;
+        case AnnotationRedoUndoCommandModeEnum::COORDINATE_MULTI:
+        {
+            AnnotationMultiCoordinateShape* multiCoordShape = dynamic_cast<AnnotationMultiCoordinateShape*>(annotation);
+            const AnnotationMultiCoordinateShape* valueMultiCoordShape = dynamic_cast<const AnnotationMultiCoordinateShape*>(annotationValue);
+            
+            if ((multiCoordShape != NULL)
+                && (valueMultiCoordShape != NULL)) {
+                std::vector<std::unique_ptr<const AnnotationCoordinate>> coords;
+                valueMultiCoordShape->getCopyOfAllCoordinates(coords);
+                multiCoordShape->replaceAllCoordinates(coords);
             }
             else {
                 CaretAssert(0);
@@ -189,6 +253,11 @@ AnnotationRedoUndoCommand::applyRedoOrUndo(Annotation* annotation,
                                    + " is handle in the redo() and undo() functions."));
             break;
         case AnnotationRedoUndoCommandModeEnum::DUPLICATE_ANNOTATION:
+            CaretAssertMessage(0, ("This mode "
+                                   + AnnotationRedoUndoCommandModeEnum::toName(m_mode)
+                                   + " is handle in the redo() and undo() functions."));
+            break;
+        case AnnotationRedoUndoCommandModeEnum::DUPLICATE_ANNOTATIONS:
             CaretAssertMessage(0, ("This mode "
                                    + AnnotationRedoUndoCommandModeEnum::toName(m_mode)
                                    + " is handle in the redo() and undo() functions."));
@@ -241,15 +310,15 @@ AnnotationRedoUndoCommand::applyRedoOrUndo(Annotation* annotation,
             break;
         case AnnotationRedoUndoCommandModeEnum::ROTATION_ANGLE:
             {
-                AnnotationTwoDimensionalShape* twoDimAnn = dynamic_cast<AnnotationTwoDimensionalShape*>(annotation);
-                const AnnotationTwoDimensionalShape* twoDimValue = dynamic_cast<const AnnotationTwoDimensionalShape*>(annotationValue);
+                AnnotationOneCoordinateShape* twoDimAnn = dynamic_cast<AnnotationOneCoordinateShape*>(annotation);
+                const AnnotationOneCoordinateShape* twoDimValue = dynamic_cast<const AnnotationOneCoordinateShape*>(annotationValue);
                 if ((twoDimAnn != NULL)
                     && (twoDimValue != NULL)) {
                     twoDimAnn->setRotationAngle(twoDimValue->getRotationAngle());
                 }
                 else {
-                    AnnotationOneDimensionalShape* oneDimAnn = dynamic_cast<AnnotationOneDimensionalShape*>(annotation);
-                    const AnnotationOneDimensionalShape* oneDimValue = dynamic_cast<const AnnotationOneDimensionalShape*>(annotationValue);
+                    AnnotationTwoCoordinateShape* oneDimAnn = dynamic_cast<AnnotationTwoCoordinateShape*>(annotation);
+                    const AnnotationTwoCoordinateShape* oneDimValue = dynamic_cast<const AnnotationTwoCoordinateShape*>(annotationValue);
                     if ((oneDimAnn != NULL)
                         && (oneDimValue != NULL)) {
                         oneDimAnn->getStartCoordinate()->setXYZ(oneDimValue->getStartCoordinate()->getXYZ());
@@ -257,6 +326,47 @@ AnnotationRedoUndoCommand::applyRedoOrUndo(Annotation* annotation,
                     }
                 }
             }
+            break;
+        case AnnotationRedoUndoCommandModeEnum::STACKING_ORDER_ANNOTATIONS:
+        {
+            const AnnotationTwoCoordinateShape* oneDimAnn = annotationValue->castToTwoCoordinateShape();
+            const AnnotationOneCoordinateShape* twoDimAnn = annotationValue->castToOneCoordinateShape();
+            if (oneDimAnn != NULL) {
+                float xyz[3];
+                oneDimAnn->getStartCoordinate()->getXYZ(xyz);
+                const float z1 = xyz[2];
+                oneDimAnn->getEndCoordinate()->getXYZ(xyz);
+                const float z2 = xyz[2];
+                
+                AnnotationTwoCoordinateShape* ann = annotation->castToTwoCoordinateShape();
+                if (ann != NULL) {
+                    ann->getStartCoordinate()->getXYZ(xyz);
+                    xyz[2] = z1;
+                    ann->getStartCoordinate()->setXYZ(xyz);
+                    
+                    ann->getEndCoordinate()->getXYZ(xyz);
+                    xyz[2] = z2;
+                    ann->getEndCoordinate()->setXYZ(xyz);
+                }
+            }
+            else if (twoDimAnn != NULL) {
+                float xyz[3];
+                twoDimAnn->getCoordinate()->getXYZ(xyz);
+                const float z = xyz[2];
+                
+                AnnotationOneCoordinateShape* ann = annotation->castToOneCoordinateShape();
+                if (ann != NULL) {
+                    ann->getCoordinate()->getXYZ(xyz);
+                    xyz[2] = z;
+                    ann->getCoordinate()->setXYZ(xyz);
+                }
+            }
+        }
+            break;
+        case AnnotationRedoUndoCommandModeEnum::STACKING_ORDER_BROWSER_TAB:
+        {
+            annotation->setStackingOrder(annotationValue->getStackingOrder());
+        }
             break;
         case AnnotationRedoUndoCommandModeEnum::TEXT_ALIGNMENT_HORIZONTAL:
         {
@@ -425,8 +535,8 @@ AnnotationRedoUndoCommand::applyRedoOrUndo(Annotation* annotation,
             break;
         case AnnotationRedoUndoCommandModeEnum::TWO_DIM_HEIGHT:
         {
-            AnnotationTwoDimensionalShape* twoDimAnn = dynamic_cast<AnnotationTwoDimensionalShape*>(annotation);
-            const AnnotationTwoDimensionalShape* twoDimValue = dynamic_cast<const AnnotationTwoDimensionalShape*>(annotationValue);
+            AnnotationOneCoordinateShape* twoDimAnn = dynamic_cast<AnnotationOneCoordinateShape*>(annotation);
+            const AnnotationOneCoordinateShape* twoDimValue = dynamic_cast<const AnnotationOneCoordinateShape*>(annotationValue);
             if ((twoDimAnn != NULL)
                 && (twoDimValue != NULL)) {
                 twoDimAnn->setHeight(twoDimValue->getHeight());
@@ -438,8 +548,8 @@ AnnotationRedoUndoCommand::applyRedoOrUndo(Annotation* annotation,
             break;
         case AnnotationRedoUndoCommandModeEnum::TWO_DIM_WIDTH:
         {
-            AnnotationTwoDimensionalShape* twoDimAnn = dynamic_cast<AnnotationTwoDimensionalShape*>(annotation);
-            const AnnotationTwoDimensionalShape* twoDimValue = dynamic_cast<const AnnotationTwoDimensionalShape*>(annotationValue);
+            AnnotationOneCoordinateShape* twoDimAnn = dynamic_cast<AnnotationOneCoordinateShape*>(annotation);
+            const AnnotationOneCoordinateShape* twoDimValue = dynamic_cast<const AnnotationOneCoordinateShape*>(annotationValue);
             if ((twoDimAnn != NULL)
                 && (twoDimValue != NULL)) {
                 twoDimAnn->setWidth(twoDimValue->getWidth());
@@ -555,7 +665,8 @@ AnnotationRedoUndoCommand::redo(AString& errorMessageOut)
                 validFlag = false;
             }
         }
-        else if (m_mode == AnnotationRedoUndoCommandModeEnum::DUPLICATE_ANNOTATION) {
+        else if ((m_mode == AnnotationRedoUndoCommandModeEnum::DUPLICATE_ANNOTATION)
+                 || (m_mode == AnnotationRedoUndoCommandModeEnum::DUPLICATE_ANNOTATIONS)) {
             EventAnnotationAddToRemoveFromFile duplicateEvent(EventAnnotationAddToRemoveFromFile::MODE_DUPLICATE,
                                                           annMem->m_annotationFile,
                                                           annMem->m_annotation);
@@ -689,7 +800,8 @@ AnnotationRedoUndoCommand::undo(AString& errorMessageOut)
                 validFlag = false;
             }
         }
-        else if (m_mode == AnnotationRedoUndoCommandModeEnum::DUPLICATE_ANNOTATION) {
+        else if ((m_mode == AnnotationRedoUndoCommandModeEnum::DUPLICATE_ANNOTATION)
+                 || (m_mode == AnnotationRedoUndoCommandModeEnum::DUPLICATE_ANNOTATIONS)) {
             EventAnnotationAddToRemoveFromFile duplicateEvent(EventAnnotationAddToRemoveFromFile::MODE_UNDUPLICATE,
                                                               annMem->m_annotationFile,
                                                               annMem->m_annotation);
@@ -791,6 +903,221 @@ AnnotationRedoUndoCommand::mergeWith(const CaretUndoCommand* command)
     return true;
 }
 
+/**
+ * Set them mode to all bounds and create the redo/undo instances.
+ *
+ * @param minX
+ *     New minimum x-value of the annotation
+ * @param maxX
+ *     New maximum x-value of the annotation
+ * @param minY
+ *     New minimum y-value of the annotation
+ * @param maxY
+ *     New minimum y-value of the annotation
+ * @param annotation
+ *     Annotation that receive this new bounds (browser tabs only).
+ */
+void
+AnnotationRedoUndoCommand::setBoundsAll(const float minX,
+                                        const float maxX,
+                                        const float minY,
+                                        const float maxY,
+                                        Annotation* annotation)
+{
+    CaretAssert(annotation);
+    
+    AnnotationBrowserTab* browserTabAnnotation = dynamic_cast<AnnotationBrowserTab*>(annotation);
+    if (browserTabAnnotation != NULL) {
+        m_mode = AnnotationRedoUndoCommandModeEnum::BOUNDS_2D_ALL;
+        setDescription("Bounds 2D ALL");
+        
+        AnnotationBrowserTab* redoAnnotation = dynamic_cast<AnnotationBrowserTab*>(browserTabAnnotation->clone());
+        CaretAssert(redoAnnotation);
+        redoAnnotation->setBounds2D(minX, maxX, minY, maxY);
+        
+        Annotation* undoAnnotation = browserTabAnnotation->clone();
+        AnnotationMemento* am = new AnnotationMemento(annotation,
+                                                      redoAnnotation,
+                                                      undoAnnotation);
+        m_annotationMementos.push_back(am);
+    }
+    else {
+        CaretLogWarning("Annotation for bounds setting must be a Browser Tab Annotation");
+    }
+}
+
+/**
+ * Set background type and create the redo/undo instances.
+ *
+ * @param backgroundType
+ *     New value for background type
+ * @param annotations
+ *     Annotations that receive this background type (browser tabs only).
+ */
+void
+AnnotationRedoUndoCommand::setBrowserTabBackground(const TileTabsLayoutBackgroundTypeEnum::Enum backgroundType,
+                                                   const std::vector<Annotation*>& annotations)
+{
+    m_mode = AnnotationRedoUndoCommandModeEnum::BROWSER_TAB_BACKGROUND;
+    setDescription("Browser Tab Background");
+    
+    for (std::vector<Annotation*>::const_iterator iter = annotations.begin();
+         iter != annotations.end();
+         iter++) {
+        Annotation* annotation = *iter;
+        CaretAssert(annotation);
+        
+        AnnotationBrowserTab* browserTabAnnotation = dynamic_cast<AnnotationBrowserTab*>(annotation);
+        if (browserTabAnnotation != NULL) {
+            AnnotationBrowserTab* redoAnnotation = dynamic_cast<AnnotationBrowserTab*>(browserTabAnnotation->clone());
+            CaretAssert(redoAnnotation);
+            
+            redoAnnotation->setBackgroundType(backgroundType);
+            
+            Annotation* undoAnnotation = browserTabAnnotation->clone();
+            AnnotationMemento* am = new AnnotationMemento(annotation,
+                                                          redoAnnotation,
+                                                          undoAnnotation);
+            m_annotationMementos.push_back(am);
+        }
+        else {
+            CaretLogWarning("Annotation for background type must be a Browser Tab Annotation");
+        }
+    }
+}
+
+/**
+ * Set them mode to x-minimum and create the redo/undo instances.
+ *
+ * @param newMinX
+ *     New minimum x-value of the annotation
+ * @param annotations
+ *     Annotations that receive this new bounds (browser tabs only).
+ */
+void
+AnnotationRedoUndoCommand::setBoundsMinX2D(const float newMinX,
+                                           const std::vector<Annotation*>& annotations)
+{
+    m_mode = AnnotationRedoUndoCommandModeEnum::BOUNDS_2D_SINGLE;
+    setDescription("Bounds 2D X-Min");
+    setBounds2DHelper(BoundsType2D::MIN_X,
+                      newMinX,
+                      annotations);
+}
+
+/**
+ * Set them mode to x-maximum and create the redo/undo instances.
+ *
+ * @param newMaxX
+ *     New minimum x-value of the annotation
+ * @param annotations
+ *     Annotations that receive this new bounds (browser tabs only).
+ */
+void
+AnnotationRedoUndoCommand::setBoundsMaxX2D(const float newMaxX,
+                                           const std::vector<Annotation*>& annotations)
+{
+    m_mode = AnnotationRedoUndoCommandModeEnum::BOUNDS_2D_SINGLE;
+    setDescription("Bounds 2D X-Max");
+    setBounds2DHelper(BoundsType2D::MAX_X,
+                      newMaxX,
+                      annotations);
+}
+
+/**
+ * Set them mode to y-minimum and create the redo/undo instances.
+ *
+ * @param newMinY
+ *     New minimum y-value of the annotation
+ * @param annotations
+ *     Annotations that receive this new bounds (browser tabs only).
+ */
+void
+AnnotationRedoUndoCommand::setBoundsMinY2D(const float newMinY,
+                                           const std::vector<Annotation*>& annotations)
+{
+    m_mode = AnnotationRedoUndoCommandModeEnum::BOUNDS_2D_SINGLE;
+    setDescription("Bounds 2D Y-Min");
+    setBounds2DHelper(BoundsType2D::MIN_Y,
+                      newMinY,
+                      annotations);
+}
+
+/**
+ * Set them mode to y-maximum and create the redo/undo instances.
+ *
+ * @param newMaxY
+ *     New maximum y-value of the annotation
+ * @param annotations
+ *     Annotations that receive this new bounds (browser tabs only).
+ */
+void
+AnnotationRedoUndoCommand::setBoundsMaxY2D(const float newMaxY,
+                                           const std::vector<Annotation*>& annotations)
+{
+    m_mode = AnnotationRedoUndoCommandModeEnum::BOUNDS_2D_SINGLE;
+    setDescription("Bounds 2D Y-Max");
+    setBounds2DHelper(BoundsType2D::MAX_Y,
+                      newMaxY,
+                      annotations);
+}
+
+/**
+ * Helper for bounds 2D
+ *
+ * @param boundsType
+ *     The bounds value bing set
+ * @param value
+ *     New value
+ * @param annotation
+ *     Annotations that have bounds changed.
+ */
+void
+AnnotationRedoUndoCommand::setBounds2DHelper(const BoundsType2D boundsType,
+                                             const float value,
+                                             const std::vector<Annotation*>& annotations)
+{
+    for (std::vector<Annotation*>::const_iterator iter = annotations.begin();
+         iter != annotations.end();
+         iter++) {
+        Annotation* annotation = *iter;
+        CaretAssert(annotation);
+        
+        AnnotationBrowserTab* browserTabAnnotation = dynamic_cast<AnnotationBrowserTab*>(annotation);
+        if (browserTabAnnotation != NULL) {
+            AnnotationBrowserTab* redoAnnotation = dynamic_cast<AnnotationBrowserTab*>(browserTabAnnotation->clone());
+            CaretAssert(redoAnnotation);
+            float minX(0.0), maxX(0.0), minY(0.0), maxY(0.0);
+            redoAnnotation->getBounds2D(minX, maxX, minY, maxY);
+            
+            switch (boundsType) {
+                case BoundsType2D::MIN_X:
+                    minX = value;
+                    break;
+                case BoundsType2D::MAX_X:
+                    maxX = value;
+                    break;
+                case BoundsType2D::MIN_Y:
+                    minY = value;
+                    break;
+                case BoundsType2D::MAX_Y:
+                    maxY = value;
+                    break;
+            }
+            
+            redoAnnotation->setBounds2D(minX, maxX, minY, maxY);
+            
+            Annotation* undoAnnotation = browserTabAnnotation->clone();
+            AnnotationMemento* am = new AnnotationMemento(annotation,
+                                                          redoAnnotation,
+                                                          undoAnnotation);
+            m_annotationMementos.push_back(am);
+        }
+        else {
+            CaretLogWarning("Annotation for bounds setting must be a Browser Tab Annotation");
+        }
+    }
+}
 
 /**
  * Set them mode to first coordinate and create the redo/undo instances.
@@ -814,8 +1141,8 @@ AnnotationRedoUndoCommand::setModeCoordinateOne(const AnnotationCoordinate& coor
         CaretAssert(annotation);
         
         Annotation* redoAnnotation = annotation->clone();
-        AnnotationOneDimensionalShape* oneDimShape = dynamic_cast<AnnotationOneDimensionalShape*>(redoAnnotation);
-        AnnotationTwoDimensionalShape* twoDimShape = dynamic_cast<AnnotationTwoDimensionalShape*>(redoAnnotation);
+        AnnotationTwoCoordinateShape* oneDimShape = dynamic_cast<AnnotationTwoCoordinateShape*>(redoAnnotation);
+        AnnotationOneCoordinateShape* twoDimShape = dynamic_cast<AnnotationOneCoordinateShape*>(redoAnnotation);
         
         AnnotationCoordinate* redoCoordinate = NULL;
         if (oneDimShape != NULL) {
@@ -866,7 +1193,7 @@ AnnotationRedoUndoCommand::setModeCoordinateOneAndTwo(const AnnotationCoordinate
         CaretAssert(annotation);
         
         Annotation* redoAnnotation = annotation->clone();
-        AnnotationOneDimensionalShape* oneDimShape = dynamic_cast<AnnotationOneDimensionalShape*>(redoAnnotation);
+        AnnotationTwoCoordinateShape* oneDimShape = dynamic_cast<AnnotationTwoCoordinateShape*>(redoAnnotation);
         
         if (oneDimShape != NULL) {
             AnnotationCoordinate* redoCoordinateOne = oneDimShape->getStartCoordinate();
@@ -958,7 +1285,7 @@ AnnotationRedoUndoCommand::setModeCoordinateTwo(const AnnotationCoordinate& coor
         CaretAssert(annotation);
         
         Annotation* redoAnnotation = annotation->clone();
-        AnnotationOneDimensionalShape* oneDimShape = dynamic_cast<AnnotationOneDimensionalShape*>(redoAnnotation);
+        AnnotationTwoCoordinateShape* oneDimShape = dynamic_cast<AnnotationTwoCoordinateShape*>(redoAnnotation);
         
         AnnotationCoordinate* redoCoordinate = NULL;
         if (oneDimShape != NULL) {
@@ -980,6 +1307,51 @@ AnnotationRedoUndoCommand::setModeCoordinateTwo(const AnnotationCoordinate& coor
         }
     }
 }
+
+/**
+ * Set them mode to second coordinate and create the redo/undo instances.
+ *
+ * @param coordinate
+ *     New value of the coordinate.
+ * @param annotations
+ *     Annotations that receive this new coordinate.
+ */
+void
+AnnotationRedoUndoCommand::setModeCoordinateMulti(const std::vector<std::unique_ptr<const AnnotationCoordinate>>& coordinates,
+                                                  const std::vector<Annotation*>& annotations)
+{
+    std::vector<AnnotationMultiCoordinateShape*> multiCoordAnns;
+    for (auto& ann : annotations) {
+        CaretAssert(ann);
+        AnnotationMultiCoordinateShape* mc = ann->castToMultiCoordinateShape();
+        if (mc != NULL) {
+            multiCoordAnns.push_back(mc);
+        }
+        else {
+            CaretLogWarning("Attempting to apply set multi-coords on annotation that is does not support multi-coordinates: "
+                            + ann->toString());
+        }
+    }
+    if (multiCoordAnns.empty()) {
+        CaretLogWarning("No multi-coord annotations for setting coordinates");
+        return;
+    }
+    
+    m_mode        = AnnotationRedoUndoCommandModeEnum::COORDINATE_MULTI;
+    setDescription("Set coordinates for multi-coordinate annotations");
+    
+    for (auto& ann : multiCoordAnns) {
+        CaretAssert(ann);
+        AnnotationMultiCoordinateShape* redoAnnotation = dynamic_cast<AnnotationMultiCoordinateShape*>(ann->clone());
+        ann->replaceAllCoordinates(coordinates);
+        Annotation* undoAnnotation = ann->clone();
+        AnnotationMemento* am = new AnnotationMemento(ann,
+                                                      redoAnnotation,
+                                                      undoAnnotation);
+        m_annotationMementos.push_back(am);
+    }
+}
+
 
 /**
  * Set them mode to line arrow start and create the redo/undo instances.
@@ -1381,6 +1753,43 @@ AnnotationRedoUndoCommand::setModeDuplicateAnnotation(AnnotationFile* annotation
     m_annotationMementos.push_back(am);
 }
 
+/**
+ * Set the mode to duplicate annotations and create the undo/redo instances.
+ *
+ * @param fileAndAnnotations
+ *       Pairs with file and annotation
+ */
+void
+AnnotationRedoUndoCommand::setModeDuplicateAnnotations(std::vector<std::pair<AnnotationFile*, Annotation*>>& fileAndAnnotations)
+{
+    m_mode = AnnotationRedoUndoCommandModeEnum::DUPLICATE_ANNOTATIONS;
+    setDescription("Duplicate Annotations");
+    
+    CaretAssert(fileAndAnnotations.size() > 0);
+    
+    for (auto& fileAnn : fileAndAnnotations) {
+        AnnotationFile* file(fileAnn.first);
+        Annotation*     annotation(fileAnn.second);
+        CaretAssert(file);
+        CaretAssert(annotation);
+        
+        /*
+         * NOTE: We only need the pointer since the file containing
+         * the annotation will handle delete/undelete of the
+         * annotation.  If we don't use NULL for the redo and
+         * undo annotations, copies of the annotation would be
+         * needed since the AnnotationMemento will delete
+         * the redo and undo annotations when it is deleted.
+         */
+        AnnotationMemento* am = new AnnotationMemento(file,
+                                                      annotation,
+                                                      NULL,
+                                                      NULL);
+        
+        m_annotationMementos.push_back(am);
+    }
+}
+
 
 /**
  * Set the mode to rotation angle and create the undo/redo instances
@@ -1403,10 +1812,10 @@ AnnotationRedoUndoCommand::setModeRotationAngle(const float newRotationAngle,
         Annotation* annotation = *iter;
         CaretAssert(annotation);
         
-        AnnotationTwoDimensionalShape* twoDimAnn = dynamic_cast<AnnotationTwoDimensionalShape*>(annotation);
-        AnnotationOneDimensionalShape* oneDimAnn = dynamic_cast<AnnotationOneDimensionalShape*>(annotation);
+        AnnotationOneCoordinateShape* twoDimAnn = dynamic_cast<AnnotationOneCoordinateShape*>(annotation);
+        AnnotationTwoCoordinateShape* oneDimAnn = dynamic_cast<AnnotationTwoCoordinateShape*>(annotation);
         if (twoDimAnn != NULL) {
-            AnnotationTwoDimensionalShape* redoAnnotation = dynamic_cast<AnnotationTwoDimensionalShape*>(annotation->clone());
+            AnnotationOneCoordinateShape* redoAnnotation = dynamic_cast<AnnotationOneCoordinateShape*>(annotation->clone());
             CaretAssert(redoAnnotation);
             redoAnnotation->setRotationAngle(newRotationAngle);
             Annotation* undoAnnotation = annotation->clone();
@@ -1469,7 +1878,7 @@ AnnotationRedoUndoCommand::setModeRotationAngle(const float newRotationAngle,
                 const bool rotateAroundMiddleFlag = true;
                 if (rotateAroundMiddleFlag) {
 
-                    AnnotationOneDimensionalShape* redoAnnotation = dynamic_cast<AnnotationOneDimensionalShape*>(annotation->clone());
+                    AnnotationTwoCoordinateShape* redoAnnotation = dynamic_cast<AnnotationTwoCoordinateShape*>(annotation->clone());
                     CaretAssert(redoAnnotation);
                     redoAnnotation->setRotationAngle(vpWidth, vpHeight, newRotationAngle);
                     Annotation* undoAnnotation = annotation->clone();
@@ -1489,7 +1898,7 @@ AnnotationRedoUndoCommand::setModeRotationAngle(const float newRotationAngle,
                     annTwoY = annOneY + dy;
                     
                     
-                    AnnotationOneDimensionalShape* redoAnnotation = dynamic_cast<AnnotationOneDimensionalShape*>(annotation->clone());
+                    AnnotationTwoCoordinateShape* redoAnnotation = dynamic_cast<AnnotationTwoCoordinateShape*>(annotation->clone());
                     CaretAssert(redoAnnotation);
                     redoAnnotation->getEndCoordinate()->setXYZFromViewportXYZ(vpWidth, vpHeight, annTwoX, annTwoY);
                     Annotation* undoAnnotation = annotation->clone();
@@ -1504,6 +1913,34 @@ AnnotationRedoUndoCommand::setModeRotationAngle(const float newRotationAngle,
     
 }
 
+/**
+ * Set the mode to stacking order and created the undo/redo instances
+ *
+ * @param newStackingOrder
+ *     New stacking order value
+ * @param annotations
+ *     Annotations that receive the new stacking order
+ */
+void
+AnnotationRedoUndoCommand::setModeStackingOrderBrowserTab(const int32_t newStackingOrder,
+                                                          const std::vector<Annotation*>& annotations)
+{
+    m_mode = AnnotationRedoUndoCommandModeEnum::STACKING_ORDER_BROWSER_TAB;
+    setDescription("Stacking Order");
+    
+    for (auto ann : annotations) {
+        CaretAssert(ann);
+        Annotation* redoAnnotation = ann->clone();
+        CaretAssert(redoAnnotation);
+        redoAnnotation->setStackingOrder(newStackingOrder);
+        
+        Annotation* undoAnnotation = ann->clone();
+        AnnotationMemento* am = new AnnotationMemento(ann,
+                                                      redoAnnotation,
+                                                      undoAnnotation);
+        m_annotationMementos.push_back(am);
+    }
+}
 
 /**
  * Set the mode to horizontal text alignment and create the undo/redo instances
@@ -1601,6 +2038,8 @@ AnnotationRedoUndoCommand::setModeTextCharacters(const AString& text,
         switch (annotation->getType()) {
             case AnnotationTypeEnum::BOX:
                 break;
+            case AnnotationTypeEnum::BROWSER_TAB:
+                break;
             case AnnotationTypeEnum::COLOR_BAR:
                 break;
             case AnnotationTypeEnum::IMAGE:
@@ -1608,6 +2047,10 @@ AnnotationRedoUndoCommand::setModeTextCharacters(const AString& text,
             case AnnotationTypeEnum::LINE:
                 break;
             case AnnotationTypeEnum::OVAL:
+                break;
+            case AnnotationTypeEnum::POLY_LINE:
+                break;
+            case AnnotationTypeEnum::SCALE_BAR:
                 break;
             case AnnotationTypeEnum::TEXT:
                 redoAnnotation = dynamic_cast<AnnotationText*>(annotation->clone());
@@ -2006,9 +2449,9 @@ AnnotationRedoUndoCommand::setModeTwoDimHeight(const float newHeight,
         Annotation* annotation = *iter;
         CaretAssert(annotation);
 
-        AnnotationTwoDimensionalShape* twoDimAnn = dynamic_cast<AnnotationTwoDimensionalShape*>(annotation);
+        AnnotationOneCoordinateShape* twoDimAnn = dynamic_cast<AnnotationOneCoordinateShape*>(annotation);
         if (twoDimAnn != NULL) {
-            AnnotationTwoDimensionalShape* redoAnnotation = dynamic_cast<AnnotationTwoDimensionalShape*>(annotation->clone());
+            AnnotationOneCoordinateShape* redoAnnotation = dynamic_cast<AnnotationOneCoordinateShape*>(annotation->clone());
             CaretAssert(redoAnnotation);
             redoAnnotation->setHeight(newHeight);
             Annotation* undoAnnotation = annotation->clone();
@@ -2041,9 +2484,9 @@ AnnotationRedoUndoCommand::setModeTwoDimWidth(const float newWidth,
         Annotation* annotation = *iter;
         CaretAssert(annotation);
         
-        AnnotationTwoDimensionalShape* twoDimAnn = dynamic_cast<AnnotationTwoDimensionalShape*>(annotation);
+        AnnotationOneCoordinateShape* twoDimAnn = dynamic_cast<AnnotationOneCoordinateShape*>(annotation);
         if (twoDimAnn != NULL) {
-            AnnotationTwoDimensionalShape* redoAnnotation = dynamic_cast<AnnotationTwoDimensionalShape*>(annotation->clone());
+            AnnotationOneCoordinateShape* redoAnnotation = dynamic_cast<AnnotationOneCoordinateShape*>(annotation->clone());
             CaretAssert(redoAnnotation);
             redoAnnotation->setWidth(newWidth);
             Annotation* undoAnnotation = annotation->clone();
@@ -2052,6 +2495,65 @@ AnnotationRedoUndoCommand::setModeTwoDimWidth(const float newWidth,
                                                           undoAnnotation);
             m_annotationMementos.push_back(am);
         }
+    }
+}
+
+/**
+ * Set the mode to and process an annotation stacking order change (but NOT for browser tab annotations)
+ *
+ * @param annotations
+ *     The annotations that are reordered
+ * @param stackingOrders
+ *     New stacking orders for each of the annotations
+ * @param orderType
+ *     Type of ordering
+ */
+void
+AnnotationRedoUndoCommand::setModeStackingOrderAnnotations(const std::vector<Annotation*>& annotations,
+                                                           const std::vector<float>& stackingOrders,
+                                                           const AnnotationStackingOrderTypeEnum::Enum orderType)
+{
+    m_mode = AnnotationRedoUndoCommandModeEnum::STACKING_ORDER_ANNOTATIONS;
+    setDescription(AnnotationStackingOrderTypeEnum::toGuiName(orderType));
+    
+    CaretAssert(annotations.size() == stackingOrders.size());
+    
+    const int32_t numAnn = static_cast<int32_t>(annotations.size());
+    for (int32_t i = 0; i < numAnn; i++) {
+        CaretAssertVectorIndex(annotations, i);
+        CaretAssertVectorIndex(stackingOrders, i);
+
+        const float newZ = stackingOrders[i];
+        
+        Annotation* redoAnnotation = annotations[i]->clone();
+        CaretAssert(redoAnnotation);
+        AnnotationTwoCoordinateShape* oneDimAnn = redoAnnotation->castToTwoCoordinateShape();
+        AnnotationOneCoordinateShape* twoDimAnn = redoAnnotation->castToOneCoordinateShape();
+        if (oneDimAnn != NULL) {
+            float xyz[3];
+            oneDimAnn->getStartCoordinate()->getXYZ(xyz);
+            xyz[2] = newZ;
+            oneDimAnn->getStartCoordinate()->setXYZ(xyz);
+            oneDimAnn->getEndCoordinate()->getXYZ(xyz);
+            xyz[2] = newZ;
+            oneDimAnn->getEndCoordinate()->setXYZ(xyz);
+        }
+        else if (twoDimAnn != NULL) {
+            float xyz[3];
+            twoDimAnn->getCoordinate()->getXYZ(xyz);
+            xyz[2] = newZ;
+            twoDimAnn->getCoordinate()->setXYZ(xyz);
+        }
+        else {
+            CaretAssert(0);
+        }
+        
+        Annotation* undoAnnotation = annotations[i]->clone();
+        
+        AnnotationMemento* am = new AnnotationMemento(annotations[i],
+                                                      redoAnnotation,
+                                                      undoAnnotation);
+        m_annotationMementos.push_back(am);
     }
 }
 

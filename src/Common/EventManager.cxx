@@ -367,9 +367,13 @@ EventManager::sendSimpleEvent(const EventTypeEnum::Enum eventType)
 {
     
     switch (eventType) {
+        /*
+         * Simple Events (no Event subclass)
+         */
         case EventTypeEnum::EVENT_ANNOTATION_TOOLBAR_UPDATE:
         case EventTypeEnum::EVENT_BROWSER_WINDOW_MENUS_UPDATE:
         case EventTypeEnum::EVENT_MOVIE_RECORDING_DIALOG_UPDATE:
+        case EventTypeEnum::EVENT_TOOLBAR_CHART_ORIENTED_AXES_UPDATE:
         case EventTypeEnum::EVENT_UPDATE_VOLUME_SLICE_INDICES_COORDS_TOOLBAR:
         {
             sendEvent(Event(eventType).getPointer());
@@ -384,27 +388,41 @@ EventManager::sendSimpleEvent(const EventTypeEnum::Enum eventType)
             CaretLogSevere(msg);
         }
             break;
+        /*
+         * Events that have a subclass of Event
+         */
         case EventTypeEnum::EVENT_ALERT_USER:
         case EventTypeEnum::EVENT_ANNOTATION_ADD_TO_REMOVE_FROM_FILE:
+        case EventTypeEnum::EVENT_ANNOTATION_BARS_GET:
         case EventTypeEnum::EVENT_ANNOTATION_CHART_LABEL_GET:
-        case EventTypeEnum::EVENT_ANNOTATION_COLOR_BAR_GET:
         case EventTypeEnum::EVENT_ANNOTATION_CREATE_NEW_TYPE:
         case EventTypeEnum::EVENT_ANNOTATION_GET_DRAWN_IN_WINDOW:
         case EventTypeEnum::EVENT_ANNOTATION_GROUP_GET_WITH_KEY:
         case EventTypeEnum::EVENT_ANNOTATION_GROUPING:
+        case EventTypeEnum::EVENT_ANNOTATION_TEXT_GET_BOUNDS:
         case EventTypeEnum::EVENT_ANNOTATION_TEXT_SUBSTITUTION_GET:
         case EventTypeEnum::EVENT_ANNOTATION_TEXT_SUBSTITUTION_INVALIDATE:
+        case EventTypeEnum::EVENT_ANNOTATION_VALIDATE:
         case EventTypeEnum::EVENT_BRAIN_RESET:
         case EventTypeEnum::EVENT_BRAIN_STRUCTURE_GET_ALL:
+        case EventTypeEnum::EVENT_BROWSER_TAB_CLOSE:
+        case EventTypeEnum::EVENT_BROWSER_TAB_CLOSE_IN_TOOL_BAR:
         case EventTypeEnum::EVENT_BROWSER_TAB_DELETE:
+        case EventTypeEnum::EVENT_BROWSER_TAB_DELETE_IN_TOOL_BAR:
         case EventTypeEnum::EVENT_BROWSER_TAB_GET:
         case EventTypeEnum::EVENT_BROWSER_TAB_GET_ALL:
         case EventTypeEnum::EVENT_BROWSER_TAB_GET_ALL_VIEWED:
         case EventTypeEnum::EVENT_BROWSER_TAB_INDICES_GET_ALL:
+        case EventTypeEnum::EVENT_BROWSER_TAB_INDICES_GET_ALL_VIEWED:
         case EventTypeEnum::EVENT_BROWSER_TAB_NEW:
+        case EventTypeEnum::EVENT_BROWSER_TAB_NEW_IN_GUI:
         case EventTypeEnum::EVENT_BROWSER_TAB_NEW_CLONE:
+        case EventTypeEnum::EVENT_BROWSER_TAB_REOPEN_AVAILBLE:
+        case EventTypeEnum::EVENT_BROWSER_TAB_REOPEN_CLOSED:
+        case EventTypeEnum::EVENT_BROWSER_TAB_SELECT_IN_WINDOW:
         case EventTypeEnum::EVENT_BROWSER_WINDOW_CONTENT:
         case EventTypeEnum::EVENT_BROWSER_WINDOW_CREATE_TABS:
+        case EventTypeEnum::EVENT_BROWSER_WINDOW_GET_TABS:
         case EventTypeEnum::EVENT_BROWSER_WINDOW_DRAWING_CONTENT_GET:
         case EventTypeEnum::EVENT_BROWSER_WINDOW_GRAPHICS_HAVE_BEEN_REDRAWN:
         case EventTypeEnum::EVENT_BROWSER_WINDOW_NEW:
@@ -415,18 +433,20 @@ EventManager::sendSimpleEvent(const EventTypeEnum::Enum eventType)
         case EventTypeEnum::EVENT_CARET_PREFERENCES_GET:
         case EventTypeEnum::EVENT_CARET_MAPPABLE_DATA_FILES_AND_MAPS_IN_DISPLAYED_OVERLAYS:
         case EventTypeEnum::EVENT_CHART_MATRIX_YOKING_VALIDATION:
-        case EventTypeEnum::EVENT_CHART_OVERLAY_VALIDATE:
-        case EventTypeEnum::EVENT_CHART_TWO_ATTRIBUTES_CHANGED:
-        case EventTypeEnum::EVENT_CHART_TWO_AXIS_GET_DATA_RANGE:
+        case EventTypeEnum::EVENT_CHART_TWO_CARTEISAN_AXIS_DISPLAY_GROUP:
+        case EventTypeEnum::EVENT_CHART_TWO_CARTESIAN_ORIENTED_AXES_YOKING:
         case EventTypeEnum::EVENT_CHART_TWO_LOAD_LINE_SERIES_DATA:
+        case EventTypeEnum::EVENT_CHART_TWO_OVERLAY_VALIDATE:
         case EventTypeEnum::EVENT_DATA_FILE_ADD:
         case EventTypeEnum::EVENT_DATA_FILE_DELETE:
         case EventTypeEnum::EVENT_DATA_FILE_READ:
         case EventTypeEnum::EVENT_DATA_FILE_RELOAD:
+        case EventTypeEnum::EVENT_DATA_FILE_RELOAD_ALL:
         case EventTypeEnum::EVENT_GET_DISPLAYED_DATA_FILES:
         case EventTypeEnum::EVENT_GET_NODE_DATA_FILES:
         case EventTypeEnum::EVENT_GET_OR_SET_USER_INPUT_MODE:
         case EventTypeEnum::EVENT_GET_TEXT_RENDERER_FOR_WINDOW:
+        case EventTypeEnum::EVENT_GET_USER_INPUT_MODE:
         case EventTypeEnum::EVENT_GET_VIEWPORT_SIZE:
         case EventTypeEnum::EVENT_GRAPHICS_OPENGL_CREATE_BUFFER_OBJECT:
         case EventTypeEnum::EVENT_GRAPHICS_OPENGL_CREATE_TEXTURE_NAME:
@@ -435,14 +455,15 @@ EventManager::sendSimpleEvent(const EventTypeEnum::Enum eventType)
         case EventTypeEnum::EVENT_GRAPHICS_TIMING_ONE_WINDOW:
         case EventTypeEnum::EVENT_GRAPHICS_UPDATE_ALL_WINDOWS:
         case EventTypeEnum::EVENT_GRAPHICS_UPDATE_ONE_WINDOW:
+        case EventTypeEnum::EVENT_GRAPHICS_WINDOW_SHOW_TOOL_TIP:
         case EventTypeEnum::EVENT_HELP_VIEWER_DISPLAY:
         case EventTypeEnum::EVENT_IDENTIFICATION_HIGHLIGHT_LOCATION:
         case EventTypeEnum::EVENT_IDENTIFICATION_SYMBOL_REMOVAL:
         case EventTypeEnum::EVENT_IDENTIFICATION_REQUEST:
         case EventTypeEnum::EVENT_IMAGE_CAPTURE:
-        case EventTypeEnum::EVENT_MAC_DOCK_MENU_UPDATE:
         case EventTypeEnum::EVENT_MAP_YOKING_SELECT_MAP:
         case EventTypeEnum::EVENT_MAP_YOKING_VALIDATION:
+        case EventTypeEnum::EVENT_MEDIA_FILES_GET:
         case EventTypeEnum::EVENT_MODEL_ADD:
         case EventTypeEnum::EVENT_MODEL_DELETE:
         case EventTypeEnum::EVENT_MODEL_GET_ALL:
@@ -456,6 +477,8 @@ EventManager::sendSimpleEvent(const EventTypeEnum::Enum eventType)
         case EventTypeEnum::EVENT_OVERLAY_VALIDATE:
         case EventTypeEnum::EVENT_PALETTE_COLOR_MAPPING_EDITOR_SHOW:
         case EventTypeEnum::EVENT_PALETTE_GET_BY_NAME:
+        case EventTypeEnum::EVENT_PALETTE_GROUPS_GET:
+        case EventTypeEnum::EVENT_RECENT_FILES_SYSTEM_ACCESS_MODE:
         case EventTypeEnum::EVENT_SCENE_ACTIVE:
         case EventTypeEnum::EVENT_SHOW_FILE_DATA_READ_WARNING_DIALOG:
         case EventTypeEnum::EVENT_SPACER_TAB_GET:

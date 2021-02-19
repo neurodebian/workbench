@@ -64,6 +64,7 @@ ScenePathName.h
 ScenePathNameArray.h
 ScenePrimitive.h
 ScenePrimitiveArray.h
+SceneRestoreWarningCodesEnum.h
 SceneSaxReader.h
 SceneString.h
 SceneStringArray.h
@@ -77,6 +78,7 @@ SceneXmlStreamBase.h
 SceneXmlStreamReader.h
 SceneXmlStreamWriter.h
 SceneableInterface.h
+TileTabsBrowserTabGeometrySceneHelper.h
 
 BackgroundAndForegroundColorsSceneHelper.cxx
 DisplayGroupAndTabItemHelper.cxx
@@ -108,6 +110,7 @@ ScenePathName.cxx
 ScenePathNameArray.cxx
 ScenePrimitive.cxx
 ScenePrimitiveArray.cxx
+SceneRestoreWarningCodesEnum.cxx
 SceneSaxReader.cxx
 SceneString.cxx
 SceneStringArray.cxx
@@ -118,6 +121,7 @@ SceneWriterXml.cxx
 SceneXmlStreamBase.cxx
 SceneXmlStreamReader.cxx
 SceneXmlStreamWriter.cxx
+TileTabsBrowserTabGeometrySceneHelper.cxx
 )
 
 TARGET_LINK_LIBRARIES(Scenes ${CARET_QT5_LINK})

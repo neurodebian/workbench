@@ -35,6 +35,7 @@ class QLabel;
 class QLineEdit;
 class QPushButton;
 class QScrollArea;
+class QTextEdit;
 class QVBoxLayout;
 
 namespace caret {
@@ -62,6 +63,8 @@ namespace caret {
                           Scene* scene);
         
         void createDefaultSceneFile();
+        
+        SceneFile* getSelectedSceneFile();
         
         static bool isInformUserAboutScenesOnExit();
 
@@ -136,8 +139,6 @@ namespace caret {
         virtual void helpButtonClicked() override;
         
     private:
-        SceneFile* getSelectedSceneFile();
-        
         Scene* getSelectedScene();
         
         void loadSceneFileComboBox(SceneFile* selectedSceneFileIn);
@@ -164,10 +165,11 @@ namespace caret {
                                                               const bool showWaitCursor);
 
         static bool displayScenePrivateWithErrorMessage(SceneFile* sceneFile,
-                                                 Scene* scene,
-                                                 const bool showWaitCursor,
-                                                 AString& errorMessageOut);
-        
+                                                        Scene* scene,
+                                                        const bool showWaitCursor,
+                                                        AString& errorMessageOut,
+                                                        AString& warningMessageOut);
+
         bool displayNewSceneWarning();
         
         void enableSceneMoveUpAndDownButtons();
@@ -294,8 +296,8 @@ namespace caret {
                                                                const int32_t sceneIndex,
                                                                AString& nameTextOut,
                                                                AString& sceneIdTextOut,
-                                                               AString& descriptionTextOut,
-                                                               const int32_t maximumLinesInDescription);
+                                                               AString& abbreviatedDescriptionTextOut,
+                                                               AString& fullDescriptionTextOut);
         
     signals:
         /**
@@ -347,7 +349,6 @@ namespace caret {
     bool SceneDialog::s_informUserAboutScenesOnExitFlag = true;
     bool SceneDialog::s_warnUserWhenCreatingSceneFlag = true;
     bool SceneDialog::s_useSceneForegroundBackgroundColorsFlag = true;
-    
 #endif // __SCENE_DIALOG_DECLARE__
 
 } // namespace

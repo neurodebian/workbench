@@ -34,7 +34,7 @@ public:
     /**
      * Enumerated values.
      */
-    enum Enum {
+    enum class Enum {
         /** Invalid */
         INVALID,
         /** Annotations */
@@ -45,6 +45,8 @@ public:
         FOCI,
         /** Image */
         IMAGE,
+        /** Tile tabs manual layouot editing */
+        TILE_TABS_MANUAL_LAYOUT_EDITING,
         /** View */
         VIEW,
         /** Volume Edit */

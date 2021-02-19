@@ -34,6 +34,7 @@
 #include "ApplicationInformation.h"
 #include "BrainOpenGLWidget.h"
 #include "CaretAssert.h"
+#include "ImageFile.h"
 #include "WuQDataEntryDialog.h"
 #include "WuQtUtilities.h"
 
@@ -76,13 +77,12 @@ AboutWorkbenchDialog::AboutWorkbenchDialog(BrainOpenGLWidget* openGLParentWidget
     workbenchFont.setPointSize(32);
     workbenchLabel->setFont(workbenchFont);
     
-    const QString labelStyle = ("QLabel { "
-                                " font: 20px bold "
-                                "}");
     QLabel* hcpWebsiteLabel = new QLabel("<html>"
-                                         "<bold><a href=\"http://www.humanconnectome.org\">Visit the Human Connectome Project</a></bold>"
+                                         "<a href=\"http://www.humanconnectome.org\">Visit the Human Connectome Project</a>"
                                          "</html>");
-    hcpWebsiteLabel->setStyleSheet(labelStyle);
+    QFont hcpWebsiteFont(hcpWebsiteLabel->font());
+    hcpWebsiteFont.setPointSize(16);
+    hcpWebsiteLabel->setFont(hcpWebsiteFont);
     hcpWebsiteLabel->setAlignment(Qt::AlignCenter);
     QObject::connect(hcpWebsiteLabel, SIGNAL(linkActivated(const QString&)),
                      this, SLOT(websiteLinkActivated(const QString&)));
@@ -173,7 +173,30 @@ AboutWorkbenchDialog::displayMoreInformation()
     }
     informationData.push_back(QString("Style Name: " + styleName));
     
-    
+    std::vector<AString> imageReadExtensions, imageWriteExtensions;
+    ImageFile::getQtSupportedImageFileExtensions(imageReadExtensions,
+                                                 imageWriteExtensions);
+    informationData.push_back("Qt Readable Images: "
+                              + AString::join(imageReadExtensions, ", "));
+    informationData.push_back("Qt Writable Images: "
+                              + AString::join(imageWriteExtensions, ", "));
+
+    AString imageWriteDefaultExtension;
+    ImageFile::getWorkbenchSupportedImageFileExtensions(imageReadExtensions,
+                                                        imageWriteExtensions,
+                                                        imageWriteDefaultExtension);
+    informationData.push_back("Workbench Readable Images: "
+                              + AString::join(imageReadExtensions, ", "));
+    informationData.push_back("Workbench Writable Images: "
+                              + AString::join(imageWriteExtensions, ", "));
+    informationData.push_back("Default Image Type: "
+                              + imageWriteDefaultExtension);
+
+    std::vector<AString> movieReadExtensions;
+    DataFileTypeEnum::getQtSupportedMovieFileExtensions(movieReadExtensions);
+    informationData.push_back("Qt Readable Movies (QMovie): "
+                              + AString::join(movieReadExtensions, ", "));
+
     WuQDataEntryDialog ded("More " + appInfo.getName() + " Information",
                            this,
                            true);

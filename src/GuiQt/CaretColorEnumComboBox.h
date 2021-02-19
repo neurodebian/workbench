@@ -21,6 +21,7 @@
  */
 /*LICENSE_END*/
 
+#include <array>
 
 #include "CaretColorEnum.h"
 #include "WuQWidget.h"
@@ -34,26 +35,61 @@ namespace caret {
         Q_OBJECT
 
     public:
+        /**
+         * Custom color mode
+         */
+        enum class CustomColorModeEnum {
+            /**
+             * No custom color
+             */
+            DISABLED,
+            /**
+             * Custom's color editable by user (pop-up when selected)
+             */
+            EDITABLE,
+            /**
+             * Custom's color is fixed and set throught function call
+             */
+            FIXED
+        };
+        
+        /**
+         * None color mode
+         */
+        enum class NoneColorModeEnum {
+            /**
+             * No None color
+             */
+            DISABLED,
+            /**
+             * Custom's color editable by user (pop-up when selected)
+             */
+            ENABLED
+        };
+        
         CaretColorEnumComboBox(QObject* parent);
         
-        CaretColorEnumComboBox(const AString& customColorSelectionName,
+        CaretColorEnumComboBox(const CustomColorModeEnum customColorMode,
+                               const NoneColorModeEnum noneColorMode,
                                QObject* parent);
-        
-        CaretColorEnumComboBox(const AString& customColorSelectionName,
-                               const QIcon& customColorSelectionIcon,
-                               QObject* parent);
-        
-        CaretColorEnumComboBox(const AString& customColorSelectionName,
-                               const QIcon& customColorSelectionIcon,
-                               const QString& objectNameForMacros,
-                               const QString& objectDescriptiveNameForMacros,
-                               QObject* parent);
-        
+                
         virtual ~CaretColorEnumComboBox();
         
         CaretColorEnum::Enum getSelectedColor();
         
         void setSelectedColor(const CaretColorEnum::Enum color);
+        
+        void getCustomColor(std::array<uint8_t, 3>& rgbOut) const;
+        
+        void getCustomColor(std::array<uint8_t, 4>& rgbaOut) const;
+        
+        void setCustomColor(const std::array<uint8_t, 3>& rgb);
+        
+        void setCustomColor(const std::array<uint8_t, 4>& rgba);
+        
+        void setCustomColorName(const AString& customColorName);
+        
+        void setCustomColorIcon(const QIcon& customColorIcon);
         
         QWidget* getWidget();
         
@@ -71,11 +107,20 @@ namespace caret {
         CaretColorEnumComboBox& operator=(const CaretColorEnumComboBox&);
         
     private:
+        void setIconColor(const int32_t index,
+                          const uint8_t rgba[4]);
+        
+        const CustomColorModeEnum m_customColorMode;
+        
+        const NoneColorModeEnum m_noneColorMode;
+        
         QComboBox* colorComboBox;
 
-        void initializeCaretColorComboBox(const AString& customColorSelectionName,
-                                          const QIcon* customColorSelectionIcon);
+        int32_t m_customColorIndex = -1;
         
+        int32_t m_noneColorIndex = -1;
+        
+        std::array<uint8_t, 3> m_customColorRGB;
     };
     
 #ifdef __CARET_COLOR_ENUM_COMBOBOX_DECLARE__

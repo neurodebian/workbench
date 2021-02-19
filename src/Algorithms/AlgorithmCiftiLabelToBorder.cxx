@@ -79,13 +79,13 @@ void AlgorithmCiftiLabelToBorder::useParameters(OperationParameters* myParams, P
     if (columnOpt->m_present)
     {
         //row is first dimension, 0D cifti won't load, so don't need a test
-        column = myCifti->getCiftiXML().getMap(CiftiXML::ALONG_ROW)->getIndexFromNumberOrName(columnOpt->getString(2));
+        column = myCifti->getCiftiXML().getMap(CiftiXML::ALONG_ROW)->getIndexFromNumberOrName(columnOpt->getString(1));
         if (column < 0)
         {
             throw AlgorithmException("invalid column specified");
         }
     }
-    const vector<ParameterComponent*>& borderOpts = *(myParams->getRepeatableParameterInstances(4));
+    const vector<ParameterComponent*>& borderOpts = myParams->getRepeatableParameterInstances(4);
     if (borderOpts.empty()) CaretLogWarning("no output requested from -cifti-label-to-border, command will do nothing");
     for (int i = 0; i < (int)borderOpts.size(); ++i)
     {

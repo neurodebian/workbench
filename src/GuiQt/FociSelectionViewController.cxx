@@ -186,6 +186,18 @@ FociSelectionViewController::createAttributesWidget()
     macroManager->addMacroSupportToObject(m_pasteOntoSurfaceCheckBox,
                                           "Enable paste foci onto surface");
     
+    QLabel* projectionLabel = new QLabel("Coordinate Type");
+    m_drawingProjectionTypeComboBox = new EnumComboBoxTemplate(this);
+    m_drawingProjectionTypeComboBox->setup<FociDrawingProjectionTypeEnum, FociDrawingProjectionTypeEnum::Enum>();
+    QObject::connect(m_drawingProjectionTypeComboBox, &EnumComboBoxTemplate::itemActivated,
+                     this, &FociSelectionViewController::processAttributesChanges);
+    m_drawingProjectionTypeComboBox->getComboBox()->setToolTip("Select foci projection type");
+    m_drawingProjectionTypeComboBox->getComboBox()->setObjectName(m_objectNamePrefix
+                                                                  + ":ProjectionType");
+    macroManager->addMacroSupportToObject(m_drawingProjectionTypeComboBox->getComboBox(),
+                                          "Select foci projection type");
+    m_drawingProjectionTypeComboBox->setToolTip(FociDrawingProjectionTypeEnum::getToolTip());
+    
     QLabel* coloringLabel = new QLabel("Coloring");
     m_coloringTypeComboBox = new EnumComboBoxTemplate(this);
     m_coloringTypeComboBox->setup<FeatureColoringTypeEnum,
@@ -199,13 +211,12 @@ FociSelectionViewController::createAttributesWidget()
                                           "Select foci color type");
     
     QLabel* standardColorLabel = new QLabel("Standard Color");
-    m_standardColorComboBox = new CaretColorEnumComboBox("",
-                                                         QIcon(),
-                                                         (m_objectNamePrefix
-                                                          + ":Color"),
-                                                         "Select foci standard color",
-                                                         this);
+    m_standardColorComboBox = new CaretColorEnumComboBox(this);
+    m_standardColorComboBox->getWidget()->setObjectName((m_objectNamePrefix
+                                                         + ":Color"));
     m_standardColorComboBox->getWidget()->setToolTip("Select the standard color");
+    WuQMacroManager::instance()->addMacroSupportToObject(m_standardColorComboBox->getComboBox(),
+                                                         "Select foci standard color");
     QObject::connect(m_standardColorComboBox, SIGNAL(colorSelected(const CaretColorEnum::Enum)),
                      this, SLOT(processAttributesChanges()));
     
@@ -228,28 +239,28 @@ FociSelectionViewController::createAttributesWidget()
     macroManager->addMacroSupportToObject(m_drawTypeComboBox,
                                           "Select foci drawing style");
     
-    float minLineWidth = 0;
-    float maxLineWidth = 1000;
-    //BrainOpenGL::getMinMaxLineWidth(minLineWidth,
-    //                                maxLineWidth);
-        
+    QLabel* symbolSizeTypeLabel = new QLabel("Diameter Type:");
+    m_symbolSizeTypeComboBox = new EnumComboBoxTemplate(this);
+    m_symbolSizeTypeComboBox->setup<IdentificationSymbolSizeTypeEnum, IdentificationSymbolSizeTypeEnum::Enum>();
+    QObject::connect(m_symbolSizeTypeComboBox, &EnumComboBoxTemplate::itemActivated,
+                     this, &FociSelectionViewController::symbolSizeTypeComboBoxActivated);
+    m_symbolSizeTypeComboBox->setToolTip(IdentificationSymbolSizeTypeEnum::getToolTip("focus"));
+
     QLabel* pointSizeLabel = new QLabel("Symbol Diameter");
     m_sizeSpinBox = WuQFactory::newDoubleSpinBox();
     m_sizeSpinBox->setFixedWidth(80);
-    m_sizeSpinBox->setRange(minLineWidth,
-                                 maxLineWidth);
-    m_sizeSpinBox->setSingleStep(1.0);
+    m_sizeSpinBox->setRange(0.1, 1000.0);
+    m_sizeSpinBox->setSingleStep(0.1);
     m_sizeSpinBox->setDecimals(1);
-    m_sizeSpinBox->setToolTip("Adjust the diameter of foci");
     m_sizeSpinBox->setSuffix("mm");
+    m_sizeSpinBox->setToolTip("Adjust the diameter of foci");
     QObject::connect(m_sizeSpinBox, SIGNAL(valueChanged(double)),
                      this, SLOT(processAttributesChanges()));
     m_sizeSpinBox->setObjectName(m_objectNamePrefix
                        + ":Diameter");
     macroManager->addMacroSupportToObject(m_sizeSpinBox,
                                           "Set foci size");
-    
-    
+        
     QWidget* gridWidget = new QWidget();
     QGridLayout* gridLayout = new QGridLayout(gridWidget);
     WuQtUtilities::setLayoutSpacingAndMargins(gridLayout, 8, 2);
@@ -260,6 +271,9 @@ FociSelectionViewController::createAttributesWidget()
     row++;
     gridLayout->addWidget(WuQtUtilities::createHorizontalLineWidget(), row, 0, 1, 2);
     row++;
+    gridLayout->addWidget(projectionLabel, row, 0);
+    gridLayout->addWidget(m_drawingProjectionTypeComboBox->getComboBox(), row, 1);
+    row++;
     gridLayout->addWidget(coloringLabel, row, 0);
     gridLayout->addWidget(m_coloringTypeComboBox->getWidget(), row, 1);
     row++;
@@ -268,6 +282,9 @@ FociSelectionViewController::createAttributesWidget()
     row++;
     gridLayout->addWidget(drawAsLabel, row, 0);
     gridLayout->addWidget(m_drawTypeComboBox , row, 1);
+    row++;
+    gridLayout->addWidget(symbolSizeTypeLabel, row, 0);
+    gridLayout->addWidget(m_symbolSizeTypeComboBox->getWidget(), row, 1);
     row++;
     gridLayout->addWidget(pointSizeLabel, row, 0);
     gridLayout->addWidget(m_sizeSpinBox, row, 1);
@@ -296,6 +313,7 @@ FociSelectionViewController::processAttributesChanges()
     const int selectedDrawTypeIndex = m_drawTypeComboBox->currentIndex();
     const int drawTypeInteger = m_drawTypeComboBox->itemData(selectedDrawTypeIndex).toInt();
     const FociDrawingTypeEnum::Enum selectedDrawingType = static_cast<FociDrawingTypeEnum::Enum>(drawTypeInteger);
+    const FociDrawingProjectionTypeEnum::Enum selectedDrawingProjectionType = m_drawingProjectionTypeComboBox->getSelectedItem<FociDrawingProjectionTypeEnum, FociDrawingProjectionTypeEnum::Enum>();
     const CaretColorEnum::Enum standardColorType = m_standardColorComboBox->getSelectedColor();
     
     BrowserTabContent* browserTabContent = 
@@ -315,15 +333,29 @@ FociSelectionViewController::processAttributesChanges()
     dpf->setPasteOntoSurface(displayGroup,
                              browserTabIndex,
                              m_pasteOntoSurfaceCheckBox->isChecked());
+    dpf->setDrawingProjectionType(displayGroup,
+                                  browserTabIndex,
+                                  selectedDrawingProjectionType);
     dpf->setColoringType(displayGroup,
                          browserTabIndex,
                          selectedColoringType);
     dpf->setStandardColorType(displayGroup,
                               browserTabIndex,
                               standardColorType);
-    dpf->setFociSize(displayGroup,
-                     browserTabIndex,
-                     m_sizeSpinBox->value());
+    
+    switch (dpf->getFociSymbolSizeType(displayGroup, browserTabIndex)) {
+        case IdentificationSymbolSizeTypeEnum::MILLIMETERS:
+            dpf->setFociSizeMillimeters(displayGroup,
+                                        browserTabIndex,
+                                        m_sizeSpinBox->value());
+            break;
+        case IdentificationSymbolSizeTypeEnum::PERCENTAGE:
+            dpf->setFociSizePercentage(displayGroup,
+                                       browserTabIndex,
+                                       m_sizeSpinBox->value());
+            break;
+    }
+    
     dpf->setDrawingType(displayGroup,
                         browserTabIndex,
                         selectedDrawingType);
@@ -356,6 +388,38 @@ FociSelectionViewController::fociDisplayGroupSelected(const DisplayGroupEnum::En
     
     /*
      * Since display group has changed, need to update controls
+     */
+    updateFociViewController();
+    
+    /*
+     * Apply the changes.
+     */
+    processFociSelectionChanges();
+}
+
+/**
+ * Called when symbol size type combo box changed
+ */
+void
+FociSelectionViewController::symbolSizeTypeComboBoxActivated()
+{
+    BrowserTabContent* browserTabContent =
+    GuiManager::get()->getBrowserTabContentForBrowserWindow(m_browserWindowIndex, true);
+    if (browserTabContent == NULL) {
+        return;
+    }
+    
+    const int32_t browserTabIndex = browserTabContent->getTabNumber();
+    Brain* brain = GuiManager::get()->getBrain();
+    DisplayPropertiesFoci* dpf = brain->getDisplayPropertiesFoci();
+    const DisplayGroupEnum::Enum displayGroup = dpf->getDisplayGroupForTab(browserTabIndex);
+    
+    dpf->setFociSymbolSizeType(displayGroup,
+                               browserTabIndex,
+                               m_symbolSizeTypeComboBox->getSelectedItem<IdentificationSymbolSizeTypeEnum, IdentificationSymbolSizeTypeEnum::Enum>());
+
+    /*
+     * Update controls since size type has changed
      */
     updateFociViewController();
     
@@ -418,6 +482,8 @@ FociSelectionViewController::updateFociViewController()
     m_coloringTypeComboBox->setSelectedItem<FeatureColoringTypeEnum, FeatureColoringTypeEnum::Enum>(dpf->getColoringType(displayGroup,
                                                                                                                          browserTabIndex));
     
+    m_drawingProjectionTypeComboBox->setSelectedItem<FociDrawingProjectionTypeEnum,FociDrawingProjectionTypeEnum::Enum>(dpf->getDrawingProjectionType(displayGroup,
+                                                                                                                                                      browserTabIndex));
     m_standardColorComboBox->setSelectedColor(dpf->getStandardColorType(displayGroup,
                                                                         browserTabIndex));
     const FociDrawingTypeEnum::Enum selectedDrawingType = dpf->getDrawingType(displayGroup,
@@ -432,10 +498,24 @@ FociSelectionViewController::updateFociViewController()
     }
     m_drawTypeComboBox->setCurrentIndex(selectedDrawingTypeIndex);
     
+    m_symbolSizeTypeComboBox->setSelectedItem<IdentificationSymbolSizeTypeEnum, IdentificationSymbolSizeTypeEnum::Enum>(dpf->getFociSymbolSizeType(displayGroup,
+                                                                                                                                                   browserTabIndex));
+
     m_sizeSpinBox->blockSignals(true);
-    m_sizeSpinBox->setValue(dpf->getFociSize(displayGroup,
+    m_sizeSpinBox->setValue(dpf->getFociSizeMillimeters(displayGroup,
                                              browserTabIndex));
-    m_sizeSpinBox->blockSignals(false);
+    switch (dpf->getFociSymbolSizeType(displayGroup, browserTabIndex)) {
+        case IdentificationSymbolSizeTypeEnum::MILLIMETERS:
+            m_sizeSpinBox->setValue(dpf->getFociSizeMillimeters(displayGroup,
+                                                                browserTabIndex));
+            m_sizeSpinBox->setSuffix("mm");
+            break;
+        case IdentificationSymbolSizeTypeEnum::PERCENTAGE:
+            m_sizeSpinBox->setValue(dpf->getFociSizePercentage(displayGroup,
+                                                               browserTabIndex));
+            m_sizeSpinBox->setSuffix("%");
+            break;
+    }    m_sizeSpinBox->blockSignals(false);
 }
 
 /**

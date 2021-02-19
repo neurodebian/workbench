@@ -44,9 +44,11 @@
 #include "EventGraphicsUpdateAllWindows.h"
 #include "EventManager.h"
 #include "EventSurfaceColoringInvalidate.h"
+#include "EventUserInterfaceUpdate.h"
 #include "GuiManager.h"
 #include "ImageCaptureMethodEnum.h"
 #include "OpenGLDrawingMethodEnum.h"
+#include "PreferencesRecentFilesWidget.h"
 #include "SessionManager.h"
 #include "WuQtUtilities.h"
 #include "WuQFactory.h"
@@ -89,6 +91,10 @@ PreferencesDialog::PreferencesDialog(QWidget* parent)
      */
     m_allWidgets = new WuQWidgetObjectGroup(this);
     
+    m_recentFilesWidget = new PreferencesRecentFilesWidget();
+    QObject::connect(m_recentFilesWidget, &PreferencesRecentFilesWidget::updateDialog,
+                     this, &PreferencesDialog::recentFilesChanged);
+    
     /*
      * Create the tab widget and all tab content
      */
@@ -103,6 +109,9 @@ PreferencesDialog::PreferencesDialog(QWidget* parent)
                       "New Tabs");
     tabWidget->addTab(createOpenGLWidget(),
                       "OpenGL");
+    tabWidget->addTab(m_recentFilesWidget,
+                      "Recent Files");
+    
     setCentralWidget(tabWidget,
                            WuQDialog::SCROLL_AREA_NEVER);
     
@@ -133,56 +142,79 @@ PreferencesDialog::addColorButtonAndSwatch(QGridLayout* gridLayout,
                                            QSignalMapper* colorSignalMapper)
 {
     QString buttonText;
+    AString buttonToolTip;
     QWidget* colorSwatchWidget = new QWidget();
     
     switch (prefColor) {
         case PREF_COLOR_BACKGROUND_ALL:
             buttonText = "All Background";
+            buttonToolTip = "Color for background in All Display";
             m_backgroundColorAllWidget = colorSwatchWidget;
             break;
         case PREF_COLOR_BACKGROUND_CHART:
             buttonText = "Chart Background";
+            buttonToolTip = "Color for background in Chart Display";
             m_backgroundColorChartWidget = colorSwatchWidget;
             break;
         case PREF_COLOR_BACKGROUND_SURFACE:
             buttonText = "Surface Background";
+            buttonToolTip = "Color for background in Surface Display";
             m_backgroundColorSurfaceWidget = colorSwatchWidget;
             break;
         case PREF_COLOR_BACKGROUND_VOLUME:
             buttonText = "Volume Background";
+            buttonToolTip = "Color for background in Volume Display";
             m_backgroundColorVolumeWidget = colorSwatchWidget;
             break;
         case PREF_COLOR_FOREGROUND_ALL:
             buttonText = "All Foreground";
+            buttonToolTip = "Color for foreground (text) in All Display";
             m_foregroundColorAllWidget = colorSwatchWidget;
             break;
         case PREF_COLOR_FOREGROUND_CHART:
             buttonText = "Chart Foreground";
+            buttonToolTip = "Color for foreground (text) in Chart Display";
             m_foregroundColorChartWidget = colorSwatchWidget;
             break;
         case PREF_COLOR_FOREGROUND_SURFACE:
             buttonText = "Surface Foreground";
+            buttonToolTip = "Color for foreground (text) in Surface Display";
             m_foregroundColorSurfaceWidget = colorSwatchWidget;
             break;
         case PREF_COLOR_FOREGROUND_VOLUME:
             buttonText = "Volume Foreground";
+            buttonToolTip = "Color for foreground (text) in Volume Display";
             m_foregroundColorVolumeWidget = colorSwatchWidget;
             break;
         case PREF_COLOR_CHART_MATRIX_GRID_LINES:
             buttonText = "Chart Grid Lines";
+            buttonToolTip = "Color for grid lines in a Chart Matrix Display";
             m_chartMatrixGridLinesColorWidget = colorSwatchWidget;
             break;
         case PREF_COLOR_CHART_THRESHOLD:
             buttonText = "Chart Threshold";
+            buttonToolTip = "Color for thresholded regions in Chart Histogram Display";
             m_chartHistogramThresholdColorWidget = colorSwatchWidget;
             break;
         case PREF_COLOR_BACKGROUND_WINDOW:
+            buttonToolTip = "Color for background in Window";
             buttonText = "Window Background";
             m_backgroundColorWindowWidget = colorSwatchWidget;
             break;
         case PREF_COLOR_FOREGROUND_WINDOW:
+            buttonToolTip = "Color for foreground (text) in Window Display";
             buttonText = "Window Foreground";
             m_foregroundColorWindowWidget = colorSwatchWidget;
+            break;
+        case PREF_COLOR_BACKGROUND_MEDIA:
+            buttonToolTip = "Color for background in Media Display";
+            buttonText    = "Media Background";
+            m_backgroundColorMediaWidget = colorSwatchWidget;
+            break;
+        case PREF_COLOR_FOREGROUND_MEDIA:
+            buttonToolTip = "Color for foreground (text) in Media Display";
+            buttonText    = "Media Foreground";
+            m_foregroundColorMediaWidget = colorSwatchWidget;
             break;
         case NUMBER_OF_PREF_COLORS:
             CaretAssert(0);
@@ -194,6 +226,7 @@ PreferencesDialog::addColorButtonAndSwatch(QGridLayout* gridLayout,
     CaretAssert( ! buttonText.isEmpty());
     
     QPushButton* colorPushButton = new QPushButton(buttonText);
+    colorPushButton->setToolTip(buttonToolTip);
     QObject::connect(colorPushButton, SIGNAL(clicked()),
                      colorSignalMapper, SLOT(map()));
     colorSignalMapper->setMapping(colorPushButton,
@@ -247,7 +280,12 @@ PreferencesDialog::createColorsWidget()
     addColorButtonAndSwatch(gridLayout,
                             PREF_COLOR_BACKGROUND_SURFACE,
                             colorSignalMapper);
-    
+    addColorButtonAndSwatch(gridLayout,
+                            PREF_COLOR_FOREGROUND_MEDIA,
+                            colorSignalMapper);
+    addColorButtonAndSwatch(gridLayout,
+                            PREF_COLOR_BACKGROUND_MEDIA,
+                            colorSignalMapper);
     addColorButtonAndSwatch(gridLayout,
                             PREF_COLOR_FOREGROUND_VOLUME,
                             colorSignalMapper);
@@ -334,6 +372,14 @@ PreferencesDialog::updateColorWidget(CaretPreferences* prefs)
                 colors.getColorForegroundWindow(rgb);
                 colorSwatchWidget = m_foregroundColorWindowWidget;
                 break;
+            case PREF_COLOR_FOREGROUND_MEDIA:
+                colors.getColorForegroundMediaView(rgb);
+                colorSwatchWidget = m_foregroundColorMediaWidget;
+                break;
+            case PREF_COLOR_BACKGROUND_MEDIA:
+                colors.getColorBackgroundMediaView(rgb);
+                colorSwatchWidget = m_backgroundColorMediaWidget;
+                break;
             case NUMBER_OF_PREF_COLORS:
                 CaretAssert(0);
                 break;
@@ -385,16 +431,6 @@ PreferencesDialog::createMiscellaneousWidget()
     m_allWidgets->add(m_miscLoggingLevelComboBox);
     
     /*
-     * Splash Screen
-     */
-    m_miscSplashScreenShowAtStartupComboBox = new WuQTrueFalseComboBox("On",
-                                                                       "Off",
-                                                                       this);
-    QObject::connect(m_miscSplashScreenShowAtStartupComboBox, SIGNAL(statusChanged(bool)),
-                     this, SLOT(miscSplashScreenShowAtStartupComboBoxChanged(bool)));
-    m_allWidgets->add(m_miscSplashScreenShowAtStartupComboBox);
-    
-    /*
      * Developer Menu
      */
     m_miscDevelopMenuEnabledComboBox = new WuQTrueFalseComboBox("On",
@@ -405,6 +441,19 @@ PreferencesDialog::createMiscellaneousWidget()
     m_allWidgets->add(m_miscDevelopMenuEnabledComboBox);
     
     /*
+     * Gestures enabled
+     */
+    const QString gesturesToolTip("Pinch two fingers to zoom; Rotate with two fingers");
+    m_guiGesturesEnabledComboBox = new WuQTrueFalseComboBox("On",
+                                                            "Off",
+                                                            this);
+    WuQtUtilities::setWordWrappedToolTip(m_guiGesturesEnabledComboBox->getWidget(),
+                                         gesturesToolTip);
+    QObject::connect(m_guiGesturesEnabledComboBox, &WuQTrueFalseComboBox::statusChanged,
+                     this, &PreferencesDialog::miscGuiGesturesEnabledComboBoxChanged);
+    m_allWidgets->add(m_guiGesturesEnabledComboBox);
+    
+    /*
      * Manage Files View Files Type
      */
     m_miscSpecFileDialogViewFilesTypeEnumComboBox = new EnumComboBoxTemplate(this);
@@ -412,6 +461,26 @@ PreferencesDialog::createMiscellaneousWidget()
     QObject::connect(m_miscSpecFileDialogViewFilesTypeEnumComboBox, SIGNAL(itemActivated()),
                      this, SLOT(miscSpecFileDialogViewFilesTypeEnumComboBoxItemActivated()));
     m_allWidgets->add(m_miscSpecFileDialogViewFilesTypeEnumComboBox->getWidget());
+    
+    /*
+     * Toolbar mode
+     */
+    const QString widthToolTip(ToolBarWidthModeEnum::toGuiName(ToolBarWidthModeEnum::WIDE)
+                               + " mode will show \"View\" toolbar components in all Modes but requires  "
+                               "a wide monitor (1920 width or greater).");
+    m_windowToolBarWidthModeComboBox = new EnumComboBoxTemplate(this);
+    m_windowToolBarWidthModeComboBox->setup<ToolBarWidthModeEnum, ToolBarWidthModeEnum::Enum>();
+    m_windowToolBarWidthModeComboBox->setToolTip(WuQtUtilities::createWordWrappedToolTipText(widthToolTip));
+    QObject::connect(m_windowToolBarWidthModeComboBox, &EnumComboBoxTemplate::itemActivated,
+                     this, &PreferencesDialog::miscWindowToolBarWidthModeComboBoxItemActivated);
+
+    const QString fileOpenTip("What to do when a file is opened outside of wb_view from the GUI.  "
+                              "On MacOS: Double-clicked in Finder");
+    m_fileOpenFromOpSysTypeComboBox = new EnumComboBoxTemplate(this);
+    m_fileOpenFromOpSysTypeComboBox->setup<FileOpenFromOpSysTypeEnum, FileOpenFromOpSysTypeEnum::Enum>();
+    m_fileOpenFromOpSysTypeComboBox->setToolTip(WuQtUtilities::createWordWrappedToolTipText(fileOpenTip));
+    QObject::connect(m_fileOpenFromOpSysTypeComboBox, &EnumComboBoxTemplate::itemActivated,
+                     this, &PreferencesDialog::miscFileOpenFromOpSysTypeComboBoxItemActivated);
     
     QGridLayout* gridLayout = new QGridLayout();
     addWidgetToLayout(gridLayout,
@@ -427,8 +496,14 @@ PreferencesDialog::createMiscellaneousWidget()
                       "Show Develop Menu in Menu Bar: ",
                       m_miscDevelopMenuEnabledComboBox->getWidget());
     addWidgetToLayout(gridLayout,
-                      "Show Splash Screen at Startup: ",
-                      m_miscSplashScreenShowAtStartupComboBox->getWidget());
+                      "Enable Trackpad Gestures: ",
+                      m_guiGesturesEnabledComboBox->getWidget());
+    addWidgetToLayout(gridLayout,
+                      "Open File from MacOS Finder",
+                      m_fileOpenFromOpSysTypeComboBox->getWidget());
+    addWidgetToLayout(gridLayout,
+                      "Window ToolBar Width Mode: ",
+                      m_windowToolBarWidthModeComboBox->getWidget());
     
     QWidget* widget = new QWidget();
     QVBoxLayout* layout = new QVBoxLayout(widget);
@@ -456,12 +531,15 @@ PreferencesDialog::updateMiscellaneousWidget(CaretPreferences* prefs)
     
     m_miscDevelopMenuEnabledComboBox->setStatus(prefs->isDevelopMenuEnabled());
     
-    m_miscSplashScreenShowAtStartupComboBox->setStatus(prefs->isSplashScreenEnabled());
-    
     m_yokingDefaultComboBox->setStatus(prefs->isYokingDefaultedOn());
     
     m_miscSpecFileDialogViewFilesTypeEnumComboBox->setSelectedItem<SpecFileDialogViewFilesTypeEnum,SpecFileDialogViewFilesTypeEnum::Enum>(prefs->getManageFilesViewFileType());
 
+    m_guiGesturesEnabledComboBox->setStatus(prefs->isGuiGesturesEnabled());
+    
+    m_windowToolBarWidthModeComboBox->setSelectedItem<ToolBarWidthModeEnum, ToolBarWidthModeEnum::Enum>(prefs->getToolBarWidthMode());
+    
+    m_fileOpenFromOpSysTypeComboBox->setSelectedItem<FileOpenFromOpSysTypeEnum, FileOpenFromOpSysTypeEnum::Enum>(prefs->getFileOpenFromOpSysType());
 }
 
 /**
@@ -485,6 +563,16 @@ PreferencesDialog::createIdentificationSymbolWidget()
     QObject::connect(m_dataToolTipsComboBox, SIGNAL(statusChanged(bool)),
                      this, SLOT(identificationSymbolToggled()));
     
+    /*
+     * Identification Mode
+     */
+    m_identificationModeComboBox = new EnumComboBoxTemplate(this);
+    m_identificationModeComboBox->setup<IdentificationDisplayModeEnum,IdentificationDisplayModeEnum::Enum>();
+    QObject::connect(m_identificationModeComboBox, &EnumComboBoxTemplate::itemActivated,
+                     this, &PreferencesDialog::identificationModeEnumComboBoxItemActivated);
+    m_allWidgets->add(m_identificationModeComboBox->getWidget());
+    
+    
     QGridLayout* gridLayout = new QGridLayout();
     int row = gridLayout->rowCount();
     gridLayout->addWidget(infoLabel,
@@ -498,6 +586,10 @@ PreferencesDialog::createIdentificationSymbolWidget()
     addWidgetToLayout(gridLayout,
                       "Show Data Tool Tips: ",
                       m_dataToolTipsComboBox->getWidget());
+    addWidgetToLayout(gridLayout,
+                      "Identification Display: ",
+                      m_identificationModeComboBox->getWidget());
+
 
     QWidget* widget = new QWidget();
     QVBoxLayout* layout = new QVBoxLayout(widget);
@@ -518,6 +610,7 @@ PreferencesDialog::updateIdentificationWidget(CaretPreferences* prefs)
     m_surfaceIdentificationSymbolComboBox->setStatus(prefs->isShowSurfaceIdentificationSymbols());
     m_volumeIdentificationSymbolComboBox->setStatus(prefs->isShowVolumeIdentificationSymbols());
     m_dataToolTipsComboBox->setStatus(prefs->isShowDataToolTipsEnabled());
+    m_identificationModeComboBox->setSelectedItem<IdentificationDisplayModeEnum, IdentificationDisplayModeEnum::Enum>(prefs->getIdentificationDisplayMode());
 }
 
 /**
@@ -530,6 +623,18 @@ PreferencesDialog::identificationSymbolToggled()
     prefs->setShowSurfaceIdentificationSymbols(m_surfaceIdentificationSymbolComboBox->isTrue());
     prefs->setShowVolumeIdentificationSymbols(m_volumeIdentificationSymbolComboBox->isTrue());
     prefs->setShowDataToolTipsEnabled(m_dataToolTipsComboBox->isTrue());
+}
+
+/**
+ * Gets called when an identification display mode is changed
+ */
+void
+PreferencesDialog::identificationModeEnumComboBoxItemActivated()
+{
+    const IdentificationDisplayModeEnum::Enum idMode = m_identificationModeComboBox->getSelectedItem<IdentificationDisplayModeEnum, IdentificationDisplayModeEnum::Enum>();
+    CaretPreferences* prefs = SessionManager::get()->getCaretPreferences();
+    prefs->setIdentificationDisplayMode(idMode);
+    EventManager::get()->sendEvent(EventUserInterfaceUpdate().getPointer());
 }
 
 /**
@@ -664,7 +769,7 @@ PreferencesDialog::createTabDefaltsWidget()
     m_volumeAllSlicePlanesLayoutComboBox = new EnumComboBoxTemplate(this);
     m_volumeAllSlicePlanesLayoutComboBox->setup<VolumeSliceViewAllPlanesLayoutEnum,VolumeSliceViewAllPlanesLayoutEnum::Enum>();
     QObject::connect(m_volumeAllSlicePlanesLayoutComboBox, SIGNAL(itemActivated()),
-                     this, SLOT(m_volumeAllSlicePlanesLayoutItemActivated()));
+                     this, SLOT(volumeAllSlicePlanesLayoutItemActivated()));
     m_allWidgets->add(m_volumeAllSlicePlanesLayoutComboBox->getWidget());
 
     
@@ -777,6 +882,15 @@ PreferencesDialog::addWidgetsToLayout(QGridLayout* gridLayout,
 }
 
 /**
+ * Called when changes are made to recent files
+ */
+void
+PreferencesDialog::recentFilesChanged()
+{
+    updateDialog();
+}
+
+/**
  * May be called to update the dialog's content.
  */
 void 
@@ -790,6 +904,7 @@ PreferencesDialog::updateDialog()
     updateIdentificationWidget(prefs);
     updateOpenGLWidget(prefs);
     updateVolumeWidget(prefs);
+    m_recentFilesWidget->updateContent(prefs);
     
     m_allWidgets->blockAllSignals(false);
 }
@@ -807,7 +922,7 @@ PreferencesDialog::updateColorWithDialog(const PREF_COLOR prefColor)
     
     const BackgroundAndForegroundColors colors = prefs->getUserBackgroundAndForegroundColors();
     
-    uint8_t rgb[3];
+    uint8_t rgb[3] = { 0, 0, 0 };
     AString prefColorName;
     switch (prefColor) {
         case PREF_COLOR_BACKGROUND_ALL:
@@ -857,6 +972,14 @@ PreferencesDialog::updateColorWithDialog(const PREF_COLOR prefColor)
         case PREF_COLOR_FOREGROUND_WINDOW:
             colors.getColorForegroundWindow(rgb);
             prefColorName = "Foreground - Window";
+            break;
+        case PREF_COLOR_BACKGROUND_MEDIA:
+            colors.getColorBackgroundMediaView(rgb);
+            prefColorName = "Background - Media";
+            break;
+        case PREF_COLOR_FOREGROUND_MEDIA:
+            colors.getColorForegroundMediaView(rgb);
+            prefColorName = "Foreground - Media";
             break;
         case NUMBER_OF_PREF_COLORS:
             CaretAssert(0);
@@ -916,6 +1039,12 @@ PreferencesDialog::updateColorWithDialog(const PREF_COLOR prefColor)
                 break;
             case PREF_COLOR_FOREGROUND_WINDOW:
                 colors.setColorForegroundWindow(rgb);
+                break;
+            case PREF_COLOR_BACKGROUND_MEDIA:
+                colors.setColorBackgroundMediaView(rgb);
+                break;
+            case PREF_COLOR_FOREGROUND_MEDIA:
+                colors.setColorForegroundMediaView(rgb);
                 break;
             case NUMBER_OF_PREF_COLORS:
                 CaretAssert(0);
@@ -1032,7 +1161,7 @@ PreferencesDialog::volumeAxesMontageCoordinatesComboBoxToggled(bool value)
  * Called when ALL view slice plane layout changed by user
  */
 void
-PreferencesDialog::m_volumeAllSlicePlanesLayoutItemActivated()
+PreferencesDialog::volumeAllSlicePlanesLayoutItemActivated()
 {
     VolumeSliceViewAllPlanesLayoutEnum::Enum layoutValue = m_volumeAllSlicePlanesLayoutComboBox->getSelectedItem<VolumeSliceViewAllPlanesLayoutEnum, VolumeSliceViewAllPlanesLayoutEnum::Enum>();
     CaretPreferences* prefs = SessionManager::get()->getCaretPreferences();
@@ -1072,17 +1201,6 @@ PreferencesDialog::yokingComboBoxToggled(bool value)
 }
 
 /**
- * Called when show splash screen option changed.
- * @param value
- *   New value.
- */
-void PreferencesDialog::miscSplashScreenShowAtStartupComboBoxChanged(bool value)
-{
-    CaretPreferences* prefs = SessionManager::get()->getCaretPreferences();
-    prefs->setSplashScreenEnabled(value);
-}
-
-/**
  * Called when dynamic connectivity option changed.
  * @param value
  *   New value.
@@ -1107,6 +1225,42 @@ PreferencesDialog::miscDevelopMenuEnabledComboBoxChanged(bool value)
     EventManager::get()->sendSimpleEvent(EventTypeEnum::EVENT_BROWSER_WINDOW_MENUS_UPDATE);
 }
 
+/**
+ * Called when gui gestures enabled changed.
+ *
+ * @param value
+ *   New value.
+ */
+void
+PreferencesDialog::miscGuiGesturesEnabledComboBoxChanged(bool value)
+{
+    CaretPreferences* prefs = SessionManager::get()->getCaretPreferences();
+    prefs->setGuiGesturesEnabled(value);
+}
+
+/**
+ * Gets called window toolbar mode is changed
+ */
+void
+PreferencesDialog::miscWindowToolBarWidthModeComboBoxItemActivated()
+{
+    const ToolBarWidthModeEnum::Enum widthMode = m_windowToolBarWidthModeComboBox->getSelectedItem<ToolBarWidthModeEnum, ToolBarWidthModeEnum::Enum>();
+    CaretPreferences* prefs = SessionManager::get()->getCaretPreferences();
+    prefs->setToolBarWidthMode(widthMode);
+    EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+    EventManager::get()->sendEvent(EventUserInterfaceUpdate().getPointer());
+}
+
+/**
+ * Gets called when file open from O/S type is changed
+ */
+void
+PreferencesDialog::miscFileOpenFromOpSysTypeComboBoxItemActivated()
+{
+    const FileOpenFromOpSysTypeEnum::Enum openType = m_fileOpenFromOpSysTypeComboBox->getSelectedItem<FileOpenFromOpSysTypeEnum, FileOpenFromOpSysTypeEnum::Enum>();
+    CaretPreferences* prefs = SessionManager::get()->getCaretPreferences();
+    prefs->setFileOpenFromOpSysType(openType);
+}
 /**
  * Gets called when view files type is changed.
  */

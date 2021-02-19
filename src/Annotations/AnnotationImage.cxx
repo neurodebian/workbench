@@ -46,7 +46,7 @@ using namespace caret;
  *    Type for attribute defaults
  */
 AnnotationImage::AnnotationImage(const AnnotationAttributesDefaultTypeEnum::Enum attributeDefaultType)
-: AnnotationTwoDimensionalShape(AnnotationTypeEnum::IMAGE,
+: AnnotationOneCoordinateShape(AnnotationTypeEnum::IMAGE,
                                 attributeDefaultType)
 {
     initializeMembersAnnotationImage();
@@ -67,7 +67,7 @@ AnnotationImage::~AnnotationImage()
  *    Object that is copied.
  */
 AnnotationImage::AnnotationImage(const AnnotationImage& obj)
-: AnnotationTwoDimensionalShape(obj)
+: AnnotationOneCoordinateShape(obj)
 {
     initializeMembersAnnotationImage();
     this->copyHelperAnnotationImage(obj);
@@ -84,7 +84,7 @@ AnnotationImage&
 AnnotationImage::operator=(const AnnotationImage& obj)
 {
     if (this != &obj) {
-        AnnotationTwoDimensionalShape::operator=(obj);
+        AnnotationOneCoordinateShape::operator=(obj);
         this->copyHelperAnnotationImage(obj);
     }
     return *this;
@@ -234,7 +234,9 @@ AnnotationImage::getGraphicsPrimitive() const
             GraphicsPrimitiveV3fT3f* primitive = GraphicsPrimitive::newPrimitiveV3fT3f(GraphicsPrimitive::PrimitiveType::OPENGL_TRIANGLE_STRIP,
                                                                                        &m_imageBytesRGBA[0],
                                                                                        m_imageWidth,
-                                                                                       m_imageHeight);
+                                                                                       m_imageHeight,
+                                                                                       GraphicsPrimitive::TextureWrappingType::CLAMP,
+                                                                                       GraphicsPrimitive::TextureFilteringType::LINEAR);
             /*
              * A Triangle Strip (consisting of two triangles) is used
              * for drawing the image.  At this time, the XYZ coordinates
@@ -254,9 +256,6 @@ AnnotationImage::getGraphicsPrimitive() const
             primitive->addVertex(0, 0, 1, 0);  /* Bottom Right */
 
             m_graphicsPrimitive.reset(primitive);
-            
-            
-//            create triangles above and add method to set the vertex coordintes (bottom left, bottom right, etc)
         }
     }
     
@@ -270,7 +269,13 @@ AnnotationImage::setVertexBounds(const float bottomLeft[3],
                                  const float topLeft[3])
 {
     GraphicsPrimitiveV3fT3f* primitive = getGraphicsPrimitive();
-    CaretAssert(primitive);
+    if (primitive == NULL) {
+        /*
+         * Primitive will be invalid if when user is dragging mouse
+         * to create the annotation.
+         */
+        return;
+    }
     
     CaretAssert(primitive->getNumberOfVertices() == 4);
 
@@ -296,7 +301,7 @@ void
 AnnotationImage::saveSubClassDataToScene(const SceneAttributes* sceneAttributes,
                                             SceneClass* sceneClass)
 {
-    AnnotationTwoDimensionalShape::saveSubClassDataToScene(sceneAttributes,
+    AnnotationOneCoordinateShape::saveSubClassDataToScene(sceneAttributes,
                                                            sceneClass);
     m_sceneAssistant->saveMembers(sceneAttributes,
                                   sceneClass);
@@ -318,7 +323,7 @@ void
 AnnotationImage::restoreSubClassDataFromScene(const SceneAttributes* sceneAttributes,
                                                  const SceneClass* sceneClass)
 {
-    AnnotationTwoDimensionalShape::restoreSubClassDataFromScene(sceneAttributes,
+    AnnotationOneCoordinateShape::restoreSubClassDataFromScene(sceneAttributes,
                                                                 sceneClass);
     m_sceneAssistant->restoreMembers(sceneAttributes,
                                      sceneClass);

@@ -32,8 +32,8 @@
 #include <QVBoxLayout>
 
 #include "AnnotationManager.h"
-#include "AnnotationOneDimensionalShape.h"
-#include "AnnotationTwoDimensionalShape.h"
+#include "AnnotationTwoCoordinateShape.h"
+#include "AnnotationOneCoordinateShape.h"
 #include "AnnotationRedoUndoCommand.h"
 #include "Brain.h"
 #include "BrainOpenGL.h"
@@ -308,7 +308,8 @@ AnnotationColorWidget::backgroundColorSelected(const CaretColorEnum::Enum caretC
         AnnotationManager* annMan = GuiManager::get()->getBrain()->getAnnotationManager();
         
         AString errorMessage;
-        if ( ! annMan->applyCommand(undoCommand,
+        if ( ! annMan->applyCommand(UserInputModeEnum::Enum::ANNOTATIONS,
+                                    undoCommand,
                                     errorMessage)) {
             WuQMessageBox::errorOk(this,
                                    errorMessage);
@@ -507,6 +508,8 @@ AnnotationColorWidget::isBothColorsSetToNoneAllowed(QWidget* widget,
                 case AnnotationTypeEnum::BOX:
                     allowBothColorsNoneFlag = false;
                     break;
+                case AnnotationTypeEnum::BROWSER_TAB:
+                    break;
                 case AnnotationTypeEnum::COLOR_BAR:
                     break;
                 case AnnotationTypeEnum::IMAGE:
@@ -516,6 +519,11 @@ AnnotationColorWidget::isBothColorsSetToNoneAllowed(QWidget* widget,
                     break;
                 case AnnotationTypeEnum::OVAL:
                     allowBothColorsNoneFlag = false;
+                    break;
+                case AnnotationTypeEnum::POLY_LINE:
+                    allowBothColorsNoneFlag = false;
+                    break;
+                case AnnotationTypeEnum::SCALE_BAR:
                     break;
                 case AnnotationTypeEnum::TEXT:
                     break;
@@ -577,7 +585,8 @@ AnnotationColorWidget::lineColorSelected(const CaretColorEnum::Enum caretColor)
         AnnotationManager* annMan = GuiManager::get()->getBrain()->getAnnotationManager();
         
         AString errorMessage;
-        if ( ! annMan->applyCommand(undoCommand,
+        if ( ! annMan->applyCommand(UserInputModeEnum::Enum::ANNOTATIONS,
+                                    undoCommand,
                                     errorMessage)) {
             WuQMessageBox::errorOk(this,
                                    errorMessage);
@@ -678,7 +687,8 @@ AnnotationColorWidget::lineThicknessSpinBoxValueChanged(double value)
     AnnotationManager* annMan = GuiManager::get()->getBrain()->getAnnotationManager();
     
     AString errorMessage;
-    if ( ! annMan->applyCommand(undoCommand,
+    if ( ! annMan->applyCommand(UserInputModeEnum::Enum::ANNOTATIONS,
+                                undoCommand,
                                 errorMessage)) {
         WuQMessageBox::errorOk(this,
                                errorMessage);

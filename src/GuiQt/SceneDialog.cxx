@@ -385,11 +385,11 @@ SceneDialog::loadSceneFileComboBox(SceneFile* selectedSceneFileIn)
             && m_cautionIconValid) {
             m_sceneFileSelectionComboBox->addItem(m_cautionIcon,
                                                   name,
-                                                  qVariantFromValue((void*)sceneFile));
+                                                  QVariant::fromValue((void*)sceneFile));
         }
         else {
             m_sceneFileSelectionComboBox->addItem(name,
-                                                  qVariantFromValue((void*)sceneFile));
+                                                  QVariant::fromValue((void*)sceneFile));
         }
     }
     
@@ -1317,6 +1317,7 @@ SceneDialog::replaceAllScenesPushButtonClicked()
     const int IMAGE_DISPLAY_WIDTH = 400;
     std::vector<AString> sceneNames;
     std::vector<AString> sceneErrors;
+    std::vector<AString> sceneWarnings;
     std::vector<QImage> oldImages;
     std::vector<QImage> newImages;
     
@@ -1364,10 +1365,12 @@ SceneDialog::replaceAllScenesPushButtonClicked()
              * Display the scene
              */
             AString errorMessage;
+            AString warningMessage;
             SceneDialog::displayScenePrivateWithErrorMessage(sceneFile,
                                                               origScene,
                                                               false,
-                                                              errorMessage);
+                                                              errorMessage,
+                                                             warningMessage);
             sceneNames.push_back(origScene->getName());
             
             /*
@@ -1451,6 +1454,7 @@ SceneDialog::replaceAllScenesPushButtonClicked()
                 newImages.push_back(QImage());
             }
             sceneErrors.push_back(errorMessage);
+            sceneWarnings.push_back(warningMessage);
         }
     }
     
@@ -1460,6 +1464,7 @@ SceneDialog::replaceAllScenesPushButtonClicked()
     CaretAssert(sceneNames.size() == sceneErrors.size());
     CaretAssert(sceneNames.size() == oldImages.size());
     CaretAssert(sceneNames.size() == newImages.size());
+    CaretAssert(sceneNames.size() == sceneWarnings.size());
     
     showNormalCursor();
     
@@ -1500,7 +1505,14 @@ SceneDialog::replaceAllScenesPushButtonClicked()
             gridLayout->addWidget(errorLabel,
                                   row, 1, Qt::AlignLeft);
         }
+        row++;
         
+        if ( ! sceneWarnings[i].isEmpty()) {
+            QLabel* warningLabel = new QLabel("Scene Warnings: " + sceneWarnings[i]);
+            warningLabel->setWordWrap(true);
+            gridLayout->addWidget(warningLabel,
+                                  row, 1, Qt::AlignLeft);
+        }
         row++;
         
         const QSizePolicy::Policy imageSizePolicy = QSizePolicy::Preferred;
@@ -1629,6 +1641,7 @@ SceneDialog::testScenesPushButtonClicked()
     
     std::vector<AString> sceneNames;
     std::vector<AString> sceneErrors;
+    std::vector<AString> sceneWarnings;
     std::vector<QImage> sceneImages;
     std::vector<QImage> newImages;
     
@@ -1657,10 +1670,12 @@ SceneDialog::testScenesPushButtonClicked()
             }
             
             AString errorMessage;
+            AString warningMessage;
             SceneDialog::displayScenePrivateWithErrorMessage(sceneFile,
                                                              origScene,
                                                              false,
-                                                             errorMessage);
+                                                             errorMessage,
+                                                             warningMessage);
             /*
              * Set the active scene
              */
@@ -1705,6 +1720,7 @@ SceneDialog::testScenesPushButtonClicked()
             }
             
             sceneErrors.push_back(errorMessage);
+            sceneWarnings.push_back(warningMessage);
         }
     }
     
@@ -1714,6 +1730,7 @@ SceneDialog::testScenesPushButtonClicked()
     CaretAssert(sceneNames.size() == sceneImages.size());
     CaretAssert(sceneNames.size() == sceneErrors.size());
     CaretAssert(sceneNames.size() == newImages.size());
+    CaretAssert(sceneNames.size() == sceneWarnings.size());
     
     showNormalCursor();
     
@@ -1751,6 +1768,14 @@ SceneDialog::testScenesPushButtonClicked()
             row = gridLayout->rowCount();
         }
         
+        if ( ! sceneWarnings[i].isEmpty()) {
+            QLabel* warningLabel = new QLabel("Scene Warnings: " + sceneWarnings[i]);
+            warningLabel->setWordWrap(true);
+            gridLayout->addWidget(warningLabel,
+                                  row, 0, 1, 2, Qt::AlignLeft);
+            
+            row = gridLayout->rowCount();
+        }
         const QSizePolicy::Policy imageSizePolicy = QSizePolicy::Preferred;
         
         QLabel* sceneImageLabel = new QLabel("Image Invalid");
@@ -2214,7 +2239,7 @@ SceneDialog::createSceneFileWidget()
      */
     m_showFileStructurePushButton = new QPushButton("Show Files and Folders...");
     WuQtUtilities::setWordWrappedToolTip(m_showFileStructurePushButton,
-                                         "In a dialog, show the organization files and folders contained in the Scene File");
+                                         "In a dialog, show the organization of files and folders contained in the Scene File");
     QObject::connect(m_showFileStructurePushButton, &QPushButton::clicked,
                      this, &SceneDialog::showFileStructure);
     
@@ -2254,7 +2279,7 @@ SceneDialog::createSceneFileWidget()
      * Upload button
      */
     m_uploadSceneFilePushButton = new QPushButton("Upload...");
-    m_uploadSceneFilePushButton->setToolTip("Upload the selected scene file to the BALSA Database");
+    m_uploadSceneFilePushButton->setToolTip("<html>Upload the selected scene file to the BALSA Database, balsa.wustl.edu</html>");
     QObject::connect(m_uploadSceneFilePushButton, SIGNAL(clicked()),
                      this, SLOT(uploadSceneFileButtonClicked()));
     
@@ -2413,6 +2438,13 @@ SceneDialog::deleteSceneButtonClicked()
 void 
 SceneDialog::showSceneButtonClicked()
 {
+    /*
+     * Any clicks on the button are blocked until this method
+     * returns to prevent 'double clicks" that call this
+     * method a second time before the first time completes.
+     */
+    QSignalBlocker blocker(m_showScenePushButton);
+    
     if ( ! checkForModifiedFiles(GuiManager::TEST_FOR_MODIFIED_FILES_MODE_FOR_SCENE_SHOW,
                                  this)) {
         return;
@@ -2542,14 +2574,14 @@ SceneDialog::showImagePreviewButtonClicked()
             
             AString nameText;
             AString sceneIdText;
-            AString descriptionText;
-            const int32_t negativeIsUnlimitedNumberOfLines = -1;
+            AString abbreviatedDescriptionText;
+            AString fullDescriptionText;
             SceneClassInfoWidget::getFormattedTextForSceneNameAndDescription(scene->getSceneInfo(),
                                                                              -1,
                                                                              nameText,
                                                                              sceneIdText,
-                                                                             descriptionText,
-                                                                             negativeIsUnlimitedNumberOfLines);
+                                                                             abbreviatedDescriptionText,
+                                                                             fullDescriptionText);
             QLabel* nameLabel = new QLabel(nameText);
             ded.addWidget("",
                           nameLabel);
@@ -2558,8 +2590,8 @@ SceneDialog::showImagePreviewButtonClicked()
             ded.addWidget("",
                           sceneIdLabel);
             
-            if (! descriptionText.isEmpty()) {
-                QLabel* descriptionLabel = new QLabel(descriptionText);
+            if (! fullDescriptionText.isEmpty()) {
+                QLabel* descriptionLabel = new QLabel(fullDescriptionText);
                 descriptionLabel->setWordWrap(true);
                 ded.addWidget("",
                               descriptionLabel);
@@ -2661,23 +2693,39 @@ SceneDialog::displayScenePrivateWithErrorMessageDialog(QWidget* dialogParent,
                                                        Scene* scene,
                                                        const bool showWaitCursor)
 {
+    CaretAssert(scene);
     AString errorMessage;
+    AString warningMessage;
     
     ElapsedTimer et;
     et.start();
     
     const bool successFlag = displayScenePrivateWithErrorMessage(sceneFile,
-                                                 scene,
-                                                 showWaitCursor,
-                                                 errorMessage);
+                                                                 scene,
+                                                                 showWaitCursor,
+                                                                 errorMessage,
+                                                                 warningMessage);
     AString msg = (AString::number(et.getElapsedTimeSeconds())
                    + " seconds to read Scene "
                    + scene->getName());
     CaretLogInfo(msg);
     
     if ( ! successFlag) {
-        WuQMessageBox::errorOk(dialogParent,
-                               errorMessage);
+        WuQMessageBox::errorDetailedTextOk(dialogParent,
+                                           ("Error reading scene: "
+                                            + scene->getName()),
+                                           errorMessage);
+    }
+    
+    if ( ! warningMessage.isEmpty()) {
+        warningMessage.replace("\n", "<br>");
+        warningMessage.insert(0, "<html><body>");
+        warningMessage.append("</body></html>");
+        WuQTextEditorDialog::runNonModal("Scene Warnings",
+                                         warningMessage,
+                                         WuQTextEditorDialog::TextMode::HTML,
+                                         WuQTextEditorDialog::WrapMode::YES,
+                                         dialogParent);
     }
     
     EventManager::get()->sendEvent(EventShowDataFileReadWarningsDialog().getPointer());
@@ -2695,6 +2743,8 @@ SceneDialog::displayScenePrivateWithErrorMessageDialog(QWidget* dialogParent,
  *     Show a wait cursor while loading scene
  * @param errorMessageOut
  *     Contains error information if scene fails to load.
+ * @param warningMessageOut
+ *     Contains non-fatal warnings encountered while loading scene
  * @return
  *     true if scene was displayed without error, else false.
  */
@@ -2702,12 +2752,14 @@ bool
 SceneDialog::displayScenePrivateWithErrorMessage(SceneFile* sceneFile,
                                                  Scene* scene,
                                                  const bool showWaitCursor,
-                                                 AString& errorMessageOut)
+                                                 AString& errorMessageOut,
+                                                 AString& warningMessageOut)
 {
     CaretAssert(sceneFile);
     CaretAssert(scene);
     
     errorMessageOut.clear();
+    warningMessageOut.clear();
     
     const AString sceneFileName = sceneFile->getFileName();
     
@@ -2767,6 +2819,8 @@ SceneDialog::displayScenePrivateWithErrorMessage(SceneFile* sceneFile,
     
     SceneClass::setDebugLoggingEnabled(false);
     
+    warningMessageOut = sceneAttributes->getSceneLoadWarningMessage();
+    
     cursor.restoreCursor();
     
     /*
@@ -2789,7 +2843,7 @@ SceneDialog::displayScenePrivateWithErrorMessage(SceneFile* sceneFile,
          */
         if ( ! sceneFile->isModified()) {
             CaretPreferences* prefs = SessionManager::get()->getCaretPreferences();
-            prefs->addToPreviousSceneFiles(sceneFile->getFileName());
+            prefs->addToRecentFilesAndOrDirectories(sceneFile->getFileName());
         }
     }
     else {
@@ -2990,8 +3044,6 @@ SceneDialog::helpButtonClicked()
     EventManager::get()->sendEvent(helpViewerEvent.getPointer());
 }
 
-
-
 /* ======================================================================== */
 /**
  * \class caret::SceneClassWidget
@@ -3017,7 +3069,7 @@ SceneClassInfoWidget::SceneClassInfoWidget()
     
     m_descriptionLabel = new QLabel();
     m_descriptionLabel->setWordWrap(true);
-    
+
     m_sceneIdLabel = new QLabel();
     
     m_previewImageLabel = new QLabel();
@@ -3098,13 +3150,14 @@ SceneClassInfoWidget::updateContent(Scene* scene,
         AString nameText;
         AString sceneIdText;
         AString descriptionText;
-        const int32_t numLinesToDisplay = 9;
+        AString abbreviatedDescriptionText;
+        AString fullDescriptionText;
         SceneClassInfoWidget::getFormattedTextForSceneNameAndDescription(scene->getSceneInfo(),
                                                                          sceneIndex,
                                                                          nameText,
                                                                          sceneIdText,
-                                                                         descriptionText,
-                                                                         numLinesToDisplay);
+                                                                         abbreviatedDescriptionText,
+                                                                         fullDescriptionText);
         
         if (activeSceneFlag) {
             m_activeSceneLabel->setText("<html><font color=\"red\">Current Scene</font></html>");
@@ -3116,7 +3169,7 @@ SceneClassInfoWidget::updateContent(Scene* scene,
         }
         m_nameLabel->setText(nameText);
         m_sceneIdLabel->setText(sceneIdText);
-        m_descriptionLabel->setText(descriptionText);
+        m_descriptionLabel->setText(fullDescriptionText);
         
         QByteArray imageByteArray;
         AString imageBytesFormat;
@@ -3197,19 +3250,18 @@ SceneClassInfoWidget::limitToNumberOfLines(AString& textLines,
  *    Text for name.
  * @param sceneIdTextOut
  *    Text for scene ID.
- * @param desciptionTextOut
- *    Text for description.
- * @param maximumLinesInDescription
- *    Maximum number of lines allowed in description.
- *    If value is negative, an unlimited number of lines are allowed.
+ * @param abbreviatedDescriptionTextOut
+ *    Abbreviated text for description.
+ * @param fullDescriptionTextOut
+ *    Full text for description.
  */
 void
 SceneClassInfoWidget::getFormattedTextForSceneNameAndDescription(const SceneInfo* sceneInfo,
                                                                  const int32_t sceneIndex,
                                                                  AString& nameTextOut,
                                                                  AString& sceneIdTextOut,
-                                                                 AString& descriptionTextOut,
-                                                                 const int32_t maximumLinesInDescription)
+                                                                 AString& abbreviatedDescriptionTextOut,
+                                                                 AString& fullDescriptionTextOut)
 {
     CaretAssert(sceneInfo);
     
@@ -3238,14 +3290,13 @@ SceneClassInfoWidget::getFormattedTextForSceneNameAndDescription(const SceneInfo
                       + sceneInfo->getBalsaSceneID()
                       + "</html>");
     
-    AString description = sceneInfo->getDescription();
-    
-    if (maximumLinesInDescription > 0) {
-        SceneClassInfoWidget::limitToNumberOfLines(description,
-                                                   maximumLinesInDescription);
-    }
-    
-    if ( ! description.isEmpty()) {
+    fullDescriptionTextOut = sceneInfo->getDescription();
+    abbreviatedDescriptionTextOut = fullDescriptionTextOut;
+    const int32_t maximumLinesInDescription(9);
+    SceneClassInfoWidget::limitToNumberOfLines(abbreviatedDescriptionTextOut,
+                                               maximumLinesInDescription);
+
+    if ( ! fullDescriptionTextOut.isEmpty()) {
         /*
          * HTML formatting is needed so text is properly displayed.
          * Want to put "Description" at beginning in bold but any
@@ -3253,13 +3304,25 @@ SceneClassInfoWidget::getFormattedTextForSceneNameAndDescription(const SceneInfo
          * HTML, perform a replace to insert "Description" in bold.
          */
         const AString replaceWithDescriptionBoldText = "REPLACE_WITH_DESCRIPTION";
-        description = WuQtUtilities::createWordWrappedToolTipText(replaceWithDescriptionBoldText
-                                                                  + description);
-        description.replace(replaceWithDescriptionBoldText,
+        fullDescriptionTextOut = WuQtUtilities::createWordWrappedToolTipText(replaceWithDescriptionBoldText
+                                                                  + fullDescriptionTextOut);
+        fullDescriptionTextOut.replace(replaceWithDescriptionBoldText,
                             "<b>DESCRIPTION:</b> ");
     }
-    
-    descriptionTextOut = description;
+
+    if ( ! abbreviatedDescriptionTextOut.isEmpty()) {
+        /*
+         * HTML formatting is needed so text is properly displayed.
+         * Want to put "Description" at beginning in bold but any
+         * HTML tags are converted to text.  So, after conversion to
+         * HTML, perform a replace to insert "Description" in bold.
+         */
+        const AString replaceWithDescriptionBoldText = "REPLACE_WITH_DESCRIPTION";
+        abbreviatedDescriptionTextOut = WuQtUtilities::createWordWrappedToolTipText(replaceWithDescriptionBoldText
+                                                                  + abbreviatedDescriptionTextOut);
+        abbreviatedDescriptionTextOut.replace(replaceWithDescriptionBoldText,
+                            "<b>DESCRIPTION:</b> ");
+    }
 }
 
 
@@ -3322,4 +3385,3 @@ SceneClassInfoWidget::isValid() const
     
     return false;
 }
-

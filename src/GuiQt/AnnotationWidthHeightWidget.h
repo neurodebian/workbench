@@ -27,20 +27,23 @@
 #include <QWidget>
 
 #include "AnnotationWidgetParentEnum.h"
+#include "UserInputModeEnum.h"
 
 class QDoubleSpinBox;
 
 namespace caret {
 
-    class AnnotationTwoDimensionalShape;
+    class AnnotationOneCoordinateShape;
     
     class AnnotationWidthHeightWidget : public QWidget {
         
         Q_OBJECT
 
     public:
-        AnnotationWidthHeightWidget(const AnnotationWidgetParentEnum::Enum parentWidgetType,
+        AnnotationWidthHeightWidget(const UserInputModeEnum::Enum userInputMode,
+                                    const AnnotationWidgetParentEnum::Enum parentWidgetType,
                                     const int32_t browserWindowIndex,
+                                    const Qt::Orientation orientation,
                                     QWidget* parent = 0);
         
         virtual ~AnnotationWidthHeightWidget();
@@ -48,7 +51,7 @@ namespace caret {
 
         // ADD_NEW_METHODS_HERE
 
-        void updateContent(std::vector<AnnotationTwoDimensionalShape*>& annotations2D);
+        void updateContent(std::vector<AnnotationOneCoordinateShape*>& annotations2D);
 
     private slots:
         void widthValueChanged(double value);
@@ -62,6 +65,8 @@ namespace caret {
         
         // ADD_NEW_MEMBERS_HERE
 
+        const UserInputModeEnum::Enum m_userInputMode;
+        
         const AnnotationWidgetParentEnum::Enum m_parentWidgetType;
         
         const int32_t m_browserWindowIndex;
@@ -70,7 +75,7 @@ namespace caret {
         
         QDoubleSpinBox* m_heightSpinBox;
         
-        std::vector<AnnotationTwoDimensionalShape*> m_annotations2D;
+        std::vector<AnnotationOneCoordinateShape*> m_annotations2D;
         
     };
     

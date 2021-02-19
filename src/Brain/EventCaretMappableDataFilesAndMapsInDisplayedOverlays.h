@@ -33,28 +33,40 @@
 namespace caret {
 
     class CaretMappableDataFile;
+    class MediaFile;
     
     class EventCaretMappableDataFilesAndMapsInDisplayedOverlays : public Event {
         
     public:
-        enum class OverlayType {
+        enum class MapOverlayType {
             BRAINORDINATE,
-            CHART
+            CHART_ONE,
+            CHART_TWO
         };
 
-        class FileInfo {
+        class MapFileInfo {
         public:
-            FileInfo(OverlayType overlayType,
-                     CaretMappableDataFile* mapFile,
-                     const std::set<int32_t>& mapIndices);
+            MapFileInfo(const MapOverlayType overlayType,
+                        CaretMappableDataFile* mapFile,
+                        const std::set<int32_t>& mapIndices);
             
-            const OverlayType m_overlayType;
+            const MapOverlayType m_overlayType;
             
             CaretMappableDataFile* m_mapFile;
             
             const std::set<int32_t> m_mapIndices;
         };
         
+        class MediaFileInfo {
+        public:
+            MediaFileInfo(MediaFile* mediaFile,
+                          const std::set<int32_t> frameIndices);
+            
+            MediaFile* m_mediaFile;
+            
+            const std::set<int32_t> m_frameIndices;            
+        };
+            
         EventCaretMappableDataFilesAndMapsInDisplayedOverlays();
         
         virtual ~EventCaretMappableDataFilesAndMapsInDisplayedOverlays();
@@ -63,24 +75,46 @@ namespace caret {
 
         EventCaretMappableDataFilesAndMapsInDisplayedOverlays& operator=(const EventCaretMappableDataFilesAndMapsInDisplayedOverlays&) = delete;
         
+        void setWindowIndexConstraint(const int32_t windowIndex);
+        
+        void setTabIndicesConstraint(const std::set<int32_t>& tabIndices);
+        
         void addBrainordinateFileAndMap(CaretMappableDataFile* mapFile,
-                                        const int32_t mapIndex);
+                                        const int32_t mapIndex,
+                                        const int32_t tabIndex);
 
-        void addChartFileAndMap(CaretMappableDataFile* mapFile,
-                                const int32_t mapIndex);
+        void addChartOneFileAndMap(CaretMappableDataFile* mapFile,
+                                   const int32_t mapIndex,
+                                   const int32_t tabIndex);
         
-        std::map<CaretMappableDataFile*, std::set<int32_t>> getMapFilesAndIndices() const;
+        void addChartTwoFileAndMap(CaretMappableDataFile* mapFile,
+                                   const int32_t mapIndex,
+                                   const int32_t tabIndex);
         
-        std::vector<FileInfo> getFilesAndMaps() const;
+        void addMediaFileAndFrame(MediaFile* mediaFile,
+                                  const int32_t frameIndex,
+                                  const int32_t tabIndex);
+                
+        std::vector<MapFileInfo> getFilesAndMaps() const;
+        
+        std::vector<MediaFileInfo> getMediaFilesAndMaps() const;
         
         // ADD_NEW_METHODS_HERE
 
     private:
-        std::map<CaretMappableDataFile*, std::set<int32_t>> m_mapFilesAndIndices;
+        bool satisfiesConstraints(const int32_t tabIndex);
         
         std::map<CaretMappableDataFile*, std::set<int32_t>> m_surfaceVolumeMapFilesAndIndices;
         
-        std::map<CaretMappableDataFile*, std::set<int32_t>> m_chartMapFilesAndIndices;
+        std::map<CaretMappableDataFile*, std::set<int32_t>> m_chartOneMapFilesAndIndices;
+        
+        std::map<CaretMappableDataFile*, std::set<int32_t>> m_chartTwoMapFilesAndIndices;
+        
+        std::map<MediaFile*, std::set<int32_t>> m_mediaFilesAndFrameIndices;
+        
+        int32_t m_windowIndex = -1;
+        
+        std::set<int32_t> m_tabIndices;
         
         // ADD_NEW_MEMBERS_HERE
 

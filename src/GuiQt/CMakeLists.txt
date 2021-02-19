@@ -44,11 +44,14 @@ ELSE()
 
     SET(MOC_INPUT_HEADER_FILES
         AboutWorkbenchDialog.h
+	AnnotationBackgroundTypeWidget.h
+	AnnotationBoundsWidget.h
         AnnotationChangeCoordinateDialog.h
         AnnotationColorWidget.h
+	AnnotationCoordinateCenterXYWidget.h
         AnnotationCoordinateSelectionWidget.h
         AnnotationCoordinateSpaceWidget.h
-        AnnotationCoordinateWidget.h
+        AnnotationCoordinatesWidget.h
         AnnotationCreateDialog.h
         AnnotationDeleteWidget.h
         AnnotationFontWidget.h
@@ -57,10 +60,11 @@ ELSE()
         AnnotationLineArrowTipsWidget.h
         AnnotationMenuArrange.h
         AnnotationMenuFileSelection.h
+	AnnotationNameWidget.h
+        AnnotationPasteDialog.h
         AnnotationRedoUndoWidget.h
         AnnotationRotationWidget.h
         AnnotationSelectionViewController.h
-        AnnotationPasteDialog.h
         AnnotationTextAlignmentWidget.h
         AnnotationTextEditorDialog.h
         AnnotationTextEditorWidget.h
@@ -78,26 +82,30 @@ ELSE()
         BrainBrowserWindowComboBox.h
         BrainBrowserWindowOrientedToolBox.h
         BrainBrowserWindowToolBar.h
+        BrainBrowserWindowToolBarAllSurface.h
         BrainBrowserWindowToolBarChartAttributes.h
         BrainBrowserWindowToolBarChartAxes.h
         BrainBrowserWindowToolBarChartTwoAttributes.h
-        BrainBrowserWindowToolBarChartTwoAxes.h
         BrainBrowserWindowToolBarChartTwoOrientation.h
-        BrainBrowserWindowToolBarChartTwoTitle.h
+        BrainBrowserWindowToolBarChartTwoOrientedAxes.h
         BrainBrowserWindowToolBarChartTwoType.h
         BrainBrowserWindowToolBarChartType.h
-        BrainBrowserWindowToolBarClipping.h
         BrainBrowserWindowToolBarComponent.h
+	BrainBrowserWindowToolBarOrientation.h
         BrainBrowserWindowToolBarSlicePlane.h
         BrainBrowserWindowToolBarSliceSelection.h
+	BrainBrowserWindowToolBarSurface.h
         BrainBrowserWindowToolBarSurfaceMontage.h
         BrainBrowserWindowToolBarTab.h
         BrainBrowserWindowToolBarTabPopUpMenu.h
+	BrainBrowserWindowToolBarView.h
         BrainBrowserWindowToolBarVolumeMontage.h
         BrainOpenGLWidget.h
         BugReportDialog.h
+	CardinalDirectionEnumMenu.h
         CaretColorEnumComboBox.h
         CaretColorEnumMenu.h
+	CaretColorToolButton.h
         CaretDataFileSelectionComboBox.h
         CaretFileDialog.h
         CaretFileDialogExtendable.h
@@ -108,19 +116,25 @@ ELSE()
         ChartLinesSelectionViewController.h
         ChartMatrixParcelSelectionViewController.h
         ChartMatrixSeriesSelectionViewController.h
+	ChartTwoAxisPropertiesEditorDialog.h
+        ChartTwoAxisPropertiesEditorWidget.h
+	ChartTwoCartesianCustomSubdivisionsEditorWidget.h
+	ChartTwoLineLayerNormalizationWidget.h
         ChartTwoOverlaySetViewController.h
         ChartTwoOverlayViewController.h
+	ChartTwoTitleEditorWidget.h
         ChartSelectionViewController.h
         ChartToolBoxViewController.h
         CiftiConnectivityMatrixViewController.h
         CiftiParcelSelectionComboBox.h
-        ClippingPlanesDialog.h
+	ClippingPlanesWidget.h
         ColorEditorWidget.h
         CopyPaletteColorMappingToFilesDialog.h
         CustomViewDialog.h
         DataFileContentCopyMoveDialog.h
         DisplayGroupAndTabItemViewController.h
         DisplayGroupEnumComboBox.h
+	DynConnViewController.h
         EnumComboBoxTemplate.h
         FiberOrientationSelectionViewController.h
         FiberSamplesOpenGLWidget.h
@@ -134,6 +148,10 @@ ELSE()
         GuiManager.h
         HelpViewerDialog.h
         HyperLinkTextBrowser.h
+	IdentificationDisplayDialog.h
+	IdentificationDisplayWidget.h
+	IdentificationFileFilteringRow.h
+	IdentificationFileFilteringTableWidget.h
         IdentifyBrainordinateDialog.h
         ImageCaptureDialog.h
         ImageFileConvertToVolumeFileDialog.h
@@ -144,7 +162,6 @@ ELSE()
     	LockAspectWarningDialog.h
         MacApplication.h
         MacDockMenu.h
-	MacDuplicateMenuBar.h
         MapSettingsChartTwoLineHistoryWidget.h
         MapSettingsColorBarPaletteOptionsWidget.h
         MapSettingsColorBarWidget.h
@@ -154,6 +171,8 @@ ELSE()
         MapSettingsPaletteColorMappingWidget.h
         MapSettingsParcelsWidget.h
         MapYokingGroupComboBox.h
+	MediaOverlayViewController.h
+	MediaOverlaySetViewController.h
         MetaDataEditorDialog.h
         MetaDataEditorWidget.h
         MovieDialog.h
@@ -163,13 +182,22 @@ ELSE()
         OverlaySettingsEditorDialog.h
         OverlayViewController.h
         PaletteColorMappingEditorDialog.h
+	PaletteCreateNewDialog.h
+	PaletteEditorDialog.h
+	PaletteEditorRangeRow.h
+	PaletteEditorRangeWidget.h
+	PaletteSelectionWidget.h
         PlotMagnifier.h
         PlotPanner.h
         PreferencesDialog.h
+	PreferencesRecentFilesWidget.h
         ProgressReportingDialog.h
         ProgressReportingFromEvent.h
         ProgressReportingWithSlots.h
+	RecentFilesDialog.h
+	RecentFilesTableWidget.h
         RegionOfInterestCreateFromBorderDialog.h
+	ScaleBarWidget.h
         SceneBasePathWidget.h
         SceneCreateReplaceDialog.h
         SceneDialog.h
@@ -179,21 +207,23 @@ ELSE()
         SceneReplaceAllDialog.h
         SceneShowOptionsDialog.h
         SpecFileManagementDialog.h
-        SplashScreen.h
         StructureEnumComboBox.h
         StructureSurfaceSelectionControl.h
         SurfacePropertiesEditorDialog.h
         SurfaceSelectionViewController.h
         ThresholdingSetMapsDialog.h
+	TileTabGridRowColumnWidgets.h
         TileTabsConfigurationDialog.h
+	TileTabsManualTabGeometryWidget.h
         UserInputModeAnnotationsContextMenu.h
         UserInputModeAnnotationsWidget.h
         UserInputModeBordersWidget.h
         UserInputModeFociWidget.h
         UserInputModeImageWidget.h
+	UserInputModeTileTabsManualLayoutContextMenu.h
         UserInputModeViewContextMenu.h
+	UserInputModeViewContextTileTabsSubMenu.h
         UserInputModeVolumeEditWidget.h
-        UserInputTileTabsContextMenu.h
         UsernamePasswordWidget.h
         VolumeFileCreateDialog.h
 	VolumePropertiesEditorDialog.h
@@ -203,6 +233,7 @@ ELSE()
 	WbMacroHelper.h
 	WbMacroWidgetActionsManager.h
         WuQCollapsibleWidget.h
+	WuQColorEditorWidget.h
         WuQDataEntryDialog.h
         WuQDialog.h
         WuQDialogModal.h
@@ -230,6 +261,7 @@ ELSE()
         WuQMacroWidgetAction.h
         WuQMessageBox.h
         WuQwtPlot.h
+	WuQScrollArea.h
         WuQSpecialIncrementDoubleSpinBox.h
 	WuQSpinBox.h
         WuQSpinBoxGroup.h
@@ -239,8 +271,10 @@ ELSE()
         WuQTabWidgetWithSizeHint.h
         WuQTextEditorDialog.h
         WuQTimedMessageDisplay.h
+	WuQToolTipHelper.h
         WuQTreeWidget.h
         WuQTrueFalseComboBox.h
+	WuQValueChangedSignalWatcher.h
         #WuQWebView.h
         WuQWidget.h
         WuQWidgetObjectGroup.h
@@ -262,12 +296,15 @@ ENDIF()
 #
 SET(SOURCE_FILES
 AboutWorkbenchDialog.h
+AnnotationBackgroundTypeWidget.h
+AnnotationBoundsWidget.h
 AnnotationChangeCoordinateDialog.h
 AnnotationColorWidget.h
+AnnotationCoordinateCenterXYWidget.h
 AnnotationCoordinateInformation.h
 AnnotationCoordinateSelectionWidget.h
 AnnotationCoordinateSpaceWidget.h
-AnnotationCoordinateWidget.h
+AnnotationCoordinatesWidget.h
 AnnotationCreateDialog.h
 AnnotationDeleteWidget.h
 AnnotationFontWidget.h
@@ -276,6 +313,7 @@ AnnotationInsertNewWidget.h
 AnnotationLineArrowTipsWidget.h
 AnnotationMenuArrange.h
 AnnotationMenuFileSelection.h
+AnnotationNameWidget.h
 AnnotationPasteDialog.h
 AnnotationRedoUndoWidget.h
 AnnotationRotationWidget.h
@@ -303,43 +341,53 @@ BrainBrowserWindowComboBox.h
 BrainBrowserWindowEditMenuItemEnum.h
 BrainBrowserWindowOrientedToolBox.h
 BrainBrowserWindowToolBar.h
+BrainBrowserWindowToolBarAllSurface.h
 BrainBrowserWindowToolBarChartAttributes.h
 BrainBrowserWindowToolBarChartAxes.h
 BrainBrowserWindowToolBarChartTwoAttributes.h
-BrainBrowserWindowToolBarChartTwoAxes.h
 BrainBrowserWindowToolBarChartTwoOrientation.h
-BrainBrowserWindowToolBarChartTwoTitle.h
+BrainBrowserWindowToolBarChartTwoOrientedAxes.h
 BrainBrowserWindowToolBarChartTwoType.h
 BrainBrowserWindowToolBarChartType.h
-BrainBrowserWindowToolBarClipping.h
 BrainBrowserWindowToolBarComponent.h
+BrainBrowserWindowToolBarOrientation.h
 BrainBrowserWindowToolBarSlicePlane.h
 BrainBrowserWindowToolBarSliceSelection.h
+BrainBrowserWindowToolBarSurface.h
 BrainBrowserWindowToolBarSurfaceMontage.h
 BrainBrowserWindowToolBarTab.h
 BrainBrowserWindowToolBarTabPopUpMenu.h
+BrainBrowserWindowToolBarView.h
 BrainBrowserWindowToolBarVolumeMontage.h
 BrainOpenGLWidget.h
 BugReportDialog.h
+CardinalDirectionEnumMenu.h
 CaretColorEnumComboBox.h
 CaretColorEnumMenu.h
+CaretColorToolButton.h
 CaretDataFileSelectionComboBox.h
 CaretFileDialog.h
 CaretFileDialogExtendable.h
 CaretFileRemoteDialog.h
 CaretMappableDataFileAndMapSelector.h
 CaretMappableDataFileAndMapSelectorObject.h
+CaretResultDialog.h
 ChartHistoryViewController.h
 ChartLinesSelectionViewController.h
 ChartMatrixParcelSelectionViewController.h
 ChartMatrixSeriesSelectionViewController.h
+ChartTwoAxisPropertiesEditorDialog.h
+ChartTwoAxisPropertiesEditorWidget.h
+ChartTwoCartesianCustomSubdivisionsEditorWidget.h
+ChartTwoLineLayerNormalizationWidget.h
 ChartTwoOverlaySetViewController.h
 ChartTwoOverlayViewController.h
+ChartTwoTitleEditorWidget.h
 ChartSelectionViewController.h
 ChartToolBoxViewController.h
 CiftiConnectivityMatrixViewController.h
 CiftiParcelSelectionComboBox.h
-ClippingPlanesDialog.h
+ClippingPlanesWidget.h
 ColorEditorWidget.h
 CopyPaletteColorMappingToFilesDialog.h
 CursorDisplayScoped.h
@@ -350,9 +398,13 @@ DataFileContentCopyMoveDialog.h
 DisplayGroupAndTabItemTreeWidgetItem.h
 DisplayGroupAndTabItemViewController.h
 DisplayGroupEnumComboBox.h
+DynConnViewController.h
 EnumComboBoxTemplate.h
 EventAnnotationCreateNewType.h
 EventAnnotationGetDrawnInWindow.h
+EventBrowserTabCloseInToolBar.h
+EventBrowserTabDeleteInToolBar.h
+EventBrowserTabNewInGUI.h
 EventBrowserWindowDrawingContent.h
 EventBrowserWindowCreateTabs.h
 EventBrowserWindowGraphicsRedrawn.h
@@ -362,10 +414,10 @@ EventGetOrSetUserInputModeProcessor.h
 EventGraphicsTimingOneWindow.h
 EventGraphicsUpdateAllWindows.h
 EventGraphicsUpdateOneWindow.h
+EventGraphicsWindowShowToolTip.h
 EventHelpViewerDisplay.h
 EventIdentificationRequest.h
 EventImageCapture.h
-EventMacDockMenuUpdate.h
 EventMovieManualModeRecording.h
 EventOperatingSystemRequestOpenDataFile.h
 EventOverlaySettingsEditorDialogRequest.h
@@ -381,6 +433,7 @@ FociProjectionDialog.h
 FociPropertiesEditorDialog.h
 FociSelectionViewController.h
 GapsAndMarginsDialog.h
+GestureEvent.h
 GiftiLabelTableEditor.h
 GiftiLabelTableSelectionComboBox.h
 GroupAndNameHierarchyTreeWidgetItem.h
@@ -388,6 +441,10 @@ GroupAndNameHierarchyViewController.h
 GuiManager.h
 HelpViewerDialog.h
 HyperLinkTextBrowser.h
+IdentificationDisplayDialog.h
+IdentificationDisplayWidget.h
+IdentificationFileFilteringRow.h
+IdentificationFileFilteringTableWidget.h
 IdentifyBrainordinateDialog.h
 ImageCaptureDialog.h
 ImageFileConvertToVolumeFileDialog.h
@@ -399,7 +456,6 @@ LabelSelectionViewController.h
 LockAspectWarningDialog.h
 MacApplication.h
 MacDockMenu.h
-MacDuplicateMenuBar.h
 MapSettingsChartTwoLineHistoryWidget.h
 MapSettingsColorBarPaletteOptionsWidget.h
 MapSettingsColorBarWidget.h
@@ -409,6 +465,8 @@ MapSettingsLayerWidget.h
 MapSettingsPaletteColorMappingWidget.h
 MapSettingsParcelsWidget.h
 MapYokingGroupComboBox.h
+MediaOverlayViewController.h
+MediaOverlaySetViewController.h
 MetaDataEditorDialog.h
 MetaDataEditorWidget.h
 MouseEvent.h
@@ -419,14 +477,24 @@ OverlaySetViewController.h
 OverlaySettingsEditorDialog.h
 OverlayViewController.h
 PaletteColorMappingEditorDialog.h
+PaletteCreateNewDialog.h
+PaletteEditorDialog.h
+PaletteEditorRangeRow.h
+PaletteEditorRangeWidget.h
+PalettePixmapPainter.h
+PaletteSelectionWidget.h
 PlotMagnifier.h
 PlotPanner.h
 PreferencesDialog.h
+PreferencesRecentFilesWidget.h
 ProgressReportingDialog.h
 ProgressReportingFromEvent.h
 ProgressReportingWithSlots.h
 QGLWidgetTextRenderer.h
+RecentFilesDialog.h
+RecentFilesTableWidget.h
 RegionOfInterestCreateFromBorderDialog.h
+ScaleBarWidget.h
 SceneBasePathWidget.h
 SceneCreateReplaceDialog.h
 SceneDialog.h
@@ -438,14 +506,15 @@ SceneReplaceAllDialog.h
 SceneShowOptionsDialog.h
 SceneWindowGeometry.h
 SpecFileManagementDialog.h
-SplashScreen.h
 StructureEnumComboBox.h
 StructureSurfaceSelectionControl.h
 SurfacePropertiesEditorDialog.h
 SurfaceSelectionViewController.h
 ThresholdingSetMapsDialog.h
+TileTabGridRowColumnWidgets.h
 TileTabsConfigurationDialog.h
-TileTabsConfigurationModifier.h
+TileTabsGridConfigurationModifier.h
+TileTabsManualTabGeometryWidget.h
 UserInputModeAbstract.h
 UserInputModeAnnotations.h
 UserInputModeAnnotationsContextMenu.h
@@ -456,11 +525,13 @@ UserInputModeFociWidget.h
 UserInputModeFoci.h
 UserInputModeImageWidget.h
 UserInputModeImage.h
+UserInputModeTileTabsManualLayout.h
+UserInputModeTileTabsManualLayoutContextMenu.h
 UserInputModeView.h
 UserInputModeViewContextMenu.h
+UserInputModeViewContextTileTabsSubMenu.h
 UserInputModeVolumeEdit.h
 UserInputModeVolumeEditWidget.h
-UserInputTileTabsContextMenu.h
 UsernamePasswordWidget.h
 ViewModeEnum.h
 VolumeFileCreateDialog.h
@@ -480,11 +551,13 @@ WbMacroCustomOperationDelay.h
 WbMacroCustomOperationIncrementRotation.h
 WbMacroCustomOperationIncrementVolumeSlice.h
 WbMacroCustomOperationManager.h
+WbMacroCustomOperationSurfaceDefaultColor.h
 WbMacroCustomOperationTypeEnum.h
 WbMacroHelper.h
 WbMacroWidgetActionNames.h
 WbMacroWidgetActionsManager.h
 WuQCollapsibleWidget.h
+WuQColorEditorWidget.h
 WuQDataEntryDialog.h
 WuQDialog.h
 WuQDialogModal.h
@@ -516,6 +589,7 @@ WuQMacroSignalWatcher.h
 WuQMacroWidgetAction.h
 WuQMessageBox.h
 WuQwtPlot.h
+WuQScrollArea.h
 WuQSpecialIncrementDoubleSpinBox.h
 WuQSpinBox.h
 WuQSpinBoxGroup.h
@@ -525,8 +599,10 @@ WuQTabWidget.h
 WuQTabWidgetWithSizeHint.h
 WuQTextEditorDialog.h
 WuQTimedMessageDisplay.h
+WuQToolTipHelper.h
 WuQTreeWidget.h
 WuQTrueFalseComboBox.h
+WuQValueChangedSignalWatcher.h
 #WuQWebView.h
 WuQWidget.h
 WuQWidgetDisabler.h
@@ -535,12 +611,15 @@ WuQtUtilities.h
 ZipSceneFileDialog.h
 
 AboutWorkbenchDialog.cxx
+AnnotationBackgroundTypeWidget.cxx
+AnnotationBoundsWidget.cxx
 AnnotationChangeCoordinateDialog.cxx
 AnnotationColorWidget.cxx
+AnnotationCoordinateCenterXYWidget.cxx
 AnnotationCoordinateInformation.cxx
 AnnotationCoordinateSelectionWidget.cxx
 AnnotationCoordinateSpaceWidget.cxx
-AnnotationCoordinateWidget.cxx
+AnnotationCoordinatesWidget.cxx
 AnnotationCreateDialog.cxx
 AnnotationDeleteWidget.cxx
 AnnotationFontWidget.cxx
@@ -549,6 +628,7 @@ AnnotationInsertNewWidget.cxx
 AnnotationLineArrowTipsWidget.cxx
 AnnotationMenuArrange.cxx
 AnnotationMenuFileSelection.cxx
+AnnotationNameWidget.cxx
 AnnotationPasteDialog.cxx
 AnnotationRedoUndoWidget.cxx
 AnnotationRotationWidget.cxx
@@ -576,43 +656,53 @@ BrainBrowserWindowComboBox.cxx
 BrainBrowserWindowEditMenuItemEnum.cxx
 BrainBrowserWindowOrientedToolBox.cxx
 BrainBrowserWindowToolBar.cxx
+BrainBrowserWindowToolBarAllSurface.cxx
 BrainBrowserWindowToolBarChartAttributes.cxx
 BrainBrowserWindowToolBarChartAxes.cxx
 BrainBrowserWindowToolBarChartTwoAttributes.cxx
-BrainBrowserWindowToolBarChartTwoAxes.cxx
 BrainBrowserWindowToolBarChartTwoOrientation.cxx
-BrainBrowserWindowToolBarChartTwoTitle.cxx
+BrainBrowserWindowToolBarChartTwoOrientedAxes.cxx
 BrainBrowserWindowToolBarChartTwoType.cxx
 BrainBrowserWindowToolBarChartType.cxx
-BrainBrowserWindowToolBarClipping.cxx
 BrainBrowserWindowToolBarComponent.cxx
+BrainBrowserWindowToolBarOrientation.cxx
 BrainBrowserWindowToolBarSlicePlane.cxx
 BrainBrowserWindowToolBarSliceSelection.cxx
+BrainBrowserWindowToolBarSurface.cxx
 BrainBrowserWindowToolBarSurfaceMontage.cxx
 BrainBrowserWindowToolBarTab.cxx
 BrainBrowserWindowToolBarTabPopUpMenu.cxx
+BrainBrowserWindowToolBarView.cxx
 BrainBrowserWindowToolBarVolumeMontage.cxx
 BrainOpenGLWidget.cxx
 BugReportDialog.cxx
+CardinalDirectionEnumMenu.cxx
 CaretColorEnumComboBox.cxx
 CaretColorEnumMenu.cxx
+CaretColorToolButton.cxx
 CaretDataFileSelectionComboBox.cxx
 CaretFileDialog.cxx
 CaretFileDialogExtendable.cxx
 CaretFileRemoteDialog.cxx
 CaretMappableDataFileAndMapSelector.cxx
 CaretMappableDataFileAndMapSelectorObject.cxx
+CaretResultDialog.cxx
 ChartHistoryViewController.cxx
 ChartLinesSelectionViewController.cxx
 ChartMatrixParcelSelectionViewController.cxx
 ChartMatrixSeriesSelectionViewController.cxx
+ChartTwoAxisPropertiesEditorDialog.cxx
+ChartTwoAxisPropertiesEditorWidget.cxx
+ChartTwoCartesianCustomSubdivisionsEditorWidget.cxx
+ChartTwoLineLayerNormalizationWidget.cxx
 ChartTwoOverlaySetViewController.cxx
 ChartTwoOverlayViewController.cxx
+ChartTwoTitleEditorWidget.cxx
 ChartSelectionViewController.cxx
 ChartToolBoxViewController.cxx
 CiftiConnectivityMatrixViewController.cxx
 CiftiParcelSelectionComboBox.cxx
-ClippingPlanesDialog.cxx
+ClippingPlanesWidget.cxx
 ColorEditorWidget.cxx
 CopyPaletteColorMappingToFilesDialog.cxx
 CursorDisplayScoped.cxx
@@ -623,6 +713,10 @@ DataFileContentCopyMoveDialog.cxx
 DisplayGroupAndTabItemTreeWidgetItem.cxx
 DisplayGroupAndTabItemViewController.cxx
 DisplayGroupEnumComboBox.cxx
+DynConnViewController.cxx
+EventBrowserTabCloseInToolBar.cxx
+EventBrowserTabDeleteInToolBar.cxx
+EventBrowserTabNewInGUI.cxx
 EventAnnotationCreateNewType.cxx
 EventAnnotationGetDrawnInWindow.cxx
 EventBrowserWindowDrawingContent.cxx
@@ -634,10 +728,10 @@ EventGetOrSetUserInputModeProcessor.cxx
 EventGraphicsTimingOneWindow.cxx
 EventGraphicsUpdateAllWindows.cxx
 EventGraphicsUpdateOneWindow.cxx
+EventGraphicsWindowShowToolTip.cxx
 EventHelpViewerDisplay.cxx
 EventIdentificationRequest.cxx
 EventImageCapture.cxx
-EventMacDockMenuUpdate.cxx
 EventMovieManualModeRecording.cxx
 EventOperatingSystemRequestOpenDataFile.cxx
 EventOverlaySettingsEditorDialogRequest.cxx
@@ -653,6 +747,7 @@ FociProjectionDialog.cxx
 FociPropertiesEditorDialog.cxx
 FociSelectionViewController.cxx
 GapsAndMarginsDialog.cxx
+GestureEvent.cxx
 GiftiLabelTableEditor.cxx
 GiftiLabelTableSelectionComboBox.cxx
 GroupAndNameHierarchyTreeWidgetItem.cxx
@@ -660,6 +755,10 @@ GroupAndNameHierarchyViewController.cxx
 GuiManager.cxx
 HelpViewerDialog.cxx
 HyperLinkTextBrowser.cxx
+IdentificationDisplayDialog.cxx
+IdentificationDisplayWidget.cxx
+IdentificationFileFilteringRow.cxx
+IdentificationFileFilteringTableWidget.cxx
 IdentifyBrainordinateDialog.cxx
 ImageCaptureDialog.cxx
 ImageFileConvertToVolumeFileDialog.cxx
@@ -671,7 +770,6 @@ LabelSelectionViewController.cxx
 LockAspectWarningDialog.cxx
 MacApplication.cxx
 MacDockMenu.cxx
-MacDuplicateMenuBar.cxx
 MapSettingsChartTwoLineHistoryWidget.cxx
 MapSettingsColorBarPaletteOptionsWidget.cxx
 MapSettingsColorBarWidget.cxx
@@ -681,6 +779,8 @@ MapSettingsLayerWidget.cxx
 MapSettingsPaletteColorMappingWidget.cxx
 MapSettingsParcelsWidget.cxx
 MapYokingGroupComboBox.cxx
+MediaOverlayViewController.cxx
+MediaOverlaySetViewController.cxx
 MetaDataEditorDialog.cxx
 MetaDataEditorWidget.cxx
 MouseEvent.cxx
@@ -691,14 +791,24 @@ OverlaySetViewController.cxx
 OverlayViewController.cxx
 OverlaySettingsEditorDialog.cxx
 PaletteColorMappingEditorDialog.cxx
+PaletteCreateNewDialog.cxx
+PaletteEditorDialog.cxx
+PaletteEditorRangeRow.cxx
+PaletteEditorRangeWidget.cxx
+PalettePixmapPainter.cxx
+PaletteSelectionWidget.cxx
 PlotMagnifier.cxx
 PlotPanner.cxx
 PreferencesDialog.cxx
+PreferencesRecentFilesWidget.cxx
 ProgressReportingDialog.cxx
 ProgressReportingFromEvent.cxx
 ProgressReportingWithSlots.cxx
 QGLWidgetTextRenderer.cxx
+RecentFilesDialog.cxx
+RecentFilesTableWidget.cxx
 RegionOfInterestCreateFromBorderDialog.cxx
+ScaleBarWidget.cxx
 SceneBasePathWidget.cxx
 SceneCreateReplaceDialog.cxx
 SceneDialog.cxx
@@ -710,14 +820,15 @@ SceneReplaceAllDialog.cxx
 SceneShowOptionsDialog.cxx
 SceneWindowGeometry.cxx
 SpecFileManagementDialog.cxx
-SplashScreen.cxx
 StructureEnumComboBox.cxx
 StructureSurfaceSelectionControl.cxx
 SurfacePropertiesEditorDialog.cxx
 SurfaceSelectionViewController.cxx
 ThresholdingSetMapsDialog.cxx
+TileTabGridRowColumnWidgets.cxx
 TileTabsConfigurationDialog.cxx
-TileTabsConfigurationModifier.cxx
+TileTabsGridConfigurationModifier.cxx
+TileTabsManualTabGeometryWidget.cxx
 UserInputModeAbstract.cxx
 UserInputModeAnnotations.cxx
 UserInputModeAnnotationsContextMenu.cxx
@@ -728,11 +839,13 @@ UserInputModeFoci.cxx
 UserInputModeFociWidget.cxx
 UserInputModeImage.cxx
 UserInputModeImageWidget.cxx
+UserInputModeTileTabsManualLayout.cxx
+UserInputModeTileTabsManualLayoutContextMenu.cxx
 UserInputModeView.cxx
 UserInputModeViewContextMenu.cxx
+UserInputModeViewContextTileTabsSubMenu.cxx
 UserInputModeVolumeEdit.cxx
 UserInputModeVolumeEditWidget.cxx
-UserInputTileTabsContextMenu.cxx
 UsernamePasswordWidget.cxx
 ViewModeEnum.cxx
 VolumeFileCreateDialog.cxx
@@ -752,10 +865,12 @@ WbMacroCustomOperationDelay.cxx
 WbMacroCustomOperationIncrementRotation.cxx
 WbMacroCustomOperationIncrementVolumeSlice.cxx
 WbMacroCustomOperationManager.cxx
+WbMacroCustomOperationSurfaceDefaultColor.cxx
 WbMacroCustomOperationTypeEnum.cxx
 WbMacroHelper.cxx
 WbMacroWidgetActionsManager.cxx
 WuQCollapsibleWidget.cxx
+WuQColorEditorWidget.cxx
 WuQDataEntryDialog.cxx
 WuQDialog.cxx
 WuQDialogModal.cxx
@@ -784,6 +899,7 @@ WuQMacroSignalWatcher.cxx
 WuQMacroWidgetAction.cxx
 WuQMessageBox.cxx
 WuQwtPlot.cxx
+WuQScrollArea.cxx
 WuQSpecialIncrementDoubleSpinBox.cxx
 WuQSpinBox.cxx
 WuQSpinBoxGroup.cxx
@@ -793,8 +909,10 @@ WuQTabWidget.cxx
 WuQTabWidgetWithSizeHint.cxx
 WuQTextEditorDialog.cxx
 WuQTimedMessageDisplay.cxx
+WuQToolTipHelper.cxx
 WuQTreeWidget.cxx
 WuQTrueFalseComboBox.cxx
+WuQValueChangedSignalWatcher.cxx
 #WuQWebView.cxx
 WuQWidget.cxx
 WuQWidgetDisabler.cxx

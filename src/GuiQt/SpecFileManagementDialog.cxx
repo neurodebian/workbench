@@ -52,14 +52,18 @@
 #include "CaretLogger.h"
 #include "CaretMappableDataFile.h"
 #include "CaretPreferences.h"
+#include "CaretResult.h"
+#include "CaretResultDialog.h"
 #include "CursorDisplayScoped.h"
 #include "DataFileContentCopyMoveDialog.h"
 #include "DataFileContentCopyMoveInterface.h"
 #include "DataFileException.h"
 #include "DataFileContentInformation.h"
 #include "EventBrowserTabGetAllViewed.h"
+#include "EventBrowserWindowCreateTabs.h"
 #include "EventDataFileRead.h"
 #include "EventDataFileReload.h"
+#include "EventDataFileReloadAll.h"
 #include "EventGetDisplayedDataFiles.h"
 #include "EventGraphicsUpdateAllWindows.h"
 #include "EventManager.h"
@@ -298,10 +302,14 @@ m_specFile(specFile)
     
     bool testForDisplayedDataFiles = false;
     m_loadScenesPushButton = NULL;
+    m_reloadAllDataFilesPushButton = NULL;
     switch (m_dialogMode) {
         case SpecFileManagementDialog::MODE_MANAGE_FILES:
             setOkButtonText("Save Checked Files");
             setCancelButtonText("Close");
+            m_reloadAllDataFilesPushButton = addUserPushButton("Reload All Loaded Files",
+                                                               QDialogButtonBox::AcceptRole);
+            m_reloadAllDataFilesPushButton->setToolTip("Reloads all files that are currently loaded");
             testForDisplayedDataFiles = true;
             break;
         case SpecFileManagementDialog::MODE_OPEN_SPEC_FILE:
@@ -309,6 +317,7 @@ m_specFile(specFile)
             setCancelButtonText("Cancel");
             m_loadScenesPushButton = addUserPushButton("Load Scenes",
                                                        QDialogButtonBox::AcceptRole);
+            m_loadScenesPushButton->setToolTip("Loads all scene files and no other files");
             break;
         case SpecFileManagementDialog::MODE_SAVE_FILES_WHILE_QUITTING:
             setOkButtonText("Save Selected Files and Exit");
@@ -433,8 +442,6 @@ m_specFile(specFile)
     /*
      * No scrollbars in dialog since the table widget will have scroll bars
      */
-//    const bool enableScrollBars = false;
-
     setTopBottomAndCentralWidgets(toolbarWidget,
                                   centralWidget,
                                   NULL,
@@ -448,32 +455,6 @@ m_specFile(specFile)
     
     disableAutoDefaultForAllPushButtons();
 
-//    /*
-//     * Table widget has a default size of 640 x 480.
-//     * So estimate the size of the dialog with the table fully 
-//     * expanded.
-//     */
-//    QHeaderView* columnHeader = m_filesTableWidget->horizontalHeader();
-//    const int columnHeaderHeight = columnHeader->sizeHint().height();
-//    
-//    int dialogWidth = 10; // start out with a little extra space
-//    int dialogHeight = 0;
-//    
-//    const int numRows = m_filesTableWidget->rowCount();
-//    const int numCols = m_filesTableWidget->columnCount();
-//    const int cellGap = 1;
-//    if ((numRows > 0)
-//        && (numCols > 0)) {
-//        for (int i = 0; i < numCols; i++) {
-//            dialogWidth += (m_filesTableWidget->columnWidth(i) + cellGap);
-//            std::cout << "column width " << i << ": " << m_filesTableWidget->columnWidth(i) << std::endl;
-//        }
-//        
-//        for (int i = 0; i < numRows; i++) {
-//            dialogHeight += (m_filesTableWidget->rowHeight(i) + cellGap);
-//        }
-//    }
-    
     const QSize tableSize = WuQtUtilities::estimateTableWidgetSize(m_filesTableWidget);
     
     int dialogWidth = std::max(tableSize.width(),
@@ -826,10 +807,8 @@ SpecFileManagementDialog::updateTableDimensionsToFitFiles()
         case MODE_SAVE_FILES_WHILE_QUITTING:
             m_specFileTableRowIndex = numberOfRows;
             numberOfRows++;
-//            if ( ! m_brain->getSceneAnnotationFile()->isEmpty()) {
                 m_sceneAnnotationFileRowIndex = numberOfRows;
                 numberOfRows++;
-//            }
             break;
         case MODE_OPEN_SPEC_FILE:
             break;
@@ -1345,25 +1324,6 @@ SpecFileManagementDialog::setFilterSelections(const SpecFileDialogViewFilesTypeE
     }
 }
 
-
-///**
-// * Less than method for sorting using the sorting key.
-// *
-// * @param item1
-// *    Tested for less than the item2
-// * @param item2
-// *    Tested for greater than the item1
-// * @return
-// *    True if item1 is less than item2, else false.
-// */
-//bool
-//lessThanForSorting(const SpecFileManagementDialogRowContent *item1,
-//                                                       const SpecFileManagementDialogRowContent* item2)
-//{
-//    return (item1->m_sortingKey < item2->m_sortingKey);
-//}
-
-
 /**
  * Sort the file content.
  */
@@ -1781,6 +1741,61 @@ SpecFileManagementDialog::userButtonPressed(QPushButton* userPushButton)
         
         return RESULT_MODAL_ACCEPT;
     }
+    else if (userPushButton == m_reloadAllDataFilesPushButton) {
+        std::vector<CaretDataFile*> loadedFiles;
+        std::unique_ptr<CaretResult> result = EventDataFileReloadAll::getReloadableFiles(GuiManager::get()->getBrain(),
+                                                                                         loadedFiles);
+        if (CaretResultDialog::isError(result,
+                                       m_reloadAllDataFilesPushButton)) {
+            return RESULT_NONE;
+        }
+        
+        AString modifiedMessage;
+        for (auto& df : loadedFiles) {
+            CaretMappableDataFile* cmdf = dynamic_cast<CaretMappableDataFile*>(df);
+            if (cmdf != NULL) {
+                if (cmdf->isModifiedExcludingPaletteColorMapping()) {
+                    modifiedMessage.appendWithNewLine("   " + df->getFileNameNoPath());
+                }
+            }
+            else if (df->isModified()) {
+                modifiedMessage.appendWithNewLine("   " + df->getFileNameNoPath());
+            }
+        }
+        
+        if ( ! modifiedMessage.isEmpty()) {
+            const QString msg("These files are modified:\n"
+                              + modifiedMessage
+                              + "\n\nDiscard changes and reload files?");
+            if ( ! WuQMessageBox::warningOkCancel(m_reloadAllDataFilesPushButton,
+                                                  msg)) {
+                return RESULT_NONE;
+            }
+        }
+        
+        CursorDisplayScoped cursor;
+        cursor.showWaitCursor();
+        
+        /*
+         * Events are sent by the 'Brain' that are received by
+         * the ProgressReportingDialog that cause the dialog to
+         * be displayed.
+         */
+        ProgressReportingDialog progressDialog("Reload All Files",
+                                               "Reloading files",
+                                               m_reloadAllDataFilesPushButton);
+        result = EventDataFileReloadAll::reloadAllFiles(GuiManager::get()->getBrain());
+        cursor.restoreCursor();
+        CaretResultDialog::isError(result,
+                                   m_reloadAllDataFilesPushButton);
+        cursor.showWaitCursor();
+        
+        getDataFileContentFromSpecFile();
+        loadSpecFileContentIntoDialog();
+        updateGraphicWindowsAndUserInterface();
+
+        return RESULT_NONE;
+    }
     else {
         CaretAssert(0);
     }
@@ -1895,6 +1910,10 @@ SpecFileManagementDialog::okButtonClickedManageAndSaveFiles()
                     try {
                         m_brain->writeDataFile(caretDataFile);
                         specFileDataFile->setSavingSelected(false);
+
+                        CaretPreferences* prefs = SessionManager::get()->getCaretPreferences();
+                        CaretAssert(prefs);
+                        prefs->addToRecentFilesAndOrDirectories(caretDataFile->getFileName());
                     }
                     catch (const DataFileException& e) {
                         errorMessages.appendWithNewLine(e.whatString());
@@ -1915,7 +1934,7 @@ SpecFileManagementDialog::okButtonClickedManageAndSaveFiles()
         }
         else {
             m_specFile->removeAnyFileInformationIfNotInSpecAndNoCaretDataFile();
-            AString specFileErrorMessage = writeSpecFile(false);
+            AString specFileErrorMessage = writeSpecFile(true);
             if (specFileErrorMessage.isEmpty() == false) {
                 errorMessages.appendWithNewLine(specFileErrorMessage);
             }
@@ -1976,7 +1995,7 @@ SpecFileManagementDialog::writeSpecFile(const bool writeOnlyIfModified)
     try {
         m_specFile->writeFile(m_specFile->getFileName());
         CaretPreferences* prefs = SessionManager::get()->getCaretPreferences();
-        prefs->addToPreviousSpecFiles(m_specFile->getFileName());
+        prefs->addToRecentFilesAndOrDirectories(m_specFile->getFileName());
     }
     catch (const DataFileException& e) {
         errorMessage = e.whatString();
@@ -2138,6 +2157,11 @@ SpecFileManagementDialog::fileReloadOrOpenFileActionSelected(int rowIndex)
         if (reloadEvent.isError()) {
             errorMessage.appendWithNewLine(reloadEvent.getErrorMessage());
         }
+        else {
+            CaretPreferences* prefs = SessionManager::get()->getCaretPreferences();
+            CaretAssert(prefs);
+            prefs->addToRecentFilesAndOrDirectories(caretDataFile->getFileName());
+        }
     }
     else {
         AString username;
@@ -2173,6 +2197,14 @@ SpecFileManagementDialog::fileReloadOrOpenFileActionSelected(int rowIndex)
         if (readEvent.isError()) {
             errorMessage.appendWithNewLine(readEvent.getErrorMessage());
         }
+        else {
+            CaretPreferences* prefs = SessionManager::get()->getCaretPreferences();
+            CaretAssert(prefs);
+            prefs->addToRecentFilesAndOrDirectories(specFileDataFile->getFileName());
+        }
+        
+        EventBrowserWindowCreateTabs createTabsEvent(EventBrowserWindowCreateTabs::MODE_LOADED_DATA_FILE);
+        EventManager::get()->sendEvent(createTabsEvent.getPointer());
     }
     
     updateGraphicWindowsAndUserInterface();
@@ -2487,20 +2519,6 @@ SpecFileManagementDialog::changeFileName(QWidget* parent,
         return;
     }
     
-//    QStringList filenameFilterList;
-//    filenameFilterList.append(DataFileTypeEnum::toQFileDialogFilter(caretDataFile->getDataFileType()));
-//    CaretFileDialog fd(parent);
-//    fd.setAcceptMode(CaretFileDialog::AcceptSave);
-//    fd.setNameFilters(filenameFilterList);
-//    fd.setFileMode(CaretFileDialog::AnyFile);
-//    fd.setViewMode(CaretFileDialog::List);
-//    fd.selectFile(caretDataFile->getFileName());
-//    fd.setLabelText(CaretFileDialog::Accept, "Choose");
-//    fd.setWindowTitle("Choose File Name");
-//    if (fd.exec() == CaretFileDialog::Accepted) {
-//        QStringList files = fd.selectedFiles();
-//        if (files.isEmpty() == false) {
-//            AString newFileName = files.at(0);
             if (newFileName != caretDataFile->getFileName()) {
                 /*
                  * Clone current item, remove file from it,
@@ -2540,8 +2558,6 @@ SpecFileManagementDialog::changeFileName(QWidget* parent,
                  */
                 updateGraphicWindowsAndUserInterface();
             }
-//        }
-//    }
 }
 
 /**
@@ -2567,89 +2583,6 @@ SpecFileManagementDialog::showFileInformation(CaretDataFile* caretDataFile)
                                      this);
 }
 
-
-///**
-// * Called when spec file options tool button is triggered.
-// */
-//void
-//SpecFileManagementDialog::specFileOptionsActionTriggered()
-//{
-//    QAction* setFileNameAction = NULL;
-//    
-//    QMenu menu;
-//    QAction* metadataAction = menu.addAction("Edit Metadata...");
-//    metadataAction->setEnabled(false);
-//    switch (m_dialogMode) {
-//        case MODE_MANAGE_FILES:
-//        case MODE_SAVE_FILES_WHILE_QUITTING:
-//            setFileNameAction = menu.addAction("Set File Name...");
-//            break;
-//        case MODE_OPEN_SPEC_FILE:
-//            break;
-//    }
-//    
-//    QAction* selectedAction = menu.exec(QCursor::pos());
-//    
-//    if (selectedAction == setFileNameAction) {
-//        QStringList filenameFilterList;
-//        filenameFilterList.append(DataFileTypeEnum::toQFileDialogFilter(DataFileTypeEnum::SPECIFICATION));
-//        CaretFileDialog fd(&menu);
-//        fd.setAcceptMode(CaretFileDialog::AcceptSave);
-//        fd.setNameFilters(filenameFilterList);
-//        fd.setFileMode(CaretFileDialog::AnyFile);
-//        fd.setViewMode(CaretFileDialog::List);
-//        fd.selectFile(m_specFile->getFileName());
-//        fd.setLabelText(CaretFileDialog::Accept, "Choose");
-//        fd.setWindowTitle("Choose Spec File Name");
-//        if (fd.exec() == CaretFileDialog::Accepted) {
-//            QStringList files = fd.selectedFiles();
-//            if (files.isEmpty() == false) {
-//                AString newFileName = files.at(0);
-//                m_specFile->setFileName(newFileName);
-//                loadSpecFileContentIntoDialog();
-//            }
-//        }
-//    }
-//    else if (selectedAction == metadataAction) {
-//        
-//    }
-//    else if (selectedAction != NULL) {
-//        CaretAssertMessage(0,
-//                           ("Unhandled Menu Action: " + selectedAction->text()));
-//    }
-//}
-
-///**
-// * Called to choose the name of the spec file.
-// */
-//void
-//SpecFileManagementDialog::chooseSpecFileNameActionTriggered()
-//{
-//    QWidget* toolButtonWidget = m_filesTableWidget->cellWidget(m_specFileTableRowIndex,
-//                                                               m_COLUMN_OPTIONS_TOOLBUTTON);
-//    CaretAssert(toolButtonWidget);
-//    
-//    QStringList filenameFilterList;
-//    filenameFilterList.append(DataFileTypeEnum::toQFileDialogFilter(DataFileTypeEnum::SPECIFICATION));
-//    CaretFileDialog fd(toolButtonWidget);
-//    fd.setAcceptMode(CaretFileDialog::AcceptSave);
-//    fd.setNameFilters(filenameFilterList);
-//    fd.setFileMode(CaretFileDialog::AnyFile);
-//    fd.setViewMode(CaretFileDialog::List);
-//    fd.selectFile(m_specFile->getFileName());
-//    fd.setLabelText(CaretFileDialog::Accept, "Choose");
-//    fd.setWindowTitle("Choose Spec File Name");
-//    if (fd.exec() == CaretFileDialog::Accepted) {
-//        QStringList files = fd.selectedFiles();
-//        if (files.isEmpty() == false) {
-//            AString newFileName = files.at(0);
-//            m_specFile->setFileName(newFileName);
-//            loadSpecFileContentIntoDialog();
-//        }
-//    }
-//}
-
-
 /**
  * @return Create and return a toolbar for viewing files by type of file.
  * @param labelOut
@@ -2666,7 +2599,7 @@ SpecFileManagementDialog::createFilesTypesToolBar(QLabel* &labelOut)
     
     QAction* fileTypeAllAction = m_fileTypesActionGroup->addAction("All");
     fileTypeAllAction->setCheckable(true);
-    fileTypeAllAction->setData(qVariantFromValue(DataFileTypeEnum::toIntegerCode(DataFileTypeEnum::UNKNOWN)));
+    fileTypeAllAction->setData(QVariant::fromValue(DataFileTypeEnum::toIntegerCode(DataFileTypeEnum::UNKNOWN)));
     
     /*
      * All types of files
@@ -2706,7 +2639,7 @@ SpecFileManagementDialog::createFilesTypesToolBar(QLabel* &labelOut)
         
         QAction* action = m_fileTypesActionGroup->addAction(text);
         action->setCheckable(true);
-        action->setData(qVariantFromValue(DataFileTypeEnum::toIntegerCode(dataFileType)));
+        action->setData(QVariant::fromValue(DataFileTypeEnum::toIntegerCode(dataFileType)));
     }
     
     if (m_fileTypesActionGroup->actions().isEmpty() == false) {
@@ -2736,10 +2669,10 @@ SpecFileManagementDialog::createFilesSelectionToolBar(QLabel* &labelOut)
                      this, SLOT(toolBarSelectFilesActionTriggered(QAction*)));
     
     QAction* allFilesAction = m_fileSelectionActionGroup->addAction("All");
-    allFilesAction->setData(qVariantFromValue(SHOW_FILES_ALL));
+    allFilesAction->setData(QVariant::fromValue(SHOW_FILES_ALL));
     
     QAction* noneFilesAction = m_fileSelectionActionGroup->addAction("None");
-    noneFilesAction->setData(qVariantFromValue(SHOW_FILES_NONE));
+    noneFilesAction->setData(QVariant::fromValue(SHOW_FILES_NONE));
     
     QToolBar* toolbar = createToolBarWithActionGroup("Select Files: ",
                                                      labelOut,
@@ -2762,23 +2695,23 @@ SpecFileManagementDialog::createManageFilesLoadedNotLoadedToolBar(QLabel* &label
                      this, SLOT(toolBarManageFilesLoadedNotLoadedActionTriggered(QAction*)));
     
     QAction* allFilesAction = m_manageFilesLoadedNotLoadedActionGroup->addAction("All");
-    allFilesAction->setData(qVariantFromValue((int)MANAGE_FILES_ALL));
+    allFilesAction->setData(QVariant::fromValue((int)MANAGE_FILES_ALL));
     allFilesAction->setCheckable(true);
     
     QAction* loadedFilesAction = m_manageFilesLoadedNotLoadedActionGroup->addAction("Loaded");
-    loadedFilesAction->setData(qVariantFromValue((int)MANAGE_FILES_LOADED));
+    loadedFilesAction->setData(QVariant::fromValue((int)MANAGE_FILES_LOADED));
     loadedFilesAction->setCheckable(true);
     
     QAction* loadedFilesModifiedAction = m_manageFilesLoadedNotLoadedActionGroup->addAction("Loaded:Modified");
-    loadedFilesModifiedAction->setData(qVariantFromValue((int)MANAGE_FILES_LOADED_MODIFIED));
+    loadedFilesModifiedAction->setData(QVariant::fromValue((int)MANAGE_FILES_LOADED_MODIFIED));
     loadedFilesModifiedAction->setCheckable(true);
     
     QAction* loadedFilesNotModifiedAction = m_manageFilesLoadedNotLoadedActionGroup->addAction("Loaded:Not Modified");
-    loadedFilesNotModifiedAction->setData(qVariantFromValue((int)MANAGE_FILES_LOADED_NOT_MODIFIED));
+    loadedFilesNotModifiedAction->setData(QVariant::fromValue((int)MANAGE_FILES_LOADED_NOT_MODIFIED));
     loadedFilesNotModifiedAction->setCheckable(true);
     
     QAction* notLoadedFilesAction = m_manageFilesLoadedNotLoadedActionGroup->addAction("Not Loaded");
-    notLoadedFilesAction->setData(qVariantFromValue((int)MANAGE_FILES_NOT_LOADED));
+    notLoadedFilesAction->setData(QVariant::fromValue((int)MANAGE_FILES_NOT_LOADED));
     notLoadedFilesAction->setCheckable(true);
     
     m_manageFilesLoadedNotLoadedActionGroup->blockSignals(true);
@@ -2835,7 +2768,7 @@ SpecFileManagementDialog::createStructureToolBar(QLabel* &labelOut)
         StructureEnum::Enum structure = *iter;
         QAction* action = m_structureActionGroup->addAction(StructureEnum::toGuiName(structure));
         action->setCheckable(true);
-        action->setData(qVariantFromValue(StructureEnum::toIntegerCode(structure)));
+        action->setData(QVariant::fromValue(StructureEnum::toIntegerCode(structure)));
     }
     
     if (m_structureActionGroup->actions().isEmpty() == false) {
@@ -2897,13 +2830,6 @@ SpecFileManagementDialog::createToolBarWithActionGroup(const QString& text,
 void
 SpecFileManagementDialog::toolBarFileTypeActionTriggered(QAction* /*action*/)
 {
-//    if (action != NULL) {
-//        const int dataValue = action->data().toInt();
-//        bool isValid = false;
-//        const DataFileTypeEnum::Enum dataFileType = DataFileTypeEnum::fromIntegerCode(dataValue,
-//                                                                                      &isValid);
-//    }
-    
     loadSpecFileContentIntoDialog();
 }
 
@@ -2916,13 +2842,6 @@ SpecFileManagementDialog::toolBarFileTypeActionTriggered(QAction* /*action*/)
 void
 SpecFileManagementDialog::toolBarStructuresActionTriggered(QAction* /*action*/)
 {
-//    if (action != NULL) {
-//        const int dataValue = action->data().toInt();
-//        bool isValid = false;
-//        const StructureEnum::Enum structure = StructureEnum::fromIntegerCode(dataValue,
-//                                                                             &isValid);
-//    }
-    
     loadSpecFileContentIntoDialog();
 }
 
@@ -2947,8 +2866,6 @@ SpecFileManagementDialog::toolBarManageFilesLoadedNotLoadedActionTriggered(QActi
 void
 SpecFileManagementDialog::toolBarSelectFilesActionTriggered(QAction* action)
 {
-//    m_filesTableWidget->blockSignals(true);
-
     if (action != NULL) {
         const int dataValue = action->data().toInt();
         
@@ -2980,8 +2897,6 @@ SpecFileManagementDialog::toolBarSelectFilesActionTriggered(QAction* action)
             }
         }
     }
-
-//    m_filesTableWidget->blockSignals(false);
 }
 
 /* ======================================================================= */
@@ -3037,13 +2952,6 @@ SpecFileManagementDialogRowContent::setSortingKey(const Sorting sorting)
     
     const DataFileTypeEnum::Enum dataFileType = m_specFileDataFile->getDataFileType();
     QString typeName = SpecFileManagementDialog::getEditedDataFileTypeName(dataFileType);
-
-    /*
-     * Push surface files to the top???
-     */
-//    if (dataFileType == DataFileTypeEnum::SURFACE) {
-//        typeName = "AAAAAA";
-//    }
 
     /*
      * Push non-specific structures to the bottom

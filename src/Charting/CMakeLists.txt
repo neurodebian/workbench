@@ -38,12 +38,19 @@ ChartSelectionModeEnum.h
 ChartOneDataTypeEnum.h
 ChartingVersionEnum.h
 
+ChartTwoAxisOrientationTypeEnum.h
 ChartTwoAxisScaleRangeModeEnum.h
 ChartTwoCartesianAxis.h
+ChartTwoCartesianCustomSubdivisions.h
+ChartTwoCartesianCustomSubdivisionsLabel.h
+ChartTwoCartesianOrientedAxes.h
+ChartTwoCartesianOrientedAxesYokingManager.h
+ChartTwoCartesianSubdivisionsModeEnum.h
 ChartTwoCompoundDataType.h
 ChartTwoDataCartesian.h
 ChartTwoDataTypeEnum.h
 ChartTwoHistogramContentTypeEnum.h
+ChartTwoLineLayerContentTypeEnum.h
 ChartTwoLineSeriesContentTypeEnum.h
 ChartTwoMatrixContentTypeEnum.h
 ChartTwoMatrixDisplayProperties.h
@@ -51,13 +58,13 @@ ChartTwoMatrixLoadingDimensionEnum.h
 ChartTwoMatrixTriangularViewingModeEnum.h
 ChartTwoNumericSubdivisionsModeEnum.h
 ChartTwoLineSeriesHistory.h
+ChartTwoOverlaySetInterface.h
 ChartTwoTitle.h
-EventChartTwoAttributesChanged.h
-EventChartTwoAxisGetDataRange.h
+EventChartTwoCartesianAxisDisplayGroup.h
+EventChartTwoCartesianOrientedAxesYoking.h
 EventChartTwoLoadLineSeriesData.h
 MapFileDataSelector.h
 
-ChartTwoAxisScaleRangeModeEnum.cxx
 ChartAxis.cxx
 ChartAxisCartesian.cxx
 ChartAxisLocationEnum.cxx
@@ -81,11 +88,19 @@ ChartSelectionModeEnum.cxx
 ChartOneDataTypeEnum.cxx
 ChartingVersionEnum.cxx
 
+ChartTwoAxisOrientationTypeEnum.cxx
+ChartTwoAxisScaleRangeModeEnum.cxx
 ChartTwoCartesianAxis.cxx
+ChartTwoCartesianCustomSubdivisions.cxx
+ChartTwoCartesianCustomSubdivisionsLabel.cxx
+ChartTwoCartesianOrientedAxes.cxx
+ChartTwoCartesianOrientedAxesYokingManager.cxx
+ChartTwoCartesianSubdivisionsModeEnum.cxx
 ChartTwoCompoundDataType.cxx
 ChartTwoDataCartesian.cxx
 ChartTwoDataTypeEnum.cxx
 ChartTwoHistogramContentTypeEnum.cxx
+ChartTwoLineLayerContentTypeEnum.cxx
 ChartTwoLineSeriesContentTypeEnum.cxx
 ChartTwoMatrixContentTypeEnum.cxx
 ChartTwoMatrixDisplayProperties.cxx
@@ -93,9 +108,10 @@ ChartTwoMatrixLoadingDimensionEnum.cxx
 ChartTwoMatrixTriangularViewingModeEnum.cxx
 ChartTwoNumericSubdivisionsModeEnum.cxx
 ChartTwoLineSeriesHistory.cxx
+ChartTwoOverlaySetInterface.cxx
 ChartTwoTitle.cxx
-EventChartTwoAttributesChanged.cxx
-EventChartTwoAxisGetDataRange.cxx
+EventChartTwoCartesianAxisDisplayGroup.cxx
+EventChartTwoCartesianOrientedAxesYoking.cxx
 EventChartTwoLoadLineSeriesData.cxx
 MapFileDataSelector.cxx
 )

@@ -36,6 +36,7 @@ namespace caret {
     
     class CaretPreferences;
     class EnumComboBoxTemplate;
+    class PreferencesRecentFilesWidget;
     class WuQTrueFalseComboBox;
     class WuQWidgetObjectGroup;
     
@@ -57,11 +58,11 @@ namespace caret {
         
         void miscDevelopMenuEnabledComboBoxChanged(bool value);
         void miscLoggingLevelComboBoxChanged(int);
-        void miscSplashScreenShowAtStartupComboBoxChanged(bool value);
         void miscSpecFileDialogViewFilesTypeEnumComboBoxItemActivated();
-        
+        void miscGuiGesturesEnabledComboBoxChanged(bool value);
         void miscDynamicConnectivityComboBoxChanged(bool value);
-        
+        void miscWindowToolBarWidthModeComboBoxItemActivated();
+        void miscFileOpenFromOpSysTypeComboBoxItemActivated();
         void openGLDrawingMethodEnumComboBoxItemActivated();
         void openGLImageCaptureMethodEnumComboBoxItemActivated();
         
@@ -70,12 +71,14 @@ namespace caret {
         void volumeAxesMontageCoordinatesComboBoxToggled(bool value);
         void volumeMontageCoordinatePrecisionChanged(int value);
         void volumeIdentificationComboBoxToggled(bool value);
-        void m_volumeAllSlicePlanesLayoutItemActivated();
+        void volumeAllSlicePlanesLayoutItemActivated();
         
         void yokingComboBoxToggled(bool value);
         
         void identificationSymbolToggled();
+        void identificationModeEnumComboBoxItemActivated();
         
+        void recentFilesChanged();
     private:
         enum PREF_COLOR {
             PREF_COLOR_BACKGROUND_ALL          = 0,
@@ -88,9 +91,11 @@ namespace caret {
             PREF_COLOR_FOREGROUND_VOLUME       = 7,
             PREF_COLOR_CHART_MATRIX_GRID_LINES = 8,
             PREF_COLOR_CHART_THRESHOLD         = 9,
-            PREF_COLOR_BACKGROUND_WINDOW       = 10,
-            PREF_COLOR_FOREGROUND_WINDOW       = 11,
-            NUMBER_OF_PREF_COLORS              = 12
+            PREF_COLOR_FOREGROUND_MEDIA        = 10,
+            PREF_COLOR_BACKGROUND_MEDIA        = 11,
+            PREF_COLOR_BACKGROUND_WINDOW       = 12,
+            PREF_COLOR_FOREGROUND_WINDOW       = 13,
+            NUMBER_OF_PREF_COLORS              = 14
         };
         
         QWidget* createColorsWidget();
@@ -128,20 +133,22 @@ namespace caret {
         QWidget* m_foregroundColorChartWidget;
         QWidget* m_foregroundColorSurfaceWidget;
         QWidget* m_foregroundColorVolumeWidget;
+        QWidget* m_foregroundColorMediaWidget;
         QWidget* m_backgroundColorWindowWidget;
         QWidget* m_backgroundColorAllWidget;
         QWidget* m_backgroundColorChartWidget;
         QWidget* m_backgroundColorSurfaceWidget;
         QWidget* m_backgroundColorVolumeWidget;
+        QWidget* m_backgroundColorMediaWidget;
         QWidget* m_chartMatrixGridLinesColorWidget;
         QWidget* m_chartHistogramThresholdColorWidget;
 
         WuQTrueFalseComboBox* m_miscDevelopMenuEnabledComboBox;
         QComboBox* m_miscLoggingLevelComboBox;
-        WuQTrueFalseComboBox* m_miscSplashScreenShowAtStartupComboBox;
         EnumComboBoxTemplate* m_miscSpecFileDialogViewFilesTypeEnumComboBox;
-        
-
+        WuQTrueFalseComboBox* m_guiGesturesEnabledComboBox;
+        EnumComboBoxTemplate* m_windowToolBarWidthModeComboBox;
+        EnumComboBoxTemplate* m_fileOpenFromOpSysTypeComboBox;
         
         EnumComboBoxTemplate* m_openGLDrawingMethodEnumComboBox;
         EnumComboBoxTemplate* m_openGLImageCaptureMethodEnumComboBox;
@@ -160,8 +167,11 @@ namespace caret {
         WuQTrueFalseComboBox* m_surfaceIdentificationSymbolComboBox;
         WuQTrueFalseComboBox* m_volumeIdentificationSymbolComboBox;
         WuQTrueFalseComboBox* m_dataToolTipsComboBox;
+        EnumComboBoxTemplate* m_identificationModeComboBox;
         
         WuQWidgetObjectGroup* m_allWidgets;
+        
+        PreferencesRecentFilesWidget* m_recentFilesWidget;
     };
     
 #ifdef __PREFERENCES_DIALOG__H__DECLARE__

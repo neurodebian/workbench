@@ -29,7 +29,10 @@
 #include "AnnotationAlignmentEnum.h"
 #include "AnnotationDistributeEnum.h"
 #include "AnnotationGroupingModeEnum.h"
-
+#include "AnnotationStackingOrderTypeEnum.h"
+#include "EventBrowserWindowTileTabOperation.h"
+#include "UserInputModeEnum.h"
+#include "UserInputModeTileTabsManualLayoutContextMenu.h"
 
 namespace caret {
 
@@ -38,7 +41,8 @@ namespace caret {
         Q_OBJECT
 
     public:
-        AnnotationMenuArrange(const int32_t browserWindowIndex,
+        AnnotationMenuArrange(const UserInputModeEnum::Enum userInputMode,
+                              const int32_t browserWindowIndex,
                               QWidget* parent = 0);
         
         virtual ~AnnotationMenuArrange();
@@ -52,11 +56,20 @@ namespace caret {
         void menuAboutToShow();
         
     private:
+        enum class MenuMode {
+            ANNOTATIONS,
+            TILE_TABS
+        };
+        
         void addAlignmentSelections();
         
         void addDistributeSelections();
         
         void addGroupingSelections();
+        
+        void addTileTabsSelections();
+        
+        void addOrderingSelections();
         
         void applyAlignment(const AnnotationAlignmentEnum::Enum alignment);
         
@@ -88,13 +101,37 @@ namespace caret {
                       const qreal x,
                       const qreal y);
         
+        bool processTileTabsMenu(QAction* actionSelected);
+        
+        bool processOrderingMenuItem(QAction* actionSelected);
+        
+        void processShrinkAndExpandTabMenuItem();
+        
+        void processWindowTileTabOperation(const EventBrowserWindowTileTabOperation::Operation operation);
+        
+        void processAnnotationOrderOperation(const AnnotationStackingOrderTypeEnum::Enum orderType);
+        
+        const UserInputModeEnum::Enum m_userInputMode;
+        
         const int32_t m_browserWindowIndex;
         
-        QAction* m_groupAction;
+        MenuMode m_menuMode = MenuMode::ANNOTATIONS;
         
-        QAction* m_regroupAction;
+        QAction* m_groupAction = NULL;
         
-        QAction* m_ungroupAction;
+        QAction* m_regroupAction = NULL;
+        
+        QAction* m_ungroupAction = NULL;
+        
+        QAction* m_tileTabsShrinkAndExpandToFillAction = NULL;
+        
+        QAction* m_orderingBringToFrontAction = NULL;
+        
+        QAction* m_orderingBringForwardAction = NULL;
+        
+        QAction* m_orderingSendToBackAction = NULL;
+        
+        QAction* m_orderingSendBackwardAction = NULL;
         
         // ADD_NEW_MEMBERS_HERE
 

@@ -35,9 +35,10 @@ namespace caret {
     class AnnotationFile;
     class AnnotationGroup;
     class AnnotationImage;
-    class AnnotationOneDimensionalShape;
+    class AnnotationMultiCoordinateShape;
+    class AnnotationTwoCoordinateShape;
     class AnnotationText;
-    class AnnotationTwoDimensionalShape;
+    class AnnotationOneCoordinateShape;
     class XmlStreamReaderHelper;
     
     class AnnotationFileXmlReader : public AnnotationFileXmlFormatBase {
@@ -69,11 +70,14 @@ namespace caret {
         
         void readGroup(AnnotationFile* annotationFile);
         
-        void readOneDimensionalAnnotation(const QString& annotationElementName,
-                                          AnnotationOneDimensionalShape* annotation);
+        void readTwoCoordinateAnnotation(const QString& annotationElementName,
+                                          AnnotationTwoCoordinateShape* annotation);
 
-        void readTwoDimensionalAnnotation(const QString& annotationElementName,
-                                          AnnotationTwoDimensionalShape* annotation);
+        void readOneCoordinateAnnotation(const QString& annotationElementName,
+                                          AnnotationOneCoordinateShape* annotation);
+        
+        void readMultiCoordinateAnnotation(const QString& annotationElementName,
+                                           AnnotationMultiCoordinateShape* annotation);
         
         void readCoordinate(const QString& coordinateElementName,
                             AnnotationCoordinate* coordinate);

@@ -26,7 +26,10 @@
 #include "BrowserTabContent.h"
 #undef __BROWSER_TAB_CONTENT_DECLARE__
 
+#include "AnnotationBrowserTab.h"
 #include "AnnotationColorBar.h"
+#include "AnnotationCoordinate.h"
+#include "AnnotationScaleBar.h"
 #include "BorderFile.h"
 #include "Brain.h"
 #include "BrainOpenGLViewportContent.h"
@@ -40,6 +43,7 @@
 #include "CaretPreferences.h"
 #include "ChartableMatrixInterface.h"
 #include "ChartModelDataSeries.h"
+#include "ChartTwoCartesianOrientedAxes.h"
 #include "ChartTwoMatrixDisplayProperties.h"
 #include "ChartTwoOverlay.h"
 #include "ChartTwoOverlaySet.h"
@@ -52,7 +56,7 @@
 #include "DeveloperFlagsEnum.h"
 #include "DisplayPropertiesBorders.h"
 #include "DisplayPropertiesFoci.h"
-#include "EventAnnotationColorBarGet.h"
+#include "EventAnnotationBarsGet.h"
 #include "EventCaretMappableDataFilesAndMapsInDisplayedOverlays.h"
 #include "EventCaretMappableDataFileMapsViewedInOverlays.h"
 #include "EventIdentificationHighlightLocation.h"
@@ -63,9 +67,13 @@
 #include "LabelFile.h"
 #include "MathFunctions.h"
 #include "Matrix4x4.h"
+#include "MediaFile.h"
+#include "MediaOverlay.h"
+#include "MediaOverlaySet.h"
 #include "MetricDynamicConnectivityFile.h"
 #include "ModelChart.h"
 #include "ModelChartTwo.h"
+#include "ModelMedia.h"
 #include "ModelSurface.h"
 #include "ModelSurfaceMontage.h"
 #include "ModelSurfaceSelector.h"
@@ -85,9 +93,12 @@
 #include "SurfaceMontageConfigurationFlatMaps.h"
 #include "SurfaceSelectionModel.h"
 #include "StructureEnum.h"
+#include "TileTabsBrowserTabGeometry.h"
+#include "TileTabsBrowserTabGeometrySceneHelper.h"
 #include "VolumeFile.h"
 #include "ViewingTransformations.h"
 #include "ViewingTransformationsCerebellum.h"
+#include "ViewingTransformationsMedia.h"
 #include "ViewingTransformationsVolume.h"
 #include "VolumeDynamicConnectivityFile.h"
 #include "VolumeSliceSettings.h"
@@ -119,6 +130,7 @@ BrowserTabContent::BrowserTabContent(const int32_t tabNumber)
     m_surfaceMontageModel = NULL;
     m_chartModel = NULL;
     m_chartTwoModel = NULL;
+    m_mediaModel = NULL;
     m_guiName = "";
     m_userName = "";
     m_volumeSurfaceOutlineSetModel = new VolumeSurfaceOutlineSetModel();
@@ -131,6 +143,10 @@ BrowserTabContent::BrowserTabContent(const int32_t tabNumber)
     m_displayVolumeMontageAxesCoordinates = prefs->isVolumeMontageAxesCoordinatesDisplayed();
     m_volumeMontageCoordinatePrecision = prefs->getVolumeMontageCoordinatePrecision();
 
+    m_scaleBar.reset(new AnnotationScaleBar(AnnotationAttributesDefaultTypeEnum::NORMAL));
+    initializeScaleBar();
+    CaretAssert(m_scaleBar.get());
+    
     m_lightingEnabled = true;
     
     m_aspectRatio = 1.0;
@@ -139,6 +155,7 @@ BrowserTabContent::BrowserTabContent(const int32_t tabNumber)
     m_cerebellumViewingTransformation  = new ViewingTransformationsCerebellum();
     m_flatSurfaceViewingTransformation = new ViewingTransformations();
     m_viewingTransformation            = new ViewingTransformations();
+    m_mediaViewingTransformation       = new ViewingTransformationsMedia();
     m_volumeSliceViewingTransformation = new ViewingTransformationsVolume();
     m_chartTwoMatrixViewingTranformation  = new ViewingTransformations();
     m_chartTwoMatrixDisplayProperties = new ChartTwoMatrixDisplayProperties();
@@ -152,6 +169,10 @@ BrowserTabContent::BrowserTabContent(const int32_t tabNumber)
     m_volumeSliceSettings = new VolumeSliceSettings();
     
     m_clippingPlaneGroup = new ClippingPlaneGroup();
+    
+    m_manualLayoutBrowserTabAnnotation.reset(new AnnotationBrowserTab(AnnotationAttributesDefaultTypeEnum::NORMAL));
+    m_manualLayoutBrowserTabAnnotation->setBrowserTabContent(this,
+                                                             m_tabNumber);
     
     m_sceneClassAssistant = new SceneClassAssistant();
     m_sceneClassAssistant->add("m_tabNumber", 
@@ -181,6 +202,10 @@ BrowserTabContent::BrowserTabContent(const int32_t tabNumber)
     m_sceneClassAssistant->add("m_viewingTransformation",
                                "ViewingTransformations",
                                m_viewingTransformation);
+    
+    m_sceneClassAssistant->add("m_mediaViewingTransformation",
+                               "ViewingTransformationsMedia",
+                               m_mediaViewingTransformation);
     
     m_sceneClassAssistant->add("m_volumeSliceViewingTransformation",
                                "ViewingTransformations",
@@ -225,8 +250,13 @@ BrowserTabContent::BrowserTabContent(const int32_t tabNumber)
                                                                        &m_brainModelYokingGroup);
     m_sceneClassAssistant->add<YokingGroupEnum, YokingGroupEnum::Enum>("m_chartModelYokingGroup",
                                                                        &m_chartModelYokingGroup);
+
+    m_sceneClassAssistant->add("m_scaleBar",
+                               "AnnotationScaleBar",
+                               m_scaleBar.get());
+    
     EventManager::get()->addEventListener(this,
-                                          EventTypeEnum::EVENT_ANNOTATION_COLOR_BAR_GET);
+                                          EventTypeEnum::EVENT_ANNOTATION_BARS_GET);
     EventManager::get()->addEventListener(this,
                                           EventTypeEnum::EVENT_IDENTIFICATION_HIGHLIGHT_LOCATION);
     EventManager::get()->addEventListener(this,
@@ -240,6 +270,31 @@ BrowserTabContent::BrowserTabContent(const int32_t tabNumber)
     if (prefs->isYokingDefaultedOn()) {
         setBrainModelYokingGroup(YokingGroupEnum::YOKING_GROUP_A);
         setChartModelYokingGroup(YokingGroupEnum::YOKING_GROUP_OFF);
+    }
+
+    /*
+     * Initialize the manual layout's default positions
+     * These values are used when a Manual Layout is selected to determine if
+     * the manual layout contains the defaults to that the bounds can be
+     * changed the first time manual layout is selected.
+     */
+    AnnotationBrowserTab* annotationBrowserTab = getManualLayoutBrowserTabAnnotation();
+    CaretAssert(annotationBrowserTab);
+    
+    TileTabsBrowserTabGeometry tabGeom(m_tabNumber);
+    m_defaultManualTabGeometryBounds[0] = tabGeom.getMinX();
+    m_defaultManualTabGeometryBounds[1] = tabGeom.getMaxX();
+    m_defaultManualTabGeometryBounds[2] = tabGeom.getMinY();
+    m_defaultManualTabGeometryBounds[3] = tabGeom.getMaxY();
+
+    annotationBrowserTab->setBounds2D(m_defaultManualTabGeometryBounds[0],
+                                      m_defaultManualTabGeometryBounds[1],
+                                      m_defaultManualTabGeometryBounds[2],
+                                      m_defaultManualTabGeometryBounds[3]);
+    const float annWidth = (m_defaultManualTabGeometryBounds[1] - m_defaultManualTabGeometryBounds[0]);
+    const float annHeight = (m_defaultManualTabGeometryBounds[3] - m_defaultManualTabGeometryBounds[2]);
+    if (annWidth > 0.0) {
+        m_aspectRatio = annHeight / annWidth;
     }
 }
 
@@ -256,6 +311,7 @@ BrowserTabContent::~BrowserTabContent()
     delete m_flatSurfaceViewingTransformation;
     delete m_cerebellumViewingTransformation;
     delete m_viewingTransformation;
+    delete m_mediaViewingTransformation;
     delete m_volumeSliceViewingTransformation;
     delete m_chartTwoMatrixViewingTranformation;
     delete m_chartTwoMatrixDisplayProperties;
@@ -313,6 +369,7 @@ BrowserTabContent::cloneBrowserTabContent(BrowserTabContent* tabToClone)
     *m_cerebellumViewingTransformation = *tabToClone->m_cerebellumViewingTransformation;
     *m_flatSurfaceViewingTransformation = *tabToClone->m_flatSurfaceViewingTransformation;
     *m_viewingTransformation = *tabToClone->m_viewingTransformation;
+    *m_mediaViewingTransformation = *tabToClone->m_mediaViewingTransformation;
     *m_volumeSliceViewingTransformation = *tabToClone->m_volumeSliceViewingTransformation;
     *m_chartTwoMatrixViewingTranformation = *tabToClone->m_chartTwoMatrixViewingTranformation;
     *m_chartTwoMatrixDisplayProperties = *tabToClone->m_chartTwoMatrixDisplayProperties;
@@ -335,36 +392,31 @@ BrowserTabContent::cloneBrowserTabContent(BrowserTabContent* tabToClone)
     if (model != NULL) {
         Brain* brain = model->getBrain();
         
-        brain->copyDisplayProperties(tabToClone->getTabNumber(),
-                                     getTabNumber());
+        brain->copyDisplayPropertiesToTab(tabToClone->getTabNumber(),
+                                          getTabNumber());
         
-        const int32_t numberOfBrainStructures = brain->getNumberOfBrainStructures();
-        for (int32_t i = 0; i < numberOfBrainStructures; i++) {
-            BrainStructure* bs = brain->getBrainStructure(i);
-            const int32_t numLabelFiles = bs->getNumberOfLabelFiles();
-            for (int32_t j = 0; j < numLabelFiles; j++) {
-                LabelFile* labelFile = bs->getLabelFile(j);
-                labelFile->getGroupAndNameHierarchyModel()->copySelections(tabToClone->getTabNumber(),
-                                                                           getTabNumber());
-            }
-        }
-
-        const int32_t numBorderFiles = brain->getNumberOfBorderFiles();
-        for (int32_t i = 0; i < numBorderFiles; i++) {
-            BorderFile* bf = brain->getBorderFile(i);
-            bf->getGroupAndNameHierarchyModel()->copySelections(tabToClone->getTabNumber(),
-                                                                getTabNumber());
-        }
-        
-        const int32_t numFociFiles = brain->getNumberOfFociFiles();
-        for (int32_t i = 0; i < numFociFiles; i++) {
-            FociFile* ff = brain->getFociFile(i);
-            ff->getGroupAndNameHierarchyModel()->copySelections(tabToClone->getTabNumber(),
-                                                                getTabNumber());
-        }
+        brain->copyFilePropertiesToTab(tabToClone->getTabNumber(),
+                                       getTabNumber());        
     }
     
     m_volumeSurfaceOutlineSetModel->copyVolumeSurfaceOutlineSetModel(tabToClone->getVolumeSurfaceOutlineSet());
+    
+    /*
+     * For manual layout, make tab same size but put in bottom left corner
+     */
+    const AnnotationBrowserTab* cloneAnnotationBrowerTab = tabToClone->getManualLayoutBrowserTabAnnotation();
+    CaretAssert(cloneAnnotationBrowerTab);
+    const float minXY(10.0f);
+    const float maxWidthHeight(100.0f - (minXY * 2));
+    float tabWidth  = MathFunctions::limitRange(cloneAnnotationBrowerTab->getWidth(),  minXY, maxWidthHeight);
+    float tabHeight = MathFunctions::limitRange(cloneAnnotationBrowerTab->getHeight(), minXY, maxWidthHeight);
+    
+    AnnotationBrowserTab* annotationBrowserTab = getManualLayoutBrowserTabAnnotation();
+    CaretAssert(annotationBrowserTab);
+    annotationBrowserTab->setBounds2D(minXY,
+                                      minXY + tabWidth,
+                                      minXY,
+                                      minXY + tabHeight);
 }
 
 /**
@@ -375,11 +427,13 @@ BrowserTabContent::getDefaultName() const
 {
     AString s = getTabNamePrefix();
     
-    const Model* displayedModel =
-    getModelForDisplay();
-    if (displayedModel != NULL) {
-        const AString name = displayedModel->getNameForBrowserTab();
-        s += name;
+    if ( ! m_closedFlag) {
+        const Model* displayedModel =
+        getModelForDisplay();
+        if (displayedModel != NULL) {
+            const AString name = displayedModel->getNameForBrowserTab();
+            s += name;
+        }
     }
     
     return s;
@@ -470,6 +524,7 @@ BrowserTabContent::getDescriptionOfContent(PlainTextStringBuilder& descriptionOu
     if (model != NULL) {
         bool chartOneFlag = false;
         bool chartTwoFlag = false;
+        bool mediaFlag    = false;
         bool surfaceFlag  = false;
         bool surfaceMontageFlag = false;
         bool wholeBrainFlag = false;
@@ -482,6 +537,9 @@ BrowserTabContent::getDescriptionOfContent(PlainTextStringBuilder& descriptionOu
                 chartTwoFlag = true;
                 break;
             case ModelTypeEnum::MODEL_TYPE_INVALID:
+                break;
+            case  ModelTypeEnum::MODEL_TYPE_MULTI_MEDIA:
+                mediaFlag = true;
                 break;
             case ModelTypeEnum::MODEL_TYPE_SURFACE:
                 surfaceFlag = true;
@@ -540,6 +598,10 @@ BrowserTabContent::getDescriptionOfContent(PlainTextStringBuilder& descriptionOu
             model->getDescriptionOfContent(tabIndex,
                                            descriptionOut);
         }
+        else if (mediaFlag) {
+            model->getDescriptionOfContent(tabIndex,
+                                           descriptionOut);
+        }
         
         if (wholeBrainFlag
             || volumeFlag) {
@@ -554,6 +616,9 @@ BrowserTabContent::getDescriptionOfContent(PlainTextStringBuilder& descriptionOu
         }
         else if (chartTwoFlag) {
             getChartTwoOverlaySet()->getDescriptionOfContent(descriptionOut);
+        }
+        else if (mediaFlag) {
+            getMediaOverlaySet()->getDescriptionOfContent(descriptionOut);
         }
         else {
             getOverlaySet()->getDescriptionOfContent(descriptionOut);
@@ -601,6 +666,9 @@ BrowserTabContent::getModelForDisplay()
     switch (m_selectedModelType) {
         case ModelTypeEnum::MODEL_TYPE_INVALID:
             break;
+        case  ModelTypeEnum::MODEL_TYPE_MULTI_MEDIA:
+            mdc = m_mediaModel;
+            break;
         case ModelTypeEnum::MODEL_TYPE_SURFACE:
             mdc = m_surfaceModelSelector->getSelectedSurfaceModel();
             break;
@@ -637,6 +705,9 @@ BrowserTabContent::getModelForDisplay() const
     
     switch (m_selectedModelType) {
         case ModelTypeEnum::MODEL_TYPE_INVALID:
+            break;
+        case  ModelTypeEnum::MODEL_TYPE_MULTI_MEDIA:
+            mdc = m_mediaModel;
             break;
         case ModelTypeEnum::MODEL_TYPE_SURFACE:
             mdc = m_surfaceModelSelector->getSelectedSurfaceModel();
@@ -716,6 +787,35 @@ BrowserTabContent::getDisplayedChartTwoModel() const
     const ModelChartTwo* mc = dynamic_cast<const ModelChartTwo*>(getModelForDisplay());
     return mc;
 }
+
+/**
+ * Get the displayed media model
+ *
+ * @return  Pointer to displayed media model or
+ *          NULL if the displayed model is NOT a
+ *          media.
+ */
+ModelMedia*
+BrowserTabContent::getDisplayedMediaModel()
+{
+    ModelMedia* mm = dynamic_cast<ModelMedia*>(getModelForDisplay());
+    return mm;
+}
+
+/**
+ * Get the displayed media model
+ *
+ * @return  Pointer to displayed media model or
+ *          NULL if the displayed model is NOT a
+ *          media.
+ */
+const ModelMedia*
+BrowserTabContent::getDisplayedMediaModel() const
+{
+    const ModelMedia* mm = dynamic_cast<const ModelMedia*>(getModelForDisplay());
+    return mm;
+}
+
 
 /**
  * Get the displayed surface model.
@@ -850,6 +950,17 @@ BrowserTabContent::isChartTwoDisplayed() const
     return false;
 }
 
+/**
+ * @return Is the displayed model a media model?
+ */
+bool
+BrowserTabContent::isMediaDisplayed() const
+{
+    const ModelMedia* mm = dynamic_cast<const ModelMedia*>(getModelForDisplay());
+    
+    const bool mediaFlag = (mm != NULL);
+    return mediaFlag;
+}
 
 /**
  * @return Is the displayed model a volume slice model?
@@ -995,6 +1106,69 @@ BrowserTabContent::getChartTwoOverlaySet() const
 }
 
 /**
+ * @return Media overlay set for this tab.
+ */
+MediaOverlaySet*
+BrowserTabContent::getMediaOverlaySet()
+{
+    if (m_mediaModel == NULL) {
+        return NULL;
+    }
+    
+    CaretAssert(m_mediaModel);
+    return m_mediaModel->getMediaOverlaySet(m_tabNumber);
+}
+
+/**
+ * @return Media overlay set for this tab.
+ */
+const MediaOverlaySet*
+BrowserTabContent::getMediaOverlaySet() const
+{
+    if (m_mediaModel == NULL) {
+        return NULL;
+    }
+    CaretAssert(m_mediaModel);
+    return m_mediaModel->getMediaOverlaySet(m_tabNumber);
+}
+
+/**
+ * Get all axes for chart two models (histogram, lines matrix) that are yoked with the given axes and range mode
+ * @param axisOrientation
+ *    The axes orientation
+ * @param yokingRangeMode
+ *    The yoking range mode
+ * @return Vector containing all chart axes for the given orientation yoked to the given yoking range mode
+ */
+std::vector<ChartTwoCartesianOrientedAxes*>
+BrowserTabContent::getYokedAxes(const ChartTwoAxisOrientationTypeEnum::Enum axisOrientation,
+                                const ChartTwoAxisScaleRangeModeEnum::Enum yokingRangeMode) const
+{
+    std::vector<ChartTwoCartesianOrientedAxes*> axesOut;
+    
+    if (m_chartTwoModel != NULL) {
+        std::vector<ChartTwoOverlaySet*> overlaySets(m_chartTwoModel->getAllChartTwoOverlaySets(m_tabNumber));
+        for (auto os : overlaySets) {
+            switch (axisOrientation) {
+                case ChartTwoAxisOrientationTypeEnum::HORIZONTAL:
+                    if (os->getHorizontalAxes()->getScaleRangeMode() == yokingRangeMode) {
+                        axesOut.push_back(os->getHorizontalAxes());
+                    }
+                    break;
+                case ChartTwoAxisOrientationTypeEnum::VERTICAL:
+                    if (os->getVerticalAxes()->getScaleRangeMode() == yokingRangeMode) {
+                        axesOut.push_back(os->getVerticalAxes());
+                    }
+                    break;
+            }
+        }
+    }
+
+    return axesOut;
+}
+
+
+/**
  * @return Chart two matrix display properties.
  */
 ChartTwoMatrixDisplayProperties*
@@ -1042,6 +1216,7 @@ BrowserTabContent::update(const std::vector<Model*> models)
     m_surfaceMontageModel = NULL;
     m_chartModel = NULL;
     m_chartTwoModel = NULL;
+    m_mediaModel = NULL;
     
     for (int i = 0; i < numModels; i++) {
         Model* mdc = models[i];
@@ -1052,6 +1227,7 @@ BrowserTabContent::update(const std::vector<Model*> models)
         ModelSurfaceMontage* mdcsm = dynamic_cast<ModelSurfaceMontage*>(mdc);
         ModelChart* mdch = dynamic_cast<ModelChart*>(mdc);
         ModelChartTwo* mdchTwo = dynamic_cast<ModelChartTwo*>(mdc);
+        ModelMedia* mdmm = dynamic_cast<ModelMedia*>(mdc);
         
         if (mdcs != NULL) {
             /* nothing to do since the surface model selector handles surfaces */
@@ -1076,6 +1252,9 @@ BrowserTabContent::update(const std::vector<Model*> models)
             CaretAssertMessage((m_chartTwoModel == NULL), "There is more than one chart two model.");
             m_chartTwoModel = mdchTwo;
         }
+        else if (mdmm != NULL) {
+            m_mediaModel = mdmm;
+        }
         else {
             CaretAssertMessage(0, (AString("Unknown type of brain model.") + mdc->getNameForGUI(true)));
         }
@@ -1083,6 +1262,11 @@ BrowserTabContent::update(const std::vector<Model*> models)
     
     switch (m_selectedModelType) {
         case ModelTypeEnum::MODEL_TYPE_INVALID:
+            break;
+        case  ModelTypeEnum::MODEL_TYPE_MULTI_MEDIA:
+            if (m_mediaModel == NULL) {
+                m_selectedModelType = ModelTypeEnum::MODEL_TYPE_INVALID;
+            }
             break;
         case ModelTypeEnum::MODEL_TYPE_SURFACE:
             if (m_surfaceModelSelector->getSelectedSurfaceModel() == NULL) {
@@ -1134,6 +1318,9 @@ BrowserTabContent::update(const std::vector<Model*> models)
         }
         else if (m_chartModel != NULL) {
             m_selectedModelType = ModelTypeEnum::MODEL_TYPE_CHART;
+        }
+        else if (m_mediaModel != NULL) {
+            m_selectedModelType = ModelTypeEnum::MODEL_TYPE_MULTI_MEDIA;
         }
     }
     
@@ -1202,6 +1389,17 @@ bool
 BrowserTabContent::isSurfaceModelValid() const
 {
     bool valid = (m_allSurfaceModels.empty() == false);
+    return valid;
+}
+
+/**
+ * Is the multi-medial model selection valid?
+ * @return True if valid, else false.
+ */
+bool
+BrowserTabContent::isMediaModelValid() const
+{
+    bool valid(m_mediaModel != NULL);
     return valid;
 }
 
@@ -1293,14 +1491,29 @@ BrowserTabContent::setAspectRatio(const float aspectRatio)
 void
 BrowserTabContent::receiveEvent(Event* event)
 {
-    if (event->getEventType() == EventTypeEnum::EVENT_ANNOTATION_COLOR_BAR_GET) {
-        EventAnnotationColorBarGet* colorBarEvent = dynamic_cast<EventAnnotationColorBarGet*>(event);
-        CaretAssert(colorBarEvent);
+    /*
+     * Ignore events while closed but available for reopening
+     */
+    if (m_closedFlag) {
+        return;
+    }
+    
+    if (event->getEventType() == EventTypeEnum::EVENT_ANNOTATION_BARS_GET) {
+        EventAnnotationBarsGet* barsEvent = dynamic_cast<EventAnnotationBarsGet*>(event);
+        CaretAssert(barsEvent);
         
-        if (colorBarEvent->isGetAnnotationColorBarsForTabIndex(m_tabNumber)) {
+        if (barsEvent->isGetAnnotationColorBarsForTabIndex(m_tabNumber)) {
             std::vector<AnnotationColorBar*> colorBars;
             getAnnotationColorBars(colorBars);
-            colorBarEvent->addAnnotationColorBars(colorBars);
+
+            barsEvent->addAnnotationColorBars(colorBars);
+            
+            if (m_scaleBar->isDisplayed()) {
+                /*
+                 * Scale bar is derived from color bar
+                 */
+                barsEvent->addAnnotationScaleBar(m_scaleBar.get());
+            }
         }
     }
     else if (event->getEventType() == EventTypeEnum::EVENT_IDENTIFICATION_HIGHLIGHT_LOCATION) {
@@ -1339,7 +1552,6 @@ BrowserTabContent::receiveEvent(Event* event)
                                 }
                                 break;
                             case VolumeSliceProjectionTypeEnum::VOLUME_SLICE_PROJECTION_OBLIQUE:
-                                //keepSliceCoordinateForSelectedAxis = true;
                                 break;
                         }
                         switch (m_volumeSliceSettings->getSliceDrawingType()) {
@@ -1371,7 +1583,6 @@ BrowserTabContent::receiveEvent(Event* event)
                     }
                     
                     selectSlicesAtCoordinate(volumeSliceXYZ);
-                    //m_volumeSliceSettings->selectSlicesAtCoordinate(volumeSliceXYZ);
                 }
             }
         }
@@ -1430,6 +1641,8 @@ BrowserTabContent::getAnnotationColorBars(std::vector<AnnotationColorBar*>& colo
             break;
         case ModelTypeEnum::MODEL_TYPE_CHART_TWO:
             useChartTwoFlag = true;
+            break;
+        case  ModelTypeEnum::MODEL_TYPE_MULTI_MEDIA:
             break;
         case ModelTypeEnum::MODEL_TYPE_SURFACE:
             useOverlayFlag = true;
@@ -1544,6 +1757,8 @@ BrowserTabContent::getAnnotationColorBars(std::vector<AnnotationColorBar*>& colo
                                 break;
                             case ChartTwoDataTypeEnum::CHART_DATA_TYPE_INVALID:
                                 break;
+                            case ChartTwoDataTypeEnum::CHART_DATA_TYPE_LINE_LAYER:
+                                break;
                             case ChartTwoDataTypeEnum::CHART_DATA_TYPE_LINE_SERIES:
                                 break;
                             case ChartTwoDataTypeEnum::CHART_DATA_TYPE_MATRIX:
@@ -1651,6 +1866,8 @@ BrowserTabContent::getDisplayedPaletteMapFiles(std::vector<CaretMappableDataFile
             break;
         case ModelTypeEnum::MODEL_TYPE_CHART_TWO:
             useChartTwoFlag = true;
+            break;
+        case  ModelTypeEnum::MODEL_TYPE_MULTI_MEDIA:
             break;
         case ModelTypeEnum::MODEL_TYPE_SURFACE:
             useOverlayFlag = true;
@@ -1770,6 +1987,8 @@ BrowserTabContent::getDisplayedPaletteMapFiles(std::vector<CaretMappableDataFile
                             break;
                         case ChartTwoDataTypeEnum::CHART_DATA_TYPE_INVALID:
                             break;
+                        case ChartTwoDataTypeEnum::CHART_DATA_TYPE_LINE_LAYER:
+                            break;
                         case ChartTwoDataTypeEnum::CHART_DATA_TYPE_LINE_SERIES:
                             break;
                         case ChartTwoDataTypeEnum::CHART_DATA_TYPE_MATRIX:
@@ -1883,9 +2102,46 @@ BrowserTabContent::getFilesAndMapIndicesInOverlays(EventCaretMappableDataFilesAn
                                               mapIndex);
                     
                     if (overlayDataFile != NULL) {
+                        switch (indexType) {
+                            case ChartTwoOverlay::SelectedIndexType::INVALID:
+                                if (overlay->getChartTwoDataType() == ChartTwoDataTypeEnum::CHART_DATA_TYPE_LINE_SERIES) {
+                                    mapIndex = 0;
+                                }
+                                break;
+                            case ChartTwoOverlay::SelectedIndexType::COLUMN:
+                                break;
+                            case ChartTwoOverlay::SelectedIndexType::MAP:
+                                break;
+                            case ChartTwoOverlay::SelectedIndexType::ROW:
+                                break;
+                        }
                         if (mapIndex >= 0) {
-                            fileAndMapsEvent->addChartFileAndMap(overlayDataFile,
-                                                                 mapIndex);
+                            fileAndMapsEvent->addChartTwoFileAndMap(overlayDataFile,
+                                                                    mapIndex,
+                                                                    m_tabNumber);
+                        }
+                    }
+                }
+            }
+        }
+            break;
+        case  ModelTypeEnum::MODEL_TYPE_MULTI_MEDIA:
+        {
+            MediaOverlaySet* overlaySet = model->getMediaOverlaySet(tabIndex);
+            const int32_t numOverlays = overlaySet->getNumberOfDisplayedOverlays();
+            for (int32_t i = 0; i < numOverlays; i++) {
+                MediaOverlay* overlay = overlaySet->getOverlay(i);
+                if (overlay->isEnabled()) {
+                    MediaFile* mediaFile = NULL;
+                    int32_t frameIndex;
+                    overlay->getSelectionData(mediaFile,
+                                              frameIndex);
+                    
+                    if (mediaFile != NULL) {
+                        if (frameIndex >= 0) {
+                            fileAndMapsEvent->addMediaFileAndFrame(mediaFile,
+                                                                   frameIndex,
+                                                                   m_tabNumber);
                         }
                     }
                 }
@@ -1910,7 +2166,8 @@ BrowserTabContent::getFilesAndMapIndicesInOverlays(EventCaretMappableDataFilesAn
                     if (overlayDataFile != NULL) {
                         if (mapIndex >= 0) {
                             fileAndMapsEvent->addBrainordinateFileAndMap(overlayDataFile,
-                                                                         mapIndex);
+                                                                         mapIndex,
+                                                                         m_tabNumber);
                         }
                     }
                 }
@@ -1941,6 +2198,27 @@ BrowserTabContent::getFilesDisplayedInTab(std::vector<CaretDataFile*>& displayed
     const int32_t tabIndex = getTabNumber();
     switch (getSelectedModelType()) {
         case ModelTypeEnum::MODEL_TYPE_INVALID:
+            break;
+        case  ModelTypeEnum::MODEL_TYPE_MULTI_MEDIA:
+        {
+            MediaOverlaySet* overlaySet = m_mediaModel->getMediaOverlaySet(tabIndex);
+            if (overlaySet != NULL) {
+                const int32_t numOverlays = overlaySet->getNumberOfDisplayedOverlays();
+                for (int32_t i = 0; i < numOverlays; i++) {
+                    MediaOverlay* mediaOverlay = overlaySet->getOverlay(i);
+                    if (mediaOverlay->isEnabled()) {
+                        MediaFile* mediaFile = NULL;
+                        int32_t selectedIndex = -1;
+                        mediaOverlay->getSelectionData(mediaFile,
+                                                       selectedIndex);
+                        
+                        if (mediaFile != NULL) {
+                            displayedDataFiles.insert(mediaFile);
+                        }
+                    }
+                }
+            }
+        }
             break;
         case ModelTypeEnum::MODEL_TYPE_SURFACE:
         {
@@ -2233,6 +2511,9 @@ BrowserTabContent::getViewingTransformation()
     else if (isChartTwoDisplayed()) {
         return m_chartTwoMatrixViewingTranformation;
     }
+    else if (isMediaDisplayed()) {
+        return m_mediaViewingTransformation;
+    }
     return m_viewingTransformation;
 }
 
@@ -2250,6 +2531,9 @@ BrowserTabContent::getViewingTransformation() const
     }
     else if (isChartTwoDisplayed()) {
         return m_chartTwoMatrixViewingTranformation;
+    }
+    else if (isMediaDisplayed()) {
+        return m_mediaViewingTransformation;
     }
     return m_viewingTransformation;
 }
@@ -2375,6 +2659,20 @@ BrowserTabContent::setObliqueVolumeRotationMatrix(const Matrix4x4& obliqueRotati
     
     updateBrainModelYokedBrowserTabs();
 }
+
+Matrix4x4
+BrowserTabContent::getFlatRotationMatrix() const
+{
+    return getViewingTransformation()->getFlatRotationMatrix();
+}
+
+void
+BrowserTabContent::setFlatRotationMatrix(const Matrix4x4& flatRotationMatrix)
+{
+    getViewingTransformation()->setFlatRotationMatrix(flatRotationMatrix);
+    updateYokedModelBrowserTabs();
+}
+
 
 /**
  * Get the offset for the right flat map offset.
@@ -2742,14 +3040,6 @@ BrowserTabContent::applyMouseRotation(BrainOpenGLViewportContent* viewportConten
                                 float mouseDelta = std::sqrt(static_cast<float>((mouseDeltaX * mouseDeltaX)
                                                                                 + (mouseDeltaY * mouseDeltaY)));
                                 
-                                //                            /*
-                                //                             * Rotation needs to be oppposite for newer
-                                //                             * oblique slice drawing for volumes that
-                                //                             * do not have a voxel corresponding to
-                                //                             * the origin.
-                                //                             */
-                                //                            mouseDelta = -mouseDelta;
-                                
                                 switch (slicePlane) {
                                     case VolumeSliceViewPlaneEnum::ALL:
                                     {
@@ -2808,6 +3098,9 @@ BrowserTabContent::applyMouseRotation(BrainOpenGLViewportContent* viewportConten
              || isChartTwoDisplayed()) {
         /* no rotation for chart */
     }
+    else if (isMediaDisplayed()) {
+        /* no rotation for media */
+    }
     else if (isCerebellumDisplayed()) {
         const float screenDX = mouseDeltaX;
         const float screenDY = mouseDeltaY;
@@ -2815,6 +3108,8 @@ BrowserTabContent::applyMouseRotation(BrainOpenGLViewportContent* viewportConten
         float rotateDX = 0.0;
         float rotateDY = 0.0;
         float rotateDZ = 0.0;
+        float rotateFlat = 0.0;
+        bool flatFlag(false);
         
         ModelSurfaceMontage* montageModel = getDisplayedSurfaceMontageModel();
         if (montageModel != NULL) {
@@ -2874,15 +3169,87 @@ BrowserTabContent::applyMouseRotation(BrainOpenGLViewportContent* viewportConten
             }
         }
         else {
-            rotateDX = -screenDY;
-            rotateDY =  screenDX;
+            ModelSurface* modelSurface = getDisplayedSurfaceModel();
+            if (modelSurface != NULL) {
+                if (isFlatSurfaceDisplayed()) {
+                    flatFlag   = true;
+                    rotateFlat = -screenDY;
+                }
+                else {
+                    rotateDX = -screenDY;
+                    rotateDY =  screenDX;
+                }
+            }
         }
         
-        Matrix4x4 rotationMatrix = m_cerebellumViewingTransformation->getRotationMatrix();
-        rotationMatrix.rotateX(rotateDX);
-        rotationMatrix.rotateY(rotateDY);
-        rotationMatrix.rotateZ(rotateDZ);
-        m_cerebellumViewingTransformation->setRotationMatrix(rotationMatrix);
+        if (flatFlag) {
+            if (rotateFlat != 0.0) {
+                int viewport[4];
+                viewportContent->getModelViewport(viewport);
+                if ((viewport[2] > 0)
+                    && (viewport[3] > 0)) {
+                    if ((mouseDeltaX != 0)
+                        || (mouseDeltaY != 0)) {
+                        
+                        const int previousMouseX = mouseX - mouseDeltaX;
+                        const int previousMouseY = mouseY - mouseDeltaY;
+                        
+                        /*
+                         * Need to account for the quadrants!!!!
+                         */
+                        const float viewportCenter[3] = {
+                            (float)(viewport[0] + viewport[2] / 2),
+                            ((float)viewport[1] + viewport[3] / 2),
+                            0.0
+                        };
+                        
+                        const float oldPos[3] = {
+                            (float)previousMouseX,
+                            (float)previousMouseY,
+                            0.0
+                        };
+                        
+                        const float newPos[3] = {
+                            (float)mouseX,
+                            (float)mouseY,
+                            0.0
+                        };
+                        
+                        /*
+                         * Compute normal vector from viewport center to
+                         * old mouse position to new mouse position.
+                         * If normal-Z is positive, mouse has been moved
+                         * in a counter clockwise motion relative to center.
+                         * If normal-Z is negative, mouse has moved clockwise.
+                         */
+                        float normalDirection[3];
+                        MathFunctions::normalVectorDirection(viewportCenter,
+                                                             oldPos,
+                                                             newPos,
+                                                             normalDirection);
+                        rotateFlat = std::fabs(rotateFlat);
+                        if (normalDirection[2] > 0.0) {
+                            /* mouse movied counter-clockwise */
+                        }
+                        else if (normalDirection[2] < 0.0) {
+                            /* mouse movied clockwise */
+                            rotateFlat = -rotateFlat;
+                        }
+                    }
+                }
+                ViewingTransformations* viewingTransform = getViewingTransformation();
+                Matrix4x4 flatRotationMatrix = viewingTransform->getFlatRotationMatrix();
+                flatRotationMatrix.rotateZ(rotateFlat);
+                viewingTransform->setFlatRotationMatrix(flatRotationMatrix);
+            }
+        }
+        else {
+            Matrix4x4 rotationMatrix = m_cerebellumViewingTransformation->getRotationMatrix();
+            rotationMatrix.rotateX(rotateDX);
+            rotationMatrix.rotateY(rotateDY);
+            rotationMatrix.rotateZ(rotateDZ);
+            m_cerebellumViewingTransformation->setRotationMatrix(rotationMatrix);
+        }
     }
     else {
         ViewingTransformations* viewingTransform = getViewingTransformation();
@@ -2895,6 +3262,10 @@ BrowserTabContent::applyMouseRotation(BrainOpenGLViewportContent* viewportConten
         else {
             float dx = mouseDeltaX;
             float dy = mouseDeltaY;
+            
+            StructureEnum::Enum flatStructure(StructureEnum::INVALID);
+            float flatRotate(0.0);
+            int32_t flatViewport[4] { -1, -1, -1, -1 };
             
             ModelSurfaceMontage* montageModel = getDisplayedSurfaceMontageModel();
             if (montageModel != NULL) {
@@ -2921,6 +3292,9 @@ BrowserTabContent::applyMouseRotation(BrainOpenGLViewportContent* viewportConten
                             case ProjectionViewTypeEnum::PROJECTION_VIEW_CEREBELLUM_VENTRAL:
                                 break;
                             case ProjectionViewTypeEnum::PROJECTION_VIEW_CEREBELLUM_FLAT_SURFACE:
+                                isFlat = true;
+                                smv->getViewport(flatViewport);
+                                flatStructure = StructureEnum::CEREBELLUM;
                                 break;
                             case ProjectionViewTypeEnum::PROJECTION_VIEW_LEFT_LATERAL:
                                 isLeft = true;
@@ -2933,6 +3307,8 @@ BrowserTabContent::applyMouseRotation(BrainOpenGLViewportContent* viewportConten
                             case ProjectionViewTypeEnum::PROJECTION_VIEW_LEFT_FLAT_SURFACE:
                                 isLeft = true;
                                 isFlat = true;
+                                smv->getViewport(flatViewport);
+                                flatStructure = StructureEnum::CORTEX_LEFT;
                                 break;
                             case ProjectionViewTypeEnum::PROJECTION_VIEW_RIGHT_LATERAL:
                                 isLeft = false;
@@ -2945,6 +3321,8 @@ BrowserTabContent::applyMouseRotation(BrainOpenGLViewportContent* viewportConten
                             case ProjectionViewTypeEnum::PROJECTION_VIEW_RIGHT_FLAT_SURFACE:
                                 isLeft = false;
                                 isFlat = true;
+                                smv->getViewport(flatViewport);
+                                flatStructure = StructureEnum::CORTEX_RIGHT;
                                 break;
                         }
                         isValid = true;
@@ -2957,7 +3335,12 @@ BrowserTabContent::applyMouseRotation(BrainOpenGLViewportContent* viewportConten
                 
                 if (isFlat) {
                     /*
-                     * No rotation.
+                     * Special flat map rotation
+                     */
+                    flatRotate = dy;
+                    
+                    /*
+                     * No 3D rotation.
                      */
                     dx = 0.0;
                     dy = 0.0;
@@ -2972,10 +3355,95 @@ BrowserTabContent::applyMouseRotation(BrainOpenGLViewportContent* viewportConten
                 }
             }
             
+            ModelSurface* modelSurface = getDisplayedSurfaceModel();
+            if (modelSurface != NULL) {
+                const Surface* surface = modelSurface->getSurface();
+                if (surface != NULL) {
+                    switch (surface->getSurfaceType()) {
+                        case SurfaceTypeEnum::ANATOMICAL:
+                        case SurfaceTypeEnum::ELLIPSOID:
+                        case SurfaceTypeEnum::HULL:
+                        case SurfaceTypeEnum::INFLATED:
+                        case SurfaceTypeEnum::RECONSTRUCTION:
+                        case SurfaceTypeEnum::SEMI_SPHERICAL:
+                        case SurfaceTypeEnum::SPHERICAL:
+                        case SurfaceTypeEnum::UNKNOWN:
+                        case SurfaceTypeEnum::VERY_INFLATED:
+                            break;
+                        case SurfaceTypeEnum::FLAT:
+                            viewportContent->getModelViewport(flatViewport);
+                            flatRotate = dy;
+                            flatStructure = surface->getStructure();
+                            break;
+                    }
+                }
+            }
+            
             Matrix4x4 rotationMatrix = viewingTransform->getRotationMatrix();
             rotationMatrix.rotateX(-dy);
             rotationMatrix.rotateY(dx);
             viewingTransform->setRotationMatrix(rotationMatrix);
+            
+            if (flatRotate != 0.0) {
+                if ((flatViewport[2] > 0)
+                    && (flatViewport[3] > 0)) {
+                    if ((mouseDeltaX != 0)
+                        || (mouseDeltaY != 0)) {
+                        
+                        const int previousMouseX = mouseX - mouseDeltaX;
+                        const int previousMouseY = mouseY - mouseDeltaY;
+                        
+                        /*
+                         * Need to account for the quadrants!!!!
+                         */
+                        const float viewportCenter[3] = {
+                            (float)(flatViewport[0] + flatViewport[2] / 2),
+                            ((float)flatViewport[1] + flatViewport[3] / 2),
+                            0.0
+                        };
+                        
+                        const float oldPos[3] = {
+                            (float)previousMouseX,
+                            (float)previousMouseY,
+                            0.0
+                        };
+                        
+                        const float newPos[3] = {
+                            (float)mouseX,
+                            (float)mouseY,
+                            0.0
+                        };
+                        
+                        /*
+                         * Compute normal vector from viewport center to
+                         * old mouse position to new mouse position.
+                         * If normal-Z is positive, mouse has been moved
+                         * in a counter clockwise motion relative to center.
+                         * If normal-Z is negative, mouse has moved clockwise.
+                         */
+                        float normalDirection[3];
+                        MathFunctions::normalVectorDirection(viewportCenter,
+                                                             oldPos,
+                                                             newPos,
+                                                             normalDirection);
+                        flatRotate = std::fabs(flatRotate);
+                        if (normalDirection[2] > 0.0) {
+                            /* mouse movied counter-clockwise */
+                        }
+                        else if (normalDirection[2] < 0.0) {
+                            /* mouse movied clockwise */
+                            flatRotate = -flatRotate;
+                        }
+                        
+                        if (StructureEnum::isRight(flatStructure)) {
+                            flatRotate = -flatRotate;
+                        }
+                    }
+                }
+                Matrix4x4 flatRotationMatrix = viewingTransform->getFlatRotationMatrix();
+                flatRotationMatrix.rotateZ(flatRotate);
+                viewingTransform->setFlatRotationMatrix(flatRotationMatrix);
+            }
         }
     }
     updateYokedModelBrowserTabs();
@@ -2984,13 +3452,28 @@ BrowserTabContent::applyMouseRotation(BrainOpenGLViewportContent* viewportConten
 /**
  * Apply mouse scaling to the displayed model.
  *
+ * @param viewportContent
+ *    Content of the viewport
+ * @param mousePressX
+ *    X coordinate of where mouse was pressed.
+ * @param mousePressY
+ *    X coordinate of where mouse was pressed.
+ * @param mouseX
+ *    Mouse X coordinate.
+ * @param mouseY
+ *    Mouse Y coordinate.
  * @param mouseDX
  *    Change in mouse X coordinate.
  * @param mouseDY
  *    Change in mouse Y coordinate.
  */
 void
-BrowserTabContent::applyMouseScaling(const int32_t /*mouseDX*/,
+BrowserTabContent::applyMouseScaling(BrainOpenGLViewportContent* viewportContent,
+                                     const int32_t /*mousePressX*/,
+                                     const int32_t /*mousePressY*/,
+                                     const float mouseX,
+                                     const float mouseY,
+                                     const int32_t /*mouseDX*/,
                                      const int32_t mouseDY)
 {
     if (isChartOneDisplayed()) {
@@ -3022,14 +3505,17 @@ BrowserTabContent::applyMouseScaling(const int32_t /*mouseDX*/,
         }
     }
     else if (isChartTwoDisplayed()) {
-        float scaling = getViewingTransformation()->getScaling();
-        if (mouseDY != 0.0) {
-            scaling *= (1.0f + (mouseDY * 0.01));
+        ChartTwoOverlaySet* overlaySet = getChartTwoOverlaySet();
+        if (overlaySet != NULL) {
+            int32_t viewport[4];
+            Matrix4x4 m1, m2;
+            if (viewportContent->getChartDataMatricesAndViewport(m1, m2, viewport)) {
+                overlaySet->applyMouseScaling(viewport,
+                                              mouseX,
+                                              mouseY,
+                                              mouseDY);
+            }
         }
-        if (scaling < 0.01) {
-            scaling = 0.01;
-        }
-        getViewingTransformation()->setScaling(scaling);
     }
     else {
         float scaling = getViewingTransformation()->getScaling();
@@ -3145,12 +3631,24 @@ BrowserTabContent::applyMouseTranslation(BrainOpenGLViewportContent* viewportCon
         }
     }
     else if (isChartTwoDisplayed()) {
-        float translation[3];
-        m_chartTwoMatrixViewingTranformation->getTranslation(translation);
-        translation[0] += mouseDX;
-        translation[1] += mouseDY;
-        translation[2] = 0; // NO Z-translation
-        m_chartTwoMatrixViewingTranformation->setTranslation(translation);
+        ChartTwoOverlaySet* overlaySet = getChartTwoOverlaySet();
+        if (overlaySet != NULL) {
+            int32_t viewport[4];
+            Matrix4x4 m1, m2;
+            if (viewportContent->getChartDataMatricesAndViewport(m1, m2, viewport)) {
+                overlaySet->applyMouseTranslation(viewport,
+                                                  mouseDX,
+                                                  mouseDY);
+            }
+        }
+    }
+    else if (isMediaDisplayed()) {
+        float txyz[3];
+        m_mediaViewingTransformation->getTranslation(txyz);
+        const float accelerate(3.0);
+        txyz[0] += (mouseDX * accelerate);
+        txyz[1] += (mouseDY * accelerate);
+        m_mediaViewingTransformation->setTranslation(txyz);
     }
     else if (isCerebellumDisplayed()) {
         const float screenDX = mouseDX;
@@ -3328,6 +3826,60 @@ BrowserTabContent::applyMouseTranslation(BrainOpenGLViewportContent* viewportCon
 }
 
 /**
+ * Apply chart two bounds selection as user drags the mouse
+ * @param viewport
+ * Chart viewport
+ * @param x1
+ * X from first pair of coordinates
+ * @param y1
+ * Y from first pair of coordinates
+ * @param x2
+ * X from second pair of coordinates
+ * @param y2
+ * Y from second pair of coordinates
+ */
+void
+BrowserTabContent::applyChartTwoAxesBoundSelection(const int32_t viewport[4],
+                                                   const int32_t x1,
+                                                   const int32_t y1,
+                                                   const int32_t x2,
+                                                   const int32_t y2)
+{
+    ChartTwoOverlaySet* ctos = getChartTwoOverlaySet();
+    if (ctos != NULL) {
+        ctos->applyChartTwoAxesBoundSelection(viewport,
+                                              x1, y1, x2, y2);
+    }
+}
+
+/**
+ * Finalize chart two bounds selection to set the bounds of the chart
+ * @param viewport
+ * Chart viewport
+ * @param x1
+ * X from first pair of coordinates
+ * @param y1
+ * Y from first pair of coordinates
+ * @param x2
+ * X from second pair of coordinates
+ * @param y2
+ * Y from second pair of coordinates
+ */
+void
+BrowserTabContent::finalizeChartTwoAxesBoundSelection(const int32_t viewport[4],
+                                                      const int32_t x1,
+                                                      const int32_t y1,
+                                                      const int32_t x2,
+                                                      const int32_t y2)
+{
+    ChartTwoOverlaySet* ctos = getChartTwoOverlaySet();
+    if (ctos != NULL) {
+        ctos->finalizeChartTwoAxesBoundSelection(viewport,
+                                                 x1, y1, x2, y2);
+    }
+}
+
+/**
  * Get the transformations for drawing a model.
  *
  * @param projectionViewType
@@ -3424,18 +3976,18 @@ BrowserTabContent::getTransformationsForOpenGLDrawing(const ProjectionViewTypeEn
         }
             break;
         case ProjectionViewTypeEnum::PROJECTION_VIEW_CEREBELLUM_FLAT_SURFACE:
-            rotationX =     0.0;
-            rotationY =     0.0;
-            rotationZ =     0.0;
+            getFlatRotationMatrix().getRotation(rotationX,
+                                                rotationY,
+                                                rotationZ);
             break;
         case ProjectionViewTypeEnum::PROJECTION_VIEW_LEFT_LATERAL:
             break;
         case ProjectionViewTypeEnum::PROJECTION_VIEW_LEFT_MEDIAL:
             break;
         case ProjectionViewTypeEnum::PROJECTION_VIEW_LEFT_FLAT_SURFACE:
-            rotationX =     0.0;
-            rotationY =     0.0;
-            rotationZ =     0.0;
+            getFlatRotationMatrix().getRotation(rotationX,
+                                                rotationY,
+                                                rotationZ);
             break;
         case ProjectionViewTypeEnum::PROJECTION_VIEW_RIGHT_LATERAL:
             rotationX = rotationFlippedX;
@@ -3446,9 +3998,11 @@ BrowserTabContent::getTransformationsForOpenGLDrawing(const ProjectionViewTypeEn
             rotationY = rotationFlippedY;
             break;
         case ProjectionViewTypeEnum::PROJECTION_VIEW_RIGHT_FLAT_SURFACE:
-            rotationX =   0.0;
-            rotationY = 180.0;
-            rotationZ =   0.0;
+            translationOut[0] = -translationOut[0];
+            getFlatRotationMatrix().getRotation(rotationX,
+                                                rotationY,
+                                                rotationZ);
+            rotationZ = -rotationZ;
             break;
     }
     
@@ -3481,6 +4035,11 @@ BrowserTabContent::getTransformationsInModelTransform(ModelTransform& modelTrans
     float mob[4][4];
     obliqueRotationMatrix.getMatrix(mob);
     modelTransform.setObliqueRotation(mob);
+    
+    const Matrix4x4 flatRotationMatrix = getFlatRotationMatrix();
+    float fm[4][4];
+    flatRotationMatrix.getMatrix(fm);
+    modelTransform.setFlatRotation(fm);
     
     float rightFlatX, rightFlatY;
     getRightCortexFlatMapOffset(rightFlatX, rightFlatY);
@@ -3520,6 +4079,12 @@ BrowserTabContent::setTransformationsFromModelTransform(const ModelTransform& mo
     obliqueRotationMatrix.setMatrix(mob);
     setObliqueVolumeRotationMatrix(obliqueRotationMatrix);
 
+    float fm[4][4];
+    modelTransform.getFlatRotation(fm);
+    Matrix4x4 flatRotationMatrix;
+    flatRotationMatrix.setMatrix(fm);
+    setFlatRotationMatrix(flatRotationMatrix);
+    
     const float scale = modelTransform.getScaling();
     setScaling(scale);
     
@@ -3555,7 +4120,8 @@ BrowserTabContent::saveToScene(const SceneAttributes* sceneAttributes,
 {
     SceneClass* sceneClass = new SceneClass(instanceName,
                                             "BrowserTabContent",
-                                            6); // WB-491 Flat Fixes
+                                            7); // matrices no longer support translation/zooming
+                                            //6); // WB-491 Flat Fixes
                                             //5); // WB-576
                                             //4);  // WB-491, 1/28/2015
                                             //3); // version 3 as of 4/22/2014
@@ -3564,7 +4130,13 @@ BrowserTabContent::saveToScene(const SceneAttributes* sceneAttributes,
     m_obliqueVolumeRotationMatrix->getMatrixForOpenGL(obliqueMatrix);
     sceneClass->addFloatArray("m_obliqueVolumeRotationMatrix", obliqueMatrix, 16);
     
-    m_sceneClassAssistant->saveMembers(sceneAttributes, 
+    TileTabsBrowserTabGeometry manualLayoutTabGeometry(m_tabNumber);
+    m_manualLayoutBrowserTabAnnotation->getTileTabsGeometry(&manualLayoutTabGeometry);
+    TileTabsBrowserTabGeometrySceneHelper geometryHelper(&manualLayoutTabGeometry);
+    sceneClass->addClass(geometryHelper.saveToScene(sceneAttributes,
+                                                    "m_manualLayoutTabGeometry"));
+
+    m_sceneClassAssistant->saveMembers(sceneAttributes,
                                        sceneClass);
     
     return sceneClass;
@@ -3593,8 +4165,18 @@ BrowserTabContent::restoreFromScene(const SceneAttributes* sceneAttributes,
     m_brainModelYokingGroup = YokingGroupEnum::YOKING_GROUP_A;
     m_chartModelYokingGroup = YokingGroupEnum::YOKING_GROUP_OFF;
     
+    initializeScaleBar();
+
     m_sceneClassAssistant->restoreMembers(sceneAttributes,
                                           sceneClass);
+    
+    TileTabsBrowserTabGeometry manualLayoutTabGeometry(m_tabNumber);
+    TileTabsBrowserTabGeometrySceneHelper geometryHelper(&manualLayoutTabGeometry);
+    geometryHelper.restoreFromScene(sceneAttributes,
+                                    sceneClass->getClass("m_manualLayoutTabGeometry"));
+    m_manualLayoutBrowserTabAnnotation->setFromTileTabsGeometry(&manualLayoutTabGeometry);
+    m_manualLayoutBrowserTabAnnotation->setBrowserTabContent(this,
+                                                             m_tabNumber);
     
     /*
      * With charting version two, yoking was split into chart and non-chart yoking
@@ -3652,8 +4234,6 @@ BrowserTabContent::restoreFromScene(const SceneAttributes* sceneAttributes,
                         m.getRotation(rotationX,
                                       rotationY,
                                       rotationZ);
-                        //rotationX = -rotationX;
-                        //rotationY = 180.0 - rotationY;
                         rotationY = 90 + rotationY;
                         rotationZ = -rotationZ;
                         m.identity();
@@ -3760,6 +4340,8 @@ BrowserTabContent::restoreFromScene(const SceneAttributes* sceneAttributes,
                 break;
             case ModelTypeEnum::MODEL_TYPE_INVALID:
                 break;
+            case  ModelTypeEnum::MODEL_TYPE_MULTI_MEDIA:
+                break;
             case ModelTypeEnum::MODEL_TYPE_SURFACE:
             {
                 ModelSurface* modelSurface = getDisplayedSurfaceModel();
@@ -3811,7 +4393,7 @@ BrowserTabContent::restoreFromScene(const SceneAttributes* sceneAttributes,
                                                         boundingBox->getDifferenceY()),
                                                zDiff);
                 if (zDiff > 0.0) {
-                    const float scaleAdjustment = zDiff / maxDim;  //maxDim / zDiff;
+                    const float scaleAdjustment = zDiff / maxDim;
                     float scaling = getScaling();
                     scaling *= scaleAdjustment;
                     setScaling(scaling);
@@ -3848,8 +4430,37 @@ BrowserTabContent::restoreFromScene(const SceneAttributes* sceneAttributes,
         }
     }
     
+    
+    testForRestoreSceneWarnings(sceneAttributes,
+                                sceneClass->getVersionNumber());
 }
 
+/**
+ * Test for scene warnings
+ */
+void
+BrowserTabContent::testForRestoreSceneWarnings(const SceneAttributes* sceneAttributes,
+                                               const int32_t sceneVersion)
+{
+    if (sceneVersion <= 6) {
+        ModelChartTwo* chartModel = getDisplayedChartTwoModel();
+        if (chartModel != NULL) {
+            if (chartModel->getSelectedChartTwoDataType(m_tabNumber) == ChartTwoDataTypeEnum::CHART_DATA_TYPE_MATRIX) {
+                float translation[3];
+                getTranslation(translation);
+                const float zoom = getScaling();
+                if (MathFunctions::compareValuesEqual(translation, 2, 0.0, 0.001)
+                    && MathFunctions::compareValuesEqual(&zoom, 1, 1.0, 0.001)) {
+                    /* OK */
+                }
+                else {
+                    sceneAttributes->setSceneRestoreWarningCode(SceneRestoreWarningCodesEnum::CHART_TWO_MATRIX_TRANSFORM);
+                }
+            }
+        }
+    }
+}
+ 
 /**
  * Get the clipping planes enabled attributes
  *
@@ -3970,6 +4581,7 @@ BrowserTabContent::setClippingPlaneTransformation(const float panning[3],
     updateYokedModelBrowserTabs();
 }
 
+
 /**
  * Get the clipping plane group (const method).
  *
@@ -3991,6 +4603,25 @@ BrowserTabContent::resetClippingPlaneTransformation()
 {
     m_clippingPlaneGroup->resetTransformation();
     updateYokedModelBrowserTabs();
+}
+
+/**
+ * @return Clipping planes enabled
+ */
+bool BrowserTabContent::isClippingPlanesEnabled()
+{
+    return m_clippingPlaneGroup->isEnabled();
+}
+
+/**
+ * Set clipping planes enabled
+ * @param status
+ *  New enabled status
+ */
+void
+BrowserTabContent::setClippingPlanesEnabled(const bool status)
+{
+    m_clippingPlaneGroup->setEnabled(status);
 }
 
 /**
@@ -4092,12 +4723,72 @@ BrowserTabContent::setSliceDrawingType(const VolumeSliceDrawingTypeEnum::Enum sl
 }
 
 /**
- * @return Type of slice projection (oblique/orthogonal)
+ * @return Selected type of slice projection (oblique/orthogonal)
  */
 VolumeSliceProjectionTypeEnum::Enum
 BrowserTabContent::getSliceProjectionType() const
 {
-    return m_volumeSliceSettings->getSliceProjectionType();
+    std::vector<VolumeSliceProjectionTypeEnum::Enum> sliceProjectionTypes;
+    getValidSliceProjectionTypes(sliceProjectionTypes);
+    
+    /*
+     * Selected projection type may not be valid and needs to be set to a valid projection type
+     */
+    VolumeSliceProjectionTypeEnum::Enum projType = m_volumeSliceSettings->getSliceProjectionType();
+    if (std::find(sliceProjectionTypes.begin(),
+                  sliceProjectionTypes.end(),
+                  projType) == sliceProjectionTypes.end()) {
+        if ( ! sliceProjectionTypes.empty()) {
+            CaretAssertVectorIndex(sliceProjectionTypes, 0);
+            projType = sliceProjectionTypes[0];
+            const_cast<VolumeSliceSettings*>(m_volumeSliceSettings)->setSliceProjectionType(projType);
+        }
+    }
+    
+    return projType;
+}
+
+/**
+ * Get valid slice projection types (ortho is NOT valid if any volume is oblique only)
+ * @param sliceProjectionTypesOut
+ *    Output containing valid slice projection types based upon selected files in overlays
+ */
+void
+BrowserTabContent::getValidSliceProjectionTypes(std::vector<VolumeSliceProjectionTypeEnum::Enum>& sliceProjectionTypesOut) const
+{
+    sliceProjectionTypesOut.clear();
+    sliceProjectionTypesOut.push_back(VolumeSliceProjectionTypeEnum::VOLUME_SLICE_PROJECTION_OBLIQUE);
+    
+    bool orthoValidFlag(false);
+    switch (getSelectedModelType()) {
+        case ModelTypeEnum::MODEL_TYPE_CHART:
+        case ModelTypeEnum::MODEL_TYPE_CHART_TWO:
+        case ModelTypeEnum::MODEL_TYPE_INVALID:
+        case  ModelTypeEnum::MODEL_TYPE_MULTI_MEDIA:
+            break;
+        case ModelTypeEnum::MODEL_TYPE_SURFACE:
+        case ModelTypeEnum::MODEL_TYPE_SURFACE_MONTAGE:
+            orthoValidFlag = true;
+        case ModelTypeEnum::MODEL_TYPE_VOLUME_SLICES:
+        case ModelTypeEnum::MODEL_TYPE_WHOLE_BRAIN:
+        {
+            /*
+             * Note: OverlaySet will be NULL if loading a scene
+             * and the volume file(s) in the scene are missing (do not exist)
+             */
+            const OverlaySet* overlaySet = getOverlaySet();
+            if (overlaySet != NULL) {
+                if ( ! overlaySet->hasObliqueOnlyVolumeSelected()) {
+                    orthoValidFlag = true;
+                }
+            }
+        }
+            break;
+    }
+    
+    if (orthoValidFlag) {
+        sliceProjectionTypesOut.push_back(VolumeSliceProjectionTypeEnum::VOLUME_SLICE_PROJECTION_ORTHOGONAL);
+    }
 }
 
 /**
@@ -4735,10 +5426,8 @@ BrowserTabContent::setChartModelYokingGroup(const YokingGroupEnum::Enum chartMod
      * Find another browser tab using the same yoking as 'me' and copy
      * yoked data from the other browser tab.
      */
-    for (std::set<BrowserTabContent*>::iterator iter = s_allBrowserTabContent.begin();
-         iter != s_allBrowserTabContent.end();
-         iter++) {
-        BrowserTabContent* btc = *iter;
+    std::vector<BrowserTabContent*> activeTabs = BrowserTabContent::getOpenBrowserTabs();
+    for (auto btc : activeTabs) {
         if (btc != this) {
             if (btc->getChartModelYokingGroup() == m_chartModelYokingGroup) {
                 copyFromTabIndex = btc->getTabNumber();
@@ -4791,10 +5480,8 @@ BrowserTabContent::setBrainModelYokingGroup(const YokingGroupEnum::Enum brainMod
      * Find another browser tab using the same yoking as 'me' and copy
      * yoked data from the other browser tab.
      */
-    for (std::set<BrowserTabContent*>::iterator iter = s_allBrowserTabContent.begin();
-         iter != s_allBrowserTabContent.end();
-         iter++) {
-        BrowserTabContent* btc = *iter;
+    std::vector<BrowserTabContent*> activeTabs = BrowserTabContent::getOpenBrowserTabs();
+    for (auto btc : activeTabs) {
         if (btc != this) {
             if (btc->getBrainModelYokingGroup() == m_brainModelYokingGroup) {
                 /*
@@ -4804,6 +5491,7 @@ BrowserTabContent::setBrainModelYokingGroup(const YokingGroupEnum::Enum brainMod
                 *m_flatSurfaceViewingTransformation = *btc->m_flatSurfaceViewingTransformation;
                 *m_cerebellumViewingTransformation = *btc->m_cerebellumViewingTransformation;
                 *m_volumeSliceViewingTransformation = *btc->m_volumeSliceViewingTransformation;
+                *m_mediaViewingTransformation = *btc->m_mediaViewingTransformation;
                 const VolumeSliceViewPlaneEnum::Enum slicePlane = m_volumeSliceSettings->getSliceViewPlane();
                 *m_volumeSliceSettings = *btc->m_volumeSliceSettings;
                 m_volumeSliceSettings->setSliceViewPlane(slicePlane); // do not yoke the slice plane
@@ -4861,6 +5549,8 @@ BrowserTabContent::updateYokedModelBrowserTabs()
             break;
         case ModelTypeEnum::MODEL_TYPE_INVALID:
             break;
+        case  ModelTypeEnum::MODEL_TYPE_MULTI_MEDIA:
+            break;
         case ModelTypeEnum::MODEL_TYPE_SURFACE:
             break;
         case ModelTypeEnum::MODEL_TYPE_SURFACE_MONTAGE:
@@ -4896,10 +5586,8 @@ BrowserTabContent::updateBrainModelYokedBrowserTabs()
     /*
      * Copy yoked data from 'me' to all other yoked browser tabs
      */
-    for (std::set<BrowserTabContent*>::iterator iter = s_allBrowserTabContent.begin();
-         iter != s_allBrowserTabContent.end();
-         iter++) {
-        BrowserTabContent* btc = *iter;
+    std::vector<BrowserTabContent*> activeTabs = BrowserTabContent::getOpenBrowserTabs();
+    for (auto btc : activeTabs) {
         if (btc != this) {
             /*
              * If anything is added, also need to update setYokingGroup()
@@ -4919,6 +5607,12 @@ BrowserTabContent::updateBrainModelYokedBrowserTabs()
                 btc->m_displayVolumeAxesCrosshairLabels = m_displayVolumeAxesCrosshairLabels;
                 btc->m_displayVolumeMontageAxesCoordinates = m_displayVolumeMontageAxesCoordinates;
                 btc->m_volumeMontageCoordinatePrecision = m_volumeMontageCoordinatePrecision;
+
+                /*
+                 * DO NOT YOKE MEDIA TRANSFORMATION (but might have its own yoking in the future 
+                 * *btc->m_mediaViewingTransformation = *m_mediaViewingTransformation;
+                 */
+
                 /**
                  * lighting enabled NOT yoked
                  * btc->m_lightingEnabled = m_lightingEnabled;
@@ -4945,10 +5639,8 @@ BrowserTabContent::updateChartModelYokedBrowserTabs()
     /*
      * Copy yoked data from 'me' to all other yoked browser tabs
      */
-    for (std::set<BrowserTabContent*>::iterator iter = s_allBrowserTabContent.begin();
-         iter != s_allBrowserTabContent.end();
-         iter++) {
-        BrowserTabContent* btc = *iter;
+    std::vector<BrowserTabContent*> activeTabs = BrowserTabContent::getOpenBrowserTabs();
+    for (auto btc : activeTabs) {
         if (btc != this) {
             /*
              * If anything is added, also need to update setYokingGroup()
@@ -4961,6 +5653,160 @@ BrowserTabContent::updateChartModelYokedBrowserTabs()
     }
 }
 
+/**
+ * @return Pointer to the manual layout browser tab annotation
+ */
+AnnotationBrowserTab*
+BrowserTabContent::getManualLayoutBrowserTabAnnotation()
+{
+    return m_manualLayoutBrowserTabAnnotation.get();
+}
+
+/**
+ * @return Pointer to the manual layout browser tab annotation (const method)
+ */
+const
+AnnotationBrowserTab*
+BrowserTabContent::getManualLayoutBrowserTabAnnotation() const
+{
+    return m_manualLayoutBrowserTabAnnotation.get();
+}
+
+/**
+ * @return True if the manual tab geometry bounds are still
+ * set to the default bounds.
+ */
+bool
+BrowserTabContent::isDefaultManualTabGeometryBounds() const
+{
+    float xMin(0.0), xMax(0.0), yMin(0.0), yMax(0.0);
+    m_manualLayoutBrowserTabAnnotation->getBounds2D(xMin, xMax, yMin, yMax);
+
+    
+    if (xMin != m_defaultManualTabGeometryBounds[0]) {
+        return false;
+    }
+    if (xMax != m_defaultManualTabGeometryBounds[1]) {
+        return false;
+    }
+    if (yMin != m_defaultManualTabGeometryBounds[2]) {
+        return false;
+    }
+    if (yMax != m_defaultManualTabGeometryBounds[3]) {
+        return false;
+    }
+    
+    return true;
+}
+
+/**
+ * @return Pointer to the scale bar
+ */
+AnnotationScaleBar*
+BrowserTabContent::getScaleBar()
+{
+    return m_scaleBar.get();
+}
+
+/**
+ * @return Pointer to the scale bar
+ */
+const AnnotationScaleBar*
+BrowserTabContent::getScaleBar() const
+{
+    return m_scaleBar.get();
+}
+
+/**
+ * Initialize a scale bar
+ */
+void
+BrowserTabContent::initializeScaleBar()
+{
+    m_scaleBar->setTabIndex(m_tabNumber);
+    m_scaleBar->setCoordinateSpace(AnnotationCoordinateSpaceEnum::TAB);
+    m_scaleBar->getCoordinate()->setXYZ(10.0, 10.0, 0.0);
+}
+
+/**
+ * This method should be called by SessionManager and NOTHING ELSE.
+ * Set the closed status (tab has been closed by user but is available for reopening.
+ * @param closedStatus
+ * New closed status
+ */
+void
+BrowserTabContent::setClosedStatusFromSessionManager(const bool closedStatus)
+{
+    m_closedFlag = closedStatus;
+    
+    /*
+     * If reopening, may need to update from yoking
+     */
+    if ( ! m_closedFlag) {
+        /*
+         * May need to update yoking
+         */
+        setChartModelYokingGroup(getChartModelYokingGroup());
+        setBrainModelYokingGroup(getBrainModelYokingGroup());
+    }
+}
+
+/**
+ * Set the position in the toolbar of a tab from when the tab was closed
+ * @param tabBarPosition
+ *     Position (index) of the tab in the tab bar
+ */
+void
+BrowserTabContent::setClosedTabWindowTabBarPositionIndex(const int32_t tabBarPosition)
+{
+    m_closedTabBarPosition = tabBarPosition;
+}
+
+/**
+ * @return Position in the toolbar of a tab from when the tab was closed
+ */
+int32_t
+BrowserTabContent::getClosedTabWindowTabBarPositionIndex() const
+{
+    return m_closedTabBarPosition;
+}
+
+/**
+ * Set the position in the toolbar of a tab from when the tab was closed
+ * @param tabBarPosition
+ *     Position (index) of the tab in the tab bar
+ */
+void
+BrowserTabContent::setClosedTabWindowIndex(const int32_t windowIndex)
+{
+    m_closedWindowIndex = windowIndex;
+}
+
+/**
+ * @return Position in the toolbar of a tab from when the tab was closed
+ */
+int32_t
+BrowserTabContent::getClosedTabWindowIndex() const
+{
+    return m_closedWindowIndex;
+}
 
 
+/**
+ *@return Browser tabs the are open and in use by the user.
+ * Any tabs that are closed but available for reopening are excluded
+ */
+std::vector<BrowserTabContent*>
+BrowserTabContent::getOpenBrowserTabs()
+{
+    std::vector<BrowserTabContent*> openTabs;
+    
+    for (auto tab : s_allBrowserTabContent) {
+        if ( ! tab->m_closedFlag) {
+            openTabs.push_back(tab);
+        }
+    }
+    
+    return openTabs;
+}
 

@@ -78,9 +78,9 @@ EventTypeEnum::initialize()
                                      "EVENT_ANNOTATION_CHART_LABEL_GET",
                                      "Event to get annotation chart labels"));
     
-    enumData.push_back(EventTypeEnum(EVENT_ANNOTATION_COLOR_BAR_GET,
-                                     "EVENT_ANNOTATION_COLOR_BAR_GET",
-                                     "Event to get annotation color bars from tab(s)"));
+    enumData.push_back(EventTypeEnum(EVENT_ANNOTATION_BARS_GET,
+                                     "EVENT_ANNOTATION_BARS_GET",
+                                     "Event to get annotation color and scale bars from tab(s)"));
     
     enumData.push_back(EventTypeEnum(EVENT_ANNOTATION_CREATE_NEW_TYPE,
                                      "EVENT_ANNOTATION_CREATE_NEW_TYPE",
@@ -98,6 +98,10 @@ EventTypeEnum::initialize()
                                      "EVENT_ANNOTATION_GROUPING",
                                      "Event for annotation grouping"));
     
+    enumData.push_back(EventTypeEnum(EVENT_ANNOTATION_TEXT_GET_BOUNDS,
+                                     "EVENT_ANNOTATION_TEXT_GET_BOUNDS",
+                                     "Get bounds for annotation text"));
+    
     enumData.push_back(EventTypeEnum(EVENT_ANNOTATION_TEXT_SUBSTITUTION_GET,
                                      "EVENT_ANNOTATION_TEXT_SUBSTITUTION_GET",
                                      "Get an annotation text substitution"));
@@ -110,6 +114,10 @@ EventTypeEnum::initialize()
                                      "EVENT_ANNOTATION_TOOLBAR_UPDATE",
                                      "Event to update annotation toolbar"));
     
+    enumData.push_back(EventTypeEnum(EVENT_ANNOTATION_VALIDATE,
+                                     "EVENT_ANNOTATION_VALIDATE",
+                                     "Verify that an annotation is valid (valid pointer to annotation"));
+
     enumData.push_back(EventTypeEnum(EVENT_BRAIN_RESET,
                                      "EVENT_BRAIN_RESET",
                                      "Brain has been reset"));
@@ -118,11 +126,23 @@ EventTypeEnum::initialize()
                                      "EVENT_BRAIN_STRUCTURE_GET_ALL",
                                      "Get all brain structures"));
     
+    enumData.push_back(EventTypeEnum(EVENT_BROWSER_TAB_CLOSE,
+                                     "EVENT_BROWSER_TAB_CLOSE",
+                                     "Close a browser tab, may reopen later"));
+    
+    enumData.push_back(EventTypeEnum(EVENT_BROWSER_TAB_CLOSE_IN_TOOL_BAR,
+                                     "EVENT_BROWSER_TAB_CLOSE_IN_TOOL_BAR",
+                                     "Close (for possible reopening) a browser tab in the tool bar"));
+    
     enumData.push_back(EventTypeEnum(EVENT_BROWSER_TAB_DELETE,
                                      "EVENT_BROWSER_TAB_DELETE", 
                                      "Delete a browser tab"));
     
-    enumData.push_back(EventTypeEnum(EVENT_BROWSER_TAB_GET, 
+    enumData.push_back(EventTypeEnum(EVENT_BROWSER_TAB_DELETE_IN_TOOL_BAR,
+                                     "EVENT_BROWSER_TAB_DELETE_IN_TOOL_BAR",
+                                     "Delete a browser tab in the tool bar"));
+    
+    enumData.push_back(EventTypeEnum(EVENT_BROWSER_TAB_GET,
                                     "EVENT_BROWSER_TAB_GET", 
                                     "Get a browser tab by number"));
     
@@ -138,13 +158,33 @@ EventTypeEnum::initialize()
                                      "EVENT_BROWSER_TAB_INDICES_GET_ALL",
                                      "Browser Tab Indices Get All"));
     
+    enumData.push_back(EventTypeEnum(EVENT_BROWSER_TAB_INDICES_GET_ALL_VIEWED,
+                                     "EVENT_BROWSER_TAB_INDICES_GET_ALL_VIEWED",
+                                     "Browser Tab Indices Get All Viewed"));
+    
     enumData.push_back(EventTypeEnum(EVENT_BROWSER_TAB_NEW,
                                      "EVENT_BROWSER_TAB_NEW", 
                                      "Create a browser tab"));
     
+    enumData.push_back(EventTypeEnum(EVENT_BROWSER_TAB_NEW_IN_GUI,
+                                     "EVENT_BROWSER_TAB_NEW_IN_GUI",
+                                     "Create a browser tab from/in the GUI so toolbar is updated"));
+    
     enumData.push_back(EventTypeEnum(EVENT_BROWSER_TAB_NEW_CLONE,
                                      "EVENT_BROWSER_TAB_NEW_CLONE",
                                      "Create a browser tab by cloning an existing browser tab"));
+    
+    enumData.push_back(EventTypeEnum(EVENT_BROWSER_TAB_REOPEN_AVAILBLE,
+                                     "EVENT_BROWSER_TAB_REOPEN_AVAILBLE",
+                                     "Event for getting available closed browser tab(s)"));
+    
+    enumData.push_back(EventTypeEnum(EVENT_BROWSER_TAB_REOPEN_CLOSED,
+                                     "EVENT_BROWSER_TAB_REOPEN_CLOSED",
+                                     "Event for reopening a closed browser tab"));
+    
+    enumData.push_back(EventTypeEnum(EVENT_BROWSER_TAB_SELECT_IN_WINDOW,
+                                     "EVENT_BROWSER_TAB_SELECT_IN_WINDOW",
+                                     "Event for selecting a browser tab in a window"));
     
     enumData.push_back(EventTypeEnum(EVENT_BROWSER_WINDOW_CONTENT,
                                      "EVENT_BROWSER_WINDOW_CONTENT",
@@ -157,6 +197,10 @@ EventTypeEnum::initialize()
     enumData.push_back(EventTypeEnum(EVENT_BROWSER_WINDOW_CREATE_TABS, 
                                      "EVENT_BROWSER_WINDOW_CREATE_TABS", 
                                      "Create tabs (if needed) after loading data files"));
+    
+    enumData.push_back(EventTypeEnum(EVENT_BROWSER_WINDOW_GET_TABS,
+                                     "EVENT_BROWSER_WINDOW_GET_TABS",
+                                     "Get the tabs in a browser window"));
     
     enumData.push_back(EventTypeEnum(EVENT_BROWSER_WINDOW_GRAPHICS_HAVE_BEEN_REDRAWN,
                                      "EVENT_BROWSER_WINDOW_GRAPHICS_HAVE_BEEN_REDRAWN",
@@ -210,21 +254,22 @@ EventTypeEnum::initialize()
                                      "EVENT_GRAPHICS_OPENGL_DELETE_TEXTURE_NAME",
                                      "Delete an OpenGL Texture Name for an OpenGL Context"));
 
-    enumData.push_back(EventTypeEnum(EVENT_CHART_OVERLAY_VALIDATE,
-                                     "EVENT_CHART_OVERLAY_VALIDATE",
-                                     "Validate a chart overlay for validity (it exists)"));
     
-    enumData.push_back(EventTypeEnum(EVENT_CHART_TWO_ATTRIBUTES_CHANGED,
-                                     "EVENT_CHART_TWO_ATTRIBUTES_CHANGED",
-                                     "GUI notification of the change in chart two atttributes"));
+    enumData.push_back(EventTypeEnum(EVENT_CHART_TWO_CARTEISAN_AXIS_DISPLAY_GROUP,
+                                     "EVENT_CHART_TWO_CARTEISAN_AXIS_DISPLAY_GROUP",
+                                     "Get a cartesian axis for a display group"));
     
-    enumData.push_back(EventTypeEnum(EVENT_CHART_TWO_AXIS_GET_DATA_RANGE,
-                                     "EVENT_CHART_TWO_AXIS_GET_DATA_RANGE",
-                                     "Get the range of data for a chart two axis"));
-    
+    enumData.push_back(EventTypeEnum(EVENT_CHART_TWO_CARTESIAN_ORIENTED_AXES_YOKING,
+                                     "EVENT_CHART_TWO_CARTESIAN_ORIENTED_AXES_YOKING",
+                                     "Get/set/query chart two cartesian axes yoking"));
+
     enumData.push_back(EventTypeEnum(EVENT_CHART_TWO_LOAD_LINE_SERIES_DATA,
                                      "EVENT_CHART_TWO_LOAD_LINE_SERIES_DATA",
                                      "Load line series data for chart two implementation"));
+    
+    enumData.push_back(EventTypeEnum(EVENT_CHART_TWO_OVERLAY_VALIDATE,
+                                     "EVENT_CHART_TWO_OVERLAY_VALIDATE",
+                                     "Validate a chart two overlay for validity (it exists)"));
     
     enumData.push_back(EventTypeEnum(EVENT_DATA_FILE_ADD,
                                      "EVENT_DATA_FILE_ADD",
@@ -242,6 +287,10 @@ EventTypeEnum::initialize()
                                      "EVENT_DATA_FILE_RELOAD",
                                      "Reopen a data file (replace it with saved version) in the Brain"));
     
+    enumData.push_back(EventTypeEnum(EVENT_DATA_FILE_RELOAD_ALL,
+                                     "EVENT_DATA_FILE_RELOAD_ALL",
+                                     "Reopen all data files (replace it with saved version) in the Brain"));
+    
     enumData.push_back(EventTypeEnum(EVENT_GET_DISPLAYED_DATA_FILES,
                                      "EVENT_GET_DISPLAYED_DATA_FILES",
                                      "Get data files displayed in windows/tabs"));
@@ -257,6 +306,10 @@ EventTypeEnum::initialize()
     enumData.push_back(EventTypeEnum(EVENT_GET_TEXT_RENDERER_FOR_WINDOW,
                                      "EVENT_GET_TEXT_RENDERER_FOR_WINDOW",
                                      "Get the text renderer for a window"));
+    
+    enumData.push_back(EventTypeEnum(EVENT_GET_USER_INPUT_MODE,
+                                     "EVENT_GET_USER_INPUT_MODE",
+                                     "Get the user input mode for a window"));
     
     enumData.push_back(EventTypeEnum(EVENT_GET_VIEWPORT_SIZE,
                                      "EVENT_GET_VIEWPORT_SIZE",
@@ -274,6 +327,10 @@ EventTypeEnum::initialize()
                                      "EVENT_GRAPHICS_UPDATE_ONE_WINDOW", 
                                      "Update graphics in one window"));
     
+    enumData.push_back(EventTypeEnum(EVENT_GRAPHICS_WINDOW_SHOW_TOOL_TIP,
+                                     "EVENT_GRAPHICS_WINDOW_SHOW_TOOL_TIP",
+                                     "Show tooltip in graphics window"));
+
     enumData.push_back(EventTypeEnum(EVENT_HELP_VIEWER_DISPLAY,
                                      "EVENT_HELP_VIEWER_DISPLAY", 
                                      "Display the help viewer"));
@@ -294,10 +351,6 @@ EventTypeEnum::initialize()
                                      "EVENT_IMAGE_CAPTURE",
                                      "Capture an Image of Browser Window Graphics Region"));
 
-    enumData.push_back(EventTypeEnum(EVENT_MAC_DOCK_MENU_UPDATE,
-                                     "EVENT_MAC_DOCK_MENU_UPDATE",
-                                     "Update the Mac Dock Menu"));
-    
     enumData.push_back(EventTypeEnum(EVENT_MAP_YOKING_SELECT_MAP,
                                      "EVENT_MAP_YOKING_SELECT_MAP", 
                                      "Map Yoking Select Map"));
@@ -305,6 +358,10 @@ EventTypeEnum::initialize()
     enumData.push_back(EventTypeEnum(EVENT_MAP_YOKING_VALIDATION,
                                      "EVENT_MAP_YOKING_VALIDATION",
                                      "Map Yoking Validation"));
+    
+    enumData.push_back(EventTypeEnum(EVENT_MEDIA_FILES_GET,
+                                     "EVENT_MEDIA_FILES_GET",
+                                     "Get media files"));
     
     enumData.push_back(EventTypeEnum(EVENT_MODEL_ADD,
                                      "EVENT_MODEL_ADD",
@@ -362,6 +419,14 @@ EventTypeEnum::initialize()
                                      "EVENT_PALETTE_GET_BY_NAME",
                                      "Read the selected files in a spec file"));
     
+    enumData.push_back(EventTypeEnum(EVENT_PALETTE_GROUPS_GET,
+                                     "EVENT_PALETTE_GROUPS_GET",
+                                     "Get all palette groups"));
+    
+    enumData.push_back(EventTypeEnum(EVENT_RECENT_FILES_SYSTEM_ACCESS_MODE,
+                                     "EVENT_RECENT_FILES_SYSTEM_ACCESS_MODE",
+                                     "Get file system access mode for recent files"));
+    
     enumData.push_back(EventTypeEnum(EVENT_SCENE_ACTIVE,
                                      "EVENT_SCENE_ACTIVE",
                                      "Get/Set the active scene"));
@@ -394,11 +459,15 @@ EventTypeEnum::initialize()
                                      "EVENT_TILE_TABS_MODIFICATION",
                                      "Tile tabs modification"));
     
+    enumData.push_back(EventTypeEnum(EVENT_TOOLBAR_CHART_ORIENTED_AXES_UPDATE,
+                                     "EVENT_TOOLBAR_CHART_ORIENTED_AXES_UPDATE",
+                                     "Update the toolbar's chart two oriented axes controls"));
+
     enumData.push_back(EventTypeEnum(EVENT_TOOLBOX_SELECTION_DISPLAY,
                                      "EVENT_TOOLBOX_SELECTION_DISPLAY", 
                                      "Display or hide the selection toolbox"));
-    
-    enumData.push_back(EventTypeEnum(EVENT_USER_INTERFACE_UPDATE, 
+        
+    enumData.push_back(EventTypeEnum(EVENT_USER_INTERFACE_UPDATE,
                                      "EVENT_USER_INTERFACE_UPDATE", 
                                      "Update the user-interface"));
     

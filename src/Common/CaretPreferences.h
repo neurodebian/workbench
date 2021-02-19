@@ -22,15 +22,20 @@
 /*LICENSE_END*/
 
 #include <memory>
+#include <set>
 #include <utility>
 
 #include "BackgroundAndForegroundColors.h"
 #include "BackgroundAndForegroundColorsModeEnum.h"
 #include "CaretObject.h"
-#include "LogLevelEnum.h"
+#include "FileOpenFromOpSysTypeEnum.h"
+#include "IdentificationDisplayModeEnum.h"
 #include "ImageCaptureMethodEnum.h"
+#include "LogLevelEnum.h"
 #include "OpenGLDrawingMethodEnum.h"
+#include "RecentFilesSystemAccessModeEnum.h"
 #include "SpecFileDialogViewFilesTypeEnum.h"
+#include "ToolBarWidthModeEnum.h"
 #include "VolumeSliceViewAllPlanesLayoutEnum.h"
 
 class QSettings;
@@ -40,7 +45,8 @@ namespace caret {
 
     class CaretPreferenceDataValue;
     class ModelTransform;
-    class TileTabsConfiguration;
+    class RecentFileItemsContainer;
+    class TileTabsLayoutBaseConfiguration;
     class WuQMacroGroup;
     
     class CaretPreferences : public CaretObject {
@@ -61,24 +67,47 @@ namespace caret {
         void setSceneBackgroundAndForegroundColors(const BackgroundAndForegroundColors& colors);
         
         void setBackgroundAndForegroundColorsMode(const BackgroundAndForegroundColorsModeEnum::Enum colorsMode);
+                
+        void addToRecentFilesAndOrDirectories(const AString& directoryOrFileName);
         
-        void getPreviousSpecFiles(std::vector<AString>& previousSpecFiles) const;
+        bool readRecentSceneAndSpecFiles(RecentFileItemsContainer* container,
+                                         AString& errorMessageOut);
         
-        void addToPreviousSpecFiles(const AString& specFileName);
+        bool writeRecentSceneAndSpecFiles(RecentFileItemsContainer* container,
+                                          AString& errorMessageOut);
         
-        void clearPreviousSpecFiles();
+        bool readRecentDirectories(RecentFileItemsContainer* container,
+                                   AString& errorMessageOut);
         
-        void getPreviousSceneFiles(std::vector<AString>& previousSceneFiles) const;
+        bool writeRecentDirectories(RecentFileItemsContainer* container,
+                                    AString& errorMessageOut);
         
-        void addToPreviousSceneFiles(const AString& specFileName);
+        void getRecentDirectoriesForOpenFileDialogHistory(const bool favoritesFirstFlag,
+                                                          std::vector<AString>& directoriesOut);
         
-        void clearPreviousSceneFiles();
+        int32_t getRecentMaximumNumberOfSceneAndSpecFiles() const;
         
-        void getPreviousOpenFileDirectories(std::vector<AString>& previousOpenFileDirectories) const;
+        void setRecentMaximumNumberOfSceneAndSpecFiles(const int32_t maximumNumberOfFiles);
         
-        void getPreviousOpenFileDirectories(QStringList& previousOpenFileDirectories) const;
+        void clearRecentSceneAndSpecFiles(const bool removeFavoritesFlag);
         
-        void addToPreviousOpenFileDirectories(const AString& directoryName);
+        int32_t getRecentMaximumNumberOfDirectories() const;
+        
+        void setRecentMaximumNumberOfDirectories(const int32_t maximumNumberOfDirectories);
+        
+        void clearRecentDirectories(const bool removeFavoritesFlag);
+
+        RecentFilesSystemAccessModeEnum::Enum getRecentFilesSystemAccessMode() const;
+
+        void setRecentFilesSystemAccessMode(const RecentFilesSystemAccessModeEnum::Enum filesSystemAccessMode);
+        
+        void readRecentFilesExclusionPaths(std::set<AString>& exclusionPathsOut);
+        
+        void writeRecentFilesExclusionPaths(const std::set<AString>& exclusionPaths);
+        
+        void addToRecentFilesExclusionPaths(const AString& exclusionPath);
+        
+        void removeFromRecentFilesExclusionPaths(const AString& exclusionPath);
         
         LogLevelEnum::Enum getLoggingLevel() const;
         
@@ -91,6 +120,18 @@ namespace caret {
         OpenGLDrawingMethodEnum::Enum getOpenDrawingMethod() const;
         
         void setOpenGLDrawingMethod(const OpenGLDrawingMethodEnum::Enum openGLDrawingMethod);
+        
+        ToolBarWidthModeEnum::Enum getToolBarWidthMode() const;
+        
+        void setToolBarWidthMode(const ToolBarWidthModeEnum::Enum widthMode);
+        
+        FileOpenFromOpSysTypeEnum::Enum getFileOpenFromOpSysType() const;
+        
+        void setFileOpenFromOpSysType(const FileOpenFromOpSysTypeEnum::Enum openType);
+        
+        IdentificationDisplayModeEnum::Enum getIdentificationDisplayMode() const;
+        
+        void setIdentificationDisplayMode(const IdentificationDisplayModeEnum::Enum identificationDisplayMode);
         
         VolumeSliceViewAllPlanesLayoutEnum::Enum getVolumeAllSlicePlanesLayout() const;
         
@@ -136,21 +177,29 @@ namespace caret {
         
         void setShowDataToolTipsEnabled(const bool enabled);
         
-        void readTileTabsConfigurations(const bool performSync = true);
+        void readTileTabsUserConfigurations(const bool performSync = true);
         
-        std::vector<const TileTabsConfiguration*> getTileTabsConfigurationsSortedByName() const;
+        std::vector<std::pair<AString, AString>> getTileTabsUserConfigurationsNamesAndUniqueIdentifiers(const bool includeManualConfigurationsFlag) const;
         
-        TileTabsConfiguration* getTileTabsConfigurationByUniqueIdentifier(const AString& uniqueIdentifier);
+        std::unique_ptr<TileTabsLayoutBaseConfiguration> getCopyOfTileTabsUserConfigurationByUniqueIdentifier(const AString& uniqueIdentifier) const;
         
-        const TileTabsConfiguration* getTileTabsConfigurationByUniqueIdentifier(const AString& uniqueIdentifier) const;
+        TileTabsLayoutBaseConfiguration* getTileTabsUserConfigurationByName(const AString& name) const;
         
-        TileTabsConfiguration* getTileTabsConfigurationByName(const AString& name) const;
+        void addTileTabsUserConfiguration(const TileTabsLayoutBaseConfiguration* tileTabsConfiguration,
+                                          const AString& configurationName);
         
-        void addTileTabsConfiguration(TileTabsConfiguration* tileTabsConfiguration);
+        bool replaceTileTabsUserConfiguration(const AString& replaceUserTileTabsUniqueIdentifier,
+                                              const TileTabsLayoutBaseConfiguration* replaceWithConfiguration,
+                                              AString& errorMessageOut);
         
-        void removeTileTabsConfigurationByUniqueIdentifier(const AString& tileTabsUniqueIdentifier);
+        bool renameTileTabsUserConfiguration(const QString& tileTabsUniqueIdentifier,
+                                             const AString& name,
+                                             AString& errorMessageOut);
         
-        void writeTileTabsConfigurations();
+        bool removeTileTabsUserConfigurationByUniqueIdentifier(const AString& tileTabsUniqueIdentifier,
+                                                               AString& errorMessageOut);
+        
+        void writeTileTabsUserConfigurations();
         
         void readCustomViews(const bool performSync = true);
         
@@ -206,6 +255,10 @@ namespace caret {
         
         void setDynamicConnectivityDefaultedOn(const bool defaultedOn);
         
+        bool isGuiGesturesEnabled() const;
+        
+        void setGuiGesturesEnabled(const bool status);
+        
         WuQMacroGroup* getMacros();
         
         const WuQMacroGroup* getMacros() const;
@@ -218,6 +271,29 @@ namespace caret {
         
         std::vector<CaretPreferenceDataValue*> getPreferenceSceneDataValues();
 
+        bool paletteUserCustomExists(const AString& paletteName);
+        
+        void paletteUserCustomGetAll(std::vector<AString>& palettesXmlOut);
+        
+        bool paletteUserCustomGetByName(const AString& paletteName,
+                                        AString& paletteXmlOut);
+        
+        bool paletteUserCustomAdd(const AString& paletteName,
+                                  const AString& paletteXML,
+                                  AString& errorMessageOut);
+        
+        bool paletteUserCustomReplace(const AString& paletteName,
+                                      const AString& paletteXML,
+                                      AString& errorMessageOut);
+        
+        bool paletteUserCustomRemove(const AString& paletteName,
+                                     AString& errorMessageOut);
+        
+        bool paletteUserCustomRename(const AString& paletteName,
+                                     const AString& newPaletteName,
+                                     const AString& paletteXML,
+                                     AString& errorMessageOut);
+
     private:
         CaretPreferences(const CaretPreferences&);
 
@@ -227,6 +303,10 @@ namespace caret {
         virtual AString toString() const;
         
     private:
+        void addToRecentSceneAndSpecFiles(const AString& filename);
+        
+        void addToRecentDirectories(const AString& directoryOrFileName);
+        
         bool getBoolean(const AString& name,
                         const bool defaultValue = false);
         
@@ -245,9 +325,6 @@ namespace caret {
         void setString(const AString& name,
                        const AString& value);
         
-        void addToPrevious(std::vector<AString>& previousVector,
-                           const AString& newName);
-        
         void readUnsignedByteArray(const AString& name,
                                    uint8_t array[],
                                    const int32_t numberOfElements);
@@ -264,6 +341,18 @@ namespace caret {
         
         void writeCustomViews();
         
+        AString getPaletteKey(const AString& paletteName) const;
+        
+        bool readRecentFileItemsContainer(const AString& preferenceName,
+                                          RecentFileItemsContainer* container,
+                                          AString& errorMessageOut);
+
+        bool writeRecentFileItemsContainer(const AString& preferenceName,
+                                           const RecentFileItemsContainer* container,
+                                           AString& errorMessageOut);
+
+        bool isInRecentFilesExclusionPaths(const AString& fileOrDirectoryName);
+        
         mutable QSettings* qSettings;
         
         BackgroundAndForegroundColors userColors;
@@ -277,8 +366,6 @@ namespace caret {
         
         std::vector<AString> previousSceneFiles;
         
-        std::vector<AString> previousOpenFileDirectories;
-        
         LogLevelEnum::Enum loggingLevel;
         
         ImageCaptureMethodEnum::Enum imageCaptureMethod;
@@ -287,7 +374,7 @@ namespace caret {
         
         std::vector<ModelTransform*> customViews;
 
-        std::vector<TileTabsConfiguration*> tileTabsConfigurations;
+        std::vector<TileTabsLayoutBaseConfiguration*> tileTabsConfigurations;
         
         bool displayVolumeAxesCrosshairs;
         
@@ -303,7 +390,21 @@ namespace caret {
         
         std::unique_ptr<CaretPreferenceDataValue> m_volumeCrossHairGapPreference;
 
-        std::vector<CaretPreferenceDataValue*> m_preferenceDataValues;
+        std::unique_ptr<CaretPreferenceDataValue> m_guiGesturesEnabled;
+        
+        std::unique_ptr<CaretPreferenceDataValue> m_toolBarWidthModePreference;
+        
+        std::unique_ptr<CaretPreferenceDataValue> m_identificationDisplayModePreference;
+        
+        std::unique_ptr<CaretPreferenceDataValue> m_fileOpenFromOperatingSystemTypePreference;
+        
+        std::vector<CaretPreferenceDataValue*> m_preferenceStoredInSceneDataValues;
+        
+        std::unique_ptr<CaretPreferenceDataValue> m_recentMaximumNumberOfSceneAndSpecFilesPreference;
+        
+        std::unique_ptr<CaretPreferenceDataValue> m_recentMaximumNumberOfDirectoriesPreferences;
+
+        std::unique_ptr<CaretPreferenceDataValue> m_recentFilesSystemAccessMode;
         
         bool splashScreenEnabled;
         
@@ -348,12 +449,15 @@ namespace caret {
         static const AString NAME_COLOR_FOREGROUND_ALL;
         static const AString NAME_COLOR_BACKGROUND_CHART;
         static const AString NAME_COLOR_FOREGROUND_CHART;
+        static const AString NAME_COLOR_BACKGROUND_MEDIA;
+        static const AString NAME_COLOR_FOREGROUND_MEDIA;
         static const AString NAME_COLOR_BACKGROUND_SURFACE;
         static const AString NAME_COLOR_FOREGROUND_SURFACE;
         static const AString NAME_COLOR_BACKGROUND_VOLUME;
         static const AString NAME_COLOR_FOREGROUND_VOLUME;
         static const AString NAME_COLOR_CHART_MATRIX_GRID_LINES;
         static const AString NAME_COLOR_CHART_HISTOGRAM_THRESHOLD;
+        static const AString NAME_CUSTOM_VIEWS;
         static const AString NAME_DEVELOP_MENU;
         static const AString NAME_DATA_TOOL_TIPS;
         static const AString NAME_DYNAMIC_CONNECTIVITY_ON;
@@ -362,11 +466,14 @@ namespace caret {
         static const AString NAME_MACROS;
         static const AString NAME_MANAGE_FILES_VIEW_FILE_TYPE;
         static const AString NAME_OPENGL_DRAWING_METHOD;
+        static const AString NAME_PALETTE_GROUP_KEY;
         static const AString NAME_PREVIOUS_SCENE_FILES;
         static const AString NAME_PREVIOUS_SPEC_FILES;
         static const AString NAME_PREVIOUS_OPEN_FILE_DIRECTORIES;
         static const AString NAME_SPLASH_SCREEN;
-        static const AString NAME_CUSTOM_VIEWS;
+        static const AString NAME_RECENT_DIRECTORIES;
+        static const AString NAME_RECENT_EXCLUSION_PATHS;
+        static const AString NAME_RECENT_SCENE_AND_SPEC_FILES;
         static const AString NAME_REMOTE_FILE_USER_NAME;
         static const AString NAME_REMOTE_FILE_PASSWORD;
         static const AString NAME_REMOTE_FILE_LOGIN_SAVED;
@@ -395,12 +502,15 @@ namespace caret {
     const AString CaretPreferences::NAME_COLOR_FOREGROUND_ALL     = "colorForegroundAll";
     const AString CaretPreferences::NAME_COLOR_BACKGROUND_CHART     = "colorBackgroundChart";
     const AString CaretPreferences::NAME_COLOR_FOREGROUND_CHART     = "colorForegroundChart";
+    const AString CaretPreferences::NAME_COLOR_BACKGROUND_MEDIA     = "colorBackgroundMedia";
+    const AString CaretPreferences::NAME_COLOR_FOREGROUND_MEDIA     = "colorForegroundMedia";
     const AString CaretPreferences::NAME_COLOR_BACKGROUND_SURFACE     = "colorBackgroundSurface";
     const AString CaretPreferences::NAME_COLOR_FOREGROUND_SURFACE     = "colorForegroundSurface";
     const AString CaretPreferences::NAME_COLOR_BACKGROUND_VOLUME     = "colorBackgroundVolume";
     const AString CaretPreferences::NAME_COLOR_FOREGROUND_VOLUME     = "colorForegroundVolume";
     const AString CaretPreferences::NAME_COLOR_CHART_MATRIX_GRID_LINES = "colorChartMatrixGridLines";
     const AString CaretPreferences::NAME_COLOR_CHART_HISTOGRAM_THRESHOLD = "colorChartHistogramThreshold";
+    const AString CaretPreferences::NAME_CUSTOM_VIEWS     = "customViews";
     const AString CaretPreferences::NAME_DEVELOP_MENU     = "developMenu";
     const AString CaretPreferences::NAME_DATA_TOOL_TIPS = "dataToolTips";
     const AString CaretPreferences::NAME_DYNAMIC_CONNECTIVITY_ON = "dynamicConnectivityDefaultedOn";
@@ -409,11 +519,14 @@ namespace caret {
     const AString CaretPreferences::NAME_MACROS = "macros";
     const AString CaretPreferences::NAME_MANAGE_FILES_VIEW_FILE_TYPE     = "manageFilesViewFileType";
     const AString CaretPreferences::NAME_OPENGL_DRAWING_METHOD     = "openGLDrawingMethod";
+    const AString CaretPreferences::NAME_PALETTE_GROUP_KEY = "palette";
     const AString CaretPreferences::NAME_PREVIOUS_SCENE_FILES     = "previousSceneFiles";
     const AString CaretPreferences::NAME_PREVIOUS_SPEC_FILES     = "previousSpecFiles";
     const AString CaretPreferences::NAME_PREVIOUS_OPEN_FILE_DIRECTORIES     = "previousOpenFileDirectories";
     const AString CaretPreferences::NAME_SPLASH_SCREEN = "splashScreen";
-    const AString CaretPreferences::NAME_CUSTOM_VIEWS     = "customViews";
+    const AString CaretPreferences::NAME_RECENT_DIRECTORIES = "recentDirectories";
+    const AString CaretPreferences::NAME_RECENT_EXCLUSION_PATHS = "recentExclusionPaths";
+    const AString CaretPreferences::NAME_RECENT_SCENE_AND_SPEC_FILES = "recentSceneAndSpecFiles";
     const AString CaretPreferences::NAME_REMOTE_FILE_USER_NAME = "remoteFileUserName";
     const AString CaretPreferences::NAME_REMOTE_FILE_PASSWORD = "remoteFilePassword";
     const AString CaretPreferences::NAME_REMOTE_FILE_LOGIN_SAVED = "removeFileLoginSaved";

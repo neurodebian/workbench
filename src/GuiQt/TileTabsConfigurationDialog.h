@@ -22,7 +22,7 @@
 /*LICENSE_END*/
 
 #include "EventListenerInterface.h"
-#include "EventTileTabsConfigurationModification.h"
+#include "EventTileTabsGridConfigurationModification.h"
 #include "TileTabsGridRowColumnContentTypeEnum.h"
 #include "TileTabsGridRowColumnStretchTypeEnum.h"
 #include "WuQDialogNonModal.h"
@@ -36,17 +36,23 @@ class QListWidgetItem;
 class QPushButton;
 class QRadioButton;
 class QSpinBox;
+class QStackedWidget;
+class QTabWidget;
 class QToolButton;
 
 namespace caret {
     class BrainBrowserWindow;
     class BrainBrowserWindowComboBox;
+    class BrainOpenGLViewportContent;
     class BrowserWindowContent;
     class CaretPreferences;
     class EnumComboBoxTemplate;
-    class TileTabsConfiguration;
-    class TileTabElementWidgets;
+    class TileTabsLayoutBaseConfiguration;
+    class TileTabsLayoutGridConfiguration;
+    class TileTabsLayoutManualConfiguration;
+    class TileTabGridRowColumnWidgets;
     class TileTabsGridRowColumnElement;
+    class TileTabsManualTabGeometryWidget;
     class WuQGridLayoutGroup;
     class WuQListWidget;
     
@@ -77,15 +83,17 @@ namespace caret {
     private slots:
         void browserWindowComboBoxValueChanged(BrainBrowserWindow* browserWindow);
         
-        void newUserConfigurationButtonClicked();
-        
         void deleteUserConfigurationButtonClicked();
         
         void renameUserConfigurationButtonClicked();
         
-        void configurationNumberOfRowsOrColumnsChanged();
+        void showConfigurationXmlPushButtonClicked();
         
-        void configurationStretchFactorWasChanged();
+        void gridConfigurationNumberOfRowsOrColumnsChanged();
+        
+        void gridConfigurationStretchFactorWasChanged();
+        
+        void addUserConfigurationPushButtonClicked();
         
         void replaceUserConfigurationPushButtonClicked();
         
@@ -93,94 +101,186 @@ namespace caret {
 
         void automaticCustomButtonClicked(QAbstractButton*);
         
-        void tileTabsModificationRequested(EventTileTabsConfigurationModification& modification);
+        void tileTabsModificationRequested(EventTileTabsGridConfigurationModification& modification);
 
         void centeringCorrectionCheckBoxClicked(bool checked);
+        
+        void manualConfigurationGeometryChanged();
 
+        void manualConfigurationSetToolButtonClicked();
+        
+        void manualConfigurationSetMenuColumnsItemTriggered();
+        
+        void manualConfigurationSetMenuFromAutomaticItemTriggered();
+        
+        void manualConfigurationSetMenuFromCustomItemTriggered();
+        
+        void manualConfigurationWindowAnnotationsDepthSpinBoxValueChanged(int value);
+        
+        void userConfigurationSelectionListWidgetItemChanged();
+        
+        void templateConfigurationSelectionListWidgetItemChanged();
+        
+        void configurationSourceTabWidgetClicked(int index);
+        
     protected:
         void focusGained();
         
         virtual void helpButtonClicked() override;
         
     private:
+        enum ConfigurationSourceTypeEnum {
+            TEMPLATE,
+            USER
+        };
+        
         // ADD_NEW_MEMBERS_HERE
         
         QWidget* createCopyLoadPushButtonsWidget();
         
         QWidget* createWorkbenchWindowWidget();
         
-        void selectTileTabConfigurationByUniqueID(const AString& uniqueID);
+        TileTabsLayoutGridConfiguration* getCustomTileTabsGridConfiguration();
         
-        TileTabsConfiguration* getAutomaticTileTabsConfiguration();
-        
-        TileTabsConfiguration* getCustomTileTabsConfiguration();
-        
-        TileTabsConfiguration* getSelectedUserTileTabsConfiguration();
+        AString getSelectedUserTileTabsConfigurationUniqueIdentifier() const;
         
         QWidget* createUserConfigurationSelectionWidget();
         
-        QWidget* createActiveConfigurationWidget();
+        QWidget* createConfigurationTypeWidget();
         
-        QWidget* createRowColumnStretchWidget();
+        QWidget* createConfigurationSettingsWidget();
         
-        QWidget* createCustomOptionsWidget();
+        QWidget* createGridRowColumnStretchWidget();
         
-        void updateRowColumnStretchWidgets(TileTabsConfiguration* configuration);
+        QWidget* createGridCustomOptionsWidget();
         
-        void addRowColumnStretchWidget(const EventTileTabsConfigurationModification::RowColumnType rowColumnType,
+        QWidget* createManualGeometryEditingWidget();
+        
+        void updateRowColumnStretchWidgets(TileTabsLayoutGridConfiguration* configuration);
+        
+        void addRowColumnStretchWidget(const EventTileTabsGridConfigurationModification::RowColumnType rowColumnType,
                                        QGridLayout* gridLayout,
-                                       std::vector<TileTabElementWidgets*>& elementVector);
+                                       std::vector<TileTabGridRowColumnWidgets*>& elementVector);
         
-        void updateStretchFactors();
+        void updateConfigurationEditingWidget();
+        
+        void updateManualGeometryEditorWidget();
+        
+        void addManualGeometryWidget(QGridLayout* gridLayout,
+                                     std::vector<TileTabsManualTabGeometryWidget*>& widgetsVector);
+        
+        QToolButton* createManualConfigurationSetToolButton();
+        
+        void updateGridStretchFactors();
         
         void updateGraphicsWindow();
         
         void updateCustomOptionsWidget();
         
-        void readConfigurationsFromPreferences();
+        void readUserConfigurationsFromPreferences();
+        
+        void updateUserConfigurationListWidget();
+        
+        void updateTemplateConfigurationListWidget();
         
         BrainBrowserWindow* getBrowserWindow();
         
+        const BrainBrowserWindow* getBrowserWindow() const;
+        
         BrowserWindowContent* getBrowserWindowContent();
+        
+        const BrowserWindowContent* getBrowserWindowContent() const;
+        
+        AString getNewConfigurationName(QWidget* dialogParent);
+        
+        const BrainOpenGLViewportContent* getViewportContentForTab(const int32_t tabIndex) const;
+
+        TileTabsLayoutManualConfiguration* createManualConfigurationFromCurrentTabs() const;
+        
+        std::unique_ptr<TileTabsLayoutBaseConfiguration> getSelectedUserConfiguration() const;
+        
+        std::unique_ptr<TileTabsLayoutBaseConfiguration> getSelectedTemplateConfiguration() const;
+        
+        ConfigurationSourceTypeEnum getSelectedConfigurationSourceType() const;
+        
+        void loadConfigurationPreviewLabel(TileTabsLayoutBaseConfiguration* configuration);
+        
+        void updateTemplateUserConfigurationPushButtons(const ConfigurationSourceTypeEnum sourceType);
+        
+        void loadTemplateLayoutConfigurations();
+        
+        void loadTemplateLayoutConfigurationFromXML(const QString& xml);
+        
+        bool warnIfGridConfigurationTooSmallDialog(const TileTabsLayoutGridConfiguration* gridConfiguration) const;
+        
+        bool loadIntoManualConfiguration(const TileTabsLayoutBaseConfiguration* configuration);
         
         BrainBrowserWindowComboBox* m_browserWindowComboBox;
         
-        QWidget* m_customConfigurationWidget;
+        QStackedWidget* m_editConfigurationStackedWidget;
         
-        QWidget* m_customOptionsWidget;
+        QWidget* m_customGridConfigurationWidget;
         
-        QRadioButton* m_automaticConfigurationRadioButton;
+        QRadioButton* m_automaticGridConfigurationRadioButton;
         
-        QRadioButton* m_customConfigurationRadioButton;
+        QRadioButton* m_customGridConfigurationRadioButton;
         
-        QPushButton* m_newConfigurationPushButton;
+        QRadioButton* m_manualConfigurationRadioButton;
         
         QPushButton* m_deleteConfigurationPushButton;
         
         QPushButton* m_renameConfigurationPushButton;
         
-        QPushButton* m_replacePushButton;
+        QPushButton* m_showConfigurationXmlPushButton;
         
-        QPushButton* m_loadPushButton;
+        QPushButton* m_addConfigurationPushButton;
+        
+        QPushButton* m_replaceConfigurationPushButton;
+        
+        QPushButton* m_loadConfigurationPushButton;
+        
+        QTabWidget* m_configurationSourceTabWidget;
+        
+        int32_t m_configurationSourceTemplateTabIndex;
+        
+        int32_t m_configurationSourceUserTabIndex;
         
         WuQListWidget* m_userConfigurationSelectionListWidget;
         
-        QSpinBox* m_numberOfRowsSpinBox;
+        WuQListWidget* m_templateConfigurationSelectionListWidget;
         
-        QSpinBox* m_numberOfColumnsSpinBox;
+        QSpinBox* m_numberOfGridRowsSpinBox;
         
-        std::vector<TileTabElementWidgets*> m_columnElements;
+        QSpinBox* m_numberOfGridColumnsSpinBox;
         
-        std::vector<TileTabElementWidgets*> m_rowElements;
+        std::vector<TileTabGridRowColumnWidgets*> m_gridColumnElements;
         
-        QGridLayout* m_rowElementsGridLayout = NULL;
+        std::vector<TileTabGridRowColumnWidgets*> m_gridRowElements;
         
-        QGridLayout* m_columnElementsGridLayout = NULL;
+        QGridLayout* m_gridRowElementsGridLayout = NULL;
         
-        QCheckBox* m_centeringCorrectionCheckBox;
+        QGridLayout* m_gridColumnElementsGridLayout = NULL;
+        
+        QCheckBox* m_gridCenteringCorrectionCheckBox;
+        
+        QWidget* m_manualGeometryWidget;
+        
+        QGridLayout* m_manualGeometryGridLayout;
+        
+        QToolButton* m_manualConfigurationSetButton;
+        
+        QString m_setManualToAutomaticGridActionText;
+        QString m_setManualToCustomGridActionText;
+        QString m_setManualToGridColumnsActionText;
+        
+        std::vector<TileTabsManualTabGeometryWidget*> m_manualGeometryEditorWidgets;
+        
+        QSpinBox* m_manualConfigurationWindowAnnotationsDepthSpinBox;
+        
+        std::vector<std::unique_ptr<TileTabsLayoutBaseConfiguration>> m_templateLayoutConfigurations;
         
         /** Blocks reading of preferences since that may invalidate data pointers */
-        bool m_blockReadConfigurationsFromPreferences;
+        bool m_blockReadUserConfigurationsFromPreferences;
         
         /**
          * Keep a pointer to preferences but DO NOT delete it
@@ -189,71 +289,13 @@ namespace caret {
          */
         CaretPreferences* m_caretPreferences;
         
-        friend class TileTabElementWidgets;
+        QLabel* m_configurationImagePreviewLabel;
+        
+        friend class TileTabGridRowColumnWidgets;
         
         static const int32_t s_maximumRowsColumns = 50;
     };
     
-    
-    /**
-     * Contains widgets for one row or column of stretching.
-     */
-    class TileTabElementWidgets : public QObject {
-        Q_OBJECT
-        
-    public:
-        TileTabElementWidgets(TileTabsConfigurationDialog* tileTabsConfigurationDialog,
-                              const EventTileTabsConfigurationModification::RowColumnType rowColumnType,
-                              const int32_t index,
-                              QGridLayout* gridLayout,
-                              QObject* parent);
-        
-        virtual ~TileTabElementWidgets();
-
-        void updateContent(TileTabsGridRowColumnElement* element);
-        
-    signals:
-        void itemChanged();
-        
-        void modificationRequested(EventTileTabsConfigurationModification& modification);
-        
-    private slots:
-        void constructionMenuAboutToShow();
-        
-        void constructionMenuTriggered(QAction*);
-        
-        void contentTypeActivated();
-        
-        void stretchTypeActivated();
-        
-        void stretchValueChanged(double);
-        
-    private:
-        QMenu* createConstructionMenu(QToolButton* toolButton);
-        
-        TileTabsConfigurationDialog* m_tileTabsConfigurationDialog;
-        const EventTileTabsConfigurationModification::RowColumnType m_rowColumnType;
-        const int32_t m_index;
-        TileTabsGridRowColumnElement* m_element;
-        
-        QLabel* m_indexLabel;
-        QAction* m_constructionAction;
-        QToolButton* m_constructionToolButton;
-        EnumComboBoxTemplate* m_contentTypeComboBox;
-        EnumComboBoxTemplate* m_stretchTypeComboBox;
-        QDoubleSpinBox* m_stretchValueSpinBox;
-        
-        QAction* m_menuDeleteAction;
-        QAction* m_menuDuplicateAfterAction;
-        QAction* m_menuDuplicateBeforeAction;
-        QAction* m_insertSpacerAfterAction;
-        QAction* m_insertSpacerBeforeAction;
-        QAction* m_menuMoveAfterAction;
-        QAction* m_menuMoveBeforeAction;
-        
-        WuQGridLayoutGroup* m_gridLayoutGroup;
-        
-    };
     
 #ifdef __TILE_TABS_CONFIGURATION_DIALOG_DECLARE__
 //    const AString TileTabsConfigurationDialog::s_automaticConfigurationPrefix = "Automatic Configuration";

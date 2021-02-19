@@ -43,7 +43,6 @@
 #include "DeveloperFlagsEnum.h"
 #include "DisplayPropertiesFoci.h"
 #include "DisplayPropertiesLabels.h"
-#include "DisplayPropertiesVolume.h"
 #include "ElapsedTimer.h"
 #include "FociFile.h"
 #include "Focus.h"
@@ -741,8 +740,14 @@ BrainOpenGLVolumeObliqueSliceDrawing::drawVolumeSliceViewProjection(const BrainO
                                                         sliceViewPlane,
                                                         slicePlane,
                                                         sliceCoordinates);
+        /*
+         * Only set for two-d view, 3D view (VIEW -> ALL) is set when surfaces are drawn
+         */
+        m_fixedPipelineDrawing->setupScaleBarDrawingInformation(m_browserTabContent,
+                                                                m_orthographicBounds[0],
+                                                                m_orthographicBounds[1]);
     }
-    
+
     SelectionItemVoxel* voxelID = m_brain->getSelectionManager()->getVoxelIdentification();
     SelectionItemVoxelEditing* voxelEditingID = m_brain->getSelectionManager()->getVoxelEditingIdentification();
     
@@ -846,8 +851,18 @@ BrainOpenGLVolumeObliqueSliceDrawing::drawVolumeSliceViewProjection(const BrainO
                     break;
             }
         }
+        
+        CaretAssertVectorIndex(m_volumeDrawInfo, 0);
+        BrainOpenGLVolumeSliceDrawing::drawIdentificationSymbols(m_fixedPipelineDrawing,
+                                                                 this->m_brain,
+                                                                 m_volumeDrawInfo[0].volumeFile,
+                                                                 slicePlane,
+                                                                 sliceThickness);
+        
     }
-    const bool annotationModeFlag = (m_fixedPipelineDrawing->m_windowUserInputMode == UserInputModeEnum::ANNOTATIONS);
+    
+    const bool annotationModeFlag = (m_fixedPipelineDrawing->m_windowUserInputMode == UserInputModeEnum::Enum::ANNOTATIONS);
+    const bool tileTabsEditModeFlag = (m_fixedPipelineDrawing->m_windowUserInputMode == UserInputModeEnum::Enum::TILE_TABS_MANUAL_LAYOUT_EDITING);
     BrainOpenGLAnnotationDrawingFixedPipeline::Inputs inputs(this->m_brain,
                                                              m_fixedPipelineDrawing->mode,
                                                              BrainOpenGLFixedPipeline::s_gluLookAtCenterFromEyeOffsetDistance,
@@ -855,7 +870,8 @@ BrainOpenGLVolumeObliqueSliceDrawing::drawVolumeSliceViewProjection(const BrainO
                                                              m_fixedPipelineDrawing->windowTabIndex,
                                                              SpacerTabIndex(),
                                                              BrainOpenGLAnnotationDrawingFixedPipeline::Inputs::WINDOW_DRAWING_NO,
-                                                             annotationModeFlag);
+                                                             annotationModeFlag,
+                                                             tileTabsEditModeFlag);
     m_fixedPipelineDrawing->m_annotationDrawing->drawModelSpaceAnnotationsOnVolumeSlice(&inputs,
                                                                                         slicePlane,
                                                                                         sliceThickness);
@@ -1211,7 +1227,7 @@ BrainOpenGLVolumeObliqueSliceDrawing::drawVolumeSliceFoci(const Plane& plane)
                                            m_fixedPipelineDrawing->windowTabIndex) == false) {
         return;
     }
-    const float focusDiameter = fociDisplayProperties->getFociSize(displayGroup,
+    const float focusDiameter = fociDisplayProperties->getFociSizeMillimeters(displayGroup,
                                                                    m_fixedPipelineDrawing->windowTabIndex);
     const FeatureColoringTypeEnum::Enum fociColoringType = fociDisplayProperties->getColoringType(displayGroup,
                                                                                                   m_fixedPipelineDrawing->windowTabIndex);
@@ -3747,13 +3763,11 @@ BrainOpenGLVolumeObliqueSliceDrawing::ObliqueSlice::draw(BrainOpenGLFixedPipelin
     
     uint8_t sliceAlpha = 255;
     bool drawWithBlendingFlag(false);
-//    if (m_bottomLayerFlag) {
-        if (m_opacity < 1.0) {
-            sliceAlpha = static_cast<uint8_t>(m_opacity * 255.0);
-            drawWithBlendingFlag = true;
-        }
-//    }
-    
+    if (m_opacity < 1.0) {
+        sliceAlpha = static_cast<uint8_t>(m_opacity * 255.0);
+        drawWithBlendingFlag = true;
+    }
+
     std::vector<int64_t> selectionIJK;
     for (int32_t iRow = 0; iRow < m_numberOfRows; iRow++) {
         float voxelXYZ[3] = {
@@ -3909,18 +3923,7 @@ BrainOpenGLVolumeObliqueSliceDrawing::ObliqueSlice::draw(BrainOpenGLFixedPipelin
             }
         }
         else {
-            /*
-             * Only allow layer blending when overall volume opacity is off (>= 1.0)
-             */
-            //const DisplayPropertiesVolume* dpv = brain->getDisplayPropertiesVolume();
-            const bool allowBlendingFlag(true); //dpv->getOpacity() >= 1.0f);
-            
             glPushAttrib(GL_COLOR_BUFFER_BIT);
-            if (drawWithBlendingFlag
-                && allowBlendingFlag) {
-                glEnable(GL_BLEND);
-                glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-            }
             GraphicsEngineDataOpenGL::draw(primitive.get());
             glPopAttrib();
         }

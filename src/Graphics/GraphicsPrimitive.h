@@ -29,7 +29,6 @@
 #include "CaretObject.h"
 #include "EventListenerInterface.h"
 
-
 namespace caret {
 
     class BoundingBox;
@@ -38,7 +37,9 @@ namespace caret {
     class GraphicsPrimitiveV3fC4f;
     class GraphicsPrimitiveV3fC4ub;
     class GraphicsPrimitiveV3fN3f;
+    class GraphicsPrimitiveV3fN3fC4ub;
     class GraphicsPrimitiveV3fT3f;
+    class Matrix4x4Interface;
     
     class GraphicsPrimitive : public CaretObject, public EventListenerInterface {
         
@@ -93,6 +94,26 @@ namespace caret {
             NONE,
             /** Three float values per vertex contains S, T, and R texture coordinates */
             FLOAT_STR
+        };
+        
+        /**
+         * Texture wrapping type
+         */
+        enum class TextureWrappingType {
+            /** Clamp so max STR is 1.0 (default) */
+            CLAMP,
+            /** Repeat so max STR is greater than 1.0) */
+            REPEAT
+        };
+        
+        /**
+         * Texture filtering type
+         */
+        enum class TextureFilteringType {
+            /* Nearest texel - no interpolation */
+            NEAREST,
+            /* Linear interpolate using nearest texels */
+            LINEAR
         };
         
         /**
@@ -255,6 +276,26 @@ namespace caret {
         };
         
         /**
+         * Modes for releasing instance data after OpenGL buffers have been loaded.
+         * For large primitives, this can save substantial memory.  Do not use if
+         * data will be updated.
+         */
+        enum class ReleaseInstanceDataMode {
+            /**
+             * Release of instance data has been completed
+             */
+            COMPLETED,
+            /**
+             * Release of instance data is disabled (DEFAULT)
+             */
+            DISABLED,
+            /**
+             * Release is enabled but not yet completed (OpenGL buffers not loaded yet)
+             */
+            ENABLED
+        };
+        
+        /**
          * Hint to graphics engine on how the primitive is used.
          * The hint must be set prior to loading of buffers.
          */
@@ -282,6 +323,8 @@ namespace caret {
                           const ColorDataType        colorDataType,
                           const VertexColorType      vertexColorType,
                           const TextureDataType      textureDataType,
+                          const TextureWrappingType  textureWrappingType,
+                          const TextureFilteringType textureFilteringType,
                           const PrimitiveType        primitiveType);
         
         GraphicsPrimitive(const GraphicsPrimitive& obj);
@@ -299,6 +342,8 @@ namespace caret {
         static GraphicsPrimitiveV3fN3f* newPrimitiveV3fN3f(const GraphicsPrimitive::PrimitiveType primitiveType,
                                                            const uint8_t unsignedByteRGBA[4]);
         
+        static GraphicsPrimitiveV3fN3fC4ub* newPrimitiveV3fN3fC4ub(const GraphicsPrimitive::PrimitiveType primitiveType);
+        
         static GraphicsPrimitiveV3fC4f* newPrimitiveV3fC4f(const GraphicsPrimitive::PrimitiveType primitiveType);
         
         static GraphicsPrimitiveV3fC4ub* newPrimitiveV3fC4ub(const GraphicsPrimitive::PrimitiveType primitiveType);
@@ -306,7 +351,9 @@ namespace caret {
         static GraphicsPrimitiveV3fT3f* newPrimitiveV3fT3f(const GraphicsPrimitive::PrimitiveType primitiveType,
                                                            const uint8_t* imageBytesRGBA,
                                                            const int32_t imageWidth,
-                                                           const int32_t imageHeight);
+                                                           const int32_t imageHeight,
+                                                           const TextureWrappingType textureWrappingType,
+                                                           const TextureFilteringType textureFilteringType);
         
         virtual ~GraphicsPrimitive();
         
@@ -360,9 +407,31 @@ namespace caret {
         inline PrimitiveType getPrimitiveType() const { return m_primitiveType; }
         
         /**
+         * @return Mode for release of instance data (xyz, normals, coloring, etc) after buffers are loaded
+         */
+        ReleaseInstanceDataMode getReleaseInstanceDataMode() const { return m_releaseInstanceDataMode; }
+        
+        /**
+         * Set the mode for release of instance data  (xyz, normals, coloring, etc) after buffers are loaded
+         */
+        void setReleaseInstanceDataMode(const ReleaseInstanceDataMode releaseDataMode) {
+            m_releaseInstanceDataMode = releaseDataMode;
+        }
+        
+        /**
          * @return Data type of texture.
          */
         inline TextureDataType getTextureDataType() const { return m_textureDataType; }
+        
+        /**
+         * @return Type of texture wrapping
+         */
+        inline TextureWrappingType getTextureWrappingType() const { return m_textureWrappingType; }
+        
+        /**
+         * @return Type of texture filtering
+         */
+        inline TextureFilteringType getTextureFilteringType() const { return m_textureFilteringType; }
         
         /**
          * @return The float coordinates.
@@ -374,6 +443,10 @@ namespace caret {
         
         void replaceFloatXYZ(const std::vector<float>& xyz);
         
+        void getFloatYComponents(std::vector<float>& yComponentsOut) const;
+        
+        void setFloatYComponents(const std::vector<float>& yComponents);
+        
         /**
          * @return The number of vertices
          */
@@ -381,6 +454,11 @@ namespace caret {
         
         void replaceVertexFloatXYZ(const int32_t vertexIndex,
                                    const float xyz[3]);
+        
+        void replaceAndTransformVertices(const GraphicsPrimitive* primitive,
+                                         const Matrix4x4Interface& matrix);
+        
+        void transformVerticesFloatXYZ(const Matrix4x4Interface& matrix);
         
         void getVertexFloatRGBA(const int32_t vertexIndex,
                                 float rgbaOut[4]) const;
@@ -435,6 +513,18 @@ namespace caret {
 
         void simplfyLines(const int32_t skipVertexCount);
         
+        void getMeanAndStandardDeviationForY(float& yMeanOut,
+                                             float& yStandardDeviationOut) const;
+        
+        void applyNewMeanAndDeviationToYComponents(const bool applyNewMeanFlag,
+                                                   const float newMean,
+                                                   const bool applyNewDeviationFlag,
+                                                   const float newDeviation,
+                                                   const bool applyAbsoluteValueFlag,
+                                                   bool& haveNanInfFlagOut);
+        
+        static AString getNewMeanDeviationOperationDescriptionInHtml();
+        
     protected:
         AString toStringPrivate(const bool includeAllDataFlag) const;
         
@@ -458,6 +548,8 @@ namespace caret {
         
         AString getVertexColorTypeAsText(const VertexColorType vertexColorType) const;
         
+        void invalidateVertexMeasurements();
+        
         const VertexDataType  m_vertexDataType;
         
         const NormalVectorDataType m_normalVectorDataType;
@@ -468,8 +560,14 @@ namespace caret {
         
         const TextureDataType m_textureDataType;
         
+        const TextureWrappingType m_textureWrappingType;
+        
+        const TextureFilteringType m_textureFilteringType;
+        
         const PrimitiveType m_primitiveType;
 
+        ReleaseInstanceDataMode m_releaseInstanceDataMode = ReleaseInstanceDataMode::DISABLED;
+        
         mutable bool m_boundingBoxValid = false;
         
         UsageType m_usageTypeCoordinates = UsageType::MODIFIED_ONCE_DRAWN_FEW_TIMES;
@@ -513,6 +611,22 @@ namespace caret {
         
         void fillTriangleStripPrimitiveRestartVertices();
         
+        void setOpenGLBuffersHaveBeenLoadedByGraphicsEngine();
+        
+        void applyNewMeanAndDeviationToYComponentsNoNaNs(std::vector<float>& data,
+                                                         const bool applyNewMeanFlag,
+                                                         const float newMean,
+                                                         const bool applyNewDeviationFlag,
+                                                         const float newDeviation,
+                                                         const bool applyAbsoluteValueFlag);
+        
+        void applyNewMeanAndDeviationToYComponentsWithNaNs(std::vector<float>& data,
+                                                           const bool applyNewMeanFlag,
+                                                           const float newMean,
+                                                           const bool applyNewDeviationFlag,
+                                                           const float newDeviation,
+                                                           const bool applyAbsoluteValueFlag);
+
         std::vector<float> m_xyz;
         
         std::vector<float> m_floatNormalVectorXYZ;
@@ -525,6 +639,10 @@ namespace caret {
         
         std::vector<uint8_t> m_textureImageBytesRGBA;
 
+        mutable float m_yMean = 0.0;
+        
+        mutable float m_yStandardDeviation = -1.0;
+        
         friend class GraphicsEngineDataOpenGL;
         friend class GraphicsOpenGLPolylineTriangles;
         friend class GraphicsPrimitiveSelectionHelper;

@@ -79,6 +79,16 @@ namespace caret {
 
         std::vector<WuQGridLayoutGroup*> m_chartOverlayGridLayoutGroups;
 
+        QLabel* m_allMapsLabel = NULL;
+        
+        QLabel* m_loadLabel = NULL;
+        
+        QLabel* m_opacityLabel = NULL;
+        
+        QLabel* m_lineWidthLabel = NULL;
+        
+        QLabel* m_pointLabel = NULL;
+        
         QScrollArea* m_scrollArea;
         
         QLabel* m_mapRowOrColumnIndexLabel = NULL;

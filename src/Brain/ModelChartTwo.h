@@ -88,6 +88,8 @@ namespace caret {
         
         virtual const ChartTwoOverlaySet* getChartTwoOverlaySet(const int tabIndex) const override;
         
+        std::vector<ChartTwoOverlaySet*> getAllChartTwoOverlaySets(const int32_t tabIndex) const;
+        
         virtual void receiveEvent(Event* event) override;
         
         void getValidChartTwoDataTypes(std::vector<ChartTwoDataTypeEnum::Enum>& validChartDataTypesOut) const;
@@ -135,13 +137,16 @@ namespace caret {
         
         mutable ChartTwoDataTypeEnum::Enum m_selectedChartTwoDataType[BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_TABS];
         
-        /** Chart Overlay sets for XX data type */
+        /** Chart Overlay sets for histogram data type */
         std::unique_ptr<ChartTwoOverlaySetArray> m_histogramChartOverlaySetArray;
         
-        /** Chart Overlay sets for XX data type */
+        /** Chart Overlay sets for line series data type */
         std::unique_ptr<ChartTwoOverlaySetArray> m_lineSeriesChartOverlaySetArray;
         
-        /** Chart Overlay sets for XX data type */
+        /** Chart Overlay sets for layer data type */
+        std::unique_ptr<ChartTwoOverlaySetArray> m_lineLayerChartOverlaySetArray;
+        
+        /** Chart Overlay sets for matrix data type */
         std::unique_ptr<ChartTwoOverlaySetArray> m_matrixChartOverlaySetArray;
         
         std::unique_ptr<SceneClassAssistant> m_sceneAssistant;

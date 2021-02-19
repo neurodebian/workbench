@@ -18,6 +18,7 @@
  */
 /*LICENSE_END*/
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <iostream>
@@ -89,6 +90,10 @@ VolumeFile::VolumeFile(const DataFileTypeEnum::Enum dataFileType)
     for (int32_t i = 0; i < BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_TABS; i++) {
         m_chartingEnabledForTab[i] = false;
     }
+    m_writingDoScale = false;
+    m_writingDType = NIFTI_TYPE_FLOAT32;
+    m_minScalingVal = -1.0;//unused, but make them consistent
+    m_maxScalingVal = 1.0;
     validateMembers();
 }
 
@@ -100,6 +105,10 @@ VolumeFile::VolumeFile()
     for (int32_t i = 0; i < BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_TABS; i++) {
         m_chartingEnabledForTab[i] = false;
     }
+    m_writingDoScale = false;
+    m_writingDType = NIFTI_TYPE_FLOAT32;
+    m_minScalingVal = -1.0;//unused, but make them consistent
+    m_maxScalingVal = 1.0;
     validateMembers();
 }
 
@@ -112,6 +121,10 @@ VolumeFile::VolumeFile(const vector<int64_t>& dimensionsIn, const vector<vector<
         m_chartingEnabledForTab[i] = false;
     }
     if (templateHeader != NULL) m_header.grabNew(templateHeader->clone());
+    m_writingDoScale = false;
+    m_writingDType = NIFTI_TYPE_FLOAT32;
+    m_minScalingVal = -1.0;//unused, but make them consistent
+    m_maxScalingVal = 1.0;
     validateMembers();
     setType(whatType);
 }
@@ -215,6 +228,11 @@ VolumeFile::clear()
     
     m_volumeFileEditorDelegate->clear();
     m_lazyInitializedDynamicConnectivityFile.reset();
+
+    m_writingDoScale = false;
+    m_writingDType = NIFTI_TYPE_FLOAT32;
+    m_minScalingVal = -1.0;//unused, but make them consistent
+    m_maxScalingVal = 1.0;
 }
 
 void VolumeFile::readFile(const AString& filename)
@@ -378,7 +396,30 @@ VolumeFile::writeFile(const AString& filename)
     outHeader.setDescription(("Connectome Workbench, version " + ApplicationInformation().getVersion()).toLatin1().constData());//30 chars, plus however many chars the version is (generally 5)
     outHeader.setSForm(getVolumeSpace().getSform());
     outHeader.setDimensions(getOriginalDimensions());
-    outHeader.setDataType(NIFTI_TYPE_FLOAT32);//could set this to an integer when type is label
+    if (getType() == SubvolumeAttributes::LABEL)
+    {
+        switch (m_writingDType)
+        {
+            case NIFTI_TYPE_INT16://ensure integer when type is label
+            case NIFTI_TYPE_INT32://int8 could be problematic for users, so disallow it?
+            case NIFTI_TYPE_INT64:
+            case NIFTI_TYPE_UINT16:
+            case NIFTI_TYPE_UINT32:
+            case NIFTI_TYPE_UINT64:
+                outHeader.setDataType(m_writingDType);
+                break;
+            default:
+                outHeader.setDataType(NIFTI_TYPE_INT32);
+                break;
+        }
+    } else {
+        if (m_writingDoScale)
+        {
+            outHeader.setDataTypeAndScaleRange(m_writingDType, m_minScalingVal, m_maxScalingVal);
+        } else {
+            outHeader.setDataType(m_writingDType);
+        }
+    }
     NiftiIO myIO;
     int outVersion = 1;
     if (!outHeader.canWriteVersion(1)) outVersion = 2;
@@ -399,6 +440,22 @@ VolumeFile::writeFile(const AString& filename)
     m_volumeFileEditorDelegate->clear();
     m_volumeFileEditorDelegate->updateIfVolumeFileChangedNumberOfMaps();
     clearModified();
+}
+
+void VolumeFile::setWritingDataTypeNoScaling(const int16_t& type)
+{
+    m_writingDType = type;//could do some validation here
+    m_writingDoScale = false;
+    m_minScalingVal = -1.0;
+    m_maxScalingVal = 1.0;
+}
+
+void VolumeFile::setWritingDataTypeAndScaling(const int16_t& type, const double& minval, const double& maxval)
+{
+    m_writingDType = type;//could do some validation here
+    m_writingDoScale = true;
+    m_minScalingVal = minval;
+    m_maxScalingVal = maxval;
 }
 
 bool VolumeFile::hasGoodSpatialInformation() const
@@ -432,12 +489,12 @@ float VolumeFile::interpolateValue(const float coordIn1, const float coordIn2, c
         {
             float indexSpace[3];
             spaceToIndex(coordIn1, coordIn2, coordIn3, indexSpace);
-            int64_t ind1low = floor(indexSpace[0]);
-            int64_t ind2low = floor(indexSpace[1]);
-            int64_t ind3low = floor(indexSpace[2]);
-            int64_t ind1high = ind1low + 1;
-            int64_t ind2high = ind2low + 1;
-            int64_t ind3high = ind3low + 1;
+            int64_t ind1low = floor(indexSpace[0] + 0.01f);//allow some rounding error
+            int64_t ind2low = floor(indexSpace[1] + 0.01f);//here these are ONLY used for checking validity
+            int64_t ind3low = floor(indexSpace[2] + 0.01f);//need to do something different in trilinear
+            int64_t ind1high = ceil(indexSpace[0] - 0.01f);
+            int64_t ind2high = ceil(indexSpace[1] - 0.01f);
+            int64_t ind3high = ceil(indexSpace[2] - 0.01f);
             if (!indexValid(ind1low, ind2low, ind3low, brickIndex, component) || !indexValid(ind1high, ind2high, ind3high, brickIndex, component))
             {
                 if (validOut != NULL) *validOut = false;//check for valid coord before deconvolving the frame
@@ -457,22 +514,31 @@ float VolumeFile::interpolateValue(const float coordIn1, const float coordIn2, c
         {
             float index1, index2, index3;
             spaceToIndex(coordIn1, coordIn2, coordIn3, index1, index2, index3);
-            int64_t ind1low = floor(index1);
-            int64_t ind2low = floor(index2);
-            int64_t ind3low = floor(index3);
+            {
+                int64_t ind1low = floor(index1 + 0.01f);//allow some rounding error for ONLY sanity checking
+                int64_t ind2low = floor(index2 + 0.01f);//need to do something different in the math
+                int64_t ind3low = floor(index3 + 0.01f);
+                int64_t ind1high = ceil(index1 - 0.01f);
+                int64_t ind2high = ceil(index2 - 0.01f);
+                int64_t ind3high = ceil(index3 - 0.01f);
+                if (!indexValid(ind1low, ind2low, ind3low, brickIndex, component) || !indexValid(ind1high, ind2high, ind3high, brickIndex, component))
+                {
+                    if (validOut != NULL) *validOut = false;
+                    if (getType() == SubvolumeAttributes::LABEL)
+                    {
+                        return getMapLabelTable(brickIndex)->getUnassignedLabelKey();
+                    } else {
+                        return INVALID_INTERP_VALUE;
+                    }
+                }
+            }
+            const int64_t* dims = getDimensionsPtr();
+            int64_t ind1low = min(max(int64_t(floor(index1)), int64_t(0)), dims[0] - 2);
+            int64_t ind2low = min(max(int64_t(floor(index2)), int64_t(0)), dims[1] - 2);
+            int64_t ind3low = min(max(int64_t(floor(index3)), int64_t(0)), dims[2] - 2);
             int64_t ind1high = ind1low + 1;
             int64_t ind2high = ind2low + 1;
             int64_t ind3high = ind3low + 1;
-            if (!indexValid(ind1low, ind2low, ind3low, brickIndex, component) || !indexValid(ind1high, ind2high, ind3high, brickIndex, component))
-            {
-                if (validOut != NULL) *validOut = false;
-                if (getType() == SubvolumeAttributes::LABEL)
-                {
-                    return getMapLabelTable(brickIndex)->getUnassignedLabelKey();
-                } else {
-                    return INVALID_INTERP_VALUE;
-                }
-            }
             float xhighWeight = index1 - ind1low;
             float xlowWeight = 1.0f - xhighWeight;
             float xinterp[2][2];//manually unrolled, because loops of 2 seem silly
@@ -2396,6 +2462,8 @@ VolumeFile::getBrainordinateMappingMatch(const CaretMappableDataFile* mapFile) c
  *    Indices of maps for which identification information is requested.
  * @param xyz
  *     Coordinate of voxel.
+ * @param dataValueSeparator
+ *    Separator between multiple data values
  * @param ijkOut
  *     Voxel indices of value.
  * @param textOut
@@ -2404,6 +2472,7 @@ VolumeFile::getBrainordinateMappingMatch(const CaretMappableDataFile* mapFile) c
 bool
 VolumeFile::getVolumeVoxelIdentificationForMaps(const std::vector<int32_t>& mapIndices,
                                                 const float xyz[3],
+                                                const AString& dataValueSeparator,
                                                 int64_t ijkOut[3],
                                                 AString& textOut) const
 {
@@ -2418,7 +2487,7 @@ VolumeFile::getVolumeVoxelIdentificationForMaps(const std::vector<int32_t>& mapI
     AString valuesText;
     for (const auto mapIndex : mapIndices) {
         if ( ! valuesText.isEmpty()) {
-            valuesText.append(", ");
+            valuesText.append(dataValueSeparator);
         }
         bool validFlag(false);
         const float value = getVoxelValue(xyz,
@@ -2437,6 +2506,9 @@ VolumeFile::getVolumeVoxelIdentificationForMaps(const std::vector<int32_t>& mapI
                 else {
                     valuesText.append("?");
                 }
+                valuesText.append(" ("
+                                  + getMapName(mapIndex)
+                                  + ")");
             }
             else {
                 valuesText.append(AString::number(value, 'f', 3));

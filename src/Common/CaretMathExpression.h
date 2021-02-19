@@ -61,7 +61,7 @@ class CaretMathExpression
         MathNode() { m_type = INVALID; m_function = MathFunctionEnum::INVALID; }
         MathNode(const ExprType& type) { m_type = type; m_function = MathFunctionEnum::INVALID; }
         double eval(const std::vector<float>& values) const;
-        AString toString(const std::vector<AString>& varNames) const;
+        AString toString(const std::vector<AString>& varNames, bool addParens = true) const;
     };
     std::map<AString, int> m_varNames;
     AString m_input;
@@ -70,6 +70,7 @@ class CaretMathExpression
     bool skipWhitespace();
     bool accept(const char& c);
     void expect(const char& c, const int& exprStart);
+    static bool isFuncNamePattern(const AString& testStr);
     CaretPointer<MathNode> orExpr();//hopefully we have enough stack space that we won't overflow without a hundred or so levels of parenthesis/functions/exponents
     CaretPointer<MathNode> andExpr();
     CaretPointer<MathNode> equalExpr();
