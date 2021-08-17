@@ -1,3 +1,11 @@
+connectome-workbench (1.5.0-2) unstable; urgency=medium
+
+  * Include upstream patch
+    https://github.com/Washington-University/workbench/commit/2605e8a98d23d229d54a9e6847ad64f678217ea7.patch
+    to resolve FTBFS with gcc-11 (Closes: #984024)
+
+ -- Yaroslav Halchenko <debian@onerussian.com>  Tue, 17 Aug 2021 18:54:41 -0400
+
 connectome-workbench (1.5.0-1) unstable; urgency=medium
 
   * Fresh upstream release
