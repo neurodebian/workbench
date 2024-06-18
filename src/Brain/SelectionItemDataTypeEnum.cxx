@@ -127,6 +127,10 @@ SelectionItemDataTypeEnum::initialize()
                                                  "CIFTI_CONNECTIVITY_MATRIX_ROW_COLUMN",
                                                  "CIFTI Connectivity Row or Column"));
     
+    enumData.push_back(SelectionItemDataTypeEnum(CZI_IMAGE,
+                                                 "CZI_IMAGE",
+                                                 "CZI Image"));
+    
     enumData.push_back(SelectionItemDataTypeEnum(FOCUS_SURFACE,
                                     "FOCUS_SURFACE", 
                                     "Surface Focus"));
@@ -134,6 +138,10 @@ SelectionItemDataTypeEnum::initialize()
     enumData.push_back(SelectionItemDataTypeEnum(FOCUS_VOLUME, 
                                     "FOCUS_VOLUME", 
                                     "Volume Focus"));
+    
+    enumData.push_back(SelectionItemDataTypeEnum(HISTOLOGY_PLANE_COORDINATE,
+                                                 "HISTOLOGY_PLANE_COORDINATE",
+                                                 "Histology Plane Coordinate"));
     
     enumData.push_back(SelectionItemDataTypeEnum(IMAGE,
                                                  "IMAGE",
@@ -143,30 +151,37 @@ SelectionItemDataTypeEnum::initialize()
                                                  "IMAGE_CONTROL_POINT",
                                                  "Image Control Point"));
     
+    enumData.push_back(SelectionItemDataTypeEnum(MEDIA_LOGICAL_COORDINATE,
+                                                 "MEDIA_LOGICAL_COORDINATE",
+                                                 "Media Logical Coordinate"));
+    
+    enumData.push_back(SelectionItemDataTypeEnum(MEDIA_PLANE_COORDINATE,
+                                                 "MEDIA_PLANE_COORDINATE",
+                                                 "Media Plane Coordinate"));
+    
     enumData.push_back(SelectionItemDataTypeEnum(SURFACE_NODE,
                                     "SURFACE_NODE", 
                                     "Surface Vertex"));
-    
-    enumData.push_back(SelectionItemDataTypeEnum(SURFACE_NODE_IDENTIFICATION_SYMBOL,
-                                                      "SURFACE_NODE_IDENTIFICATION_SYMBOL",
-                                                      "Surface Vertex Identification Symbol"));
     
     enumData.push_back(SelectionItemDataTypeEnum(SURFACE_TRIANGLE,
                                     "SURFACE_TRIANGLE", 
                                     "Surface Triangle"));
     
-    enumData.push_back(SelectionItemDataTypeEnum(VOXEL, 
-                                    "VOXEL", 
-                                    "Voxel"));
+    enumData.push_back(SelectionItemDataTypeEnum(UNIVERSAL_IDENTIFICATION_SYMBOL,
+                                                 "UNIVERSAL_IDENTIFICATION_SYMBOL",
+                                                 "Universal Identification Symbol"));
+    
+    enumData.push_back(SelectionItemDataTypeEnum(VOLUME_MPR_CROSSHAIR,
+                                                 "VOLUME_MPR_CROSSHAIR",
+                                                 "Volume MPR Crosshair"));
+
+    enumData.push_back(SelectionItemDataTypeEnum(VOXEL,
+                                                 "VOXEL",
+                                                 "Voxel"));
     
     enumData.push_back(SelectionItemDataTypeEnum(VOXEL_EDITING,
                                                  "VOXEL_EDITING",
-                                                 "Voxel Editing"));
-    
-    enumData.push_back(SelectionItemDataTypeEnum(VOXEL_IDENTIFICATION_SYMBOL,
-                                                 "VOXEL_IDENTIFICATION_SYMBOL",
-                                                 "Voxel Identification Symbol"));
-    
+                                                 "Voxel Editing"));    
 }
 
 /**

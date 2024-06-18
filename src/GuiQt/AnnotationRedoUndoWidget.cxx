@@ -28,13 +28,12 @@
 #include <QLabel>
 #include <QToolButton>
 
-#include "AnnotationManager.h"
-#include "Brain.h"
 #include "CaretAssert.h"
 #include "CaretUndoStack.h"
-#include "EventGraphicsUpdateAllWindows.h"
+#include "EventAnnotationGetBeingDrawnInWindow.h"
+#include "EventGraphicsPaintSoonAllWindows.h"
 #include "EventManager.h"
-#include "GuiManager.h"
+#include "UserInputModeAnnotations.h"
 #include "WuQMessageBox.h"
 #include "WuQtUtilities.h"
 
@@ -59,15 +58,18 @@ using namespace caret;
  *    The parent widget.
  */
 AnnotationRedoUndoWidget::AnnotationRedoUndoWidget(const Qt::Orientation orientation,
-                                                   const UserInputModeEnum::Enum userInputMode,
+                                                   UserInputModeAnnotations* userInputModeAnnotations,
                                                    const int32_t browserWindowIndex,
                                                    QWidget* parent)
 : QWidget(parent),
-m_userInputMode(userInputMode),
+m_userInputModeAnnotations(userInputModeAnnotations),
+m_userInputMode(userInputModeAnnotations->getUserInputMode()),
 m_browserWindowIndex(browserWindowIndex)
 {
-    QLabel* titleLabel = new QLabel("Edit");
+    CaretAssert(m_userInputModeAnnotations);
     
+    QLabel* titleLabel = new QLabel("Edit");
+
     m_redoAction = WuQtUtilities::createAction("Redo",
                                                "Redo ToolTip",
                                                this,
@@ -128,8 +130,13 @@ AnnotationRedoUndoWidget::~AnnotationRedoUndoWidget()
 void
 AnnotationRedoUndoWidget::updateContent(const std::vector<Annotation*>& annotations)
 {
-    AnnotationManager* annMan = GuiManager::get()->getBrain()->getAnnotationManager();
-    CaretUndoStack* undoStack = annMan->getCommandRedoUndoStack(m_userInputMode);
+    m_selectedAnnotations = annotations;
+    
+    EventAnnotationGetBeingDrawnInWindow annDrawEvent(m_userInputMode,
+                                                      m_browserWindowIndex);
+    EventManager::get()->sendEvent(annDrawEvent.getPointer());
+    
+    CaretUndoStack* undoStack = m_userInputModeAnnotations->getUndoRedoStack();
 
     m_redoAction->setEnabled(undoStack->canRedo());
     m_redoAction->setToolTip(undoStack->redoText());
@@ -142,16 +149,14 @@ AnnotationRedoUndoWidget::updateContent(const std::vector<Annotation*>& annotati
                || m_undoAction->isEnabled());
 }
 
-
 /**
  * Gets called when the redo action is triggered
  */
 void
 AnnotationRedoUndoWidget::redoActionTriggered()
 {
-    AnnotationManager* annMan = GuiManager::get()->getBrain()->getAnnotationManager();
-    CaretUndoStack* undoStack = annMan->getCommandRedoUndoStack(m_userInputMode);
-    
+    CaretUndoStack* undoStack = m_userInputModeAnnotations->getUndoRedoStack();
+
     AString errorMessage;
     if ( ! undoStack->redoInWindow(m_browserWindowIndex,
                                    errorMessage)) {
@@ -160,7 +165,7 @@ AnnotationRedoUndoWidget::redoActionTriggered()
     }
     
     EventManager::get()->sendSimpleEvent(EventTypeEnum::EVENT_ANNOTATION_TOOLBAR_UPDATE);
-    EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+    EventManager::get()->sendEvent(EventGraphicsPaintSoonAllWindows().getPointer());
 }
 
 /**
@@ -169,9 +174,8 @@ AnnotationRedoUndoWidget::redoActionTriggered()
 void
 AnnotationRedoUndoWidget::undoActionTriggered()
 {
-    AnnotationManager* annMan = GuiManager::get()->getBrain()->getAnnotationManager();
-    CaretUndoStack* undoStack = annMan->getCommandRedoUndoStack(m_userInputMode);
-    
+    CaretUndoStack* undoStack = m_userInputModeAnnotations->getUndoRedoStack();
+
     AString errorMessage;
     if ( ! undoStack->undoInWindow(m_browserWindowIndex,
                                    errorMessage)) {
@@ -180,6 +184,7 @@ AnnotationRedoUndoWidget::undoActionTriggered()
     }
     
     EventManager::get()->sendSimpleEvent(EventTypeEnum::EVENT_ANNOTATION_TOOLBAR_UPDATE);
-    EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+    EventManager::get()->sendEvent(EventGraphicsPaintSoonAllWindows().getPointer());
 }
+
 

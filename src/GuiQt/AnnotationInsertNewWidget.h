@@ -26,23 +26,30 @@
 
 #include "AnnotationCoordinateSpaceEnum.h"
 #include "AnnotationTypeEnum.h"
+#include "EventListenerInterface.h"
+#include "UserInputModeEnum.h"
 
+class QAbstractButton;
 class QActionGroup;
+class QSpinBox;
+class QRadioButton;
 class QToolButton;
 
 namespace caret {
     class AnnotationMenuFileSelection;
     
-    class AnnotationInsertNewWidget : public QWidget {
+    class AnnotationInsertNewWidget : public QWidget, public EventListenerInterface {
         
         Q_OBJECT
 
     public:
-        AnnotationInsertNewWidget(const int32_t browserWindowIndex,
+        AnnotationInsertNewWidget(const UserInputModeEnum::Enum userInputMode,
+                                  const int32_t browserWindowIndex,
                                   QWidget* parent = 0);
         
         virtual ~AnnotationInsertNewWidget();
         
+        virtual void receiveEvent(Event* event);
 
         // ADD_NEW_METHODS_HERE
 
@@ -53,7 +60,17 @@ namespace caret {
         
         void spaceOrShapeActionTriggered();
         
+        void newSampleActionTriggered();
+        
+        void newSampleDepthValueChanged(int value);
+        
     private:
+        enum class WidgetMode {
+            INVALID,
+            ANNOTATIONS,
+            SAMPLES
+        };
+        
         AnnotationInsertNewWidget(const AnnotationInsertNewWidget&);
 
         AnnotationInsertNewWidget& operator=(const AnnotationInsertNewWidget&);
@@ -74,7 +91,17 @@ namespace caret {
         
         void enableDisableSpaceActions();
         
+        void enableDisableShapeActions();
+        
+        void createAnnotationsWidgets();
+        
+        void createEditSamplesWidgets();
+        
+        const UserInputModeEnum::Enum m_userInputMode;
+        
         const int32_t m_browserWindowIndex;
+        
+        WidgetMode m_widgetMode = WidgetMode::INVALID;
         
         QActionGroup* m_spaceActionGroup;
         
@@ -84,11 +111,15 @@ namespace caret {
         
         AnnotationMenuFileSelection* m_fileSelectionMenu;
         
+        QToolButton* m_polygonToolButton = NULL;
+        
         QToolButton* m_polyLineToolButton = NULL;
         
-        AString m_polyLineDrawClicksToolTipText;
+        QAction* m_newSampleAction = NULL;
         
-        AString m_polyLineDrawDragToolTipText;
+        QSpinBox* m_newSampleDepthSpinBox = NULL;
+        
+        int32_t m_previousNewSampleDepthSpinBoxValue = 3;
         
         static AString s_previousImageFileDirectory;
         

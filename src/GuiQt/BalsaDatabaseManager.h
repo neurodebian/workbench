@@ -72,6 +72,13 @@ namespace caret {
         bool updateSceneIDs(SceneFile* sceneFile,
                             AString& errorMessageOut);
         
+        bool checkSceneIDs(SceneFile* sceneFile,
+                           AString& errorMessageOut);
+        
+        bool processCheckSceneIdResponse(SceneFile* sceneFile,
+                                         const AString& responseContent,
+                                         AString& errorMessageOut);
+        
         bool uploadZippedSceneFile(SceneFile* sceneFile,
                                    const AString& zipFileName,
                                    const AString& extractToDirectoryName,
@@ -84,6 +91,8 @@ namespace caret {
         
         bool isStudyEditableByUser(const AString& studyID,
                                    AString& errorMessageOut);
+        
+        AString getInfoMessages() const;
         
         // ADD_NEW_METHODS_HERE
 
@@ -159,6 +168,8 @@ namespace caret {
         AString m_password;
         
         AString m_jSessionIdCookie;
+        
+        AString m_infoMessages;
         
         bool m_debugFlag;
         

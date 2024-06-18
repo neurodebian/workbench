@@ -24,6 +24,7 @@
 #undef __CHART_TWO_OVERLAY_VIEW_CONTROLLER_DECLARE__
 
 #include <QAction>
+#include <QActionGroup>
 #include <QApplication>
 #include <QCheckBox>
 #include <QClipboard>
@@ -51,8 +52,9 @@
 #include "ElapsedTimer.h"
 #include "EnumComboBoxTemplate.h"
 #include "EventDataFileReload.h"
-#include "EventGraphicsUpdateAllWindows.h"
-#include "EventGraphicsUpdateOneWindow.h"
+#include "EventGraphicsPaintNowOneWindow.h"
+#include "EventGraphicsPaintSoonAllWindows.h"
+#include "EventGraphicsPaintSoonOneWindow.h"
 #include "EventManager.h"
 #include "EventMapYokingSelectMap.h"
 #include "EventOverlaySettingsEditorDialogRequest.h"
@@ -283,8 +285,8 @@ m_parentObjectName(parentObjectName)
      */
     const int greekMu(0x03bc);
     const int greekSigma(0x03c3);
-    const QString normActionText(QString(greekMu)
-                                 + QString(greekSigma));
+    const QString normActionText(QString(QChar(greekMu))
+                                 + QString(QChar(greekSigma)));
     const QString normActionToolTipText("<html><body>"
                                         "Transform chart data elements"
                                         "</body></html>");
@@ -526,10 +528,16 @@ ChartTwoOverlayViewController::mapRowOrColumnIndexSpinBoxValueChanged(int indxIn
     
     const MapYokingGroupEnum::Enum mapYoking = m_chartOverlay->getMapYokingGroup();
     if (mapYoking != MapYokingGroupEnum::MAP_YOKING_GROUP_OFF) {
+        AnnotationTextSubstitutionFile* nullAnnTextFile(NULL);
+        HistologySlicesFile* nullHistologySlicesFile(NULL);
+        MediaFile* nullMediaFile(NULL);
         EventMapYokingSelectMap selectMapEvent(mapYoking,
                                                file,
-                                               NULL,
+                                               nullAnnTextFile,
+                                               nullHistologySlicesFile,
+                                               nullMediaFile,
                                                indx,
+                                               MapYokingGroupEnum::MediaAllFramesStatus::ALL_FRAMES_OFF,
                                                m_chartOverlay->isEnabled());
         EventManager::get()->sendEvent(selectMapEvent.getPointer());
     }
@@ -579,10 +587,16 @@ ChartTwoOverlayViewController::mapRowOrColumnNameComboBoxSelected(int indx)
     
     const MapYokingGroupEnum::Enum mapYoking = m_chartOverlay->getMapYokingGroup();
     if (mapYoking != MapYokingGroupEnum::MAP_YOKING_GROUP_OFF) {
+        AnnotationTextSubstitutionFile* nullAnnTextFile(NULL);
+        HistologySlicesFile* nullHistologySlicesFile(NULL);
+        MediaFile* nullMediaFile(NULL);
         EventMapYokingSelectMap selectMapEvent(mapYoking,
                                                file,
-                                               NULL,
+                                               nullAnnTextFile,
+                                               nullHistologySlicesFile,
+                                               nullMediaFile,
                                                indx,
+                                               MapYokingGroupEnum::MediaAllFramesStatus::ALL_FRAMES_OFF,
                                                m_chartOverlay->isEnabled());
         EventManager::get()->sendEvent(selectMapEvent.getPointer());
     }
@@ -631,10 +645,16 @@ ChartTwoOverlayViewController::enabledCheckBoxClicked(bool checked)
                                          selectedIndex);
         
         if (selectedIndexType == ChartTwoOverlay::SelectedIndexType::MAP) {
+            AnnotationTextSubstitutionFile* nullAnnTextFile(NULL);
+            HistologySlicesFile* nullHistologySlicesFile(NULL);
+            MediaFile* nullMediaFile(NULL);
             EventMapYokingSelectMap selectMapEvent(mapYoking,
                                                    mapFile,
-                                                   NULL,
+                                                   nullAnnTextFile,
+                                                   nullHistologySlicesFile,
+                                                   nullMediaFile,
                                                    selectedIndex,
+                                                   MapYokingGroupEnum::MediaAllFramesStatus::ALL_FRAMES_OFF,
                                                    m_chartOverlay->isEnabled());
             EventManager::get()->sendEvent(selectMapEvent.getPointer());
         }
@@ -1145,10 +1165,10 @@ ChartTwoOverlayViewController::updateGraphicsWindow()
 {
     if (m_chartOverlay->getMapYokingGroup() != MapYokingGroupEnum::MAP_YOKING_GROUP_OFF) {
         EventManager::get()->sendEvent(EventSurfaceColoringInvalidate().getPointer());
-        EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+        EventManager::get()->sendEvent(EventGraphicsPaintSoonAllWindows().getPointer());
     }
     else {
-        EventManager::get()->sendEvent(EventGraphicsUpdateOneWindow(m_browserWindowIndex).getPointer());
+        EventManager::get()->sendEvent(EventGraphicsPaintSoonOneWindow(m_browserWindowIndex).getPointer());
     }
 }
 
@@ -1372,9 +1392,7 @@ ChartTwoOverlayViewController::selectedPointIndexSpinBoxValueChanged(int index)
              * If we did not do this, the window position may be 'stale' (from
              * a previous graphics update)
              */
-            const bool doRepaintFlag(true);
-            EventGraphicsUpdateOneWindow graphicsEvent(m_browserWindowIndex,
-                                                       doRepaintFlag);
+            EventGraphicsPaintNowOneWindow graphicsEvent(m_browserWindowIndex);
             EventManager::get()->sendEvent(graphicsEvent.getPointer());
         }
     }
@@ -1870,8 +1888,7 @@ ChartTwoOverlayViewController::menuConstructionPreColorAllFiles()
          * Need to to a graphics update with a repaint (a synchronous
          * graphics update) so that file is actually drawn.
          */
-        EventGraphicsUpdateOneWindow graphicsEvent(m_browserWindowIndex,
-                                                   true);
+        EventGraphicsPaintNowOneWindow graphicsEvent(m_browserWindowIndex);
         EventManager::get()->sendEvent(graphicsEvent.getPointer());
         QApplication::processEvents();
     }

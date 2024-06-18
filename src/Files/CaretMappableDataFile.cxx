@@ -34,7 +34,6 @@
 #include "DataFileContentInformation.h"
 #include "EventManager.h"
 #include "FastStatistics.h"
-#include "FileIdentificationAttributes.h"
 #include "FileInformation.h"
 #include "GiftiLabelTable.h"
 #include "GiftiMetaDataXmlElements.h"
@@ -110,7 +109,6 @@ void
 CaretMappableDataFile::initializeCaretMappableDataFileInstance(const DataFileTypeEnum::Enum /*dataFileType*/)
 {
     m_labelDrawingProperties = std::unique_ptr<LabelDrawingProperties>(new LabelDrawingProperties());
-    m_fileIdentificationAttributes.reset(new FileIdentificationAttributes());
     m_applyToAllMapsSelected = false;
 }
 
@@ -284,9 +282,17 @@ CaretMappableDataFile::applyPaletteColorMappingToAllMaps(const int32_t mapIndex)
     for (int32_t i = 0; i < numMaps; i++) {
         if (i != mapIndex) {
             PaletteColorMapping* pcm = getMapPaletteColorMapping(i);
-                pcm->copy(*mapColoring,
-                          false);
+            const bool copyHistogramAttributesFlag(true);
+            pcm->copy(*mapColoring,
+                      copyHistogramAttributesFlag);
         }
+        
+        /*
+         * Want all palette color mappings modified.
+         * Otherwise, this index might remain unmodified and the
+         * auto palette fixing when scenes are loaded may
+         */
+        getMapPaletteColorMapping(mapIndex)->setModified();
     }
 }
 
@@ -363,9 +369,6 @@ CaretMappableDataFile::saveFileDataToScene(const SceneAttributes* sceneAttribute
     sceneClass->addClass(m_labelDrawingProperties->saveToScene(sceneAttributes,
                                                                "m_labelDrawingProperties"));
     
-    sceneClass->addClass(m_fileIdentificationAttributes->saveToScene(sceneAttributes,
-                                                                     "m_fileIdentificationAttributes"));
-
     if (m_chartingDelegate != NULL) {
         SceneClass* chartDelegateScene = m_chartingDelegate->saveToScene(sceneAttributes,
                                                                          "m_chartingDelegate");
@@ -512,8 +515,6 @@ CaretMappableDataFile::restoreFileDataFromScene(const SceneAttributes* sceneAttr
     
     m_labelDrawingProperties->restoreFromScene(sceneAttributes,
                                                sceneClass->getClass("m_labelDrawingProperties"));
-    m_fileIdentificationAttributes->restoreFromScene(sceneAttributes,
-                                                     sceneClass->getClass("m_fileIdentificationAttributes"));
     
     const SceneClass* chartingDelegateClass = sceneClass->getClass("m_chartingDelegate");
     ChartableTwoFileDelegate* chartDelegate = getChartingDelegate();
@@ -556,10 +557,56 @@ CaretMappableDataFile::restoreFileDataFromScene(const SceneAttributes* sceneAttr
             }
         }
         
+        /*
+         * This enables fixing of palettes for files that have palette settings
+         * for each map; apply to all maps is enabled; there is at least one
+         * palettes settings in the scene for the file; and the number of maps
+         * in the file does not match the number of palette settings in the scene
+         * for the file
+         */
+        const bool enablePaletteFixingFlag(true);
+        
+        /*
+         * Will be set to true if we find that the file's palette
+         * settings need to be updated.
+         */
+        bool fixFilesPalettesFlag(false);
+
+        std::vector<AString> paletteErrorMessages;
+        int32_t numberOfMapPaletteSettings(-1);
+        
         const int32_t numMaps = getNumberOfMaps();
         const SceneClassArray* pcmArray = sceneClass->getClassArray("savedPaletteColorMappingArray");
         if (pcmArray != NULL) {
             const int32_t numElements = pcmArray->getNumberOfArrayElements();
+            if (enablePaletteFixingFlag) {
+                if ( ! isOnePaletteUsedForAllMaps()) {
+                    if ((numElements > 0)
+                        && (numMaps > 0)
+                        && (numMaps != numElements)) {
+                        
+                        //std::cout << "*** Maps=" << numMaps << ", palettes=" << numElements << " file: " << getFileNameNoPath() << std::endl;
+                        
+                        numberOfMapPaletteSettings = numElements;
+                        
+                        if (sceneAttributes->isLogFilesWithPaletteSettingsErrors()) {
+                            
+                            
+                            /*
+                             * Number of maps in file is different than number of palette settings
+                             * in the scene for the file.  This is used by the
+                             * scene file update command that will fix the palette errors itself.
+                             */
+                            sceneAttributes->addToMapFilesWithPaletteSettingsErrors(this,
+                                                                                    getFileName());
+                        }
+                        else {
+                            fixFilesPalettesFlag = true;
+                        }
+                    }
+                }
+            }
+
             for (int32_t i = 0; i < numElements; i++) {
                 const SceneClass* pcmClass = pcmArray->getClassAtIndex(i);
                 
@@ -666,13 +713,26 @@ CaretMappableDataFile::restoreFileDataFromScene(const SceneAttributes* sceneAttr
                     }
                 }
                 else {
-                    const AString msg = ("Unable to find map for restoring palette settings for file: "
-                                         + getFileNameNoPath()
-                                         + "  Map Name: "
-                                         + mapName
-                                         + "  Map Index: "
-                                         + AString::number(mapIndex));
-                    sceneAttributes->addToErrorMessage(msg);
+                    if (sceneAttributes->isLogFilesWithPaletteSettingsErrors()) {
+                        /* Prevent logging of error message */
+                    }
+                    else {
+                        const AString msg = ("Unable to find map for restoring palette settings for file: "
+                                             + getFileNameNoPath()
+                                             + "  Map Name: "
+                                             + mapName
+                                             + "  Map Index: "
+                                             + AString::number(mapIndex));
+                        if (fixFilesPalettesFlag) {
+                            /*
+                             * Message may be displayed later
+                             */
+                            paletteErrorMessages.push_back(msg);
+                        }
+                        else {
+                            sceneAttributes->addToErrorMessage(msg);
+                        }
+                    }
                 }
             }
         }
@@ -707,6 +767,39 @@ CaretMappableDataFile::restoreFileDataFromScene(const SceneAttributes* sceneAttr
             m_applyToAllMapsSelected = applyToAllMapsPrimitive->booleanValue();
         }
         
+        /*
+         * Need to fix here since we need to know if Apply to All Maps is enabled
+         */
+        if (fixFilesPalettesFlag
+            && m_applyToAllMapsSelected) {
+            /*
+             * Only need to set palettes if the number of maps has increased
+             */
+            if (numMaps != numberOfMapPaletteSettings) {
+                if (numMaps > numberOfMapPaletteSettings) {
+                    /*
+                     * Apply the first map to all maps
+                     */
+                    const int32_t mapIndex(0);
+                    applyPaletteColorMappingToAllMaps(mapIndex);
+                }
+                CaretLogInfo("Fixed incorrect palette settings count (maps="
+                             + AString::number(numMaps)
+                             + ", paletteSettings="
+                             + AString::number(numberOfMapPaletteSettings)
+                             + ") for "
+                             + getFileNameNoPath()
+                             + ".  Replacing the scene will eliminate this message.");
+            }
+        }
+        else {
+            /*
+             * Cannot fix palette errors so keep any error messages
+             */
+            for (const auto& msg : paletteErrorMessages) {
+                sceneAttributes->addToErrorMessage(msg);
+            }
+        }
         /*
          * README ABOUT IMPORTANCE OF MODIFIED COLOR PALLETTE MAPPING STATUS MUST REMAIN ON
          *
@@ -1510,6 +1603,8 @@ const CiftiXML CaretMappableDataFile::getCiftiXML() const
  *    Number of nodes in the surface.
  * @param dataValueSeparator
  *    Separator between multiple data values
+ * @param digitsRightOfDecimal
+ *    Digits right of decimal for real data
  * @param textOut
  *    Output containing identification information.
  */
@@ -1519,6 +1614,7 @@ CaretMappableDataFile::getSurfaceNodeIdentificationForMaps(const std::vector<int
                                                            const int /*nodeIndex*/,
                                                            const int32_t /*numberOfNodes*/,
                                                            const AString& /*dataValueSeparator*/,
+                                                           const int32_t /*digitsRightOfDecimal*/,
                                                            AString& textOut) const
 {
     textOut.clear();
@@ -1543,6 +1639,7 @@ bool
 CaretMappableDataFile::getVolumeVoxelIdentificationForMaps(const std::vector<int32_t>& /*mapIndices*/,
                                                            const float* /*xyz[3]*/,
                                                            const AString& /*dataValueSeparator*/,
+                                                           const int32_t /*digitsRightOfDecimal*/,
                                                            int64_t* /*ijkOut[3]*/,
                                                            AString& textOut) const
 {
@@ -1551,21 +1648,21 @@ CaretMappableDataFile::getVolumeVoxelIdentificationForMaps(const std::vector<int
 }
 
 /**
- * @return The file identification attributes
+ * @return File casted to caret mappable data  file (avoids use of dynamic_cast that can be slow)
+ * Overidden in MediaFile
  */
-FileIdentificationAttributes*
-CaretMappableDataFile::getFileIdentificationAttributes()
+CaretMappableDataFile*
+CaretMappableDataFile::castToCaretMappableDataFile()
 {
-    return m_fileIdentificationAttributes.get();
+    return this;
 }
 
 /**
- * @return The file identification attributes (const method)
+ * @return File casted to an caret mappable data file (avoids use of dynamic_cast that can be slow)
+ * Overidden in ImageFile
  */
-const FileIdentificationAttributes*
-CaretMappableDataFile::getFileIdentificationAttributes() const
+const CaretMappableDataFile*
+CaretMappableDataFile::castToCaretMappableDataFile() const
 {
-    return m_fileIdentificationAttributes.get();
+    return this;
 }
-
-

@@ -30,44 +30,27 @@ using namespace caret;
     
 /**
  * \class caret::GraphicsPrimitiveV3fT3f 
- * \brief Primitive containing XYZ with and texture coordinates applied to all vertices.
+ * \brief Primitive containing XYZ with and texture coordinates applied to all vertices for 3D images (volumes)
  * \ingroup Graphics
  */
 
 /**
  * Constructor for solid color float RGBA.
- * 
+ *
  * @param primitiveType
  *     Type of primitive drawn (triangles, lines, etc.)
- * @param imageBytesRGBA
- *     Bytes containing the image data.
- * @param imageWidth
- *     Width of the actual image.
- * @param imageHeight
- *     Height of the image.
- * @param textureWrappingType
- *     Type of texture wrapping
- * @param textureFilteringType
- *     Type of texture filtering
+ * @param textureSettings
+ *     Settings for textures
  */
 GraphicsPrimitiveV3fT3f::GraphicsPrimitiveV3fT3f(const PrimitiveType primitiveType,
-                                                 const uint8_t* imageBytesRGBA,
-                                                 const int32_t imageWidth,
-                                                 const int32_t imageHeight,
-                                                 const TextureWrappingType textureWrappingType,
-                                                 const TextureFilteringType textureFilteringType)
+                                                 const GraphicsTextureSettings& textureSettings)
 : GraphicsPrimitive(VertexDataType::FLOAT_XYZ,
                     NormalVectorDataType::NONE,
                     ColorDataType::NONE,
                     VertexColorType::NONE,
-                    TextureDataType::FLOAT_STR,
-                    textureWrappingType,
-                    textureFilteringType,
+                    textureSettings,
                     primitiveType)
 {
-    setTextureImage(imageBytesRGBA,
-                    imageWidth,
-                    imageHeight);
 }
 
 /**
@@ -104,14 +87,13 @@ GraphicsPrimitiveV3fT3f::copyHelperGraphicsPrimitiveV3fT3f(const GraphicsPrimiti
  * 
  * @param xyz
  *     Coordinate of vertex.
- * @parma st
+ * @parma str
  *     Texture coordinates
  */
 void
 GraphicsPrimitiveV3fT3f::addVertex(const float xyz[3],
-                                   const float st[2])
+                                   const float str[2])
 {
-    const float str[] { st[0], st[1], 0.0f } ;
     addVertexProtected(xyz,
                        NULL,
                        NULL,
@@ -132,39 +114,21 @@ GraphicsPrimitiveV3fT3f::addVertex(const float xyz[3],
  *     S-coordinate of texture
  * @param t
  *     T-coordinate of texture
+ * @param r
+ *     R-coordinate of texture
  */
 void
 GraphicsPrimitiveV3fT3f::addVertex(const float x,
                                    const float y,
                                    const float z,
                                    const float s,
-                                   const float t)
+                                   const float t,
+                                   const float r)
 {
     const float xyz[] { x, y, z };
-    const float str[] { s, t, 0.0f };
+    const float str[] { s, t, r };
     addVertex(xyz,
               str);
-}
-
-/**
- * Add a 2D vertex.  Z will be zero.
- *
- * @param x
- *     X-coordinate of vertex.
- * @param y
- *     Y-coordinate of vertex.
- * @param s
- *     S-coordinate of texture
- * @param t
- *     T-coordinate of texture
- */
-void
-GraphicsPrimitiveV3fT3f::addVertex(const float x,
-                                   const float y,
-                                   const float s,
-                                   const float t)
-{
-    addVertex(x, y, 0.0f, s, t);
 }
 
 /**

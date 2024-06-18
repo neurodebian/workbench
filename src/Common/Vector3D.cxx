@@ -18,6 +18,10 @@
  */
 /*LICENSE_END*/
 
+#include <cmath>
+
+#include <QStringList>
+
 #include "MathFunctions.h"
 #include "Vector3D.h"
 
@@ -216,4 +220,135 @@ Vector3D& Vector3D::operator=(const float* right)
     m_vec[1] = right[1];
     m_vec[2] = right[2];
     return *this;
+}
+
+void Vector3D::fill(const float value)
+{
+    m_vec[0] = value;
+    m_vec[1] = value;
+    m_vec[2] = value;
+}
+
+void Vector3D::set(const float x, const float y, const float z)
+{
+    m_vec[0] = x;
+    m_vec[1] = y;
+    m_vec[2] = z;
+}
+
+/**
+ * Compute the signed angle between 'this' and 'right'.
+ * Both 'this' and 'right' must lie in the plane with the normal vector 'normal'
+ * @param right
+ *    Vector that has angle computed between 'this'
+ * @param normal
+ *    Normal vector of plane in which both vector lie
+ * @return
+ *    The signed angle between 'this' and 'right'
+ *
+ * NOTE: Code is adapted from vtkMath::SignedAngleBetweenVectors()
+ * https://vtk.org/doc/nightly/html/classvtkMath.html
+ *
+ *  =========================================================================
+ *
+ *  Program:   Visualization Toolkit
+ *  Module:    vtkMath.h
+ *
+ *  Copyright (c) Ken Martin, Will Schroeder, Bill Lorensen
+ *  All rights reserved.
+ *  See Copyright.txt or http://www.kitware.com/Copyright.htm for details.
+ *
+ *  This software is distributed WITHOUT ANY WARRANTY; without even
+ *  the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+ *  PURPOSE.  See the above copyright notice for more information.
+ *
+ *  =========================================================================
+ *  Copyright 2011 Sandia Corporation.
+ *  Under the terms of Contract DE-AC04-94AL85000, there is a non-exclusive
+ *  license for use of this work by or on behalf of the
+ *  U.S. Government. Redistribution and use in source and binary forms, with
+ *  or without modification, are permitted provided that this Notice and any
+ *  statement of authorship are reproduced on all copies.
+ *
+ *  Contact: pppebay@sandia.gov,dcthomp@sandia.gov
+ *
+ * =========================================================================
+ *
+ */
+float
+Vector3D::signedAngleRadians(const Vector3D& right,
+                             const Vector3D& normal) const
+{
+    /*
+     * Code from vtkMath::SignedAngleBetweenVectors()
+     *
+     * double cross[3];
+     * vtkMath::Cross(v1, v2, cross);
+     * double angle = atan2(vtkMath::Norm(cross), vtkMath::Dot(v1, v2));
+     * return vtkMath::Dot(cross, vn) >= 0 ? angle : -angle;
+     */
+    
+    Vector3D cross(this->cross(right));
+    double angle(atan2(cross.length(),
+                       this->dot(right)));
+    angle = (cross.dot(normal) >= 0) ? angle : -angle;
+    return angle;
+}
+
+/**
+ * @return vector as a string separated by commas and enclosed in parenthesis
+ * @param precision
+ *    Digits right of decimal
+ */
+AString
+Vector3D::toString(const int32_t precision) const
+{
+    return AString("("
+                   + AString::fromNumbers(m_vec,
+                                          3,    /* number of elements */
+                                          ", ", /* separator */
+                                          'f',  /* format */
+                                          precision)
+                   + ")");
+
+}
+
+/**
+ * Read three values from a string and numeric values in Vector3D
+ * @param s
+ *    The string with values separated by a comma
+ * @param validFlag
+ *   If not NULL, will be set to true if conversion from string to
+ *   Vector3D was successful.
+ */
+Vector3D
+Vector3D::fromString(const AString& s,
+                     bool* validFlag)
+{
+    if (validFlag != NULL) {
+        *validFlag = false;
+    }
+    
+    Vector3D xyz;
+    xyz.fill(0.0);
+    
+#if QT_VERSION >= 0x060000
+    const QStringList stringList(s.split(",",
+                                         Qt::SkipEmptyParts));
+#else
+    const QStringList stringList(s.split(",",
+                                         QString::SkipEmptyParts));
+#endif
+    if (stringList.size() == 3) {
+        bool xValid(false), yValid(false), zValid(false);
+        xyz[0] = stringList.at(0).toFloat(&xValid);
+        xyz[1] = stringList.at(1).toFloat(&yValid);
+        xyz[2] = stringList.at(2).toFloat(&zValid);
+        
+        if (validFlag != NULL) {
+            *validFlag = (xValid && yValid && zValid);
+        }
+    }
+
+    return xyz;
 }

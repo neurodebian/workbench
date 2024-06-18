@@ -32,7 +32,7 @@
 #include "AnnotationText.h"
 #include "Brain.h"
 #include "CaretAssert.h"
-#include "EventGraphicsUpdateAllWindows.h"
+#include "EventGraphicsPaintSoonAllWindows.h"
 #include "EventManager.h"
 #include "GuiManager.h"
 #include "WuQMessageBox.h"
@@ -49,14 +49,18 @@ using namespace caret;
 /**
  * Constructor.
  *
+ * @param userInputMode
+ *    The user input mode
  * @param textAnnotation
  *    Text annotation that will be edited.
  * @param parent
  *    Parent of this dialog.
  */
-AnnotationTextEditorDialog::AnnotationTextEditorDialog(AnnotationText* textAnnotation,
+AnnotationTextEditorDialog::AnnotationTextEditorDialog(const UserInputModeEnum::Enum userInputMode,
+                                                       AnnotationText* textAnnotation,
                                                        QWidget* parent)
 : QDialog(parent),
+m_userInputMode(userInputMode),
 m_textAnnotation(textAnnotation)
 {
     CaretAssert(textAnnotation);
@@ -126,19 +130,18 @@ void
 AnnotationTextEditorDialog::textWasEdited()
 {
     const QString text = m_textEdit->toPlainText();
-    AnnotationManager* annMan = GuiManager::get()->getBrain()->getAnnotationManager();
+    AnnotationManager* annMan = GuiManager::get()->getBrain()->getAnnotationManager(m_userInputMode);
     AnnotationRedoUndoCommand* undoCommand = new AnnotationRedoUndoCommand();
     std::vector<Annotation*> annotationVector;
     annotationVector.push_back(m_textAnnotation);
     undoCommand->setModeTextCharacters(text,
                                        annotationVector);
     AString errorMessage;
-    if ( ! annMan->applyCommand(UserInputModeEnum::Enum::ANNOTATIONS,
-                                undoCommand,
+    if ( ! annMan->applyCommand(undoCommand,
                                 errorMessage)) {
         WuQMessageBox::errorOk(this,
                                errorMessage);
     }
     EventManager::get()->sendSimpleEvent(EventTypeEnum::EVENT_ANNOTATION_TOOLBAR_UPDATE);
-    EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+    EventManager::get()->sendEvent(EventGraphicsPaintSoonAllWindows().getPointer());
 }

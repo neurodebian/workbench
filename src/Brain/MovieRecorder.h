@@ -33,7 +33,6 @@
 #include "MovieRecorderVideoResolutionTypeEnum.h"
 
 class QImage;
-class QStringList;
 
 namespace caret {
     class MovieRecorder : public CaretObject {
@@ -140,6 +139,9 @@ namespace caret {
                                          QString& errorMessageOut);
         
         bool waitForImagesToFinishWriting();
+        
+        bool findFFmpegProgram(AString& programNameOut,
+                               AString& errorMessageOut) const;
         
         MovieRecorderModeEnum::Enum m_recordingMode = MovieRecorderModeEnum::MANUAL;
         

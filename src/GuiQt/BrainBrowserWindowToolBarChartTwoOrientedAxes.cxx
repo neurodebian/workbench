@@ -42,7 +42,7 @@
 #include "EnumComboBoxTemplate.h"
 #include "EventBrowserTabGet.h"
 #include "EventBrowserWindowGraphicsRedrawn.h"
-#include "EventGraphicsUpdateAllWindows.h"
+#include "EventGraphicsPaintSoonAllWindows.h"
 #include "EventManager.h"
 #include "ModelChartTwo.h"
 #include "WuQDoubleSpinBox.h"
@@ -721,7 +721,7 @@ BrainBrowserWindowToolBarChartTwoOrientedAxes::valueChanged()
 void
 BrainBrowserWindowToolBarChartTwoOrientedAxes::updateGraphics()
 {
-    EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+    EventManager::get()->sendEvent(EventGraphicsPaintSoonAllWindows().getPointer());
 }
 
 /**
@@ -780,7 +780,7 @@ BrainBrowserWindowToolBarChartTwoOrientedAxes::horizontalAxisMinimumValueChanged
                      verticalAxis);
     if (horizontalAxis != NULL) {
         horizontalAxis->setUserScaleMinimumValueFromGUI(minimumValue);
-        valueChanged();
+        updateGraphics();
     }
 }
 
@@ -801,7 +801,7 @@ BrainBrowserWindowToolBarChartTwoOrientedAxes::horizontalAxisMaximumValueChanged
                      verticalAxis);
     if (horizontalAxis != NULL) {
         horizontalAxis->setUserScaleMaximumValueFromGUI(maximumValue);
-        valueChanged();
+        updateGraphics();
     }
 }
 
@@ -859,7 +859,7 @@ BrainBrowserWindowToolBarChartTwoOrientedAxes::verticalAxisMinimumValueChanged(d
                      verticalAxis);
     if (verticalAxis != NULL) {
         verticalAxis->setUserScaleMinimumValueFromGUI(minimumValue);
-        valueChanged();
+        updateGraphics();
     }
 }
 
@@ -880,7 +880,7 @@ BrainBrowserWindowToolBarChartTwoOrientedAxes::verticalAxisMaximumValueChanged(d
                      verticalAxis);
     if (verticalAxis != NULL) {
         verticalAxis->setUserScaleMaximumValueFromGUI(maximumValue);
-        valueChanged();
+        updateGraphics();
     }
 }
 

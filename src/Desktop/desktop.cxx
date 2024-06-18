@@ -26,11 +26,11 @@
 #include "CaretOpenGLInclude.h"
 
 #include <QApplication>
-#include <QDesktopWidget>
 #include <QLabel>
 #ifndef WORKBENCH_USE_QT5_QOPENGL_WIDGET
 #include <QGLPixelBuffer>
 #endif
+#include <QScreen>
 #include <QSplashScreen>
 #include <QStyleFactory>
 #include <QThread>
@@ -49,12 +49,17 @@
 #include "CaretLogger.h"
 #include "CaretPreferences.h"
 #include "CommandOperationManager.h"
+#include "DeveloperFlagsEnum.h"
+#if QT_VERSION < 0x060000
+#include <QDesktopWidget>
+#endif
 #include "EventBrowserWindowNew.h"
 #include "EventManager.h"
 #include "FileInformation.h"
 #include "GuiManager.h"
 #include "MacApplication.h"
 #include "ProgramParameters.h"
+#include "QtPluginsPathSetup.h"
 #include "RecentFilesDialog.h"
 #include "RecentFilesSystemAccessModeEnum.h"
 #include "SceneDialog.h"
@@ -63,6 +68,10 @@
 #include "WorkbenchQtMessageHandler.h"
 #include "WuQMessageBox.h"
 #include "WuQtUtilities.h"
+
+#ifdef Q_OS_MAC
+#include "macos.h"
+#endif
 
 using namespace caret;
 using namespace std;
@@ -87,6 +96,8 @@ struct ProgramState
     AString sceneFileNameNoDialog;
     AString sceneNameOrNumber;
     
+    bool sceneMostRecentFlag;
+    
     ProgramState();
 };
 
@@ -110,6 +121,25 @@ void parseCommandLine(const AString& progName, ProgramParameters* myParams, Prog
 int 
 main(int argc, char* argv[])
 {
+
+#ifdef Q_OS_MAC 
+    /*
+     * Removes items that Apple adds to menus
+     *   Edit Menu - Start Dictation
+     *   Edit Menu - Emoji & Symbols
+     *   View Menu - Enter Full Screen
+     *
+     * The code uses the equivalent of the terminal's
+     * 'default' command.  The code could be replaced
+     * by having the user enter commands in the terminal
+     * to remove the menu items.
+     *
+     * Shows workbench's: defaults read workbench
+     * See: 'man defaults'.
+     */
+    OpenCOR::removeMacosSpecificMenuItems();
+#endif
+
     srand(time(NULL));
     int result;
     {
@@ -117,6 +147,13 @@ main(int argc, char* argv[])
         * Handle uncaught exceptions
         */
         SystemUtilities::setUnexpectedHandler();
+        
+        /*
+         * Set environment variable QT_PLUGIN_PATH for plugin loading on some operating systems
+         * Neither qt.conf (in app's resource directory) or using QCoreApplication::addLibraryPath()
+         * work for setting plugin paths.
+         */
+        QtPluginsPathSetup::setupPluginsPathEnvironmentVariable(argv[0]);
         
         /*
         * Create the session manager.
@@ -342,6 +379,13 @@ main(int argc, char* argv[])
 
         
         BrainBrowserWindow* myWindow = GuiManager::get()->getBrowserWindowByWindowIndex(0);
+        if (myWindow == NULL) {
+            std::cerr << "Unable to create a window.  This may result if you are trying to run "
+            << "wb_view from a remote login to a computer.  You must use the display directly "
+            << "attached to the computer or use some sort of 'Remote Desktop' system." << std::endl;
+            return -1;
+        }
+        
         if ( ! myWindow->hasValidOpenGL()) {
             app.processEvents();
             WuQMessageBox::errorOk(NULL,
@@ -354,8 +398,10 @@ main(int argc, char* argv[])
         /**
          * Test for the required OpenGL version is available.
          */
+        const bool guiFlag(true);
         AString requiredOpenGLMessage;
-        if ( ! BrainOpenGL::testForRequiredOpenGLVersion(requiredOpenGLMessage)) {
+        if ( ! BrainOpenGL::testForRequiredOpenGLVersion(guiFlag,
+                                                         requiredOpenGLMessage)) {
             app.processEvents();
             if ( ! WuQMessageBox::warningAcceptReject(NULL,
                                                       requiredOpenGLMessage,
@@ -440,6 +486,19 @@ main(int argc, char* argv[])
                                                BrainBrowserWindow::LoadSceneFromCommandLineDialogMode::SHOW_NO);
         }
         
+        if (myState.sceneMostRecentFlag) {
+            std::vector<RecentSceneInfoContainer> recentSceneInfo;
+            CaretPreferences* preferences = SessionManager::get()->getCaretPreferences();
+            preferences->getMostRecentScenes(recentSceneInfo);
+
+            if ( ! recentSceneInfo.empty()) {
+                CaretAssertVectorIndex(recentSceneInfo, 0);
+                const RecentSceneInfoContainer& rsic(recentSceneInfo[0]);
+                myWindow->loadRecentScene(rsic.getSceneFileName(),
+                                          rsic.getSceneName());
+            }
+        }
+        
         if ( ! myState.directoryName.isEmpty()) {
             myWindow->loadDirectoryFromCommandLine(myState.directoryName);
         }
@@ -466,10 +525,12 @@ main(int argc, char* argv[])
          * Resolution of screens
          */
         AString screenSizeText = "Screen Sizes: ";
-        QDesktopWidget* dw = QApplication::desktop();
-        const int numScreens = dw->screenCount();
+        QList<QScreen*> allScreens = QGuiApplication::screens();
+        const int32_t numScreens = allScreens.size();
         for (int i = 0; i < numScreens; i++) {
-            const QRect rect = dw->screenGeometry(i);
+            CaretAssertVectorIndex(allScreens, i);
+            CaretAssert(allScreens[i]);
+            const QRect rect = allScreens[i]->availableGeometry();
             const int x = rect.x();
             const int y = rect.y();
             const int w = rect.width();
@@ -485,6 +546,67 @@ main(int argc, char* argv[])
                                              + ", h="
                                              + AString::number(h));
         }
+        
+#if QT_VERSION >= QT_VERSION_CHECK(5, 6, 0)
+        if (numScreens > 0) {
+            screenSizeText = "Screen Sizes: ";
+            QScreen* primaryScreen = QGuiApplication::primaryScreen();
+            for (int32_t i = 0; i < numScreens; i++) {
+                CaretAssertVectorIndex(allScreens, i);
+                QScreen* screen(allScreens[i]);
+                CaretAssert(screen);
+                QString primaryScreenText;
+                if (screen == primaryScreen) {
+                    primaryScreenText = " PRIMARY";
+                }
+                
+                /*
+                 * The manufacturer, model, and name may be empty.
+                 * Using trimmed() will make the overall string empty
+                 * so that it is not displayed.
+                 */
+                QString displayInfoText;
+#if QT_VERSION >= QT_VERSION_CHECK(6, 2, 0)
+                displayInfoText = (("   "
+                                    + screen->manufacturer()
+                                    + " " + screen->model()
+                                    + " " + screen->name()).trimmed());
+#endif
+                screenSizeText.appendWithNewLine("Screen="
+                                                 + AString::number(i)
+                                                 + primaryScreenText);
+                if ( ! displayInfoText.isEmpty()) {
+                    screenSizeText.appendWithNewLine(displayInfoText);
+                }
+                QRect screenWidgetRect = screen->availableGeometry();
+                screenSizeText.appendWithNewLine("   Desktop: x="
+                                                 + AString::number(screenWidgetRect.x())
+                                                 + ", y="
+                                                 + AString::number(screenWidgetRect.y())
+                                                 + ", w="
+                                                 + AString::number(screenWidgetRect.width())
+                                                 + ", h="
+                                                 + AString::number(screenWidgetRect.height()));
+                
+                screenSizeText.appendWithNewLine("   Logical DPI: x="
+                                                 + AString::number(screen->logicalDotsPerInchX())
+                                                 + ", y="
+                                                 + AString::number(screen->logicalDotsPerInchY()));
+                
+                screenSizeText.appendWithNewLine("   Physical DPI: x="
+                                                 + AString::number(screen->physicalDotsPerInch())
+                                                 + ", y="
+                                                 + AString::number(screen->physicalDotsPerInchY()));
+                
+                const QSizeF physicalSizeMM(primaryScreen->physicalSize());
+                screenSizeText.appendWithNewLine("   Width/height (mm): x="
+                                                 + AString::number(physicalSizeMM.width())
+                                                 + ", y="
+                                                 + AString::number(physicalSizeMM.height()));
+            }
+        }
+#else
+        QDesktopWidget* dw = QApplication::desktop();
         screenSizeText.appendWithNewLine("Primary Screen="
                                          + AString::number(dw->primaryScreen()));
         if (dw->isVirtualDesktop()) {
@@ -518,6 +640,7 @@ main(int argc, char* argv[])
                                          + AString::number(dw->widthMM())
                                          + ", y="
                                          + AString::number(dw->heightMM()));
+#endif
         
         CaretLogConfig(screenSizeText);
         
@@ -570,6 +693,9 @@ void printHelp(const AString& progName)
     << "Options:" << endl
     << "    -help" << endl
     << "        display this usage text" << endl
+    << endl
+    << "    -enable-perf" << endl
+    << "        Enable graphics performance improvements (surface buffers, volume textures)"
     << endl
     << "    -graphics-size  <X Y>" << endl
     << "        Set the size of the graphics region." << endl
@@ -632,6 +758,9 @@ void printHelp(const AString& progName)
     << "        Same as \"-scene-load\" except that the scene dialog " << endl
     << "        is hidden after the scene has loaded." << endl
     << endl
+    << "    -scene-recent" << endl
+    << "        Loads the most recently loaded scene from its scene file." << endl
+    << endl
     << "    -style <style-name>" << endl
     << "        change the window style to the specified style" << endl
     << "        the following styles are valid on this system:" << endl;
@@ -677,6 +806,8 @@ void parseCommandLine(const AString& progName, ProgramParameters* myParams, Prog
                 } else if (thisParam == "-help") {
                     printHelp(progName);
                     exit(0);
+                } else if (thisParam == "-enable-perf") {
+                    DeveloperFlagsEnum::setFlag(DeveloperFlagsEnum::DEVELOPER_FLAG_SURFACE_BUFFER, true);
                 } else if (thisParam == "-logging") {
                     if (myParams->hasNext()) {
                         const AString logLevelName = myParams->nextString("Logging Level").toUpper();
@@ -754,6 +885,8 @@ void parseCommandLine(const AString& progName, ProgramParameters* myParams, Prog
                         cerr << "Missing scene file name for " << thisParam << " option" << std::endl;
                         hasFatalError = true;
                     }
+                } else if (thisParam == "-scene-recent") {
+                    myState.sceneMostRecentFlag = true;
                 } else if (thisParam == "-spec-load-all") {
                     if ( ! myState.specFileNameLoadAll.isEmpty()) {
                         cerr << qPrintable(moreThanOneSpecFileErrorMessage) << endl;
@@ -885,6 +1018,9 @@ void parseCommandLine(const AString& progName, ProgramParameters* myParams, Prog
     if ( ! myState.specFileNameLoadWithDialog.isEmpty()) {
         myState.showSplash = false;
     }
+    if (myState.sceneMostRecentFlag) {
+        myState.showSplash = false;
+    }
     if ( ! myState.specFileNameLoadAll.isEmpty()) {
         myState.showSplash = false;
     }
@@ -895,6 +1031,7 @@ ProgramState::ProgramState()
     sceneFileName = "";
     sceneFileNameNoDialog = "";
     sceneNameOrNumber = "";
+    sceneMostRecentFlag = false;
     windowSizeXY[0] = -1;
     windowSizeXY[1] = -1;
     windowPosXY[0] = -1;

@@ -39,25 +39,33 @@ using namespace caret;
 /**
  * Constructor.
  *
+ * @param browserWindowIndex
+ *    Index of browser window
+ * @param userInputMode
+ *    The user input mode
  * @param annotationFile
  *    File for annotation
  * @param annotationSpace
  *    Space for new annotation.
  * @param annotationType
  *    Type for new annotation.
- * @param polyLineDrawingMode
+ * @param polyhedronDrawingMode
  *    Mode for drawing polyline
  *
  */
-EventAnnotationCreateNewType::EventAnnotationCreateNewType(AnnotationFile* annotationFile,
+EventAnnotationCreateNewType::EventAnnotationCreateNewType(const int32_t browserWindowIndex,
+                                                           const UserInputModeEnum::Enum userInputMode,
+                                                           AnnotationFile* annotationFile,
                                                            const AnnotationCoordinateSpaceEnum::Enum annotationSpace,
                                                            const AnnotationTypeEnum::Enum annotationType,
-                                                           const PolyLineDrawingMode polyLineDrawingMode)
+                                                           const PolyhedronDrawingMode polyhedronDrawingMode)
 : Event(EventTypeEnum::EVENT_ANNOTATION_CREATE_NEW_TYPE),
+m_browserWindowIndex(browserWindowIndex),
+m_userInputMode(userInputMode),
 m_annotationFile(annotationFile),
 m_annotationSpace(annotationSpace),
 m_annotationType(annotationType),
-m_polyLineDrawingMode(polyLineDrawingMode)
+m_polyhedronDrawingMode(polyhedronDrawingMode)
 {
     
 }
@@ -69,6 +77,23 @@ EventAnnotationCreateNewType::~EventAnnotationCreateNewType()
 {
 }
 
+/**
+ * @return Index of the browser window
+ */
+int32_t
+EventAnnotationCreateNewType::getBrowserWindowIndex() const
+{
+    return m_browserWindowIndex;
+}
+
+/**
+ * @return The user input mode
+ */
+UserInputModeEnum::Enum
+EventAnnotationCreateNewType::getUserInputMode() const
+{
+    return m_userInputMode;
+}
 /**
  * @return Annotation file for new anotation.
  */
@@ -97,12 +122,12 @@ EventAnnotationCreateNewType::getAnnotationType() const
 }
 
 /**
- * @return Mode for polyline drawing
+ * @return Mode for poly type drawing
  */
-EventAnnotationCreateNewType::PolyLineDrawingMode
-EventAnnotationCreateNewType::getPolyLineDrawingMode() const
+EventAnnotationCreateNewType::PolyhedronDrawingMode
+EventAnnotationCreateNewType::getPolyhedronDrawingMode() const
 {
-    return m_polyLineDrawingMode;
+    return m_polyhedronDrawingMode;
 }
 
 

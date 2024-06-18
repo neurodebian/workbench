@@ -22,17 +22,21 @@
  */
 /*LICENSE_END*/
 
+#include <memory>
+
 #include "BrainConstants.h"
 #include "VolumeBase.h"
 #include "CaretMappableDataFile.h"
 #include "CaretMutex.h"
 #include "CaretVolumeExtension.h"
 #include "ChartableLineSeriesBrainordinateInterface.h"
+#include "GroupAndNameHierarchyUserInterface.h"
 #include "StructureEnum.h"
 #include "GiftiMetaData.h"
 #include "BoundingBox.h"
 #include "VolumeFileVoxelColorizer.h"
 #include "VoxelIJK.h"
+#include "VoxelInterpolationTypeEnum.h"
 
 namespace caret {
     
@@ -40,9 +44,10 @@ namespace caret {
     class VolumeDynamicConnectivityFile;
     class VolumeFileEditorDelegate;
     class VolumeFileVoxelColorizer;
+    class VolumeGraphicsPrimitiveManager;
     class VolumeSpline;
     
-    class VolumeFile : public VolumeBase, public CaretMappableDataFile, public ChartableLineSeriesBrainordinateInterface
+    class VolumeFile : public VolumeBase, public CaretMappableDataFile, public ChartableLineSeriesBrainordinateInterface, public GroupAndNameHierarchyUserInterface
     {
         VolumeFile(const VolumeFile&);
         
@@ -99,6 +104,8 @@ namespace caret {
         
         std::unique_ptr<VolumeDynamicConnectivityFile> m_lazyInitializedDynamicConnectivityFile;
         
+        std::unique_ptr<VolumeGraphicsPrimitiveManager> m_graphicsPrimitiveManager;
+        
         /** True if the volume is a single slice, needed by interpolateValue() methods */
         bool m_singleSliceFlag;
         
@@ -117,6 +124,9 @@ namespace caret {
         mutable float m_dataRangeMinimum;
         
         mutable float m_dataRangeMaximum;
+        
+        /** Have bounding box for each map */
+        mutable std::vector<std::unique_ptr<BoundingBox>> m_nonZeroVoxelCoordinateBoundingBoxes;
         
         /** Holds class and name hierarchy used for display selection */
         mutable CaretPointer<GroupAndNameHierarchyModel> m_classNameHierarchy;
@@ -193,6 +203,8 @@ namespace caret {
 
         float interpolateValue(const float coordIn1, const float coordIn2, const float coordIn3, InterpType interp = TRILINEAR, bool* validOut = NULL, const int64_t brickIndex = 0, const int64_t component = 0) const;
 
+        float interpolateValue(const float* coordIn, const VoxelInterpolationTypeEnum::Enum interpType = VoxelInterpolationTypeEnum::TRILINEAR, bool* validOut = NULL, const int64_t brickIndex = 0, const int64_t component = 0) const;
+        
         ///returns true if volume space matches in spatial dimensions and sform
         bool matchesVolumeSpace(const VolumeFile* right) const;
         
@@ -221,6 +233,15 @@ namespace caret {
         virtual bool isModifiedExcludingPaletteColorMapping() const;
         
         void getVoxelSpaceBoundingBox(BoundingBox& boundingBoxOut) const override;
+        
+        static void dimensionOriginSpacingXyzToVoxelEdges(const Vector3D& dimensions,
+                                                          const Vector3D& origin,
+                                                          const Vector3D& spacing,
+                                                          Vector3D& firstVoxelEdgeOut,
+                                                          Vector3D& lastVoxelEdgeOut);
+        
+        virtual void getNonZeroVoxelCoordinateBoundingBox(const int32_t mapIndex,
+                                                   BoundingBox& boundingBoxOut) const override;
         
         /**
          * @return The structure for this file.
@@ -309,6 +330,10 @@ namespace caret {
         
         AString getMapUniqueID(const int32_t mapIndex) const;
         
+        virtual CaretMappableDataFile* castToVolumeMappableDataFile() override;
+        
+        virtual const CaretMappableDataFile* castToVolumeMappableDataFile() const override;
+
         void updateScalarColoringForMap(const int32_t mapIndex) override;
         
         virtual int64_t getVoxelColorsForSliceInMap(const int32_t mapIndex,
@@ -340,12 +365,46 @@ namespace caret {
                                                     const int32_t tabIndex,
                                                     uint8_t* rgbaOut) const override;
         
+        virtual GraphicsPrimitiveV3fT3f* getVolumeDrawingTriangleStripPrimitive(const int32_t mapIndex,
+                                                                           const DisplayGroupEnum::Enum displayGroup,
+                                                                           const int32_t tabIndex) const override;
+        
+        virtual GraphicsPrimitiveV3fT3f* getVolumeDrawingTriangleFanPrimitive(const int32_t mapIndex,
+                                                                      const DisplayGroupEnum::Enum displayGroup,
+                                                                      const int32_t tabIndex) const override;
+        
+        virtual GraphicsPrimitiveV3fT3f* getVolumeDrawingTrianglesPrimitive(const int32_t mapIndex,
+                                                                            const DisplayGroupEnum::Enum displayGroup,
+                                                                            const int32_t tabIndex) const override;
+
+        virtual GraphicsPrimitive* getHistologyImageIntersectionPrimitive(const int32_t mapIndex,
+                                                                          const DisplayGroupEnum::Enum displayGroup,
+                                                                          const int32_t tabIndex,
+                                                                          const MediaFile* mediaFile,
+                                                                          const VolumeToImageMappingModeEnum::Enum volumeMappingMode,
+                                                                          const float volumeSliceThickness,
+                                                                          AString& errorMessageOut) const override;
+        
+        virtual std::vector<GraphicsPrimitive*> getHistologySliceIntersectionPrimitive(const int32_t mapIndex,
+                                                                                       const DisplayGroupEnum::Enum displayGroup,
+                                                                                       const int32_t tabIndex,
+                                                                                       const HistologySlice* histologySlice,
+                                                                                       const VolumeToImageMappingModeEnum::Enum volumeMappingMode,
+                                                                                       const float volumeSliceThickness,
+                                                                                       AString& errorMessageOut) const override;
+
         void getVoxelValuesForSliceInMap(const int32_t mapIndex,
                                          const VolumeSliceViewPlaneEnum::Enum slicePlane,
                                          const int64_t sliceIndex,
                                          float* sliceValues) const;
         
-        void getVoxelColorInMap(const int64_t i,
+        virtual void getVoxelColorInMap(const int64_t i,
+                                const int64_t j,
+                                const int64_t k,
+                                const int64_t mapIndex,
+                                uint8_t rgbaOut[4]) const override;
+        
+        virtual void getVoxelColorInMap(const int64_t i,
                                 const int64_t j,
                                 const int64_t k,
                                 const int64_t mapIndex,
@@ -390,6 +449,7 @@ namespace caret {
         virtual bool getVolumeVoxelIdentificationForMaps(const std::vector<int32_t>& mapIndices,
                                                          const float xyz[3],
                                                          const AString& dataValueSeparator,
+                                                         const int32_t digitsRightOfDecimal,
                                                          int64_t ijkOut[3],
                                                          AString& textOut) const;
         
@@ -406,6 +466,11 @@ namespace caret {
         
         virtual PaletteModifiedStatusEnum::Enum getPaletteColorMappingModifiedStatus() const override;
         
+        virtual void groupAndNameHierarchyItemStatusChanged() override;
+
+        void setValuesForVoxelEditing(const int32_t mapIndex,
+                                      const std::vector<VoxelIJK>& voxelsIJK,
+                                      const float value);
     };
 
 }

@@ -396,9 +396,13 @@ EventManager::sendSimpleEvent(const EventTypeEnum::Enum eventType)
         case EventTypeEnum::EVENT_ANNOTATION_BARS_GET:
         case EventTypeEnum::EVENT_ANNOTATION_CHART_LABEL_GET:
         case EventTypeEnum::EVENT_ANNOTATION_CREATE_NEW_TYPE:
+        case EventTypeEnum::EVENT_ANNOTATION_DRAWING_FINISH_CANCEL:
+        case EventTypeEnum::EVENT_ANNOTATION_GET_BEING_DRAWN_IN_WINDOW:
         case EventTypeEnum::EVENT_ANNOTATION_GET_DRAWN_IN_WINDOW:
+        case EventTypeEnum::EVENT_ANNOTATION_GET_SELECTED_INSERT_NEW_FILE:
         case EventTypeEnum::EVENT_ANNOTATION_GROUP_GET_WITH_KEY:
         case EventTypeEnum::EVENT_ANNOTATION_GROUPING:
+        case EventTypeEnum::EVENT_ANNOTATION_NEW_DRAWING_POLYHEDRON_SLICE_DEPTH:
         case EventTypeEnum::EVENT_ANNOTATION_TEXT_GET_BOUNDS:
         case EventTypeEnum::EVENT_ANNOTATION_TEXT_SUBSTITUTION_GET:
         case EventTypeEnum::EVENT_ANNOTATION_TEXT_SUBSTITUTION_INVALIDATE:
@@ -412,6 +416,8 @@ EventManager::sendSimpleEvent(const EventTypeEnum::Enum eventType)
         case EventTypeEnum::EVENT_BROWSER_TAB_GET:
         case EventTypeEnum::EVENT_BROWSER_TAB_GET_ALL:
         case EventTypeEnum::EVENT_BROWSER_TAB_GET_ALL_VIEWED:
+        case EventTypeEnum::EVENT_BROWSER_TAB_GET_AT_WINDOW_XY:
+        case EventTypeEnum::EVENT_BROWSER_TAB_INDEX_GET_WINDOW_INDEX:
         case EventTypeEnum::EVENT_BROWSER_TAB_INDICES_GET_ALL:
         case EventTypeEnum::EVENT_BROWSER_TAB_INDICES_GET_ALL_VIEWED:
         case EventTypeEnum::EVENT_BROWSER_TAB_NEW:
@@ -420,12 +426,14 @@ EventManager::sendSimpleEvent(const EventTypeEnum::Enum eventType)
         case EventTypeEnum::EVENT_BROWSER_TAB_REOPEN_AVAILBLE:
         case EventTypeEnum::EVENT_BROWSER_TAB_REOPEN_CLOSED:
         case EventTypeEnum::EVENT_BROWSER_TAB_SELECT_IN_WINDOW:
+        case EventTypeEnum::EVENT_BROWSER_TAB_VALIDATE:
         case EventTypeEnum::EVENT_BROWSER_WINDOW_CONTENT:
         case EventTypeEnum::EVENT_BROWSER_WINDOW_CREATE_TABS:
         case EventTypeEnum::EVENT_BROWSER_WINDOW_GET_TABS:
         case EventTypeEnum::EVENT_BROWSER_WINDOW_DRAWING_CONTENT_GET:
         case EventTypeEnum::EVENT_BROWSER_WINDOW_GRAPHICS_HAVE_BEEN_REDRAWN:
         case EventTypeEnum::EVENT_BROWSER_WINDOW_NEW:
+        case EventTypeEnum::EVENT_BROWSER_WINDOW_PIXEL_SIZE_INFO:
         case EventTypeEnum::EVENT_BROWSER_WINDOW_TILE_TAB_OPERATION:
         case EventTypeEnum::EVENT_CARET_DATA_FILES_GET:
         case EventTypeEnum::EVENT_CARET_MAPPABLE_DATA_FILES_GET:
@@ -442,6 +450,9 @@ EventManager::sendSimpleEvent(const EventTypeEnum::Enum eventType)
         case EventTypeEnum::EVENT_DATA_FILE_READ:
         case EventTypeEnum::EVENT_DATA_FILE_RELOAD:
         case EventTypeEnum::EVENT_DATA_FILE_RELOAD_ALL:
+        case EventTypeEnum::EVENT_DRAWING_VIEWPORT_CONTENT_ADD:
+        case EventTypeEnum::EVENT_DRAWING_VIEWPORT_CONTENT_CLEAR:
+        case EventTypeEnum::EVENT_DRAWING_VIEWPORT_CONTENT_GET:
         case EventTypeEnum::EVENT_GET_DISPLAYED_DATA_FILES:
         case EventTypeEnum::EVENT_GET_NODE_DATA_FILES:
         case EventTypeEnum::EVENT_GET_OR_SET_USER_INPUT_MODE:
@@ -452,11 +463,14 @@ EventManager::sendSimpleEvent(const EventTypeEnum::Enum eventType)
         case EventTypeEnum::EVENT_GRAPHICS_OPENGL_CREATE_TEXTURE_NAME:
         case EventTypeEnum::EVENT_GRAPHICS_OPENGL_DELETE_BUFFER_OBJECT:
         case EventTypeEnum::EVENT_GRAPHICS_OPENGL_DELETE_TEXTURE_NAME:
+        case EventTypeEnum::EVENT_GRAPHICS_PAINT_NOW_ALL_WINDOWS:
+        case EventTypeEnum::EVENT_GRAPHICS_PAINT_NOW_ONE_WINDOW:
         case EventTypeEnum::EVENT_GRAPHICS_TIMING_ONE_WINDOW:
-        case EventTypeEnum::EVENT_GRAPHICS_UPDATE_ALL_WINDOWS:
-        case EventTypeEnum::EVENT_GRAPHICS_UPDATE_ONE_WINDOW:
+        case EventTypeEnum::EVENT_GRAPHICS_PAINT_SOON_ALL_WINDOWS:
+        case EventTypeEnum::EVENT_GRAPHICS_PAINT_SOON_ONE_WINDOW:
         case EventTypeEnum::EVENT_GRAPHICS_WINDOW_SHOW_TOOL_TIP:
         case EventTypeEnum::EVENT_HELP_VIEWER_DISPLAY:
+        case EventTypeEnum::EVENT_HISTOLOGY_SLICES_FILES_GET:
         case EventTypeEnum::EVENT_IDENTIFICATION_HIGHLIGHT_LOCATION:
         case EventTypeEnum::EVENT_IDENTIFICATION_SYMBOL_REMOVAL:
         case EventTypeEnum::EVENT_IDENTIFICATION_REQUEST:
@@ -479,11 +493,13 @@ EventManager::sendSimpleEvent(const EventTypeEnum::Enum eventType)
         case EventTypeEnum::EVENT_PALETTE_GET_BY_NAME:
         case EventTypeEnum::EVENT_PALETTE_GROUPS_GET:
         case EventTypeEnum::EVENT_RECENT_FILES_SYSTEM_ACCESS_MODE:
+        case EventTypeEnum::EVENT_RESET_VIEW:
         case EventTypeEnum::EVENT_SCENE_ACTIVE:
         case EventTypeEnum::EVENT_SHOW_FILE_DATA_READ_WARNING_DIALOG:
         case EventTypeEnum::EVENT_SPACER_TAB_GET:
         case EventTypeEnum::EVENT_SPEC_FILE_READ_DATA_FILES:
         case EventTypeEnum::EVENT_SURFACE_COLORING_INVALIDATE:
+        case EventTypeEnum::EVENT_VOLUME_COLORING_INVALIDATE:
         case EventTypeEnum::EVENT_SURFACES_GET:
         case EventTypeEnum::EVENT_SURFACE_STRUCTURES_VALID_GET:
         case EventTypeEnum::EVENT_TILE_TABS_MODIFICATION:

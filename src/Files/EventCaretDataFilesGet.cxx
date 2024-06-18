@@ -23,10 +23,15 @@
 #include "EventCaretDataFilesGet.h"
 #undef __EVENT_CARET_DATA_FILES_GET_DECLARE__
 
+#include <set>
+
 #include "CaretAssert.h"
 #include "CaretDataFile.h"
+#include "CaretLogger.h"
 #include "EventManager.h"
 #include "EventTypeEnum.h"
+#include "FileIdentificationAttributes.h"
+#include "FileInformation.h"
 
 using namespace caret;
 
@@ -62,6 +67,72 @@ EventCaretDataFilesGet::~EventCaretDataFilesGet()
 {
 }
 
+/**
+ * @return CaretDataFile with the given name or NULL if no match.
+ * @param filename
+ *    Name of file.
+ */
+CaretDataFile*
+EventCaretDataFilesGet::getCaretDataFileWithName(const AString& filename)
+{
+    const std::vector<CaretDataFile*> allFiles(EventCaretDataFilesGet::getAllCaretDataFiles());
+    const bool absPathFlag(FileInformation(filename).isAbsolute());
+    
+    CaretDataFile* caretDataFileOut(NULL);
+    if (absPathFlag) {
+        for (auto& dataFile : allFiles) {
+            CaretAssert(dataFile);
+            if (dataFile->getFileName() == filename) {
+                if (caretDataFileOut != NULL) {
+                    CaretLogWarning("More than one file has same absolute path name: "
+                                    + filename);
+                }
+                else {
+                   caretDataFileOut = dataFile;
+                }
+            }
+        }
+    }
+    else {
+        for (auto& dataFile : allFiles) {
+            CaretAssert(dataFile);
+            if (dataFile->getFileName().endsWith(filename)) {
+                if (caretDataFileOut != NULL) {
+                    CaretLogWarning("More than one file matches relative path name: "
+                                    + filename);
+                }
+                else {
+                    caretDataFileOut = dataFile;
+                }
+            }
+        }
+    }
+
+    return caretDataFileOut;
+}
+
+
+/**
+ * @return Data file types of all loaded data files
+ */
+std::vector<DataFileTypeEnum::Enum>
+EventCaretDataFilesGet::getAllCaretDataFileTyes()
+{
+    std::set<DataFileTypeEnum::Enum> uniqueTypes;
+    
+    std::vector<CaretDataFile*> allFiles(getAllCaretDataFiles());
+    for (const auto& file : allFiles) {
+        uniqueTypes.insert(file->getDataFileType());
+    }
+    
+    std::vector<DataFileTypeEnum::Enum> typesVector(uniqueTypes.begin(),
+                                                    uniqueTypes.end());
+    return typesVector;
+}
+
+/**
+ * @return All loaded caret data files.
+ */
 std::vector<CaretDataFile*>
 EventCaretDataFilesGet::getAllCaretDataFiles()
 {
@@ -143,6 +214,31 @@ void
 EventCaretDataFilesGet::addAllCaretDataFiles(std::vector<CaretDataFile*>& caretDataFiles)
 {
     m_caretDataFiles = caretDataFiles;
+}
+
+/**
+ * @return All data files that support File Identification Attributes sorted by name
+ */
+std::vector<CaretDataFile*>
+EventCaretDataFilesGet::getIdentifiableFilesSortedByName()
+{
+    std::vector<CaretDataFile*> allFiles(getAllCaretDataFiles());
+    
+    std::vector<CaretDataFile*> idFiles;
+    for (CaretDataFile* cdf : allFiles) {
+        if (cdf->getFileIdentificationAttributes()->isSupported()) {
+            idFiles.push_back(cdf);
+        }
+    }
+    
+    std::sort(idFiles.begin(),
+              idFiles.end(),
+              [] (CaretDataFile* lhs, CaretDataFile* rhs) {
+        const int result = lhs->getFileNameNoPath().compare(rhs->getFileNameNoPath(), Qt::CaseInsensitive);
+        return (result < 0);
+    } );
+
+    return idFiles;
 }
 
 /**

@@ -56,6 +56,7 @@
 #include "CaretFileDialog.h"
 #include "CaretLogger.h"
 #include "CaretMappableDataFile.h"
+#include "CaretResultDialog.h"
 #include "CursorDisplayScoped.h"
 #include "CaretPreferences.h"
 #include "DataFileException.h"
@@ -64,7 +65,7 @@
 #include "EventDataFileAdd.h"
 #include "EventDataFileRead.h"
 #include "EventDataFileReload.h"
-#include "EventGraphicsUpdateAllWindows.h"
+#include "EventGraphicsPaintSoonAllWindows.h"
 #include "EventImageCapture.h"
 #include "EventManager.h"
 #include "EventModelGetAll.h"
@@ -73,12 +74,14 @@
 #include "EventShowDataFileReadWarningsDialog.h"
 #include "EventSceneActive.h"
 #include "FileInformation.h"
+#include "GiftiMetaData.h"
 #include "GuiManager.h"
 #include "ImageFile.h"
 #include "ProgressReportingDialog.h"
 #include "Scene.h"
 #include "SceneAttributes.h"
 #include "SceneClass.h"
+#include "SceneClassInfoWidget.h"
 #include "SceneCreateReplaceDialog.h"
 #include "SceneFile.h"
 #include "SceneFileInformationDialog.h"
@@ -87,6 +90,7 @@
 #include "SceneReplaceAllDialog.h"
 #include "SceneShowOptionsDialog.h"
 #include "SessionManager.h"
+#include "SpecFile.h"
 #include "UsernamePasswordWidget.h"
 #include "WuQDataEntryDialog.h"
 #include "WuQDialogNonModal.h"
@@ -509,6 +513,7 @@ SceneDialog::loadScenesIntoDialog(Scene* selectedSceneIn)
     
     m_addNewScenePushButton->setEnabled(validFile);
     m_deleteScenePushButton->setEnabled(validScene);
+    m_editScenePushButton->setEnabled(validScene);
     if (m_replaceAllScenesPushButton != NULL) {
         m_replaceAllScenesPushButton->setEnabled(haveScenes);
     }
@@ -674,15 +679,88 @@ SceneDialog::newSceneFileButtonClicked()
         return;
     }
     
-    SceneFile* newSceneFile = new SceneFile();
-    GuiManager::get()->getBrain()->convertDataFilePathNameToAbsolutePathName(newSceneFile);
-    newSceneFile->clearModified();
+    const SceneFile* previousSceneFile(getSelectedSceneFile());
+    AString pathName;
+    const auto result(GuiManager::get()->getBrain()->getBaseDirectoryForLoadedSceneAndSpecFiles(previousSceneFile,
+                                                                                                pathName));
+    
+    /*
+     * Do not use root directory
+     */
+    if ( ! pathName.isEmpty()) {
+        if (QFileInfo(pathName).isRoot()) {
+            pathName = "";
+        }
+    }
+    
+    /*
+     * If path invalid, try path from selected scene file
+     */
+    if (pathName.isEmpty()) {
+        if (previousSceneFile != NULL) {
+            const AString previousSceneFileName(previousSceneFile->getFileName());
+            if ( ! previousSceneFileName.isEmpty()) {
+                QFileInfo fileInfo(previousSceneFileName);
+                pathName = fileInfo.absolutePath();
+            }
+        }
+    }
+    
+    /*
+     * If path invalid, try path from current spec file
+     */
+    if (pathName.isEmpty()) {
+        const SpecFile* specFile = GuiManager::get()->getBrain()->getSpecFile();
+        if (specFile != NULL) {
+            const AString specFileName(specFile->getFileName());
+            if ( ! specFileName.isEmpty()) {
+                QFileInfo fileInfo(specFileName);
+                pathName = fileInfo.absolutePath();
+            }
+        }
+    }
 
+    /*
+     * If path invalid, use current directory
+     */
+    if (pathName.isEmpty()) {
+        pathName = GuiManager::get()->getBrain()->getCurrentDirectory();
+    }
+    
+    SceneFile* newSceneFile = new SceneFile();
+    AString newSceneFileName(newSceneFile->getFileName());
+    if ( ! pathName.isEmpty()) {
+        newSceneFileName = FileInformation::assembleFileComponents(pathName,
+                                                                   newSceneFile->getFileNameNoPathNoExtension(),
+                                                                   DataFileTypeEnum::toFileExtension(DataFileTypeEnum::SCENE));
+    }
+
+    newSceneFile->setFileName(newSceneFileName);
+
+    GuiManager::get()->getBrain()->convertDataFilePathNameToAbsolutePathName(newSceneFile);
+
+    /*
+     * Pop up dialog so that user can change name or path
+     */
+    const AString usersFileName = CaretFileDialog::getSaveFileNameDialog(newSceneFile->getDataFileType(),
+                                                                         m_newSceneFilePushButton,
+                                                                         "New Scene File Name",
+                                                                         newSceneFile->getFileName());
+    if (usersFileName.isEmpty()) {
+        /*
+         * User cancelled, do not create a new scene file
+         */
+        delete newSceneFile;
+        return;
+    }
+    
     /*
      * Note that this dialog receives EventDataFileAdd
      * as a post-processed event and will take care of
      * the dialog updates.
      */
+    newSceneFile->setFileName(usersFileName);
+    newSceneFile->clearModified();
     EventManager::get()->sendEvent(EventDataFileAdd(newSceneFile).getPointer());
 }
 
@@ -772,6 +850,74 @@ SceneDialog::saveAsSelectedSceneFile()
     loadSceneFileComboBox(sceneFile);
     
     return true;
+}
+
+/**
+ * Move the scene file to a new location
+ */
+void
+SceneDialog::moveSceneFileButtonClicked()
+{
+    SceneFile* sceneFile = getSelectedSceneFile();
+    if (sceneFile == NULL) {
+        WuQMessageBox::errorOk(m_saveAsSceneFilePushButton, "There is no selected scene file to move");
+        return;
+    }
+    
+    const AString filename = CaretFileDialog::getSaveFileNameDialog(sceneFile->getDataFileType(),
+                                                                    m_moveSceneFilePushButton,
+                                                                    "Move Scene File to",
+                                                                    sceneFile->getFileName());
+    if (filename.isEmpty()) {
+        return;
+    }
+    
+    const bool modifiedFlag(sceneFile->isModified());
+    const AString oldSceneFileName(sceneFile->getFileName());
+    
+    try {
+        CursorDisplayScoped cursor;
+        cursor.showWaitCursor();
+        
+        sceneFile->setFileName(filename);
+        
+        Brain* brain = GuiManager::get()->getBrain();
+        brain->writeDataFile(sceneFile);
+        
+        const QString backupName(oldSceneFileName
+                                 + ".bak");
+        if (QFile::rename(oldSceneFileName,
+                          backupName)) {
+            const QString msg("Previous scnene file backup up to: "
+                              + backupName);
+            cursor.restoreCursor();
+            WuQMessageBox::informationOk(m_moveSceneFilePushButton,
+                                         msg);
+        }
+        else {
+            QString msg("Backing up of "
+                        + oldSceneFileName
+                        + " to "
+                        + backupName
+                        + " failed.");
+            if (QFile::exists(backupName)) {
+                msg.append("  File not overwritten.");
+            }
+            cursor.restoreCursor();
+            WuQMessageBox::errorOk(m_moveSceneFilePushButton,
+                                   msg);
+        }
+    }
+    catch (const DataFileException& e) {
+        sceneFile->setFileName(oldSceneFileName);
+        if ( ! modifiedFlag) {
+            sceneFile->clearModified();
+        }
+        WuQMessageBox::errorOk(m_moveSceneFilePushButton,
+                               e.whatString());
+    }
+    
+    loadSceneFileComboBox(sceneFile);
 }
 
 /**
@@ -1117,12 +1263,6 @@ SceneDialog::sceneFileSelected(int /*index*/)
     updateSceneFileModifiedStatusLabel();
 }
 
-//Modified status for both scenes and _LIBCPP_POP_MACROS
-//In Scene info panel indicate if scene is the active scene
-//Add macro group to Scene
-//Remove macro group from scene FILE
-//List active scene file on macros Dialog
-
 /**
  * Called when add new scene button clicked.
  */
@@ -1393,7 +1533,7 @@ SceneDialog::replaceAllScenesPushButtonClicked()
              * Process options
              */
             if (replaceDialog.isChangeSurfaceAnnotationOffsetToOffset()) {
-                AnnotationManager* annMan = GuiManager::get()->getBrain()->getAnnotationManager();
+                AnnotationManager* annMan = GuiManager::get()->getBrain()->getAnnotationManager(UserInputModeEnum::Enum::ANNOTATIONS);
                 std::vector<Annotation*> annotations = annMan->getAllAnnotations();
                 for (auto ann : annotations) {
                     ann->changeSurfaceSpaceToTangentOffset();
@@ -1425,16 +1565,18 @@ SceneDialog::replaceAllScenesPushButtonClicked()
             newScene->addClass(GuiManager::get()->saveToScene(sceneAttributes,
                                                               "guiManager"));
             
+            const bool cropImageFlag(true);
             AString imageErrorMessage;
-            SceneCreateReplaceDialog::addImageToScene(newScene,
-                                                      imageErrorMessage);
+            SceneCreateReplaceDialog::addImageAndWorkbenchInfoToScene(newScene,
+                                                                      cropImageFlag,
+                                                                      imageErrorMessage);
             if ( ! imageErrorMessage.isEmpty()) {
                 errorMessage.appendWithNewLine(imageErrorMessage);
             }
             
             getSelectedSceneFile()->replaceScene(newScene,
                                                  origScene);
-            EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+            EventManager::get()->sendEvent(EventGraphicsPaintSoonAllWindows().getPointer());
 
             /* Ensures macros dialog gets updated with active scene */
             EventManager::get()->sendEvent(EventUserInterfaceUpdate().getPointer());
@@ -1546,6 +1688,7 @@ SceneDialog::replaceAllScenesPushButtonClicked()
     QWidget* dialogWidget = new QWidget();
     QVBoxLayout* dialogLayout = new QVBoxLayout(dialogWidget);
     dialogLayout->addLayout(gridLayout);
+    dialogLayout->addStretch();
     
     WuQDialogNonModal* dialog = new WuQDialogNonModal("Replace All Scenes Comparison",
                                                       m_replaceAllScenesPushButton);
@@ -1683,7 +1826,7 @@ SceneDialog::testScenesPushButtonClicked()
             activeSceneEvent.setScene(origScene);
             EventManager::get()->sendEvent(activeSceneEvent.getPointer());
 
-            EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+            EventManager::get()->sendEvent(EventGraphicsPaintSoonAllWindows().getPointer());
 
             /* Ensures macros dialog gets updated with active scene */
             EventManager::get()->sendEvent(EventUserInterfaceUpdate().getPointer());
@@ -1692,9 +1835,11 @@ SceneDialog::testScenesPushButtonClicked()
              * Always generate an image, even if the scene fails and failure may 
              * be a very minor error.
              */
+            const bool cropImageFlag(true);
             QImage image;
             AString imageErrorMessage;
             const bool validImage = SceneCreateReplaceDialog::createSceneImage(image,
+                                                                               cropImageFlag,
                                                                                imageErrorMessage);
             if (validImage) {
                 newImages.push_back(image.scaledToWidth(IMAGE_DISPLAY_WIDTH));
@@ -1863,6 +2008,22 @@ SceneDialog::moveSceneDownButtonClicked()
             
             updateSceneFileModifiedStatusLabel();
         }
+    }
+}
+
+/**
+ * Edit the scene name and description
+ */
+void
+SceneDialog::editSceneButtonClicked()
+{
+    Scene* scene = getSelectedScene();
+    if (scene != NULL) {
+        SceneCreateReplaceDialog::editSceneInfo(m_editScenePushButton,
+                                                getSelectedSceneFile(),
+                                                getSelectedScene());
+        loadScenesIntoDialog(getSelectedScene());
+        updateSceneFileModifiedStatusLabel();
     }
 }
 
@@ -2067,6 +2228,14 @@ SceneDialog::createScenesWidget()
                      this, SLOT(moveSceneDownButtonClicked()));
     
     /*
+     * Edit Scene Button
+     */
+    m_editScenePushButton = new QPushButton("Edit...");
+    m_editScenePushButton->setToolTip("Edit the name and description of the the selected scene");
+    QObject::connect(m_editScenePushButton, &QPushButton::clicked,
+                     this, &SceneDialog::editSceneButtonClicked);
+    
+    /*
      * Insert scene button
      */
     m_insertNewScenePushButton = new QPushButton("Insert...");
@@ -2152,6 +2321,8 @@ SceneDialog::createScenesWidget()
     organizeGroupBox->setSizePolicy(organizeGroupBox->sizePolicy().horizontalPolicy(), QSizePolicy::Fixed);
     QVBoxLayout* organizeGroupLayout = new QVBoxLayout(organizeGroupBox);
     WuQtUtilities::setLayoutSpacingAndMargins(organizeGroupLayout, 2, 2);
+    organizeGroupLayout->addWidget(m_editScenePushButton);
+    organizeGroupLayout->addSpacing(5);
     organizeGroupLayout->addWidget(m_moveSceneUpPushButton);
     organizeGroupLayout->addWidget(m_moveSceneDownPushButton);
     organizeGroupLayout->addSpacing(5);
@@ -2173,14 +2344,14 @@ SceneDialog::createScenesWidget()
      * Widget and layout containing the scene class info.
      */
     m_sceneSelectionLayout = new QVBoxLayout();
-    m_sceneSelectionWidget = new QWidget();
-    QVBoxLayout* sceneSelectionWidgetLayout = new QVBoxLayout(m_sceneSelectionWidget);
+    QWidget* sceneSelectionWidget = new QWidget();
+    QVBoxLayout* sceneSelectionWidgetLayout = new QVBoxLayout(sceneSelectionWidget);
     sceneSelectionWidgetLayout->addLayout(m_sceneSelectionLayout);
     sceneSelectionWidgetLayout->addStretch();
     m_sceneSelectionScrollArea = new QScrollArea();
     m_sceneSelectionScrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
     m_sceneSelectionScrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
-    m_sceneSelectionScrollArea->setWidget(m_sceneSelectionWidget);
+    m_sceneSelectionScrollArea->setWidget(sceneSelectionWidget);
     m_sceneSelectionScrollArea->setWidgetResizable(true);
     
     /*
@@ -2219,7 +2390,7 @@ SceneDialog::createSceneFileWidget()
      */
     QLabel* sceneFileLabel = new QLabel("Scene File");
     m_sceneFileSelectionComboBox = new QComboBox();
-    m_sceneFileSelectionComboBox->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLength);
+    m_sceneFileSelectionComboBox->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
     m_sceneFileSelectionComboBox->setSizePolicy(QSizePolicy::MinimumExpanding,
                                                 m_sceneFileSelectionComboBox->sizePolicy().verticalPolicy());
     WuQtUtilities::setToolTipAndStatusTip(m_sceneFileSelectionComboBox,
@@ -2244,10 +2415,31 @@ SceneDialog::createSceneFileWidget()
                      this, &SceneDialog::showFileStructure);
     
     /*
+     * Tooltip
+     */
+    const AString baseToolTip("It is recommended that you save your scene file in the "
+                              "<b>base path</b> or one level down in an appropriate "
+                              "subdirectory.&nbsp;&nbsp;Click the <b>"
+                              + m_showFileStructurePushButton->text()
+                              + "</b> button to see the data file organization.");
+    const AString newToolTip("<html><body>Display a file selection dialog for creating a new scene file.<p>"
+                             + baseToolTip
+                             + "</body></html>");
+    const AString saveToolTip("<html><body>Save the scene file using its current name.<p>"
+                             + baseToolTip
+                             + "</body></html>");
+    const AString saveAsToolTip("<html><body>Display a file selection dialog for saving the scenes to a different file name.<p>"
+                             + baseToolTip
+                             + "</body></html>");
+    const AString moveToolTip("<html><body>Display a file selection dialog for moving the scene file to a new name.<p>"
+                             + baseToolTip
+                             + "</body></html>");
+
+    /*
      * New File button
      */
     m_newSceneFilePushButton = new QPushButton("New");
-    m_newSceneFilePushButton->setToolTip("Create a new scene file");
+    m_newSceneFilePushButton->setToolTip(newToolTip);
     QObject::connect(m_newSceneFilePushButton, SIGNAL(clicked()),
                      this, SLOT(newSceneFileButtonClicked()));
     
@@ -2263,7 +2455,7 @@ SceneDialog::createSceneFileWidget()
      * Save File button
      */
     m_saveSceneFilePushButton = new QPushButton("Save");
-    m_saveSceneFilePushButton->setToolTip("Save the scene file using its current name");
+    m_saveSceneFilePushButton->setToolTip(saveToolTip);
     QObject::connect(m_saveSceneFilePushButton, SIGNAL(clicked()),
                      this, SLOT(saveSceneFileButtonClicked()));
     
@@ -2271,9 +2463,17 @@ SceneDialog::createSceneFileWidget()
      * Save As File button
      */
     m_saveAsSceneFilePushButton = new QPushButton("Save As...");
-    m_saveAsSceneFilePushButton->setToolTip("Display a file selection dialog for saving scene file with a new name");
+    m_saveAsSceneFilePushButton->setToolTip(saveAsToolTip);
     QObject::connect(m_saveAsSceneFilePushButton, SIGNAL(clicked()),
                      this, SLOT(saveAsSceneFileButtonClicked()));
+    
+    /*
+     * Move button
+     */
+    m_moveSceneFilePushButton = new QPushButton("Move...");
+    m_moveSceneFilePushButton->setToolTip(moveToolTip);
+    QObject::connect(m_moveSceneFilePushButton, &QPushButton::clicked,
+                     this, &SceneDialog::moveSceneFileButtonClicked);
     
     /*
      * Upload button
@@ -2297,6 +2497,7 @@ SceneDialog::createSceneFileWidget()
     m_sceneFileButtonsGroup = new WuQWidgetObjectGroup(this);
     m_sceneFileButtonsGroup->add(m_saveSceneFilePushButton);
     m_sceneFileButtonsGroup->add(m_saveAsSceneFilePushButton);
+    m_sceneFileButtonsGroup->add(m_moveSceneFilePushButton);
     m_sceneFileButtonsGroup->add(m_uploadSceneFilePushButton);
     m_sceneFileButtonsGroup->add(m_zipSceneFilePushButton);
     
@@ -2316,19 +2517,21 @@ SceneDialog::createSceneFileWidget()
     gridLayout->setColumnStretch(3,   0);
     gridLayout->setColumnStretch(4,   0);
     gridLayout->setColumnStretch(5,   0);
+    gridLayout->setColumnStretch(5,   0);
     int row = 0;
     gridLayout->addWidget(sceneFileLabel,                 row, 0, Qt::AlignRight);
-    gridLayout->addWidget(m_sceneFileSelectionComboBox,   row, 1, 1, 2);
-    gridLayout->addWidget(m_newSceneFilePushButton,       row, 3);
-    gridLayout->addWidget(m_saveSceneFilePushButton,      row, 4);
-    gridLayout->addWidget(m_zipSceneFilePushButton,       row, 5);
+    gridLayout->addWidget(m_sceneFileSelectionComboBox,   row, 1, 1, 3);
+    gridLayout->addWidget(m_newSceneFilePushButton,       row, 4);
+    gridLayout->addWidget(m_saveSceneFilePushButton,      row, 5);
+    gridLayout->addWidget(m_zipSceneFilePushButton,       row, 6);
     row++;
     gridLayout->addWidget(modifiedLabel,                  row, 0, Qt::AlignRight);
     gridLayout->addWidget(m_sceneFileModifiedStatusLabel, row, 1, Qt::AlignLeft);
     gridLayout->addWidget(m_showFileStructurePushButton,  row, 2);
-    gridLayout->addWidget(m_openSceneFilePushButton,      row, 3);
-    gridLayout->addWidget(m_saveAsSceneFilePushButton,    row, 4);
-    gridLayout->addWidget(m_uploadSceneFilePushButton,    row, 5);
+    gridLayout->addWidget(m_moveSceneFilePushButton,      row, 3);
+    gridLayout->addWidget(m_openSceneFilePushButton,      row, 4);
+    gridLayout->addWidget(m_saveAsSceneFilePushButton,    row, 5);
+    gridLayout->addWidget(m_uploadSceneFilePushButton,    row, 6);
     row++;
     
     return widget;
@@ -2511,8 +2714,8 @@ SceneDialog::showSceneOptionsButtonClicked()
 
             if ( ! optionsResult.isUseSceneColorsSelected()) {
                 CaretPreferences* prefs = SessionManager::get()->getCaretPreferences();
-                prefs->setBackgroundAndForegroundColorsMode(BackgroundAndForegroundColorsModeEnum::USER_PREFERENCES);
-                EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+                prefs->setBackgroundAndForegroundColorsSceneOverrideMode(CaretPreferenceValueSceneOverrideModeEnum::USER_PREFERENCES);
+                EventManager::get()->sendEvent(EventGraphicsPaintSoonAllWindows().getPointer());
             }
         }
     }
@@ -2531,74 +2734,12 @@ SceneDialog::showImagePreviewButtonClicked()
         scene->getSceneInfo()->getImageBytes(imageByteArray,
                                              imageBytesFormat);
         
-        bool useNonModalDialogFlag = true;
-        if (useNonModalDialogFlag) {
-            /*
-             * Scene preview dialog will be deleted when user closes it
-             */
-            ScenePreviewDialog* spd = new ScenePreviewDialog(scene,
-                                                             m_showSceneImagePreviewPushButton);
-            spd->show();
-        }
-        else {
-            WuQDataEntryDialog ded(scene->getName(),
-                                   m_showSceneImagePreviewPushButton,
-                                   WuQDialog::SCROLL_AREA_AS_NEEDED);
-            ded.setCancelButtonText("");
-            ded.setOkButtonText("Close");
-            
-            try {
-                if (imageByteArray.length() > 0) {
-                    ImageFile imageFile;
-                    imageFile.setImageFromByteArray(imageByteArray,
-                                                    imageBytesFormat);
-                    const QImage* image = imageFile.getAsQImage();
-                    if (image != NULL) {
-                        if (image->isNull()) {
-                            CaretLogSevere("Preview image is invalid (isNull)");
-                        }
-                        else {
-                            QLabel* imageLabel = new QLabel();
-                            imageLabel->setPixmap(QPixmap::fromImage(*image));
-                            ded.addWidget("",
-                                          imageLabel);
-                        }
-                    }
-                }
-                
-            }
-            catch (const DataFileException& dfe) {
-                CaretLogSevere("Converting preview to image: "
-                               + dfe.whatString());
-            }
-            
-            AString nameText;
-            AString sceneIdText;
-            AString abbreviatedDescriptionText;
-            AString fullDescriptionText;
-            SceneClassInfoWidget::getFormattedTextForSceneNameAndDescription(scene->getSceneInfo(),
-                                                                             -1,
-                                                                             nameText,
-                                                                             sceneIdText,
-                                                                             abbreviatedDescriptionText,
-                                                                             fullDescriptionText);
-            QLabel* nameLabel = new QLabel(nameText);
-            ded.addWidget("",
-                          nameLabel);
-            
-            QLabel* sceneIdLabel = new QLabel(sceneIdText);
-            ded.addWidget("",
-                          sceneIdLabel);
-            
-            if (! fullDescriptionText.isEmpty()) {
-                QLabel* descriptionLabel = new QLabel(fullDescriptionText);
-                descriptionLabel->setWordWrap(true);
-                ded.addWidget("",
-                              descriptionLabel);
-            }
-            
-            ded.exec();
-        }
+        /*
+         * Scene preview dialog will be deleted when user closes it
+         */
+        ScenePreviewDialog* spd = new ScenePreviewDialog(scene,
+                                                         m_showSceneImagePreviewPushButton);
+        spd->show();
     }
 }
 
@@ -2613,8 +2754,8 @@ SceneDialog::useSceneColorsCheckBoxClicked(bool checked)
 {
     if ( ! checked) {
         CaretPreferences* prefs = SessionManager::get()->getCaretPreferences();
-        prefs->setBackgroundAndForegroundColorsMode(BackgroundAndForegroundColorsModeEnum::USER_PREFERENCES);
-        EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+        prefs->setBackgroundAndForegroundColorsSceneOverrideMode(CaretPreferenceValueSceneOverrideModeEnum::USER_PREFERENCES);
+        EventManager::get()->sendEvent(EventGraphicsPaintSoonAllWindows().getPointer());
     }
 }
 
@@ -2844,6 +2985,8 @@ SceneDialog::displayScenePrivateWithErrorMessage(SceneFile* sceneFile,
         if ( ! sceneFile->isModified()) {
             CaretPreferences* prefs = SessionManager::get()->getCaretPreferences();
             prefs->addToRecentFilesAndOrDirectories(sceneFile->getFileName());
+            prefs->addToMostRecentScenes(sceneFile->getFileName(),
+                                         scene->getName());
         }
     }
     else {
@@ -3011,10 +3154,29 @@ SceneDialog::updateSceneFileModifiedStatusLabel()
     SceneFile* sceneFile = getSelectedSceneFile();
     if (sceneFile != NULL) {
         if (sceneFile->isModified()) {
+            statusText = "<html><font color=\"red\">YES</font></html>";
+            
             if (sceneFile->exists()) {
                 saveButtonEnabledFlag = true;
             }
-            statusText = "<html><font color=\"red\">YES</font></html>";
+            else {
+                FileInformation fileInfo(sceneFile->getFileName());
+                if (fileInfo.isWritable()) {
+                    saveButtonEnabledFlag = true;
+                }
+                else {
+                    /*
+                     * FileInformation::isWritable() seems to fail if the file
+                     * does not exist.  So if the directory path is writable
+                     * and the filename is not empty, assume file is writable.
+                     */
+                    if (FileInformation(fileInfo.getAbsolutePath()).isWritable()) {
+                        if ( ! sceneFile->getFileNameNoPath().isEmpty()) {
+                            saveButtonEnabledFlag = true;
+                        }
+                    }
+                }
+            }
         }
         else {
             statusText = "NO";
@@ -3027,6 +3189,8 @@ SceneDialog::updateSceneFileModifiedStatusLabel()
     
     m_sceneFileModifiedStatusLabel->setText(statusText);
     m_saveSceneFilePushButton->setEnabled(saveButtonEnabledFlag);
+    m_moveSceneFilePushButton->setEnabled( (! saveButtonEnabledFlag)
+                                          && (getSelectedSceneFile() != NULL));
     
     m_showFileStructurePushButton->setEnabled(haveScenesFlag);
     m_zipSceneFilePushButton->setEnabled(haveScenesFlag);
@@ -3042,346 +3206,4 @@ SceneDialog::helpButtonClicked()
     EventHelpViewerDisplay helpViewerEvent(NULL,
                                            "Scenes_Window");
     EventManager::get()->sendEvent(helpViewerEvent.getPointer());
-}
-
-/* ======================================================================== */
-/**
- * \class caret::SceneClassWidget
- * \brief Dialog for manipulation of scenes.
- * \ingroup GuiQt
- */
-
-/**
- * Constructor.
- */
-SceneClassInfoWidget::SceneClassInfoWidget()
-: QGroupBox(0)
-{
-    m_scene = NULL;
-    m_sceneIndex = -1;
-    
-    m_defaultBackgroundRole = backgroundRole();
-    m_defaultAutoFillBackgroundStatus = autoFillBackground();
-    
-    m_activeSceneLabel = new QLabel();
-    m_nameLabel = new QLabel();
-    m_nameLabel->setWordWrap(true);
-    
-    m_descriptionLabel = new QLabel();
-    m_descriptionLabel->setWordWrap(true);
-
-    m_sceneIdLabel = new QLabel();
-    
-    m_previewImageLabel = new QLabel();
-    m_previewImageLabel->setContentsMargins(0, 0, 0, 0);
-    
-    m_rightSideWidget = new QWidget();
-    QVBoxLayout* rightLayout = new QVBoxLayout(m_rightSideWidget);
-    rightLayout->setContentsMargins(0, 0, 0, 0);
-    rightLayout->setSpacing(3);
-    rightLayout->addWidget(m_activeSceneLabel);
-    rightLayout->addWidget(m_nameLabel,1);
-    rightLayout->addWidget(m_sceneIdLabel);
-    rightLayout->addWidget(m_descriptionLabel, 100);
-    rightLayout->addStretch();
-    
-    m_leftSideWidget = new QWidget();
-    QVBoxLayout* leftLayout = new QVBoxLayout(m_leftSideWidget);
-    leftLayout->setContentsMargins(0, 0, 0, 0);
-    leftLayout->setSpacing(0);
-    leftLayout->addWidget(m_previewImageLabel);
-    leftLayout->addStretch();
-    
-    QHBoxLayout* layout = new QHBoxLayout(this);
-    layout->setContentsMargins(0, 3, 0, 0);
-    layout->setSpacing(3);
-    layout->addWidget(m_leftSideWidget);
-    layout->addWidget(m_rightSideWidget, 100, Qt::AlignTop);
-}
-
-/**
- * Destructor.
- */
-SceneClassInfoWidget::~SceneClassInfoWidget()
-{
-    
-}
-
-/**
- * Set/reset the background so that the widget appears to be 
- * selected/unselected.
- *
- * @param selected
- *     Selection status.
- */
-void
-SceneClassInfoWidget::setBackgroundForSelected(const bool selected)
-{
-    if (selected) {
-        setAutoFillBackground(true);
-        setBackgroundRole(QPalette::Highlight);
-    }
-    else {
-        setAutoFillBackground(m_defaultAutoFillBackgroundStatus);
-        setBackgroundRole(m_defaultBackgroundRole);
-    }
-}
-
-/**
- * Update the content.
- *
- * @param scene
- *     Scene for display.
- * @param sceneIndex
- *     Index of the scene.
- * @param activeSceneFlag
- *     True if this is the active scene
- */
-void
-SceneClassInfoWidget::updateContent(Scene* scene,
-                                    const int32_t sceneIndex,
-                                    const bool activeSceneFlag)
-{
-    m_scene = scene;
-    m_sceneIndex = sceneIndex;
-    
-    if ((m_scene != NULL)
-        && (m_sceneIndex >= 0)) {
-        AString nameText;
-        AString sceneIdText;
-        AString descriptionText;
-        AString abbreviatedDescriptionText;
-        AString fullDescriptionText;
-        SceneClassInfoWidget::getFormattedTextForSceneNameAndDescription(scene->getSceneInfo(),
-                                                                         sceneIndex,
-                                                                         nameText,
-                                                                         sceneIdText,
-                                                                         abbreviatedDescriptionText,
-                                                                         fullDescriptionText);
-        
-        if (activeSceneFlag) {
-            m_activeSceneLabel->setText("<html><font color=\"red\">Current Scene</font></html>");
-            m_activeSceneLabel->setVisible(true);
-        }
-        else {
-            m_activeSceneLabel->setText("");
-            m_activeSceneLabel->setVisible(false);
-        }
-        m_nameLabel->setText(nameText);
-        m_sceneIdLabel->setText(sceneIdText);
-        m_descriptionLabel->setText(fullDescriptionText);
-        
-        QByteArray imageByteArray;
-        AString imageBytesFormat;
-        scene->getSceneInfo()->getImageBytes(imageByteArray,
-                                                      imageBytesFormat);
-        
-        
-        const int previewImageWidth = 192;
-        
-        QImage  previewImage;
-        bool    previewImageValid = false;
-        
-        if (imageByteArray.length() > 0) {
-            ImageFile imageFile;
-            imageFile.setImageFromByteArray(imageByteArray,
-                                            imageBytesFormat);
-            
-            previewImage = *imageFile.getAsQImage();
-            if ( ! previewImage.isNull()) {
-                imageFile.resizeToWidth(previewImageWidth);
-                QImage newPreviewImage = *imageFile.getAsQImage();
-                if ( ! newPreviewImage.isNull()) {
-                    previewImage = newPreviewImage;
-                    previewImageValid = true;
-                }
-            }
-        }
-        
-        m_previewImageLabel->clear();
-        m_previewImageLabel->setAlignment(Qt::AlignHCenter
-                                          | Qt::AlignTop);
-        if (previewImageValid) {
-            m_previewImageLabel->setPixmap(QPixmap::fromImage(previewImage));
-        }
-        else {
-            m_previewImageLabel->setText("<html>No preview<br>image</html>");
-        }
-    }
-}
-
-/**
- * Examine the given string for newlines and remove
- * any lines that exceed the maximum allowed.
- *
- * @param textLines
- *     String containing lines of text separated by a newline character.
- * @param maximumNumberOfLines
- *     Maximum number of lines for the text.
- */
-void
-SceneClassInfoWidget::limitToNumberOfLines(AString& textLines,
-                                           const int32_t maximumNumberOfLines)
-{
-    if (textLines.isEmpty()) {
-        return;
-    }
-    
-    const QString lineSeparator("\n");
-    
-    QStringList descriptionLines = textLines.split(lineSeparator,
-                                                   QString::KeepEmptyParts);
-    const int32_t numLines = descriptionLines.size();
-    const int32_t numLinesToRemove = numLines - maximumNumberOfLines;
-    if (numLinesToRemove > 0) {
-        for (int32_t i = 0; i < numLinesToRemove; i++) {
-            descriptionLines.pop_back();
-        }
-    }
-    textLines = descriptionLines.join(lineSeparator);
-}
-
-/**
- * Get formatted text for display of scene name and description.
- *
- * @param sceneInfo
- *    Info for the scene.
- * @param nameTextOut
- *    Text for name.
- * @param sceneIdTextOut
- *    Text for scene ID.
- * @param abbreviatedDescriptionTextOut
- *    Abbreviated text for description.
- * @param fullDescriptionTextOut
- *    Full text for description.
- */
-void
-SceneClassInfoWidget::getFormattedTextForSceneNameAndDescription(const SceneInfo* sceneInfo,
-                                                                 const int32_t sceneIndex,
-                                                                 AString& nameTextOut,
-                                                                 AString& sceneIdTextOut,
-                                                                 AString& abbreviatedDescriptionTextOut,
-                                                                 AString& fullDescriptionTextOut)
-{
-    CaretAssert(sceneInfo);
-    
-    AString name = sceneInfo->getName();
-    if (name.isEmpty()) {
-        name = "NAME IS MISSING !!!";
-    }
-    
-    AString indexText;
-    const bool showSceneIndexFlag = false;
-    if (showSceneIndexFlag) {
-        if (sceneIndex >= 0) {
-            indexText = ("(" + AString::number(sceneIndex + 1) + ") ");
-        }
-    }
-    
-    nameTextOut = ("<html>"
-                   + indexText
-                   + "<b>NAME</b> ("
-                   + AString::number(sceneIndex + 1)
-                   + "):  "
-                   + name
-                   + "</html>");
-    
-    sceneIdTextOut = ("<html><b>BALSA SCENE ID</b>:  "
-                      + sceneInfo->getBalsaSceneID()
-                      + "</html>");
-    
-    fullDescriptionTextOut = sceneInfo->getDescription();
-    abbreviatedDescriptionTextOut = fullDescriptionTextOut;
-    const int32_t maximumLinesInDescription(9);
-    SceneClassInfoWidget::limitToNumberOfLines(abbreviatedDescriptionTextOut,
-                                               maximumLinesInDescription);
-
-    if ( ! fullDescriptionTextOut.isEmpty()) {
-        /*
-         * HTML formatting is needed so text is properly displayed.
-         * Want to put "Description" at beginning in bold but any
-         * HTML tags are converted to text.  So, after conversion to
-         * HTML, perform a replace to insert "Description" in bold.
-         */
-        const AString replaceWithDescriptionBoldText = "REPLACE_WITH_DESCRIPTION";
-        fullDescriptionTextOut = WuQtUtilities::createWordWrappedToolTipText(replaceWithDescriptionBoldText
-                                                                  + fullDescriptionTextOut);
-        fullDescriptionTextOut.replace(replaceWithDescriptionBoldText,
-                            "<b>DESCRIPTION:</b> ");
-    }
-
-    if ( ! abbreviatedDescriptionTextOut.isEmpty()) {
-        /*
-         * HTML formatting is needed so text is properly displayed.
-         * Want to put "Description" at beginning in bold but any
-         * HTML tags are converted to text.  So, after conversion to
-         * HTML, perform a replace to insert "Description" in bold.
-         */
-        const AString replaceWithDescriptionBoldText = "REPLACE_WITH_DESCRIPTION";
-        abbreviatedDescriptionTextOut = WuQtUtilities::createWordWrappedToolTipText(replaceWithDescriptionBoldText
-                                                                  + abbreviatedDescriptionTextOut);
-        abbreviatedDescriptionTextOut.replace(replaceWithDescriptionBoldText,
-                            "<b>DESCRIPTION:</b> ");
-    }
-}
-
-
-/**
- * Called by Qt when the mouse is pressed.
- *
- * @param event
- *    The mouse event information.
- */
-void
-SceneClassInfoWidget::mousePressEvent(QMouseEvent* event)
-{
-    emit highlighted(m_sceneIndex);
-    event->setAccepted(true);
-}
-
-/**
- * Called when the mouse is double clicked.
- *
- * @param event
- *    The mouse event information.
- */
-void
-SceneClassInfoWidget::mouseDoubleClickEvent(QMouseEvent* event)
-{
-    emit activated(m_sceneIndex);
-    event->setAccepted(true);
-}
-
-/**
- * @return The scene.
- */
-Scene*
-SceneClassInfoWidget::getScene()
-{
-    return m_scene;
-}
-
-/**
- * @return The index of the scene.
- */
-int32_t
-SceneClassInfoWidget::getSceneIndex() const
-{
-    return m_sceneIndex;
-}
-
-
-/**
- * @return True if this scene class info widget is valid (has
- * a scene with a valid index).
- */
-bool
-SceneClassInfoWidget::isValid() const
-{
-    if ((m_scene != NULL)
-        && (m_sceneIndex >= 0)) {
-        return true;
-    }
-    
-    return false;
 }

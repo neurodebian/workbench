@@ -25,6 +25,8 @@
 
 #include "AnnotationText.h"
 #include "CaretAssert.h"
+#include "CaretLogger.h"
+
 using namespace caret;
 
 
@@ -114,6 +116,32 @@ SelectionItemAnnotation::getPolyLineCoordinateIndex() const
 }
 
 /**
+ * @return Normalized range from 'polyLineCoordinateIndex' to point on line nearest selection coordinate on
+ * the line formed by coord index to the next coord in the line
+ */
+float
+SelectionItemAnnotation::getNormalizedRangeFromCoordIndexToNextCoordIndex() const
+{
+    return m_normalizedRangeFromCoordIndexToNextCoordIndex;
+}
+
+float
+SelectionItemAnnotation::getDistanceFromMouseToPointOnLine() const
+{
+    return m_distanceFromMouseToPointOnLine;
+}
+
+/**
+ * @return The annotation's coordinates converted to window coordinates
+ */
+std::vector<Vector3D>
+SelectionItemAnnotation::getAnnotationCoordsInWindowXYZ() const
+{
+    return m_coordsInWindowXYZ;
+}
+
+
+/**
  * Add a annotation to the selected annotations.
  *
  * @param annotationFile
@@ -124,12 +152,19 @@ SelectionItemAnnotation::getPolyLineCoordinateIndex() const
  *     Sizing handle that is selected.
  * @param polyLineCoordinateIndex
  *     Index of poly line coordinate
+ * @param normalizedRangeFromCoordIndexToNextCoordIndex
+ *     Normalized range from 'polyLineCoordinateIndex' to point on line nearest selection coordinate
+ * @param coordsInWindowXYZ
+ *     Coordinates convertex to window XYZ
  */
 void
 SelectionItemAnnotation::setAnnotation(AnnotationFile* annotationFile,
                                        Annotation* annotation,
                                        const AnnotationSizingHandleTypeEnum::Enum annotationSizingHandle,
-                                       const int32_t polyLineCoordinateIndex)
+                                       const int32_t polyLineCoordinateIndex,
+                                       const float normalizedRangeFromCoordIndexToNextCoordIndex,
+                                       const float distanceFromMouseToPointOnLine,
+                                       const std::vector<Vector3D>& coordsInWindowXYZ)
 {
     CaretAssert(annotationFile);
     CaretAssert(annotation);
@@ -137,6 +172,56 @@ SelectionItemAnnotation::setAnnotation(AnnotationFile* annotationFile,
     m_annotation     = annotation;
     m_sizingHandle   = annotationSizingHandle;
     m_polyLineCoordinateIndex = polyLineCoordinateIndex;
+    m_normalizedRangeFromCoordIndexToNextCoordIndex = normalizedRangeFromCoordIndexToNextCoordIndex;
+    m_distanceFromMouseToPointOnLine = distanceFromMouseToPointOnLine;
+    m_coordsInWindowXYZ       = coordsInWindowXYZ;
+    
+    if (annotation != NULL) {
+        bool validateFlag(false);
+        switch (annotation->getType()) {
+            case AnnotationTypeEnum::BOX:
+                validateFlag = true;
+                break;
+            case AnnotationTypeEnum::BROWSER_TAB:
+                break;
+            case AnnotationTypeEnum::COLOR_BAR:
+                break;
+            case AnnotationTypeEnum::IMAGE:
+                validateFlag = true;
+                break;
+            case AnnotationTypeEnum::LINE:
+                validateFlag = true;
+                break;
+            case AnnotationTypeEnum::OVAL:
+                validateFlag = true;
+                break;
+            case AnnotationTypeEnum::POLYHEDRON:
+                validateFlag = true;
+                break;
+            case AnnotationTypeEnum::POLYGON:
+                validateFlag = true;
+                break;
+            case AnnotationTypeEnum::POLYLINE:
+                validateFlag = true;
+                break;
+            case AnnotationTypeEnum::SCALE_BAR:
+                break;
+            case AnnotationTypeEnum::TEXT:
+                validateFlag = true;
+                break;
+        }
+        if (validateFlag) {
+            if (annotation->getNumberOfCoordinates() != static_cast<int32_t>(coordsInWindowXYZ.size())) {
+                CaretLogSevere("Selection failed for annotation "
+                               + annotation->toString()
+                               + " with "
+                               + AString::number(annotation->getNumberOfCoordinates())
+                               + " coordinates but only "
+                               + AString::number(coordsInWindowXYZ.size())
+                               + " coordinates have valid window positions.");
+            }
+        }
+    }
 }
 /**
  * Get a description of m_ object's content.
@@ -148,16 +233,13 @@ SelectionItemAnnotation::toString() const
     AString text = SelectionItem::toString();
     text += ("Annotation type=" + AnnotationTypeEnum::toGuiName(m_annotation->getType())
              + "   sizeHandleType=" + AnnotationSizingHandleTypeEnum::toGuiName(m_sizingHandle)
-             + "   m_polyLineCoordinateIndex=" + AString::number(m_polyLineCoordinateIndex));
+             + "   m_polyLineCoordinateIndex=" + AString::number(m_polyLineCoordinateIndex)
+             + "   m_normalizedRangeFromCoordIndexToNextCoordIndex=" + AString::number(m_normalizedRangeFromCoordIndexToNextCoordIndex, 'f', 3)
+             + "   m_distanceFromMouseToPointOnLine=" + AString::number(m_distanceFromMouseToPointOnLine));
     
     AnnotationText* textAnn = dynamic_cast<AnnotationText*>(m_annotation);
     if (textAnn != NULL) {
         text += ("   text=" + textAnn->getText());
     }
-//    text += ("Surface: " + ((surface != NULL) ? surface->getFileNameNoPath() : "INVALID") + "\n");
-//    text += ("Border File: " + ((borderFile != NULL) ? borderFile->getFileNameNoPath() : "INVALID") + "\n");
-//    text += ("Border: " + ((border != NULL) ? border->getName() : "INVALID") + "\n");
-//    text += ("Border Index: " + AString::number(borderIndex) + "\n");
-//    text += ("Border Point Index: " + AString::number(borderPointIndex) + "\n");
     return text;
 }

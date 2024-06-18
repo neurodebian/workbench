@@ -43,23 +43,26 @@ namespace caret {
         
         void addCoordinate(AnnotationCoordinate* coord);
         
+        void insertCoordinateAtIndex(const int32_t index,
+                                     AnnotationCoordinate* coord);
+
         virtual AnnotationMultiCoordinateShape* castToMultiCoordinateShape() override;
         
         virtual const AnnotationMultiCoordinateShape* castToMultiCoordinateShape() const override;
         
-        int32_t getNumberOfCoordinates() const;
+        virtual int32_t getNumberOfCoordinates() const override;
         
-        AnnotationCoordinate* getCoordinate(const int32_t index);
+        virtual AnnotationCoordinate* getCoordinate(const int32_t index) override;
         
-        const AnnotationCoordinate* getCoordinate(const int32_t index) const;
-        
-        void getCopyOfAllCoordinates(std::vector<std::unique_ptr<AnnotationCoordinate>>& allCoordsOut) const;
-        
-        void getCopyOfAllCoordinates(std::vector<std::unique_ptr<const AnnotationCoordinate>>& allCoordsOut) const;
-        
+        virtual const AnnotationCoordinate* getCoordinate(const int32_t index) const override;
+
+        void insertCoordinate(const int32_t insertAfterCoordinateIndex,
+                              const int32_t surfaceSpaceVertexIndex,
+                              const float normalizedDistanceToNextCoordinate);
+                
         void removeCoordinateAtIndex(const int32_t index);
         
-        void replaceAllCoordinates(const std::vector<std::unique_ptr<const AnnotationCoordinate>>& coordinates);
+        virtual void replaceAllCoordinates(const std::vector<std::unique_ptr<const AnnotationCoordinate>>& coordinates) override;
         
         virtual AnnotationSurfaceOffsetVectorTypeEnum::Enum getSurfaceOffsetVectorType() const override;
         
@@ -89,6 +92,10 @@ namespace caret {
         
         bool applySpatialModificationChartSpace(const AnnotationSpatialModification& spatialModification);
         
+        bool applySpatialModificationHistologySpace(const AnnotationSpatialModification& spatialModification);
+        
+        bool applySpatialModificationMediaSpace(const AnnotationSpatialModification& spatialModification);
+        
         bool applySpatialModificationSurfaceSpace(const AnnotationSpatialModification& spatialModification);
         
         bool applySpatialModificationStereotaxicSpace(const AnnotationSpatialModification& spatialModification);
@@ -96,6 +103,10 @@ namespace caret {
         bool applySpatialModificationTabOrWindowSpace(const AnnotationSpatialModification& spatialModification);
         
         bool applySpatialModificationSpacerTabSpace(const AnnotationSpatialModification& spatialModification);
+        
+        bool getClockwiseAndCounterClockwiseCoordinates(const int32_t coordinateIndex,
+                                                        int32_t& clockwiseIndexOut,
+                                                        int32_t& counterClockwiseIndexOut) const;
         
         std::unique_ptr<SceneClassAssistant> m_sceneAssistant;
         

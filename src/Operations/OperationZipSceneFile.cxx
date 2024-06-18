@@ -18,6 +18,7 @@
  */
 /*LICENSE_END*/
 
+#include "ApplicationInformation.h"
 #include "CaretLogger.h"
 #include "DataFile.h"
 #include "EventManager.h"
@@ -30,6 +31,7 @@
 #include "SceneClass.h"
 #include "SceneClassArray.h"
 #include "SceneFile.h"
+#include "ScenePathName.h"
 #include "SpecFile.h"
 
 #include "quazip.h"
@@ -67,6 +69,8 @@ OperationParameters* OperationZipSceneFile::getParameters()
     
     ret->createOptionalParameter(5, "-skip-missing", "any missing files will generate only warnings, and the zip file will be created anyway");
 
+    ret->createOptionalParameter(6, "-write-scene-file", "rewrite the scene file before zipping, to store a new base path or fix extra '..'s in paths that might break");
+    
     ret->setHelpText("If zip-file already exists, it will be overwritten.  "
         "If -base-dir is not specified, the base directory will be automatically set to the lowest level directory containing all files.  "
         "The scene file must contain only relative paths, and no data files may be outside the base directory.");
@@ -85,6 +89,7 @@ void OperationZipSceneFile::useParameters(OperationParameters* myParams, Progres
         myBaseDir = QDir::cleanPath(QDir(baseOpt->getString(1)).absolutePath());
     }
     bool skipMissing = myParams->getOptionalParameter(5)->m_present;
+    bool allowSceneFileWriting = myParams->getOptionalParameter(6)->m_present;
     
     OperationZipSceneFile::createZipFile(myProgObj,
                                          sceneFileName,
@@ -92,7 +97,8 @@ void OperationZipSceneFile::useParameters(OperationParameters* myParams, Progres
                                          zipFileName,
                                          myBaseDir,
                                          PROGRESS_COMMAND_LINE,
-                                         skipMissing);
+                                         skipMissing,
+                                         allowSceneFileWriting);
 }
 
 void OperationZipSceneFile::createZipFile(ProgressObject* myProgObj,
@@ -101,7 +107,8 @@ void OperationZipSceneFile::createZipFile(ProgressObject* myProgObj,
                                           const AString& zipFileName,
                                           const AString& baseDirectory,
                                           const ProgressMode progressMode,
-                                          const bool skipMissing)
+                                          const bool skipMissing,
+                                          const bool rewriteSceneFile)
 {
     LevelProgress myProgress(myProgObj);
     FileInformation sceneFileInfo(sceneFileName);
@@ -127,30 +134,67 @@ void OperationZipSceneFile::createZipFile(ProgressObject* myProgObj,
     if ( ! baseDirectory.isEmpty())
     {
         myBaseDir = QDir::cleanPath(QDir(baseDirectory).absolutePath());
+        sceneFile.setBasePathType(SceneFileBasePathTypeEnum::CUSTOM);
+        sceneFile.setBalsaCustomBaseDirectory(myBaseDir);
     }
     else {
         AString baseDirectoryName;
         std::vector<AString> missingFileNames;
-        AString errorMessage;
-        const bool validBasePathFlag = sceneFile.findBaseDirectoryForDataFiles(baseDirectoryName,
-                                                                               missingFileNames,
-                                                                               errorMessage);
-        if ( ! validBasePathFlag) {
-            throw OperationException("Automatic Base Directory Failed: "
-                                     + errorMessage);
-        }
+        switch (sceneFile.getBasePathType())
+        {
+            case SceneFileBasePathTypeEnum::AUTOMATIC:
+            {
+                AString errorMessage;
+                const bool validBasePathFlag = sceneFile.findBaseDirectoryForDataFiles(baseDirectoryName,
+                                                                                    missingFileNames,
+                                                                                    errorMessage);
+                if ( ! validBasePathFlag) {
+                    throw OperationException("Automatic Base Directory Failed: "
+                                            + errorMessage);
+                }
 
-        myBaseDir = QDir::cleanPath(baseDirectoryName);
+                myBaseDir = QDir::cleanPath(baseDirectoryName);
+                break;
+            }
+            case SceneFileBasePathTypeEnum::CUSTOM:
+            {
+                myBaseDir = QDir::cleanPath(sceneFile.getBalsaCustomBaseDirectory());
+                break;
+            }
+        }
+        cout << "Base Directory: " << myBaseDir << endl;
     }
     if (!myBaseDir.endsWith('/'))//root is a special case, if we didn't handle it differently it would end up looking for "//somefile"
     {//this is actually because the path function strips the final "/" from the path, but not when it is just "/"
         myBaseDir += "/";//so, add the trailing slash to the path
     }
     
+    AString warningMsg;
+    sceneFile.setBalsaExtractToDirectoryName(outputSubDirectory);
+    if (sceneFile.isModified()) {
+        switch (ApplicationInformation::getApplicationType()) {
+            case ApplicationTypeEnum::APPLICATION_TYPE_COMMAND_LINE:
+                if (rewriteSceneFile) {
+                    cout << "Writing scene file: " << sceneFile.getFileName() << endl;
+                    sceneFile.writeFile(sceneFile.getFileName());
+                } else {
+                    warningMsg = "new base directory or extraction directory was specified, but without -write-scene-file - if this zip is uploaded to balsa, it may extract to a different directory name than you want";
+                }
+                break;
+            case ApplicationTypeEnum::APPLICATION_TYPE_GRAPHICAL_USER_INTERFACE:
+                // GUI writes scene file in zip dialog
+                break;
+            case ApplicationTypeEnum::APPLICATION_TYPE_INVALID:
+                CaretAssert(0);
+                break;
+        }
+    }
     AString sceneFilePath = QDir::cleanPath(sceneFileInfo.getAbsoluteFilePath());//resolve filenames to open from the spec file's location, NOT from current directory
     if (!sceneFilePath.startsWith(myBaseDir))
     {
-        throw OperationException("scene file lies outside the base directory");
+        throw OperationException("scene file lies outside the base directory\n"
+                                 "scene file path: " + sceneFilePath + "\n"
+                                 "base directory: " + myBaseDir);
     }
     
     set<AString> allFiles;
@@ -187,6 +231,22 @@ void OperationZipSceneFile::createZipFile(ProgressObject* myProgObj,
             SpecFile tempSpec;
             tempSpec.restoreFromScene(myAttrs, specClass);
             vector<AString> tempNames = tempSpec.getAllDataFileNamesSelectedForLoading();
+            
+            
+            const SceneClass* childDataFilePathNamesClass(brainClass->getClass("brainChildDataFilePathNames"));
+            if (childDataFilePathNamesClass != NULL) {
+                const int32_t numPathNames(childDataFilePathNamesClass->getNumberOfObjects());
+                for (int32_t ipn = 0; ipn < numPathNames; ipn++) {
+                    const SceneObject* so(childDataFilePathNamesClass->getObjectAtIndex(ipn));
+                    if (so != NULL) {
+                        const ScenePathName* pathName(dynamic_cast<const ScenePathName*>(so));
+                        if (pathName != NULL) {
+                            tempNames.push_back(pathName->stringValue());
+                        }
+                    }
+                }
+            }
+            
             int numNames = (int)tempNames.size();
             for (int k = 0; k < numNames; ++k)
             {
@@ -327,5 +387,9 @@ void OperationZipSceneFile::createZipFile(ProgressObject* myProgObj,
             }
             EventManager::get()->sendEvent(progressEvent.getPointer());
             break;
+    }
+    if (warningMsg != "")
+    {
+        CaretLogWarning(warningMsg); //do the -write-scene-file warning last so people actually see it
     }
 }

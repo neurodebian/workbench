@@ -38,7 +38,11 @@ public:
         /** Draw volume slice with an oblique projection */
         VOLUME_SLICE_PROJECTION_OBLIQUE,
         /** Draw volume slice with an orthogonal projection */
-        VOLUME_SLICE_PROJECTION_ORTHOGONAL
+        VOLUME_SLICE_PROJECTION_ORTHOGONAL,
+        /** Multi-Planar Reconstruction  */
+        VOLUME_SLICE_PROJECTION_MPR,
+        /** Multi-Planar Reconstruction  Revision Three*/
+        VOLUME_SLICE_PROJECTION_MPR_THREE
     };
 
 
@@ -62,10 +66,15 @@ public:
 
     static void getAllGuiNames(std::vector<AString>& allGuiNames, const bool isSorted);
 
+    static AString toToolTip(Enum enumValue);
+    
+    static AString getToolTipForGuiInHtml();
+    
 private:
     VolumeSliceProjectionTypeEnum(const Enum enumValue, 
-                 const AString& name,
-                 const AString& guiName);
+                                  const AString& name,
+                                  const AString& guiName,
+                                  const AString& toolTip);;
 
     static const VolumeSliceProjectionTypeEnum* findData(const Enum enumValue);
 
@@ -92,6 +101,9 @@ private:
     
     /** A user-friendly name that is displayed in the GUI */
     AString guiName;
+    
+    /** Tooltip for GUI */
+    AString toolTip;
 };
 
 #ifdef __VOLUME_SLICE_PROJECTION_TYPE_ENUM_DECLARE__

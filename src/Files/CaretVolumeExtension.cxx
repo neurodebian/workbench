@@ -133,6 +133,9 @@ void SubvolumeAttributes::writeAsXML(XmlWriter& xmlWriter, int index)
         case RGB:
             typeString = "RGB";
             break;
+        case RGB_WORKBENCH:
+            typeString = "RGB_WORKBENCH";
+            break;
         case SEGMENTATION:
             typeString = "Segmentation";
             break;
@@ -147,6 +150,43 @@ void SubvolumeAttributes::writeAsXML(XmlWriter& xmlWriter, int index)
         m_metadata.writeAsXML(xmlWriter);
     }
     xmlWriter.writeEndElement();
+}
+
+/**
+ * @return Name for the given volume type
+ * @param volumeType
+ *    The volume type
+ */
+AString SubvolumeAttributes::getTypeNameFromType(SubvolumeAttributes::VolumeType volumeType)
+{
+    AString name("INVALID");
+    switch (volumeType) {
+        case SubvolumeAttributes::ANATOMY:
+            name = "ANATOMY";
+            break;
+        case SubvolumeAttributes::FUNCTIONAL:
+            name = "FUNCTIONAL";
+            break;
+        case SubvolumeAttributes::LABEL:
+            name = "LABEL";
+            break;
+        case SubvolumeAttributes::RGB:
+            name = "RGB";
+            break;
+        case SubvolumeAttributes::RGB_WORKBENCH:
+            name = "RGB_WORKBENCH";
+            break;
+        case SubvolumeAttributes::SEGMENTATION:
+            name = "SEGMENTATION";
+            break;
+        case SubvolumeAttributes::UNKNOWN:
+            name = "UNKNOWN";
+            break;
+        case SubvolumeAttributes::VECTOR:
+            name = "VECTOR";
+            break;
+    }
+    return name;
 }
 
 void StudyMetadataLinkSet::writeAsXML(XmlWriter& xmlWriter)
@@ -282,6 +322,8 @@ void CaretVolumeExtensionXMLReader::endElement(const AString& namespaceURI, cons
                 m_toFill->m_attributes[m_viIndex]->m_type = SubvolumeAttributes::LABEL;
             } else if (elemCharData == "RGB") {
                 m_toFill->m_attributes[m_viIndex]->m_type = SubvolumeAttributes::RGB;
+            } else if (elemCharData == "RGB_WORKBENCH") {
+                m_toFill->m_attributes[m_viIndex]->m_type = SubvolumeAttributes::RGB_WORKBENCH;
             } else if (elemCharData == "Segmentation") {
                 m_toFill->m_attributes[m_viIndex]->m_type = SubvolumeAttributes::SEGMENTATION;
             } else if (elemCharData == "Vector") {

@@ -21,9 +21,10 @@
  */
 /*LICENSE_END*/
 
+#include <array>
 
 #include "CaretObject.h"
-
+#include "Vector3D.h"
 
 namespace caret {
 
@@ -31,6 +32,8 @@ namespace caret {
     class Plane : public CaretObject {
         
     public:
+        static Plane fromFormattedString(const AString& s);
+        
         Plane();
         
         Plane(const float p1[3],
@@ -40,11 +43,26 @@ namespace caret {
         Plane(const float unitNormalVector[3],
               const float pointOnPlane[3]);
         
+        Plane(const float A,
+              const float B,
+              const float C,
+              const float D, 
+              const float pointOnPlane[3]);
+        
         virtual ~Plane();
         
         Plane(const Plane& p);
         
         Plane& operator=(const Plane& p);
+        
+        static bool arePlanesOrthogonal(const Vector3D& normalVectorOne,
+                                        const Vector3D& normalVectorTwo,
+                                        const Vector3D& normalVectorThree,
+                                        AString* optionalMessageOut);
+        
+        static float angleDegreesOfPlaneNormalVectors(const Plane& p1,
+                                                      const Plane& p2,
+                                                      bool* optionalValidFlagOut = NULL);
         
         bool isValidPlane() const;
         
@@ -67,20 +85,36 @@ namespace caret {
         void projectPointToPlane(const float pointIn[3],
                                  float pointProjectedOut[3]) const;
         
+        Vector3D projectPointToPlane(const float pointIn[3]) const;
+        
         void getPlane(double& aOut,
                       double& bOut,
                       double& cOut,
                       double& dOut) const;
         
+        std::array<double, 4> getPlaneEquation() const;
+        
         void getNormalVector(double normalVectorOut[3]) const;
         
         void getNormalVector(float normalVectorOut[3]) const;
         
+        Vector3D getNormalVector() const;
+        
+        void invertNormalVector();
+        
         bool rayIntersection(const float rayOrigin[3],
                              const float rayVector[3],
-                             float intersectionXYZandDistance[4]);
+                             Vector3D& intersectionOutXYZ,
+                             float& distanceOut) const;
+        
+        void shiftPlane(const float distance);
         
         virtual AString toString() const;
+        
+        AString toFormattedString() const;
+        
+        bool toAbcdAndPointXYZ(AString& abcdOut,
+                               AString& pointXyzOut) const;
         
         static void unitTest(std::ostream& stream,
                       const bool isVerbose);

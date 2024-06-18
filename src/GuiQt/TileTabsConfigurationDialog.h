@@ -48,6 +48,7 @@ namespace caret {
     class CaretPreferences;
     class EnumComboBoxTemplate;
     class TileTabsLayoutBaseConfiguration;
+    class TileTabsLayoutConfigurationTypeWidget;
     class TileTabsLayoutGridConfiguration;
     class TileTabsLayoutManualConfiguration;
     class TileTabGridRowColumnWidgets;
@@ -71,6 +72,16 @@ namespace caret {
         
         virtual void receiveEvent(Event* event) override;
         
+        static bool warnIfGridConfigurationTooSmallDialog(const int32_t windowIndex,
+                                                          const TileTabsLayoutGridConfiguration* gridConfiguration,
+                                                          QWidget* parentWidget);
+        
+        static bool loadIntoManualConfiguration(const TileTabsLayoutBaseConfiguration* configuration,
+                                                const int32_t windowIndex,
+                                                QWidget* parentWidget);
+        
+        static TileTabsLayoutManualConfiguration* createManualConfigurationFromWindow(const BrainBrowserWindow* window);
+
     private:
         TileTabsConfigurationDialog(const TileTabsConfigurationDialog&);
 
@@ -99,22 +110,12 @@ namespace caret {
         
         void loadIntoActiveConfigurationPushButtonClicked();
 
-        void automaticCustomButtonClicked(QAbstractButton*);
-        
         void tileTabsModificationRequested(EventTileTabsGridConfigurationModification& modification);
 
         void centeringCorrectionCheckBoxClicked(bool checked);
         
         void manualConfigurationGeometryChanged();
 
-        void manualConfigurationSetToolButtonClicked();
-        
-        void manualConfigurationSetMenuColumnsItemTriggered();
-        
-        void manualConfigurationSetMenuFromAutomaticItemTriggered();
-        
-        void manualConfigurationSetMenuFromCustomItemTriggered();
-        
         void manualConfigurationWindowAnnotationsDepthSpinBoxValueChanged(int value);
         
         void userConfigurationSelectionListWidgetItemChanged();
@@ -122,6 +123,8 @@ namespace caret {
         void templateConfigurationSelectionListWidgetItemChanged();
         
         void configurationSourceTabWidgetClicked(int index);
+        
+        void viewAspectLockedInfoDialog();
         
     protected:
         void focusGained();
@@ -169,8 +172,6 @@ namespace caret {
         void addManualGeometryWidget(QGridLayout* gridLayout,
                                      std::vector<TileTabsManualTabGeometryWidget*>& widgetsVector);
         
-        QToolButton* createManualConfigurationSetToolButton();
-        
         void updateGridStretchFactors();
         
         void updateGraphicsWindow();
@@ -193,7 +194,8 @@ namespace caret {
         
         AString getNewConfigurationName(QWidget* dialogParent);
         
-        const BrainOpenGLViewportContent* getViewportContentForTab(const int32_t tabIndex) const;
+        static const BrainOpenGLViewportContent* getViewportContentForTab(const int32_t windowIndex,
+                                                                          const int32_t tabIndex);
 
         TileTabsLayoutManualConfiguration* createManualConfigurationFromCurrentTabs() const;
         
@@ -211,21 +213,17 @@ namespace caret {
         
         void loadTemplateLayoutConfigurationFromXML(const QString& xml);
         
-        bool warnIfGridConfigurationTooSmallDialog(const TileTabsLayoutGridConfiguration* gridConfiguration) const;
-        
-        bool loadIntoManualConfiguration(const TileTabsLayoutBaseConfiguration* configuration);
+        void updateAspectLockingInfo();
         
         BrainBrowserWindowComboBox* m_browserWindowComboBox;
         
+        QLabel* m_aspectLockedLabel;
+
         QStackedWidget* m_editConfigurationStackedWidget;
         
         QWidget* m_customGridConfigurationWidget;
         
-        QRadioButton* m_automaticGridConfigurationRadioButton;
-        
-        QRadioButton* m_customGridConfigurationRadioButton;
-        
-        QRadioButton* m_manualConfigurationRadioButton;
+        TileTabsLayoutConfigurationTypeWidget* m_configurationTypeWidget;
         
         QPushButton* m_deleteConfigurationPushButton;
         
@@ -266,12 +264,6 @@ namespace caret {
         QWidget* m_manualGeometryWidget;
         
         QGridLayout* m_manualGeometryGridLayout;
-        
-        QToolButton* m_manualConfigurationSetButton;
-        
-        QString m_setManualToAutomaticGridActionText;
-        QString m_setManualToCustomGridActionText;
-        QString m_setManualToGridColumnsActionText;
         
         std::vector<TileTabsManualTabGeometryWidget*> m_manualGeometryEditorWidgets;
         

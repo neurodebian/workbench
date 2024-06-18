@@ -11,6 +11,15 @@ set (EXE_NAME wb_view)
 #
 # QT Include directories
 #
+if(Qt6_FOUND)
+    include_directories(${Qt6Core_INCLUDE_DIRS})
+    include_directories(${Qt6Network_INCLUDE_DIRS})
+#    if(Qt5OpenGL_FOUND)
+#        include_directories(${Qt5OpenGL_INCLUDE_DIRS})
+#    endif()
+    include_directories(${Qt6OpenGLWidgets_INCLUDE_DIRS})
+    include_directories(${Qt6Widgets_INCLUDE_DIRS})
+endif()
 if(Qt5_FOUND)
     include_directories(${Qt5Core_INCLUDE_DIRS})
     include_directories(${Qt5Network_INCLUDE_DIRS})
@@ -19,13 +28,6 @@ if(Qt5_FOUND)
     endif()
     include_directories(${Qt5Widgets_INCLUDE_DIRS})
 endif()
-IF (QT4_FOUND)
-    SET(QT_USE_QTXML TRUE)
-    SET(QT_USE_QTOPENGL TRUE)
-    SET(QT_USE_QTNETWORK TRUE)
-    INCLUDE(${QT_USE_FILE})
-ENDIF ()
-
 
 #
 # Added by JWH to eliminate OpenGL linking errors in Ubuntu Linux
@@ -41,6 +43,7 @@ ENDIF (UNIX)
 # Help can be excluded
 #
 SET (RESOURCES_QRC_FILE
+     ../Resources/Data/data_resources.qrc
      ../Resources/General/general_resources.qrc
      ../Resources/Gui/gui_resources.qrc)
 IF (WORKBENCH_INCLUDE_HELP_HTML_RESOURCES)
@@ -48,12 +51,11 @@ IF (WORKBENCH_INCLUDE_HELP_HTML_RESOURCES)
           ../Resources/Help/help_resources.qrc)
 ENDIF (WORKBENCH_INCLUDE_HELP_HTML_RESOURCES)
 
+IF (Qt6_FOUND)
+    QT6_ADD_RESOURCES(IMAGE_RCS_SRCS ${RESOURCES_QRC_FILE})
+ENDIF (Qt6_FOUND)
 IF (Qt5_FOUND)
     QT5_ADD_RESOURCES(IMAGE_RCS_SRCS ${RESOURCES_QRC_FILE})
-ELSE (Qt5_FOUND)
-    IF (QT4_FOUND)
-        QT4_ADD_RESOURCES(IMAGE_RCS_SRCS ${RESOURCES_QRC_FILE})
-    ENDIF()
 ENDIF (Qt5_FOUND)
 
 #
@@ -105,6 +107,19 @@ ENDIF (NOT APPLE)
 if(Qt5OpenGL_FOUND)
     set(QT5_OPENGL_LIB_NAME Qt5::OpenGL)
 endif()
+if(Qt6_FOUND)
+    set(QT6_LINK_LIBS
+        Qt6::Concurrent
+        Qt6::Core
+        Qt6::Core5Compat
+        Qt6::Gui
+        Qt6::Network
+        Qt6::OpenGLWidgets
+        Qt6::PrintSupport
+        Qt6::Test
+        Qt6::Widgets
+        Qt6::Xml)
+endif()
 if(Qt5_FOUND)
     set(QT5_LINK_LIBS
         Qt5::Concurrent
@@ -132,9 +147,9 @@ ${Qwt_LIBRARIES}
 OSMesaDummy
 Brain
 Files
-Graphics
 ${FTGL_LIBRARIES}
 Annotations
+Graphics
 Charting
 Palette
 Cifti
@@ -144,13 +159,18 @@ QxtCore
 FilesBase
 Scenes
 Xml
+CZICmd
+CZI
+CZIJxrDecode
 Common
 ${GLEW_LIBRARIES}
 ${QUAZIP_LIBRARIES}
 ${FREETYPE_LIBRARIES}
 ${QT_LIBRARIES}
+${QT6_LINK_LIBS}
 ${QT5_LINK_LIBS}
 ${ZLIB_LIBRARIES}
+${OPENMP_LIBRARY}
 #${LIBS}
 )
 
@@ -234,7 +254,7 @@ IF (APPLE)
 ENDIF (APPLE)
 
 IF (APPLE)
-    SET (MACOSX_BUNDLE_INFO_STRING wb_view Copyright 2015 )
+    SET (MACOSX_BUNDLE_INFO_STRING wb_view Copyright 2024 )
     SET (MACOSX_BUNDLE_ICON_FILE workbench.icns )
     ##SET (MACOSX_BUNDLE_GUI_IDENTIFIER wb_view )
     ## Underscore is not valid in MACOSX_BUNDLE_GUI_IDENTIFIER
@@ -243,7 +263,7 @@ IF (APPLE)
     SET (MACOSX_BUNDLE_BUNDLE_NAME wb_view)
     SET (MACOSX_BUNDLE_SHORT_VERSION_STRING ${WB_VERSION})
     SET (MACOSX_BUNDLE_BUNDLE_VERSION ${WB_VERSION})
-    SET (MACOSX_BUNDLE_COPYRIGHT  2015 )
+    SET (MACOSX_BUNDLE_COPYRIGHT  2024 )
 
     ADD_CUSTOM_COMMAND(
         TARGET ${EXE_NAME}

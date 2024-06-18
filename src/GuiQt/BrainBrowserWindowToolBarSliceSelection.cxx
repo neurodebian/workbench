@@ -26,6 +26,7 @@
 #undef __BRAIN_BROWSER_WINDOW_TOOL_BAR_SLICE_SELECTION_DECLARE__
 
 #include <QAction>
+#include <QActionGroup>
 #include <QCheckBox>
 #include <QDoubleSpinBox>
 #include <QGridLayout>
@@ -35,6 +36,7 @@
 #include <QPen>
 #include <QSpinBox>
 #include <QToolButton>
+#include <QWidgetAction>
 
 #include "BrainBrowserWindowToolBar.h"
 #include "BrowserTabContent.h"
@@ -46,6 +48,8 @@
 #include "ModelVolume.h"
 #include "ModelWholeBrain.h"
 #include "VolumeFile.h"
+#include "VolumeMprSettingsWidget.h"
+#include "VolumeObliqueOptionsWidget.h"
 #include "VolumeSliceInterpolationEdgeEffectsMaskingEnum.h"
 #include "VolumeSliceProjectionTypeEnum.h"
 #include "WuQFactory.h"
@@ -74,12 +78,12 @@ using namespace caret;
 BrainBrowserWindowToolBarSliceSelection::BrainBrowserWindowToolBarSliceSelection(BrainBrowserWindowToolBar* parentToolBar,
                                                                                  const QString parentObjectName)
 : BrainBrowserWindowToolBarComponent(parentToolBar),
-m_parentToolBar(parentToolBar)
+m_parentToolBar(parentToolBar),
+m_objectNamePrefix(parentObjectName
+                   + ":ToolBar:SliceSelection:")
 {
     WuQMacroManager* macroManager = WuQMacroManager::instance();
     CaretAssert(macroManager);
-    const QString objectNamePrefix(parentObjectName
-                                   + ":ToolBar:SliceSelection:");
     
     QAction* volumeIndicesOriginToolButtonAction = WuQtUtilities::createAction("O\nR\nI\nG\nI\nN",
                                                                                "Set the slice indices to the origin, \n"
@@ -90,7 +94,7 @@ m_parentToolBar(parentToolBar)
     QToolButton* volumeIndicesOriginToolButton = new QToolButton;
     volumeIndicesOriginToolButton->setDefaultAction(volumeIndicesOriginToolButtonAction);
     WuQtUtilities::setToolButtonStyleForQt5Mac(volumeIndicesOriginToolButton);
-    volumeIndicesOriginToolButtonAction->setObjectName(objectNamePrefix
+    volumeIndicesOriginToolButtonAction->setObjectName(m_objectNamePrefix
                                                        + "MoveVolumeSlicesToOrigin");
     volumeIndicesOriginToolButtonAction->setParent(volumeIndicesOriginToolButton);
     macroManager->addMacroSupportToObject(volumeIndicesOriginToolButtonAction,
@@ -103,7 +107,7 @@ m_parentToolBar(parentToolBar)
     m_volumeIndicesParasagittalCheckBox = new QCheckBox(" ");
     WuQtUtilities::setToolTipAndStatusTip(m_volumeIndicesParasagittalCheckBox,
                                           "Enable/Disable display of PARASAGITTAL slice");
-    m_volumeIndicesParasagittalCheckBox->setObjectName(objectNamePrefix
+    m_volumeIndicesParasagittalCheckBox->setObjectName(m_objectNamePrefix
                                                        + "EnableParasagittalSlice");
     QObject::connect(m_volumeIndicesParasagittalCheckBox, SIGNAL(stateChanged(int)),
                      this, SLOT(volumeIndicesParasagittalCheckBoxStateChanged(int)));
@@ -113,7 +117,7 @@ m_parentToolBar(parentToolBar)
     m_volumeIndicesCoronalCheckBox = new QCheckBox(" ");
     WuQtUtilities::setToolTipAndStatusTip(m_volumeIndicesCoronalCheckBox,
                                           "Enable/Disable display of CORONAL slice");
-    m_volumeIndicesCoronalCheckBox->setObjectName(objectNamePrefix
+    m_volumeIndicesCoronalCheckBox->setObjectName(m_objectNamePrefix
                                                        + "EnableCoronalSlice");
     QObject::connect(m_volumeIndicesCoronalCheckBox, SIGNAL(stateChanged(int)),
                      this, SLOT(volumeIndicesCoronalCheckBoxStateChanged(int)));
@@ -124,7 +128,7 @@ m_parentToolBar(parentToolBar)
     WuQtUtilities::setToolTipAndStatusTip(m_volumeIndicesAxialCheckBox,
                                           "Enable/Disable display of AXIAL slice");
     
-    m_volumeIndicesAxialCheckBox->setObjectName(objectNamePrefix
+    m_volumeIndicesAxialCheckBox->setObjectName(m_objectNamePrefix
                                                        + "EnableAxialSlice");
     QObject::connect(m_volumeIndicesAxialCheckBox, SIGNAL(stateChanged(int)),
                      this, SLOT(volumeIndicesAxialCheckBoxStateChanged(int)));
@@ -140,7 +144,7 @@ m_parentToolBar(parentToolBar)
                                           "Change the selected PARASAGITTAL slice");
     QObject::connect(m_volumeIndicesParasagittalSpinBox, SIGNAL(valueChanged(int)),
                      this, SLOT(volumeIndicesParasagittalSpinBoxValueChanged(int)));
-    m_volumeIndicesParasagittalSpinBox->setObjectName(objectNamePrefix
+    m_volumeIndicesParasagittalSpinBox->setObjectName(m_objectNamePrefix
                                                       + "VolumeParasagittalSliceIndex");
     macroManager->addMacroSupportToObject(m_volumeIndicesParasagittalSpinBox,
                                           "Set parasagittal volume slice index");
@@ -151,7 +155,7 @@ m_parentToolBar(parentToolBar)
                                           "Change the selected CORONAL slice");
     QObject::connect(m_volumeIndicesCoronalSpinBox, SIGNAL(valueChanged(int)),
                      this, SLOT(volumeIndicesCoronalSpinBoxValueChanged(int)));
-    m_volumeIndicesCoronalSpinBox->setObjectName(objectNamePrefix
+    m_volumeIndicesCoronalSpinBox->setObjectName(m_objectNamePrefix
                                                  + "VolumeCoronalSliceIndex");
     macroManager->addMacroSupportToObject(m_volumeIndicesCoronalSpinBox,
                                           "Set coronal volume slice index");
@@ -162,7 +166,7 @@ m_parentToolBar(parentToolBar)
                                           "Change the selected AXIAL slice");
     QObject::connect(m_volumeIndicesAxialSpinBox, SIGNAL(valueChanged(int)),
                      this, SLOT(volumeIndicesAxialSpinBoxValueChanged(int)));
-    m_volumeIndicesAxialSpinBox->setObjectName(objectNamePrefix
+    m_volumeIndicesAxialSpinBox->setObjectName(m_objectNamePrefix
                                                + "VolumeAxialSliceIndex");
     macroManager->addMacroSupportToObject(m_volumeIndicesAxialSpinBox,
                                           "Set axial volume slice index");
@@ -174,7 +178,7 @@ m_parentToolBar(parentToolBar)
                                           "Adjust coordinate to select PARASAGITTAL slice");
     QObject::connect(m_volumeIndicesXcoordSpinBox, SIGNAL(valueChanged(double)),
                      this, SLOT(volumeIndicesXcoordSpinBoxValueChanged(double)));
-    m_volumeIndicesXcoordSpinBox->setObjectName(objectNamePrefix
+    m_volumeIndicesXcoordSpinBox->setObjectName(m_objectNamePrefix
                                                 + "VolumeParasagittalCoordinate");
     macroManager->addMacroSupportToObject(m_volumeIndicesXcoordSpinBox,
                                           "Set parasagittal volume slice coordinate");
@@ -186,7 +190,7 @@ m_parentToolBar(parentToolBar)
                                           "Adjust coordinate to select CORONAL slice");
     QObject::connect(m_volumeIndicesYcoordSpinBox, SIGNAL(valueChanged(double)),
                      this, SLOT(volumeIndicesYcoordSpinBoxValueChanged(double)));
-    m_volumeIndicesYcoordSpinBox->setObjectName(objectNamePrefix
+    m_volumeIndicesYcoordSpinBox->setObjectName(m_objectNamePrefix
                                                 + "VolumeCoronalCoordinate");
     macroManager->addMacroSupportToObject(m_volumeIndicesYcoordSpinBox,
                                           "Set coronal volume slice coordinate");
@@ -198,7 +202,7 @@ m_parentToolBar(parentToolBar)
                                           "Adjust coordinate to select AXIAL slice");
     QObject::connect(m_volumeIndicesZcoordSpinBox, SIGNAL(valueChanged(double)),
                      this, SLOT(volumeIndicesZcoordSpinBoxValueChanged(double)));
-    m_volumeIndicesZcoordSpinBox->setObjectName(objectNamePrefix
+    m_volumeIndicesZcoordSpinBox->setObjectName(m_objectNamePrefix
                                                 + "VolumeAxialCoordinate");
     macroManager->addMacroSupportToObject(m_volumeIndicesZcoordSpinBox,
                                           "Set axial volume slice coordinate");
@@ -227,38 +231,58 @@ m_parentToolBar(parentToolBar)
     }
     volumeIDToolButton->setDefaultAction(m_volumeIdentificationUpdatesSlicesAction);
     WuQtUtilities::setToolButtonStyleForQt5Mac(volumeIDToolButton);
-    m_volumeIdentificationUpdatesSlicesAction->setObjectName(objectNamePrefix
+    m_volumeIdentificationUpdatesSlicesAction->setObjectName(m_objectNamePrefix
                                                              + "MoveSliceToID");
     macroManager->addMacroSupportToObject(m_volumeIdentificationUpdatesSlicesAction,
                                           "Enable move volume slice to ID location");
     
     m_volumeSliceProjectionTypeEnumComboBox = new EnumComboBoxTemplate(this);
     m_volumeSliceProjectionTypeEnumComboBox->setup<VolumeSliceProjectionTypeEnum,VolumeSliceProjectionTypeEnum::Enum>();
-    m_volumeSliceProjectionTypeEnumComboBox->getComboBox()->setSizeAdjustPolicy(QComboBox::AdjustToContentsOnFirstShow);
+    m_volumeSliceProjectionTypeEnumComboBox->getComboBox()->setSizeAdjustPolicy(QComboBox::AdjustToContents);
     QObject::connect(m_volumeSliceProjectionTypeEnumComboBox, SIGNAL(itemActivated()),
                      this, SLOT(volumeSliceProjectionTypeEnumComboBoxItemActivated()));
     WuQtUtilities::setToolTipAndStatusTip(m_volumeSliceProjectionTypeEnumComboBox->getWidget(),
-                                          "Chooses viewing orientation (oblique or orthogonal)");
-    m_volumeSliceProjectionTypeEnumComboBox->getComboBox()->setObjectName(objectNamePrefix
+                                          VolumeSliceProjectionTypeEnum::getToolTipForGuiInHtml());
+    m_volumeSliceProjectionTypeEnumComboBox->getComboBox()->setObjectName(m_objectNamePrefix
                                                                           + "Orthogonal/Oblique");
     macroManager->addMacroSupportToObject(m_volumeSliceProjectionTypeEnumComboBox->getComboBox(),
                                           "Select volume slice projection type");
+    m_volumeSliceProjectionTypeEnumComboBox->getComboBox()->setSizePolicy(QSizePolicy::Fixed,
+                                                                          m_volumeSliceProjectionTypeEnumComboBox->getComboBox()->sizePolicy().verticalPolicy());
     
-    m_obliqueMaskingAction = new QAction("M", this);
-    m_obliqueMaskingAction->setToolTip(VolumeSliceInterpolationEdgeEffectsMaskingEnum::getToolTip());
-    m_obliqueMaskingAction->setCheckable(true);
-    QObject::connect(m_obliqueMaskingAction, &QAction::triggered,
-                     this, &BrainBrowserWindowToolBarSliceSelection::obliqueMaskingActionTriggered);
-    m_obliqueMaskingAction->setObjectName(objectNamePrefix
-                                          + "ObliqueMasking");
+    /*
+     * MPR Options action
+     */
+    m_mprOptionsAction = createMprOptionsAction();
+
+    /*
+     * Oblique options action
+     */
+    m_obliqueOptionsAction = createObliqueOptionsAction();
     
-    QToolButton* obliqueMaskingToolButton = new QToolButton();
-    obliqueMaskingToolButton->setDefaultAction(m_obliqueMaskingAction);
-    WuQtUtilities::setToolButtonStyleForQt5Mac(obliqueMaskingToolButton);
-    
+    /*
+     * Options button for MPR and Oblique options
+     * Add some text and set fixed width so that
+     * button does not change size as its text
+     * is updated by the MPR or Oblique QAction.
+     */
+    m_optionsToolButton = new QToolButton();
+    m_optionsToolButton->setText("123456");
+    m_optionsToolButton->setFixedWidth(m_optionsToolButton->sizeHint().width());
+    m_optionsToolButton->setText("");
+    if ( ! m_newOptionsToolButtonFlag) {
+        m_optionsToolButton->setDefaultAction(m_mprOptionsAction);
+    }
+    WuQtUtilities::setToolButtonStyleForQt5Mac(m_optionsToolButton);
+    if (m_newOptionsToolButtonFlag) {
+        m_optionsToolButton->setArrowType(Qt::DownArrow);
+        QObject::connect(m_optionsToolButton, &QToolButton::clicked,
+                         this, &BrainBrowserWindowToolBarSliceSelection::optionsToolButtonClicked);
+    }
     
     QGridLayout* gridLayout = new QGridLayout(this);
     WuQtUtilities::setLayoutSpacingAndMargins(gridLayout, 0, 0);
+    gridLayout->setHorizontalSpacing(2);
     gridLayout->addWidget(m_volumeIndicesParasagittalCheckBox, 0, 0);
     gridLayout->addWidget(parasagittalLabel, 0, 1);
     gridLayout->addWidget(m_volumeIndicesCoronalCheckBox, 1, 0);
@@ -274,9 +298,16 @@ m_parentToolBar(parentToolBar)
     gridLayout->addWidget(m_volumeIndicesYcoordSpinBox, 1, 3);
     gridLayout->addWidget(m_volumeIndicesZcoordSpinBox, 2, 3);
 
-    gridLayout->addWidget(volumeIDToolButton, 3, 0, 1, 2, Qt::AlignLeft);
-    gridLayout->addWidget(m_volumeSliceProjectionTypeEnumComboBox->getWidget(), 3, 2, 1, 2, Qt::AlignCenter);
-    gridLayout->addWidget(obliqueMaskingToolButton, 3, 4);
+    QHBoxLayout* bottomLayout(new QHBoxLayout());
+    bottomLayout->setSpacing(1);
+    bottomLayout->setContentsMargins(0, 0, 0, 0);
+    bottomLayout->addWidget(volumeIDToolButton);
+    bottomLayout->addStretch();
+    bottomLayout->addWidget(m_volumeSliceProjectionTypeEnumComboBox->getWidget());
+    bottomLayout->addWidget(m_optionsToolButton);
+    bottomLayout->setStretchFactor(m_volumeSliceProjectionTypeEnumComboBox->getWidget(), 100);
+    
+    gridLayout->addLayout(bottomLayout, 3, 0, 1, 5);
 
     gridLayout->addWidget(volumeIndicesOriginToolButton, 0, 4, 3, 1);
     
@@ -364,17 +395,17 @@ BrainBrowserWindowToolBarSliceSelection::updateContent(BrowserTabContent* browse
          * Update slice projection type for allowed projection types
          */
         std::vector<VolumeSliceProjectionTypeEnum::Enum> validSliceProjections;
-        browserTabContent->getValidSliceProjectionTypes(validSliceProjections);
+        browserTabContent->getValidVolumeSliceProjectionTypes(validSliceProjections);
         m_volumeSliceProjectionTypeEnumComboBox->setupWithItems<VolumeSliceProjectionTypeEnum,VolumeSliceProjectionTypeEnum::Enum>(validSliceProjections);
 
-        m_volumeIndicesAxialCheckBox->setChecked(browserTabContent->isSliceAxialEnabled());
-        m_volumeIndicesCoronalCheckBox->setChecked(browserTabContent->isSliceCoronalEnabled());
-        m_volumeIndicesParasagittalCheckBox->setChecked(browserTabContent->isSliceParasagittalEnabled());
+        m_volumeIndicesAxialCheckBox->setChecked(browserTabContent->isVolumeSliceAxialEnabled());
+        m_volumeIndicesCoronalCheckBox->setChecked(browserTabContent->isVolumeSliceCoronalEnabled());
+        m_volumeIndicesParasagittalCheckBox->setChecked(browserTabContent->isVolumeSliceParasagittalEnabled());
     }
     
-    updateObliqueMaskingButton();
+    updateOptionsButton();
 
-    m_volumeSliceProjectionTypeEnumComboBox->setSelectedItem<VolumeSliceProjectionTypeEnum,VolumeSliceProjectionTypeEnum::Enum>(browserTabContent->getSliceProjectionType());
+    m_volumeSliceProjectionTypeEnumComboBox->setSelectedItem<VolumeSliceProjectionTypeEnum,VolumeSliceProjectionTypeEnum::Enum>(browserTabContent->getVolumeSliceProjectionType());
     
     m_volumeIdentificationUpdatesSlicesAction->setChecked(browserTabContent->isIdentificationUpdatesVolumeSlices());
     
@@ -411,19 +442,19 @@ BrainBrowserWindowToolBarSliceSelection::updateSliceIndicesAndCoordinatesRanges(
         m_volumeIndicesCoronalSpinBox->setEnabled(true);
         m_volumeIndicesParasagittalSpinBox->setEnabled(true);
         
-        std::vector<int64_t> dimensions;
-        vf->getDimensions(dimensions);
+        int64_t dimParasagittal(0), dimCoronal(0), dimAxial(0);
+        vf->getDimensionsPCA(dimParasagittal, dimCoronal, dimAxial);
         
         /*
          * Setup minimum and maximum slices for each dimension.
          * Range is unlimited when Yoked.
          */
-        int minAxialDim = 0;
-        int minCoronalDim = 0;
-        int minParasagittalDim = 0;
-        int maxAxialDim = (dimensions[2] > 0) ? (dimensions[2] - 1) : 0;
-        int maxCoronalDim = (dimensions[1] > 0) ? (dimensions[1] - 1) : 0;
-        int maxParasagittalDim = (dimensions[0] > 0) ? (dimensions[0] - 1) : 0;
+        const int minAxialDim = 0;
+        const int minCoronalDim = 0;
+        const int minParasagittalDim = 0;
+        const int maxAxialDim = (dimAxial > 0) ? (dimAxial - 1) : 0;
+        const int maxCoronalDim = (dimCoronal > 0) ? (dimCoronal - 1) : 0;
+        const int maxParasagittalDim = (dimParasagittal > 0) ? (dimParasagittal - 1) : 0;
         
         /*
          * BUG NOTE:
@@ -475,18 +506,14 @@ BrainBrowserWindowToolBarSliceSelection::updateSliceIndicesAndCoordinatesRanges(
         vf->indexToSpace(slicesMax,
                          sliceMaxCoords);
         
-        const double minX = std::min(sliceZeroCoords[0],
-                                    sliceMaxCoords[0]);
-        const double maxX = std::max(sliceZeroCoords[0],
-                                    sliceMaxCoords[0]);
-        const double minY = std::min(sliceZeroCoords[1],
-                                    sliceMaxCoords[1]);
-        const double maxY = std::max(sliceZeroCoords[1],
-                                    sliceMaxCoords[1]);
-        const double minZ = std::min(sliceZeroCoords[2],
-                                    sliceMaxCoords[2]);
-        const double maxZ = std::max(sliceZeroCoords[2],
-                                    sliceMaxCoords[2]);
+        BoundingBox boundingBox;
+        vf->getVoxelSpaceBoundingBox(boundingBox);
+        const double minX(boundingBox.getMinX());
+        const double maxX(boundingBox.getMaxX());
+        const double minY(boundingBox.getMinY());
+        const double maxY(boundingBox.getMaxY());
+        const double minZ(boundingBox.getMinZ());
+        const double maxZ(boundingBox.getMaxZ());
         
         /*
          * See BUG NOTE above.
@@ -521,23 +548,23 @@ BrainBrowserWindowToolBarSliceSelection::updateSliceIndicesAndCoordinatesRanges(
         m_volumeIndicesYcoordSpinBox->setSingleStep(dy);
         m_volumeIndicesZcoordSpinBox->setSingleStep(dz);
         
-        m_volumeIndicesAxialSpinBox->setValue(btc->getSliceIndexAxial(vf));
-        m_volumeIndicesCoronalSpinBox->setValue(btc->getSliceIndexCoronal(vf));
-        m_volumeIndicesParasagittalSpinBox->setValue(btc->getSliceIndexParasagittal(vf));
+        m_volumeIndicesAxialSpinBox->setValue(btc->getVolumeSliceIndexAxial(vf));
+        m_volumeIndicesCoronalSpinBox->setValue(btc->getVolumeSliceIndexCoronal(vf));
+        m_volumeIndicesParasagittalSpinBox->setValue(btc->getVolumeSliceIndexParasagittal(vf));
         
         int64_t slices[3] = {
-            btc->getSliceIndexParasagittal(vf),
-            btc->getSliceIndexCoronal(vf),
-            btc->getSliceIndexAxial(vf)
+            btc->getVolumeSliceIndexParasagittal(vf),
+            btc->getVolumeSliceIndexCoronal(vf),
+            btc->getVolumeSliceIndexAxial(vf)
         };
         float sliceCoords[3] = { 0.0, 0.0, 0.0 };
         if (vf != NULL) {
             vf->indexToSpace(slices,
                              sliceCoords);
         }
-        m_volumeIndicesXcoordSpinBox->setValue(btc->getSliceCoordinateParasagittal());
-        m_volumeIndicesYcoordSpinBox->setValue(btc->getSliceCoordinateCoronal());
-        m_volumeIndicesZcoordSpinBox->setValue(btc->getSliceCoordinateAxial());
+        m_volumeIndicesXcoordSpinBox->setValue(btc->getVolumeSliceCoordinateParasagittal());
+        m_volumeIndicesYcoordSpinBox->setValue(btc->getVolumeSliceCoordinateCoronal());
+        m_volumeIndicesZcoordSpinBox->setValue(btc->getVolumeSliceCoordinateAxial());
     }
     
     m_volumeIndicesWidgetGroup->blockAllSignals(blockedStatus);
@@ -550,7 +577,7 @@ void
 BrainBrowserWindowToolBarSliceSelection::volumeIndicesOriginActionTriggered()
 {
     BrowserTabContent* btc = this->getTabContentFromSelectedTab();
-    btc->setSlicesToOrigin();
+    btc->selectVolumeSlicesAtOrigin();
     
     updateContent(btc);
     this->updateGraphicsWindowAndYokedWindows();
@@ -563,7 +590,7 @@ void
 BrainBrowserWindowToolBarSliceSelection::volumeIndicesParasagittalCheckBoxStateChanged(int /*state*/)
 {
     BrowserTabContent* btc = this->getTabContentFromSelectedTab();
-    btc->setSliceParasagittalEnabled(m_volumeIndicesParasagittalCheckBox->isChecked());
+    btc->setVolumeSliceParasagittalEnabled(m_volumeIndicesParasagittalCheckBox->isChecked());
     this->updateGraphicsWindowAndYokedWindows();
 }
 
@@ -574,7 +601,7 @@ void
 BrainBrowserWindowToolBarSliceSelection::volumeIndicesCoronalCheckBoxStateChanged(int /*state*/)
 {
     BrowserTabContent* btc = this->getTabContentFromSelectedTab();
-    btc->setSliceCoronalEnabled(m_volumeIndicesCoronalCheckBox->isChecked());
+    btc->setVolumeSliceCoronalEnabled(m_volumeIndicesCoronalCheckBox->isChecked());
     this->updateGraphicsWindowAndYokedWindows();
 }
 
@@ -585,7 +612,7 @@ void
 BrainBrowserWindowToolBarSliceSelection::volumeIndicesAxialCheckBoxStateChanged(int /*state*/)
 {
     BrowserTabContent* btc = this->getTabContentFromSelectedTab();
-    btc->setSliceAxialEnabled(m_volumeIndicesAxialCheckBox->isChecked());
+    btc->setVolumeSliceAxialEnabled(m_volumeIndicesAxialCheckBox->isChecked());
     this->updateGraphicsWindowAndYokedWindows();
 }
 
@@ -702,15 +729,15 @@ BrainBrowserWindowToolBarSliceSelection::readVolumeSliceIndicesAndUpdateSliceCoo
                         CaretAssert(0);
                         break;
                     case VolumeSliceViewPlaneEnum::AXIAL:
-                        btc->setSliceIndexAxial(underlayVolumeFile,
+                        btc->setVolumeSliceIndexAxial(underlayVolumeFile,
                                                 sliceIndex);
                         break;
                     case VolumeSliceViewPlaneEnum::CORONAL:
-                        btc->setSliceIndexCoronal(underlayVolumeFile,
+                        btc->setVolumeSliceIndexCoronal(underlayVolumeFile,
                                                   sliceIndex);
                         break;
                     case VolumeSliceViewPlaneEnum::PARASAGITTAL:
-                        btc->setSliceIndexParasagittal(underlayVolumeFile,
+                        btc->setVolumeSliceIndexParasagittal(underlayVolumeFile,
                                                        sliceIndex);
                         break;
                 }
@@ -722,15 +749,35 @@ BrainBrowserWindowToolBarSliceSelection::readVolumeSliceIndicesAndUpdateSliceCoo
                         CaretAssert(0);
                         break;
                     case VolumeSliceViewPlaneEnum::AXIAL:
-                        btc->setSliceIndexAxial(underlayVolumeFile,
+                        btc->setVolumeSliceIndexAxial(underlayVolumeFile,
                                                 sliceIndex);
                         break;
                     case VolumeSliceViewPlaneEnum::CORONAL:
-                        btc->setSliceIndexCoronal(underlayVolumeFile,
+                        btc->setVolumeSliceIndexCoronal(underlayVolumeFile,
                                                   sliceIndex);
                         break;
                     case VolumeSliceViewPlaneEnum::PARASAGITTAL:
-                        btc->setSliceIndexParasagittal(underlayVolumeFile,
+                        btc->setVolumeSliceIndexParasagittal(underlayVolumeFile,
+                                                       sliceIndex);
+                        break;
+                }
+                break;
+            case VolumeSliceProjectionTypeEnum::VOLUME_SLICE_PROJECTION_MPR:
+            case VolumeSliceProjectionTypeEnum::VOLUME_SLICE_PROJECTION_MPR_THREE:
+                switch (viewPlane) {
+                    case VolumeSliceViewPlaneEnum::ALL:
+                        CaretAssert(0);
+                        break;
+                    case VolumeSliceViewPlaneEnum::AXIAL:
+                        btc->setVolumeSliceIndexAxial(underlayVolumeFile,
+                                                sliceIndex);
+                        break;
+                    case VolumeSliceViewPlaneEnum::CORONAL:
+                        btc->setVolumeSliceIndexCoronal(underlayVolumeFile,
+                                                  sliceIndex);
+                        break;
+                    case VolumeSliceViewPlaneEnum::PARASAGITTAL:
+                        btc->setVolumeSliceIndexParasagittal(underlayVolumeFile,
                                                        sliceIndex);
                         break;
                 }
@@ -775,7 +822,7 @@ BrainBrowserWindowToolBarSliceSelection::readVolumeSliceCoordinatesAndUpdateSlic
             (float)m_volumeIndicesZcoordSpinBox->value()
         };
         
-        btc->selectSlicesAtCoordinate(sliceCoords);
+        btc->selectVolumeSlicesAtCoordinate(sliceCoords);
     }
     
     this->updateSliceIndicesAndCoordinatesRanges();
@@ -791,10 +838,11 @@ BrainBrowserWindowToolBarSliceSelection::volumeSliceProjectionTypeEnumComboBoxIt
 {
     BrowserTabContent* btc = this->getTabContentFromSelectedTab();
     const VolumeSliceProjectionTypeEnum::Enum sliceProjectionType = m_volumeSliceProjectionTypeEnumComboBox->getSelectedItem<VolumeSliceProjectionTypeEnum,VolumeSliceProjectionTypeEnum::Enum>();
-    btc->setSliceProjectionType(sliceProjectionType);
+    btc->setVolumeSliceProjectionType(sliceProjectionType);
     this->updateGraphicsWindowAndYokedWindows();
-    updateObliqueMaskingButton();
+    updateOptionsButton();
     EventManager::get()->sendEvent(EventUpdateVolumeEditingToolBar().getPointer());
+    updateUserInterface();
 }
 
 /**
@@ -813,95 +861,60 @@ BrainBrowserWindowToolBarSliceSelection::volumeIdentificationToggled(bool value)
     browserTabContent->setIdentificationUpdatesVolumeSlices(value);
 }
 
-/**
- * Called when the oblique masking action is triggered.
- */
 void
-BrainBrowserWindowToolBarSliceSelection::obliqueMaskingActionTriggered(bool)
-{
-    static bool addMacroSupportStaticFlag(true);
-    
-    BrowserTabContent* browserTabContent = this->getTabContentFromSelectedTab();
-    if (browserTabContent == NULL) {
-        return;
-    }
-    std::vector<VolumeSliceInterpolationEdgeEffectsMaskingEnum::Enum> allMaskEnums;
-    VolumeSliceInterpolationEdgeEffectsMaskingEnum::getAllEnums(allMaskEnums);
-    
-    QMenu obliqueMaskingMenu("Oblique Sampling");
-    QActionGroup* maskActionGroup = new QActionGroup(this);
-    maskActionGroup->setExclusive(true);
-    QAction* selectedAction = NULL;
-    for (auto maskEnum : allMaskEnums) {
-        QAction* action = maskActionGroup->addAction(VolumeSliceInterpolationEdgeEffectsMaskingEnum::toGuiName(maskEnum));
-        action->setObjectName(m_obliqueMaskingAction->objectName()
-                              + ":"
-                              + VolumeSliceInterpolationEdgeEffectsMaskingEnum::toName(maskEnum));
-        action->setCheckable(true);
-        action->setData(VolumeSliceInterpolationEdgeEffectsMaskingEnum::toIntegerCode(maskEnum));
-        if (maskEnum == browserTabContent->getVolumeSliceInterpolationEdgeEffectsMaskingType()) {
-            selectedAction = action;
-        }
-        
-        if (addMacroSupportStaticFlag) {
-            addMacroSupportStaticFlag = false;
-            WuQMacroManager::instance()->addMacroSupportToObject(action,
-                                                                 "Select " + action->text() + " oblique sampling");
-        }
-
-        obliqueMaskingMenu.addAction(action);
-    }
-    if (selectedAction != NULL) {
-        selectedAction->setChecked(true);
-    }
-    
-    selectedAction = obliqueMaskingMenu.exec(QCursor::pos());
-    if (selectedAction != NULL) {
-        const int32_t intValue = selectedAction->data().toInt();
-        bool validFlag = false;
-        VolumeSliceInterpolationEdgeEffectsMaskingEnum::Enum maskType = VolumeSliceInterpolationEdgeEffectsMaskingEnum::fromIntegerCode(intValue,
-                                                                                                              &validFlag);
-        CaretAssert(validFlag);
-        browserTabContent->setVolumeSliceInterpolationEdgeEffectsMaskingType(maskType);
-        
-        this->updateGraphicsWindowAndYokedWindows();
-        EventManager::get()->sendEvent(EventUpdateVolumeEditingToolBar().getPointer());
-    }
-    
-    updateObliqueMaskingButton();
-}
-
-/**
- * Update the oblique masking button so that it enabled only 
- * when oblique slice drawing is selected and it is "checked"
- * when a masking is applied.
- */
-void
-BrainBrowserWindowToolBarSliceSelection::updateObliqueMaskingButton()
+BrainBrowserWindowToolBarSliceSelection::updateOptionsButton()
 {
     BrowserTabContent* browserTabContent = this->getTabContentFromSelectedTab();
     if (browserTabContent == NULL) {
         return;
     }
     
-    QSignalBlocker obliqueBlocker(m_obliqueMaskingAction);
-    switch (browserTabContent->getVolumeSliceInterpolationEdgeEffectsMaskingType()) {
-        case VolumeSliceInterpolationEdgeEffectsMaskingEnum::OFF:
-            m_obliqueMaskingAction->setChecked(false);
-            break;
-        case VolumeSliceInterpolationEdgeEffectsMaskingEnum::LOOSE:
-        case VolumeSliceInterpolationEdgeEffectsMaskingEnum::TIGHT:
-            m_obliqueMaskingAction->setChecked(true);
-            break;
-    }
-    
-    switch (browserTabContent->getSliceProjectionType()) {
+    switch (browserTabContent->getVolumeSliceProjectionType()) {
         case VolumeSliceProjectionTypeEnum::VOLUME_SLICE_PROJECTION_OBLIQUE:
-            m_obliqueMaskingAction->setEnabled(true);
+            m_mprOptionsAction->setEnabled(false);
+            m_obliqueOptionsAction->setEnabled(true);
             break;
         case VolumeSliceProjectionTypeEnum::VOLUME_SLICE_PROJECTION_ORTHOGONAL:
-            m_obliqueMaskingAction->setEnabled(false);
+            m_mprOptionsAction->setEnabled(false);
+            m_obliqueOptionsAction->setEnabled(false);
             break;
+        case VolumeSliceProjectionTypeEnum::VOLUME_SLICE_PROJECTION_MPR:
+            m_mprOptionsAction->setEnabled(true);
+            m_obliqueOptionsAction->setEnabled(false);
+            break;
+        case VolumeSliceProjectionTypeEnum::VOLUME_SLICE_PROJECTION_MPR_THREE:
+            m_mprOptionsAction->setEnabled(true);
+            m_obliqueOptionsAction->setEnabled(false);
+            break;
+    }
+        
+    if (m_newOptionsToolButtonFlag) {
+        if (m_mprOptionsAction->isEnabled()) {
+            m_optionsToolButton->setEnabled(true);
+            m_optionsToolButton->setToolTip("Click to set MPR intensity type and other options");
+        }
+        else if (m_obliqueOptionsAction->isEnabled()) {
+            m_optionsToolButton->setEnabled(true);
+            m_optionsToolButton->setToolTip("Click to change oblique masking");
+        }
+        else {
+            m_optionsToolButton->setEnabled(false);
+            m_optionsToolButton->setToolTip("");
+        }
+    }
+    else {
+        QList<QAction*> buttonActions(m_optionsToolButton->actions());
+        for (auto action : buttonActions) {
+            m_optionsToolButton->removeAction(action);
+        }
+        if (m_mprOptionsAction->isEnabled()) {
+            m_optionsToolButton->setDefaultAction(m_mprOptionsAction);
+            updateMprOptionsAction();
+        }
+        else {
+            m_optionsToolButton->setDefaultAction(m_obliqueOptionsAction);
+            updateObliqueOptionsAction();
+        }
     }
 }
 
@@ -953,3 +966,193 @@ BrainBrowserWindowToolBarSliceSelection::createVolumeIdentificationUpdatesSlices
     return pixmap;
 }
 
+/**
+ * Called when options tool button is clicked
+ */
+void
+BrainBrowserWindowToolBarSliceSelection::optionsToolButtonClicked()
+{
+    if (m_mprOptionsAction->isEnabled()) {
+        updateMprOptionsAction();
+        m_mprOptionsMenu->exec(m_optionsToolButton->mapToGlobal(QPoint(0, m_optionsToolButton->height())));
+    }
+    else if (m_obliqueOptionsAction->isEnabled()) {
+        updateObliqueOptionsAction();
+        m_obliqueOptionsMenu->exec(m_optionsToolButton->mapToGlobal(QPoint(0, m_optionsToolButton->height())));
+    }
+}
+
+/**
+ * @return Instance of the MPR options
+ */
+QMenu*
+BrainBrowserWindowToolBarSliceSelection::createMprOptionsMenu()
+{
+    m_volumeMprSettingsWidget = new VolumeMprSettingsWidget(m_objectNamePrefix);
+    QWidgetAction* mprSettingsAction = new QWidgetAction(this);
+    mprSettingsAction->setDefaultWidget(m_volumeMprSettingsWidget);
+    
+    QMenu* menu = new QMenu(this);
+    menu->addAction(mprSettingsAction);
+    QObject::connect(menu, &QMenu::aboutToShow,
+                     this, &BrainBrowserWindowToolBarSliceSelection::mprOptionsMenuAboutToShow);
+    return menu;
+}
+
+/**
+ * @return New instance of MPR options action
+ */
+QAction*
+BrainBrowserWindowToolBarSliceSelection::createMprOptionsAction()
+{
+    const QString toolTip("Click button to cycle through MPR modes "
+                          "or click arrow to select a mode and adjust "
+                          "other options");
+    QAction* action = new QAction(this);
+    action->setCheckable(false);
+    action->setText("MPR");
+    WuQtUtilities::setWordWrappedToolTip(action,
+                                         toolTip);
+    m_mprOptionsMenu = createMprOptionsMenu();
+    action->setMenu(m_mprOptionsMenu);
+    action->setObjectName(m_objectNamePrefix
+                          + ":MprOptions");
+    QObject::connect(action, &QAction::triggered,
+                     this, &BrainBrowserWindowToolBarSliceSelection::mprOptionsActionTriggered);
+    WuQMacroManager::instance()->addMacroSupportToObject(action,
+                                                         "View MPR Options");
+    return action;
+}
+
+/**
+ * Called when MPR options action is triggered
+ */
+void
+BrainBrowserWindowToolBarSliceSelection::mprOptionsActionTriggered(bool)
+{
+    BrowserTabContent* browserTabContent = this->getTabContentFromSelectedTab();
+    if (browserTabContent != NULL) {
+        VolumeMprViewModeEnum::Enum viewMode(browserTabContent->getVolumeMprViewMode());
+        viewMode = VolumeMprViewModeEnum::nextEnum(viewMode);
+        browserTabContent->setVolumeMprViewMode(viewMode);
+        updateMprOptionsAction();
+        updateGraphicsWindowAndYokedWindows();
+    }
+}
+
+/**
+ * Update the MPR options action
+ */
+void
+BrainBrowserWindowToolBarSliceSelection::updateMprOptionsAction()
+{
+    BrowserTabContent* browserTabContent = this->getTabContentFromSelectedTab();
+    if (browserTabContent != NULL) {
+        VolumeMprViewModeEnum::Enum viewMode(browserTabContent->getVolumeMprViewMode());
+
+        const AString text(VolumeMprViewModeEnum::toShortGuiName(viewMode));
+        m_mprOptionsAction->setText(text);
+    }
+}
+
+/**
+ * Called when MPR options menu is about to show
+ */
+void
+BrainBrowserWindowToolBarSliceSelection::mprOptionsMenuAboutToShow()
+{
+    int32_t tabIndex = -1;
+    BrowserTabContent* browserTabContent = this->getTabContentFromSelectedTab();
+    if (browserTabContent != NULL) {
+        tabIndex = browserTabContent->getTabNumber();
+    }
+    
+    m_volumeMprSettingsWidget->updateContent(tabIndex);
+}
+
+/**
+ * @return New instance of oblique options action
+ */
+QAction*
+BrainBrowserWindowToolBarSliceSelection::createObliqueOptionsAction()
+{
+    const QString toolTip("Click button to cycle through Oblique masking modes "
+                          "or click arrow to select masking mode directly");
+    QAction* action = new QAction(this);
+    action->setCheckable(false);
+    action->setText("Opts");
+    WuQtUtilities::setWordWrappedToolTip(action,
+                                         toolTip);
+    m_obliqueOptionsMenu = createObliqueOptionsMenu();
+    action->setMenu(m_obliqueOptionsMenu);
+    action->setObjectName(m_objectNamePrefix
+                                          + ":ObliqueOptions");
+    QObject::connect(action, &QAction::triggered,
+                     this, &BrainBrowserWindowToolBarSliceSelection::obliqueOptionsActionTriggered);
+    WuQMacroManager::instance()->addMacroSupportToObject(action,
+                                                         "View Oblique Options");
+    return action;
+}
+
+/**
+ * @return Instance of the Oblique Options
+ */
+QMenu*
+BrainBrowserWindowToolBarSliceSelection::createObliqueOptionsMenu()
+{
+    m_obliqueOptionsWidget = new VolumeObliqueOptionsWidget(m_objectNamePrefix);
+    QWidgetAction* obliqueOptionsAction = new QWidgetAction(this);
+    obliqueOptionsAction->setDefaultWidget(m_obliqueOptionsWidget);
+    
+    QMenu* menu = new QMenu(this);
+    menu->addAction(obliqueOptionsAction);
+    QObject::connect(menu, &QMenu::aboutToShow,
+                     this, &BrainBrowserWindowToolBarSliceSelection::obliqueOptionsMenuAboutToShow);
+    return menu;
+}
+
+/**
+ * Called when MPR options menu is about to show
+ */
+void
+BrainBrowserWindowToolBarSliceSelection::obliqueOptionsMenuAboutToShow()
+{
+    int32_t tabIndex = -1;
+    BrowserTabContent* browserTabContent = this->getTabContentFromSelectedTab();
+    if (browserTabContent != NULL) {
+        tabIndex = browserTabContent->getTabNumber();
+    }
+    
+    m_obliqueOptionsWidget->updateContent(tabIndex);
+}
+
+/**
+ * Called when Oblique options action is triggered
+ */
+void
+BrainBrowserWindowToolBarSliceSelection::obliqueOptionsActionTriggered(bool)
+{
+    BrowserTabContent* browserTabContent = this->getTabContentFromSelectedTab();
+    if (browserTabContent != NULL) {
+        VolumeSliceInterpolationEdgeEffectsMaskingEnum::Enum maskEnum(browserTabContent->getVolumeSliceInterpolationEdgeEffectsMaskingType());
+        maskEnum = VolumeSliceInterpolationEdgeEffectsMaskingEnum::nextEnum(maskEnum);
+        browserTabContent->setVolumeSliceInterpolationEdgeEffectsMaskingType(maskEnum);
+        updateObliqueOptionsAction();
+        updateGraphicsWindowAndYokedWindows();
+    }
+}
+
+/**
+ * Update the Oblique options action
+ */
+void
+BrainBrowserWindowToolBarSliceSelection::updateObliqueOptionsAction()
+{
+    BrowserTabContent* browserTabContent = this->getTabContentFromSelectedTab();
+    if (browserTabContent != NULL) {
+        VolumeSliceInterpolationEdgeEffectsMaskingEnum::Enum maskEnum(browserTabContent->getVolumeSliceInterpolationEdgeEffectsMaskingType());
+
+        const AString text(VolumeSliceInterpolationEdgeEffectsMaskingEnum::toShortGuiName(maskEnum));
+        m_obliqueOptionsAction->setText(text);
+    }
+}

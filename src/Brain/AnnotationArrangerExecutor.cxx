@@ -77,7 +77,7 @@ AnnotationArrangerExecutor::~AnnotationArrangerExecutor()
  * Apply alignment modification to selected annotations
  *
  * @param userInputMode
- *     The current user input mode which MUST be ANNOTATIONS or TILE_TABS_MANUAL_LAYOUT_EDITING
+ *     The current user input mode which MUST be ANNOTATIONS or TILE_TABS_LAYOUT_EDITING
  * @param annotationManager
  *     The annotation manager.
  * @param arrangerInputs
@@ -119,7 +119,7 @@ AnnotationArrangerExecutor::alignAnnotations(AnnotationManager* annotationManage
  * Apply distribute modification to selected annotations
  *
  * @param userInputMode
- *     The current user input mode which MUST be ANNOTATIONS or TILE_TABS_MANUAL_LAYOUT_EDITING
+ *     The current user input mode which MUST be ANNOTATIONS or TILE_TABS_LAYOUT_EDITING
  * @param annotationManager
  *     The annotation manager.
  * @param arrangerInputs
@@ -344,11 +344,11 @@ AnnotationArrangerExecutor::distributeAnnotationsPrivate(const AnnotationArrange
         CaretAssert(beforeMoving.size() == afterMoving.size());
         AnnotationRedoUndoCommand* undoCommand = new AnnotationRedoUndoCommand();
         undoCommand->setModeLocationAndSize(beforeMoving,
-                                            afterMoving);
+                                            afterMoving,
+                                            AnnotationDistributeEnum::toGuiName(m_distribute));
         undoCommand->setDescription(AnnotationDistributeEnum::toGuiName(m_distribute));
         
-        validFlag = m_annotationManager->applyCommand(m_userInputMode,
-                                                      undoCommand,
+        validFlag = m_annotationManager->applyCommand(undoCommand,
                                                       errorMessage);
     }
     
@@ -455,11 +455,11 @@ AnnotationArrangerExecutor::alignAnnotationsPrivate(const AnnotationArrangerInpu
         CaretAssert(beforeMoving.size() == afterMoving.size());
         AnnotationRedoUndoCommand* undoCommand = new AnnotationRedoUndoCommand();
         undoCommand->setModeLocationAndSize(beforeMoving,
-                                            afterMoving);
+                                            afterMoving,
+                                            AnnotationAlignmentEnum::toGuiName(m_alignment));
         undoCommand->setDescription(AnnotationAlignmentEnum::toGuiName(m_alignment));
         
-        validFlag = m_annotationManager->applyCommand(m_userInputMode,
-                                                      undoCommand,
+        validFlag = m_annotationManager->applyCommand(undoCommand,
                                                       errorMessage);
     }
     
@@ -622,6 +622,12 @@ AnnotationArrangerExecutor::setupAnnotationInfo(const AnnotationArrangerInputs& 
         int32_t annViewport[4] = { 0, 0, 0, 0 };
         switch (annotation->getCoordinateSpace()) {
             case AnnotationCoordinateSpaceEnum::CHART:
+                CaretAssert(0);
+                break;
+            case AnnotationCoordinateSpaceEnum::HISTOLOGY:
+                CaretAssert(0);
+                break;
+            case AnnotationCoordinateSpaceEnum::MEDIA_FILE_NAME_AND_PIXEL:
                 CaretAssert(0);
                 break;
             case AnnotationCoordinateSpaceEnum::SPACER:

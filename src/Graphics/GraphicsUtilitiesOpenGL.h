@@ -22,10 +22,12 @@
 /*LICENSE_END*/
 
 
-
+#include <array>
 #include <memory>
+#include <stack>
 
 #include "CaretObject.h"
+#include "CaretOpenGLInclude.h"
 
 namespace caret {
 
@@ -47,9 +49,16 @@ namespace caret {
         
         static float convertPixelsToMillimeters(const float pixels);
         
+        static void getTextCompressionEnumInfo(const GLenum enumValue,
+                                               QString& nameOut,
+                                               QString& decimalValueOut,
+                                               QString& hexadecimalValueOut);
+        
         static void resetOpenGLError();
         
         static std::unique_ptr<GraphicsOpenGLError> getOpenGLError(const AString& message = "");
+        
+        static void printMatrixDepths(const AString messagePrefix);
         
         static bool isVersionOrGreater(const int32_t majorVersion,
                                        const int32_t minorVersion);
@@ -63,6 +72,14 @@ namespace caret {
         static int32_t getTextureWidthHeightMaximumDimension();
         
         static int32_t getTextureDepthMaximumDimension();
+        
+        static void pushMatrix();
+        
+        static void popMatrix();
+
+        static bool unproject(const float windowX,
+                              const float windowY,
+                              float modelXyzOut[3]);
         
     private:
         GraphicsUtilitiesOpenGL();
@@ -87,6 +104,8 @@ namespace caret {
         
         static int32_t s_textureDepthMaximumDimension;
         
+        static std::stack<std::array<double, 16>> s_projectionMatrixStack;
+        
         friend class BrainOpenGL;
     };
     
@@ -99,6 +118,9 @@ namespace caret {
      */
     int32_t GraphicsUtilitiesOpenGL::s_textureWidthHeightMaximumDimension = 16384;
     int32_t GraphicsUtilitiesOpenGL::s_textureDepthMaximumDimension = 2048;
+    
+    std::stack<std::array<double, 16>> GraphicsUtilitiesOpenGL::s_projectionMatrixStack;
+    
 #endif // __GRAPHICS_UTILITIES_OPEN_G_L_DECLARE__
 
 } // namespace

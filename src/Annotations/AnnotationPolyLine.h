@@ -38,6 +38,10 @@ namespace caret {
         
         AnnotationPolyLine& operator=(const AnnotationPolyLine& obj);
 
+        virtual AnnotationPolyLine* castToPolyline() override;
+        
+        virtual const AnnotationPolyLine* castToPolyline() const override;
+        
        // ADD_NEW_METHODS_HERE
           
     protected: 

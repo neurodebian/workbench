@@ -30,6 +30,8 @@
 class QLabel;
 class QRadioButton;
 class QSpinBox;
+class QStackedWidget;
+class QTextEdit;
 
 namespace caret {
 
@@ -41,8 +43,8 @@ namespace caret {
     class CiftiParcelSelectionComboBox;
     class GiftiLabelTableSelectionComboBox;
     class StructureEnumComboBox;
-    class WuQGroupBoxExclusiveWidget;
-    
+    class WuQDoubleSpinBox;
+
     class IdentifyBrainordinateDialog : public WuQDialogNonModal, public EventListenerInterface {
         
         Q_OBJECT
@@ -73,7 +75,7 @@ namespace caret {
         
         void slotLabelFileOrMapSelectionChanged();
         
-        void selectedWidgetChanged();
+        void idTypeRadioButtonClicked(QAbstractButton* button);
         
     private:
         enum Mode {
@@ -97,25 +99,35 @@ namespace caret {
         
         QWidget* createLabelFilesWidget(const std::vector<DataFileTypeEnum::Enum>& supportedFileTypes);
         
-        QWidget* createSurfaceVertexlWidget();
+        QWidget* createSurfaceVertexWidget();
+        
+        QWidget* createImagePixelWidget(const std::vector<DataFileTypeEnum::Enum>& supportedFileTypes);
+        
+        QWidget* createStereotaxicWidget();
         
         void processCiftiParcelWidget(AString& errorMessageOut);
         
         void processCiftiRowWidget(AString& errorMessageOut);
         
+        void processImagePixelSelection(AString& errorMessage);
+        
         void processLabelFileWidget(AString& errorMessageOut);
+        
+        void processStereotaxicWidget(AString& errorMessageOut);
         
         void processSurfaceVertexWidget(AString& errorMessageOut);
         
         void flashBrainordinateHighlightingRegionOfInterest(BrainordinateRegionOfInterest* brainROI);
         
-        void updateColoringAndDrawAllWindows();
+        void updateColoringAndDrawAllWindows(const bool doRepaintFlag = false);
 
         ParcelSourceDimension getParcelSourceDimensionFromFile(const CaretMappableDataFile* mapFile);
         
         StructureEnumComboBox* m_vertexStructureComboBox;
         
         QWidget* m_surfaceVertexWidget;
+        
+        QWidget* m_stereotaxicWidget;
         
         QLabel* m_vertexStructureLabel;
         
@@ -177,9 +189,36 @@ namespace caret {
         
         CaretMappableDataFileAndMapSelectorObject* m_ciftiParcelFileSelector;
         
-        WuQGroupBoxExclusiveWidget* m_widgetBox;
+        QWidget* m_imagePixelWidget;
+        
+        CaretDataFileSelectionModel* m_imageFileSelectionModel;
+        
+        CaretDataFileSelectionComboBox* m_imageFileSelectionComboBox;
+        
+        QSpinBox* m_imagePixelISpinBox;
+        
+        QSpinBox* m_imagePixelJSpinBox;
+        
+        QTextEdit* m_stereotaxicTextEdit;
+        
+        WuQDoubleSpinBox* m_stereotaxicXWidget;
+        
+        WuQDoubleSpinBox* m_stereotaxicYWidget;
+        
+        WuQDoubleSpinBox* m_stereotaxicZWidget;
+        
+        QStackedWidget* m_stackedWidget;
+        
+        QRadioButton* m_ciftiFileRowRadioButton;
+        QRadioButton* m_ciftiFileParcelRadioButton;
+        QRadioButton* m_imagePixelRadioButton;
+        QRadioButton* m_labelRadioButton;
+        QRadioButton* m_stereotaxicRadioButton;
+        QRadioButton* m_surfaceVertexRadioButton;
         
         std::map<DataFileTypeEnum::Enum, ParcelSourceDimension> m_parcelSourceDimensionMap;
+        std::vector<DataFileTypeEnum::Enum> m_supportedCiftiRowFileTypes;
+        std::vector<DataFileTypeEnum::Enum> m_supportedLabelFileTypes;
     };
     
 #ifdef __IDENTIFY_BRAINORDINATE_DIALOG_DECLARE__

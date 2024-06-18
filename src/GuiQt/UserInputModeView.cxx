@@ -21,32 +21,48 @@
 
 #include <QMessageBox>
 #include <QLineEdit>
+#include <QScreen>
 
 #define __USER_INPUT_MODE_VIEW_DECLARE__
 #include "UserInputModeView.h"
 #undef __USER_INPUT_MODE_VIEW_DECLARE__
 
 #include "Brain.h"
+#include "BrainBrowserWindow.h"
 #include "BrainOpenGLViewportContent.h"
 #include "BrainOpenGLWidget.h"
 #include "BrowserTabContent.h"
 #include "CaretLogger.h"
+#include "CaretUndoStack.h"
 #include "ChartTwoCartesianAxis.h"
 #include "ChartTwoOverlay.h"
 #include "ChartTwoOverlaySet.h"
-#include "EventGraphicsUpdateOneWindow.h"
-#include "EventGraphicsUpdateAllWindows.h"
+#include "EventGraphicsPaintSoonOneWindow.h"
+#include "EventGraphicsPaintSoonAllWindows.h"
 #include "EventUpdateYokedWindows.h"
 #include "EventUserInterfaceUpdate.h"
+#include "EventBrowserWindowDrawingContent.h"
 #include "EventManager.h"
 #include "GestureEvent.h"
+#include "GraphicsObjectToWindowTransform.h"
+#include "GraphicsRegionSelectionBox.h"
 #include "GuiManager.h"
+#include "SelectionItemHistologyCoordinate.h"
 #include "KeyEvent.h"
+#include "MediaOverlaySet.h"
+#include "ModelMedia.h"
 #include "MouseEvent.h"
+#include "ProgressReportingDialog.h"
 #include "SelectionItemChartTwoLabel.h"
 #include "SelectionItemChartTwoLineLayerVerticalNearest.h"
+#include "SelectionItemMediaLogicalCoordinate.h"
+#include "SelectionItemMediaPlaneCoordinate.h"
+#include "SelectionItemVolumeMprCrosshair.h"
+#include "SelectionItemVoxel.h"
 #include "SelectionManager.h"
 #include "UserInputModeViewContextMenu.h"
+#include "ViewingTransformations.h"
+#include "WuQMessageBox.h"
 #include "WuQDataEntryDialog.h"
 
 using namespace caret;
@@ -64,12 +80,12 @@ using namespace caret;
 
 /**
  * Constructor.
- * @param windowIndex
+ * @param browserIndexIndex
  *    Index of the window
  */
-UserInputModeView::UserInputModeView(const int32_t windowIndex)
-: UserInputModeAbstract(UserInputModeEnum::Enum::VIEW),
-m_browserWindowIndex(windowIndex)
+UserInputModeView::UserInputModeView(const int32_t browserIndexIndex)
+: UserInputModeAbstract(browserIndexIndex,
+                        UserInputModeEnum::Enum::VIEW)
 {
     
 }
@@ -77,15 +93,15 @@ m_browserWindowIndex(windowIndex)
 /**
  * Constructor for subclasses.
  *
- * @param windowIndex
+ * @param browserIndexIndex
  *    Index of the window
  * @param inputMode
  *    Subclass' input mode.
  */
-UserInputModeView::UserInputModeView(const int32_t windowIndex,
+UserInputModeView::UserInputModeView(const int32_t browserIndexIndex,
                                      const UserInputModeEnum::Enum inputMode)
-: UserInputModeAbstract(inputMode),
-m_browserWindowIndex(windowIndex)
+: UserInputModeAbstract(browserIndexIndex,
+                        inputMode)
 {
     
 }
@@ -120,9 +136,9 @@ UserInputModeView::processModelViewIdentification(BrainOpenGLViewportContent* vi
                                            const int32_t mouseClickY)
 {
     SelectionManager* selectionManager =
-    openGLWidget->performIdentification(mouseClickX,
-                                        mouseClickY,
-                                        false);
+    openGLWidget->performIdentificationAll(mouseClickX,
+                                           mouseClickY,
+                                           false);
     
     BrowserTabContent* btc = viewportContent->getBrowserTabContent();
     if (btc != NULL) {
@@ -177,8 +193,41 @@ UserInputModeView::update()
 CursorEnum::Enum
 UserInputModeView::getCursor() const
 {
+    CursorEnum::Enum cursorOut(CursorEnum::CURSOR_DEFAULT);
     
-    return CursorEnum::CURSOR_DEFAULT;
+    BrowserTabContent* browserTabContent(getBrowserTabContainingMouse());
+    if (browserTabContent != NULL) {
+        switch (browserTabContent->getMouseLeftDragMode()) {
+            case MouseLeftDragModeEnum::INVALID:
+                break;
+            case MouseLeftDragModeEnum::DEFAULT:
+                break;
+            case MouseLeftDragModeEnum::REGION_SELECTION:
+                cursorOut = CursorEnum::CURSOR_CROSS;
+                return cursorOut;
+                break;
+        }
+    }
+    
+
+    switch (m_mprCursorMode) {
+        case VOLUME_MPR_CURSOR_MODE::INVALID:
+            cursorOut = CursorEnum::CURSOR_DEFAULT;
+            break;
+        case VOLUME_MPR_CURSOR_MODE::ROTATE_SLICE:
+            cursorOut = CursorEnum::CURSOR_HALF_ROTATION;
+            break;
+        case VOLUME_MPR_CURSOR_MODE::ROTATE_TRANSFORM:
+            cursorOut = CursorEnum::CURSOR_ROTATION;
+            break;
+        case VOLUME_MPR_CURSOR_MODE::SCROLL_SLICE:
+            break;
+        case VOLUME_MPR_CURSOR_MODE::SELECT_SLICE:
+            cursorOut = CursorEnum::CURSOR_FOUR_ARROWS;
+            break;
+    }
+    
+    return cursorOut;
 }
 
 /**
@@ -206,9 +255,9 @@ UserInputModeView::mouseLeftDoubleClick(const MouseEvent& mouseEvent)
         const int32_t mouseY = mouseEvent.getY();
         
         BrainOpenGLWidget* openGLWidget = mouseEvent.getOpenGLWidget();
-        SelectionManager* idManager = openGLWidget->performIdentification(mouseX,
-                                                                          mouseY,
-                                                                          false);
+        SelectionManager* idManager = openGLWidget->performIdentificationAll(mouseX,
+                                                                             mouseY,
+                                                                             false);
         CaretAssert(idManager);
         SelectionItemChartTwoLabel* labelID = idManager->getChartTwoLabelIdentification();
         if (labelID->isValid()) {
@@ -319,22 +368,149 @@ UserInputModeView::mouseLeftDrag(const MouseEvent& mouseEvent)
         return;
     }
 
+    switch (browserTabContent->getMouseLeftDragMode()) {
+        case MouseLeftDragModeEnum::INVALID:
+            CaretAssert(0);
+            return;
+            break;
+        case MouseLeftDragModeEnum::DEFAULT:
+            /* handled below */
+            break;
+        case MouseLeftDragModeEnum::REGION_SELECTION:
+            updateGraphicsRegionSelectionBox(mouseEvent);
+            return;
+            break;
+    }
+    
+    SelectionItemVolumeMprCrosshair::Axis mprCrosshairAxis(SelectionItemVolumeMprCrosshair::Axis::INVALID);
+    
+    bool allowRotationFlag(true);
     bool scrollVolumeSlicesFlag(false);
     if (browserTabContent->isVolumeSlicesDisplayed()) {
-        switch (browserTabContent->getSliceProjectionType()) {
+        bool mprFlag(false);
+        switch (browserTabContent->getVolumeSliceProjectionType()) {
+            case VolumeSliceProjectionTypeEnum::VOLUME_SLICE_PROJECTION_MPR:
+            case VolumeSliceProjectionTypeEnum::VOLUME_SLICE_PROJECTION_MPR_THREE:
+                mprFlag = true;
+                break;
             case VolumeSliceProjectionTypeEnum::VOLUME_SLICE_PROJECTION_OBLIQUE:
                 break;
             case VolumeSliceProjectionTypeEnum::VOLUME_SLICE_PROJECTION_ORTHOGONAL:
+                allowRotationFlag      = false;
                 scrollVolumeSlicesFlag = true;
                 break;
         }
+        if (mprFlag) {
+            switch (m_mprCursorMode) {
+                case VOLUME_MPR_CURSOR_MODE::INVALID:
+                    break;
+                case VOLUME_MPR_CURSOR_MODE::SCROLL_SLICE:
+                    scrollVolumeSlicesFlag = true;
+                    break;
+                case VOLUME_MPR_CURSOR_MODE::SELECT_SLICE:
+                {
+                    SelectionManager* selectionManager(GuiManager::get()->getBrain()->getSelectionManager());
+                    selectionManager->setAllSelectionsEnabled(false);
+                    SelectionItemVoxel* voxelID(selectionManager->getVoxelIdentification());
+                    voxelID->setEnabledForSelection(true);
+                    mouseEvent.getOpenGLWidget()->performIdentificationSome(mouseEvent.getX(),
+                                                                            mouseEvent.getY(),
+                                                                            false);
+                    if (voxelID->isValid()) {
+                        double xyzDouble[3] { 0.0, 0.0, 0.0 };
+                        voxelID->getModelXYZ(xyzDouble);
+                        float xyz[3] {
+                            static_cast<float>(xyzDouble[0]),
+                            static_cast<float>(xyzDouble[1]),
+                            static_cast<float>(xyzDouble[2])
+                        };
+                        switch (browserTabContent->getVolumeSliceDrawingType()) {
+                            case VolumeSliceDrawingTypeEnum::VOLUME_SLICE_DRAW_MONTAGE:
+                                CaretLogInfo("Slice selection disabled (not implemented) in montage.  Needs to move the selected coordinates, not this slice");
+                                break;
+                            case VolumeSliceDrawingTypeEnum::VOLUME_SLICE_DRAW_SINGLE:
+                                browserTabContent->selectVolumeSlicesAtCoordinate(xyz);
+                                break;
+                        }
+                    }
+                    allowRotationFlag = false;
+                    EventManager::get()->sendSimpleEvent(EventTypeEnum::EVENT_UPDATE_VOLUME_SLICE_INDICES_COORDS_TOOLBAR);
+                }
+                    break;
+                case VOLUME_MPR_CURSOR_MODE::ROTATE_SLICE:
+                    mprCrosshairAxis = SelectionItemVolumeMprCrosshair::Axis::ROTATE_SLICE;
+                    break;
+                case VOLUME_MPR_CURSOR_MODE::ROTATE_TRANSFORM:
+                    /*
+                     * Will fall through to rotation
+                     */
+                    mprCrosshairAxis = SelectionItemVolumeMprCrosshair::Axis::ROTATE_TRANSFORM;
+                    break;
+            }
+        }
     }
     if (scrollVolumeSlicesFlag) {
-        browserTabContent->applyMouseVolumeSliceIncrement(viewportContent,
-                                                          mouseEvent.getPressedX(),
-                                                          mouseEvent.getPressedY(),
-                                                          mouseEvent.getDy());
-        EventManager::get()->sendSimpleEvent(EventTypeEnum::EVENT_UPDATE_VOLUME_SLICE_INDICES_COORDS_TOOLBAR);
+        if (getUserInputMode() == UserInputModeEnum::Enum::ANNOTATIONS) {
+            /* Don't scroll slices when editing annotations */
+        }
+        else {
+            int32_t sliceStep(0);
+            if (m_lastSliceIncrementMouseYValid) {
+                /*
+                 * Get the screen containing the mouse.
+                 * If available get high DPI factor.
+                 */
+                const QScreen* screen(mouseEvent.getScreen());
+                const int32_t highDpiFactor((screen != NULL)
+                                            ? static_cast<int32_t>(screen->devicePixelRatio())
+                                            : 1);
+                
+                /*
+                 * Number of vertical pixels mouse must move to
+                 * trigger an increment or decrement slice increment/decrement
+                 */
+                const int32_t pixelMinDist(4 * highDpiFactor);
+                
+                /*
+                 * Distance mouse has moved since:
+                 * (1) user first dragged mouse
+                 * OR (2) vertical pixels that mouse has moved since slice was
+                 *        incremented or decremented
+                 */
+                const int32_t dy(mouseEvent.getY() - m_lastSliceIncrementMouseY);
+                
+                /*
+                 * Integers are used.
+                 * If user moves mouse moves slowly, slice will increment or decrement
+                 * by one slice at a time.  If the user moves the mouse very quickly,
+                 * "dy" will be larger and slice will increment or decrement by
+                 * several slices.
+                 */
+                sliceStep = dy / pixelMinDist;
+                if (sliceStep != 0) {
+                    /*
+                     * Slice will change to reset Y-position of mouse
+                     */
+                    m_lastSliceIncrementMouseY = mouseEvent.getY();
+                }
+            }
+            else {
+                /*
+                 * User has just started to drag mouse so initialize
+                 * Y-postion of mouse
+                 */
+                m_lastSliceIncrementMouseYValid = true;
+                m_lastSliceIncrementMouseY = mouseEvent.getY();
+            }
+
+            if (sliceStep != 0) {
+                browserTabContent->applyMouseVolumeSliceIncrement(viewportContent,
+                                                                  mouseEvent.getPressedX(),
+                                                                  mouseEvent.getPressedY(),
+                                                                  sliceStep);
+                EventManager::get()->sendSimpleEvent(EventTypeEnum::EVENT_UPDATE_VOLUME_SLICE_INDICES_COORDS_TOOLBAR);
+            }
+        }
     }
     else if (browserTabContent->isChartTwoDisplayed()) {
         const int32_t x1(mouseEvent.getPressedX());
@@ -354,8 +530,15 @@ UserInputModeView::mouseLeftDrag(const MouseEvent& mouseEvent)
             CaretLogSevere("Chart viewport is invalid");
         }
     }
-    else {
+    else if (browserTabContent->isHistologyDisplayed()) {
+        /* Nothing, selection box handled at beginning of function */
+    }
+    else if (browserTabContent->isMediaDisplayed()) {
+        /* Nothing, selection box handled at beginning of function */
+    }
+    else if (allowRotationFlag) {
         browserTabContent->applyMouseRotation(viewportContent,
+                                              mprCrosshairAxis,
                                               mouseEvent.getPressedX(),
                                               mouseEvent.getPressedY(),
                                               mouseEvent.getX(),
@@ -368,6 +551,111 @@ UserInputModeView::mouseLeftDrag(const MouseEvent& mouseEvent)
      * Update graphics.
      */
     updateGraphics(mouseEvent);
+}
+
+/**
+ * Update the graphics region selection box
+ */
+void
+UserInputModeView::updateGraphicsRegionSelectionBox(const MouseEvent& mouseEvent)
+{
+    BrainOpenGLViewportContent* viewportContent = mouseEvent.getViewportContent();
+    if (viewportContent == NULL) {
+        return;
+    }
+    
+    BrowserTabContent* browserTabContent = viewportContent->getBrowserTabContent();
+    if (browserTabContent == NULL) {
+        return;
+    }
+    
+    BrainOpenGLWidget* openGLWidget = mouseEvent.getOpenGLWidget();
+    CaretAssert(openGLWidget);
+
+    int32_t viewport[4];
+    viewportContent->getModelViewport(viewport);
+    const float vpX(mouseEvent.getX() - viewport[0]);
+    const float vpY(mouseEvent.getY() - viewport[1]);
+    
+    bool modelXyzValidFlag(false);
+    double modelXYZ[3];
+
+    if (browserTabContent->isHistologyDisplayed()) {
+        {
+            SelectionItemHistologyCoordinate* histologyID = openGLWidget->performIdentificationHistologyPlaneCoordinate(mouseEvent.getX(),
+                                                                                                                        mouseEvent.getY());
+            CaretAssert(histologyID);
+            if (histologyID->isValid()) {
+                const HistologyCoordinate coordinate(histologyID->getCoordinate());
+                if (coordinate.isPlaneXYValid()) {
+                    const Vector3D planeXYZ(coordinate.getPlaneXYZ());
+                    modelXYZ[0] = planeXYZ[0];
+                    modelXYZ[1] = planeXYZ[1];
+                    modelXYZ[2] = planeXYZ[2];
+                    modelXyzValidFlag = true;
+                }
+            }
+        }
+    }
+    else if (browserTabContent->isMediaDisplayed()) {
+        switch (browserTabContent->getMediaDisplayCoordinateMode()) {
+            case MediaDisplayCoordinateModeEnum::PIXEL:
+            {
+                SelectionItemMediaLogicalCoordinate* mediaID = openGLWidget->performIdentificationMediaLogicalCoordinate(mouseEvent.getX(),
+                                                                                                                         mouseEvent.getY());
+                CaretAssert(mediaID);
+                if (mediaID->isValid()) {
+                    mediaID->getModelXYZ(modelXYZ);
+                    modelXyzValidFlag = true;
+                }
+            }
+                break;
+            case MediaDisplayCoordinateModeEnum::PLANE:
+            {
+                SelectionItemMediaPlaneCoordinate* mediaID = openGLWidget->performIdentificationMediaPlaneCoordinate(mouseEvent.getX(),
+                                                                                                                     mouseEvent.getY());
+                CaretAssert(mediaID);
+                if (mediaID->isValid()) {
+                    const Vector3D planeXYZ(mediaID->getPlaneCoordinate());
+                    modelXYZ[0] = planeXYZ[0];
+                    modelXYZ[1] = planeXYZ[1];
+                    modelXYZ[2] = planeXYZ[2];
+                    modelXyzValidFlag = true;
+                }
+            }
+                break;
+        }
+    }
+    else if (browserTabContent->isVolumeSlicesDisplayed()) {
+        openGLWidget->performIdentificationAll(mouseEvent.getX(), mouseEvent.getY(), false);
+        SelectionItemVoxel* voxelID(GuiManager::get()->getBrain()->getSelectionManager()->getVoxelIdentification());
+        CaretAssert(voxelID);
+        if (voxelID->isValid()) {
+            voxelID->getModelXYZ(modelXYZ);
+            modelXyzValidFlag = true;
+        }
+    }
+
+    
+    if (modelXyzValidFlag) {
+        GraphicsRegionSelectionBox* box = browserTabContent->getRegionSelectionBox();
+        CaretAssert(box);
+        
+        if (mouseEvent.isFirstDragging()) {
+            box->initialize(modelXYZ[0],
+                            modelXYZ[1],
+                            modelXYZ[2],
+                            vpX,
+                            vpY);
+        }
+        else {
+            box->update(modelXYZ[0],
+                        modelXYZ[1],
+                        modelXYZ[2],
+                        vpX,
+                        vpY);
+        }
+    }
 }
 
 /**
@@ -405,13 +693,100 @@ UserInputModeView::mouseLeftDragWithCtrl(const MouseEvent& mouseEvent)
     
     int32_t modelViewport[4];
     viewportContent->getModelViewport(modelViewport);
-    browserTabContent->applyMouseScaling(viewportContent,
-                                         mouseEvent.getPressedX(),
-                                         mouseEvent.getPressedY(),
-                                         mouseEvent.getPressedX() - modelViewport[0],
-                                         mouseEvent.getPressedY() - modelViewport[1],
-                                         mouseEvent.getDx(),
-                                         mouseEvent.getDy());
+    if (browserTabContent->isHistologyDisplayed()) {
+        if (mouseEvent.isFirstDragging()) {
+            m_histologyLeftDragWithCtrlModelXYZValidFlag = false;
+            
+            BrainOpenGLWidget* openGLWidget = mouseEvent.getOpenGLWidget();
+            bool modelXyzValidFlag(false);
+            double modelXYZ[3];
+            
+            SelectionItemHistologyCoordinate* histologyID = openGLWidget->performIdentificationHistologyPlaneCoordinate(mouseEvent.getPressedX(),
+                                                                                                                        mouseEvent.getPressedY());
+            CaretAssert(histologyID);
+            if (histologyID->isValid()) {
+                const HistologyCoordinate coordinate(histologyID->getCoordinate());
+                if (coordinate.isStereotaxicXYZValid()) {
+                    const Vector3D planeXYZ(coordinate.getPlaneXYZ());
+                    modelXYZ[0] = planeXYZ[0];
+                    modelXYZ[1] = planeXYZ[1];
+                    modelXYZ[2] = planeXYZ[2];
+                    modelXyzValidFlag = true;
+                }
+            }
+
+            if (modelXyzValidFlag) {
+                m_histologyLeftDragWithCtrlModelXYZ[0] = modelXYZ[0];
+                m_histologyLeftDragWithCtrlModelXYZ[1] = modelXYZ[1];
+                m_histologyLeftDragWithCtrlModelXYZ[2] = modelXYZ[2];
+                m_histologyLeftDragWithCtrlModelXYZValidFlag = true;
+            }
+        }
+        browserTabContent->applyHistologyMouseScaling(viewportContent,
+                                                      mouseEvent.getPressedX(),
+                                                      mouseEvent.getPressedY(),
+                                                      mouseEvent.getDy(),
+                                                      m_histologyLeftDragWithCtrlModelXYZ[0],
+                                                      m_histologyLeftDragWithCtrlModelXYZ[1],
+                                                      m_histologyLeftDragWithCtrlModelXYZValidFlag);
+    }
+    else if (browserTabContent->isMediaDisplayed()) {
+        if (mouseEvent.isFirstDragging()) {
+            m_mediaLeftDragWithCtrlModelXYZValidFlag = false;
+            
+            BrainOpenGLWidget* openGLWidget = mouseEvent.getOpenGLWidget();
+            bool modelXyzValidFlag(false);
+            double modelXYZ[3];
+            switch (browserTabContent->getMediaDisplayCoordinateMode()) {
+                case MediaDisplayCoordinateModeEnum::PIXEL:
+                {
+                    SelectionItemMediaLogicalCoordinate* mediaID = openGLWidget->performIdentificationMediaLogicalCoordinate(mouseEvent.getPressedX(),
+                                                                                                            mouseEvent.getPressedY());
+                    CaretAssert(mediaID);
+                    if (mediaID->isValid()) {
+                        mediaID->getModelXYZ(modelXYZ);
+                        modelXyzValidFlag = true;
+                    }
+                }
+                    break;
+                case MediaDisplayCoordinateModeEnum::PLANE:
+                {
+                    SelectionItemMediaPlaneCoordinate* mediaID = openGLWidget->performIdentificationMediaPlaneCoordinate(mouseEvent.getPressedX(),
+                                                                                                                             mouseEvent.getPressedY());
+                    CaretAssert(mediaID);
+                    if (mediaID->isValid()) {
+                        const Vector3D planeXYZ(mediaID->getPlaneCoordinate());
+                        modelXYZ[0] = planeXYZ[0];
+                        modelXYZ[1] = planeXYZ[1];
+                        modelXYZ[2] = planeXYZ[2];
+                        modelXyzValidFlag = true;
+                    }
+                }
+                    break;
+            }
+
+            if (modelXyzValidFlag) {
+                m_mediaLeftDragWithCtrlModelXYZ[0] = modelXYZ[0];
+                m_mediaLeftDragWithCtrlModelXYZ[1] = modelXYZ[1];
+                m_mediaLeftDragWithCtrlModelXYZ[2] = modelXYZ[2];
+                m_mediaLeftDragWithCtrlModelXYZValidFlag = true;
+            }
+        }
+        browserTabContent->applyMediaMouseScaling(viewportContent,
+                                                  mouseEvent.getPressedX(),
+                                                  mouseEvent.getPressedY(),
+                                                  mouseEvent.getDy(),
+                                                  m_mediaLeftDragWithCtrlModelXYZ[0],
+                                                  m_mediaLeftDragWithCtrlModelXYZ[1],
+                                                  m_mediaLeftDragWithCtrlModelXYZValidFlag);
+    }
+    else {
+        browserTabContent->applyMouseScaling(viewportContent,
+                                             mouseEvent.getPressedX() - modelViewport[0],
+                                             mouseEvent.getPressedY() - modelViewport[1],
+                                             mouseEvent.getDx(),
+                                             mouseEvent.getDy());
+    }
     updateGraphics(mouseEvent);
 }
 
@@ -434,11 +809,14 @@ UserInputModeView::mouseLeftDragWithShift(const MouseEvent& mouseEvent)
         return;
     }
     
+    const float factor(viewportContent->getTranslationFactorForMousePanning());
     browserTabContent->applyMouseTranslation(viewportContent,
                                              mouseEvent.getPressedX(),
                                              mouseEvent.getPressedY(),
-                                             mouseEvent.getDx(),
-                                             mouseEvent.getDy());
+                                             mouseEvent.getX(),
+                                             mouseEvent.getY(),
+                                             static_cast<int32_t>(mouseEvent.getDx() * factor),
+                                             static_cast<int32_t>(mouseEvent.getDy() * factor));
     updateGraphics(mouseEvent);
 }
 
@@ -451,6 +829,9 @@ UserInputModeView::mouseLeftDragWithShift(const MouseEvent& mouseEvent)
 void
 UserInputModeView::mouseLeftRelease(const MouseEvent& mouseEvent)
 {
+    m_mprCursorMode = VOLUME_MPR_CURSOR_MODE::INVALID;
+    m_lastSliceIncrementMouseYValid = false;
+
     BrainOpenGLViewportContent* viewportContent = mouseEvent.getViewportContent();
     if (viewportContent == NULL) {
         return;
@@ -461,6 +842,20 @@ UserInputModeView::mouseLeftRelease(const MouseEvent& mouseEvent)
         return;
     }
     
+    switch (browserTabContent->getMouseLeftDragMode()) {
+        case MouseLeftDragModeEnum::INVALID:
+            CaretAssert(0);
+            return;
+            break;
+        case MouseLeftDragModeEnum::DEFAULT:
+            /* handled below */
+            break;
+        case MouseLeftDragModeEnum::REGION_SELECTION:
+            applyGraphicsRegionSelectionBox(mouseEvent);
+            return;
+            break;
+    }
+
     if (browserTabContent->isChartTwoDisplayed()) {
         const int32_t x1(mouseEvent.getPressedX());
         const int32_t y1(mouseEvent.getPressedY());
@@ -483,14 +878,164 @@ UserInputModeView::mouseLeftRelease(const MouseEvent& mouseEvent)
 }
 
 /**
+ * Apply the graphics region selection box after user has release left mouse button
+ * @param mouseEvent
+ *     Mouse event information.
+ */
+void
+UserInputModeView::applyGraphicsRegionSelectionBox(const MouseEvent& mouseEvent)
+{
+    BrainOpenGLViewportContent* viewportContent = mouseEvent.getViewportContent();
+    if (viewportContent == NULL) {
+        return;
+    }
+    
+    BrowserTabContent* browserTabContent = viewportContent->getBrowserTabContent();
+    if (browserTabContent == NULL) {
+        return;
+    }
+    
+    GraphicsRegionSelectionBox* selectionBox = browserTabContent->getRegionSelectionBox();
+    CaretAssert(selectionBox);
+    switch (selectionBox->getStatus()) {
+        case GraphicsRegionSelectionBox::Status::INVALID:
+            return;
+            break;
+        case GraphicsRegionSelectionBox::Status::VALID:
+            break;
+    }
+    
+    /*
+     * Zoom to selection region
+     */
+    std::vector<const BrainOpenGLViewportContent*> viewportContentInAllWindows;
+    
+    /*
+     * Get all tab viewports in the window using this instance as we
+     * want it FIRST in all viewport content
+     */
+    BrainOpenGLWindowContent* windowContent(mouseEvent.getWindowContent());
+    CaretAssert(windowContent);
+    std::vector<const BrainOpenGLViewportContent*> vpContents(windowContent->getAllTabViewports());
+    viewportContentInAllWindows.insert(viewportContentInAllWindows.end(),
+                                       vpContents.begin(),
+                                       vpContents.end());
+    
+    /*
+     * Get viewport content in all other windows
+     */
+    std::vector<BrainBrowserWindow*> allBrowserWindows(GuiManager::get()->getAllOpenBrainBrowserWindows());
+    for (auto& bw : allBrowserWindows) {
+        if (bw->getBrowserWindowIndex() != getBrowserWindowIndex()) {
+            std::vector<const BrainOpenGLViewportContent*> vpContents;
+            bw->getAllBrainOpenGLViewportContent(vpContents);
+            viewportContentInAllWindows.insert(viewportContentInAllWindows.end(),
+                                               vpContents.begin(),
+                                               vpContents.end());
+        }
+    }
+        
+    browserTabContent->setViewToBounds(viewportContentInAllWindows,
+                                       &mouseEvent,
+                                       selectionBox);
+
+    selectionBox->setStatus(GraphicsRegionSelectionBox::Status::INVALID);
+    
+    /*
+     * Update graphics.
+     */
+    updateGraphics(mouseEvent);
+    EventManager::get()->sendEvent(EventUserInterfaceUpdate().getPointer());
+}
+
+/**
  * Process a mouse left press event.
  *
  * @param mouseEvent
  *     Mouse event information.
  */
 void
-UserInputModeView::mouseLeftPress(const MouseEvent& /*mouseEvent*/)
+UserInputModeView::mouseLeftPress(const MouseEvent& mouseEvent)
 {
+    m_mprCursorMode = getVolumeMprMouseMode(mouseEvent);
+    m_lastSliceIncrementMouseYValid = false;
+}
+
+/**
+ * @return MPR mouse mode based upon cursor position
+ * @param mouseEvent
+ *    A mouse event
+ */
+UserInputModeView::VOLUME_MPR_CURSOR_MODE
+UserInputModeView::getVolumeMprMouseMode(const MouseEvent& mouseEvent)
+{
+    UserInputModeView::VOLUME_MPR_CURSOR_MODE mprModeOut(VOLUME_MPR_CURSOR_MODE::INVALID);
+    
+    BrainOpenGLViewportContent* viewportContent = mouseEvent.getViewportContent();
+    if (viewportContent == NULL) {
+        return mprModeOut;
+    }
+    
+    BrowserTabContent* browserTabContent = viewportContent->getBrowserTabContent();
+    if (browserTabContent == NULL) {
+        return mprModeOut;
+    }
+    
+    if (browserTabContent->isVolumeMprOldDisplayed()) {
+        BrainOpenGLWidget* openGLWidget = mouseEvent.getOpenGLWidget();
+        SelectionItemVolumeMprCrosshair* crosshairID(openGLWidget->performIdentificationVolumeMprCrosshairs(mouseEvent.getX(),
+                                                                                                            mouseEvent.getY()));
+        CaretAssert(crosshairID);
+        if (crosshairID->isValid()) {
+            if (crosshairID->isRotateTransform()) {
+                mprModeOut = VOLUME_MPR_CURSOR_MODE::ROTATE_TRANSFORM;
+            }
+            else if (crosshairID->isSliceSelection()) {
+                mprModeOut = VOLUME_MPR_CURSOR_MODE::SELECT_SLICE;
+            }
+        }
+        else {
+            mprModeOut = VOLUME_MPR_CURSOR_MODE::SCROLL_SLICE;
+        }
+    }
+    else if (browserTabContent->isVolumeMprThreeDisplayed()) {
+        BrainOpenGLWidget* openGLWidget = mouseEvent.getOpenGLWidget();
+        SelectionItemVolumeMprCrosshair* crosshairID(openGLWidget->performIdentificationVolumeMprCrosshairs(mouseEvent.getX(),
+                                                                                                            mouseEvent.getY()));
+        CaretAssert(crosshairID);
+        if (crosshairID->isValid()) {
+            switch (crosshairID->getAxis()) {
+                case SelectionItemVolumeMprCrosshair::Axis::INVALID:
+                    break;
+                case SelectionItemVolumeMprCrosshair::Axis::ROTATE_SLICE:
+                    mprModeOut = VOLUME_MPR_CURSOR_MODE::ROTATE_SLICE;
+                    break;
+                case SelectionItemVolumeMprCrosshair::Axis::ROTATE_TRANSFORM:
+                    mprModeOut = VOLUME_MPR_CURSOR_MODE::ROTATE_TRANSFORM;
+                    break;
+                case SelectionItemVolumeMprCrosshair::Axis::SELECT_SLICE:
+                    mprModeOut = VOLUME_MPR_CURSOR_MODE::SELECT_SLICE;
+                    break;
+            }
+        }
+        else {
+            mprModeOut = VOLUME_MPR_CURSOR_MODE::SCROLL_SLICE;
+        }
+    }
+
+    return mprModeOut;
+}
+
+/**
+ * Process a mouse move with no buttons or keys down
+ *
+ * @param mouseEvent
+ *     Mouse event information.
+ */
+void
+UserInputModeView::mouseMove(const MouseEvent& mouseEvent)
+{
+    m_mprCursorMode = getVolumeMprMouseMode(mouseEvent);
 }
 
 /**
@@ -525,13 +1070,89 @@ UserInputModeView::gestureEvent(const GestureEvent& gestureEvent)
                     scaleFactor = -2.0;
                 }
                 if (scaleFactor != 0.0) {
-                    browserTabContent->applyMouseScaling(viewportContent,
-                                                         gestureEvent.getStartCenterX(),
-                                                         gestureEvent.getStartCenterX(),
-                                                         gestureEvent.getStartCenterX(),
-                                                         gestureEvent.getStartCenterY(),
-                                                         0.0f,
-                                                         scaleFactor);
+                    if (browserTabContent->isHistologyDisplayed()) {
+                        const bool enableHistologyesturesFlag(false);
+                        /* Needs separate modes for each histology drawing mode */
+                        if (enableHistologyesturesFlag) {
+                            BrainOpenGLWidget* openGLWidget = gestureEvent.getOpenGLWidget();
+                            bool modelXyzValidFlag(false);
+                            double modelXYZ[3];
+                            {
+                                SelectionItemHistologyCoordinate* histologyID = openGLWidget->performIdentificationHistologyPlaneCoordinate(gestureEvent.getStartCenterX(),
+                                                                                                                                            gestureEvent.getStartCenterY());
+                                CaretAssert(histologyID);
+                                if (histologyID->isValid()) {
+                                    const HistologyCoordinate coordinate(histologyID->getCoordinate());
+                                    const Vector3D planeXYZ(coordinate.getPlaneXYZ());
+                                    modelXYZ[0] = planeXYZ[0];
+                                    modelXYZ[1] = planeXYZ[1];
+                                    modelXYZ[2] = planeXYZ[2];
+                                    modelXyzValidFlag = true;
+                                }
+                                if (modelXyzValidFlag) {
+                                    browserTabContent->applyHistologyMouseScaling(viewportContent,
+                                                                                  gestureEvent.getStartCenterX(),
+                                                                                  gestureEvent.getStartCenterX(),
+                                                                                  deltaY,
+                                                                                  modelXYZ[0],
+                                                                                  modelXYZ[1],
+                                                                                  true);
+                                }
+                            }
+                        }
+                    }
+                    else if (browserTabContent->isMediaDisplayed()) {
+                        const bool enableMediaGesturesFlag(false);
+                        if (enableMediaGesturesFlag) {
+                            BrainOpenGLWidget* openGLWidget = gestureEvent.getOpenGLWidget();
+                            bool modelXyzValidFlag(false);
+                            double modelXYZ[3];
+                            switch (browserTabContent->getMediaDisplayCoordinateMode()) {
+                                case MediaDisplayCoordinateModeEnum::PIXEL:
+                                {
+        
+                                    SelectionItemMediaLogicalCoordinate* mediaID = openGLWidget->performIdentificationMediaLogicalCoordinate(gestureEvent.getStartCenterX(),
+                                                                                                                                             gestureEvent.getStartCenterY());
+                                    CaretAssert(mediaID);
+                                    if (mediaID->isValid()) {
+                                        mediaID->getModelXYZ(modelXYZ);
+                                        modelXyzValidFlag = true;
+                                    }
+                                }
+                                    break;
+                                case MediaDisplayCoordinateModeEnum::PLANE:
+                                {
+                                    SelectionItemMediaPlaneCoordinate* mediaID = openGLWidget->performIdentificationMediaPlaneCoordinate(gestureEvent.getStartCenterX(),
+                                                                                                                                         gestureEvent.getStartCenterY());
+                                    CaretAssert(mediaID);
+                                    if (mediaID->isValid()) {
+                                        const Vector3D planeXYZ(mediaID->getPlaneCoordinate());
+                                        modelXYZ[0] = planeXYZ[0];
+                                        modelXYZ[1] = planeXYZ[1];
+                                        modelXYZ[2] = planeXYZ[2];
+                                        modelXyzValidFlag = true;
+                                    }
+                                    break;
+                                }
+                            }
+                            if (modelXyzValidFlag) {
+                                browserTabContent->applyMediaMouseScaling(viewportContent,
+                                                                          gestureEvent.getStartCenterX(),
+                                                                          gestureEvent.getStartCenterX(),
+                                                                          deltaY,
+                                                                          modelXYZ[0],
+                                                                          modelXYZ[1],
+                                                                          true);
+                            }
+                        }
+                    }
+                    else {
+                        browserTabContent->applyMouseScaling(viewportContent,
+                                                             gestureEvent.getStartCenterX(),
+                                                             gestureEvent.getStartCenterX(),
+                                                             0.0f,
+                                                             scaleFactor);
+                    }
                     updateGraphics(viewportContent);
                 }
             }
@@ -566,9 +1187,9 @@ UserInputModeView::showContextMenu(const MouseEvent& mouseEvent,
     const int32_t mouseX = mouseEvent.getX();
     const int32_t mouseY = mouseEvent.getY();
     
-    SelectionManager* idManager = openGLWidget->performIdentification(mouseX,
-                                                                      mouseY,
-                                                                      false);
+    SelectionManager* idManager = openGLWidget->performIdentificationAll(mouseX,
+                                                                         mouseY,
+                                                                         false);
     
     UserInputModeViewContextMenu contextMenu(mouseEvent,
                                              viewportContent,
@@ -591,7 +1212,7 @@ UserInputModeView::updateGraphics(const BrainOpenGLViewportContent* viewportCont
     if (viewportContent != NULL) {
         BrowserTabContent* browserTabContent = viewportContent->getBrowserTabContent();
         const int32_t browserWindowIndex = viewportContent->getWindowIndex();
-        EventManager::get()->sendEvent(EventGraphicsUpdateOneWindow(browserWindowIndex).getPointer());
+        EventManager::get()->sendEvent(EventGraphicsPaintSoonOneWindow(browserWindowIndex).getPointer());
         
         YokingGroupEnum::Enum brainYokingGroup = YokingGroupEnum::YOKING_GROUP_OFF;
         YokingGroupEnum::Enum chartYokingGroup = YokingGroupEnum::YOKING_GROUP_OFF;
@@ -607,7 +1228,7 @@ UserInputModeView::updateGraphics(const BrainOpenGLViewportContent* viewportCont
             }
             
             if (issuedYokeEvent) {
-                EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+                EventManager::get()->sendEvent(EventGraphicsPaintSoonAllWindows().getPointer());
                 EventManager::get()->sendEvent(EventUpdateYokedWindows(brainYokingGroup,
                                                                        chartYokingGroup).getPointer());
             }
@@ -618,7 +1239,7 @@ UserInputModeView::updateGraphics(const BrainOpenGLViewportContent* viewportCont
      * If not yoked, just need to update graphics.
      */
     if ( ! issuedYokeEvent) {
-        EventManager::get()->sendEvent(EventGraphicsUpdateOneWindow(viewportContent->getWindowIndex()).getPointer());
+        EventManager::get()->sendEvent(EventGraphicsPaintSoonOneWindow(viewportContent->getWindowIndex()).getPointer());
     }
 }
 
@@ -633,7 +1254,7 @@ UserInputModeView::updateGraphics(const MouseEvent& mouseEvent)
     if (mouseEvent.getViewportContent() != NULL) {
         BrowserTabContent* browserTabContent = mouseEvent.getViewportContent()->getBrowserTabContent();
         const int32_t browserWindowIndex = mouseEvent.getBrowserWindowIndex();
-        EventManager::get()->sendEvent(EventGraphicsUpdateOneWindow(browserWindowIndex).getPointer());
+        EventManager::get()->sendEvent(EventGraphicsPaintSoonOneWindow(browserWindowIndex).getPointer());
         
         YokingGroupEnum::Enum brainYokingGroup = YokingGroupEnum::YOKING_GROUP_OFF;
         YokingGroupEnum::Enum chartYokingGroup = YokingGroupEnum::YOKING_GROUP_OFF;
@@ -649,7 +1270,7 @@ UserInputModeView::updateGraphics(const MouseEvent& mouseEvent)
             }
             
             if (issuedYokeEvent) {
-                EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+                EventManager::get()->sendEvent(EventGraphicsPaintSoonAllWindows().getPointer());
                 EventManager::get()->sendEvent(EventUpdateYokedWindows(brainYokingGroup,
                                                                        chartYokingGroup).getPointer());
             }
@@ -660,7 +1281,7 @@ UserInputModeView::updateGraphics(const MouseEvent& mouseEvent)
      * If not yoked, just need to update graphics.
      */
     if ( ! issuedYokeEvent) {
-        EventManager::get()->sendEvent(EventGraphicsUpdateOneWindow(mouseEvent.getBrowserWindowIndex()).getPointer());
+        EventManager::get()->sendEvent(EventGraphicsPaintSoonOneWindow(mouseEvent.getBrowserWindowIndex()).getPointer());
     }
 }
 
@@ -705,9 +1326,9 @@ UserInputModeView::keyPressEvent(const KeyEvent& keyEvent)
              * Increment/decrement selected point in line layer chart.
              * Identification will fail if chart is not visible.
              */
-            SelectionManager* selectionManager = keyEvent.getOpenGLWidget()->performIdentification(mouseXY[0],
-                                                                                                   mouseXY[1],
-                                                                                                   false);
+            SelectionManager* selectionManager = keyEvent.getOpenGLWidget()->performIdentificationAll(mouseXY[0],
+                                                                                                      mouseXY[1],
+                                                                                                      false);
             
             SelectionItemChartTwoLineLayerVerticalNearest* layerSelection = selectionManager->getChartTwoLineLayerVerticalNearestIdentification();
             CaretAssert(layerSelection);
@@ -751,7 +1372,7 @@ UserInputModeView::processChartActiveLayerAction(const ChartActiveLayerMode char
 {
     ChartTwoOverlaySet* chartOverlaySet = NULL;
     BrowserTabContent* browserTabContent =
-    GuiManager::get()->getBrowserTabContentForBrowserWindow(m_browserWindowIndex, true);
+    GuiManager::get()->getBrowserTabContentForBrowserWindow(getBrowserWindowIndex(), true);
     if (browserTabContent != NULL) {
         chartOverlaySet = browserTabContent->getChartTwoOverlaySet();
     }
@@ -775,7 +1396,122 @@ UserInputModeView::processChartActiveLayerAction(const ChartActiveLayerMode char
         }
     }
     
-    EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+    EventManager::get()->sendEvent(EventGraphicsPaintSoonAllWindows().getPointer());
     EventManager::get()->sendEvent(EventUserInterfaceUpdate().addToolBox().getPointer());    
 }
 
+/**
+ * Get the menu items that should be enabled for the current user input processor.
+ * Intended for override by sub-classes.
+ * Unless this method is overridden, all items on Edit menu are disabled.
+ *
+ * @param enabledEditMenuItemsOut
+ *     Upon exit contains edit menu items that should be enabled.
+ * @param redoMenuItemSuffixTextOut
+ *     If the redo menu is enabled, the contents of string becomes
+ *     the suffix for the 'Redo' menu item.
+ * @param undoMenuItemSuffixTextOut
+ *     If the undo menu is enabled, the contents of string becomes
+ *     the suffix for the 'Undo' menu item.
+ * @param pasteTextOut
+ *     If not empty, this text is shown for the PASTE menu item
+ * @param pasteSpecialTextOut
+ *     If not empty, this text is shown for the PASTE_SPECIAL menu item
+ */
+void
+UserInputModeView::getEnabledEditMenuItems(std::vector<BrainBrowserWindowEditMenuItemEnum::Enum>& enabledEditMenuItemsOut,
+                                           AString& redoMenuItemSuffixTextOut,
+                                           AString& undoMenuItemSuffixTextOut,
+                                           AString& pasteTextOut,
+                                           AString& pasteSpecialTextOut)
+{
+    enabledEditMenuItemsOut.clear();
+    redoMenuItemSuffixTextOut = "";
+    undoMenuItemSuffixTextOut = "";
+    
+    
+    pasteTextOut        = BrainBrowserWindowEditMenuItemEnum::toGuiName(BrainBrowserWindowEditMenuItemEnum::PASTE);
+    pasteSpecialTextOut = BrainBrowserWindowEditMenuItemEnum::toGuiName(BrainBrowserWindowEditMenuItemEnum::PASTE_SPECIAL);
+    
+    BrowserTabContent* browserTabContent =
+    GuiManager::get()->getBrowserTabContentForBrowserWindow(getBrowserWindowIndex(), true);
+    if (browserTabContent != NULL) {
+        ViewingTransformations* viewingTransform(browserTabContent->getViewingTransformation());
+        CaretAssert(viewingTransform);
+
+        CaretUndoStack* undoStack(viewingTransform->getRedoUndoStack());
+        CaretAssert(undoStack);
+        
+        if (undoStack->canRedo()) {
+            enabledEditMenuItemsOut.push_back(BrainBrowserWindowEditMenuItemEnum::REDO);
+            redoMenuItemSuffixTextOut = undoStack->redoText();
+        }
+        
+        if (undoStack->canUndo()) {
+            enabledEditMenuItemsOut.push_back(BrainBrowserWindowEditMenuItemEnum::UNDO);
+            undoMenuItemSuffixTextOut = undoStack->undoText();
+        }
+    }
+}
+
+/**
+ * Process a selection that was made from the browser window's edit menu.
+ * Intended for override by sub-classes.
+ *
+ * @param editMenuItem
+ *     Item that was selected from the edit menu.
+ */
+void
+UserInputModeView::processEditMenuItemSelection(const BrainBrowserWindowEditMenuItemEnum::Enum editMenuItem)
+{
+    CaretUndoStack* undoStack(NULL);
+    BrowserTabContent* browserTabContent =
+    GuiManager::get()->getBrowserTabContentForBrowserWindow(getBrowserWindowIndex(), true);
+    if (browserTabContent != NULL) {
+        ViewingTransformations* viewingTransform(browserTabContent->getViewingTransformation());
+        CaretAssert(viewingTransform);
+        
+        undoStack = viewingTransform->getRedoUndoStack();
+    }
+    
+    switch (editMenuItem) {
+        case BrainBrowserWindowEditMenuItemEnum::COPY:
+            break;
+        case BrainBrowserWindowEditMenuItemEnum::CUT:
+            break;
+        case BrainBrowserWindowEditMenuItemEnum::DELETER:
+            break;
+        case BrainBrowserWindowEditMenuItemEnum::DESELECT_ALL:
+            break;
+        case BrainBrowserWindowEditMenuItemEnum::PASTE:
+            break;
+        case BrainBrowserWindowEditMenuItemEnum::PASTE_SPECIAL:
+            break;
+        case BrainBrowserWindowEditMenuItemEnum::REDO:
+        if (undoStack != NULL) {
+            AString errorMessage;
+            if ( ! undoStack->redo(errorMessage)) {
+                WuQMessageBox::errorOk(GuiManager::get()->getBrowserWindowByWindowIndex(getBrowserWindowIndex()),
+                                       errorMessage);
+            }
+            
+            EventManager::get()->sendSimpleEvent(EventTypeEnum::EVENT_ANNOTATION_TOOLBAR_UPDATE);
+            EventManager::get()->sendEvent(EventGraphicsPaintSoonAllWindows().getPointer());
+        }
+            break;
+        case BrainBrowserWindowEditMenuItemEnum::SELECT_ALL:
+            break;
+        case BrainBrowserWindowEditMenuItemEnum::UNDO:
+        if (undoStack != NULL) {
+            AString errorMessage;
+            if ( ! undoStack->undo(errorMessage)) {
+                WuQMessageBox::errorOk(GuiManager::get()->getBrowserWindowByWindowIndex(getBrowserWindowIndex()),
+                                       errorMessage);
+            }
+            
+            EventManager::get()->sendSimpleEvent(EventTypeEnum::EVENT_ANNOTATION_TOOLBAR_UPDATE);
+            EventManager::get()->sendEvent(EventGraphicsPaintSoonAllWindows().getPointer());
+        }
+            break;
+    }
+}

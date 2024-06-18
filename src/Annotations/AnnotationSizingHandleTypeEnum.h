@@ -59,8 +59,14 @@ public:
         ANNOTATION_SIZING_HANDLE_LINE_END,
         /** Line Start */
         ANNOTATION_SIZING_HANDLE_LINE_START,
-        /** Point in poly line */
-        ANNOTATION_SIZING_HANDLE_POLY_LINE_COORDINATE
+        /** Editable coordinate in poly line */
+        ANNOTATION_SIZING_HANDLE_EDITABLE_POLY_LINE_COORDINATE,
+        /** Text displayed over polyhedron first end (face) */
+        ANNOTATION_SIZING_HANDLE_POLYHEDRON_TEXT_COORDINATE_ONE,
+        /** Text displayed over polyhedron second end (face) */
+        ANNOTATION_SIZING_HANDLE_POLYHEDRON_TEXT_COORDINATE_TWO,
+        /** NOTE Editable coordinate in poly line */
+        ANNOTATION_SIZING_HANDLE_NOT_EDITABLE_POLY_LINE_COORDINATE
     };
 
 

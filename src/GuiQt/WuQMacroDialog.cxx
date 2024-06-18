@@ -199,7 +199,7 @@ WuQMacroDialog::WuQMacroDialog(QWidget* parent)
     /*
      * Disable auto default for all push buttons
      */
-    QList<QPushButton*> allChildPushButtons = findChildren<QPushButton*>(QRegExp(".*"));
+    QList<QPushButton*> allChildPushButtons = findChildren<QPushButton*>(QRegularExpression(".*"));    
     QListIterator<QPushButton*> allChildPushButtonsIterator(allChildPushButtons);
     while (allChildPushButtonsIterator.hasNext()) {
         QPushButton* pushButton = allChildPushButtonsIterator.next();
@@ -734,7 +734,11 @@ WuQMacroDialog::updateDialogContents()
     QString selectedUniqueIdentifer;
     const QVariant dataSelected = m_macroGroupComboBox->currentData();
     if (dataSelected.isValid()) {
+#if QT_VERSION >= 0x060000
+        if (dataSelected.metaType().id() == QMetaType::QString) {
+#else
         if (dataSelected.type() == QVariant::String) {
+#endif
             selectedUniqueIdentifer = dataSelected.toString();
         }
     }

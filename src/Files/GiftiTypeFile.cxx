@@ -835,6 +835,8 @@ GiftiTypeFile::isMappedWithPalette() const
             break;
         case DataFileTypeEnum::CONNECTIVITY_PARCEL_DENSE:
             break;
+        case DataFileTypeEnum::CONNECTIVITY_PARCEL_DYNAMIC:
+            break;
         case DataFileTypeEnum::CONNECTIVITY_PARCEL_LABEL:
             break;
         case DataFileTypeEnum::CONNECTIVITY_PARCEL_SCALAR:
@@ -851,7 +853,11 @@ GiftiTypeFile::isMappedWithPalette() const
             break;
         case DataFileTypeEnum::CONNECTIVITY_SCALAR_DATA_SERIES:
             break;
+        case DataFileTypeEnum::CZI_IMAGE_FILE:
+            break;
         case DataFileTypeEnum::FOCI:
+            break;
+        case DataFileTypeEnum::HISTOLOGY_SLICES:
             break;
         case DataFileTypeEnum::IMAGE:
             break;
@@ -866,6 +872,8 @@ GiftiTypeFile::isMappedWithPalette() const
         case DataFileTypeEnum::PALETTE:
             break;
         case DataFileTypeEnum::RGBA:
+            break;
+        case DataFileTypeEnum::SAMPLES:
             break;
         case DataFileTypeEnum::SCENE:
             break;
@@ -925,6 +933,8 @@ GiftiTypeFile::getPaletteNormalizationModesSupported(std::vector<PaletteNormaliz
             break;
         case DataFileTypeEnum::CONNECTIVITY_PARCEL_DENSE:
             break;
+        case DataFileTypeEnum::CONNECTIVITY_PARCEL_DYNAMIC:
+            break;
         case DataFileTypeEnum::CONNECTIVITY_PARCEL_LABEL:
             break;
         case DataFileTypeEnum::CONNECTIVITY_PARCEL_SCALAR:
@@ -933,7 +943,11 @@ GiftiTypeFile::getPaletteNormalizationModesSupported(std::vector<PaletteNormaliz
             break;
         case DataFileTypeEnum::CONNECTIVITY_SCALAR_DATA_SERIES:
             break;
+        case DataFileTypeEnum::CZI_IMAGE_FILE:
+            break;
         case DataFileTypeEnum::FOCI:
+            break;
+        case DataFileTypeEnum::HISTOLOGY_SLICES:
             break;
         case DataFileTypeEnum::IMAGE:
             break;
@@ -949,6 +963,8 @@ GiftiTypeFile::getPaletteNormalizationModesSupported(std::vector<PaletteNormaliz
         case DataFileTypeEnum::PALETTE:
             break;
         case DataFileTypeEnum::RGBA:
+            break;
+        case DataFileTypeEnum::SAMPLES:
             break;
         case DataFileTypeEnum::SCENE:
             break;
@@ -1249,6 +1265,8 @@ GiftiTypeFile::getBrainordinateMappingMatch(const CaretMappableDataFile* mapFile
             break;
         case DataFileTypeEnum::CONNECTIVITY_PARCEL_DENSE:
             break;
+        case DataFileTypeEnum::CONNECTIVITY_PARCEL_DYNAMIC:
+            break;
         case DataFileTypeEnum::CONNECTIVITY_PARCEL_LABEL:
             break;
         case DataFileTypeEnum::CONNECTIVITY_PARCEL_SCALAR:
@@ -1257,7 +1275,11 @@ GiftiTypeFile::getBrainordinateMappingMatch(const CaretMappableDataFile* mapFile
             break;
         case DataFileTypeEnum::CONNECTIVITY_SCALAR_DATA_SERIES:
             break;
+        case DataFileTypeEnum::CZI_IMAGE_FILE:
+            break;
         case DataFileTypeEnum::FOCI:
+            break;
+        case DataFileTypeEnum::HISTOLOGY_SLICES:
             break;
         case DataFileTypeEnum::IMAGE:
             break;
@@ -1274,6 +1296,8 @@ GiftiTypeFile::getBrainordinateMappingMatch(const CaretMappableDataFile* mapFile
             break;
         case DataFileTypeEnum::RGBA:
             giftiFlag = true;
+            break;
+        case DataFileTypeEnum::SAMPLES:
             break;
         case DataFileTypeEnum::SCENE:
             break;
@@ -1315,16 +1339,19 @@ GiftiTypeFile::getBrainordinateMappingMatch(const CaretMappableDataFile* mapFile
  *    Number of nodes in the surface.
  * @param dataValueSeparator
  *    Separator between multiple data values
+ * @param digitsRightOfDecimal
+ *    Digits right of decimal for real data
  * @param textOut
  *    Output containing identification information.
  */
 bool
 GiftiTypeFile::getSurfaceNodeIdentificationForMaps(const std::vector<int32_t>& mapIndices,
-                                                           const StructureEnum::Enum structure,
-                                                           const int nodeIndex,
-                                                           const int32_t numberOfNodes,
-                                                           const AString& dataValueSeparator,
-                                                           AString& textOut) const
+                                                   const StructureEnum::Enum structure,
+                                                   const int nodeIndex,
+                                                   const int32_t numberOfNodes,
+                                                   const AString& dataValueSeparator,
+                                                   const int32_t digitsRightOfDecimal,
+                                                   AString& textOut) const
 {
     textOut.clear();
     
@@ -1357,6 +1384,8 @@ GiftiTypeFile::getSurfaceNodeIdentificationForMaps(const std::vector<int32_t>& m
                 break;
             case DataFileTypeEnum::CONNECTIVITY_PARCEL_DENSE:
                 break;
+            case DataFileTypeEnum::CONNECTIVITY_PARCEL_DYNAMIC:
+                break;
             case DataFileTypeEnum::CONNECTIVITY_PARCEL_LABEL:
                 break;
             case DataFileTypeEnum::CONNECTIVITY_PARCEL_SCALAR:
@@ -1365,7 +1394,11 @@ GiftiTypeFile::getSurfaceNodeIdentificationForMaps(const std::vector<int32_t>& m
                 break;
             case DataFileTypeEnum::CONNECTIVITY_SCALAR_DATA_SERIES:
                 break;
+            case DataFileTypeEnum::CZI_IMAGE_FILE:
+                break;
             case DataFileTypeEnum::FOCI:
+                break;
+            case DataFileTypeEnum::HISTOLOGY_SLICES:
                 break;
             case DataFileTypeEnum::IMAGE:
                 break;
@@ -1406,7 +1439,7 @@ GiftiTypeFile::getSurfaceNodeIdentificationForMaps(const std::vector<int32_t>& m
                     if ( ! valuesText.isEmpty()) {
                         valuesText.append(dataValueSeparator);
                     }
-                    valuesText.append(AString::number(value, 'f', 3));
+                    valuesText.append(AString::number(value, 'f', digitsRightOfDecimal));
                 }
                 
                 if ( ! valuesText.isEmpty()) {
@@ -1417,6 +1450,8 @@ GiftiTypeFile::getSurfaceNodeIdentificationForMaps(const std::vector<int32_t>& m
             case DataFileTypeEnum::PALETTE:
                 break;
             case DataFileTypeEnum::RGBA:
+                break;
+            case DataFileTypeEnum::SAMPLES:
                 break;
             case DataFileTypeEnum::SCENE:
                 break;

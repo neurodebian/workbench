@@ -54,12 +54,15 @@ AnnotationCoordinateSpaceWidget::AnnotationCoordinateSpaceWidget(const int32_t b
 : QWidget(parent),
 m_browserWindowIndex(browserWindowIndex)
 {
+    QLabel* coordinateSpaceLabel = new QLabel("Space");
     m_spaceLabel = new QLabel("  ");
     m_spaceLabel->setToolTip("Selection annotation(s) space.\n"
                              "Mouse dragging to move/resize\n"
                              "annotations allowed in Tab or \n"
                              "Window space only.\n"
                              "   Ch : Chart\n"
+                             "   M  : Media\n"
+                             "   Sp : Spacer\n"
                              "   St : Stereotaxic\n"
                              "   Sf : Surface\n"
                              "   T  : Tab\n"
@@ -67,9 +70,11 @@ m_browserWindowIndex(browserWindowIndex)
                              "   +  : Multiple Spaces");
     
                              
-    QHBoxLayout* layout = new QHBoxLayout(this);
+    QVBoxLayout* layout = new QVBoxLayout(this);
     WuQtUtilities::setLayoutSpacingAndMargins(layout, 0, 0);
-    layout->addWidget(m_spaceLabel);
+    layout->addWidget(coordinateSpaceLabel, 0, Qt::AlignHCenter);
+    layout->addWidget(m_spaceLabel, 0, Qt::AlignHCenter);
+    layout->addStretch();
 }
 
 /**
@@ -139,9 +144,13 @@ AnnotationCoordinateSpaceWidget::updateContent(std::vector<Annotation*> annotati
             switch (space) {
                 case AnnotationCoordinateSpaceEnum::CHART:
                     break;
+                case AnnotationCoordinateSpaceEnum::HISTOLOGY:
+                    break;
+                case AnnotationCoordinateSpaceEnum::MEDIA_FILE_NAME_AND_PIXEL:
+                    break;
                 case AnnotationCoordinateSpaceEnum::SPACER:
                 {
-                    text = AnnotationCoordinateSpaceEnum::toGuiAbbreviatedName(AnnotationCoordinateSpaceEnum::TAB);
+                    text = AnnotationCoordinateSpaceEnum::toGuiAbbreviatedName(AnnotationCoordinateSpaceEnum::SPACER);
                     text.append(indicesString);
                 }
                     break;
@@ -162,5 +171,7 @@ AnnotationCoordinateSpaceWidget::updateContent(std::vector<Annotation*> annotati
     }
     
     m_spaceLabel->setText(text);
+    
+    setEnabled(! annotations.empty());
 }
 

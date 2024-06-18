@@ -28,11 +28,13 @@
 #include "CaretObject.h"
 #include "DisplayGroupEnum.h"
 #include "ModelTypeEnum.h"
+#include "Plane.h"
 #include "VolumeSliceInterpolationEdgeEffectsMaskingEnum.h"
 #include "VolumeSliceProjectionTypeEnum.h"
 #include "VolumeSliceDrawingTypeEnum.h"
 #include "VolumeSliceViewAllPlanesLayoutEnum.h"
 #include "VolumeSliceViewPlaneEnum.h"
+#include "VoxelInterpolationTypeEnum.h"
 
 namespace caret {
 
@@ -42,7 +44,6 @@ namespace caret {
     class Matrix4x4;
     class ModelVolume;
     class ModelWholeBrain;
-    class Plane;
     class VolumeMappableInterface;
     
     class BrainOpenGLVolumeObliqueSliceDrawing : public CaretObject {
@@ -53,6 +54,7 @@ namespace caret {
         virtual ~BrainOpenGLVolumeObliqueSliceDrawing();
         
         void draw(BrainOpenGLFixedPipeline* fixedPipelineDrawing,
+                  BrainOpenGLViewportContent* viewportContent,
                   BrowserTabContent* browserTabContent,
                   std::vector<BrainOpenGLFixedPipeline::VolumeDrawInfo>& volumeDrawInfo,
                   const VolumeSliceDrawingTypeEnum::Enum sliceDrawingType,
@@ -61,6 +63,22 @@ namespace caret {
                   const int32_t viewport[4]);
 
         // ADD_NEW_METHODS_HERE
+
+        static VoxelInterpolationTypeEnum::Enum getVoxelInterpolationType();
+        
+        static void setVoxelInterpolationType(const VoxelInterpolationTypeEnum::Enum voxelInterpolationType);
+        
+        static float getVoxelStepScaling();
+        
+        static void setVoxelStepScaling(const float voxelStepScaling);
+        
+        static void getOrthographicProjection(const BoundingBox& voxelSpaceBoundingBox,
+                                              const float zoomFactor,
+                                              const BrainOpenGLVolumeSliceDrawing::AllSliceViewMode allSliceViewMode,
+                                              const VolumeSliceViewPlaneEnum::Enum sliceViewPlane,
+                                              const int viewport[4],
+                                              double orthographicsBoundsOut[6]);
+
 
     private:        
         class ObliqueSlice {
@@ -72,7 +90,8 @@ namespace caret {
                 VOLUME_LABEL,
                 VOLUME_PALETTE,
                 VOLUME_RGB,
-                VOLUME_RGBA
+                VOLUME_RGBA,
+                VOLUME_RGB_WORKBENCH
             };
             
             ObliqueSlice(BrainOpenGLFixedPipeline* fixedPipelineDrawing,
@@ -105,7 +124,8 @@ namespace caret {
             
             bool getSelectionIJK(int32_t ijkOut[3]) const;
             
-            void draw(BrainOpenGLFixedPipeline* fixedPipelineDrawing);
+            void draw(BrainOpenGLFixedPipeline* fixedPipelineDrawing,
+                      const Plane& slicePlane);
             
             bool spatialMatch(const ObliqueSlice* slice);
             
@@ -178,6 +198,25 @@ namespace caret {
             int64_t m_selectionIJK[3];
         };
         
+        class GridInfo {
+        public:
+            GridInfo() : GridInfo(-1, -1, -1, -1) { }
+            
+            GridInfo(const int32_t numberOfRows,
+                     const int32_t numberOfColumns,
+                     const int32_t rowIndex,
+                     const int32_t columnIndex)
+            : m_numberOfRows(numberOfRows),
+            m_numberOfColumns(numberOfColumns),
+            m_rowIndex(rowIndex),
+            m_columnIndex(columnIndex) { }
+            
+            const int32_t m_numberOfRows;
+            const int32_t m_numberOfColumns;
+            const int32_t m_rowIndex;
+            const int32_t m_columnIndex;
+        };
+
         BrainOpenGLVolumeObliqueSliceDrawing(const BrainOpenGLVolumeObliqueSliceDrawing&);
 
         BrainOpenGLVolumeObliqueSliceDrawing& operator=(const BrainOpenGLVolumeObliqueSliceDrawing&);
@@ -206,15 +245,17 @@ namespace caret {
         void drawVolumeSliceViewProjection(const BrainOpenGLVolumeSliceDrawing::AllSliceViewMode allSliceViewMode,
                                            const VolumeSliceDrawingTypeEnum::Enum sliceDrawingType,
                                            const VolumeSliceProjectionTypeEnum::Enum sliceProjectionType,
-                                 const VolumeSliceViewPlaneEnum::Enum sliceViewPlane,
-                                 const float sliceCoordinates[3],
-                                 const int32_t viewport[4]);
-        
+                                           const VolumeSliceViewPlaneEnum::Enum sliceViewPlane,
+                                           const float sliceCoordinates[3],
+                                           const int32_t viewport[4],
+                                           const GridInfo& gridInfo);
+
         void drawObliqueSlice(const VolumeSliceViewPlaneEnum::Enum sliceViewPlane,
                               Matrix4x4& transformationMatrix,
                               const Plane& plane);
         
         void drawObliqueSliceWithOutlines(const VolumeSliceViewPlaneEnum::Enum sliceViewPlane,
+                                          const Plane& slicePlane,
                                           Matrix4x4& transformationMatrix);
         
         void createSlicePlaneEquation(const VolumeSliceProjectionTypeEnum::Enum sliceProjectionType,
@@ -241,8 +282,6 @@ namespace caret {
                         const Plane& slicePlane,
                         const float sliceCoordinates[3]);
         
-        void drawVolumeSliceFoci(const Plane& plane);
-        
         void drawAxesCrosshairs(const VolumeSliceProjectionTypeEnum::Enum sliceProjectionType,
                                 const VolumeSliceDrawingTypeEnum::Enum sliceDrawingType,
                                 const VolumeSliceViewPlaneEnum::Enum sliceViewPlane,
@@ -265,23 +304,13 @@ namespace caret {
         
         void createObliqueTransformationMatrix(const float sliceCoordinates[3],
                                                Matrix4x4& obliqueTransformationMatrixOut);
-        
-        void addVoxelToIdentification(const int32_t volumeIndex,
-                                      const int32_t mapIndex,
-                                      const int32_t voxelI,
-                                      const int32_t voxelJ,
-                                      const int32_t voxelK,
-                                      const float voxelDiffXYZ[3],
-                                      uint8_t rgbaForColorIdentificationOut[4]);
-        
+                
         bool getVolumeDrawingViewDependentCulling(const VolumeSliceViewPlaneEnum::Enum sliceViewPlane,
                                                   const float selectedSliceCoordinate,
                                                   const VolumeMappableInterface* volumeFile,
                                                   int64_t culledFirstVoxelIJKOut[3],
                                                   int64_t culledLastVoxelIJKOut[3],
                                                   float voxelDeltaXYZOut[3]);
-        
-        void processIdentification();
         
         void resetIdentification();
         
@@ -298,6 +327,8 @@ namespace caret {
         std::vector<std::vector<float> > m_ciftiMappableFileData;
         
         BrainOpenGLFixedPipeline* m_fixedPipelineDrawing;
+        
+        BrainOpenGLViewportContent* m_viewportContent;
         
         std::vector<BrainOpenGLFixedPipeline::VolumeDrawInfo> m_volumeDrawInfo;
         
@@ -321,11 +352,17 @@ namespace caret {
         
         static const int32_t IDENTIFICATION_INDICES_PER_VOXEL;
         
+        static VoxelInterpolationTypeEnum::Enum s_voxelInterpolationType;
+        
+        static float s_voxelStepScaling;
+        
         // ADD_NEW_MEMBERS_HERE
     };
     
 #ifdef __BRAIN_OPEN_GL_VOLUME_OBLIQUE_SLICE_DRAWING_DECLARE__
     const int32_t BrainOpenGLVolumeObliqueSliceDrawing::IDENTIFICATION_INDICES_PER_VOXEL = 8;
+    VoxelInterpolationTypeEnum::Enum BrainOpenGLVolumeObliqueSliceDrawing::s_voxelInterpolationType = VoxelInterpolationTypeEnum::CUBIC;
+    float BrainOpenGLVolumeObliqueSliceDrawing::s_voxelStepScaling = 1.0f;
 #endif // __BRAIN_OPEN_GL_VOLUME_OBLIQUE_SLICE_DRAWING_DECLARE__
 
 } // namespace

@@ -60,6 +60,8 @@ namespace caret {
     class BrainBrowserWindowToolBarChartTwoOrientedAxes;
     class BrainBrowserWindowToolBarChartTwoType;
     class BrainBrowserWindowToolBarChartType;
+    class BrainBrowserWindowToolBarHistology;
+    class BrainBrowserWindowToolBarImage;
     class BrainBrowserWindowToolBarSlicePlane;
     class BrainBrowserWindowToolBarSliceSelection;
     class BrainBrowserWindowToolBarSurface;
@@ -67,6 +69,7 @@ namespace caret {
     class BrainBrowserWindowToolBarTab;
     class BrainBrowserWindowToolBarView;
     class BrainBrowserWindowToolBarVolumeMontage;
+    class BrainBrowserWindowToolBarVolumeMPR;
     class BrainBrowserWindow;
     class BrowserTabContent;
     class EventBrowserTabReopenClosed;
@@ -83,7 +86,8 @@ namespace caret {
     class UserInputModeBorders;
     class UserInputModeFoci;
     class UserInputModeImage;
-    class UserInputModeTileTabsManualLayout;
+    class UserInputModeSamplesEdit;
+    class UserInputModeTileTabsLayout;
     class UserInputModeView;
     class UserInputModeVolumeEdit;
     class UserInputModeAbstract;
@@ -100,6 +104,7 @@ namespace caret {
                                   QAction* overlayToolBoxAction,
                                   QAction* layersToolBoxAction,
                                   QToolButton* toolBarLockWindowAndAllTabAspectRatioButton,
+                                  QToolButton* toolBarUndoUnlockWindowAndAllTabAspectRatioButton,
                                   const QString& objectNamePrefix,
                                   BrainBrowserWindow* parentBrainBrowserWindow);
         
@@ -170,7 +175,8 @@ namespace caret {
         QWidget* createWholeBrainSurfaceOptionsWidget();
         QWidget* createVolumeIndicesWidget();
         QWidget* createModeWidget();
-        QWidget* createTabOptionsWidget(QToolButton* toolBarLockWindowAndAllTabAspectRatioButton);
+        QWidget* createTabOptionsWidget(QToolButton* toolBarLockWindowAndAllTabAspectRatioButton,
+                                        QToolButton* toolBarUndoUnlockWindowAndAllTabAspectRatioButton);
         QWidget* createChartAxesWidget();
         QWidget* createChartAttributesWidget();
         QWidget* createChartTwoOrientationWidget();
@@ -178,9 +184,12 @@ namespace caret {
         QWidget* createChartTwoOrientedAxisWidget();
         QWidget* createChartTypeWidget();
         QWidget* createChartTypeTwoWidget();
+        QWidget* createHistologyWidget();
+        QWidget* createImageWidget();
         QWidget* createSingleSurfaceOptionsWidget();
         QWidget* createSurfaceMontageOptionsWidget();
         QWidget* createVolumeMontageWidget();
+        QWidget* createVolumeMprWidget();
         QWidget* createVolumePlaneWidget();
         
         ModelTypeEnum::Enum updateViewWidget(BrowserTabContent* browserTabContent);
@@ -198,7 +207,10 @@ namespace caret {
         void updateChartTwoOrientationWidget(BrowserTabContent* browserTabContent);
         void updateChartTypeWidget(BrowserTabContent* browserTabContent);
         void updateChartTypeTwoWidget(BrowserTabContent* browserTabContent);
+        void updateHistologyWidget(BrowserTabContent* browserTabContent);
+        void updateImageWidget(BrowserTabContent* browserTabContent);
         void updateVolumeMontageWidget(BrowserTabContent* browserTabContent);
+        void updateVolumeMprWidget(BrowserTabContent* browserTabConent);
         void updateVolumePlaneWidget(BrowserTabContent* browserTabContent);
         
         QWidget* viewWidget;
@@ -210,6 +222,7 @@ namespace caret {
         QWidget* singleSurfaceSelectionWidget;
         QWidget* surfaceMontageSelectionWidget;
         QWidget* volumeMontageWidget;
+        QWidget* volumeMprWidget;
         QWidget* volumePlaneWidget;
         QWidget* chartTypeWidget;
         QWidget* chartTypeTwoWidget;
@@ -218,14 +231,17 @@ namespace caret {
         QWidget* chartTwoOrientationWidget;
         QWidget* chartTwoAttributesWidget;
         QWidget* chartTwoOrientedAxesWidget;
-        
+        QWidget* histologyWidget;
+        QWidget* imageWidget;
+
         UserInputModeAbstract* selectedUserInputProcessor = NULL;
         UserInputModeAnnotations* userInputAnnotationsModeProcessor;
         UserInputModeView* userInputViewModeProcessor;
         UserInputModeBorders* userInputBordersModeProcessor;
         UserInputModeFoci* userInputFociModeProcessor;
         UserInputModeImage* userInputImageModeProcessor;
-        UserInputModeTileTabsManualLayout* userInputTileTabsManualLayoutProcessor;
+        UserInputModeSamplesEdit* userInputSamplesEditProcessor;
+        UserInputModeTileTabsLayout* userInputTileTabsManualLayoutProcessor;
         UserInputModeVolumeEdit* userInputVolumeEditModeProcessor;
         
         /* DO NOT delete these as the corresponding processor is the parent */
@@ -233,6 +249,7 @@ namespace caret {
         QWidget* bordersModeWidget;
         QWidget* fociModeWidget;
         QWidget* imageModeWidget;
+        QWidget* samplesModeWidget;
         QWidget* tileModeWidget;
         QWidget* volumeModeWidget;
         
@@ -320,9 +337,15 @@ namespace caret {
         BrowserTabContent* createNewTab(AString& errorMessage);
         
         QAction* customViewAction;
+        
+        QMenu* customViewMenu;
 
     private slots:
         void customViewActionTriggered();
+        
+        void customViewMenuAboutToShow();
+        
+        void customViewMenuTriggered(QAction* action);
         
         void sceneToolButtonClicked();
         
@@ -330,7 +353,6 @@ namespace caret {
         
         QToolButton* m_movieToolButton = NULL;
         
-    
     private:
         BrainBrowserWindowToolBarAllSurface* m_allSurfaceToolBarComponent;
         BrainBrowserWindowToolBarChartAxes* m_chartAxisToolBarComponent;
@@ -340,6 +362,8 @@ namespace caret {
         BrainBrowserWindowToolBarChartTwoOrientedAxes* m_chartTwoOrientedAxesToolBarComponent;
         BrainBrowserWindowToolBarChartTwoOrientation* m_chartTwoOrientationToolBarComponent;
         BrainBrowserWindowToolBarChartTwoAttributes* m_chartTwoAttributesToolBarComponent;
+        BrainBrowserWindowToolBarHistology* m_histologyToolBarComponent;
+        BrainBrowserWindowToolBarImage* m_imageToolBarComponent;
         BrainBrowserWindowToolBarOrientation* m_orientationToolBarComponent;
         BrainBrowserWindowToolBarSurface* m_surfaceToolBarComponent;
         BrainBrowserWindowToolBarSurfaceMontage* m_surfaceMontageToolBarComponent;
@@ -347,6 +371,7 @@ namespace caret {
         BrainBrowserWindowToolBarSlicePlane* m_slicePlaneComponent;
         BrainBrowserWindowToolBarSliceSelection* m_sliceSelectionComponent;
         BrainBrowserWindowToolBarVolumeMontage* m_volumeMontageComponent;
+        BrainBrowserWindowToolBarVolumeMPR* m_volumeMprComponent;
         BrainBrowserWindowToolBarTab* m_tabOptionsComponent;
         
     private slots:
@@ -360,6 +385,7 @@ namespace caret {
         QRadioButton* modeInputModeFociRadioButton;
         QRadioButton* modeInputModeImageRadioButton;
         QRadioButton* modeInputModeViewRadioButton;
+        QRadioButton* modeInputModeSamplesEditRadioButton;
         QRadioButton* modeInputModeTileTabsManualLayoutRadioButton;
         QRadioButton* modeInputVolumeEditRadioButton;
         
@@ -383,6 +409,8 @@ namespace caret {
         friend class BrainBrowserWindowToolBarChartTwoType;
         friend class BrainBrowserWindowToolBarChartType;
         friend class BrainBrowserWindowToolBarComponent;
+        friend class BrainBrowserWindowToolBarHistology;
+        friend class BrainBrowserWindowToolBarImage;
         friend class BrainBrowserWindowToolBarMode;
         friend class BrainBrowserWindowToolBarOrientation;
         friend class BrainBrowserWindowToolBarSurfaceMontage;

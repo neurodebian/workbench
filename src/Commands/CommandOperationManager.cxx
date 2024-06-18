@@ -28,7 +28,6 @@
 #include "AlgorithmBorderResample.h"
 #include "AlgorithmBorderToVertices.h"
 #include "AlgorithmCiftiAllLabelsToROIs.h"
-#include "AlgorithmCiftiAverage.h"
 #include "AlgorithmCiftiAverageDenseROI.h"
 #include "AlgorithmCiftiAverageROICorrelation.h"
 #include "AlgorithmCiftiCorrelation.h"
@@ -150,6 +149,7 @@
 #include "OperationBorderFileExportToCaret5.h"
 #include "OperationBorderLength.h"
 #include "OperationBorderMerge.h"
+#include "OperationCiftiAverage.h"
 #include "OperationCiftiChangeMapping.h"
 #include "OperationCiftiChangeTimestep.h"
 #include "OperationCiftiConvert.h"
@@ -200,10 +200,12 @@
 #include "OperationProbtrackXDotConvert.h"
 #include "OperationSceneFileMerge.h"
 #include "OperationSceneFileRelocate.h"
+#include "OperationSceneFileUpdate.h"
 #include "OperationSetMapName.h"
 #include "OperationSetMapNames.h"
 #include "OperationSetStructure.h"
 #include "OperationShowScene.h"
+#include "OperationShowSceneTwo.h"
 #include "OperationSpecFileMerge.h"
 #include "OperationSpecFileRelocate.h"
 #include "OperationSurfaceClosestVertex.h"
@@ -216,8 +218,10 @@
 #include "OperationSurfaceInformation.h"
 #include "OperationSurfaceNormals.h"
 #include "OperationSurfaceSetCoordinates.h"
+#include "OperationSurfaceSphereTriangularPatches.h"
 #include "OperationSurfaceVertexAreas.h"
 #include "OperationVolumeCapturePlane.h"
+#include "OperationVolumeComponentsToFrames.h"
 #include "OperationVolumeCopyExtensions.h"
 #include "OperationVolumeCreate.h"
 #include "OperationVolumeLabelExportTable.h"
@@ -294,7 +298,6 @@ CommandOperationManager::CommandOperationManager()
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmBorderResample()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmBorderToVertices()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmCiftiAllLabelsToROIs()));
-    this->commandOperations.push_back(new CommandParser(new AutoAlgorithmCiftiAverage()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmCiftiAverageDenseROI()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmCiftiAverageROICorrelation()));
     this->commandOperations.push_back(new CommandParser(new AutoAlgorithmCiftiCorrelation()));
@@ -414,6 +417,7 @@ CommandOperationManager::CommandOperationManager()
     this->commandOperations.push_back(new CommandParser(new AutoOperationBorderFileExportToCaret5()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationBorderLength()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationBorderMerge()));
+    this->commandOperations.push_back(new CommandParser(new AutoOperationCiftiAverage()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationCiftiChangeMapping()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationCiftiConvert()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationCiftiCreateDenseFromTemplate()));
@@ -459,11 +463,10 @@ CommandOperationManager::CommandOperationManager()
     this->commandOperations.push_back(new CommandParser(new AutoOperationProbtrackXDotConvert()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationSceneFileMerge()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationSceneFileRelocate()));
+    this->commandOperations.push_back(new CommandParser(new AutoOperationSceneFileUpdate()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationSetMapNames()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationSetStructure()));
-    if (OperationShowScene::isShowSceneCommandAvailable()) {
-        this->commandOperations.push_back(new CommandParser(new AutoOperationShowScene()));
-    }
+    this->commandOperations.push_back(new CommandParser(new AutoOperationShowSceneTwo()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationSpecFileMerge()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationSpecFileRelocate()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationSurfaceClosestVertex()));
@@ -476,8 +479,10 @@ CommandOperationManager::CommandOperationManager()
     this->commandOperations.push_back(new CommandParser(new AutoOperationSurfaceInformation()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationSurfaceNormals()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationSurfaceSetCoordinates()));
+    this->commandOperations.push_back(new CommandParser(new AutoOperationSurfaceSphereTriangularPatches()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationSurfaceVertexAreas()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationVolumeCapturePlane()));
+    this->commandOperations.push_back(new CommandParser(new AutoOperationVolumeComponentsToFrames()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationVolumeCopyExtensions()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationVolumeCreate()));
     this->commandOperations.push_back(new CommandParser(new AutoOperationVolumeLabelExportTable()));
@@ -508,6 +513,7 @@ CommandOperationManager::CommandOperationManager()
     this->deprecatedOperations.push_back(new CommandParser(new AutoOperationCiftiCopyMapping()));
     this->deprecatedOperations.push_back(new CommandParser(new AutoOperationCiftiSeparateAll()));
     this->deprecatedOperations.push_back(new CommandParser(new AutoOperationMetricVertexSum()));
+    this->deprecatedOperations.push_back(new CommandParser(new AutoOperationShowScene()));
     this->deprecatedOperations.push_back(new CommandParser(new AutoOperationSetMapName()));
     this->deprecatedOperations.push_back(new CommandParser(new AutoAlgorithmVolumeAffineResample()));
     this->deprecatedOperations.push_back(new CommandParser(new AutoAlgorithmVolumeWarpfieldResample()));
@@ -535,7 +541,7 @@ CommandOperationManager::~CommandOperationManager()
 namespace
 {
     //quick hack to convert type argument to internal integer
-    int16_t stringToCiftiType(const AString& input)
+    int16_t stringToNiftiType(const AString& input)
     {
         map<AString, int16_t> nameToCode;
         nameToCode["INT8"] = NIFTI_TYPE_INT8;
@@ -589,34 +595,35 @@ CommandOperationManager::runCommand(ProgramParameters& parameters)
             CaretLogWarning("SIMD type '" + DotSIMDEnum::toName(impl) + "' not supported (could be cpu, compiler, or build options), using '" + DotSIMDEnum::toName(retval) + "'");
         }
     }
-    int16_t ciftiDType = NIFTI_TYPE_FLOAT32, niftiDType = NIFTI_TYPE_FLOAT32;
-    bool ciftiScale = false, niftiScale = false;
-    double ciftiMin = -1.0, ciftiMax = -1.0, niftiMin = -1.0, niftiMax = -1.0;
-    if (getGlobalOption(parameters, "-cifti-output-datatype", 1, globalOptionArgs))
-    {
-        ciftiDType = stringToCiftiType(globalOptionArgs[0]);
-    }
-    if (getGlobalOption(parameters, "-cifti-output-range", 2, globalOptionArgs))
-    {
-        ciftiScale = true;
-        bool valid = false;
-        ciftiMin = globalOptionArgs[0].toDouble(&valid);
-        if (!valid) throw CommandException("non-numeric option to -cifti-output-range: '" + globalOptionArgs[0] + "'");
-        ciftiMax = globalOptionArgs[1].toDouble(&valid);
-        if (!valid) throw CommandException("non-numeric option to -cifti-output-range: '" + globalOptionArgs[1] + "'");
-    }
     if (getGlobalOption(parameters, "-nifti-output-datatype", 1, globalOptionArgs))
     {
-        niftiDType = stringToCiftiType(globalOptionArgs[0]);
+        caret_global_command_options.m_ciftiDType =
+            caret_global_command_options.m_volumeDType = stringToNiftiType(globalOptionArgs[0]);
     }
     if (getGlobalOption(parameters, "-nifti-output-range", 2, globalOptionArgs))
     {
-        niftiScale = true;
+        caret_global_command_options.m_ciftiScale =
+            caret_global_command_options.m_volumeScale = true;
         bool valid = false;
-        niftiMin = globalOptionArgs[0].toDouble(&valid);
+        caret_global_command_options.m_ciftiMin =
+            caret_global_command_options.m_volumeMin = globalOptionArgs[0].toDouble(&valid);
         if (!valid) throw CommandException("non-numeric option to -nifti-output-range: '" + globalOptionArgs[0] + "'");
-        niftiMax = globalOptionArgs[1].toDouble(&valid);
+        caret_global_command_options.m_ciftiMax =
+            caret_global_command_options.m_volumeMax = globalOptionArgs[1].toDouble(&valid);
         if (!valid) throw CommandException("non-numeric option to -nifti-output-range: '" + globalOptionArgs[1] + "'");
+    }
+    if (getGlobalOption(parameters, "-cifti-output-datatype", 1, globalOptionArgs))
+    {
+        caret_global_command_options.m_ciftiDType = stringToNiftiType(globalOptionArgs[0]);
+    }
+    if (getGlobalOption(parameters, "-cifti-output-range", 2, globalOptionArgs))
+    {
+        caret_global_command_options.m_ciftiScale = true;
+        bool valid = false;
+        caret_global_command_options.m_ciftiMin = globalOptionArgs[0].toDouble(&valid);
+        if (!valid) throw CommandException("non-numeric option to -cifti-output-range: '" + globalOptionArgs[0] + "'");
+        caret_global_command_options.m_ciftiMax = globalOptionArgs[1].toDouble(&valid);
+        if (!valid) throw CommandException("non-numeric option to -cifti-output-range: '" + globalOptionArgs[1] + "'");
     }
     if (getGlobalOption(parameters, "-cifti-read-memory", 0, globalOptionArgs))
     {
@@ -661,7 +668,7 @@ CommandOperationManager::runCommand(ProgramParameters& parameters)
         printAllCommandsHelpInfo(myProgramName);
     } else {
         
-        CommandOperation* operation = NULL;
+        CommandOperation* operation = NULL, *compatOperation = NULL; //separate so we can do both in one pass while giving priority on collision
         
         for (uint64_t i = 0; i < numberOfCommands; i++)
         {
@@ -669,6 +676,15 @@ CommandOperationManager::runCommand(ProgramParameters& parameters)
             {
                 operation = this->commandOperations[i];
                 break;
+            }
+            for (const AString compatSwitch : this->commandOperations[i]->getCompatibilitySwitches())
+            {
+                if (compatSwitch == commandSwitch)
+                {
+                    CaretAssert(compatOperation == NULL); //try to catch switch collisions in debug builds
+                    compatOperation = this->commandOperations[i];
+                    break; //do NOT break outer loop, we want to give priority to non-compat switches
+                }
             }
         }
         if (operation == NULL)
@@ -680,7 +696,22 @@ CommandOperationManager::runCommand(ProgramParameters& parameters)
                     operation = this->deprecatedOperations[i];
                     break;
                 }
+                for (const AString compatSwitch : this->deprecatedOperations[i]->getCompatibilitySwitches())
+                {
+                    if (compatSwitch == commandSwitch)
+                    {
+                        CaretAssert(compatOperation == NULL); //try to catch switch collisions in debug builds
+                        compatOperation = this->deprecatedOperations[i];
+                        break; //do NOT break outer loop, we want to give priority to non-compat switches
+                    }
+                }
             }
+        }
+        if (operation == NULL)
+        {
+            operation = compatOperation; //may also be null, but that is fine
+        } else {
+            CaretAssert(compatOperation == NULL); //try to catch switch collisions in debug builds
         }
         
         if (operation == NULL) {
@@ -695,20 +726,6 @@ CommandOperationManager::runCommand(ProgramParameters& parameters)
             {
                 cout << operation->getHelpInformation(myProgramName) << endl;
             } else {
-                if (niftiScale)
-                {
-                    operation->setCiftiOutputDTypeAndScale(niftiDType, niftiMin, niftiMax);
-                    operation->setVolumeOutputDTypeAndScale(niftiDType, niftiMin, niftiMax);
-                } else {
-                    operation->setCiftiOutputDTypeNoScale(niftiDType);
-                    operation->setVolumeOutputDTypeNoScale(niftiDType);
-                }
-                if (ciftiScale)
-                {
-                    operation->setCiftiOutputDTypeAndScale(ciftiDType, ciftiMin, ciftiMax);
-                } else {
-                    operation->setCiftiOutputDTypeNoScale(ciftiDType);
-                }
                 operation->execute(parameters, preventProvenance);
             }
         }
@@ -971,12 +988,6 @@ CommandOperationManager::printAllCommandsMatching(const AString& partialSwitch)
             
             cmdMap.insert(make_pair(cmdSwitch,
                                         op->getOperationShortDescription()));
-#ifndef NDEBUG
-            const AString helpInfo = op->getHelpInformation("");//TSC: generating help info takes a little processing (populating and walking an OperationParameters tree for each command)
-            if (helpInfo.isEmpty()) {//So, test the same define as for asserts and skip this check in release
-                CaretLogSevere("Command has no help info: " + cmdSwitch);
-            }
-#endif
         }
     }
     if (longestSwitch == -1)//no command found
@@ -1215,7 +1226,7 @@ void CommandOperationManager::printCiftiHelp()
     cout << "         timeseries of 0 sec, 0.7 sec, 1.4 sec, ...)" << endl;
     cout << "      Labels: each index is assigned a name (i.e., 'Visual Areas'), but also a" << endl;
     cout << "         list of labels that maps integer data values to names and colors (i.e." << endl;
-    cout << "         {(5, 'V1', #ff0000), (7, 'V2', #00ff00), ...}" << endl;
+    cout << "         {(5, 'V1', #ff0000), (7, 'V2', #00ff00), ...})" << endl;
     cout << endl;//guide for wrap, assuming 80 columns:                                     |
     cout << "   The commands that operate on cifti files often require you to specify which" << endl;
     cout << "   dimension they should operate on.  Because cifti files can contain 3" << endl;

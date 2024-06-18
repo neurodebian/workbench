@@ -36,13 +36,17 @@ public:
      */
     enum Enum {
         DEVELOPER_FLAG_UNUSED,
-        DEVELOPER_FLAG_FLIP_PALETTE_NOT_DATA,
-        DEVELOPER_FLAG_TEXTURE_VOLUME,
-        DELELOPER_FLAG_VOXEL_SMOOTH,
-        DEVELOPER_FLAG_BALSA,
-        DEVELOPER_FLAG_VOXEL_CUBES_TEST,
+        DEVELOPER_FLAG_BLENDING,
         DEVELOPER_FLAG_CHART_OPENGL_LINES,
-        DEVELOPER_FLAG_BLENDING
+        DEVELOPER_FLAG_FLIP_PALETTE_NOT_DATA,
+        DEVELOPER_FLAG_HISTOLOGY_CORRECT_FOR_NON_LINEAR_DISTORTION,
+        DEVELOPER_FLAG_HISTOLOGY_CORRECT_IMAGE_OVERLAP,
+        DEVELOPER_FLAG_MPR_THREE_SLICES_CHANGED_JUMP_FIX,
+        DEVELOPER_FLAG_SURFACE_BUFFER,
+        DELELOPER_FLAG_TEXTURE_ANATOMY_VOLUME_SMOOTH,
+        DELELOPER_FLAG_TEXTURE_FUNCTIONAL_VOLUME_SMOOTH,
+        DEVELOPER_FLAG_VOXEL_CUBES_TEST,
+        DEVELOPER_FLAG_VOXEL_EDIT
     };
 
     ~DeveloperFlagsEnum();
@@ -50,6 +54,8 @@ public:
     static AString toName(Enum enumValue);
     
     static Enum fromName(const AString& name, bool* isValidOut);
+    
+    static AString toToolTip(Enum enumValue);
     
     static AString toGuiName(Enum enumValue);
     
@@ -61,6 +67,8 @@ public:
 
     static void getAllEnums(std::vector<Enum>& allEnums);
 
+    static void getAllEnumsSortedByGuiName(std::vector<Enum>& allEnums);
+    
     static void getAllNames(std::vector<AString>& allNames, const bool isSorted);
 
     static void getAllGuiNames(std::vector<AString>& allGuiNames, const bool isSorted);

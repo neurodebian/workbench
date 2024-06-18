@@ -23,8 +23,7 @@
 
 #include "AnnotationSizingHandleTypeEnum.h"
 #include "SelectionItem.h"
-
-
+#include "Vector3D.h"
 
 namespace caret {
     class Annotation;
@@ -51,10 +50,19 @@ namespace caret {
         
         int32_t getPolyLineCoordinateIndex() const;
         
+        float getNormalizedRangeFromCoordIndexToNextCoordIndex() const;
+        
+        float getDistanceFromMouseToPointOnLine() const;
+        
+        std::vector<Vector3D> getAnnotationCoordsInWindowXYZ() const;
+        
         void setAnnotation(AnnotationFile* annotationFile,
                            Annotation* annotation,
                            const AnnotationSizingHandleTypeEnum::Enum annotationSizingHandle,
-                           const int32_t polyLineCoordinateIndex);
+                           const int32_t polyLineCoordinateIndex,
+                           const float normalizedRangeFromCoordIndexToNextCoordIndex,
+                           const float distanceFromMouseToPointOnLine,
+                           const std::vector<Vector3D>& coordsInWindowXYZ);
 
         // ADD_NEW_METHODS_HERE
 
@@ -70,6 +78,12 @@ namespace caret {
         AnnotationSizingHandleTypeEnum::Enum m_sizingHandle;
         
         int32_t m_polyLineCoordinateIndex = -1;
+        
+        float m_normalizedRangeFromCoordIndexToNextCoordIndex;
+        
+        float m_distanceFromMouseToPointOnLine;
+        
+        std::vector<Vector3D> m_coordsInWindowXYZ;
         
         // ADD_NEW_MEMBERS_HERE
 

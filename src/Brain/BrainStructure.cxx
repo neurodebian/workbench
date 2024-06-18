@@ -179,6 +179,7 @@ BrainStructure::addLabelFile(LabelFile* labelFile,
             DataFileException e(labelFile->getFileName(),
                                 message);
             CaretLogThrowing(e);
+
             throw e;
         }
     }
@@ -192,7 +193,8 @@ BrainStructure::addLabelFile(LabelFile* labelFile,
         DataFileException e(labelFile->getFileName(),
                             message);
         CaretLogThrowing(e);
-        throw e;        
+
+        throw e;
     }
     
     if (addFileToBrainStructure) {
@@ -232,6 +234,7 @@ BrainStructure::addMetricFile(MetricFile* metricFile,
             DataFileException e(metricFile->getFileName(),
                                 message);
             CaretLogThrowing(e);
+            
             throw e;
         }
     }
@@ -245,7 +248,8 @@ BrainStructure::addMetricFile(MetricFile* metricFile,
         DataFileException e(metricFile->getFileName(),
                             message);
         CaretLogThrowing(e);
-        throw e;        
+                
+        throw e;
     }
     
     if (addFileToBrainStructure) {
@@ -294,6 +298,7 @@ BrainStructure::addRgbaFile(RgbaFile* rgbaFile,
             DataFileException e(rgbaFile->getFileName(),
                                 message);
             CaretLogThrowing(e);
+            
             throw e;
         }
     }
@@ -308,7 +313,8 @@ BrainStructure::addRgbaFile(RgbaFile* rgbaFile,
         DataFileException e(rgbaFile->getFileName(),
                             message);
         CaretLogThrowing(e);
-        throw e;        
+
+        throw e;
     }
     
     if (addFileToBrainStructure) {
@@ -349,12 +355,13 @@ BrainStructure::addSurface(Surface* surface,
             DataFileException e(surface->getFileName(),
                                 message);
             CaretLogThrowing(e);
+            
             throw e;
         }
     }
     
     if (surface->getStructure() != getStructure()) {
-        AString message = ("Trying to add metric file with structure \""
+        AString message = ("Trying to add surface file with structure \""
                            + StructureEnum::toGuiName(surface->getStructure())
                            + " to BrainStructure for \""
                            + StructureEnum::toGuiName(getStructure())
@@ -362,7 +369,8 @@ BrainStructure::addSurface(Surface* surface,
         DataFileException e(surface->getFileName(),
                             message);
         CaretLogThrowing(e);
-        throw e;        
+
+        throw e;
     }
     if (numNodes == 0) {
         const int32_t numSurfaceNodes = surface->getNumberOfNodes();
@@ -1213,72 +1221,6 @@ BrainStructure::removeWithoutDeleteDataFile(const CaretDataFile* caretDataFile)
     
     return false;
 }
-
-
-///**
-// * Remove AND DELETE a data file from memory (does NOT delete file on disk.)
-// * Searches all of the loaded files for given file, and, when found
-// * deletes the file.
-// *
-// * @param caretDataFile
-// *    Data file to remove.  After calling this method and the file was
-// *    deleted (true was returned) this pointer is no longer valid.
-// * @return
-// *    true if file was removed, else false.
-// */
-//bool 
-//BrainStructure::removeAndDeleteDataFile(CaretDataFile* caretDataFile)
-//{
-//    if (removeWithoutDeleteDataFile(caretDataFile)) {
-//        delete caretDataFile;
-//        return true;
-//    }
-//    
-//    return false;
-
-//    std::vector<Surface*>::iterator surfaceIterator = 
-//        std::find(m_surfaces.begin(),
-//                  m_surfaces.end(),
-//                  caretDataFile);
-//    if (surfaceIterator != m_surfaces.end()) {
-//        Surface* s = *surfaceIterator;
-//        removeSurface(s);
-//        return true;
-//    }
-//    
-//    std::vector<LabelFile*>::iterator labelIterator = 
-//    std::find(m_labelFiles.begin(),
-//              m_labelFiles.end(),
-//              caretDataFile);
-//    if (labelIterator != m_labelFiles.end()) {
-//        delete caretDataFile;
-//        m_labelFiles.erase(labelIterator);
-//        return true;
-//    }
-//    
-//    std::vector<MetricFile*>::iterator metricIterator = 
-//    std::find(m_metricFiles.begin(),
-//              m_metricFiles.end(),
-//              caretDataFile);
-//    if (metricIterator != m_metricFiles.end()) {
-//        delete caretDataFile;
-//        m_metricFiles.erase(metricIterator);
-//        return true;
-//    }
-//    
-//    std::vector<RgbaFile*>::iterator rgbaIterator = 
-//    std::find(m_rgbaFiles.begin(),
-//              m_rgbaFiles.end(),
-//              caretDataFile);
-//    if (rgbaIterator != m_rgbaFiles.end()) {
-//        delete caretDataFile;
-//        m_rgbaFiles.erase(rgbaIterator);
-//        return true;
-//    }
-//    
-//    return false;
-
-//}
 
 /**
  * Find a map in a metric file that contains shape data.

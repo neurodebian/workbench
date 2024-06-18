@@ -34,7 +34,7 @@
 #include "AnnotationRedoUndoCommand.h"
 #include "Brain.h"
 #include "CaretAssert.h"
-#include "EventGraphicsUpdateAllWindows.h"
+#include "EventGraphicsPaintSoonAllWindows.h"
 #include "EventManager.h"
 #include "GuiManager.h"
 #include "WuQMessageBox.h"
@@ -52,10 +52,18 @@ using namespace caret;
 
 /**
  * Constructor.
+ * @param userInputMode
+ *    The user input mode
+ * @param browserWindowIndex
+ *    Index of browser window
+ * @param parent
+ *    Parent widget
  */
-AnnotationLineArrowTipsWidget::AnnotationLineArrowTipsWidget(const int32_t browserWindowIndex,
+AnnotationLineArrowTipsWidget::AnnotationLineArrowTipsWidget(const UserInputModeEnum::Enum userInputMode,
+                                                             const int32_t browserWindowIndex,
                                                              QWidget* parent)
 : QWidget(parent),
+m_userInputMode(userInputMode),
 m_browserWindowIndex(browserWindowIndex)
 {
     QLabel* label = new QLabel("Line");
@@ -160,17 +168,16 @@ AnnotationLineArrowTipsWidget::startArrowTipActionToggled()
         AnnotationRedoUndoCommand* undoCommand = new AnnotationRedoUndoCommand();
         undoCommand->setModeLineArrowStart(m_startArrowAction->isChecked(),
                                            m_annotations);
-        AnnotationManager* annMan = GuiManager::get()->getBrain()->getAnnotationManager();
+        AnnotationManager* annMan = GuiManager::get()->getBrain()->getAnnotationManager(m_userInputMode);
     
     AString errorMessage;
-    if ( ! annMan->applyCommand(UserInputModeEnum::Enum::ANNOTATIONS,
-                                undoCommand,
+    if ( ! annMan->applyCommand(undoCommand,
                                 errorMessage)) {
         WuQMessageBox::errorOk(this,
                                errorMessage);
     }
         EventManager::get()->sendSimpleEvent(EventTypeEnum::EVENT_ANNOTATION_TOOLBAR_UPDATE);
-        EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+        EventManager::get()->sendEvent(EventGraphicsPaintSoonAllWindows().getPointer());
     
         AnnotationLine::setUserDefaultDisplayStartArrow(m_startArrowAction->isChecked());
 }
@@ -184,18 +191,17 @@ AnnotationLineArrowTipsWidget::endArrowTipActionToggled()
         AnnotationRedoUndoCommand* undoCommand = new AnnotationRedoUndoCommand();
         undoCommand->setModeLineArrowEnd(m_endArrowAction->isChecked(),
                                          m_annotations);
-        AnnotationManager* annMan = GuiManager::get()->getBrain()->getAnnotationManager();
+        AnnotationManager* annMan = GuiManager::get()->getBrain()->getAnnotationManager(m_userInputMode);
 
     AString errorMessage;
-    if ( ! annMan->applyCommand(UserInputModeEnum::Enum::ANNOTATIONS,
-                                undoCommand,
+    if ( ! annMan->applyCommand(undoCommand,
                                 errorMessage)) {
         WuQMessageBox::errorOk(this,
                                errorMessage);
     }
     
         EventManager::get()->sendSimpleEvent(EventTypeEnum::EVENT_ANNOTATION_TOOLBAR_UPDATE);
-        EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+        EventManager::get()->sendEvent(EventGraphicsPaintSoonAllWindows().getPointer());
     
         AnnotationLine::setUserDefaultDisplayEndArrow(m_endArrowAction->isChecked());
 }

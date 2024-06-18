@@ -31,7 +31,8 @@
 
 namespace caret {
 
-    class ConnectivityCorrelation;
+    class ConnectivityCorrelationTwo;
+    class ConnectivityCorrelationSettings;
     class ConnectivityDataLoaded;
     
     class MetricDynamicConnectivityFile : public MetricFile {
@@ -89,6 +90,10 @@ namespace caret {
         MetricFile* newMetricFileFromLoadedData(const AString& directoryName,
                                                 AString& errorMessageOut);
         
+        ConnectivityCorrelationSettings* getCorrelationSettings();
+        
+        const ConnectivityCorrelationSettings* getCorrelationSettings() const;
+        
         // ADD_NEW_METHODS_HERE
 
     protected:
@@ -106,13 +111,11 @@ namespace caret {
         bool getConnectivityForVertexIndex(const int32_t vertexIndex,
                                            std::vector<float>& vertexDataOut);
         
-        ConnectivityCorrelation* getConnectivityCorrelation();
+        ConnectivityCorrelationTwo* getConnectivityCorrelationTwo() const;
         
         const MetricFile* m_parentMetricFile;
         
         std::unique_ptr<SceneClassAssistant> m_sceneAssistant;
-        
-        std::unique_ptr<ConnectivityCorrelation> m_connectivityCorrelation;
         
         AString m_dataLoadedName;
         
@@ -126,7 +129,13 @@ namespace caret {
         
         std::unique_ptr<ConnectivityDataLoaded> m_connectivityDataLoaded;
         
-        bool m_connectivityCorrelationFailedFlag = false;
+        mutable bool m_connectivityCorrelationFailedFlag = false;
+        
+        mutable std::unique_ptr<ConnectivityCorrelationTwo> m_connectivityCorrelationTwo;
+        
+        mutable std::unique_ptr<ConnectivityCorrelationSettings> m_correlationSettings;
+        
+        mutable std::vector<float> m_metricDataCopy;
         
         // ADD_NEW_MEMBERS_HERE
 

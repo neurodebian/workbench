@@ -20,6 +20,7 @@
 /*LICENSE_END*/
 
 #include <cmath>
+#include <limits>
 
 #define __BRAIN_OPEN_GL_VOLUME_SLICE_DRAWING_DECLARE__
 #include "BrainOpenGLVolumeSliceDrawing.h"
@@ -31,8 +32,11 @@
 #include "BoundingBox.h"
 #include "Brain.h"
 #include "BrainOpenGLAnnotationDrawingFixedPipeline.h"
+#include "BrainOpenGLFociDrawing.h"
+#include "BrainOpenGLIdentificationDrawing.h"
 #include "BrainOpenGLPrimitiveDrawing.h"
 #include "BrainOpenGLViewportContent.h"
+#include "BrainOpenGLVolumeSurfaceOutlineDrawing.h"
 #include "BrainordinateRegionOfInterest.h"
 #include "BrowserTabContent.h"
 #include "CaretAssert.h"
@@ -42,40 +46,33 @@
 #include "CaretPreferences.h"
 #include "CiftiMappableDataFile.h"
 #include "DeveloperFlagsEnum.h"
-#include "DisplayPropertiesFoci.h"
 #include "DisplayPropertiesLabels.h"
 #include "ElapsedTimer.h"
-#include "FociFile.h"
-#include "Focus.h"
+#include "EventDrawingViewportContentAdd.h"
 #include "GapsAndMargins.h"
-#include "GiftiLabel.h"
-#include "GiftiLabelTable.h"
 #include "GraphicsEngineDataOpenGL.h"
+#include "GraphicsObjectToWindowTransform.h"
 #include "GraphicsPrimitiveV3fC4f.h"
 #include "GraphicsUtilitiesOpenGL.h"
+#include "GraphicsShape.h"
+#include "GraphicsViewport.h"
 #include "GroupAndNameHierarchyModel.h"
 #include "IdentificationManager.h"
 #include "IdentificationWithColor.h"
-#include "IdentifiedItemVoxel.h"
 #include "LabelDrawingProperties.h"
 #include "MathFunctions.h"
 #include "Matrix4x4.h"
 #include "ModelVolume.h"
 #include "ModelWholeBrain.h"
 #include "NodeAndVoxelColoring.h"
-#include "SelectionItemFocusVolume.h"
+#include "SamplesDrawingSettings.h"
 #include "SelectionItemVoxel.h"
 #include "SelectionItemVoxelEditing.h"
-#include "SelectionItemVoxelIdentificationSymbol.h"
 #include "SelectionManager.h"
 #include "SessionManager.h"
 #include "SpacerTabIndex.h"
-#include "SurfacePlaneIntersectionToContour.h"
 #include "Surface.h"
 #include "VolumeFile.h"
-#include "VolumeSurfaceOutlineColorOrTabModel.h"
-#include "VolumeSurfaceOutlineModel.h"
-#include "VolumeSurfaceOutlineSetModel.h"
 
 using namespace caret;
 
@@ -108,6 +105,8 @@ BrainOpenGLVolumeSliceDrawing::~BrainOpenGLVolumeSliceDrawing()
  *
  * @param fixedPipelineDrawing
  *    The OpenGL drawing.
+ * @param viewportContent
+ *     Content of the viewport
  * @param browserTabContent
  *    Content of browser tab that is to be drawn.
  * @param volumeDrawInfo
@@ -121,11 +120,12 @@ BrainOpenGLVolumeSliceDrawing::~BrainOpenGLVolumeSliceDrawing()
  */
 void
 BrainOpenGLVolumeSliceDrawing::draw(BrainOpenGLFixedPipeline* fixedPipelineDrawing,
-                                  BrowserTabContent* browserTabContent,
-                                  std::vector<BrainOpenGLFixedPipeline::VolumeDrawInfo>& volumeDrawInfo,
-                                  const VolumeSliceDrawingTypeEnum::Enum sliceDrawingType,
-                                  const VolumeSliceProjectionTypeEnum::Enum sliceProjectionType,
-                                  const int32_t viewport[4])
+                                    BrainOpenGLViewportContent* viewportContent,
+                                    BrowserTabContent* browserTabContent,
+                                    std::vector<BrainOpenGLFixedPipeline::VolumeDrawInfo>& volumeDrawInfo,
+                                    const VolumeSliceDrawingTypeEnum::Enum sliceDrawingType,
+                                    const VolumeSliceProjectionTypeEnum::Enum sliceProjectionType,
+                                    const int32_t viewport[4])
 {
     if (volumeDrawInfo.empty()) {
         return;
@@ -133,7 +133,9 @@ BrainOpenGLVolumeSliceDrawing::draw(BrainOpenGLFixedPipeline* fixedPipelineDrawi
     
     CaretAssert(sliceProjectionType == VolumeSliceProjectionTypeEnum::VOLUME_SLICE_PROJECTION_ORTHOGONAL);
     CaretAssert(fixedPipelineDrawing);
+    CaretAssert(viewportContent);
     CaretAssert(browserTabContent);
+    m_viewportContent   = viewportContent;
     m_browserTabContent = browserTabContent;    
     m_fixedPipelineDrawing = fixedPipelineDrawing;
     
@@ -204,8 +206,8 @@ BrainOpenGLVolumeSliceDrawing::draw(BrainOpenGLFixedPipeline* fixedPipelineDrawi
     if (browserTabContent->getDisplayedVolumeModel() != NULL) {
         drawVolumeSliceViewPlane(sliceDrawingType,
                                  sliceProjectionType,
-                                 browserTabContent->getSliceViewPlane(),
-                                 browserTabContent->getSlicePlanesAllViewLayout(),
+                                 browserTabContent->getVolumeSliceViewPlane(),
+                                 browserTabContent->getVolumeSlicePlanesAllViewLayout(),
                                  viewport);
     }
     else if (browserTabContent->getDisplayedWholeBrainModel() != NULL) {
@@ -258,6 +260,14 @@ BrainOpenGLVolumeSliceDrawing::drawVolumeSliceViewPlane(const VolumeSliceDrawing
             /*
              * Draw parasagittal slice
              */
+            {
+                EventDrawingViewportContentAdd addViewportEvent;
+                addViewportEvent.addModel(this->m_fixedPipelineDrawing->m_windowIndex,
+                                          m_tabIndex,
+                                          GraphicsViewport(paraVP),
+                                          ModelTypeEnum::MODEL_TYPE_VOLUME_SLICES);
+                EventManager::get()->sendEvent(addViewportEvent.getPointer());
+            }
             glPushMatrix();
             drawVolumeSliceViewType(AllSliceViewMode::ALL_YES,
                                     sliceDrawingType,
@@ -270,6 +280,14 @@ BrainOpenGLVolumeSliceDrawing::drawVolumeSliceViewPlane(const VolumeSliceDrawing
             /*
              * Draw coronal slice
              */
+            {
+                EventDrawingViewportContentAdd addViewportEvent;
+                addViewportEvent.addModel(this->m_fixedPipelineDrawing->m_windowIndex,
+                                          m_tabIndex,
+                                          GraphicsViewport(coronalVP),
+                                          ModelTypeEnum::MODEL_TYPE_VOLUME_SLICES);
+                EventManager::get()->sendEvent(addViewportEvent.getPointer());
+            }
             glPushMatrix();
             drawVolumeSliceViewType(AllSliceViewMode::ALL_YES,
                                     sliceDrawingType,
@@ -282,6 +300,14 @@ BrainOpenGLVolumeSliceDrawing::drawVolumeSliceViewPlane(const VolumeSliceDrawing
             /*
              * Draw axial slice
              */
+            {
+                EventDrawingViewportContentAdd addViewportEvent;
+                addViewportEvent.addModel(this->m_fixedPipelineDrawing->m_windowIndex,
+                                          m_tabIndex,
+                                          GraphicsViewport(axialVP),
+                                          ModelTypeEnum::MODEL_TYPE_VOLUME_SLICES);
+                EventManager::get()->sendEvent(addViewportEvent.getPointer());
+            }
             glPushMatrix();
             drawVolumeSliceViewType(AllSliceViewMode::ALL_YES,
                                     sliceDrawingType,
@@ -305,6 +331,12 @@ BrainOpenGLVolumeSliceDrawing::drawVolumeSliceViewPlane(const VolumeSliceDrawing
                         CaretAssert(0);
                         break;
                     case VolumeSliceProjectionTypeEnum::VOLUME_SLICE_PROJECTION_ORTHOGONAL:
+                        break;
+                    case VolumeSliceProjectionTypeEnum::VOLUME_SLICE_PROJECTION_MPR:
+                        CaretAssert(0);
+                        break;
+                    case VolumeSliceProjectionTypeEnum::VOLUME_SLICE_PROJECTION_MPR_THREE:
+                        CaretAssert(0);
                         break;
                 }
             }
@@ -369,41 +401,44 @@ BrainOpenGLVolumeSliceDrawing::drawVolumeSlicesForAllStructuresView(const Volume
     }
     
     const float sliceCoordinates[3] = {
-        m_browserTabContent->getSliceCoordinateParasagittal(),
-        m_browserTabContent->getSliceCoordinateCoronal(),
-        m_browserTabContent->getSliceCoordinateAxial()
+        m_browserTabContent->getVolumeSliceCoordinateParasagittal(),
+        m_browserTabContent->getVolumeSliceCoordinateCoronal(),
+        m_browserTabContent->getVolumeSliceCoordinateAxial()
     };
     
-    if (m_browserTabContent->isSliceAxialEnabled()) {
+    if (m_browserTabContent->isVolumeSliceAxialEnabled()) {
         glPushMatrix();
         drawVolumeSliceViewProjection(AllSliceViewMode::ALL_NO,
                                       VolumeSliceDrawingTypeEnum::VOLUME_SLICE_DRAW_SINGLE,
                                       sliceProjectionType,
                                       VolumeSliceViewPlaneEnum::AXIAL,
                                       sliceCoordinates,
-                                      viewport);
+                                      viewport,
+                                      GridInfo());
         glPopMatrix();
     }
     
-    if (m_browserTabContent->isSliceCoronalEnabled()) {
+    if (m_browserTabContent->isVolumeSliceCoronalEnabled()) {
         glPushMatrix();
         drawVolumeSliceViewProjection(AllSliceViewMode::ALL_NO,
                                       VolumeSliceDrawingTypeEnum::VOLUME_SLICE_DRAW_SINGLE,
                                       sliceProjectionType,
                                       VolumeSliceViewPlaneEnum::CORONAL,
                                       sliceCoordinates,
-                                      viewport);
+                                      viewport,
+                                      GridInfo());
         glPopMatrix();
     }
     
-    if (m_browserTabContent->isSliceParasagittalEnabled()) {
+    if (m_browserTabContent->isVolumeSliceParasagittalEnabled()) {
         glPushMatrix();
         drawVolumeSliceViewProjection(AllSliceViewMode::ALL_NO,
                                       VolumeSliceDrawingTypeEnum::VOLUME_SLICE_DRAW_SINGLE,
                                       sliceProjectionType,
                                       VolumeSliceViewPlaneEnum::PARASAGITTAL,
                                       sliceCoordinates,
-                                      viewport);
+                                      viewport,
+                                      GridInfo());
         glPopMatrix();
     }
 }
@@ -440,20 +475,27 @@ BrainOpenGLVolumeSliceDrawing::drawVolumeSliceViewType(const AllSliceViewMode al
         case VolumeSliceDrawingTypeEnum::VOLUME_SLICE_DRAW_SINGLE:
         {
             const float sliceCoordinates[3] = {
-                m_browserTabContent->getSliceCoordinateParasagittal(),
-                m_browserTabContent->getSliceCoordinateCoronal(),
-                m_browserTabContent->getSliceCoordinateAxial()
+                m_browserTabContent->getVolumeSliceCoordinateParasagittal(),
+                m_browserTabContent->getVolumeSliceCoordinateCoronal(),
+                m_browserTabContent->getVolumeSliceCoordinateAxial()
             };
             drawVolumeSliceViewProjection(allSliceViewMode,
                                           sliceDrawingType,
                                           sliceProjectionType,
                                           sliceViewPlane,
                                           sliceCoordinates,
-                                          viewport);
+                                          viewport,
+                                          GridInfo());
         }
             break;
     }
-    
+  
+    /*
+     * Draw yellow cross at center of viewport
+     */
+    if (SessionManager::get()->getCaretPreferences()->isCrossAtViewportCenterEnabled()) {
+        GraphicsShape::drawYellowCrossAtViewportCenter();
+    }
 }
 
 /**
@@ -477,17 +519,25 @@ BrainOpenGLVolumeSliceDrawing::drawVolumeSliceViewTypeMontage(const AllSliceView
                                                               const VolumeSliceViewPlaneEnum::Enum sliceViewPlane,
                                                               const int32_t viewport[4])
 {
-    const int32_t numRows = m_browserTabContent->getMontageNumberOfRows();
+    const int32_t numRows = m_browserTabContent->getVolumeMontageNumberOfRows();
     CaretAssert(numRows > 0);
-    const int32_t numCols = m_browserTabContent->getMontageNumberOfColumns();
+    const int32_t numCols = m_browserTabContent->getVolumeMontageNumberOfColumns();
     CaretAssert(numCols > 0);
-    
-    const int32_t montageCoordPrecision = m_browserTabContent->getVolumeMontageCoordinatePrecision();
     
     const GapsAndMargins* gapsAndMargins = m_brain->getGapsAndMargins();
     
     const int32_t windowIndex = m_fixedPipelineDrawing->m_windowIndex;
     
+    {
+        EventDrawingViewportContentAdd addViewportEvent;
+        addViewportEvent.addModelVolumeGrid(windowIndex,
+                                            m_tabIndex,
+                                            GraphicsViewport(viewport),
+                                            numRows,
+                                            numCols);
+        EventManager::get()->sendEvent(addViewportEvent.getPointer());
+    }
+
     int32_t vpSizeY        = 0;
     int32_t verticalMargin = 0;
     BrainOpenGLFixedPipeline::createSubViewportSizeAndGaps(viewport[3],
@@ -519,36 +569,36 @@ BrainOpenGLVolumeSliceDrawing::drawVolumeSliceViewTypeMontage(const AllSliceView
     AString axisLetter = "";
     
     float sliceCoordinates[3] = {
-        m_browserTabContent->getSliceCoordinateParasagittal(),
-        m_browserTabContent->getSliceCoordinateCoronal(),
-        m_browserTabContent->getSliceCoordinateAxial()
+        m_browserTabContent->getVolumeSliceCoordinateParasagittal(),
+        m_browserTabContent->getVolumeSliceCoordinateCoronal(),
+        m_browserTabContent->getVolumeSliceCoordinateAxial()
     };
     
     int32_t sliceIndex = -1;
     int32_t maximumSliceIndex = -1;
     int64_t dimI, dimJ, dimK, numMaps, numComponents;
     m_underlayVolume->getDimensions(dimI, dimJ, dimK, numMaps, numComponents);
-    const int32_t sliceStep = m_browserTabContent->getMontageSliceSpacing();
+    const int32_t sliceStep = m_browserTabContent->getVolumeMontageSliceSpacing();
     switch (sliceViewPlane) {
         case VolumeSliceViewPlaneEnum::ALL:
             sliceIndex = -1;
             break;
         case VolumeSliceViewPlaneEnum::AXIAL:
-            sliceIndex = m_browserTabContent->getSliceIndexAxial(m_underlayVolume);
+            sliceIndex = m_browserTabContent->getVolumeSliceIndexAxial(m_underlayVolume);
             maximumSliceIndex = dimK;
             sliceThickness = z1 - originZ;
             sliceOrigin = originZ;
             axisLetter = "Z";
             break;
         case VolumeSliceViewPlaneEnum::CORONAL:
-            sliceIndex = m_browserTabContent->getSliceIndexCoronal(m_underlayVolume);
+            sliceIndex = m_browserTabContent->getVolumeSliceIndexCoronal(m_underlayVolume);
             maximumSliceIndex = dimJ;
             sliceThickness = y1 - originY;
             sliceOrigin = originY;
             axisLetter = "Y";
             break;
         case VolumeSliceViewPlaneEnum::PARASAGITTAL:
-            sliceIndex = m_browserTabContent->getSliceIndexParasagittal(m_underlayVolume);
+            sliceIndex = m_browserTabContent->getVolumeSliceIndexParasagittal(m_underlayVolume);
             maximumSliceIndex = dimI;
             sliceThickness = x1 - originX;
             sliceOrigin = originX;
@@ -556,17 +606,7 @@ BrainOpenGLVolumeSliceDrawing::drawVolumeSliceViewTypeMontage(const AllSliceView
             break;
     }
     
-    /*
-     * Foreground color for slice coordinate text
-     */
-    const CaretPreferences* prefs = SessionManager::get()->getCaretPreferences();
-    uint8_t foregroundRGBA[4];
-    prefs->getBackgroundAndForegroundColors()->getColorForegroundVolumeView(foregroundRGBA);
-    foregroundRGBA[3] = 255;
-    const bool showCoordinates = m_browserTabContent->isVolumeMontageAxesCoordinatesDisplayed();
-    uint8_t backgroundRGBA[4];
-    prefs->getBackgroundAndForegroundColors()->getColorBackgroundVolumeView(backgroundRGBA);
-    backgroundRGBA[3] = 255;
+    const SamplesDrawingSettings* samplesSettings(m_browserTabContent->getSamplesDrawingSettings());
     
     /*
      * Determine a slice offset to selected slices is in
@@ -588,9 +628,19 @@ BrainOpenGLVolumeSliceDrawing::drawVolumeSliceViewTypeMontage(const AllSliceView
         sliceIndex -= sliceStep;
     }
     
+    const bool flipFlag = m_browserTabContent->isVolumeMontageSliceOrderFlippedForSliceViewPlane(sliceViewPlane);    
+    
     if (sliceIndex >= 0) {
-        for (int32_t i = 0; i < numRows; i++) {
-            for (int32_t j = 0; j < numCols; j++) {
+        for (int32_t i1 = 0; i1 < numRows; i1++) {
+            int32_t i(i1);
+            if (flipFlag) {
+                i = numRows - 1 - i;
+            }
+            for (int32_t j1 = 0; j1 < numCols; j1++) {
+                int32_t j(j1);
+                if (flipFlag) {
+                    j = numCols - 1 - j;
+                }
                 if ((sliceIndex >= 0)
                     && (sliceIndex < maximumSliceIndex)) {
                     const int32_t vpX = (j * (vpSizeX + horizontalMargin));
@@ -628,28 +678,26 @@ BrainOpenGLVolumeSliceDrawing::drawVolumeSliceViewTypeMontage(const AllSliceView
                                                   sliceProjectionType,
                                                   sliceViewPlane,
                                                   sliceCoordinates,
-                                                  vp);
+                                                  vp,
+                                                  GridInfo(numRows, numCols, i, j));
                     
-                    if (showCoordinates) {
-                        const AString coordText = (axisLetter
-                                                   + "="
-                                                   + AString::number(sliceCoord, 'f', montageCoordPrecision));
-                        
-                        AnnotationPercentSizeText annotationText(AnnotationAttributesDefaultTypeEnum::NORMAL);
-                        annotationText.setHorizontalAlignment(AnnotationTextAlignHorizontalEnum::RIGHT);
-                        annotationText.setVerticalAlignment(AnnotationTextAlignVerticalEnum::BOTTOM);
-                        annotationText.setFontPercentViewportSize(10.0f);
-                        annotationText.setTextColor(CaretColorEnum::CUSTOM);
-                        annotationText.setCustomTextColor(foregroundRGBA);
-                        annotationText.setBackgroundColor(CaretColorEnum::CUSTOM);
-                        annotationText.setCustomBackgroundColor(backgroundRGBA);
-                        annotationText.setText(coordText);
-                        m_fixedPipelineDrawing->drawTextAtViewportCoords((vpSizeX - 5),
-                                                                         5,
-                                                                         annotationText);
-                    }
+                    BrainOpenGLVolumeSliceDrawing::drawMontageSliceCoordinates(m_fixedPipelineDrawing,
+                                                                               m_browserTabContent,
+                                                                               sliceViewPlane,
+                                                                               vp,
+                                                                               sliceCoordinates,
+                                                                               sliceCoord);
                 }
                 sliceIndex -= sliceStep;
+
+                if (m_fixedPipelineDrawing->m_windowUserInputMode == UserInputModeEnum::Enum::SAMPLES_EDITING) {
+                    if ( ! samplesSettings->isSliceInLowerUpperOffsetRange(i, j)) {
+                        const uint8_t rgba[4] { 255, 0, 0, 255 };
+                        const float percentageThickness(3.0);
+                        GraphicsShape::drawViewportCrossPercentageLineWidth(rgba,
+                                                                            percentageThickness);
+                    }
+                }
             }
         }
     }
@@ -683,6 +731,8 @@ BrainOpenGLVolumeSliceDrawing::drawVolumeSliceViewTypeMontage(const AllSliceView
  *    Coordinates of the selected slice.
  * @param viewport
  *    The viewport (region of graphics area) for drawing slices.
+ * @param gridInfo
+ *    Info about montage grid
  */
 void
 BrainOpenGLVolumeSliceDrawing::drawVolumeSliceViewProjection(const AllSliceViewMode allSliceViewMode,
@@ -690,7 +740,8 @@ BrainOpenGLVolumeSliceDrawing::drawVolumeSliceViewProjection(const AllSliceViewM
                                                              const VolumeSliceProjectionTypeEnum::Enum sliceProjectionType,
                                                              const VolumeSliceViewPlaneEnum::Enum sliceViewPlane,
                                                              const float sliceCoordinates[3],
-                                                             const int32_t viewport[4])
+                                                             const int32_t viewport[4],
+                                                             const GridInfo& gridInfo)
 {
     bool twoDimSliceViewFlag = false;
     if (m_modelVolume != NULL) {
@@ -712,7 +763,7 @@ BrainOpenGLVolumeSliceDrawing::drawVolumeSliceViewProjection(const AllSliceViewM
                    viewport[2],
                    viewport[3]);
 
-        /*
+       /*
          * Set the orthographic projection to fit the slice axis
          */
         setOrthographicProjection(allSliceViewMode,
@@ -786,43 +837,66 @@ BrainOpenGLVolumeSliceDrawing::drawVolumeSliceViewProjection(const AllSliceViewM
     GLboolean cullFaceOn = glIsEnabled(GL_CULL_FACE);
 
     if (drawVolumeSlicesFlag) {
+        Plane planeEQ;
+        switch (sliceViewPlane) {
+            case VolumeSliceViewPlaneEnum::ALL:
+                break;
+            case VolumeSliceViewPlaneEnum::AXIAL:
+                planeEQ = Plane(Vector3D(0.0, 0.0, 1.0),
+                                sliceCoordinates);
+                break;
+            case VolumeSliceViewPlaneEnum::CORONAL:
+                planeEQ = Plane(Vector3D(0.0, -1.0, 0.0),
+                                sliceCoordinates);
+                break;
+            case VolumeSliceViewPlaneEnum::PARASAGITTAL:
+                planeEQ = Plane(Vector3D(-1.0, 0.0, 0.0),
+                                sliceCoordinates);
+                break;
+        }
+        DrawingViewportContentVolumeSlice vpSlice(gridInfo.m_numberOfRows,
+                                                  gridInfo.m_numberOfColumns,
+                                                  gridInfo.m_rowIndex,
+                                                  gridInfo.m_columnIndex,
+                                                  sliceViewPlane,
+                                                  planeEQ,
+                                                  sliceCoordinates);
+        EventDrawingViewportContentAdd addViewportEvent;
+        addViewportEvent.addVolumeSlice(this->m_fixedPipelineDrawing->m_windowIndex,
+                                        m_tabIndex,
+                                        viewport,
+                                        vpSlice);
+        EventManager::get()->sendEvent(addViewportEvent.getPointer());
         /*
          * Disable culling so that both sides of the triangles/quads are drawn.
          */
         glDisable(GL_CULL_FACE);
         
         const bool cullingSliceViewFlag = true;
-        switch (sliceProjectionType) {
-            case VolumeSliceProjectionTypeEnum::VOLUME_SLICE_PROJECTION_ORTHOGONAL:
-                if (m_modelVolume != NULL) {
-                    if (cullingSliceViewFlag) {
-                        drawOrthogonalSliceWithCulling(sliceViewPlane,
-                                                       sliceCoordinates,
-                                                       slicePlane);
-                    }
-                    else {
-                        drawOrthogonalSlice(sliceViewPlane,
-                                            sliceCoordinates,
-                                            slicePlane);
-                    }
-                }
-                else if (m_modelWholeBrain != NULL) {
-                    const bool allOrientationsFlag = true;
-                    if (allOrientationsFlag) {
-                        drawOrthogonalSliceAllView(sliceViewPlane,
-                                                   sliceCoordinates,
-                                                   slicePlane);
-                    }
-                    else {
-                        drawOrthogonalSlice(sliceViewPlane,
-                                            sliceCoordinates,
-                                            slicePlane);
-                    }
-                }
-                break;
-            case VolumeSliceProjectionTypeEnum::VOLUME_SLICE_PROJECTION_OBLIQUE:
-                CaretAssert(0);
-                break;
+        if (m_modelVolume != NULL) {
+            if (cullingSliceViewFlag) {
+                drawOrthogonalSliceWithCulling(sliceViewPlane,
+                                               sliceCoordinates,
+                                               slicePlane);
+            }
+            else {
+                drawOrthogonalSlice(sliceViewPlane,
+                                    sliceCoordinates,
+                                    slicePlane);
+            }
+        }
+        else if (m_modelWholeBrain != NULL) {
+            const bool allOrientationsFlag = true;
+            if (allOrientationsFlag) {
+                drawOrthogonalSliceAllView(sliceViewPlane,
+                                           sliceCoordinates,
+                                           slicePlane);
+            }
+            else {
+                drawOrthogonalSlice(sliceViewPlane,
+                                    sliceCoordinates,
+                                    slicePlane);
+            }
         }
     }
     
@@ -833,8 +907,10 @@ BrainOpenGLVolumeSliceDrawing::drawVolumeSliceViewProjection(const AllSliceViewM
     if ( ! m_volumeDrawInfo.empty()) {
         if (m_volumeDrawInfo[0].volumeFile != NULL) {
             float spaceX = 0.0, spaceY = 0.0, spaceZ = 0.0;
-            m_volumeDrawInfo[0].volumeFile->getVoxelSpacing(spaceX, spaceY, spaceZ);
-            
+            m_volumeDrawInfo[0].volumeFile->getVoxelSpacingPCA(spaceX,
+                                                               spaceY,
+                                                               spaceZ);
+
             switch (sliceViewPlane) {
                 case VolumeSliceViewPlaneEnum::ALL:
                     CaretAssert(0);
@@ -853,22 +929,22 @@ BrainOpenGLVolumeSliceDrawing::drawVolumeSliceViewProjection(const AllSliceViewM
         
         CaretAssertVectorIndex(m_volumeDrawInfo, 0);
         drawIdentificationSymbols(m_volumeDrawInfo[0].volumeFile,
+                                  m_volumeDrawInfo[0].mapIndex,
                                   slicePlane,
                                   sliceThickness);
     }
     
-    if ( ! m_identificationModeFlag) {
-        if (slicePlane.isValidPlane()) {
-            drawLayers(sliceDrawingType,
-                       sliceProjectionType,
-                       sliceViewPlane,
-                       slicePlane,
-                       sliceCoordinates);
-        }
+    if (slicePlane.isValidPlane()) {
+        drawLayers(sliceDrawingType,
+                   sliceProjectionType,
+                   sliceViewPlane,
+                   slicePlane,
+                   sliceCoordinates);
     }
-    
+
     const bool annotationModeFlag = (m_fixedPipelineDrawing->m_windowUserInputMode == UserInputModeEnum::Enum::ANNOTATIONS);
-    const bool tileTabsEditModeFlag = (m_fixedPipelineDrawing->m_windowUserInputMode == UserInputModeEnum::Enum::TILE_TABS_MANUAL_LAYOUT_EDITING);
+    const bool tileTabsEditModeFlag = (m_fixedPipelineDrawing->m_windowUserInputMode == UserInputModeEnum::Enum::TILE_TABS_LAYOUT_EDITING);
+    std::set<AString> emptyMediaFileNames;
     BrainOpenGLAnnotationDrawingFixedPipeline::Inputs inputs(this->m_brain,
                                                              m_fixedPipelineDrawing->mode,
                                                              BrainOpenGLFixedPipeline::s_gluLookAtCenterFromEyeOffsetDistance,
@@ -876,13 +952,59 @@ BrainOpenGLVolumeSliceDrawing::drawVolumeSliceViewProjection(const AllSliceViewM
                                                              m_fixedPipelineDrawing->windowTabIndex,
                                                              SpacerTabIndex(),
                                                              BrainOpenGLAnnotationDrawingFixedPipeline::Inputs::WINDOW_DRAWING_NO,
+                                                             emptyMediaFileNames,
                                                              annotationModeFlag,
                                                              tileTabsEditModeFlag);
     m_fixedPipelineDrawing->m_annotationDrawing->drawModelSpaceAnnotationsOnVolumeSlice(&inputs,
                                                                                         slicePlane,
                                                                                         sliceThickness);
-    
+    {
+        const bool samplesModeFlag(m_fixedPipelineDrawing->m_windowUserInputMode == UserInputModeEnum::Enum::SAMPLES_EDITING);
+        BrainOpenGLAnnotationDrawingFixedPipeline::Inputs inputs(this->m_brain,
+                                                                 m_fixedPipelineDrawing->mode,
+                                                                 BrainOpenGLFixedPipeline::s_gluLookAtCenterFromEyeOffsetDistance,
+                                                                 m_fixedPipelineDrawing->m_windowIndex,
+                                                                 m_fixedPipelineDrawing->windowTabIndex,
+                                                                 SpacerTabIndex(),
+                                                                 BrainOpenGLAnnotationDrawingFixedPipeline::Inputs::WINDOW_DRAWING_NO,
+                                                                 emptyMediaFileNames,
+                                                                 samplesModeFlag,
+                                                                 tileTabsEditModeFlag);
+        m_fixedPipelineDrawing->m_annotationDrawing->drawModelSpaceSamplesOnVolumeSlice(&inputs,
+                                                                                        slicePlane,
+                                                                                        sliceThickness);
+    }
+
     m_fixedPipelineDrawing->disableClippingPlanes();
+    
+    bool drawSelectionBoxFlag(false);
+    switch (sliceDrawingType) {
+        case VolumeSliceDrawingTypeEnum::VOLUME_SLICE_DRAW_MONTAGE:
+            break;
+        case VolumeSliceDrawingTypeEnum::VOLUME_SLICE_DRAW_SINGLE:
+            drawSelectionBoxFlag = true;
+            break;
+    }
+    if (drawSelectionBoxFlag) {
+        GraphicsRegionSelectionBox::DrawMode drawMode(GraphicsRegionSelectionBox::DrawMode::Z_PLANE);
+        switch (sliceViewPlane) {
+            case VolumeSliceViewPlaneEnum::ALL:
+                CaretAssert(0);
+                break;
+            case VolumeSliceViewPlaneEnum::AXIAL:
+                drawMode = GraphicsRegionSelectionBox::DrawMode::Z_PLANE;
+                break;
+            case VolumeSliceViewPlaneEnum::CORONAL:
+                drawMode = GraphicsRegionSelectionBox::DrawMode::Y_PLANE;
+                break;
+            case VolumeSliceViewPlaneEnum::PARASAGITTAL:
+                drawMode = GraphicsRegionSelectionBox::DrawMode::X_PLANE;
+                break;
+        }
+        BrainOpenGLFixedPipeline::drawGraphicsRegionSelectionBox(m_browserTabContent->getRegionSelectionBox(),
+                                                                 drawMode,
+                                                                 m_fixedPipelineDrawing->m_foregroundColorFloat);
+    }
     
     if (cullFaceOn) {
         glEnable(GL_CULL_FACE);
@@ -1432,11 +1554,14 @@ BrainOpenGLVolumeSliceDrawing::drawOrthogonalSlice(const VolumeSliceViewPlaneEnu
                                   volumeFile,
                                   iVol,
                                   volInfo.mapIndex,
-                                  volumeDrawingOpacity);
+                                  volumeDrawingOpacity,
+                                  sliceViewingPlane,
+                                  sliceIndexForDrawing);
         glDisable(GL_POLYGON_OFFSET_FILL);
         
         if (m_identificationModeFlag) {
-            processIdentification(true);
+            processIdentification(true,
+                                  plane);
         }
     }
     
@@ -1607,6 +1732,8 @@ BrainOpenGLVolumeSliceDrawing::showBrainordinateHighlightRegionOfInterest(const 
  *
  * @param volume
  *    The underlay volume
+ * @param mapIndex
+ *    Index of map in volume file that is being drawn
  * @param plane
  *   The plane equation.
  * @param sliceThickess
@@ -1614,12 +1741,14 @@ BrainOpenGLVolumeSliceDrawing::showBrainordinateHighlightRegionOfInterest(const 
  */
 void
 BrainOpenGLVolumeSliceDrawing::drawIdentificationSymbols(const VolumeMappableInterface* volume,
+                                                         const int32_t mapIndex,
                                                          const Plane& plane,
                                                          const float sliceThickness)
 {
     drawIdentificationSymbols(m_fixedPipelineDrawing,
-                              m_brain,
+                              m_browserTabContent,
                               volume,
+                              mapIndex,
                               plane,
                               sliceThickness);
 }
@@ -1628,10 +1757,12 @@ BrainOpenGLVolumeSliceDrawing::drawIdentificationSymbols(const VolumeMappableInt
  * Draw identification symbols on volume slice with the given plane.
  * @param fixedPipelineDrawing
  *   The fixed pipeline drawing
- * @param brain
- *    The brain
+ * @param browserTabContent
+ *    Tab content containing volume
  * @param volume
  *    The underlay volume
+ * @param mapIndex
+ *    Index of map in volume file that is being drawn
  * @param plane
  *   The plane equation.
  * @param sliceThickess
@@ -1639,114 +1770,30 @@ BrainOpenGLVolumeSliceDrawing::drawIdentificationSymbols(const VolumeMappableInt
  */
 void
 BrainOpenGLVolumeSliceDrawing::drawIdentificationSymbols(BrainOpenGLFixedPipeline* fixedPipelineDrawing,
-                                                         Brain* brain,
+                                                         BrowserTabContent* browserTabContent,
                                                          const VolumeMappableInterface* volume,
+                                                         const int32_t mapIndex,
                                                          const Plane& plane,
                                                          const float sliceThickness)
 {
     CaretAssert(fixedPipelineDrawing);
-    CaretAssert(brain);
     CaretAssert(volume);
-    
-    const float halfSliceThickness(sliceThickness > 0.0
-                                   ? (sliceThickness * 0.55) /* ensure symbol falls within a slice*/
-                                   : 1.0);
-    IdentificationManager* idManager = brain->getIdentificationManager();
-    
-    SelectionItemVoxelIdentificationSymbol* symbolID = brain->getSelectionManager()->getVoxelIdentificationSymbol();
-    
-    const std::vector<IdentifiedItemVoxel> voxelIDs = idManager->getIdentifiedItemsForVolume();
+        
+    const GraphicsViewport viewport(GraphicsViewport::newInstanceCurrentViewport());
     
     /*
-     * Check for a 'selection' type mode
+     * Draw volume identification symbols
      */
-    bool isSelect = false;
-    switch (fixedPipelineDrawing->mode) {
-        case BrainOpenGLFixedPipeline::MODE_DRAWING:
-            break;
-        case BrainOpenGLFixedPipeline::MODE_IDENTIFICATION:
-            if (symbolID->isEnabledForSelection()) {
-                isSelect = true;
-                glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-            }
-            else {
-                return;
-            }
-            break;
-        case BrainOpenGLFixedPipeline::MODE_PROJECTION:
-            return;
-            break;
-    }
-    
-    if (idManager->isShowVolumeIdentificationSymbols()) {
-        uint8_t rgba[4];
-        const int32_t numVoxelIdSymbols = static_cast<int32_t>(voxelIDs.size());
-        for (int32_t iVoxel = 0; iVoxel < numVoxelIdSymbols; iVoxel++) {
-            CaretAssertVectorIndex(voxelIDs, iVoxel);
-            const IdentifiedItemVoxel& voxel = voxelIDs[iVoxel];
-            
-            float xyz[3];
-            voxel.getXYZ(xyz);
-            
-            float symbolDiameter = voxel.getSymbolSize();
-            
-            const float dist = std::fabs(plane.signedDistanceToPlane(xyz));
-            if (dist < halfSliceThickness) {
-                switch (voxel.getIdentificationSymbolSizeType()) {
-                    case IdentificationSymbolSizeTypeEnum::MILLIMETERS:
-                        break;
-                    case IdentificationSymbolSizeTypeEnum::PERCENTAGE:
-                    {
-                        BoundingBox boundingBox;
-                        volume->getVoxelSpaceBoundingBox(boundingBox);
-                        const float maxDimension = boundingBox.getMaximumDifferenceOfXYZ();
-                        symbolDiameter = maxDimension * (symbolDiameter / 100.0);
-                    }
-                        break;
-                }
-                
-                if (isSelect) {
-                    fixedPipelineDrawing->colorIdentification->addItem(rgba,
-                                                                         SelectionItemDataTypeEnum::VOXEL_IDENTIFICATION_SYMBOL,
-                                                                         iVoxel);
-                    rgba[3] = 255;
-                }
-                else {
-                    voxel.getSymbolRGBA(rgba);
-                }
-                
-                glPushMatrix();
-                glTranslatef(xyz[0], xyz[1], xyz[2]);
-                fixedPipelineDrawing->drawSphereWithDiameter(rgba,
-                                                               symbolDiameter);
-                glPopMatrix();
-            }
-        }
-    }
-    
-    
-    if (isSelect) {
-        int voxelIdIndex = -1;
-        float depth = -1.0;
-        fixedPipelineDrawing->getIndexFromColorSelection(SelectionItemDataTypeEnum::VOXEL_IDENTIFICATION_SYMBOL,
-                                                           fixedPipelineDrawing->mouseX,
-                                                           fixedPipelineDrawing->mouseY,
-                                                           voxelIdIndex,
-                                                           depth);
-        if (voxelIdIndex >= 0) {
-            if (symbolID->isOtherScreenDepthCloserToViewer(depth)) {
-                CaretAssertVectorIndex(voxelIDs, voxelIdIndex);
-                const IdentifiedItemVoxel& voxel = voxelIDs[voxelIdIndex];
-                float xyz[3];
-                voxel.getXYZ(xyz);
-                symbolID->setVoxelXYZ(xyz);
-                symbolID->setBrain(brain);
-                symbolID->setScreenDepth(depth);
-                fixedPipelineDrawing->setSelectedItemScreenXYZ(symbolID, xyz);
-                CaretLogFine("Selected Vertex Identification Symbol: " + QString::number(voxelIdIndex));
-            }
-        }
-    }
+    BrainOpenGLIdentificationDrawing idDrawing(fixedPipelineDrawing,
+                                               fixedPipelineDrawing->m_brain,
+                                               browserTabContent,
+                                               fixedPipelineDrawing->mode);
+    idDrawing.drawVolumeIdentificationSymbols(volume,
+                                              mapIndex,
+                                              plane,
+                                              sliceThickness,
+                                              browserTabContent->getScaling(),
+                                              viewport.getHeight());
 }
 
 /**
@@ -2130,12 +2177,15 @@ BrainOpenGLVolumeSliceDrawing::drawOrthogonalSliceWithCulling(const VolumeSliceV
                                   volumeFile,
                                   iVol,
                                   mapIndex,
-                                  volumeDrawingOpacity);
+                                  volumeDrawingOpacity,
+                                  sliceViewPlane,
+                                  sliceIndexForDrawing);
         
         glDisable(GL_POLYGON_OFFSET_FILL);
         
         if (m_identificationModeFlag) {
-            processIdentification(true);
+            processIdentification(true,
+                                  plane);
         }
     }
 
@@ -2160,7 +2210,7 @@ BrainOpenGLVolumeSliceDrawing::drawOrthogonalSliceWithCulling(const VolumeSliceV
  *    OUTPUT plane of slice after transforms.
  */
 void
-BrainOpenGLVolumeSliceDrawing::createSlicePlaneEquation(const VolumeSliceProjectionTypeEnum::Enum sliceProjectionType,
+BrainOpenGLVolumeSliceDrawing::createSlicePlaneEquation(const VolumeSliceProjectionTypeEnum::Enum /*sliceProjectionType*/,
                                                       const VolumeSliceViewPlaneEnum::Enum sliceViewPlane,
                                                       const float sliceCoordinates[3],
                                                       Plane& planeOut)
@@ -2181,16 +2231,7 @@ BrainOpenGLVolumeSliceDrawing::createSlicePlaneEquation(const VolumeSliceProject
             sliceNormalVector[0] = -1.0;
             break;
     }
-    
-    switch (sliceProjectionType) {
-            break;
-        case VolumeSliceProjectionTypeEnum::VOLUME_SLICE_PROJECTION_OBLIQUE:
-            CaretAssert(0);
-            break;
-        case VolumeSliceProjectionTypeEnum::VOLUME_SLICE_PROJECTION_ORTHOGONAL:
-            break;
-    }
-    
+        
     Plane plane(sliceNormalVector,
                 sliceCoordinates);
     planeOut = plane;
@@ -2212,7 +2253,7 @@ BrainOpenGLVolumeSliceDrawing::createSlicePlaneEquation(const VolumeSliceProject
  *    Plane equation of selected slice.
  */
 void
-BrainOpenGLVolumeSliceDrawing::setVolumeSliceViewingAndModelingTransformations(const VolumeSliceProjectionTypeEnum::Enum sliceProjectionType,
+BrainOpenGLVolumeSliceDrawing::setVolumeSliceViewingAndModelingTransformations(const VolumeSliceProjectionTypeEnum::Enum /*sliceProjectionType*/,
                                                                              const VolumeSliceViewPlaneEnum::Enum sliceViewPlane,
                                                                              const Plane& plane)
 {
@@ -2319,17 +2360,6 @@ BrainOpenGLVolumeSliceDrawing::setVolumeSliceViewingAndModelingTransformations(c
                  userTranslation[2]);
     
     /*
-     * For oblique viewing, the up vector needs to be rotated by the
-     * oblique rotation matrix.
-     */
-    switch (sliceProjectionType) {
-        case VolumeSliceProjectionTypeEnum::VOLUME_SLICE_PROJECTION_OBLIQUE:
-            CaretAssert(0);
-            break;
-        case VolumeSliceProjectionTypeEnum::VOLUME_SLICE_PROJECTION_ORTHOGONAL:
-            break;
-    }
-    /*
      * Apply user scaling
      */
     const float userScaling = m_browserTabContent->getScaling();
@@ -2373,719 +2403,107 @@ BrainOpenGLVolumeSliceDrawing::drawLayers(const VolumeSliceDrawingTypeEnum::Enum
         drawFociFlag = false;
     }
     
-    if ( ! m_identificationModeFlag) {
-        if (slicePlane.isValidPlane()) {
-            /*
-             * Disable culling so that both sides of the triangles/quads are drawn.
-             */
-            GLboolean cullFaceOn = glIsEnabled(GL_CULL_FACE);
-            glDisable(GL_CULL_FACE);
+    if (slicePlane.isValidPlane()) {
+        /*
+         * Disable culling so that both sides of the triangles/quads are drawn.
+         */
+        GLboolean cullFaceOn = glIsEnabled(GL_CULL_FACE);
+        glDisable(GL_CULL_FACE);
+        
+        glPushMatrix();
+        
+        GLboolean depthBufferEnabled = false;
+        glGetBooleanv(GL_DEPTH_TEST,
+                      &depthBufferEnabled);
+        
+        /*
+         * Use some polygon offset that will adjust the depth values of the
+         * layers so that the layers depth values place the layers in front of
+         * the volume slice.
+         */
+        glEnable(GL_POLYGON_OFFSET_FILL);
+        glPolygonOffset(0.0, 1.0);
+        
+        if (drawOutlineFlag) {
+            Matrix4x4 displayTransformMatrix;
+            bool displayTransformMatrixValidFlag(false);
+            BrainOpenGLVolumeSurfaceOutlineDrawing outlineDrawing;
+            outlineDrawing.drawSurfaceOutline(m_underlayVolume,
+                                              m_modelType,
+                                              sliceProjectionType,
+                                              sliceViewPlane,
+                                              sliceCoordinates,
+                                              slicePlane,
+                                              displayTransformMatrix,
+                                              displayTransformMatrixValidFlag,
+                                              m_browserTabContent->getVolumeSurfaceOutlineSet(),
+                                              m_fixedPipelineDrawing,
+                                              false);
+        }
+        
+        if (drawFibersFlag) {
+            glDisable(GL_DEPTH_TEST);
+            m_fixedPipelineDrawing->drawFiberOrientations(&slicePlane,
+                                                          StructureEnum::ALL);
+            m_fixedPipelineDrawing->drawFiberTrajectories(&slicePlane,
+                                                          StructureEnum::ALL);
+            if (depthBufferEnabled) {
+                glEnable(GL_DEPTH_TEST);
+            }
+            else {
+                glDisable(GL_DEPTH_TEST);
+            }
+        }
+        if (drawFociFlag) {
+            glDisable(GL_DEPTH_TEST);
+            float minVoxelSpacing;
+            float maxVoxelSpacing;
+            if (getMinMaxVoxelSpacing(m_underlayVolume,
+                                      minVoxelSpacing,
+                                      maxVoxelSpacing)) {
+                const float sliceThickness = maxVoxelSpacing;
+                BrainOpenGLFociDrawing fociDrawing;
+                fociDrawing.drawVolumeOrthogonalFoci(m_brain,
+                                                     m_fixedPipelineDrawing,
+                                                     m_underlayVolume,
+                                                     slicePlane,
+                                                     sliceViewPlane,
+                                                     sliceThickness);
+            }
             
+            if (depthBufferEnabled) {
+                glEnable(GL_DEPTH_TEST);
+            }
+            else {
+                glDisable(GL_DEPTH_TEST);
+            }
+        }
+        
+        glDisable(GL_POLYGON_OFFSET_FILL);
+        
+        if (drawCrosshairsFlag) {
             glPushMatrix();
-            
-            GLboolean depthBufferEnabled = false;
-            glGetBooleanv(GL_DEPTH_TEST,
-                          &depthBufferEnabled);
-            
-            /*
-             * Use some polygon offset that will adjust the depth values of the
-             * layers so that the layers depth values place the layers in front of
-             * the volume slice.
-             */
-            glEnable(GL_POLYGON_OFFSET_FILL);
-            glPolygonOffset(0.0, 1.0);
-            
-            if (drawOutlineFlag) {
-                drawSurfaceOutline(m_underlayVolume,
-                                   m_modelType,
-                                   sliceProjectionType,
-                                   sliceViewPlane,
-                                   sliceCoordinates,
-                                   slicePlane,
-                                   m_browserTabContent->getVolumeSurfaceOutlineSet(),
-                                   m_fixedPipelineDrawing,
-                                   false);
-            }
-            
-            if (drawFibersFlag) {
-                glDisable(GL_DEPTH_TEST);
-                m_fixedPipelineDrawing->drawFiberOrientations(&slicePlane,
-                                                              StructureEnum::ALL);
-                m_fixedPipelineDrawing->drawFiberTrajectories(&slicePlane,
-                                                              StructureEnum::ALL);
-                if (depthBufferEnabled) {
-                    glEnable(GL_DEPTH_TEST);
-                }
-                else {
-                    glDisable(GL_DEPTH_TEST);
-                }
-            }
-            if (drawFociFlag) {
-                glDisable(GL_DEPTH_TEST);
-                drawVolumeSliceFoci(slicePlane);
-                if (depthBufferEnabled) {
-                    glEnable(GL_DEPTH_TEST);
-                }
-                else {
-                    glDisable(GL_DEPTH_TEST);
-                }
-            }
-            
-            glDisable(GL_POLYGON_OFFSET_FILL);
-            
-            if (drawCrosshairsFlag) {
-                glPushMatrix();
-                drawAxesCrosshairs(sliceProjectionType,
-                                   sliceDrawingType,
-                                   sliceViewPlane,
-                                   sliceCoordinates);
-                glPopMatrix();
-                if (depthBufferEnabled) {
-                    glEnable(GL_DEPTH_TEST);
-                }
-                else {
-                    glDisable(GL_DEPTH_TEST);
-                }
-            }
-            
+            drawAxesCrosshairs(sliceProjectionType,
+                               sliceDrawingType,
+                               sliceViewPlane,
+                               sliceCoordinates);
             glPopMatrix();
-            
-            if (cullFaceOn) {
-                glEnable(GL_CULL_FACE);
-            }
-        }
-    }
-}
-
-/**
- * Draw surface outlines on the volume slices
- *
- * @param underlayVolume
- *    The underlay volume
- * @param modelType
- *    Type of model being drawn.
- * @param sliceProjectionType
- *    Projection type (oblique/orthogonal)
- * @param sliceViewPlane
- *    Slice view plane (axial, coronal, parasagittal)
- * @param sliceXYZ
- *    Coordinates of slices
- * @param plane
- *    Plane of the volume slice on which surface outlines are drawn.
- * @param outlineSet
- *    The surface outline set.
- * @param fixedPipelineDrawing
- *    The fixed pipeline drawing.
- * @param useNegativePolygonOffsetFlag
- *    If true, use a negative offset for polygon offset
- */
-void
-BrainOpenGLVolumeSliceDrawing::drawSurfaceOutline(const VolumeMappableInterface* underlayVolume,
-                                                  const ModelTypeEnum::Enum modelType,
-                                                  const VolumeSliceProjectionTypeEnum::Enum sliceProjectionType,
-                                                  const VolumeSliceViewPlaneEnum::Enum sliceViewPlane,
-                                                  const float sliceXYZ[3],
-                                                  const Plane& plane,
-                                                  VolumeSurfaceOutlineSetModel* outlineSet,
-                                                  BrainOpenGLFixedPipeline* fixedPipelineDrawing,
-                                                  const bool useNegativePolygonOffsetFlag)
-{
-    /*
-     * Code still here to allow comparison with
-     * previous algorithm
-     */
-    bool drawCachedFlag(true);
-    if (drawCachedFlag) {
-        drawSurfaceOutlineCached(underlayVolume,
-                                 modelType,
-                                 sliceProjectionType,
-                                 sliceViewPlane,
-                                 sliceXYZ,
-                                 plane,
-                                 outlineSet,
-                                 fixedPipelineDrawing,
-                                 useNegativePolygonOffsetFlag);
-    }
-    else {
-        drawSurfaceOutlineNotCached(modelType,
-                                    plane,
-                                    outlineSet,
-                                    fixedPipelineDrawing,
-                                    useNegativePolygonOffsetFlag);
-    }
-}
-
-/**
- * Draw surface outlines on the volume slices
- *
- * @param underlayVolume
- *    The underlay volume
- * @param modelType
- *    Type of model being drawn.
- * @param sliceProjectionType
-      Type of slice projection
- * @param sliceProjectionType
- *    Type of slice projection
- * @param sliceViewPlane
- *    Slice view plane (axial, coronal, parasagittal)
- * @param sliceXYZ
- *    Coordinates of slices
- * @param plane
- *    Plane of the volume slice on which surface outlines are drawn.
- * @param outlineSet
- *    The surface outline set.
- * @param fixedPipelineDrawing
- *    The fixed pipeline drawing.
- * @param useNegativePolygonOffsetFlag
- *    If true, use a negative offset for polygon offset
- */
-void
-BrainOpenGLVolumeSliceDrawing::drawSurfaceOutlineCached(const VolumeMappableInterface* underlayVolume,
-                                                        const ModelTypeEnum::Enum modelType,
-                                                        const VolumeSliceProjectionTypeEnum::Enum sliceProjectionType,
-                                                        const VolumeSliceViewPlaneEnum::Enum sliceViewPlane,
-                                                        const float sliceXYZ[3],
-                                                        const Plane& plane,
-                                                        VolumeSurfaceOutlineSetModel* outlineSet,
-                                                        BrainOpenGLFixedPipeline* fixedPipelineDrawing,
-                                                        const bool useNegativePolygonOffsetFlag)
-{
-    glPushAttrib(GL_ENABLE_BIT);
-    glDisable(GL_DEPTH_TEST);
-    glDisable(GL_LIGHTING);
-    
-    switch (modelType) {
-        case ModelTypeEnum::MODEL_TYPE_CHART:
-            break;
-        case ModelTypeEnum::MODEL_TYPE_CHART_TWO:
-            break;
-        case ModelTypeEnum::MODEL_TYPE_INVALID:
-            break;
-        case  ModelTypeEnum::MODEL_TYPE_MULTI_MEDIA:
-            break;
-        case ModelTypeEnum::MODEL_TYPE_SURFACE:
-            break;
-        case ModelTypeEnum::MODEL_TYPE_SURFACE_MONTAGE:
-            break;
-        case ModelTypeEnum::MODEL_TYPE_VOLUME_SLICES:
-            break;
-        case ModelTypeEnum::MODEL_TYPE_WHOLE_BRAIN:
-            /*
-             * Enable depth so outlines in front or in back
-             * of the slices.  Without this the volume surface
-             * outlines "behind" the slices are visible and
-             * it looks weird
-             */
-            glEnable(GL_DEPTH_TEST);
-            break;
-    }
-    
-    float sliceCoordinate(0.0);
-    switch (sliceViewPlane) {
-        case VolumeSliceViewPlaneEnum::ALL:
-            break;
-        case VolumeSliceViewPlaneEnum::AXIAL:
-            sliceCoordinate = sliceXYZ[2];
-            break;
-        case VolumeSliceViewPlaneEnum::CORONAL:
-            sliceCoordinate = sliceXYZ[1];
-            break;
-        case VolumeSliceViewPlaneEnum::PARASAGITTAL:
-            sliceCoordinate = sliceXYZ[0];
-            break;
-    }
-    
-    /*
-     * Key for outline cache
-     */
-    VolumeSurfaceOutlineModelCacheKey outlineCacheKey(underlayVolume,
-                                                      sliceViewPlane,
-                                                      sliceCoordinate);
-    switch (sliceProjectionType) {
-        case VolumeSliceProjectionTypeEnum::VOLUME_SLICE_PROJECTION_OBLIQUE:
-            outlineCacheKey = VolumeSurfaceOutlineModelCacheKey(underlayVolume,
-                                                                plane);
-            break;
-        case VolumeSliceProjectionTypeEnum::VOLUME_SLICE_PROJECTION_ORTHOGONAL:
-            break;
-    }
-    
-    /*
-     * Process each surface outline
-     * As of 24 May, "zero" is on top so draw in reverse order
-     */
-    const int32_t numberOfOutlines = outlineSet->getNumberOfDislayedVolumeSurfaceOutlines();
-    for (int32_t io = (numberOfOutlines - 1);
-         io >= 0;
-         io--) {
-        std::vector<GraphicsPrimitive*> contourPrimitives;
-        
-        VolumeSurfaceOutlineModel* outline = outlineSet->getVolumeSurfaceOutlineModel(io);
-        if (outline->isDisplayed()) {
-            Surface* surface = outline->getSurface();
-            if (surface != NULL) {
-                float thicknessPercentage = outline->getThicknessPercentageViewportHeight();
-                const float thicknessPixels = outline->getThicknessPixelsObsolete();
-                
-                /*
-                 * Thickness was changed from pixels to percentage viewport height on Feb 02, 2018
-                 * If thickness percentage is negative, it was not present in an old
-                 * scene so convert pixels to percentage using viewports dimensions
-                 */
-                if (thicknessPercentage < 0.0f) {
-                    thicknessPercentage = GraphicsUtilitiesOpenGL::convertPixelsToPercentageOfViewportHeight(thicknessPixels);
-                    if (thicknessPercentage > 0.0f) {
-                        outline->setThicknessPercentageViewportHeight(thicknessPercentage);
-                    }
-                }
-                
-                if (outline->getOutlineCachePrimitives(underlayVolume,
-                                                       outlineCacheKey,
-                                                       contourPrimitives)) {
-                    /* OK, have cached primitives to draw */
-                }
-                else {
-                    CaretColorEnum::Enum outlineColor = CaretColorEnum::BLACK;
-                    int32_t colorSourceBrowserTabIndex = -1;
-                    
-                    VolumeSurfaceOutlineColorOrTabModel* colorOrTabModel = outline->getColorOrTabModel();
-                    VolumeSurfaceOutlineColorOrTabModel::Item* selectedColorOrTabItem = colorOrTabModel->getSelectedItem();
-                    switch (selectedColorOrTabItem->getItemType()) {
-                        case VolumeSurfaceOutlineColorOrTabModel::Item::ITEM_TYPE_BROWSER_TAB:
-                            colorSourceBrowserTabIndex = selectedColorOrTabItem->getBrowserTabIndex();
-                            outlineColor = CaretColorEnum::CUSTOM;
-                            break;
-                        case VolumeSurfaceOutlineColorOrTabModel::Item::ITEM_TYPE_COLOR:
-                            outlineColor = selectedColorOrTabItem->getColor();
-                            break;
-                    }
-                    const bool surfaceColorFlag = (colorSourceBrowserTabIndex >= 0);
-                    
-                    float* nodeColoringRGBA = NULL;
-                    if (surfaceColorFlag) {
-                        nodeColoringRGBA = fixedPipelineDrawing->surfaceNodeColoring->colorSurfaceNodes(NULL,
-                                                                                                        surface,
-                                                                                                        colorSourceBrowserTabIndex);
-                    }
-                    
-                    SurfacePlaneIntersectionToContour contour(surface,
-                                                              plane,
-                                                              outlineColor,
-                                                              nodeColoringRGBA,
-                                                              thicknessPercentage);
-                    AString errorMessage;
-                    if ( ! contour.createContours(contourPrimitives,
-                                                  errorMessage)) {
-                        CaretLogSevere(errorMessage);
-                    }
-                    
-                    outline->setOutlineCachePrimitives(underlayVolume,
-                                                       outlineCacheKey,
-                                                       contourPrimitives);
-                }
-            }
-        }
-        
-        /**
-         * Draw the contours.
-         * Note: The primitives are now cached so DO NOT delete them.
-         */
-        for (auto primitive : contourPrimitives) {
-            if (useNegativePolygonOffsetFlag) {
-                glPolygonOffset(-1.0, -1.0);
+            if (depthBufferEnabled) {
+                glEnable(GL_DEPTH_TEST);
             }
             else {
-                glPolygonOffset(1.0, 1.0);
-            }
-            glEnable(GL_POLYGON_OFFSET_FILL);
-            
-            GraphicsEngineDataOpenGL::draw(primitive);
-            
-            glDisable(GL_POLYGON_OFFSET_FILL);
-        }
-    }
-    
-    glPopAttrib();
-}
-
-/**
- * Draw surface outlines on the volume slices WITHOUT caching
- *
- * @param modelType
- *    Type of model being drawn.
- * @param plane
- *    Plane of the volume slice on which surface outlines are drawn.
- * @param outlineSet
- *    The surface outline set.
- * @param fixedPipelineDrawing
- *    The fixed pipeline drawing.
- * @param useNegativePolygonOffsetFlag
- *    If true, use a negative offset for polygon offset
- */
-void
-BrainOpenGLVolumeSliceDrawing::drawSurfaceOutlineNotCached(const ModelTypeEnum::Enum modelType,
-                                                           const Plane& plane,
-                                                           VolumeSurfaceOutlineSetModel* outlineSet,
-                                                           BrainOpenGLFixedPipeline* fixedPipelineDrawing,
-                                                           const bool useNegativePolygonOffsetFlag)
-{
-    glPushAttrib(GL_ENABLE_BIT);
-    glDisable(GL_DEPTH_TEST);
-    glDisable(GL_LIGHTING);
-    
-    switch (modelType) {
-        case ModelTypeEnum::MODEL_TYPE_CHART:
-            break;
-        case ModelTypeEnum::MODEL_TYPE_CHART_TWO:
-            break;
-        case ModelTypeEnum::MODEL_TYPE_INVALID:
-            break;
-        case  ModelTypeEnum::MODEL_TYPE_MULTI_MEDIA:
-            break;
-        case ModelTypeEnum::MODEL_TYPE_SURFACE:
-            break;
-        case ModelTypeEnum::MODEL_TYPE_SURFACE_MONTAGE:
-            break;
-        case ModelTypeEnum::MODEL_TYPE_VOLUME_SLICES:
-            break;
-        case ModelTypeEnum::MODEL_TYPE_WHOLE_BRAIN:
-            /*
-             * Enable depth so outlines in front or in back
-             * of the slices.  Without this the volume surface
-             * outlines "behind" the slices are visible and
-             * it looks weird
-             */
-            glEnable(GL_DEPTH_TEST);
-            break;
-    }
-    
-    /*
-     * Process each surface outline
-     * As of 24 May, "zero" is on top so draw in reverse order
-     */
-    const int32_t numberOfOutlines = outlineSet->getNumberOfDislayedVolumeSurfaceOutlines();
-    for (int32_t io = (numberOfOutlines - 1);
-         io >= 0;
-         io--) {
-        std::vector<GraphicsPrimitive*> contourPrimitives;
-        
-        VolumeSurfaceOutlineModel* outline = outlineSet->getVolumeSurfaceOutlineModel(io);
-        if (outline->isDisplayed()) {
-            Surface* surface = outline->getSurface();
-            if (surface != NULL) {
-                float thicknessPercentage = outline->getThicknessPercentageViewportHeight();
-                const float thicknessPixels = outline->getThicknessPixelsObsolete();
-                
-                /*
-                 * Thickness was changed from pixels to percentage viewport height on Feb 02, 2018
-                 * If thickness percentage is negative, it was not present in an old
-                 * scene so convert pixels to percentage using viewports dimensions
-                 */
-                if (thicknessPercentage < 0.0f) {
-                    thicknessPercentage = GraphicsUtilitiesOpenGL::convertPixelsToPercentageOfViewportHeight(thicknessPixels);
-                    if (thicknessPercentage > 0.0f) {
-                        outline->setThicknessPercentageViewportHeight(thicknessPercentage);
-                    }
-                }
-                
-                CaretColorEnum::Enum outlineColor = CaretColorEnum::BLACK;
-                int32_t colorSourceBrowserTabIndex = -1;
-                
-                VolumeSurfaceOutlineColorOrTabModel* colorOrTabModel = outline->getColorOrTabModel();
-                VolumeSurfaceOutlineColorOrTabModel::Item* selectedColorOrTabItem = colorOrTabModel->getSelectedItem();
-                switch (selectedColorOrTabItem->getItemType()) {
-                    case VolumeSurfaceOutlineColorOrTabModel::Item::ITEM_TYPE_BROWSER_TAB:
-                        colorSourceBrowserTabIndex = selectedColorOrTabItem->getBrowserTabIndex();
-                        outlineColor = CaretColorEnum::CUSTOM;
-                        break;
-                    case VolumeSurfaceOutlineColorOrTabModel::Item::ITEM_TYPE_COLOR:
-                        outlineColor = selectedColorOrTabItem->getColor();
-                        break;
-                }
-                const bool surfaceColorFlag = (colorSourceBrowserTabIndex >= 0);
-                
-                float* nodeColoringRGBA = NULL;
-                if (surfaceColorFlag) {
-                    nodeColoringRGBA = fixedPipelineDrawing->surfaceNodeColoring->colorSurfaceNodes(NULL,
-                                                                                                    surface,
-                                                                                                    colorSourceBrowserTabIndex);
-                }
-                
-                SurfacePlaneIntersectionToContour contour(surface,
-                                                          plane,
-                                                          outlineColor,
-                                                          nodeColoringRGBA,
-                                                          thicknessPercentage);
-                AString errorMessage;
-                if ( ! contour.createContours(contourPrimitives,
-                                              errorMessage)) {
-                    CaretLogSevere(errorMessage);
-                }
+                glDisable(GL_DEPTH_TEST);
             }
         }
         
-        /**
-         * Draw the contours.
-         */
-        for (auto primitive : contourPrimitives) {
-            if (useNegativePolygonOffsetFlag) {
-                glPolygonOffset(-1.0, -1.0);
-            }
-            else {
-                glPolygonOffset(1.0, 1.0);
-            }
-            glEnable(GL_POLYGON_OFFSET_FILL);
-            
-            GraphicsEngineDataOpenGL::draw(primitive);
-            delete primitive;
-            
-            glDisable(GL_POLYGON_OFFSET_FILL);
-        }
-    }
-    
-    glPopAttrib();
-}
-
-
-/**
- * Draw foci on volume slice.
- *
- * @param plane
- *   Plane of the volume slice on which surface outlines are drawn.
- */
-void
-BrainOpenGLVolumeSliceDrawing::drawVolumeSliceFoci(const Plane& plane)
-{
-    SelectionItemFocusVolume* idFocus = m_brain->getSelectionManager()->getVolumeFocusIdentification();
-    
-    /*
-     * Check for a 'selection' type mode
-     */
-    bool isSelect = false;
-    switch (m_fixedPipelineDrawing->mode) {
-        case BrainOpenGLFixedPipeline::MODE_DRAWING:
-            break;
-        case BrainOpenGLFixedPipeline::MODE_IDENTIFICATION:
-            if (idFocus->isEnabledForSelection()) {
-                isSelect = true;
-                glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-            }
-            else {
-                return;
-            }
-            break;
-        case BrainOpenGLFixedPipeline::MODE_PROJECTION:
-            return;
-            break;
-    }
-    
-    VolumeMappableInterface* underlayVolume = m_volumeDrawInfo[0].volumeFile;
-    float minVoxelSpacing;
-    float maxVoxelSpacing;
-    if ( ! getMinMaxVoxelSpacing(underlayVolume, minVoxelSpacing, maxVoxelSpacing)) {
-        return;
-    }
-    
-    const float sliceThickness = maxVoxelSpacing;
-    const float halfSliceThickness = sliceThickness * 0.5;
-    
-    
-    const DisplayPropertiesFoci* fociDisplayProperties = m_brain->getDisplayPropertiesFoci();
-    const DisplayGroupEnum::Enum displayGroup = fociDisplayProperties->getDisplayGroupForTab(m_fixedPipelineDrawing->windowTabIndex);
-    
-    const CaretColorEnum::Enum caretColor = fociDisplayProperties->getStandardColorType(displayGroup,
-                                                                                        m_fixedPipelineDrawing->windowTabIndex);
-    float caretColorRGBA[4];
-    CaretColorEnum::toRGBAFloat(caretColor, caretColorRGBA);
-    
-    if (fociDisplayProperties->isDisplayed(displayGroup,
-                                           m_fixedPipelineDrawing->windowTabIndex) == false) {
-        return;
-    }
-//    const float focusDiameter = fociDisplayProperties->getFociSizeMillimeters(displayGroup,
-//                                                                   m_fixedPipelineDrawing->windowTabIndex);
-    float focusDiameter(1.0);
-    switch (fociDisplayProperties->getFociSymbolSizeType(displayGroup,
-                                                         m_fixedPipelineDrawing->windowTabIndex)) {
-        case IdentificationSymbolSizeTypeEnum::MILLIMETERS:
-            focusDiameter = fociDisplayProperties->getFociSizeMillimeters(displayGroup,
-                                                                          m_fixedPipelineDrawing->windowTabIndex);
-            break;
-        case IdentificationSymbolSizeTypeEnum::PERCENTAGE:
-        {
-            focusDiameter = fociDisplayProperties->getFociSizePercentage(displayGroup,
-                                                                         m_fixedPipelineDrawing->windowTabIndex);
-            BoundingBox boundingBox;
-            underlayVolume->getVoxelSpaceBoundingBox(boundingBox);
-            const float maxDimension = boundingBox.getMaximumDifferenceOfXYZ();
-            focusDiameter = maxDimension * (focusDiameter / 100.0);
-        }
-            break;
-    }
-    
-    const FeatureColoringTypeEnum::Enum fociColoringType = fociDisplayProperties->getColoringType(displayGroup,
-                                                                                                  m_fixedPipelineDrawing->windowTabIndex);
-    
-    bool drawAsSpheres = false;
-    switch (fociDisplayProperties->getDrawingType(displayGroup,
-                                                  m_fixedPipelineDrawing->windowTabIndex)) {
-        case FociDrawingTypeEnum::DRAW_AS_SPHERES:
-            drawAsSpheres = true;
-            break;
-        case FociDrawingTypeEnum::DRAW_AS_SQUARES:
-            break;
-    }
-    
-    /*
-     * Process each foci file
-     */
-    const int32_t numberOfFociFiles = m_brain->getNumberOfFociFiles();
-    for (int32_t iFile = 0; iFile < numberOfFociFiles; iFile++) {
-        FociFile* fociFile = m_brain->getFociFile(iFile);
+        glPopMatrix();
         
-        const GroupAndNameHierarchyModel* classAndNameSelection = fociFile->getGroupAndNameHierarchyModel();
-        if (classAndNameSelection->isSelected(displayGroup,
-                                              m_fixedPipelineDrawing->windowTabIndex) == false) {
-            continue;
-        }
-        
-        const GiftiLabelTable* classColorTable = fociFile->getClassColorTable();
-        const GiftiLabelTable* nameColorTable = fociFile->getNameColorTable();
-        
-        const int32_t numFoci = fociFile->getNumberOfFoci();
-        
-        for (int32_t j = 0; j < numFoci; j++) {
-            Focus* focus = fociFile->getFocus(j);
-            
-            const GroupAndNameHierarchyItem* groupNameItem = focus->getGroupNameSelectionItem();
-            if (groupNameItem != NULL) {
-                if (groupNameItem->isSelected(displayGroup,
-                                              m_fixedPipelineDrawing->windowTabIndex) == false) {
-                    continue;
-                }
-            }
-            
-            float rgba[4] = { 0.0, 0.0, 0.0, 1.0 };
-            switch (fociColoringType) {
-                case FeatureColoringTypeEnum::FEATURE_COLORING_TYPE_CLASS:
-                    if (focus->isClassRgbaValid() == false) {
-                        const GiftiLabel* colorLabel = classColorTable->getLabelBestMatching(focus->getClassName());
-                        if (colorLabel != NULL) {
-                            colorLabel->getColor(rgba);
-                            focus->setClassRgba(rgba);
-                        }
-                        else {
-                            focus->setClassRgba(rgba);
-                        }
-                    }
-                    focus->getClassRgba(rgba);
-                    break;
-                case FeatureColoringTypeEnum::FEATURE_COLORING_TYPE_STANDARD_COLOR:
-                    rgba[0] = caretColorRGBA[0];
-                    rgba[1] = caretColorRGBA[1];
-                    rgba[2] = caretColorRGBA[2];
-                    rgba[3] = caretColorRGBA[3];
-                    break;
-                case FeatureColoringTypeEnum::FEATURE_COLORING_TYPE_NAME:
-                    if (focus->isNameRgbaValid() == false) {
-                        const GiftiLabel* colorLabel = nameColorTable->getLabelBestMatching(focus->getName());
-                        if (colorLabel != NULL) {
-                            colorLabel->getColor(rgba);
-                            focus->setNameRgba(rgba);
-                        }
-                        else {
-                            focus->setNameRgba(rgba);
-                        }
-                    }
-                    focus->getNameRgba(rgba);
-                    break;
-            }
-
-            /*
-             * Some label tables may have alpha at zero, so correct it
-             */
-            rgba[3] = 1.0;
-
-            const int32_t numProjections = focus->getNumberOfProjections();
-            for (int32_t k = 0; k < numProjections; k++) {
-                const SurfaceProjectedItem* spi = focus->getProjection(k);
-                if (spi->isVolumeXYZValid()) {
-                    float xyz[3];
-                    spi->getVolumeXYZ(xyz);
-                    
-                    bool drawIt = false;
-                    if (plane.absoluteDistanceToPlane(xyz) < halfSliceThickness) {
-                        drawIt = true;
-                    }
-                    
-                    if (drawIt) {
-                        glPushMatrix();
-                        glTranslatef(xyz[0], xyz[1], xyz[2]);
-                        if (isSelect) {
-                            uint8_t idRGBA[4];
-                            m_fixedPipelineDrawing->colorIdentification->addItem(idRGBA,
-                                                                                 SelectionItemDataTypeEnum::FOCUS_VOLUME,
-                                                                                 iFile, // file index
-                                                                                 j, // focus index
-                                                                                 k);// projection index
-                            idRGBA[3] = 255;
-                            if (drawAsSpheres) {
-                                m_fixedPipelineDrawing->drawSphereWithDiameter(idRGBA,
-                                                                               focusDiameter);
-                            }
-                            else {
-                                glColor4ubv(idRGBA);
-                                drawSquare(focusDiameter);
-                            }
-                        }
-                        else {
-                            if (drawAsSpheres) {
-                                m_fixedPipelineDrawing->drawSphereWithDiameter(rgba,
-                                                                               focusDiameter);
-                            }
-                            else {
-                                glColor3fv(rgba);
-                                drawSquare(focusDiameter);
-                            }
-                        }
-                        glPopMatrix();
-                    }
-                }
-            }
-        }
-    }
-    
-    if (isSelect) {
-        int32_t fociFileIndex = -1;
-        int32_t focusIndex = -1;
-        int32_t focusProjectionIndex = -1;
-        float depth = -1.0;
-        m_fixedPipelineDrawing->getIndexFromColorSelection(SelectionItemDataTypeEnum::FOCUS_VOLUME,
-                                                           m_fixedPipelineDrawing->mouseX,
-                                                           m_fixedPipelineDrawing->mouseY,
-                                                           fociFileIndex,
-                                                           focusIndex,
-                                                           focusProjectionIndex,
-                                                           depth);
-        if (fociFileIndex >= 0) {
-            if (idFocus->isOtherScreenDepthCloserToViewer(depth)) {
-                Focus* focus = m_brain->getFociFile(fociFileIndex)->getFocus(focusIndex);
-                idFocus->setBrain(m_brain);
-                idFocus->setFocus(focus);
-                idFocus->setFociFile(m_brain->getFociFile(fociFileIndex));
-                idFocus->setFocusIndex(focusIndex);
-                idFocus->setFocusProjectionIndex(focusProjectionIndex);
-                idFocus->setVolumeFile(underlayVolume);
-                idFocus->setScreenDepth(depth);
-                float xyz[3];
-                const SurfaceProjectedItem* spi = focus->getProjection(focusProjectionIndex);
-                spi->getVolumeXYZ(xyz);
-                m_fixedPipelineDrawing->setSelectedItemScreenXYZ(idFocus, xyz);
-                CaretLogFine("Selected Volume Focus Identification Symbol: " + QString::number(focusIndex));
-            }
+        if (cullFaceOn) {
+            glEnable(GL_CULL_FACE);
         }
     }
 }
+
 
 /**
  * Draw the axes crosshairs.
@@ -3141,6 +2559,10 @@ BrainOpenGLVolumeSliceDrawing::drawAxesCrosshairs(const VolumeSliceProjectionTyp
                                     drawCrosshairLabelsFlag);
             glPopMatrix();
         }
+            break;
+        case VolumeSliceProjectionTypeEnum::VOLUME_SLICE_PROJECTION_MPR:
+        case VolumeSliceProjectionTypeEnum::VOLUME_SLICE_PROJECTION_MPR_THREE:
+            CaretAssert(0);
             break;
     }
 }
@@ -3476,13 +2898,15 @@ BrainOpenGLVolumeSliceDrawing::getMinMaxVoxelSpacing(const VolumeMappableInterfa
  *    View plane that is displayed.
  * @param boundingBox
  *    Bounding box for all volume.
+ * @param zoomFactor
+ *    Zooming
  * @param viewport
  *    The viewport.
  * @param orthographicBoundsOut
  *    Output containing the orthographic bounds used for orthographic projection.
  */
 void
-BrainOpenGLVolumeSliceDrawing::setOrthographicProjection(const AllSliceViewMode allSliceViewMode,
+BrainOpenGLVolumeSliceDrawing::getOrthographicProjection(const AllSliceViewMode allSliceViewMode,
                                                          const VolumeSliceViewPlaneEnum::Enum sliceViewPlane,
                                                          const BoundingBox& boundingBox,
                                                          const float zoomFactor,
@@ -3573,6 +2997,38 @@ BrainOpenGLVolumeSliceDrawing::setOrthographicProjection(const AllSliceViewMode 
     orthographicBoundsOut[3] = orthoTop;
     orthographicBoundsOut[4] = nearDepth;
     orthographicBoundsOut[5] = farDepth;
+}
+
+/**
+ * Set the orthographic projection.
+ *
+ * @param allSliceViewMode
+ *    Indicates drawing of ALL slices volume view (axial, coronal, parasagittal in one view)
+ * @param sliceViewPlane
+ *    View plane that is displayed.
+ * @param boundingBox
+ *    Bounding box for all volume.
+ * @param zoomFactor
+ *    Zooming
+ * @param viewport
+ *    The viewport.
+ * @param orthographicBoundsOut
+ *    Output containing the orthographic bounds used for orthographic projection.
+ */
+void
+BrainOpenGLVolumeSliceDrawing::setOrthographicProjection(const AllSliceViewMode allSliceViewMode,
+                                                         const VolumeSliceViewPlaneEnum::Enum sliceViewPlane,
+                                                         const BoundingBox& boundingBox,
+                                                         const float zoomFactor,
+                                                         const int viewport[4],
+                                                         double orthographicBoundsOut[6])
+{
+    getOrthographicProjection(allSliceViewMode,
+                              sliceViewPlane,
+                              boundingBox,
+                              zoomFactor,
+                              viewport,
+                              orthographicBoundsOut);
     
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
@@ -3642,6 +3098,10 @@ BrainOpenGLVolumeSliceDrawing::setOrthographicProjection(const AllSliceViewMode 
  *    Selected map in the volume being drawn.
  * @param sliceOpacity
  *    Opacity from the overlay.
+ * @param sliceViewPlane
+ *    Slice plane being drawn
+ * @param sliceIndex
+ *    Index of slice being drawn
  */
 void
 BrainOpenGLVolumeSliceDrawing::drawOrthogonalSliceVoxels(const float sliceNormalVector[3],
@@ -3655,7 +3115,9 @@ BrainOpenGLVolumeSliceDrawing::drawOrthogonalSliceVoxels(const float sliceNormal
                                                          const VolumeMappableInterface* volumeInterface,
                                                          const int32_t volumeIndex,
                                                          const int32_t mapIndex,
-                                                         const uint8_t sliceOpacity)
+                                                         const uint8_t sliceOpacity,
+                                                         const VolumeSliceViewPlaneEnum::Enum sliceViewPlane,
+                                                         const int32_t sliceIndex)
 {
     if (validVoxelCount <= 0) {
         if (m_identificationModeFlag) {
@@ -3742,7 +3204,45 @@ BrainOpenGLVolumeSliceDrawing::drawOrthogonalSliceVoxels(const float sliceNormal
                                                       sliceOpacity);
     }
     glGetBooleanv(GL_BLEND, &blendOn);
-
+    
+    
+    if (volumeIndex == 0) {
+        if (m_modelType == ModelTypeEnum::MODEL_TYPE_VOLUME_SLICES) {
+            bool updateFlag(false);
+            switch (sliceViewPlane) {
+                case VolumeSliceViewPlaneEnum::ALL:
+                    break;
+                case VolumeSliceViewPlaneEnum::AXIAL:
+                    if (sliceIndex == m_browserTabContent->getVolumeSliceIndexAxial(volumeInterface)) {
+                        updateFlag = true;
+                    }
+                    break;
+                case VolumeSliceViewPlaneEnum::CORONAL:
+                    if (sliceIndex == m_browserTabContent->getVolumeSliceIndexCoronal(volumeInterface)) {
+                        updateFlag = true;
+                    }
+                    break;
+                case VolumeSliceViewPlaneEnum::PARASAGITTAL:
+                    if (sliceIndex == m_browserTabContent->getVolumeSliceIndexParasagittal(volumeInterface)) {
+                        updateFlag = true;
+                    }
+                    break;
+            }
+            
+            if (updateFlag) {
+                std::array<float, 4> orthoLRBT {
+                    static_cast<float>(m_orthographicBounds[0]),
+                    static_cast<float>(m_orthographicBounds[1]),
+                    static_cast<float>(m_orthographicBounds[2]),
+                    static_cast<float>(m_orthographicBounds[3])
+                };
+                GraphicsObjectToWindowTransform* transform = new GraphicsObjectToWindowTransform();
+                m_fixedPipelineDrawing->loadObjectToWindowTransform(transform, orthoLRBT, 0.0, true);
+                CaretAssert(m_viewportContent);
+                m_viewportContent->setVolumeMprGraphicsObjectToWindowTransform(sliceViewPlane, transform);
+            }
+        }
+    }
 }
 
 /**
@@ -4514,9 +4014,12 @@ BrainOpenGLVolumeSliceDrawing::addVoxelToIdentification(const int32_t volumeInde
  *
  * @param doNotReplaceUnderlayFlag
  * If true, do not replace identification from a lower layer
+ * @param plane
+ *    The plane of slice
  */
 void
-BrainOpenGLVolumeSliceDrawing::processIdentification(const bool doNotReplaceUnderlayFlag)
+BrainOpenGLVolumeSliceDrawing::processIdentification(const bool doNotReplaceUnderlayFlag,
+                                                     const Plane& plane)
 {
     int32_t identifiedItemIndex;
     float depth = -1.0;
@@ -4546,14 +4049,16 @@ BrainOpenGLVolumeSliceDrawing::processIdentification(const bool doNotReplaceUnde
                 /* do not replace the identified voxel */
             }
             else if (voxelID->isOtherScreenDepthCloserToViewer(depth)) {
-                voxelID->setVoxelIdentification(m_brain,
-                                                vf,
-                                                voxelIndices,
-                                                depth);
-                
                 float voxelCoordinates[3];
                 vf->indexToSpace(voxelIndices[0], voxelIndices[1], voxelIndices[2],
                                  voxelCoordinates[0], voxelCoordinates[1], voxelCoordinates[2]);
+                voxelID->setVoxelIdentification(m_brain,
+                                                vf,
+                                                voxelIndices,
+                                                voxelCoordinates,
+                                                plane,
+                                                depth);
+                
                 
                 m_fixedPipelineDrawing->setSelectedItemScreenXYZ(voxelID,
                                                                  voxelCoordinates);
@@ -4565,15 +4070,17 @@ BrainOpenGLVolumeSliceDrawing::processIdentification(const bool doNotReplaceUnde
         if (voxelEditID->isEnabledForSelection()) {
             if (voxelEditID->getVolumeFileForEditing() == vf) {
                 if (voxelEditID->isOtherScreenDepthCloserToViewer(depth)) {
-                    voxelEditID->setVoxelIdentification(m_brain,
-                                                        vf,
-                                                        voxelIndices,
-                                                        depth);
-                    voxelEditID->setVoxelDiffXYZ(floatDiffXYZ);
-                    
                     float voxelCoordinates[3];
                     vf->indexToSpace(voxelIndices[0], voxelIndices[1], voxelIndices[2],
                                      voxelCoordinates[0], voxelCoordinates[1], voxelCoordinates[2]);
+                    voxelEditID->setVoxelIdentification(m_brain,
+                                                        vf,
+                                                        voxelIndices,
+                                                        voxelCoordinates,
+                                                        plane,
+                                                        depth);
+                    voxelEditID->setVoxelDiffXYZ(floatDiffXYZ);
+                    
                     
                     m_fixedPipelineDrawing->setSelectedItemScreenXYZ(voxelEditID,
                                                                      voxelCoordinates);
@@ -4586,90 +4093,6 @@ BrainOpenGLVolumeSliceDrawing::processIdentification(const bool doNotReplaceUnde
             }
         }
     }
-}
-
-/**
- * Get the maximum bounds that enclose the volumes and the minimum
- * voxel spacing from the volumes.
- *
- * @param boundsOut
- *    Bounds of the volumes.
- * @param spacingOut
- *    Minimum voxel spacing from the volumes.  Always positive values (even if
- *    volumes is oriented right to left).
- *
- */
-bool
-BrainOpenGLVolumeSliceDrawing::getVoxelCoordinateBoundsAndSpacing(float boundsOut[6],
-                                                                float spacingOut[3])
-{
-    const int32_t numberOfVolumesToDraw = static_cast<int32_t>(m_volumeDrawInfo.size());
-    if (numberOfVolumesToDraw <= 0) {
-        return false;
-    }
-    
-    /*
-     * Find maximum extent of all voxels and smallest voxel
-     * size in each dimension.
-     */
-    float minVoxelX = std::numeric_limits<float>::max();
-    float maxVoxelX = -std::numeric_limits<float>::max();
-    float minVoxelY = std::numeric_limits<float>::max();
-    float maxVoxelY = -std::numeric_limits<float>::max();
-    float minVoxelZ = std::numeric_limits<float>::max();
-    float maxVoxelZ = -std::numeric_limits<float>::max();
-    float voxelStepX = std::numeric_limits<float>::max();
-    float voxelStepY = std::numeric_limits<float>::max();
-    float voxelStepZ = std::numeric_limits<float>::max();
-    for (int32_t i = 0; i < numberOfVolumesToDraw; i++) {
-        const VolumeMappableInterface* volumeFile = m_volumeDrawInfo[i].volumeFile;
-        int64_t dimI, dimJ, dimK, numMaps, numComponents;
-        volumeFile->getDimensions(dimI, dimJ, dimK, numMaps, numComponents);
-        
-        float originX, originY, originZ;
-        float x1, y1, z1;
-        float lastX, lastY, lastZ;
-        volumeFile->indexToSpace(0, 0, 0, originX, originY, originZ);
-        volumeFile->indexToSpace(1, 1, 1, x1, y1, z1);
-        volumeFile->indexToSpace(dimI - 1, dimJ - 1, dimK - 1, lastX, lastY, lastZ);
-        const float dx = x1 - originX;
-        const float dy = y1 - originY;
-        const float dz = z1 - originZ;
-        voxelStepX = std::min(voxelStepX, std::fabs(dx));
-        voxelStepY = std::min(voxelStepY, std::fabs(dy));
-        voxelStepZ = std::min(voxelStepZ, std::fabs(dz));
-        
-        minVoxelX = std::min(minVoxelX, std::min(originX, lastX));
-        maxVoxelX = std::max(maxVoxelX, std::max(originX, lastX));
-        minVoxelY = std::min(minVoxelY, std::min(originY, lastY));
-        maxVoxelY = std::max(maxVoxelY, std::max(originY, lastY));
-        minVoxelZ = std::min(minVoxelZ, std::min(originZ, lastZ));
-        maxVoxelZ = std::max(maxVoxelZ, std::max(originZ, lastZ));
-    }
-    
-    boundsOut[0] = minVoxelX;
-    boundsOut[1] = maxVoxelX;
-    boundsOut[2] = minVoxelY;
-    boundsOut[3] = maxVoxelY;
-    boundsOut[4] = minVoxelZ;
-    boundsOut[5] = maxVoxelZ;
-    
-    spacingOut[0] = voxelStepX;
-    spacingOut[1] = voxelStepY;
-    spacingOut[2] = voxelStepZ;
-    
-    bool valid = false;
-    
-    if ((maxVoxelX > minVoxelX)
-        && (maxVoxelY > minVoxelY)
-        && (maxVoxelZ > minVoxelZ)
-        && (voxelStepX > 0.0)
-        && (voxelStepY > 0.0)
-        && (voxelStepZ > 0.0)) {
-        valid = true;
-    }
-    
-    return valid;
 }
 
 /**
@@ -4776,9 +4199,10 @@ BrainOpenGLVolumeSliceDrawing::getVolumeDrawingViewDependentCulling(const Volume
 
     {
         float spaceX, spaceY, spaceZ;
-        volumeFile->getVoxelSpacing(spaceX,
-                                    spaceY,
-                                    spaceZ);
+        volumeFile->getVoxelSpacingPCA(spaceX,
+                                       spaceY,
+                                       spaceZ);
+
         const float halfX = std::fabs(spaceX / 2.0);
         const float halfY = std::fabs(spaceY / 2.0);
         const float halfZ = std::fabs(spaceZ / 2.0);
@@ -4866,9 +4290,9 @@ BrainOpenGLVolumeSliceDrawing::getVolumeDrawingViewDependentCulling(const Volume
      * and positive may be on left or bottom
      */
     float voxelDeltaX, voxelDeltaY, voxelDeltaZ;
-    volumeFile->getVoxelSpacing(voxelDeltaX,
-                                voxelDeltaY,
-                                voxelDeltaZ);
+    volumeFile->getVoxelSpacingPCA(voxelDeltaX,
+                                   voxelDeltaY,
+                                   voxelDeltaZ);
     voxelDeltaX = std::fabs(voxelDeltaX);
     voxelDeltaY = std::fabs(voxelDeltaY);
     voxelDeltaZ = std::fabs(voxelDeltaZ);
@@ -5617,14 +5041,17 @@ BrainOpenGLVolumeSliceDrawing::drawOrthogonalSliceAllView(const VolumeSliceViewP
                                   volumeInterface,
                                   iVol,
                                   volInfo.mapIndex,
-                                  volumeDrawingOpacity);
+                                  volumeDrawingOpacity,
+                                  sliceViewingPlane,
+                                  sliceIndexForDrawing);
         
         glDisable(GL_POLYGON_OFFSET_FILL);
         
         glPopAttrib();
         
         if (m_identificationModeFlag) {
-            processIdentification(false);
+            processIdentification(false,
+                                  plane);
         }
     }
     
@@ -5636,3 +5063,126 @@ BrainOpenGLVolumeSliceDrawing::drawOrthogonalSliceAllView(const VolumeSliceViewP
     glShadeModel(GL_SMOOTH);
 }
 
+/**
+ * Draw slice coordinates on a montage slice
+ * @param fixedPipelineDrawing,
+ *    The fixed pipeline drawing
+ * @param browserTabContent,
+ *    Content of the browser tab
+ * @param sliceViewPlane
+ *    Slice view plane
+ * @param viewport,
+ *    Montage viewport
+ * @param viewportTextY,
+ *    Viewport Y for text
+ * @param sliceXYZ,
+ *    The slice 3D coordinate
+ * @param sliceOffset
+ *    The slice offset
+ */
+void
+BrainOpenGLVolumeSliceDrawing::drawMontageSliceCoordinates(BrainOpenGLFixedPipeline* fixedPipelineDrawing,
+                                                           const BrowserTabContent* browserTabContent,
+                                                           const VolumeSliceViewPlaneEnum::Enum sliceViewPlane,
+                                                           const int32_t viewport[4],
+                                                           const Vector3D sliceXYZ,
+                                                           const float sliceOffset)
+{
+    if ( ! browserTabContent->isVolumeMontageAxesCoordinatesDisplayed()) {
+        return;
+    }
+    
+    const CaretPreferences* prefs = SessionManager::get()->getCaretPreferences();
+    uint8_t foregroundRGBA[4];
+    prefs->getBackgroundAndForegroundColors()->getColorForegroundVolumeView(foregroundRGBA);
+    foregroundRGBA[3] = 255;
+    const VolumeMontageCoordinateDisplayTypeEnum::Enum coordDisplayType(browserTabContent->getVolumeMontageCoordinatesDislayType());
+    uint8_t backgroundRGBA[4];
+    prefs->getBackgroundAndForegroundColors()->getColorBackgroundVolumeView(backgroundRGBA);
+    backgroundRGBA[3] = 255;
+    const int32_t precision(browserTabContent->getVolumeMontageCoordinatePrecision());
+    
+    AString coordText;
+    switch (coordDisplayType) {
+        case VolumeMontageCoordinateDisplayTypeEnum::OFF:
+            break;
+        case VolumeMontageCoordinateDisplayTypeEnum::OFFSET:
+        {
+            switch (browserTabContent->getVolumeSliceProjectionType()) {
+                case VolumeSliceProjectionTypeEnum::VOLUME_SLICE_PROJECTION_MPR:
+                case VolumeSliceProjectionTypeEnum::VOLUME_SLICE_PROJECTION_MPR_THREE:
+                {
+                    const AString plusSignText((sliceOffset > 0.0) ? "+" : "");
+                    coordText = (plusSignText
+                                 + AString::number(sliceOffset, 'f', precision)
+                                 + "mm");
+                }
+                    break;
+                case VolumeSliceProjectionTypeEnum::VOLUME_SLICE_PROJECTION_OBLIQUE:
+                case VolumeSliceProjectionTypeEnum::VOLUME_SLICE_PROJECTION_ORTHOGONAL:
+                {
+                    AString axisLetter;
+                    switch (sliceViewPlane) {
+                        case VolumeSliceViewPlaneEnum::ALL:
+                            CaretAssert(0);
+                            break;
+                        case VolumeSliceViewPlaneEnum::AXIAL:
+                            axisLetter = "Z";
+                            break;
+                        case VolumeSliceViewPlaneEnum::CORONAL:
+                            axisLetter = "Y";
+                            break;
+                        case VolumeSliceViewPlaneEnum::PARASAGITTAL:
+                            axisLetter = "X";
+                            break;
+                    }
+                    coordText = (axisLetter
+                                 + "="
+                                 + AString::number(sliceOffset, 'f', precision));
+                }
+                    break;
+            }
+        }
+            break;
+        case VolumeMontageCoordinateDisplayTypeEnum::XYZ:
+            coordText = (AString::number(sliceXYZ[0], 'f', precision)
+                         + ", "
+                         + AString::number(sliceXYZ[1], 'f', precision)
+                         + ", "
+                         + AString::number(sliceXYZ[2], 'f', precision));
+            break;
+    }
+    
+    if ( ! coordText.isEmpty()) {
+        AnnotationTextAlignHorizontalEnum::Enum alignment(AnnotationTextAlignHorizontalEnum::RIGHT);
+        int32_t viewportTextX(0);
+        int32_t viewportTextY(5);
+        const int32_t viewportWidth(viewport[2]);
+        switch (browserTabContent->getVolumeMontageCoordinateTextAlignment()) {
+            case VolumeMontageCoordinateTextAlignmentEnum::LEFT:
+                alignment     = AnnotationTextAlignHorizontalEnum::LEFT;
+                viewportTextX = 5;
+                break;
+            case VolumeMontageCoordinateTextAlignmentEnum::CENTER:
+                alignment     = AnnotationTextAlignHorizontalEnum::CENTER;
+                viewportTextX = (viewportWidth / 2);
+                break;
+            case VolumeMontageCoordinateTextAlignmentEnum::RIGHT:
+                alignment     = AnnotationTextAlignHorizontalEnum::RIGHT;
+                viewportTextX = viewportWidth - 5;
+                break;
+        }
+        AnnotationPercentSizeText annotationText(AnnotationAttributesDefaultTypeEnum::NORMAL);
+        annotationText.setHorizontalAlignment(alignment);
+        annotationText.setVerticalAlignment(AnnotationTextAlignVerticalEnum::BOTTOM);
+        annotationText.setFontPercentViewportSize(browserTabContent->getVolumeMontageCoordinateFontHeight());
+        annotationText.setTextColor(CaretColorEnum::CUSTOM);
+        annotationText.setCustomTextColor(foregroundRGBA);
+        annotationText.setBackgroundColor(CaretColorEnum::CUSTOM);
+        annotationText.setCustomBackgroundColor(backgroundRGBA);
+        annotationText.setText(coordText);
+        fixedPipelineDrawing->drawTextAtViewportCoords(viewportTextX,
+                                                       viewportTextY,
+                                                       annotationText);
+    }
+}

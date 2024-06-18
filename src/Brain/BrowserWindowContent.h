@@ -31,9 +31,11 @@
 #include "TileTabsLayoutConfigurationTypeEnum.h"
 
 namespace caret {
+    class WindowTabAspectRatios;
     class SceneClassAssistant;
     class TileTabsLayoutBaseConfiguration;
     class TileTabsLayoutGridConfiguration;
+    class TileTabsLayoutManualConfiguration;
     
     class BrowserWindowContent : public CaretObject, public SceneableInterface {
         
@@ -88,6 +90,10 @@ namespace caret {
         
         void setManualConfigurationFromGridConfiguration(TileTabsLayoutGridConfiguration* gridConfiguration);
         
+        void setPreviousManualTileTabsConfiguration(TileTabsLayoutManualConfiguration* manualConfiguration);
+        
+        const TileTabsLayoutManualConfiguration* getPreviousManualTileTabsConfiguration() const;
+        
         int32_t getSceneGraphicsWidth() const;
         
         void setSceneGraphicsWidth(const int32_t width);
@@ -107,6 +113,10 @@ namespace caret {
         int32_t getWindowAnnotationsStackingOrder() const;
         
         void setWindowAnnotationsStackingOrder(const int32_t stackingOrder);
+        
+        const WindowTabAspectRatios getWindowTabAspectRatios() const;
+        
+        void setWindowTabAspectRatios(const WindowTabAspectRatios& windowTabAspectRatios);
         
         // ADD_NEW_METHODS_HERE
 
@@ -155,21 +165,25 @@ namespace caret {
         
         bool m_tileTabsEnabled = false;
         
-        TileTabsLayoutConfigurationTypeEnum::Enum m_tileTabsConfigurationMode = TileTabsLayoutConfigurationTypeEnum::AUTOMATIC_GRID;
-        
         int32_t m_sceneGraphicsWidth = 0;
         
         int32_t m_sceneGraphicsHeight = 0;
-        
-        std::unique_ptr<TileTabsLayoutGridConfiguration> m_automaticGridTileTabsConfiguration;
-        
-        std::unique_ptr<TileTabsLayoutGridConfiguration> m_customGridTileTabsConfiguration;
         
         int32_t m_sceneSelectedTabIndex = 0;
         
         std::vector<int32_t> m_sceneTabIndices;
         
         int32_t m_windowAnnotationsStackingOrder = -1000;
+        
+        std::unique_ptr<WindowTabAspectRatios> m_windowTabAspectRatios;
+        
+        TileTabsLayoutConfigurationTypeEnum::Enum m_tileTabsConfigurationMode = TileTabsLayoutConfigurationTypeEnum::AUTOMATIC_GRID;
+        
+        std::unique_ptr<TileTabsLayoutGridConfiguration> m_automaticGridTileTabsConfiguration;
+        
+        std::unique_ptr<TileTabsLayoutGridConfiguration> m_customGridTileTabsConfiguration;
+        
+        std::unique_ptr<TileTabsLayoutManualConfiguration> m_previousManualTileTabsConfiguration;
         
         friend class BrainBrowserWindow;
 

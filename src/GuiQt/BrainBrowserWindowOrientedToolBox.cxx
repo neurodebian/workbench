@@ -53,11 +53,13 @@
 #include "FiberOrientationSelectionViewController.h"
 #include "FociSelectionViewController.h"
 #include "GuiManager.h"
+#include "HistologyOverlaySetViewController.h"
 #include "IdentificationDisplayWidget.h"
 #include "ImageSelectionViewController.h"
 #include "LabelSelectionViewController.h"
 #include "MediaOverlaySetViewController.h"
 #include "OverlaySetViewController.h"
+#include "SamplesSelectionViewController.h"
 #include "SceneClass.h"
 #include "ScenePrimitiveArray.h"
 #include "SceneWindowGeometry.h"
@@ -142,19 +144,21 @@ BrainBrowserWindowOrientedToolBox::BrainBrowserWindowOrientedToolBox(const int32
                   + "_"
                   + AString::number(browserWindowIndex));
     
-    m_annotationTabWidget              = NULL;
-    m_annotationViewController         = NULL;
+    m_annotationTabWidget               = NULL;
+    m_annotationViewController          = NULL;
     m_annotationTextSubstitutionViewController = NULL;
-    m_borderSelectionViewController    = NULL;
-    m_chartOverlaySetViewController    = NULL;
-    m_chartToolBoxViewController       = NULL;
-    m_connectivityMatrixViewController = NULL;
-    m_fiberOrientationViewController   = NULL;
-    m_fociSelectionViewController      = NULL;
-    m_imageSelectionViewController     = NULL;
-    m_labelSelectionViewController     = NULL;
-    m_mediaSelectionViewController     = NULL;
-    m_overlaySetViewController         = NULL;
+    m_borderSelectionViewController     = NULL;
+    m_chartOverlaySetViewController     = NULL;
+    m_chartToolBoxViewController        = NULL;
+    m_connectivityMatrixViewController  = NULL;
+    m_fiberOrientationViewController    = NULL;
+    m_fociSelectionViewController       = NULL;
+    m_histologyOverlaySetViewController = NULL;
+    m_imageSelectionViewController      = NULL;
+    m_labelSelectionViewController      = NULL;
+    m_mediaSelectionViewController      = NULL;
+    m_overlaySetViewController          = NULL;
+    m_samplesSelectionViewController    = NULL;
     m_volumeSurfaceOutlineSetViewController = NULL;
 
     m_tabWidget = new WuQTabWidgetWithSizeHint();
@@ -187,10 +191,12 @@ BrainBrowserWindowOrientedToolBox::BrainBrowserWindowOrientedToolBox(const int32
     m_connectivityTabIndex = -1;
     m_fiberOrientationTabIndex = -1;
     m_fociTabIndex = -1;
+    m_histologyTabIndex = -1;
     m_imageTabIndex = -1;
     m_labelTabIndex = -1;
     m_mediaTabIndex = -1;
     m_overlayTabIndex = -1;
+    m_samplesTabIndex = -1;
     m_volumeSurfaceOutlineTabIndex = -1;
     
     if (isOverlayToolBox) {
@@ -267,6 +273,15 @@ BrainBrowserWindowOrientedToolBox::BrainBrowserWindowOrientedToolBox(const int32
                              "Foci");
     }
     
+    if (isOverlayToolBox) {
+        m_histologyOverlaySetViewController = new HistologyOverlaySetViewController(orientation,
+                                                                                    browserWindowIndex,
+                                                                                    objectNamePrefix,
+                                                                                    this);
+        m_histologyTabIndex = addToTabWidget(m_histologyOverlaySetViewController,
+                                             "Histology");
+    }
+    
     if (isFeaturesToolBox) {
         m_imageSelectionViewController = new ImageSelectionViewController(browserWindowIndex,
                                                                           objectNamePrefix,
@@ -290,6 +305,14 @@ BrainBrowserWindowOrientedToolBox::BrainBrowserWindowOrientedToolBox(const int32
                                                                            this);
         m_mediaTabIndex = addToTabWidget(m_mediaSelectionViewController,
                                          "Media");
+    }
+    
+    if (isFeaturesToolBox) {
+        m_samplesSelectionViewController = new SamplesSelectionViewController(browserWindowIndex,
+                                                                              objectNamePrefix,
+                                                                              this);
+        m_samplesTabIndex = addToTabWidget(m_samplesSelectionViewController,
+                                           "Samples");
     }
     
     if (isOverlayToolBox) {
@@ -577,6 +600,10 @@ BrainBrowserWindowOrientedToolBox::saveToScene(const SceneAttributes* sceneAttri
         sceneClass->addClass(m_labelSelectionViewController->saveToScene(sceneAttributes,
                                                      "m_labelSelectionViewController"));
     }
+    if (m_samplesSelectionViewController != NULL) {
+        sceneClass->addClass(m_samplesSelectionViewController->saveToScene(sceneAttributes,
+                                                                           "m_samplesSelectionViewController"));
+    }
 
     bool saveSplitterFlag(false);
     switch (SessionManager::get()->getCaretPreferences()->getIdentificationDisplayMode()) {
@@ -686,7 +713,10 @@ BrainBrowserWindowOrientedToolBox::restoreFromScene(const SceneAttributes* scene
         m_labelSelectionViewController->restoreFromScene(sceneAttributes,
                                                           sceneClass->getClass("m_labelSelectionViewController"));
     }
-    
+    if (m_samplesSelectionViewController != NULL) {
+        m_samplesSelectionViewController->restoreFromScene(sceneAttributes,
+                                                           sceneClass->getClass("m_samplesSelectionViewController"));
+    }
     /*
      * Restore current widget size
      */
@@ -714,35 +744,6 @@ BrainBrowserWindowOrientedToolBox::restoreFromScene(const SceneAttributes* scene
             /* is restored only when floating and visible. */
             geometryClass->setDescendantsRestored(true);
         }
-#if QT_VERSION < 0x050000
-        /*
-         * Do this for Qt4 only.  Qt5 restores size in BrainBrowserWindow.
-         *
-         * From http://stackoverflow.com/questions/2722939/c-resize-a-docked-qt-qdockwidget-programmatically
-         *
-         * Set the minimum and maximum sizes and restore them later.
-         * Trying to restore them immediately does not work.  So, as
-         * explained in the link above, set the minimum and maximum
-         * sizes to that the toolbox is the correct size and then use
-         * a timer to restore the correct values for the minimum and
-         * maximum sizes after a little delay.
-         */
-        const int w = sceneClass->getIntegerValue("toolboxWidth", -1);
-        const int h = sceneClass->getIntegerValue("toolboxHeight", -1);
-        if ((w > 0) && (h > 0)) {
-            m_minimumSizeAfterSceneRestored = minimumSize();
-            m_maximumSizeAfterSceneRestored = maximumSize();
-            
-            setMaximumWidth(w);
-            setMaximumHeight(h);
-            setMinimumWidth(w);
-            setMinimumHeight(h);
-
-            QTimer::singleShot(1000,  // 1000 ms => 1 second
-                               this,
-                               SLOT(restoreMinimumAndMaximumSizesAfterSceneRestored()));
-        }
-#endif
     }
     
     if (m_splitterWidget != NULL) {
@@ -794,10 +795,12 @@ BrainBrowserWindowOrientedToolBox::receiveEvent(Event* event)
         bool haveAnnSub     = false;
         bool haveBorders    = false;
         bool haveConnFiles  = false;
+        bool haveCziImages  = false;
         bool haveFibers     = false;
         bool haveFoci       = false;
         bool haveImages     = false;
         bool haveLabels     = false;
+        bool haveSamples    = false;
         bool haveSurfaces   = false;
         bool haveVolumes    = false;
         
@@ -847,6 +850,9 @@ BrainBrowserWindowOrientedToolBox::receiveEvent(Event* event)
                 case DataFileTypeEnum::CONNECTIVITY_PARCEL_DENSE:
                     haveConnFiles = true;
                     break;
+                case DataFileTypeEnum::CONNECTIVITY_PARCEL_DYNAMIC:
+                    haveConnFiles = true;
+                    break;
                 case DataFileTypeEnum::CONNECTIVITY_PARCEL_LABEL:
                     haveLabels = true;
                     break;
@@ -856,8 +862,13 @@ BrainBrowserWindowOrientedToolBox::receiveEvent(Event* event)
                     break;
                 case DataFileTypeEnum::CONNECTIVITY_SCALAR_DATA_SERIES:
                     break;
+                case DataFileTypeEnum::CZI_IMAGE_FILE:
+                    haveCziImages = true;
+                    break;
                 case DataFileTypeEnum::FOCI:
                     haveFoci = true;
+                    break;
+                case DataFileTypeEnum::HISTOLOGY_SLICES:
                     break;
                 case DataFileTypeEnum::IMAGE:
                     haveImages = true;
@@ -873,6 +884,9 @@ BrainBrowserWindowOrientedToolBox::receiveEvent(Event* event)
                 case DataFileTypeEnum::PALETTE:
                     break;
                 case DataFileTypeEnum::RGBA:
+                    break;
+                case DataFileTypeEnum::SAMPLES:
+                    haveSamples = true;
                     break;
                 case DataFileTypeEnum::SCENE:
                     break;
@@ -908,6 +922,7 @@ BrainBrowserWindowOrientedToolBox::receiveEvent(Event* event)
         int defaultTabIndex = -1;
         bool enableLayers = true;
         bool enableMedia  = false;
+        bool enableHistology = false;
         bool enableVolumeSurfaceOutline = false;
         bool enableChartOne = false;
         bool enableChartTwo = false;
@@ -918,6 +933,15 @@ BrainBrowserWindowOrientedToolBox::receiveEvent(Event* event)
                 switch (windowContent->getSelectedModelType()) {
                     case ModelTypeEnum::MODEL_TYPE_INVALID:
                         break;
+                    case ModelTypeEnum::MODEL_TYPE_HISTOLOGY:
+                        defaultTabIndex = m_histologyTabIndex;
+                        enableHistology = true;
+                        enableLayers = true;
+                        enableVolumeSurfaceOutline = true;
+                        haveBorders = false;
+                        haveFibers  = false;
+                        haveFoci    = true;
+                        break;
                     case  ModelTypeEnum::MODEL_TYPE_MULTI_MEDIA:
                         defaultTabIndex = m_mediaTabIndex;
                         enableMedia     = true;
@@ -927,12 +951,15 @@ BrainBrowserWindowOrientedToolBox::receiveEvent(Event* event)
                         haveFibers  = false;
                         haveFoci    = false;
                         haveLabels  = false;
+                        haveSamples = false;
                         break;
                     case ModelTypeEnum::MODEL_TYPE_SURFACE:
                         defaultTabIndex = m_overlayTabIndex;
+                        haveSamples = false;
                         break;
                     case ModelTypeEnum::MODEL_TYPE_SURFACE_MONTAGE:
                         defaultTabIndex = m_overlayTabIndex;
+                        haveSamples = false;
                         break;
                     case ModelTypeEnum::MODEL_TYPE_VOLUME_SLICES:
                         defaultTabIndex = m_overlayTabIndex;
@@ -943,6 +970,7 @@ BrainBrowserWindowOrientedToolBox::receiveEvent(Event* event)
                         defaultTabIndex = m_overlayTabIndex;
                         enableVolumeSurfaceOutline = (haveSurfaces
                                                       & haveVolumes);
+                        haveSamples = false;
                         break;
                     case ModelTypeEnum::MODEL_TYPE_CHART:
                         defaultTabIndex = m_chartTabIndex;
@@ -953,6 +981,7 @@ BrainBrowserWindowOrientedToolBox::receiveEvent(Event* event)
                         haveFibers  = false;
                         haveFoci    = false;
                         haveLabels  = false;
+                        haveSamples = false;
                         break;
                     case ModelTypeEnum::MODEL_TYPE_CHART_TWO:
                         defaultTabIndex = m_chartOverlayTabIndex;
@@ -963,6 +992,7 @@ BrainBrowserWindowOrientedToolBox::receiveEvent(Event* event)
                         haveFibers  = false;
                         haveFoci    = false;
                         haveLabels  = false;
+                        haveSamples = false;
                         break;
                 }
             }
@@ -987,7 +1017,9 @@ BrainBrowserWindowOrientedToolBox::receiveEvent(Event* event)
                 break;
             case UserInputModeEnum::Enum::INVALID:
                 break;
-            case UserInputModeEnum::Enum::TILE_TABS_MANUAL_LAYOUT_EDITING:
+            case UserInputModeEnum::Enum::SAMPLES_EDITING:
+                break;
+            case UserInputModeEnum::Enum::TILE_TABS_LAYOUT_EDITING:
                 break;
             case UserInputModeEnum::Enum::VIEW:
                 break;
@@ -1019,11 +1051,15 @@ BrainBrowserWindowOrientedToolBox::receiveEvent(Event* event)
         if (m_borderTabIndex >= 0) m_tabWidget->setTabEnabled(m_borderTabIndex, haveBorders);
         if (m_fiberOrientationTabIndex >= 0) m_tabWidget->setTabEnabled(m_fiberOrientationTabIndex, haveFibers);
         if (m_fociTabIndex >= 0) m_tabWidget->setTabEnabled(m_fociTabIndex, haveFoci);
-        if (m_imageTabIndex >= 0) m_tabWidget->setTabEnabled(m_imageTabIndex, haveImages);
+        if (m_imageTabIndex >= 0) m_tabWidget->setTabEnabled(m_imageTabIndex, (haveImages
+                                                                               || haveCziImages));
         if (m_labelTabIndex >= 0) m_tabWidget->setTabEnabled(m_labelTabIndex, haveLabels);
         
         if (m_overlayTabIndex >= 0) m_tabWidget->setTabEnabled(m_overlayTabIndex, enableLayers);
         if (m_mediaTabIndex >= 0) m_tabWidget->setTabEnabled(m_mediaTabIndex, enableMedia);
+        if (m_histologyTabIndex >= 0) m_tabWidget->setTabEnabled(m_histologyTabIndex, enableHistology);
+        
+        if (m_samplesTabIndex >= 0) m_tabWidget->setTabEnabled(m_samplesTabIndex, haveSamples);
         
         if (m_annotationTabWidget != NULL) {
             const int32_t numTabs = m_annotationTabWidget->count();

@@ -63,7 +63,13 @@ namespace caret {
         
         void addCaretDataFile(CaretDataFile* caretDataFile);
         
-        void removeCaretDataFile(const CaretDataFile* caretDataFile);
+        int32_t removeAllNonLoadedFiles();
+        
+        bool removeCaretDataFile(const CaretDataFile* caretDataFile,
+                                 const bool logSevereIfFailureToRemoveFileFlag = true);
+        
+        bool removeCaretDataFileByName(const AString& filename,
+                                 const bool logSevereIfFailureToRemoveFileFlag = true);
         
         SpecFileDataFile* changeFileName(SpecFileDataFile* specFileDataFile,
                             const AString& newFileName);

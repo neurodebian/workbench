@@ -35,6 +35,7 @@
 #include "FileInformation.h"
 #include "SceneableInterface.h"
 #include "StructureEnum.h"
+#include "UserInputModeEnum.h"
 #include "VolumeFile.h"
 
 namespace caret {
@@ -63,6 +64,7 @@ namespace caret {
     class CiftiConnectivityMatrixDenseParcelFile;
     class CiftiConnectivityMatrixParcelFile;
     class CiftiConnectivityMatrixParcelDenseFile;
+    class CiftiConnectivityMatrixParcelDynamicFile;
     class CiftiFiberOrientationFile;
     class CiftiFiberTrajectoryFile;
     class CiftiMappableDataFile;
@@ -71,21 +73,25 @@ namespace caret {
     class CiftiParcelSeriesFile;
     class CiftiParcelScalarFile;
     class CiftiScalarDataSeriesFile;
+    class CziImageFile;
     class DisplayProperties;
     class DisplayPropertiesAnnotation;
     class DisplayPropertiesAnnotationTextSubstitution;
     class DisplayPropertiesBorders;
+    class DisplayPropertiesCziImages;
     class DisplayPropertiesFiberOrientation;
     class DisplayPropertiesFoci;
     class DisplayPropertiesImages;
     class DisplayPropertiesLabels;
     class DisplayPropertiesSurface;
+    class DisplayPropertiesSamples;
     class DisplayPropertiesVolume;
     class EventDataFileRead;
     class EventDataFileReload;
     class EventDataFileReloadAll;
     class EventSpecFileReadDataFiles;
     class GapsAndMargins;
+    class HistologySlicesFile;
     class IdentificationManager;
     class ImageFile;
     class LabelFile;
@@ -93,6 +99,7 @@ namespace caret {
     class MetricDynamicConnectivityFile;
     class ModelChart;
     class ModelChartTwo;
+    class ModelHistology;
     class ModelMedia;
     class ModelSurfaceMontage;
     class ModelVolume;
@@ -101,6 +108,8 @@ namespace caret {
     class PaletteGroupStandardPalettes;
     class PaletteGroupUserCustomPalettes;
     class RgbaFile;
+    class SamplesFile;
+    class SamplesMetaDataManager;
     class SceneClassAssistant;
     class Scene;
     class SceneFile;
@@ -151,6 +160,22 @@ namespace caret {
         
         void getAnnotationTextSubstitutionFiles(std::vector<AnnotationTextSubstitutionFile*>& annSubFilesOut) const;
         
+        const std::vector<CziImageFile*> getAllCziImageFiles() const;
+        
+        int32_t getNumberOfCziImageFiles() const;
+        
+        CziImageFile* getCziImageFile(const int32_t indx);
+        
+        const CziImageFile* getCziImageFile(const int32_t indx) const;
+        
+        const std::vector<HistologySlicesFile*> getAllHistologySlicesFiles() const;
+        
+        int32_t getNumberOfHistologySlicesFiles() const;
+        
+        HistologySlicesFile* getHistologySlicesFile(const int32_t indx);
+        
+        const HistologySlicesFile* getHistologySlicesFile(const int32_t indx) const;
+
         int32_t getNumberOfFociFiles() const;
         
         FociFile* getFociFile(const int32_t indx);
@@ -169,7 +194,17 @@ namespace caret {
         
         const PaletteFile* getPaletteFile() const;
 
+        int32_t getNumberOfSamplesFiles() const;
+        
+        const SamplesFile* getSamplesFile(const int32_t indx) const;
+        
+        SamplesFile* getSamplesFile(const int32_t indx);
+        
+        std::vector<SamplesFile*> getAllSamplesFiles() const;
+        
         int32_t getNumberOfSceneFiles() const;
+        
+        SceneFile* getSceneFileWithName(const AString& sceneFileName) const;
         
         SceneFile* getSceneFile(const int32_t indx);
         
@@ -207,9 +242,9 @@ namespace caret {
         
         void receiveEvent(Event* event);
         
-        AnnotationManager* getAnnotationManager();
+        AnnotationManager* getAnnotationManager(const UserInputModeEnum::Enum userInputMode);
         
-        const AnnotationManager* getAnnotationManager() const;
+        const AnnotationManager* getAnnotationManager(const UserInputModeEnum::Enum userInputMode) const;
         
         ModelChart* getChartModel();
         
@@ -222,6 +257,10 @@ namespace caret {
         ChartingDataManager* getChartingDataManager();
         
         const ChartingDataManager* getChartingDataManager() const;
+        
+        ModelHistology* getHistologyModel();
+        
+        const ModelHistology* getHistologyModel() const;
         
         ModelMedia* getMediaModel();
         
@@ -294,6 +333,8 @@ namespace caret {
         const CiftiParcelSeriesFile* getConnectivityParcelSeriesFile(int32_t indx) const;
         
         void getConnectivityParcelSeriesFiles(std::vector<CiftiParcelSeriesFile*>& connectivityParcelSeriesFilesOut) const;
+        
+        void getConnectivityParcelDenseDynamicFiles(std::vector<CiftiConnectivityMatrixParcelDynamicFile*>& parcelDynamicFilesOut) const;
         
         int32_t getNumberOfConnectivityFiberOrientationFiles() const;
         
@@ -401,6 +442,10 @@ namespace caret {
         
         const DisplayPropertiesBorders* getDisplayPropertiesBorders() const;
         
+        DisplayPropertiesCziImages* getDisplayPropertiesCziImages();
+        
+        const DisplayPropertiesCziImages* getDisplayPropertiesCziImages() const;
+        
         DisplayPropertiesFiberOrientation* getDisplayPropertiesFiberOrientation();
         
         const DisplayPropertiesFiberOrientation* getDisplayPropertiesFiberOrientation() const;
@@ -416,6 +461,10 @@ namespace caret {
         DisplayPropertiesSurface* getDisplayPropertiesSurface();
         
         const DisplayPropertiesSurface* getDisplayPropertiesSurface() const;
+        
+        DisplayPropertiesSamples* getDisplayPropertiesSamples();
+        
+        const DisplayPropertiesSamples* getDisplayPropertiesSamples() const;
         
         DisplayPropertiesImages* getDisplayPropertiesImages();
         
@@ -465,7 +514,12 @@ namespace caret {
         
         std::unique_ptr<CaretResult> getBaseDirectoryForLoadedDataFiles(AString& baseDirectoryOut) const;
         
+        std::unique_ptr<CaretResult> getBaseDirectoryForLoadedSceneAndSpecFiles(const SceneFile* sceneFile,
+                                                                                AString& baseDirectoryOut) const;
+        
         const Scene* getActiveScene() const;
+        
+        SamplesMetaDataManager* getSamplesMetaDataManager() const;
         
     private:
         /**
@@ -614,7 +668,16 @@ namespace caret {
                          * and exit loop
                          */
                         newDataFile->setFileName(versionFullName);
-                        newDataFile->setModified();
+                        if (newDataFile->supportsWriting()) {
+                            newDataFile->setModified();
+                        }
+                        else {
+                            /*
+                             * Cannot write file, so don't let name update
+                             * report file as modified
+                             */
+                            newDataFile->clearModified();
+                        }
                         done = true;
                     }
                 }
@@ -722,6 +785,14 @@ namespace caret {
                                                                          CaretDataFile* caretDataFile,
                                                                          const AString& filename);
         
+        CziImageFile* addReadOrReloadCziImageFile(const FileModeAddReadReload fileMode,
+                                                  CaretDataFile* caretDataFile,
+                                                  const AString& filename);
+
+        HistologySlicesFile* addReadOrReloadHistologySlicesFile(const FileModeAddReadReload fileMode,
+                                                                CaretDataFile* caretDataFile,
+                                                                const AString& filename);
+        
         FociFile* addReadOrReloadFociFile(const FileModeAddReadReload fileMode,
                                CaretDataFile* caretDataFile,
                                const AString& filename);
@@ -734,6 +805,10 @@ namespace caret {
                                      CaretDataFile* caretDataFile,
                                      const AString& filename);
         
+        SamplesFile* addReadOrReloadSamplesFile(const FileModeAddReadReload fileMode,
+                                                CaretDataFile* caretDataFile,
+                                                const AString& filename);
+
         SceneFile* addReadOrReloadSceneFile(const FileModeAddReadReload fileMode,
                                  CaretDataFile* caretDataFile,
                                  const AString& filename);
@@ -741,6 +816,8 @@ namespace caret {
         AString convertFilePathNameToAbsolutePathName(const AString& filename) const;
         
         void initializeDenseDataSeriesFile(CiftiBrainordinateDataSeriesFile* dataSeriesFile);
+        
+        void initializeParcelSeriesFile(CiftiParcelSeriesFile* parcelSeriesFile);
         
         void initializeVolumeFile(VolumeFile* volumeFile);
         
@@ -751,6 +828,8 @@ namespace caret {
         void updateWholeBrainModel();
         
         void updateSurfaceMontageModel();
+        
+        void updateHistologyModel();
         
         void updateMediaModel();
         
@@ -776,9 +855,15 @@ namespace caret {
         
         std::vector<BorderFile*> m_borderFiles;
         
+        std::vector<CziImageFile*> m_cziImageFiles;
+        
+        std::vector<HistologySlicesFile*> m_histologySlicesFiles;
+        
         std::vector<FociFile*> m_fociFiles;
         
         std::vector<ImageFile*> m_imageFiles;
+        
+        std::vector<SamplesFile*> m_samplesFiles;
         
         std::vector<SceneFile*> m_sceneFiles;
         
@@ -826,14 +911,21 @@ namespace caret {
         
         ModelWholeBrain* m_wholeBrainModel;
         
+        ModelHistology* m_histologyModel;
+        
         ModelMedia* m_mediaModel = NULL;
         
         ModelSurfaceMontage* m_surfaceMontageModel;
         
         ChartingDataManager* m_chartingDataManager;
         
-        AnnotationManager* m_annotationManager;
+        std::unique_ptr<AnnotationManager> m_annotationsManager;
         
+        std::unique_ptr<AnnotationManager> m_samplesAnnotationsManager;
+        
+        std::unique_ptr<AnnotationManager> m_tileTabsAnnotationsManager;
+        
+
         std::unique_ptr<ChartTwoCartesianOrientedAxesYokingManager> m_chartTwoCartesianAxesYokingManager;
         
         /** contains all display properties */
@@ -851,6 +943,8 @@ namespace caret {
          */
         DisplayPropertiesSurface* m_displayPropertiesSurface;
 
+        DisplayPropertiesSamples* m_displayPropertiesSamples;
+        
         /**
          * Display properties for image - DO NOT delete since this
          * is also in the displayProperties std::vector.
@@ -880,6 +974,12 @@ namespace caret {
          * is also in the displayProperties std::vector.
          */
         DisplayPropertiesBorders* m_displayPropertiesBorders;
+        
+        /**
+         * Display properties for CZI images - DO NOT delete since this
+         * is also in the displayProperties std::vector.
+         */
+        DisplayPropertiesCziImages* m_displayPropertiesCziImages;
         
         /**
          * Display properties for fiber orientation - DO NOT delete since this
@@ -921,6 +1021,9 @@ namespace caret {
         std::shared_ptr<PaletteGroupStandardPalettes> m_palettesStandardGroup;
         
         std::shared_ptr<PaletteGroupUserCustomPalettes> m_palettesUserCustomGroup;
+        
+        mutable std::unique_ptr<SamplesMetaDataManager> m_samplesMetaDataManager;
+        
     };
 
 } // namespace

@@ -31,13 +31,12 @@
 #include "DataFileException.h"
 #include "ImageFile.h"
 #include "Scene.h"
+#include "SceneClassInfoWidget.h"
 #include "SceneDialog.h"
 #include "SceneInfo.h"
 #include "WuQtUtilities.h"
 
 using namespace caret;
-
-
     
 /**
  * \class caret::ScenePreviewDialog 
@@ -97,12 +96,14 @@ ScenePreviewDialog::ScenePreviewDialog(const Scene* scene,
     AString sceneIdText;
     AString abbreviatedDescriptionText;
     AString fullDescriptionText;
+    const bool scenePreviewDialogFlag(true);
     SceneClassInfoWidget::getFormattedTextForSceneNameAndDescription(scene->getSceneInfo(),
                                                                      -1,
                                                                      nameText,
                                                                      sceneIdText,
                                                                      abbreviatedDescriptionText,
-                                                                     fullDescriptionText);
+                                                                     fullDescriptionText,
+                                                                     scenePreviewDialogFlag);
     QLabel* nameLabel = new QLabel(nameText);
     
     QLabel* sceneIdLabel = new QLabel(sceneIdText);

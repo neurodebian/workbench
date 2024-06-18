@@ -39,6 +39,8 @@ namespace caret {
     class AnnotationCoordinateSpaceWidget;
     class AnnotationCoordinatesWidget;
     class AnnotationDeleteWidget;
+    class AnnotationDepthWidget;
+    class AnnotationPolyTypeDrawEditWidget;
     class AnnotationFontWidget;
     class AnnotationFormatWidget;
     class AnnotationInsertNewWidget;
@@ -46,10 +48,13 @@ namespace caret {
     class AnnotationNameWidget;
     class AnnotationRedoUndoWidget;
     class AnnotationRotationWidget;
+    class AnnotationSamplesInsertNewWidget;
+    class AnnotationSamplesModifyWidget;
     class AnnotationTextAlignmentWidget;
     class AnnotationTextEditorWidget;
     class AnnotationTextOrientationWidget;
     class AnnotationWidthHeightWidget;
+    class TileTabsLayoutConfigurationTypeWidget;
     class UserInputModeAnnotations;
     
     class UserInputModeAnnotationsWidget : public QWidget, public EventListenerInterface {
@@ -69,17 +74,14 @@ namespace caret {
 
         // ADD_NEW_METHODS_HERE
 
-    private slots:
-        void selectCoordinateOneWithMouse();
-        
-        void selectCoordinateTwoWithMouse();
-        
     private:
         UserInputModeAnnotationsWidget(const UserInputModeAnnotationsWidget&);
 
         UserInputModeAnnotationsWidget& operator=(const UserInputModeAnnotationsWidget&);
         
         void createAnnotationWidget();
+        
+        void createSamplesEditingWidget();
         
         void createTileTabsEditingWidget();
         
@@ -90,6 +92,8 @@ namespace caret {
         const int32_t m_browserWindowIndex = -1;
         
         UserInputModeAnnotations* m_inputModeAnnotations = NULL;
+        
+        TileTabsLayoutConfigurationTypeWidget* m_layoutTypeWidget = NULL;
         
         AnnotationNameWidget* m_nameWidget = NULL;
         
@@ -123,7 +127,13 @@ namespace caret {
         
         AnnotationInsertNewWidget* m_insertNewWidget = NULL;
         
+        AnnotationSamplesInsertNewWidget* m_insertSamplesNewWidget = NULL;
+        
+        AnnotationSamplesModifyWidget* m_modifiySamplesWidget = NULL;
+
         AnnotationDeleteWidget* m_deleteWidget = NULL;
+        
+        AnnotationPolyTypeDrawEditWidget* m_polyTypeDrawEditWidget = NULL;
         
         AnnotationRedoUndoWidget* m_redoUndoWidget = NULL;
         

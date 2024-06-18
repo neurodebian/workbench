@@ -21,22 +21,39 @@
  */
 /*LICENSE_END*/
 
+#include <array>
 #include <memory>
 #include <set>
 
+#include <QQuaternion>
+
+#include "BoundingBox.h"
 #include "CaretObject.h"
 #include "ChartTwoAxisOrientationTypeEnum.h"
 #include "ChartTwoAxisScaleRangeModeEnum.h"
+#include "ClippingPlanePanningModeEnum.h"
 #include "EventListenerInterface.h"
+#include "HistologyCoordinate.h"
+#include "HistologySlice.h"
+#include "Matrix4x4.h"
+#include "MediaDisplayCoordinateModeEnum.h"
 #include "Model.h"
 #include "ModelTypeEnum.h"
+#include "MouseLeftDragModeEnum.h"
 #include "Plane.h"
 #include "ProjectionViewTypeEnum.h"
 #include "SceneableInterface.h"
+#include "SelectionItemVolumeMprCrosshair.h"
 #include "StructureEnum.h"
 #include "TabContentBase.h"
+#include "Vector3D.h"
+#include "VolumeMprOrientationModeEnum.h"
+#include "VolumeMontageSliceOrderModeEnum.h"
+#include "VolumeMprViewModeEnum.h"
 #include "VolumeSliceDrawingTypeEnum.h"
 #include "VolumeSliceInterpolationEdgeEffectsMaskingEnum.h"
+#include "VolumeMontageCoordinateDisplayTypeEnum.h"
+#include "VolumeMontageCoordinateTextAlignmentEnum.h"
 #include "VolumeSliceProjectionTypeEnum.h"
 #include "VolumeSliceViewPlaneEnum.h"
 #include "VolumeSliceViewAllPlanesLayoutEnum.h"
@@ -48,6 +65,7 @@ namespace caret {
     class AnnotationColorBar;
     class AnnotationScaleBar;
     class BrainOpenGLViewportContent;
+    class BrainOpenGLWindowContent;
     class CaretDataFile;
     class CaretMappableDataFile;
     class ChartTwoCartesianOrientedAxes;
@@ -55,10 +73,16 @@ namespace caret {
     class ChartTwoOverlaySet;
     class ClippingPlaneGroup;
     class EventCaretMappableDataFilesAndMapsInDisplayedOverlays;
+    class GraphicsRegionSelectionBox;
+    class GraphicsViewport;
+    class HistologyOverlaySet;
+    class HistologySliceSettings;
+    class HistologySlicesFile;
     class Matrix4x4;
     class MediaOverlaySet;
     class ModelChart;
     class ModelChartTwo;
+    class ModelHistology;
     class ModelMedia;
     class ModelSurface;
     class ModelSurfaceMontage;
@@ -66,9 +90,11 @@ namespace caret {
     class ModelTransform;
     class ModelVolume;
     class ModelWholeBrain;
+    class MouseEvent;
     class OverlaySet;
     class Palette;
     class PlainTextStringBuilder;
+    class SamplesDrawingSettings;
     class SceneClassAssistant;
     class Surface;
     class ViewingTransformations;
@@ -80,15 +106,41 @@ namespace caret {
     class VolumeSurfaceOutlineSetModel;
     class WholeBrainSurfaceSettings;
     
-    /// Maintains content in a brower's tab
     class BrowserTabContent : public TabContentBase, public EventListenerInterface, public SceneableInterface {
         
     public:
+        enum class MoveYokedVolumeSlices {
+            MOVE_NO,
+            MOVE_YES
+        };
+        
         BrowserTabContent(const int32_t tabNumber);
         
         virtual ~BrowserTabContent();
         
         void cloneBrowserTabContent(BrowserTabContent* tabToClone);
+        
+        static QQuaternion matrixToQuaternion(const Matrix4x4& matrix);
+        
+        static Matrix4x4 quaternionToMatrix(const QQuaternion& quaternion);
+        
+        static std::array<float, 4> quaternionToArrayXYZS(const QQuaternion& quaternion);
+        
+        static std::array<float, 4> quaternionToArraySXYZ(const QQuaternion& quaternion);
+        
+        static QQuaternion arrayXYZSToQuaternion(const std::array<float, 4>& arrayXYZS);
+        
+        static QQuaternion arraySXYZToQuaternion(const std::array<float, 4>& arraySXYZ);
+        
+        static void quaternionToArrayXYZS(const QQuaternion& quaternion,
+                                          float arrayXYZS[4]);
+        
+        static void quaternionToArraySXYZ(const QQuaternion& quaternion,
+                                          float arraySXYZ[4]);
+        
+        static QQuaternion arrayXYZSToQuaternion(const float arrayXYZS[4]);
+        
+        static QQuaternion arraySXYZToQuaternion(const float arraySXYZ[4]);
         
         virtual void receiveEvent(Event* event);
         
@@ -113,9 +165,19 @@ namespace caret {
         std::vector<ChartTwoCartesianOrientedAxes*> getYokedAxes(const ChartTwoAxisOrientationTypeEnum::Enum axisOrientation,
                                                                  const ChartTwoAxisScaleRangeModeEnum::Enum yokingRangeMode) const;
         
+        HistologyOverlaySet* getHistologyOverlaySet();
+        
+        const HistologyOverlaySet* getHistologyOverlaySet() const;
+        
         MediaOverlaySet* getMediaOverlaySet();
         
         const MediaOverlaySet* getMediaOverlaySet() const;
+        
+        std::set<AString> getDisplayedMediaFileNames() const;
+        
+        MediaDisplayCoordinateModeEnum::Enum getMediaDisplayCoordinateMode() const;
+        
+        void setMediaDisplayCoordinateMode(const MediaDisplayCoordinateModeEnum::Enum mediaDisplayCoordinateMode);
         
         int32_t getTabNumber() const;
         
@@ -138,6 +200,10 @@ namespace caret {
         ModelMedia* getDisplayedMediaModel();
         
         const ModelMedia* getDisplayedMediaModel() const;
+        
+        ModelHistology* getDisplayedHistologyModel();
+        
+        const ModelHistology* getDisplayedHistologyModel() const;
         
         ModelSurface* getDisplayedSurfaceModel();
         
@@ -169,6 +235,12 @@ namespace caret {
         
         bool isVolumeSlicesDisplayed() const;
         
+        bool isVolumeMprOldDisplayed() const;
+        
+        bool isVolumeMprThreeDisplayed() const;
+        
+        bool isHistologyDisplayed() const;
+
         bool isMediaDisplayed() const;
         
         bool isWholeBrainDisplayed() const;
@@ -190,6 +262,8 @@ namespace caret {
         bool isWholeBrainModelValid() const;
 
         bool isSurfaceMontageModelValid() const;
+        
+        bool isHistologyModelValid() const;
         
         bool isMediaModelValid() const;
         
@@ -243,6 +317,13 @@ namespace caret {
         
         void setClippingPlanesEnabled(const bool status);
         
+        void setClippingPlanesEnabledAndEnablePlanes(const bool status);
+        
+        void setClippingPanningMode(const ClippingPlanePanningModeEnum::Enum panningMode);
+        
+        ClippingPlanePanningModeEnum::Enum getClippingPanningMode() const;
+        
+
         const float* getTranslation() const;
         
         void getTranslation(float translationOut[3]) const;
@@ -268,6 +349,26 @@ namespace caret {
         Matrix4x4 getFlatRotationMatrix() const;
         
         void setFlatRotationMatrix(const Matrix4x4& flatRotationMatrix);
+        
+        void resetMprRotations();
+
+        float getMprRotationX() const;
+        
+        float getMprRotationY() const;
+        
+        float getMprRotationZ() const;
+        
+        Matrix4x4 getMprThreeRotationMatrix() const;
+        
+        Matrix4x4 getMprThreeRotationMatrixForSlicePlane(const VolumeSliceViewPlaneEnum::Enum slicePlane);
+        
+        Vector3D getMprThreeRotationVectorForSlicePlane(const VolumeSliceViewPlaneEnum::Enum slicePlane) const;
+        
+        void setMprThreeRotationVectorForSlicePlane(const VolumeSliceViewPlaneEnum::Enum slicePlane,
+                                                    const Vector3D& rotationVector);
+
+        Matrix4x4 getMprRotationMatrix4x4ForSlicePlane(const ModelTypeEnum::Enum modelType,
+                                                       const VolumeSliceViewPlaneEnum::Enum slicePlane) const;
         
         void getRightCortexFlatMapOffset(float& offsetX,
                                          float& offsetY) const;
@@ -301,24 +402,51 @@ namespace caret {
                                             const int32_t mouseDY);
         
         void applyMouseRotation(BrainOpenGLViewportContent* viewportContent,
+                                const SelectionItemVolumeMprCrosshair::Axis mprCrosshairAxis,
                                 const int32_t mousePressX,
                                 const int32_t mousePressY,
                                 const int32_t mouseX,
                                 const int32_t mouseY,
                                 const int32_t mouseDeltaX,
                                 const int32_t mouseDeltaY);
+
+        void applyHistologyMouseScaling(BrainOpenGLViewportContent* viewportContent,
+                                        const int32_t mousePressX,
+                                        const int32_t mousePressY,
+                                        const int32_t mouseDY,
+                                        const float dataX,
+                                        const float dataY,
+                                        const bool dataXYValidFlag);
+
+        void applyMediaMouseScaling(BrainOpenGLViewportContent* viewportContent,
+                                    const int32_t mousePressX,
+                                    const int32_t mousePressY,
+                                    const int32_t mouseDY,
+                                    const float dataX,
+                                    const float dataY,
+                                    const bool dataXYValidFlag);
+        
+        void setHistologyScalingFromGui(BrainOpenGLViewportContent* viewportContent,
+                                        const float scaling);
+        
+        void setMediaScalingFromGui(BrainOpenGLViewportContent* viewportContent,
+                                    const float scaling);
+        
+        void setViewToBounds(const std::vector<const BrainOpenGLViewportContent*>& allViewportContent,
+                             const MouseEvent* mouseEvent,
+                             const GraphicsRegionSelectionBox* selectionBounds);
         
         void applyMouseScaling(BrainOpenGLViewportContent* viewportContent,
                                const int32_t mousePressX,
                                const int32_t mousePressY,
-                               const float mouseX,
-                               const float mouseY,
                                const int32_t mouseDX,
                                const int32_t mouseDY);
         
         void applyMouseTranslation(BrainOpenGLViewportContent* viewportContent,
                                    const int32_t mousePressX,
                                    const int32_t mousePressY,
+                                   const int32_t mouseX,
+                                   const int32_t mouseY,
                                    const int32_t mouseDX,
                                    const int32_t mouseDY);
         
@@ -341,92 +469,150 @@ namespace caret {
 
         void getTransformationsInModelTransform(ModelTransform& modelTransform) const;
         
-        void setTransformationsFromModelTransform(const ModelTransform& modelTransform);
+        /**
+         * How to change MPR three rotations when updating with ModelTransform
+         */
+        enum class MprThreeRotationUpdateType {
+            /** Update with differences in MPR Three rotations */
+            DELTA,
+            /** Replace the MPR Three rotations */
+            REPLACE,
+            /** Do not change the MPR Three rotations */
+            UNCHANGED,
+        };
+        
+        void setTransformationsFromModelTransform(const ModelTransform& modelTransform,
+                                                  const MprThreeRotationUpdateType mprThreeRotationUpdateType);
+        
+        void setMprThreeRotationAnglesForYokingGroup(const YokingGroupEnum::Enum yokingGroup,
+                                                     const Vector3D& mprRotationAngles);
+
+        void setMprThreeRotationAngles(const Vector3D& mprRotationAngles);
         
         ChartTwoMatrixDisplayProperties* getChartTwoMatrixDisplayProperties();
 
         const ChartTwoMatrixDisplayProperties* getChartTwoMatrixDisplayProperties() const;
         
-        VolumeSliceViewPlaneEnum::Enum getSliceViewPlane() const;
+        VolumeMprOrientationModeEnum::Enum getVolumeMprOrientationMode() const;
         
-        void setSliceViewPlane(VolumeSliceViewPlaneEnum::Enum sliceAxisMode);
+        void setVolumeMprOrientationMode(const VolumeMprOrientationModeEnum::Enum orientationMode);
         
-        VolumeSliceViewAllPlanesLayoutEnum::Enum getSlicePlanesAllViewLayout() const;
+        VolumeMontageSliceOrderModeEnum::Enum getVolumeMontageSliceOrderMode() const;
         
-        void setSlicePlanesAllViewLayout(const VolumeSliceViewAllPlanesLayoutEnum::Enum slicePlanesAllViewLayout);
+        void setVolumeMontageSliceOrderMode(const VolumeMontageSliceOrderModeEnum::Enum sliceDirectionMode);
+
+        bool isVolumeMontageSliceOrderFlippedForSliceViewPlane(const VolumeSliceViewPlaneEnum::Enum sliceViewPlane) const;
         
-        VolumeSliceDrawingTypeEnum::Enum getSliceDrawingType() const;
+        VolumeMprViewModeEnum::Enum getVolumeMprViewMode() const;
         
-        void setSliceDrawingType(const VolumeSliceDrawingTypeEnum::Enum sliceDrawingType);
+        void setVolumeMprViewMode(const VolumeMprViewModeEnum::Enum viewType);
         
-        void getValidSliceProjectionTypes(std::vector<VolumeSliceProjectionTypeEnum::Enum>& sliceProjectionTypesOut) const;
+        float getVolumeMprSliceThickness() const;
         
-        VolumeSliceProjectionTypeEnum::Enum getSliceProjectionType() const;
+        void setVolumeMprSliceThickness(const float sliceThickness);
         
-        void setSliceProjectionType(const VolumeSliceProjectionTypeEnum::Enum sliceProjectionType);
+        bool isVolumeMprAllViewThicknessEnabled() const;
+        
+        void setVolumeMprAllViewThicknessEnabled(const bool enabled);
+        
+        bool isVolumeMprAxialSliceThicknessEnabled() const;
+        
+        void setVolumeMprAxialSliceThicknessEnabled(const bool enabled);
+        
+        bool isVolumeMprCoronalSliceThicknessEnabled() const;
+        
+        void setVolumeMprCoronalSliceThicknessEnabled(const bool enabled);
+        
+        bool isVolumeMprParasagittalSliceThicknessEnabled() const;
+        
+        void setVolumeMprParasagittalSliceThicknessEnabled(const bool enabled);
+        
+        VolumeSliceViewPlaneEnum::Enum getVolumeSliceViewPlane() const;
+        
+        void setVolumeSliceViewPlane(VolumeSliceViewPlaneEnum::Enum sliceAxisMode);
+        
+        VolumeSliceViewAllPlanesLayoutEnum::Enum getVolumeSlicePlanesAllViewLayout() const;
+        
+        void setVolumeSlicePlanesAllViewLayout(const VolumeSliceViewAllPlanesLayoutEnum::Enum slicePlanesAllViewLayout);
+        
+        VolumeSliceDrawingTypeEnum::Enum getVolumeSliceDrawingType() const;
+        
+        void setVolumeSliceDrawingType(const VolumeSliceDrawingTypeEnum::Enum sliceDrawingType);
+        
+        void getValidVolumeSliceProjectionTypes(std::vector<VolumeSliceProjectionTypeEnum::Enum>& sliceProjectionTypesOut) const;
+        
+        VolumeSliceProjectionTypeEnum::Enum getVolumeSliceProjectionType() const;
+        
+        void setVolumeSliceProjectionType(const VolumeSliceProjectionTypeEnum::Enum sliceProjectionType);
         
         VolumeSliceInterpolationEdgeEffectsMaskingEnum::Enum getVolumeSliceInterpolationEdgeEffectsMaskingType() const;
         
         void setVolumeSliceInterpolationEdgeEffectsMaskingType(const VolumeSliceInterpolationEdgeEffectsMaskingEnum::Enum maskingType);
         
-        int32_t getMontageNumberOfColumns() const;
+        int32_t getVolumeMontageNumberOfColumns() const;
         
-        void setMontageNumberOfColumns(const int32_t montageNumberOfColumns);
+        void setVolumeMontageNumberOfColumns(const int32_t montageNumberOfColumns);
         
-        int32_t getMontageNumberOfRows() const;
+        int32_t getVolumeMontageNumberOfRows() const;
         
-        void setMontageNumberOfRows(const int32_t montageNumberOfRows);
+        void setVolumeMontageNumberOfRows(const int32_t montageNumberOfRows);
         
-        int32_t getMontageSliceSpacing() const;
+        int32_t getVolumeMontageSliceSpacing() const;
         
-        void setMontageSliceSpacing(const int32_t montageSliceSpacing);
+        void setVolumeMontageSliceSpacing(const int32_t montageSliceSpacing);
         
-        void setSlicesToOrigin();
+        float getVolumeSliceCoordinateAxial() const;
         
-        float getSliceCoordinateAxial() const;
+        void setVolumeSliceCoordinateAxial(const float x);
         
-        void setSliceCoordinateAxial(const float x);
+        float getVolumeSliceCoordinateCoronal() const;
         
-        float getSliceCoordinateCoronal() const;
+        void setVolumeSliceCoordinateCoronal(const float y);
         
-        void setSliceCoordinateCoronal(const float y);
+        float getVolumeSliceCoordinateParasagittal() const;
         
-        float getSliceCoordinateParasagittal() const;
+        void setVolumeSliceCoordinateParasagittal(const float z);
         
-        void setSliceCoordinateParasagittal(const float z);
+        Vector3D getVolumeSliceCoordinates() const;
         
-        int64_t getSliceIndexAxial(const VolumeMappableInterface* volumeFile) const;
+        int64_t getVolumeSliceIndexAxial(const VolumeMappableInterface* volumeFile) const;
         
-        void setSliceIndexAxial(const VolumeMappableInterface* volumeFile,
+        void setVolumeSliceIndexAxial(const VolumeMappableInterface* volumeFile,
                                 const int64_t sliceIndexAxial);
         
-        int64_t getSliceIndexCoronal(const VolumeMappableInterface* volumeFile) const;
+        int64_t getVolumeSliceIndexCoronal(const VolumeMappableInterface* volumeFile) const;
         
-        void setSliceIndexCoronal(const VolumeMappableInterface* volumeFile,
+        void setVolumeSliceIndexCoronal(const VolumeMappableInterface* volumeFile,
                                   const int64_t sliceIndexCoronal);
         
-        int64_t getSliceIndexParasagittal(const VolumeMappableInterface* volumeFile) const;
+        int64_t getVolumeSliceIndexParasagittal(const VolumeMappableInterface* volumeFile) const;
         
-        void setSliceIndexParasagittal(const VolumeMappableInterface* volumeFile,
+        void setVolumeSliceIndexParasagittal(const VolumeMappableInterface* volumeFile,
                                        const int64_t sliceIndexParasagittal);
         
-        bool isSliceParasagittalEnabled() const;
+        bool isVolumeSliceParasagittalEnabled() const;
         
-        void setSliceParasagittalEnabled(const bool sliceEnabledParasagittal);
+        void setVolumeSliceParasagittalEnabled(const bool sliceEnabledParasagittal);
         
-        bool isSliceCoronalEnabled() const;
+        bool isVolumeSliceCoronalEnabled() const;
         
-        void setSliceCoronalEnabled(const bool sliceEnabledCoronal);
+        void setVolumeSliceCoronalEnabled(const bool sliceEnabledCoronal);
         
-        bool isSliceAxialEnabled() const;
+        bool isVolumeSliceAxialEnabled() const;
         
-        void setSliceAxialEnabled(const bool sliceEnabledAxial);
+        void setVolumeSliceAxialEnabled(const bool sliceEnabledAxial);
         
-        void updateForVolumeFile(const VolumeMappableInterface* volumeFile);
+        void selectVolumeSlicesAtOrigin();
         
-        void selectSlicesAtOrigin();
+        void selectVolumeSlicesAtCoordinate(const float xyz[3]);
         
-        void selectSlicesAtCoordinate(const float xyz[3]);
+        bool isIdentificationUpdateHistologySlices() const;
+
+        void setIdentificationUpdatesHistologySlices(const bool status);
+        
+        bool isHistologyAxesCrosshairsDisplayed() const;
+        
+        void setHistologyAxesCrosshairsDisplayed(const bool displayed);
         
         bool isIdentificationUpdatesVolumeSlices() const;
         
@@ -444,21 +630,55 @@ namespace caret {
         
         void setVolumeMontageAxesCoordinatesDisplayed(const bool displayed);
 
+        VolumeMontageCoordinateDisplayTypeEnum::Enum getVolumeMontageCoordinatesDislayType() const;
+        
+        void setVolumeMontageCoordinateDisplayType(const VolumeMontageCoordinateDisplayTypeEnum::Enum displayType);
+        
         int32_t getVolumeMontageCoordinatePrecision() const;
         
         void setVolumeMontageCoordinatePrecision(const int32_t volumeMontageCoordinatePrecision);
+        
+        float getVolumeMontageCoordinateFontHeight() const;
+        
+        void setVolumeMontageCoordinateFontHeight(const float volumeMontageCoordinateFontHeight);
+        
+        VolumeMontageCoordinateTextAlignmentEnum::Enum getVolumeMontageCoordinateTextAlignment() const;
+        
+        void setVolumeMontageCoordinateTextAlignment(const VolumeMontageCoordinateTextAlignmentEnum::Enum alignment);
+        
+        SamplesDrawingSettings* getSamplesDrawingSettings();
+        
+        const SamplesDrawingSettings* getSamplesDrawingSettings() const;
+        
+        HistologyCoordinate getHistologySelectedCoordinate(const HistologySlicesFile* histologySlicesFile) const;
+        
+        void setHistologySelectedCoordinate(const HistologySlicesFile* histologySlicesFile,
+                                            const HistologyCoordinate& histologyCoordinate,
+                                            const MoveYokedVolumeSlices moveYokedVolumeSlices);
+                
+        void selectHistologySlicesAtOrigin(const HistologySlicesFile* histologySlicesFile);
+        
+        bool isHistologyOrientationAppliedToYoking() const;
+        
+        void setHistologyOrientationAppliedToYoking(const bool status);
+        
+        YokingGroupEnum::Enum applyHistologyOrientationYoking();
         
         bool isLightingEnabled() const;
         
         void setLightingEnabled(const bool lightingEnabled);
         
-        void reset();
-
         void updateChartModelYokedBrowserTabs();
+        
+        void updateHistologyModelYokedBrowserTabs();
+        
+        void updateMediaModelYokedBrowserTabs();
         
         bool isBrainModelYoked() const;
         
         bool isChartModelYoked() const;
+        
+        bool isMediaModelYoked() const;
         
         YokingGroupEnum::Enum getBrainModelYokingGroup() const;
         
@@ -467,6 +687,10 @@ namespace caret {
         YokingGroupEnum::Enum getChartModelYokingGroup() const;
         
         void setChartModelYokingGroup(const YokingGroupEnum::Enum chartModelYokingType);
+        
+        YokingGroupEnum::Enum getMediaModelYokingGroup() const;
+        
+        void setMediaModelYokingGroup(const YokingGroupEnum::Enum mediaModelYokingType);
         
         bool isWholeBrainLeftEnabled() const;
         
@@ -505,9 +729,20 @@ namespace caret {
         virtual SceneClass* saveToScene(const SceneAttributes* sceneAttributes,
                                         const AString& instanceName);
         
+        void saveQuaternionToScene(SceneClass* sceneClass,
+                                   const AString& memberName,
+                                   const QQuaternion& quaternion);
+
         virtual void restoreFromScene(const SceneAttributes* sceneAttributes,
                                       const SceneClass* sceneClass);
         
+        void restoreFromScenePartTwo(const SceneAttributes* sceneAttributes,
+                                     const SceneClass* sceneClass);
+        
+        bool restoreQuaternionFromScene(const SceneClass* sceneClass,
+                                        const AString& memberName,
+                                        QQuaternion& quaternion) const;
+
         void setClosedStatusFromSessionManager(const bool closedStatus);
         
         void setClosedTabWindowTabBarPositionIndex(const int32_t tabBarPosition);
@@ -517,6 +752,20 @@ namespace caret {
         void setClosedTabWindowIndex(const int32_t windowIndex);
         
         int32_t getClosedTabWindowIndex() const;
+        
+        GraphicsRegionSelectionBox* getRegionSelectionBox();
+
+        const GraphicsRegionSelectionBox* getRegionSelectionBox() const;
+        
+        std::vector<MouseLeftDragModeEnum::Enum> getSupportedMouseLeftDragModes() const;
+        
+        MouseLeftDragModeEnum::Enum getMouseLeftDragMode() const;
+        
+        void setMouseLeftDragMode(const MouseLeftDragModeEnum::Enum mouseLeftDragMode);
+
+        void addMprThreeMontageViewport(const GraphicsViewport& viewport);
+        
+        GraphicsViewport getMprThreeMontageViewportContainingMouse(const Vector3D mouseXY) const;
         
     private:
         class ColorBarFileMap {
@@ -552,8 +801,38 @@ namespace caret {
         void testForRestoreSceneWarnings(const SceneAttributes* sceneAttributes,
                                          const int32_t sceneVersion);
         
+        void setMediaScaling(const float newScaleValue);
+        
         static std::vector<BrowserTabContent*> getOpenBrowserTabs();
         
+        void applyMouseTranslationVolumeMPR(BrainOpenGLViewportContent* viewportContent,
+                                            const int32_t mousePressX,
+                                            const int32_t mousePressY,
+                                            const int32_t mouseX,
+                                            const int32_t mouseY,
+                                            const int32_t mouseDX,
+                                            const int32_t mouseDY);
+        
+        void moveYokedVolumeSlicesToHistologyCoordinate(const HistologyCoordinate& histologyCoordinate);
+        
+        void setVolumeSliceViewsToHistologyRegion(const YokingGroupEnum::Enum yokingGroup,
+                                                  const HistologySlice* histologySlice,
+                                                  const std::vector<const BrainOpenGLViewportContent*>& allViewportContent,
+                                                  const GraphicsRegionSelectionBox* histologySelectionBounds);
+
+        void selectVolumeSlicesAtOriginPrivate();
+        
+        void applyMouseRotationMprThree(BrainOpenGLViewportContent* viewportContent,
+                                        const SelectionItemVolumeMprCrosshair::Axis mprCrosshairAxis,
+                                        const GraphicsViewport& viewport,
+                                        const Vector3D& mousePressWindowXY,
+                                        const Vector3D& mouseWindowXY,
+                                        const Vector3D& previousMouseWindowXY);
+
+        float getMouseMovementAngleCCW(const Vector3D& rotationXY,
+                                       const Vector3D& mouseXY,
+                                       const Vector3D& previousMouseXY) const;
+
         /** Number of this tab */
         int32_t m_tabNumber;
         
@@ -581,10 +860,15 @@ namespace caret {
         /** The chart two model */
         ModelChartTwo* m_chartTwoModel;
         
+        /** The histology model */
+        ModelHistology* m_histologyModel;
+        
         /** The multi-media model */
         ModelMedia* m_mediaModel;
+
+        MediaDisplayCoordinateModeEnum::Enum m_mediaDisplayCoordinateMode = MediaDisplayCoordinateModeEnum::PIXEL;
         
-        /** 
+        /**
          * Name requested by user interface - reflects contents 
          * such as Surface, Volume Slices, etc
          */
@@ -611,6 +895,9 @@ namespace caret {
         /** Chart Model Yoking group */
         YokingGroupEnum::Enum m_chartModelYokingGroup;
         
+        /** Media Model Yoking Group */
+        YokingGroupEnum::Enum m_mediaModelYokingGroup;
+        
         /** Volume Surface Outlines */
         VolumeSurfaceOutlineSetModel* m_volumeSurfaceOutlineSetModel;
         
@@ -626,6 +913,9 @@ namespace caret {
         /** Transformation for surface/all viewing */
         ViewingTransformations* m_flatSurfaceViewingTransformation;
         
+        /** Transformation for media */
+        ViewingTransformationsMedia* m_histologyViewingTransformation;
+        
         /** Transformation for media viewing */
         ViewingTransformationsMedia* m_mediaViewingTransformation;
         
@@ -638,6 +928,9 @@ namespace caret {
         /** Display properties for chart two matrix */
         ChartTwoMatrixDisplayProperties* m_chartTwoMatrixDisplayProperties;
         
+        /** Histology settings for histology slices */
+        HistologySliceSettings* m_histologySliceSettings;
+        
         /** Volume slice settings for volume slices */
         VolumeSliceSettings* m_volumeSliceSettings;
         
@@ -646,11 +939,41 @@ namespace caret {
         
         std::unique_ptr<AnnotationScaleBar> m_scaleBar;
         
+        float m_mprRotationX = 0.0;
+        
+        float m_mprRotationY = 0.0;
+        
+        float m_mprRotationZ = 0.0;
+    
+        /* For separate rotation (matrix for each axis) */
+        QQuaternion m_mprThreeRotationSeparateQuaternion;
+        QQuaternion m_mprThreeAxialSeparateRotationQuaternion;
+        QQuaternion m_mprThreeCoronalSeparateRotationQuaternion;
+        QQuaternion m_mprThreeParasagittalSeparateRotationQuaternion;
+
+        /* One matrix with "inverse rotations" */
+        QQuaternion m_mprThreeAxialInverseRotationQuaternion;
+        QQuaternion m_mprThreeCoronalInverseRotationQuaternion;
+        QQuaternion m_mprThreeParasagittalInverseRotationQuaternion;
+
+        /*
+         * Note: these are not copied when yoked since they
+         * are set when the tab is drawn
+         */
+        Vector3D m_mprThreeAxialRotationVector;
+        Vector3D m_mprThreeCoronalRotationVector;
+        Vector3D m_mprThreeParasagittalRotationVector;
+
+        std::unique_ptr<SamplesDrawingSettings> m_samplesDrawingSettings;
+        
         /** aspect ratio */
         float m_aspectRatio;
         
         /** aspect ratio locked */
         bool m_aspectRatioLocked;
+        
+        /** Apply orientation of histology to Yoking */
+        bool m_histologyOrientationAppliedToYokingFlag = false;
         
         /** 
          * If true, selected volume slices in tab move to location
@@ -658,17 +981,35 @@ namespace caret {
          */
         bool m_identificationUpdatesVolumeSlices;
         
+        /**
+         * If true, selected histology slices in tab move to location
+         *  of the identification operation.
+         */
+        bool m_identificationUpdatesHistologySlices;
+        
+        /** display crosshairs on histology slices */
+        bool m_displayHistologyAxesCrosshairs;
+        
         /** display crosshairs on volume slices */
         bool m_displayVolumeAxesCrosshairs;
         
         /** display crosshair labels on volume slices */
         bool m_displayVolumeAxesCrosshairLabels;
         
+        /** type of coordinates displayed on montage slices */
+        VolumeMontageCoordinateDisplayTypeEnum::Enum m_volumeMontageCoordinateDisplayType = VolumeMontageCoordinateDisplayTypeEnum::OFFSET;
+        
         /** display coordinates on montage */
         bool m_displayVolumeMontageAxesCoordinates;
         
         /** precision for coordinate on montage */
         int32_t m_volumeMontageCoordinatePrecision;
+        
+        /** percentage height for font for coordinate text*/
+        float m_volumeMontageCoordinateFontHeight = 10.0;
+        
+        /* alignment for volume montage coordinates text */
+        VolumeMontageCoordinateTextAlignmentEnum::Enum m_volumeMontageCoordinateTextAlignment = VolumeMontageCoordinateTextAlignmentEnum::RIGHT;
         
         /** enable lighting (shading) added 29 March 2018 */
         bool m_lightingEnabled;
@@ -693,13 +1034,21 @@ namespace caret {
         /** Index of window before tab was closed */
         int32_t m_closedWindowIndex = -1;
         
+        /** Selection box NOT copied when tab cloned*/
+        std::unique_ptr<GraphicsRegionSelectionBox> m_regionSelectionBox;
+        
+        /** Montage viewports not saved to scene */
+        std::vector<GraphicsViewport> m_mprThreeMontageViewports;
+
+        /** Not saved to scenes nor copied when tab copied/yoked*/
+        mutable MouseLeftDragModeEnum::Enum m_mouseLeftDragMode = MouseLeftDragModeEnum::INVALID;
+        
         /**
          * NEVER access this directly as it may contain tabs that are closed but available for reopening.
          * Instead, call getOpenBrowserTabs().
          * Contains all active browser tab content instances
          */
         static std::set<BrowserTabContent*> s_allBrowserTabContent;
-        
     };
     
 #ifdef __BROWSER_TAB_CONTENT_DECLARE__

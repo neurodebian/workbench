@@ -85,6 +85,31 @@ EventOpenGLObjectToWindowTransform::isValid() const
 /**
  * Transform a window coordinate to an object coordinate.
  *
+ * @param windowX
+ *     The window X-coordinate.
+ * @param windowY
+ *     The window Y-coordinate.
+ * @param windowZ
+ *     The window Z-coordinate.
+ * @param objectXYZOut
+ *     Output containing the computed object coordinate.
+ * @return
+ *     True if output coordinate is valid, else false.
+ */
+bool
+EventOpenGLObjectToWindowTransform::inverseTransformPoint(const float windowX,
+                                                          const float windowY,
+                                                          const float windowZ,
+                                                          float objectXYZOut[3]) const
+{
+    const float windowXYZ[3] { windowX, windowY, windowZ };
+    return inverseTransformPoint(windowXYZ,
+                                 objectXYZOut);
+}
+
+/**
+ * Transform a window coordinate to an object coordinate.
+ *
  * @param windowXYZ
  *     The window coordinate.
  * @param objectXYZOut
@@ -94,7 +119,7 @@ EventOpenGLObjectToWindowTransform::isValid() const
  */
 bool
 EventOpenGLObjectToWindowTransform::inverseTransformPoint(const float windowXYZ[3],
-                           float objectXYZOut[3]) const
+                                                          float objectXYZOut[3]) const
 {
     if ( ! m_validFlag) {
         CaretAssert(0);
@@ -129,6 +154,22 @@ EventOpenGLObjectToWindowTransform::inverseTransformPoint(const float windowXYZ[
     objectXYZOut[2] = xyzw[2];
     
     return true;
+}
+
+/**
+ * @return Window coordinate transformed to model coordinate
+ * @param windowXYZ
+ *    The window coordinate
+ * If the inverse transform is invalid, a message is logged.
+ */
+Vector3D
+EventOpenGLObjectToWindowTransform::inverseTransformPoint(const float windowXYZ[3]) const
+{
+    Vector3D modelXYZ(windowXYZ);
+    if ( ! inverseTransformPoint(windowXYZ, modelXYZ)) {
+        CaretLogSevere("Inverse transform failed");
+    }
+    return modelXYZ;
 }
 
 /**

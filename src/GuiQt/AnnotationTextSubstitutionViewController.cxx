@@ -39,7 +39,7 @@
 #include "BrowserTabContent.h"
 #include "CaretAssert.h"
 #include "DisplayPropertiesAnnotationTextSubstitution.h"
-#include "EventGraphicsUpdateAllWindows.h"
+#include "EventGraphicsPaintSoonAllWindows.h"
 #include "EventMapYokingSelectMap.h"
 #include "EventSurfaceColoringInvalidate.h"
 #include "EventUserInterfaceUpdate.h"
@@ -244,10 +244,16 @@ AnnotationTextSubstitutionViewController::valueIndexSpinBoxChanged(int32_t fileI
                                     - spinBox->minimum());
         MapYokingGroupEnum::Enum mapYoking = textSubFile->getMapYokingGroup();
         if (mapYoking != MapYokingGroupEnum::MAP_YOKING_GROUP_OFF) {
+            CaretMappableDataFile* nullMapFile(NULL);
+            HistologySlicesFile* nullHistologySlicesFile(NULL);
+            MediaFile* nullMediaFile(NULL);
             EventMapYokingSelectMap selectMapEvent(mapYoking,
-                                                   NULL,
+                                                   nullMapFile,
                                                    textSubFile,
+                                                   nullHistologySlicesFile,
+                                                   nullMediaFile,
                                                    valueIndex,
+                                                   MapYokingGroupEnum::MediaAllFramesStatus::ALL_FRAMES_OFF,
                                                    true);
             EventManager::get()->sendEvent(selectMapEvent.getPointer());
         }
@@ -307,7 +313,7 @@ AnnotationTextSubstitutionViewController::updateOtherViewControllersAndGraphics(
         EventManager::get()->sendEvent(EventSurfaceColoringInvalidate().getPointer());
         EventManager::get()->sendEvent(EventUserInterfaceUpdate().getPointer());
     }
-    EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+    EventManager::get()->sendEvent(EventGraphicsPaintSoonAllWindows().getPointer());
 }
 
 /**

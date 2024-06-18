@@ -18,6 +18,13 @@ PROJECT (Scenes)
 # QT include files
 #
 SET(CARET_QT_LINK_MODULES "")
+if(Qt6_FOUND)
+    include_directories(${Qt6Core5Compat_INCLUDE_DIRS})
+    include_directories(${Qt6Core_INCLUDE_DIRS})
+    include_directories(${Qt6Gui_INCLUDE_DIRS})
+    include_directories(${Qt6Xml_INCLUDE_DIRS})
+# do we need this?    SET(CARET_QT_LINK_MODULES "Qt6::Core")
+endif()
 if(Qt5_FOUND)
     include_directories(${Qt5Core_INCLUDE_DIRS})
     include_directories(${Qt5Gui_INCLUDE_DIRS})
@@ -25,10 +32,6 @@ if(Qt5_FOUND)
     include_directories(${Qt5Xml_INCLUDE_DIRS})
     SET(CARET_QT_LINK_MODULES "Qt5::Core")
 endif()
-IF (QT4_FOUND)
-    SET(QT_DONT_USE_QTGUI TRUE)
-    INCLUDE(${QT_USE_FILE})
-ENDIF ()
 
 #
 # Create a Library
@@ -49,12 +52,13 @@ SceneFileBasePathTypeEnum.h
 SceneFloat.h
 SceneFloatArray.h
 SceneInfo.h
-SceneInfoSaxReader.h
 SceneInfoXmlStreamBase.h
 SceneInfoXmlStreamReader.h
 SceneInfoXmlStreamWriter.h
 SceneInteger.h
 SceneIntegerArray.h
+SceneLongInteger.h
+SceneLongIntegerArray.h
 SceneObject.h
 SceneObjectArray.h
 SceneObjectContainerTypeEnum.h
@@ -65,15 +69,12 @@ ScenePathNameArray.h
 ScenePrimitive.h
 ScenePrimitiveArray.h
 SceneRestoreWarningCodesEnum.h
-SceneSaxReader.h
 SceneString.h
 SceneStringArray.h
 SceneTypeEnum.h
 SceneUnsignedByte.h
 SceneUnsignedByteArray.h
 SceneWriterInterface.h
-SceneWriterXml.h
-SceneXmlElements.h
 SceneXmlStreamBase.h
 SceneXmlStreamReader.h
 SceneXmlStreamWriter.h
@@ -95,12 +96,13 @@ SceneFileBasePathTypeEnum.cxx
 SceneFloat.cxx
 SceneFloatArray.cxx
 SceneInfo.cxx
-SceneInfoSaxReader.cxx
 SceneInfoXmlStreamBase.cxx
 SceneInfoXmlStreamReader.cxx
 SceneInfoXmlStreamWriter.cxx
 SceneInteger.cxx
 SceneIntegerArray.cxx
+SceneLongInteger.cxx
+SceneLongIntegerArray.cxx
 SceneObject.cxx
 SceneObjectArray.cxx
 SceneObjectContainerTypeEnum.cxx
@@ -111,13 +113,11 @@ ScenePathNameArray.cxx
 ScenePrimitive.cxx
 ScenePrimitiveArray.cxx
 SceneRestoreWarningCodesEnum.cxx
-SceneSaxReader.cxx
 SceneString.cxx
 SceneStringArray.cxx
 SceneTypeEnum.cxx
 SceneUnsignedByte.cxx
 SceneUnsignedByteArray.cxx
-SceneWriterXml.cxx
 SceneXmlStreamBase.cxx
 SceneXmlStreamReader.cxx
 SceneXmlStreamWriter.cxx

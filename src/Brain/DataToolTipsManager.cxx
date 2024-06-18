@@ -302,6 +302,47 @@ DataToolTipsManager::setShowChart(const bool status)
     m_showChartFlag = status;
 }
 
+/**
+ * @return Is show media enabled?
+ */
+bool
+DataToolTipsManager::isShowMedia() const
+{
+    return m_showMediaFlag;
+}
+
+/**
+ * Set status for show media
+ *
+ * @param status
+ *     New status.
+ */
+void
+DataToolTipsManager::setShowMedia(const bool status)
+{
+    m_showMediaFlag = status;
+}
+
+/**
+ * @return Is show histology enabled?
+ */
+bool
+DataToolTipsManager::isShowHistology() const
+{
+    return m_showHistologyFlag;
+}
+
+/**
+ * Set status for show histology
+ *
+ * @param status
+ *     New status.
+ */
+void
+DataToolTipsManager::setShowHistology(const bool status)
+{
+    m_showHistologyFlag = status;
+}
 
 /**
  * Get a description of this object's content.

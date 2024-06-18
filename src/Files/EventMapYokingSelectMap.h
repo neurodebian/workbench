@@ -29,6 +29,8 @@ namespace caret {
 
     class AnnotationTextSubstitutionFile;
     class CaretMappableDataFile;
+    class HistologySlicesFile;
+    class MediaFile;
     
     class EventMapYokingSelectMap : public Event {
         
@@ -36,7 +38,10 @@ namespace caret {
         EventMapYokingSelectMap(const MapYokingGroupEnum::Enum mapYokingGroup,
                                 const CaretMappableDataFile* caretMappableDataFile,
                                 const AnnotationTextSubstitutionFile* annotationTextSubstitutionFile,
+                                const HistologySlicesFile* histologySlicesFile,
+                                const MediaFile* mediaFile,
                                 const int32_t mapIndex,
+                                const MapYokingGroupEnum::MediaAllFramesStatus mediaAllFramesStatus,
                                 const bool selectionStatus);
         
         virtual ~EventMapYokingSelectMap();
@@ -47,10 +52,12 @@ namespace caret {
         
         const AnnotationTextSubstitutionFile* getAnnotationTextSubstitutionFile() const;
         
+        const HistologySlicesFile* getHistologySlicesFile() const;
+        
+        const MediaFile* getMediaFile() const;
+        
         int32_t getMapIndex() const;
         
-        bool getSelectionStatus() const;
-
         // ADD_NEW_METHODS_HERE
 
     private:
@@ -64,9 +71,11 @@ namespace caret {
         
         const AnnotationTextSubstitutionFile* m_annotationTextSubstitutionFile;
         
-        const int32_t m_mapIndex;
+        const HistologySlicesFile* m_histologySlicesFile;
         
-        const bool m_selectionStatus;
+        const MediaFile* m_mediaFile;
+        
+        const int32_t m_mapIndex;
 
         // ADD_NEW_MEMBERS_HERE
 

@@ -26,6 +26,7 @@
 #include <QVariant>
 
 #include "CaretColorEnum.h"
+#include "DataFileTypeEnum.h"
 #include "StructureEnum.h"
 #include "WuQDialogModal.h"
 
@@ -35,6 +36,7 @@ class QComboBox;
 class QDialogButtonBox;
 class QDoubleSpinBox;
 class QGridLayout;
+class QImage;
 class QLabel;
 class QLineEdit;
 class QListWidget;
@@ -45,6 +47,7 @@ class QTextEdit;
 namespace caret {
     class BrainStructure;
     class CaretColorEnumComboBox;
+    class CaretDataFileSelectionComboBox;
     class StructureEnumComboBox;
     class SurfaceSelectionViewController;
     
@@ -57,12 +60,12 @@ namespace caret {
         WuQDataEntryDialog(const QString& title,
                            QWidget* parent,
                            const bool addScrollBarsFlag = false,
-                           Qt::WindowFlags f = 0);
+                           Qt::WindowFlags f = Qt::WindowFlags());
         
         WuQDataEntryDialog(const QString& title,
                            QWidget* parent,
                            const WuQDialog::ScrollAreaStatus scrollBarStatus,
-                           Qt::WindowFlags f = 0);
+                           Qt::WindowFlags f = Qt::WindowFlags());
         
         void hideCancelButton();
         
@@ -88,9 +91,17 @@ namespace caret {
                                const QStringList& comboBoxItems,
                                const QList<QVariant>* comboBoxItemsUserData = NULL);
         
+        // File selection combo box
+        CaretDataFileSelectionComboBox* addFileSelectionComboBox(const QString& labelText,
+                                                                 const std::vector<DataFileTypeEnum::Enum> dataFileTypes);
+        
         // add line edit
         QLineEdit* addLineEditWidget(const QString& labelText,
                                      const QString& defaultText = "");
+        
+        // add labels
+        QLabel* addLabel(const QString& labelLeftText,
+                         const QString& labelRightText);
         
         // add list box
         QListWidget* addListWidget(const QString& labelText,
@@ -134,6 +145,9 @@ namespace caret {
         
         SurfaceSelectionViewController* addSurfaceSelectionViewController(const QString& labelText,
                                                             BrainStructure* brainStructure);
+        
+        void addImage(const QString labelText,
+                      const QImage& image);
         
         // set text at top of dialog 
         void setTextAtTop(const QString& s,

@@ -391,6 +391,7 @@ GraphicsOpenGLPolylineTriangles::convertLinesToPolygons(AString& errorMessageOut
     }
     else {
         errorMessageOut = "Primitive invalid, all points may be coincident";
+        errorMessageOut.clear(); // Ignore this error message
     }
     
     return primitiveOut;
@@ -679,8 +680,8 @@ GraphicsOpenGLPolylineTriangles::createTrianglesFromWindowVertices(const int32_t
         0.0f
     };
     const float lineLength = MathFunctions::normalizeVector(startToEndVector);
-    if (lineLength < 0.001f) {
-        const AString msg("This should not happen: Failure to filter coincident points with indices="
+    if (lineLength < 0.0000000001f) {
+        const AString msg("Failure to filter coincident points with indices="
                           + AString::number(windowVertexOneIndex)
                           + ", "
                           + AString::number(windowVertexTwoIndex)

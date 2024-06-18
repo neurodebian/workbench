@@ -33,6 +33,7 @@ namespace caret {
     class OverlaySet;
     class VolumeFile;
     class VolumeFileEditorDelegate;
+    class VolumeMappableInterface;
     
     class UserInputModeVolumeEditWidget;
     
@@ -45,16 +46,19 @@ namespace caret {
          */
         struct VolumeEditInfo {
             /** The overlay set in the tab */
-            OverlaySet* m_overlaySet;
+            OverlaySet* m_overlaySet = NULL;
+            
+            /** The underlay volume */
+            VolumeMappableInterface* m_underlayVolume = NULL;
             
             /** The top-most overlay in the tab */
-            Overlay* m_topOverlay;
+            Overlay* m_topOverlay = NULL;
             
             /** The overlay containing the volume file */
-            Overlay* m_volumeOverlay;
+            Overlay* m_volumeOverlay = NULL;
             
             /** The volume file being edited */
-            VolumeFile* m_volumeFile;
+            VolumeFile* m_volumeFile = NULL;
             
             /** Index of the map in the volume file being edited */
             int32_t m_mapIndex;
@@ -68,11 +72,11 @@ namespace caret {
             /** The volume's editor delegate */
             VolumeFileEditorDelegate* m_volumeFileEditorDelegate;
             
-            /** The oblique projection rotation matrix */
-            Matrix4x4 m_obliqueRotationMatrix;
+            /** The oblique or MPR projection rotation matrix */
+            Matrix4x4 m_obliqueMprRotationMatrix;
         };
         
-        UserInputModeVolumeEdit(const int32_t windowIndex);
+        UserInputModeVolumeEdit(const int32_t browserIndexIndex);
         
         virtual ~UserInputModeVolumeEdit();
         
@@ -88,14 +92,16 @@ namespace caret {
         
         virtual void mouseLeftDragWithCtrlShift(const MouseEvent& mouseEvent);
 
+        bool getVolumeEditInfoForStatus(VolumeEditInfo& volumeEditInfo);
+        
+        bool getVolumeEditInfoForEditOperation(VolumeEditInfo& volumeEditInfo,
+                                               const VolumeSliceViewPlaneEnum::Enum sliceViewPlane);
+        
         virtual void showContextMenu(const MouseEvent& mouseEvent,
                                      const QPoint& menuPosition,
                                      BrainOpenGLWidget* openGLWidget);
         
-        bool getVolumeEditInfo(VolumeEditInfo& volumeEditInfo);
-        
-        void updateGraphicsAfterEditing(VolumeFile* volumeFile,
-                                        const int32_t mapIndex);
+        void updateGraphicsAfterEditing();
         
         // ADD_NEW_METHODS_HERE
 
@@ -104,9 +110,11 @@ namespace caret {
 
         UserInputModeVolumeEdit& operator=(const UserInputModeVolumeEdit&);
         
-        void processEditCommandFromMouse(const MouseEvent& mouseEvent);
+        bool getVolumeEditInfo(VolumeEditInfo& volumeEditInfo,
+                               const VolumeSliceViewPlaneEnum::Enum sliceViewPlane,
+                               const bool setObliqueMprMatrixFlag);
         
-        const int32_t m_windowIndex;
+        void processEditCommandFromMouse(const MouseEvent& mouseEvent);
         
         UserInputModeVolumeEditWidget* m_inputModeVolumeEditWidget;
         

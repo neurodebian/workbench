@@ -24,7 +24,9 @@
 
 #include "CaretObject.h"
 #include "Matrix4x4Interface.h"
+#include "Vector3D.h"
 #include <stdint.h>
+#include <vector>
 
 #include <AString.h>
 
@@ -41,13 +43,17 @@ class Matrix4x4 : public Matrix4x4Interface, public CaretObject {
 public:
     Matrix4x4();
 
-public:
+    Matrix4x4(const std::vector<std::vector<float>>& matrixRows);
+    
     Matrix4x4(const Matrix4x4& o);
 
     Matrix4x4& operator=(const Matrix4x4& o);
 
     virtual ~Matrix4x4();
 
+    static Matrix4x4 rotationTo(const Vector3D& fromVector,
+                                const Vector3D& toVector);
+    
 private:
     void copyHelper(const Matrix4x4& o);
 
@@ -71,6 +77,8 @@ public:
             const double tz);
 
     void translate(const double txyz[3]);
+    
+    void translate(const float txyz[3]);
     
     void scale(
             const double sx,
@@ -97,10 +105,10 @@ public:
             const double y,
             const double z);
 
-    void getRotation(double& rotationOutX,
-                     double& rotationOutY,
-                     double& rotationOutZ) const;
-    
+    virtual void getRotation(double& rotationOutX,
+                             double& rotationOutY,
+                             double& rotationOutZ) const override;
+
     void setRotation(const double rotationX,
                      const double rotationY,
                      const double rotationZ);
@@ -117,6 +125,10 @@ public:
     
     void setMatrixFromOpenGL(const float m[16]);
     
+    QString getMatrixInRowMajorOrderString();
+    
+    void setMatrixFromRowMajorOrderString(const QString& s);
+    
     void setMatrixToOpenGLRotationFromVector(const float vector[3]);
     
     void transpose();
@@ -125,7 +137,7 @@ public:
 
     void getMatrix(double m[4][4]) const;
 
-    void setMatrix(const float m[4][4]);
+    virtual void setMatrix(const float m[4][4]) override;
     
     void getMatrix(float m[4][4]) const;
     
@@ -147,6 +159,20 @@ public:
 
     void setTransformedSpaceName(const AString& name);
 
+    void getColumn(const int32_t columnIndex,
+                   float columnOut[4]) const;
+    
+    void getColumn(const int32_t columnIndex,
+                   double columnOut[4]) const;
+    
+    void setColumn(const int32_t columnIndex,
+                   const float column[4]);
+    
+    void setColumn(const int32_t columnIndex,
+                   const double column[4]);
+    
+    Vector3D getBasisVector(const int32_t columnIndex) const;
+    
     double getMatrixElement(
             const int32_t i,
             const int32_t j) const;

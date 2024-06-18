@@ -32,6 +32,7 @@
 
 #include "CaretAssert.h"
 #include "CaretLogger.h"
+#include "FileInformation.h"
 
 using namespace caret;
 
@@ -130,6 +131,23 @@ DataFileTypeEnum::DataFileTypeEnum(const Enum enumValue,
 DataFileTypeEnum::~DataFileTypeEnum()
 {
 }
+
+/**
+ * Reinitialize the data file types
+ * These items are initialized when a palette file is creeated during session manager creation.
+ * However, QCoreApplication has not been initialized so the plugin paths are not valid and this
+ * prevents getting image file extensions for image files loaded using plugins.  Calling this method
+ * after QCoreApplication results in the plugin image file extensions availability.
+ */
+void
+DataFileTypeEnum::reinitializeDataFileTypeEnums()
+{
+    initializedFlag      = false;
+    integerCodeGenerator = 0;
+    enumData.clear();
+    initialize();
+}
+
 
 /**
  * Initialize the enumerated metadata.
@@ -234,6 +252,13 @@ DataFileTypeEnum::initialize()
                                         false,
                                         "pdconn.nii"));
     
+    enumData.push_back(DataFileTypeEnum(CONNECTIVITY_PARCEL_DYNAMIC,
+                                        "CONNECTIVITY_PARCEL_DYNAMIC",
+                                        "CIFTI - Parcel Dynamic",
+                                        "CIFTI PARCEL DYNAMIC",
+                                        false,
+                                        "parcel_dynconn")); /* this file is never written */
+    
     enumData.push_back(DataFileTypeEnum(CONNECTIVITY_PARCEL_LABEL,
                                         "CONNECTIVITY_PARCEL_LABEL",
                                         "CIFTI - Parcel Label",
@@ -262,13 +287,28 @@ DataFileTypeEnum::initialize()
                                         false,
                                         "sdseries.nii"));
     
+    enumData.push_back(DataFileTypeEnum(CZI_IMAGE_FILE,
+                                        "CZI_IMAGE_FILE",
+                                        "CZI Image",
+                                        "CZI IMAGE",
+                                        false,             /* ext below begins with dot */
+                                        DataFileTypeEnum::toCziImageFileExtension().mid(1)));
+    
     enumData.push_back(DataFileTypeEnum(FOCI,
-                                        "FOCI", 
+                                        "FOCI",
                                         "Foci",
                                         "FOCI",
                                         false,
                                         "foci",
                                         "wb_foci"));
+    
+    enumData.push_back(DataFileTypeEnum(HISTOLOGY_SLICES,
+                                        "HISTOLOGY_SLICES",
+                                        "Histology Slices",
+                                        "HISTOLOGY_SLICES",
+                                        false,             /* ext below begins with dot */
+                                        "metaczi",
+                                        "meta-image"));
     
     enumData.push_back(DataFileTypeEnum(IMAGE,
                                         "IMAGE",
@@ -314,7 +354,14 @@ DataFileTypeEnum::initialize()
                                         true,
                                         "rgba.gii"));
     
-    enumData.push_back(DataFileTypeEnum(SCENE, 
+    enumData.push_back(DataFileTypeEnum(SAMPLES,
+                                        "SAMPLES",
+                                        "Samples",
+                                        "SAMPLES",
+                                        false,
+                                        "wb_samples"));
+    
+    enumData.push_back(DataFileTypeEnum(SCENE,
                                         "SCENE", 
                                         "Scene",
                                         "SCENE",
@@ -716,6 +763,32 @@ DataFileTypeEnum::getAllFileExtensions(const Enum enumValue)
 }
 
 /**
+ * @return All valid file extensions for reading the given enum value.
+ * @param enumValue
+ *     Enumerated type for file extensions.
+ */
+std::vector<AString>
+DataFileTypeEnum::getAllFileExtensionsForReading(const Enum enumValue)
+{
+    if (initializedFlag == false) initialize();
+    const DataFileTypeEnum* enumInstance = findData(enumValue);
+    return enumInstance->readFileExtensions;
+}
+
+/**
+ * @return All valid file extensions for writing the given enum value.
+ * @param enumValue
+ *     Enumerated type for file extensions.
+ */
+std::vector<AString>
+DataFileTypeEnum::getAllFileExtensionsForWriting(const Enum enumValue)
+{
+    if (initializedFlag == false) initialize();
+    const DataFileTypeEnum* enumInstance = findData(enumValue);
+    return enumInstance->writeFileExtensions;
+}
+
+/**
  * @return All valid file extensions for all file types except UNKNOWN
  * and dynanmic connectivity files
  *
@@ -752,6 +825,9 @@ DataFileTypeEnum::getFilesExtensionsForEveryFile(const bool includeNonWritableFi
                 break;
             case DataFileTypeEnum::CONNECTIVITY_PARCEL_DENSE:
                 break;
+            case DataFileTypeEnum::CONNECTIVITY_PARCEL_DYNAMIC:
+                validFlag = includeNonWritableFileTypesFlag;
+                break;
             case DataFileTypeEnum::CONNECTIVITY_PARCEL_LABEL:
                 break;
             case DataFileTypeEnum::CONNECTIVITY_PARCEL_SCALAR:
@@ -768,7 +844,11 @@ DataFileTypeEnum::getFilesExtensionsForEveryFile(const bool includeNonWritableFi
                 break;
             case DataFileTypeEnum::CONNECTIVITY_SCALAR_DATA_SERIES:
                 break;
+            case DataFileTypeEnum::CZI_IMAGE_FILE:
+                break;
             case DataFileTypeEnum::FOCI:
+                break;
+            case DataFileTypeEnum::HISTOLOGY_SLICES:
                 break;
             case DataFileTypeEnum::IMAGE:
                 break;
@@ -782,6 +862,8 @@ DataFileTypeEnum::getFilesExtensionsForEveryFile(const bool includeNonWritableFi
             case DataFileTypeEnum::PALETTE:
                 break;
             case DataFileTypeEnum::RGBA:
+                break;
+            case DataFileTypeEnum::SAMPLES:
                 break;
             case DataFileTypeEnum::SCENE:
                 break;
@@ -918,6 +1000,32 @@ DataFileTypeEnum::isValidFileExtension(const AString& filename,
     return false;
 }
 
+/***
+ * Does the filename have a valid extension for writing the given file type?
+ *
+ * @param filename
+ *    Name of file that may not have the correct file extension for writing
+ * @param enumValue
+ *    The data file type.
+ * @return
+ *    True if the filename has a valid writing extension, else false.
+ */
+bool
+DataFileTypeEnum::isValidWriteFileExtension(const AString& filename,
+                                            const Enum enumValue)
+{
+    std::vector<AString> extensions = DataFileTypeEnum::getAllFileExtensionsForWriting(enumValue);
+    
+    const AString ext(FileInformation(filename).getFileExtension());
+    if (std::find(extensions.begin(),
+                  extensions.end(),
+                  ext) != extensions.end()) {
+        return true;
+    }
+
+    return false;
+}
+
 /**
  * For the filename, match its extension to a DataFileType enumerated type.
  * @param filename 
@@ -1026,6 +1134,7 @@ DataFileTypeEnum::getAllEnums(std::vector<DataFileTypeEnum::Enum>& allEnums,
     allEnums.clear();
     
     const bool includeDenseDynamicFlag  = (options & OPTIONS_INCLUDE_CONNECTIVITY_DENSE_DYNAMIC);
+    const bool includeParcelDynamicFlag = (options & OPTIONS_INCLUDE_CONNECTIVITY_PARCEL_DYNAMIC);
     const bool includeMetricDynamicFlag = (options & OPTIONS_INCLUDE_METRIC_DENSE_DYNAMIC);
     const bool includeVolumeDynamicFlag = (options & OPTIONS_INCLUDE_VOLUME_DENSE_DYNAMIC);
     const bool includeUnknownFlag       = (options & OPTIONS_INCLUDE_UNKNOWN);
@@ -1055,6 +1164,11 @@ DataFileTypeEnum::getAllEnums(std::vector<DataFileTypeEnum::Enum>& allEnums,
                 break;
             case DataFileTypeEnum::CONNECTIVITY_PARCEL_DENSE:
                 break;
+            case DataFileTypeEnum::CONNECTIVITY_PARCEL_DYNAMIC:
+                if ( ! includeParcelDynamicFlag) {
+                    addEnumFlag = false;
+                }
+                break;
             case DataFileTypeEnum::CONNECTIVITY_PARCEL_LABEL:
                 break;
             case DataFileTypeEnum::CONNECTIVITY_PARCEL_SCALAR:
@@ -1071,7 +1185,11 @@ DataFileTypeEnum::getAllEnums(std::vector<DataFileTypeEnum::Enum>& allEnums,
                 break;
             case DataFileTypeEnum::CONNECTIVITY_SCALAR_DATA_SERIES:
                 break;
+            case DataFileTypeEnum::CZI_IMAGE_FILE:
+                break;
             case DataFileTypeEnum::FOCI:
+                break;
+            case DataFileTypeEnum::HISTOLOGY_SLICES:
                 break;
             case DataFileTypeEnum::IMAGE:
                 break;
@@ -1087,6 +1205,8 @@ DataFileTypeEnum::getAllEnums(std::vector<DataFileTypeEnum::Enum>& allEnums,
             case DataFileTypeEnum::PALETTE:
                 break;
             case DataFileTypeEnum::RGBA:
+                break;
+            case DataFileTypeEnum::SAMPLES:
                 break;
             case DataFileTypeEnum::SCENE:
                 break;

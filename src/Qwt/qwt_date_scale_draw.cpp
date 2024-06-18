@@ -157,7 +157,7 @@ QString QwtDateScaleDraw::dateFormat(
         return d_data->dateFormats[ intervalType ];
     }
 
-    return QString::null;
+    return QString();
 }
 
 /*!
@@ -271,11 +271,7 @@ QDateTime QwtDateScaleDraw::toDateTime( double value ) const
     if ( d_data->timeSpec == Qt::OffsetFromUTC )
     {
         dt = dt.addSecs( d_data->utcOffset );
-#ifdef WORKBENCH_REPLACE_QT_DEPRECATED
         dt.setOffsetFromUtc( d_data->utcOffset );
-#else
-        dt.setUtcOffset( d_data->utcOffset );
-#endif
     }
 
     return dt;

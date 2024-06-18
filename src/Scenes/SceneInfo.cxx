@@ -23,9 +23,14 @@
 #include "SceneInfo.h"
 #undef __SCENE_INFO_DECLARE__
 
+#include <QDateTime>
+#include <QSysInfo>
+
+#include "ApplicationInformation.h"
 #include "CaretAssert.h"
 #include "CaretLogger.h"
-#include "SceneXmlElements.h"
+#include "GiftiMetaData.h"
+#include "SceneInfoXmlStreamBase.h"
 #include "XmlAttributes.h"
 #include "XmlUtilities.h"
 #include "XmlWriter.h"
@@ -44,6 +49,7 @@ using namespace caret;
 SceneInfo::SceneInfo()
 : CaretObjectTracksModification()
 {
+    m_metaData.reset(new GiftiMetaData());
 }
 
 SceneInfo::SceneInfo(const SceneInfo& rhs) : CaretObjectTracksModification()
@@ -53,6 +59,7 @@ SceneInfo::SceneInfo(const SceneInfo& rhs) : CaretObjectTracksModification()
     m_balsaSceneID = rhs.m_balsaSceneID;
     m_imageFormat = rhs.m_imageFormat;
     m_imageBytes = rhs.m_imageBytes;
+    m_metaData.reset(new GiftiMetaData(*(rhs.m_metaData)));
 }
 
 /**
@@ -131,6 +138,25 @@ SceneInfo::setDescription(const AString& sceneDescription)
 }
 
 /**
+ * @return Pointer to metadata
+ */
+GiftiMetaData*
+SceneInfo::getMetaData()
+{
+    return m_metaData.get();
+}
+
+/**
+ * @return Pointer to metadata (const method)
+ */
+const GiftiMetaData*
+SceneInfo::getMetaData() const
+{
+    return m_metaData.get();
+}
+
+
+/**
  * Set bytes containing the thumbnail image.  
  *
  * @param imageBytes
@@ -182,6 +208,58 @@ SceneInfo::hasImage() const
 }
 
 /**
+ * Add data about Workbench Version to the scene's metadata
+ */
+void
+SceneInfo::addWorkbenchVersionInfoToSceneMetaData()
+{
+    addWorkbenchVersionInfoToMetaData(m_metaData.get());
+}
+
+/**
+ * Add (or replace) informatrion about this version of Workbench to the
+ * given metadata that may be a scene or the scene file's metadfata
+ * @param metaData
+ *    The metadata
+ */
+void
+SceneInfo::addWorkbenchVersionInfoToMetaData(GiftiMetaData* metaData)
+{
+    CaretAssert(metaData);
+
+    const AString dateTimeString(QDateTime(QDateTime::currentDateTime()).toString(Qt::ISODate));
+    ApplicationInformation appInfo;
+
+    metaData->set(METADATA_WORKBENCH_COMMIT_DATE_NAME,       SceneInfo::removeNamePrefix(appInfo.getCommitDate()));
+    metaData->set(METADATA_WORKBENCH_COMMIT_NAME,            SceneInfo::removeNamePrefix(appInfo.getCommit()));
+    metaData->set(METADATA_WORKBENCH_CURRENT_TIME_NAME,      dateTimeString);
+    metaData->set(METADATA_WORKBENCH_SYSTEM_INFO,            QSysInfo::prettyProductName());
+    metaData->set(METADATA_WORKBENCH_WORKBENCH_VERSION_NAME, appInfo.getVersion());
+}
+
+/**
+ * @return Text after the ": " from the given string
+ * @param text
+ *    The text string
+ *
+ * The commit and commit data from ApplicationInfo are like this:
+ *    Commit: 512308ecc04b66c1ce5650653bee869b12d9965c
+ *    Commit Date: 2022-03-17 08:53:20 -0500
+ *  just need data without title
+ */
+AString
+SceneInfo::removeNamePrefix(const AString& text)
+{
+    AString s(text);
+    const int32_t offset(s.indexOf(": "));
+    if (offset > 0) {
+        s = s.mid(offset + 2);
+    }
+    
+    return s;
+}
+
+/**
  * @return The BALSA Scene ID.
  */
 AString
@@ -206,84 +284,6 @@ SceneInfo::setBalsaSceneID(const AString& balsaSceneID)
 }
 
 /**
- * Write the scene info element.
- *
- * @param sceneInfo
- *     The scene info element that is written.
- * @param sceneInfoIndex
- *     The index for the scene info.
- */
-void
-SceneInfo::writeSceneInfo(XmlWriter& xmlWriter,
-                          const int32_t sceneInfoIndex) const
-{
-    XmlAttributes attributes;
-    attributes.addAttribute(SceneXmlElements::SCENE_INFO_INDEX_ATTRIBUTE,
-                            sceneInfoIndex);
-    
-    xmlWriter.writeStartElement(SceneXmlElements::SCENE_INFO_TAG,
-                                  attributes);
-    
-    xmlWriter.writeElementCData(SceneXmlElements::SCENE_INFO_NAME_TAG,
-                                     m_sceneName);
-    
-    xmlWriter.writeElementCData(SceneXmlElements::SCENE_INFO_BALSA_SCENE_ID_TAG,
-                                m_balsaSceneID);
-    
-    xmlWriter.writeElementCData(SceneXmlElements::SCENE_INFO_DESCRIPTION_TAG,
-                                       m_sceneDescription);
-    
-    writeSceneInfoImage(xmlWriter,
-                        SceneXmlElements::SCENE_INFO_IMAGE_TAG,
-                        m_imageBytes,
-                        m_imageFormat);
-    
-    /*
-     * End class element.
-     */
-    xmlWriter.writeEndElement();
-}
-
-/**
- * Write an image to the scene info.
- *
- * @param xmlWriter
- *    The XML writer.
- * @param xmlTag
- *    Tag for the image.
- * @param imageBytes
- *    Bytes containing the image.
- * @param imageFormat
- *    Format of the image.
- *
- */
-void
-SceneInfo::writeSceneInfoImage(XmlWriter& xmlWriter,
-                               const AString& xmlTag,
-                                    const QByteArray& imageBytes,
-                                    const AString& imageFormat) const
-{
-    if (imageBytes.length() > 0) {
-        //QString base64String(imageBytes.toBase64());
-        const QByteArray base64ByteArray(imageBytes.toBase64());
-        QString base64String = QString::fromLatin1(base64ByteArray.constData(),
-                                                  base64ByteArray.size());
-        XmlAttributes attributes;
-        attributes.addAttribute(SceneXmlElements::SCENE_INFO_IMAGE_ENCODING_ATTRIBUTE,
-                                SceneXmlElements::SCENE_INFO_ENCODING_BASE64_NAME);
-        attributes.addAttribute(SceneXmlElements::SCENE_INFO_IMAGE_FORMAT_ATTRIBUTE,
-                                imageFormat);
-        
-        xmlWriter.writeStartElement(xmlTag,
-                                      attributes);
-        
-        xmlWriter.writeCharacters(base64String);
-        
-        xmlWriter.writeEndElement();
-    }
-}
-
-/**
  * Set an image form text.
  *
  * @param text
@@ -302,7 +302,7 @@ SceneInfo::setImageFromText(const AString& text,
     m_imageFormat = "";
     
     if ( ! text.isEmpty()) {
-        if (encoding == SceneXmlElements::SCENE_INFO_ENCODING_BASE64_NAME) {
+        if (encoding == SceneInfoXmlStreamBase::VALUE_ENCODING_BASE64) {
             m_imageBytes = QByteArray::fromBase64(text.toLatin1());
             m_imageFormat = imageFormat;
         }

@@ -46,7 +46,11 @@ namespace caret {
         
         CaretDataFileSelectionModel* getSelectionModel();
         
+        CaretDataFile* getSelectedFile() const;
+        
         virtual QWidget* getWidget();
+        
+        void setNoFilesText(const AString& noFilesText);
         
         // ADD_NEW_METHODS_HERE
 
@@ -64,6 +68,8 @@ namespace caret {
         QComboBox* m_comboBox;
         
         CaretDataFileSelectionModel* m_selectionModel;
+        
+        AString m_noFilesText;
         
         // ADD_NEW_MEMBERS_HERE
 

@@ -113,6 +113,8 @@ CaretDataFileSelectionComboBox::updateComboBox(CaretDataFileSelectionModel* sele
     
     m_selectionModel = selectionModel;
     
+    bool enabledFlag(false);
+    
     if (m_selectionModel != NULL) {
         const CaretDataFile* selectedFile = m_selectionModel->getSelectedFile();
         int defaultIndex = 0;
@@ -142,9 +144,19 @@ CaretDataFileSelectionComboBox::updateComboBox(CaretDataFileSelectionModel* sele
             && (defaultIndex < m_comboBox->count())) {
             m_comboBox->setCurrentIndex(defaultIndex);
         }
+        
+        enabledFlag = (m_comboBox->count() > 0);
     }
     
     m_comboBox->blockSignals(false);
+    
+    m_comboBox->setEnabled(enabledFlag);
+    
+    if ( ! enabledFlag) {
+        if ( ! m_noFilesText.isEmpty()) {
+            m_comboBox->addItem(m_noFilesText);
+        }
+    }
 }
 
 /**
@@ -155,5 +167,30 @@ CaretDataFileSelectionComboBox::getSelectionModel()
 {
     return m_selectionModel;
 }
+
+/**
+ * @return Selected file or NULL if invalid
+ */
+CaretDataFile*
+CaretDataFileSelectionComboBox::getSelectedFile() const
+{
+    if (m_selectionModel != NULL) {
+        return m_selectionModel->getSelectedFile();
+    }
+    return NULL;
+}
+
+/**
+ * Set the text displayed if no files are available
+ * @param noFilesText
+ *    The text
+ */
+void
+CaretDataFileSelectionComboBox::setNoFilesText(const AString& noFilesText)
+{
+    m_noFilesText = noFilesText;
+}
+
+
 
 

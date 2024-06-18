@@ -31,6 +31,8 @@ namespace caret {
 
     class AnnotationTextSubstitutionFile;
     class CaretMappableDataFile;
+    class HistologySlicesFile;
+    class MediaFile;
     
     class EventMapYokingValidation : public Event {
         
@@ -43,6 +45,14 @@ namespace caret {
                              const MapYokingGroupEnum::Enum mapYokingGroup,
                              const int32_t tabIndex);
         
+        void addHistologySlicesYokedFile(const HistologySlicesFile* histologySlicesFile,
+                                         const MapYokingGroupEnum::Enum mapYokingGroup,
+                                         const int32_t tabIndex);
+        
+        void addMediaYokedFile(const MediaFile* mediaFile,
+                               const MapYokingGroupEnum::Enum mapYokingGroup,
+                               const int32_t tabIndex);
+        
         void addAnnotationTextSubstitutionFile(const AnnotationTextSubstitutionFile* annTextSubFile,
                                                const MapYokingGroupEnum::Enum mapYokingGroup);
         
@@ -53,6 +63,8 @@ namespace caret {
         
         bool validateCompatibility(const AnnotationTextSubstitutionFile* annTextSubFile,
                                    const CaretMappableDataFile* caretMapFile,
+                                   const HistologySlicesFile* histologySlicesFile,
+                                   const MediaFile* mediaFile,
                                    int32_t& numberOfYokedFilesOut,
                                    AString& messageOut) const;
         
@@ -63,11 +75,17 @@ namespace caret {
         public:
             YokedFileInfo(const AnnotationTextSubstitutionFile* annTextSubFile,
                           const CaretMappableDataFile* caretMapFile,
+                          const HistologySlicesFile* histologySlicesFile,
+                          const MediaFile* mediaFile,
                           const int32_t tabIndex);
 
             const AnnotationTextSubstitutionFile* m_annTextSubFile;
             
             const CaretMappableDataFile* m_mapFile;
+            
+            const HistologySlicesFile* m_histologySlicesFile;
+            
+            const MediaFile* m_mediaFile;
             
             const int32_t m_tabIndex;
             

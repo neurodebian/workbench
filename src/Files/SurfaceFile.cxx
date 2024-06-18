@@ -36,9 +36,9 @@
 #include "DescriptiveStatistics.h"
 #include "FastStatistics.h"
 #include "EventSurfaceColoringInvalidate.h"
-
 #include "GiftiFile.h"
 #include "GiftiMetaDataXmlElements.h"
+#include "GraphicsPrimitiveV3fN3fC4f.h"
 #include "MathFunctions.h"
 #include "Matrix4x4.h"
 #include "Vector3D.h"
@@ -214,17 +214,17 @@ SurfaceFile::validateDataArraysAfterReading()
         }
         
     }
-    
-    AString errorMessage;
     if (this->coordinateDataArray == NULL) {
-        errorMessage += "Unable to find coordinate data array which "
-            " contains data type FLOAT32, Intent POINTSET, and two "
-            " dimensions with the second dimension set to three.  ";
+        throw DataFileException(getFileName(),
+                                "Unable to find coordinate data array which "
+                                " contains data type FLOAT32, Intent POINTSET, and two "
+                                " dimensions with the second dimension set to three.  ");
     }
     if (this->triangleDataArray == NULL) {
-        errorMessage += "Unable to find topology data array which "
-        " contains data type INT32, Intent TRIANGLE, and two "
-        " dimensions with the second dimension set to three.";
+        throw DataFileException(getFileName(),
+                                "Unable to find topology data array which "
+                                " contains data type INT32, Intent TRIANGLE, and two "
+                                " dimensions with the second dimension set to three.");
     }
     const int32_t numNodes = this->getNumberOfNodes();
     if (!m_skipSanityCheck)
@@ -237,26 +237,22 @@ SurfaceFile::validateDataArraysAfterReading()
             {
                 if (thisTri[j] < 0 || thisTri[j] >= numNodes)
                 {
-                    errorMessage += "Invalid vertex in triangle array: triangle " + AString::number(i) + ", vertex " + AString::number(thisTri[j]);
-                    break;
+                    throw DataFileException(getFileName(),
+                                            "Invalid vertex in triangle array: triangle " + AString::number(i) + ", vertex " + AString::number(thisTri[j]));
                 }
                 for (int k = j + 1; k < 3; ++k)
                 {
                     if (thisTri[j] == thisTri[k])
                     {
-                        errorMessage += "Vertex used twice in one triangle: triangle " + AString::number(i) + ", vertex " + AString::number(thisTri[j]);
-                        break;
+                        throw DataFileException(getFileName(),
+                                                "Vertex used twice in one triangle: triangle " + AString::number(i) + ", vertex " + AString::number(thisTri[j]));
                     }
                 }
             }
         }
-        if (errorMessage.isEmpty() == false) {
-            throw DataFileException(getFileName(),
-                                    errorMessage);
-        }
     }
-    
-    this->computeNormals();
+
+    this->computeNormals(); //this will be garbage in the case that m_skipSanityCheck is used for, but we want it to be allocated to the right size, as multiple functions use it unchecked...
 
     /*
      * Apply the first transformation matrix that transforms to 
@@ -601,6 +597,14 @@ SurfaceFile::computeNormals()
     int32_t numCoords = this->getNumberOfNodes();
     if (numCoords > 0) {
         this->normalVectors.resize(numCoords * 3);
+
+        /*
+         * Need to fill with zeros so calculations are correct
+         * especially when normal get recomputed (resize does nothing)
+         */
+        std::fill(this->normalVectors.begin(),
+                  this->normalVectors.end(),
+                  0.0);
     }
     else {
         this->normalVectors.clear();
@@ -1562,7 +1566,11 @@ SurfaceFile::invalidateNodeColoringForBrowserTabs()
         this->surfaceNodeColoringForBrowserTabs[i].clear();
         this->surfaceMontageNodeColoringForBrowserTabs[i].clear();
         this->wholeBrainNodeColoringForBrowserTabs[i].clear();
-    }    
+    }
+    
+    m_surfaceGraphicsPrimitives.clear();
+    m_surfaceMontageGraphicsPrimitives.clear();
+    m_wholeBrainGraphicsPrimitives.clear();
 }
 
 /**
@@ -1691,6 +1699,11 @@ SurfaceFile::setSurfaceNodeColoringRgbaForBrowserTab(const int32_t browserTabInd
     for (int32_t i = 0; i < numberOfComponentsRGBA; i++) {
         rgba[i] = rgbaNodeColorComponents[i];
     }
+    
+    if ((browserTabIndex >= 0)
+        && (browserTabIndex < static_cast<int32_t>(m_surfaceGraphicsPrimitives.size()))) {
+        m_surfaceGraphicsPrimitives[browserTabIndex].reset();
+    }
 }
 
 /**
@@ -1737,6 +1750,11 @@ SurfaceFile::setSurfaceMontageNodeColoringRgbaForBrowserTab(const int32_t browse
     std::vector<float>& rgba = this->surfaceMontageNodeColoringForBrowserTabs[browserTabIndex];
     for (int32_t i = 0; i < numberOfComponentsRGBA; i++) {
         rgba[i] = rgbaNodeColorComponents[i];
+    }
+    
+    if ((browserTabIndex >= 0)
+        && (browserTabIndex < static_cast<int32_t>(m_surfaceMontageGraphicsPrimitives.size()))) {
+        m_surfaceMontageGraphicsPrimitives[browserTabIndex].reset();
     }
 }
 
@@ -1785,6 +1803,121 @@ SurfaceFile::setWholeBrainNodeColoringRgbaForBrowserTab(const int32_t browserTab
     for (int32_t i = 0; i < numberOfComponentsRGBA; i++) {
         rgba[i] = rgbaNodeColorComponents[i];
     }
+    
+    if ((browserTabIndex >= 0)
+        && (browserTabIndex < static_cast<int32_t>(m_wholeBrainGraphicsPrimitives.size()))) {
+        m_wholeBrainGraphicsPrimitives[browserTabIndex].reset();
+    }
+}
+
+/**
+ * @return the graphics primitive for drawing this surface for a single surface view
+ * in the given tab index
+ * @param browserTabIndex
+ *    Index of the tab
+ */
+GraphicsPrimitiveV3fN3fC4f*
+SurfaceFile::getSurfaceGraphicsPrimitiveForBrowserTab(const int32_t browserTabIndex)
+{
+    const float* allRGBA(getSurfaceNodeColoringRgbaForBrowserTab(browserTabIndex));
+    GraphicsPrimitiveV3fN3fC4f* primitiveOut(getGraphicsPrimitive(m_surfaceGraphicsPrimitives,
+                                                                  browserTabIndex,
+                                                                  allRGBA));
+    return primitiveOut;
+}
+
+/**
+ * @return the graphics primitive for drawing this surface for a single surface view
+ * in the given tab index
+ * @param primitives
+ *    Primitives for each tab index
+ * @param browserTabIndex
+ *    Index of the tab
+ * @param rgba
+ *    The RGBA coloring for the surface
+ */
+GraphicsPrimitiveV3fN3fC4f*
+SurfaceFile::getGraphicsPrimitive(std::vector<std::unique_ptr<GraphicsPrimitiveV3fN3fC4f>>& primitives,
+                                                                     const int32_t browserTabIndex,
+                                                                     const float* rgba)
+{
+    GraphicsPrimitiveV3fN3fC4f* primitiveOut(NULL);
+    
+    if ((browserTabIndex >= 0)
+        && (browserTabIndex < static_cast<int32_t>(primitives.size()))) {
+        primitiveOut = primitives[browserTabIndex].get();
+    }
+    
+    if (primitiveOut == NULL) {
+        primitiveOut = createSurfaceGraphicsPrimitive(rgba);
+        
+        if (primitiveOut != NULL) {
+            if (browserTabIndex >= static_cast<int32_t>(primitives.size())) {
+                primitives.resize(browserTabIndex + 1);
+            }
+            primitives[browserTabIndex].reset(primitiveOut);
+        }
+    }
+    
+    return primitiveOut;
+
+}
+
+/*
+ * @return Graphics primitive for drawing this surface in the given RGBA colors
+ * @param rgba
+ *     The RGBA coloring
+ * @return
+ *     The graphics primitive
+ */
+GraphicsPrimitiveV3fN3fC4f*
+SurfaceFile::createSurfaceGraphicsPrimitive(const float* rgba)
+{
+    GraphicsPrimitiveV3fN3fC4f* primitiveOut(GraphicsPrimitive::newPrimitiveV3fN3fC4f(GraphicsPrimitive::PrimitiveType::OPENGL_TRIANGLES));
+    
+    const int32_t numberOfTriangles(getNumberOfTriangles());
+    for (int32_t i = 0; i < numberOfTriangles; i++) {
+        const int32_t* triangleIndices(getTriangle(i));
+        for (int32_t j = 0; j < 3; j++) {
+            const int32_t vertexIndex(triangleIndices[j]);
+            const float* xyz(getCoordinate(vertexIndex));
+            const float* normalXYZ(getNormalVector(vertexIndex));
+            const float* vertexRgba(&rgba[vertexIndex * 4]);
+            primitiveOut->addVertex(xyz, normalXYZ, vertexRgba);
+        }
+    }
+    return primitiveOut;
+}
+/**
+ * @return the graphics primitive for drawing this surface for a  surface montage view
+ * in the given tab index
+ * @param browserTabIndex
+ *    Index of the tab
+ */
+GraphicsPrimitiveV3fN3fC4f*
+SurfaceFile::getSurfaceMontageGraphicsPrimitiveForBrowserTab(const int32_t browserTabIndex)
+{
+    const float* allRGBA(getSurfaceMontageNodeColoringRgbaForBrowserTab(browserTabIndex));
+    GraphicsPrimitiveV3fN3fC4f* primitiveOut(getGraphicsPrimitive(m_surfaceMontageGraphicsPrimitives,
+                                                                  browserTabIndex,
+                                                                  allRGBA));
+    return primitiveOut;
+}
+
+/**
+ * @return the graphics primitive for drawing this surface for a whole brain view
+ * in the given tab index
+ * @param browserTabIndex
+ *    Index of the tab
+ */
+GraphicsPrimitiveV3fN3fC4f*
+SurfaceFile::getWholeBrainGraphicsPrimitiveForBrowserTab(const int32_t browserTabIndex)
+{
+    const float* allRGBA(getWholeBrainNodeColoringRgbaForBrowserTab(browserTabIndex));
+    GraphicsPrimitiveV3fN3fC4f* primitiveOut(getGraphicsPrimitive(m_wholeBrainGraphicsPrimitives,
+                                                                  browserTabIndex,
+                                                                  allRGBA));
+    return primitiveOut;
 }
 
 /**

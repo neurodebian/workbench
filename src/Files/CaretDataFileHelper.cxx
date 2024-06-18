@@ -43,13 +43,16 @@
 #include "CiftiFiberOrientationFile.h"
 #include "CiftiFiberTrajectoryFile.h"
 #include "CiftiScalarDataSeriesFile.h"
+#include "CziImageFile.h"
 #include "FileInformation.h"
 #include "FociFile.h"
+#include "HistologySlicesFile.h"
 #include "ImageFile.h"
 #include "LabelFile.h"
 #include "MetricFile.h"
 #include "PaletteFile.h"
 #include "RgbaFile.h"
+#include "SamplesFile.h"
 #include "SceneFile.h"
 #include "SpecFile.h"
 #include "SurfaceFile.h"
@@ -344,6 +347,9 @@ CaretDataFileHelper::createCaretDataFileForFileType(const DataFileTypeEnum::Enum
         case DataFileTypeEnum::CONNECTIVITY_PARCEL_DENSE:
             caretDataFile = new CiftiConnectivityMatrixParcelDenseFile();
             break;
+        case DataFileTypeEnum::CONNECTIVITY_PARCEL_DYNAMIC:
+            CaretAssertMessage(0, "Never create a parcel dynamic file");
+            break;
         case DataFileTypeEnum::CONNECTIVITY_PARCEL_LABEL:
             caretDataFile = new CiftiParcelLabelFile();
             break;
@@ -356,8 +362,14 @@ CaretDataFileHelper::createCaretDataFileForFileType(const DataFileTypeEnum::Enum
         case DataFileTypeEnum::CONNECTIVITY_SCALAR_DATA_SERIES:
             caretDataFile = new CiftiScalarDataSeriesFile();
             break;
+        case DataFileTypeEnum::CZI_IMAGE_FILE:
+            caretDataFile = new CziImageFile();
+            break;
         case DataFileTypeEnum::FOCI:
             caretDataFile = new FociFile();
+            break;
+        case DataFileTypeEnum::HISTOLOGY_SLICES:
+            caretDataFile = new HistologySlicesFile();
             break;
         case DataFileTypeEnum::IMAGE:
             caretDataFile = new ImageFile();
@@ -376,6 +388,9 @@ CaretDataFileHelper::createCaretDataFileForFileType(const DataFileTypeEnum::Enum
             break;
         case DataFileTypeEnum::RGBA:
             caretDataFile = new RgbaFile();
+            break;
+        case DataFileTypeEnum::SAMPLES:
+            caretDataFile = new SamplesFile();
             break;
         case DataFileTypeEnum::SCENE:
             caretDataFile = new SceneFile();

@@ -25,13 +25,17 @@
 
 #include <QAction>
 #include <QCheckBox>
+#include <QDoubleSpinBox>
 #include <QGridLayout>
 #include <QLabel>
+#include <QMenu>
 #include <QSpinBox>
 #include <QToolButton>
+#include <QWidgetAction>
 
 #include "BrowserTabContent.h"
 #include "CaretAssert.h"
+#include "EnumComboBoxTemplate.h"
 #include "WuQFactory.h"
 #include "WuQMacroManager.h"
 #include "WuQWidgetObjectGroup.h"
@@ -105,10 +109,85 @@ m_parentToolBar(parentToolBar)
     WuQMacroManager::instance()->addMacroSupportToObject(m_montageSpacingSpinBox,
                                                          "Set volume montage spacing");
     
+    QLabel* directionLabel(new QLabel("Dir:"));
+    m_montageSliceDirectionComboBox = new EnumComboBoxTemplate(this);
+    m_montageSliceDirectionComboBox->setup<VolumeMontageSliceOrderModeEnum,VolumeMontageSliceOrderModeEnum::Enum>();
+    QObject::connect(m_montageSliceDirectionComboBox, &EnumComboBoxTemplate::itemActivated,
+                     this, &BrainBrowserWindowToolBarVolumeMontage::montageSliceDirectionComboBoxItemActivated);
+    m_montageSliceDirectionComboBox->getComboBox()->setObjectName(objectNamePrefix
+                                           + "SliceDirection");
+    m_montageSliceDirectionComboBox->getComboBox()->setToolTip(VolumeMontageSliceOrderModeEnum::getGuiToolTip());
+    WuQMacroManager::instance()->addMacroSupportToObject(m_montageSliceDirectionComboBox->getComboBox(),
+                                                         "Set volume montage slice Direction");
+    directionLabel->setToolTip(VolumeMontageSliceOrderModeEnum::getGuiToolTip());
+
+    m_sliceCoordinateFontHeightSpinBox = new QDoubleSpinBox();
+    m_sliceCoordinateFontHeightSpinBox->setMinimum(0.1);
+    m_sliceCoordinateFontHeightSpinBox->setMaximum(100.0);
+    m_sliceCoordinateFontHeightSpinBox->setSingleStep(0.1);
+    m_sliceCoordinateFontHeightSpinBox->setSuffix("%");
+    QObject::connect(m_sliceCoordinateFontHeightSpinBox, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+                     this, &BrainBrowserWindowToolBarVolumeMontage::sliceCoordinateFontHeightValueChanged);
+    
+    m_sliceCoordinateTextAlignmentEnumComboBox = new EnumComboBoxTemplate(this);
+    m_sliceCoordinateTextAlignmentEnumComboBox->setup<VolumeMontageCoordinateTextAlignmentEnum,VolumeMontageCoordinateTextAlignmentEnum::Enum>();
+    QObject::connect(m_sliceCoordinateTextAlignmentEnumComboBox, &EnumComboBoxTemplate::itemActivated,
+                     this, &BrainBrowserWindowToolBarVolumeMontage::sliceCoordinateTextAlignmentEnumComboBoxItemActivated);
+
+    m_sliceCoordinateDisplayTypeEnumComboBox = new EnumComboBoxTemplate(this);
+    m_sliceCoordinateDisplayTypeEnumComboBox->setup<VolumeMontageCoordinateDisplayTypeEnum,VolumeMontageCoordinateDisplayTypeEnum::Enum>();
+    QObject::connect(m_sliceCoordinateDisplayTypeEnumComboBox, &EnumComboBoxTemplate::itemActivated,
+                     this, &BrainBrowserWindowToolBarVolumeMontage::sliceCoordinateDisplayTypeEnumComboBoxItemActivated);
+
+    QLabel* precisionLabel = new QLabel("Precision:");
+    precisionLabel->setToolTip("Digits right of decimal in slice coordinates");
+    m_sliceCoordinatePrecisionSpinBox = WuQFactory::newSpinBox();
+    m_sliceCoordinatePrecisionSpinBox->setRange(0, 10);
+    m_sliceCoordinatePrecisionSpinBox->setMaximumWidth(spinBoxWidth);
+    m_sliceCoordinatePrecisionSpinBox->setToolTip(precisionLabel->toolTip());
+    m_sliceCoordinatePrecisionSpinBox->setAlignment(Qt::AlignRight);
+    QObject::connect(m_sliceCoordinatePrecisionSpinBox, static_cast<void (QSpinBox::*)(int)>(&QSpinBox::valueChanged),
+                     this, &BrainBrowserWindowToolBarVolumeMontage::slicePrecisionSpinBoxValueChanged);
+    m_sliceCoordinatePrecisionSpinBox->setObjectName(objectNamePrefix
+                                                        + "Precision");
+    WuQMacroManager::instance()->addMacroSupportToObject(m_sliceCoordinatePrecisionSpinBox,
+                                                         "Set volume montage coordinate precision");
+
+    QWidget* textWidget(new QWidget());
+    QGridLayout* textLayout(new QGridLayout(textWidget));
+    textLayout->setContentsMargins(5, 0, 5, 0);
+    textLayout->setVerticalSpacing(textLayout->verticalSpacing() / 2);
+    int32_t textRow(0);
+    textLayout->addWidget(new QLabel("Coordinates Format"), textRow, 0, 1, 2, Qt::AlignCenter);
+    ++textRow;
+    textLayout->addWidget(new QLabel("Alignment: "), textRow, 0);
+    textLayout->addWidget(m_sliceCoordinateTextAlignmentEnumComboBox->getWidget(), textRow, 1);
+    ++textRow;
+    textLayout->addWidget(new QLabel("Font Height: "), textRow, 0);
+    textLayout->addWidget(m_sliceCoordinateFontHeightSpinBox, textRow, 1);
+    ++textRow;
+    textLayout->addWidget(precisionLabel, textRow, 0);
+    textLayout->addWidget(m_sliceCoordinatePrecisionSpinBox, textRow, 1, Qt::AlignRight);
+    ++textRow;
+    textLayout->addWidget(new QLabel("Show As: "), textRow, 0);
+    textLayout->addWidget(m_sliceCoordinateDisplayTypeEnumComboBox->getWidget(), textRow, 1);
+    ++textRow;
+    textWidget->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    QWidgetAction* textWidgetAction(new QWidgetAction(this));
+    textWidgetAction->setDefaultWidget(textWidget);
+
+    m_sliceCoordinateTypeMenu = new QMenu();
+    m_sliceCoordinateTypeMenu->addAction(textWidgetAction);
+    
+    QObject::connect(m_sliceCoordinateTypeMenu, &QMenu::aboutToShow,
+                     this, &BrainBrowserWindowToolBarVolumeMontage::sliceCoordinateTypeMenuAboutToShow);
+    
     m_showSliceCoordinateAction = new QAction("XYZ", this);
     m_showSliceCoordinateAction->setText("XYZ");
     m_showSliceCoordinateAction->setCheckable(true);
-    m_showSliceCoordinateAction->setToolTip("Show coordinates on slices");
+    m_showSliceCoordinateAction->setToolTip("<html>Click button to show/hide coordinates on slices; "
+                                            "Click arrow for coordinate text formatting options</html>");
+    m_showSliceCoordinateAction->setMenu(m_sliceCoordinateTypeMenu);
     QObject::connect(m_showSliceCoordinateAction, &QAction::triggered,
                      this, &BrainBrowserWindowToolBarVolumeMontage::showSliceCoordinateToolButtonClicked);
     m_showSliceCoordinateAction->setObjectName(objectNamePrefix
@@ -119,20 +198,6 @@ m_parentToolBar(parentToolBar)
     QToolButton* showSliceCoordToolButton = new QToolButton;
     showSliceCoordToolButton->setDefaultAction(m_showSliceCoordinateAction);
     WuQtUtilities::setToolButtonStyleForQt5Mac(showSliceCoordToolButton);
-
-    QLabel* decimalsLabel = new QLabel("Prec:");
-    decimalsLabel->setToolTip("Digits right of decimal in slice coordinates");
-    m_sliceCoordinatePrecisionSpinBox = WuQFactory::newSpinBox();
-    m_sliceCoordinatePrecisionSpinBox->setRange(0, 10);
-    m_sliceCoordinatePrecisionSpinBox->setMaximumWidth(spinBoxWidth);
-    m_sliceCoordinatePrecisionSpinBox->setToolTip(decimalsLabel->toolTip());
-    QObject::connect(m_sliceCoordinatePrecisionSpinBox, static_cast<void (QSpinBox::*)(int)>(&QSpinBox::valueChanged),
-                     this, &BrainBrowserWindowToolBarVolumeMontage::slicePrecisionSpinBoxValueChanged);
-    m_sliceCoordinatePrecisionSpinBox->setObjectName(objectNamePrefix
-                                                     + "Precision");
-    WuQMacroManager::instance()->addMacroSupportToObject(m_sliceCoordinatePrecisionSpinBox,
-                                                         "Set volume montage coordinate precision");
-
 
     QToolButton* montageEnabledToolButton = new QToolButton();
     m_montageEnabledAction = WuQtUtilities::createAction("On",
@@ -148,6 +213,12 @@ m_parentToolBar(parentToolBar)
     WuQMacroManager::instance()->addMacroSupportToObject(m_montageEnabledAction,
                                                          "Enable volume slice montage");
 
+    QHBoxLayout* directionLayout(new QHBoxLayout());
+    directionLayout->setContentsMargins(0, 0, 0, 0);
+    directionLayout->addWidget(directionLabel);
+    directionLayout->addStretch();
+    directionLayout->addWidget(m_montageSliceDirectionComboBox->getWidget());
+    
     QGridLayout* gridLayout = new QGridLayout(this);
     WuQtUtilities::setLayoutSpacingAndMargins(gridLayout, 0, 0);
     gridLayout->setVerticalSpacing(2);
@@ -157,10 +228,9 @@ m_parentToolBar(parentToolBar)
     gridLayout->addWidget(m_montageColumnsSpinBox, 1, 1);
     gridLayout->addWidget(spacingLabel, 2, 0);
     gridLayout->addWidget(m_montageSpacingSpinBox, 2, 1);
-    gridLayout->addWidget(decimalsLabel, 3, 0);
-    gridLayout->addWidget(m_sliceCoordinatePrecisionSpinBox, 3, 1);
-    gridLayout->addWidget(showSliceCoordToolButton, 4, 0);
-    gridLayout->addWidget(montageEnabledToolButton, 4, 1);
+    gridLayout->addLayout(directionLayout, 3, 0, 1, 2);
+    gridLayout->addWidget(showSliceCoordToolButton, 4, 0, Qt::AlignLeft);
+    gridLayout->addWidget(montageEnabledToolButton, 4, 1, Qt::AlignRight);
     
     m_volumeMontageWidgetGroup = new WuQWidgetObjectGroup(this);
     m_volumeMontageWidgetGroup->add(m_montageRowsSpinBox);
@@ -168,7 +238,6 @@ m_parentToolBar(parentToolBar)
     m_volumeMontageWidgetGroup->add(m_montageSpacingSpinBox);
     m_volumeMontageWidgetGroup->add(m_montageEnabledAction);
     m_volumeMontageWidgetGroup->add(m_showSliceCoordinateAction);
-    m_volumeMontageWidgetGroup->add(m_sliceCoordinatePrecisionSpinBox);
 }
 
 /**
@@ -189,7 +258,7 @@ BrainBrowserWindowToolBarVolumeMontage::updateContent(BrowserTabContent* browser
 {
     m_volumeMontageWidgetGroup->blockAllSignals(true);
     
-    switch (browserTabContent->getSliceDrawingType()) {
+    switch (browserTabContent->getVolumeSliceDrawingType()) {
         case VolumeSliceDrawingTypeEnum::VOLUME_SLICE_DRAW_MONTAGE:
             m_montageEnabledAction->setChecked(true);
             break;
@@ -197,10 +266,12 @@ BrainBrowserWindowToolBarVolumeMontage::updateContent(BrowserTabContent* browser
             m_montageEnabledAction->setChecked(false);
             break;
     }
-    m_montageRowsSpinBox->setValue(browserTabContent->getMontageNumberOfRows());
-    m_montageColumnsSpinBox->setValue(browserTabContent->getMontageNumberOfColumns());
-    m_montageSpacingSpinBox->setValue(browserTabContent->getMontageSliceSpacing());
+    m_montageRowsSpinBox->setValue(browserTabContent->getVolumeMontageNumberOfRows());
+    m_montageColumnsSpinBox->setValue(browserTabContent->getVolumeMontageNumberOfColumns());
+    m_montageSpacingSpinBox->setValue(browserTabContent->getVolumeMontageSliceSpacing());
     
+    const auto sliceDirection(browserTabContent->getVolumeMontageSliceOrderMode());
+    m_montageSliceDirectionComboBox->setSelectedItem<VolumeMontageSliceOrderModeEnum,VolumeMontageSliceOrderModeEnum::Enum>(sliceDirection);
     m_showSliceCoordinateAction->setChecked(browserTabContent->isVolumeMontageAxesCoordinatesDisplayed());
     m_sliceCoordinatePrecisionSpinBox->setValue(browserTabContent->getVolumeMontageCoordinatePrecision());
     
@@ -221,7 +292,7 @@ BrainBrowserWindowToolBarVolumeMontage::montageEnabledActionToggled(bool)
     
     BrowserTabContent* btc = this->getTabContentFromSelectedTab();
     
-    btc->setSliceDrawingType(drawingType);
+    btc->setVolumeSliceDrawingType(drawingType);
     
     this->updateGraphicsWindowAndYokedWindows();
 }
@@ -235,7 +306,7 @@ BrainBrowserWindowToolBarVolumeMontage::montageRowsSpinBoxValueChanged(int /*i*/
 {
     BrowserTabContent* btc = this->getTabContentFromSelectedTab();
     
-    btc->setMontageNumberOfRows(m_montageRowsSpinBox->value());
+    btc->setVolumeMontageNumberOfRows(m_montageRowsSpinBox->value());
     
     this->updateGraphicsWindowAndYokedWindows();
 }
@@ -247,7 +318,7 @@ void
 BrainBrowserWindowToolBarVolumeMontage::montageColumnsSpinBoxValueChanged(int /*i*/)
 {
     BrowserTabContent* btc = this->getTabContentFromSelectedTab();
-    btc->setMontageNumberOfColumns(m_montageColumnsSpinBox->value());
+    btc->setVolumeMontageNumberOfColumns(m_montageColumnsSpinBox->value());
     
     this->updateGraphicsWindowAndYokedWindows();
 }
@@ -260,8 +331,20 @@ BrainBrowserWindowToolBarVolumeMontage::montageSpacingSpinBoxValueChanged(int /*
 {
     BrowserTabContent* btc = this->getTabContentFromSelectedTab();
     
-    btc->setMontageSliceSpacing(m_montageSpacingSpinBox->value());
+    btc->setVolumeMontageSliceSpacing(m_montageSpacingSpinBox->value());
     
+    this->updateGraphicsWindowAndYokedWindows();
+}
+
+/**
+ * Called when volume slice direction combo box is changed
+ */
+void
+BrainBrowserWindowToolBarVolumeMontage::montageSliceDirectionComboBoxItemActivated()
+{
+    BrowserTabContent* btc = this->getTabContentFromSelectedTab();
+    const auto sliceDirection(m_montageSliceDirectionComboBox->getSelectedItem<VolumeMontageSliceOrderModeEnum,VolumeMontageSliceOrderModeEnum::Enum>());
+    btc->setVolumeMontageSliceOrderMode(sliceDirection);
     this->updateGraphicsWindowAndYokedWindows();
 }
 
@@ -281,6 +364,29 @@ BrainBrowserWindowToolBarVolumeMontage::showSliceCoordinateToolButtonClicked(boo
     this->updateGraphicsWindowAndYokedWindows();
 }
 
+/**
+ * Called when slice coordinate type menu is about to show
+ */
+void
+BrainBrowserWindowToolBarVolumeMontage::sliceCoordinateTypeMenuAboutToShow()
+{
+    BrowserTabContent* btc = this->getTabContentFromSelectedTab();
+    
+    const auto alignment(btc->getVolumeMontageCoordinateTextAlignment());
+    m_sliceCoordinateTextAlignmentEnumComboBox->setSelectedItem<VolumeMontageCoordinateTextAlignmentEnum,VolumeMontageCoordinateTextAlignmentEnum::Enum>(alignment);
+    
+    const auto displayType(btc->getVolumeMontageCoordinatesDislayType());
+    m_sliceCoordinateDisplayTypeEnumComboBox->setSelectedItem<VolumeMontageCoordinateDisplayTypeEnum, VolumeMontageCoordinateDisplayTypeEnum::Enum>(displayType);
+    
+    QSignalBlocker fontHeightBlocker(m_sliceCoordinateFontHeightSpinBox);
+    m_sliceCoordinateFontHeightSpinBox->setValue(btc->getVolumeMontageCoordinateFontHeight());
+    
+    QSignalBlocker precisionBlocker(m_sliceCoordinatePrecisionSpinBox);
+    m_sliceCoordinatePrecisionSpinBox->setValue(btc->getVolumeMontageCoordinatePrecision());
+    
+    WuQtUtilities::matchWidgetWidths(m_sliceCoordinateTextAlignmentEnumComboBox->getWidget(),
+                                     m_sliceCoordinatePrecisionSpinBox);
+}
 
 /**
  * Called when montage slice precision spin box value is changed.
@@ -298,3 +404,48 @@ BrainBrowserWindowToolBarVolumeMontage::slicePrecisionSpinBoxValueChanged(int va
     this->updateGraphicsWindowAndYokedWindows();
 }
 
+/**
+ * Called when montage coordinate font height is changed
+ *
+ * @param value
+ *     New value
+ */
+void
+BrainBrowserWindowToolBarVolumeMontage::sliceCoordinateFontHeightValueChanged(double value)
+{
+    BrowserTabContent* btc = this->getTabContentFromSelectedTab();
+    
+    btc->setVolumeMontageCoordinateFontHeight(value);
+    
+    this->updateGraphicsWindowAndYokedWindows();
+}
+
+/**
+ * Called when text alignment is changed
+ */
+void
+BrainBrowserWindowToolBarVolumeMontage::sliceCoordinateTextAlignmentEnumComboBoxItemActivated()
+{
+    const auto alignment(m_sliceCoordinateTextAlignmentEnumComboBox->getSelectedItem<VolumeMontageCoordinateTextAlignmentEnum,VolumeMontageCoordinateTextAlignmentEnum::Enum>());
+    
+    BrowserTabContent* btc = this->getTabContentFromSelectedTab();
+    
+    btc->setVolumeMontageCoordinateTextAlignment(alignment);
+    
+    this->updateGraphicsWindowAndYokedWindows();
+}
+
+/**
+ * Called when text display type is changed
+ */
+void
+BrainBrowserWindowToolBarVolumeMontage::sliceCoordinateDisplayTypeEnumComboBoxItemActivated()
+{
+    const auto displayType(m_sliceCoordinateDisplayTypeEnumComboBox->getSelectedItem<VolumeMontageCoordinateDisplayTypeEnum,VolumeMontageCoordinateDisplayTypeEnum::Enum>());
+    
+    BrowserTabContent* btc = this->getTabContentFromSelectedTab();
+    
+    btc->setVolumeMontageCoordinateDisplayType(displayType);
+    
+    this->updateGraphicsWindowAndYokedWindows();
+}

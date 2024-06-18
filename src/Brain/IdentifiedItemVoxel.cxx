@@ -42,7 +42,7 @@ using namespace caret;
  * Constructor.
  */
 IdentifiedItemVoxel::IdentifiedItemVoxel()
-: IdentifiedItem()
+: IdentifiedItemBase()
 {
     initializeMembers();
 }
@@ -59,8 +59,8 @@ IdentifiedItemVoxel::IdentifiedItemVoxel()
 IdentifiedItemVoxel::IdentifiedItemVoxel(const AString& simpleText,
                                          const AString& formattedText,
                                          const float xyz[3])
-: IdentifiedItem(simpleText,
-                 formattedText)
+: IdentifiedItemBase(simpleText,
+                     formattedText)
 {
     initializeMembers();
     
@@ -83,7 +83,7 @@ IdentifiedItemVoxel::~IdentifiedItemVoxel()
  *    Object that is copied.
  */
 IdentifiedItemVoxel::IdentifiedItemVoxel(const IdentifiedItemVoxel& obj)
-: IdentifiedItem(obj)
+: IdentifiedItemBase(obj)
 {
     initializeMembers();
     this->copyHelperIdentifiedItemVoxel(obj);
@@ -100,7 +100,7 @@ IdentifiedItemVoxel&
 IdentifiedItemVoxel::operator=(const IdentifiedItemVoxel& obj)
 {
     if (this != &obj) {
-        IdentifiedItem::operator=(obj);
+        IdentifiedItemBase::operator=(obj);
         this->copyHelperIdentifiedItemVoxel(obj);
     }
     return *this;    
@@ -265,7 +265,7 @@ IdentifiedItemVoxel::setIdentificationSymbolSizeType(const IdentificationSymbolS
 AString
 IdentifiedItemVoxel::toString() const
 {
-    const AString s = (IdentifiedItem::toString()
+    const AString s = (IdentifiedItemBase::toString()
                        + ", m_xyz=" + AString::fromNumbers(m_xyz, 3, ", "));
     return s;
 }
@@ -285,21 +285,15 @@ SceneClass*
 IdentifiedItemVoxel::saveToScene(const SceneAttributes* sceneAttributes,
                                  const AString& instanceName)
 {
-    SceneClass* sceneClass = new SceneClass(instanceName,
-                                            "IdentifiedItemVoxel",
-                                            1);
+//    SceneClass* sceneClass = new SceneClass(instanceName,
+//                                            "IdentifiedItemVoxel",
+//                                            1);
+
+    SceneClass* sceneClass = IdentifiedItemBase::saveToScene(sceneAttributes,
+                                                             instanceName);
+    
     m_sceneAssistant->saveMembers(sceneAttributes,
                                   sceneClass);
-    
-    /*
-     * Save data in parent class.
-     */
-    saveMembers(sceneAttributes,
-                sceneClass);
-    
-    // Uncomment if sub-classes must save to scene
-    //saveSubClassDataToScene(sceneAttributes,
-    //                        sceneClass);
     
     return sceneClass;
 }
@@ -323,20 +317,12 @@ IdentifiedItemVoxel::restoreFromScene(const SceneAttributes* sceneAttributes,
         return;
     }
     
+    IdentifiedItemBase::restoreFromScene(sceneAttributes,
+                                          sceneClass);
+    
     m_identificationSymbolSizeType = IdentificationSymbolSizeTypeEnum::MILLIMETERS;
     
     m_sceneAssistant->restoreMembers(sceneAttributes,
-                                     sceneClass);    
-    
-    /*
-     * Restores data in parent class.
-     */
-    restoreMembers(sceneAttributes,
-                   sceneClass);
-    
-    //Uncomment if sub-classes must restore from scene
-    //restoreSubClassDataFromScene(sceneAttributes,
-    //                             sceneClass);
-    
+                                     sceneClass);
 }
 

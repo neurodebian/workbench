@@ -26,6 +26,8 @@
 
 namespace caret {
     class CiftiBrainordinateDataSeriesFile;
+    class ConnectivityCorrelationTwo;
+    class ConnectivityCorrelationSettings;
     class SceneClassAssistant;
     
     class CiftiConnectivityMatrixDenseDynamicFile : public CiftiMappableConnectivityMatrixDataFile {
@@ -49,6 +51,10 @@ namespace caret {
         
         const CiftiBrainordinateDataSeriesFile* getParentBrainordinateDataSeriesFile() const;
         
+        ConnectivityCorrelationSettings* getCorrelationSettings();
+        
+        const ConnectivityCorrelationSettings* getCorrelationSettings() const;
+
     private:
         CiftiConnectivityMatrixDenseDynamicFile(const CiftiConnectivityMatrixDenseDynamicFile&);
 
@@ -61,9 +67,7 @@ namespace caret {
                 
         virtual void getProcessedDataForColumn(float* dataOut, const int64_t& index) const;
         
-        virtual void getProcessedDataForRow(float* dataOut, const int64_t& index) const;
-        
-        virtual void processRowAverageData(std::vector<float>& rowAverageData);
+        virtual void getProcessedDataForRow(std::vector<float>& dataOut, const int64_t& index) const override;
         
         virtual void saveSubClassDataToScene(const SceneAttributes* sceneAttributes,
                                              SceneClass* sceneClass);
@@ -72,51 +76,29 @@ namespace caret {
                                                   const SceneClass* sceneClass);
         
     private:
-        class RowData {
-        public:
-            RowData() { }
-            
-            ~RowData() { }
-            
-            std::vector<float> m_data;
-            float m_mean;
-            float m_sqrt_ssxx;
-        };
-        
-        float correlation(const int32_t rowIndex,
-                          const int32_t otherRowIndex,
-                          const int32_t numberOfPoints) const;
-        
-        float correlation(const std::vector<float>& data,
-                          const float mean,
-                          const float sumSquared,
-                          const int32_t otherRowIndex,
-                          const int32_t numberOfPoints) const;
-        
-        void preComputeRowMeanAndSumSquared();
-        
-        void computeDataMeanAndSumSquared(const float* data,
-                                          const int32_t dataLength,
-                                          float& meanOut,
-                                          float& sumSquaredOut) const;
+        ConnectivityCorrelationTwo* getConnectivityCorrelationTwo() const;
         
         CiftiBrainordinateDataSeriesFile* m_parentDataSeriesFile;
         
         CiftiFile* m_parentDataSeriesCiftiFile;
         
-        int32_t m_numberOfBrainordinates;
+        int64_t m_numberOfBrainordinates;
         
-        int32_t m_numberOfTimePoints;
-        
-        std::vector<RowData> m_rowData;
+        int64_t m_numberOfTimePoints;
         
         bool m_validDataFlag;
         
         bool m_enabledAsLayer;
         
-        const bool m_cacheDataFlag;
-        
         CaretPointer<SceneClassAssistant> m_sceneAssistant;
+        
+        mutable std::unique_ptr<ConnectivityCorrelationTwo> m_connectivityCorrelationTwo;
+        
+        mutable bool m_connectivityCorrelationFailedFlag = false;
+        
+        mutable std::vector<float> m_dataSeriesMatrixData;
+
+        mutable std::unique_ptr<ConnectivityCorrelationSettings> m_correlationSettings;
         
         // ADD_NEW_MEMBERS_HERE
 

@@ -6,16 +6,16 @@ PROJECT (Files)
 #
 # Add QT for includes
 #
+if(Qt6_FOUND)
+    include_directories(${Qt6Core_INCLUDE_DIRS})
+    include_directories(${Qt6Gui_INCLUDE_DIRS})
+    include_directories(${Qt6Network_INCLUDE_DIRS})
+endif()
 if(Qt5_FOUND)
     include_directories(${Qt5Core_INCLUDE_DIRS})
     include_directories(${Qt5Gui_INCLUDE_DIRS})
     include_directories(${Qt5Network_INCLUDE_DIRS})
 endif()
-IF (QT4_FOUND)
-    SET(QT_DONT_USE_QTGUI)
-    SET(QT_USE_QTNETWORK TRUE)
-    INCLUDE(${QT_USE_FILE})
-ENDIF ()
 
 #
 # Files Library
@@ -60,6 +60,7 @@ CiftiBrainordinateScalarFile.h
 CiftiConnectivityMatrixDenseFile.h
 CiftiConnectivityMatrixDenseDynamicFile.h
 CiftiConnectivityMatrixDenseParcelFile.h
+CiftiConnectivityMatrixParcelDynamicFile.h
 CiftiConnectivityMatrixParcelFile.h
 CiftiConnectivityMatrixParcelDenseFile.h
 CiftiFiberOrientationFile.h
@@ -73,18 +74,34 @@ CiftiParcelReorderingModel.h
 CiftiParcelSeriesFile.h
 CiftiParcelScalarFile.h
 CiftiScalarDataSeriesFile.h
+CommaSeparatedValuesFile.h
+ConnectivityCorrelationTwo.h
+ConnectivityCorrelationModeEnum.h
+ConnectivityCorrelationSettings.h
 ConnectivityDataLoaded.h
 ControlPointFile.h
+CziDistanceFile.h
+CziImage.h
+CziImageFile.h
+CziImageLoaderBase.h
+CziImageLoaderMultiResolution.h
+CziImageResolutionChangeModeEnum.h
+CziNonLinearTransform.h
+CziPixelCoordSpaceEnum.h
+CziUtilities.h
+DingOntologyTermsFile.h
 EventCaretDataFilesGet.h
 EventCaretMappableDataFileMapsViewedInOverlays.h
 EventCaretMappableDataFilesGet.h
 EventChartMatrixParcelYokingValidation.h
 EventGetDisplayedDataFiles.h
+EventHistologySlicesFilesGet.h
 EventMapYokingSelectMap.h
 EventMapYokingValidation.h
 EventMediaFilesGet.h
 EventSurfaceColoringInvalidate.h
 EventSurfaceStructuresValidGet.h
+EventVolumeColoringInvalidate.h
 Fiber.h
 FiberOrientation.h
 FiberOrientationColoringTypeEnum.h
@@ -93,6 +110,7 @@ FiberTrajectoryColorModel.h
 FiberTrajectoryMapProperties.h
 FiberTrajectoryDisplayModeEnum.h
 FileIdentificationAttributes.h
+FileIdentificationDisplayModeEnum.h
 FileIdentificationMapSelectionEnum.h
 FilePathNamePrefixCompactor.h
 FociFile.h
@@ -105,8 +123,15 @@ GroupAndNameHierarchyGroup.h
 GroupAndNameHierarchyItem.h
 GroupAndNameHierarchyModel.h
 GroupAndNameHierarchyName.h
+GroupAndNameHierarchyUserInterface.h
+HistologyCoordinate.h
+HistologySlice.h
+HistologySliceImage.h
+HistologySlicesFile.h
+HistologySlicesFileXmlStreamBase.h
+HistologySlicesFileXmlStreamReader.h
 ImageCaptureDimensionsModeEnum.h
-ImageCaptureSettings.h
+ImageCaptureDialogSettings.h
 ImageFile.h
 ImageResolutionUnitsEnum.h
 ImageSpatialUnitsEnum.h
@@ -114,18 +139,25 @@ LabelDrawingProperties.h
 LabelDrawingTypeEnum.h
 LabelFile.h
 MapYokingGroupEnum.h
+MediaDisplayCoordinateModeEnum.h
 MediaFile.h
+MediaFileChannelInfo.h
+MediaFileTransforms.h
 MetricDynamicConnectivityFile.h
 MetricFile.h
 MetricSmoothingObject.h
 NodeAndVoxelColoring.h
 OxfordSparseThreeFile.h
 PaletteFile.h
+PixelCoordinate.h
+PixelIndex.h
+PixelLogicalIndex.h
+RectangleTransform.h
 RgbaFile.h
 RibbonMappingHelper.h
+SamplesFile.h
 SceneDataFileInfo.h
 SceneFile.h
-SceneFileSaxReader.h
 SceneFileXmlStreamBase.h
 SceneFileXmlStreamReader.h
 SceneFileXmlStreamWriter.h
@@ -135,7 +167,6 @@ SpecFile.h
 SpecFileDataFileTypeGroup.h
 SpecFileDataFile.h
 SpecFileSaxReader.h
-SceneFileXmlStreamFormatTester.h
 StudyMetaDataLink.h
 StudyMetaDataLinkSet.h
 StudyMetaDataLinkSetSaxReader.h
@@ -158,10 +189,15 @@ VolumeEditingModeEnum.h
 VolumeFile.h
 VolumeFileEditorDelegate.h
 VolumeFileVoxelColorizer.h
+VolumeGraphicsPrimitiveManager.h
 VolumeMapUndoCommand.h
 VolumePaddingHelper.h
+VolumePlaneIntersection.h
 VolumeSliceProjectionTypeEnum.h
 VolumeSpline.h
+VolumeToImageMapping.h
+VolumeVerticesEdgesFaces.h
+VoxelInterpolationTypeEnum.h
 VtkFileExporter.h
 WarpfieldFile.h
 XmlStreamReaderHelper.h
@@ -202,6 +238,7 @@ CiftiConnectivityMatrixDenseFile.cxx
 CiftiConnectivityMatrixDenseDynamicFile.cxx
 CiftiConnectivityMatrixDenseParcelFile.cxx
 CiftiConnectivityMatrixParcelFile.cxx
+CiftiConnectivityMatrixParcelDynamicFile.cxx
 CiftiConnectivityMatrixParcelDenseFile.cxx
 CiftiFiberOrientationFile.cxx
 CiftiFiberTrajectoryFile.cxx
@@ -214,18 +251,34 @@ CiftiParcelReorderingModel.cxx
 CiftiParcelSeriesFile.cxx
 CiftiParcelScalarFile.cxx
 CiftiScalarDataSeriesFile.cxx
+CommaSeparatedValuesFile.cxx
+ConnectivityCorrelationTwo.cxx
+ConnectivityCorrelationModeEnum.cxx
+ConnectivityCorrelationSettings.cxx
 ConnectivityDataLoaded.cxx
 ControlPointFile.cxx
+CziDistanceFile.cxx
+CziImage.cxx
+CziImageFile.cxx
+CziImageLoaderBase.cxx
+CziImageLoaderMultiResolution.cxx
+CziImageResolutionChangeModeEnum.cxx
+CziNonLinearTransform.cxx
+CziPixelCoordSpaceEnum.cxx
+CziUtilities.cxx
+DingOntologyTermsFile.cxx
 EventCaretDataFilesGet.cxx
 EventCaretMappableDataFileMapsViewedInOverlays.cxx
 EventCaretMappableDataFilesGet.cxx
 EventChartMatrixParcelYokingValidation.cxx
 EventGetDisplayedDataFiles.cxx
+EventHistologySlicesFilesGet.cxx
 EventMapYokingSelectMap.cxx
 EventMapYokingValidation.cxx
 EventMediaFilesGet.cxx
 EventSurfaceColoringInvalidate.cxx
 EventSurfaceStructuresValidGet.cxx
+EventVolumeColoringInvalidate.cxx
 Fiber.cxx
 FiberOrientation.cxx
 FiberOrientationColoringTypeEnum.cxx
@@ -234,6 +287,7 @@ FiberTrajectoryColorModel.cxx
 FiberTrajectoryDisplayModeEnum.cxx
 FiberTrajectoryMapProperties.cxx
 FileIdentificationAttributes.cxx
+FileIdentificationDisplayModeEnum.cxx
 FileIdentificationMapSelectionEnum.cxx
 FilePathNamePrefixCompactor.cxx
 FociFile.cxx
@@ -246,8 +300,14 @@ GroupAndNameHierarchyGroup.cxx
 GroupAndNameHierarchyItem.cxx
 GroupAndNameHierarchyModel.cxx
 GroupAndNameHierarchyName.cxx
+HistologyCoordinate.cxx
+HistologySlice.cxx
+HistologySliceImage.cxx
+HistologySlicesFile.cxx
+HistologySlicesFileXmlStreamBase.cxx
+HistologySlicesFileXmlStreamReader.cxx
 ImageCaptureDimensionsModeEnum.cxx
-ImageCaptureSettings.cxx
+ImageCaptureDialogSettings.cxx
 ImageFile.cxx
 ImageResolutionUnitsEnum.cxx
 ImageSpatialUnitsEnum.cxx
@@ -255,20 +315,26 @@ LabelDrawingProperties.cxx
 LabelDrawingTypeEnum.cxx
 LabelFile.cxx
 MapYokingGroupEnum.cxx
+MediaDisplayCoordinateModeEnum.cxx
 MediaFile.cxx
+MediaFileChannelInfo.cxx
+MediaFileTransforms.cxx
 MetricDynamicConnectivityFile.cxx
 MetricFile.cxx
 MetricSmoothingObject.cxx
 NodeAndVoxelColoring.cxx
 OxfordSparseThreeFile.cxx
 PaletteFile.cxx
+PixelCoordinate.cxx
+PixelIndex.cxx
+PixelLogicalIndex.cxx
+RectangleTransform.cxx
 RgbaFile.cxx
 RibbonMappingHelper.cxx
+SamplesFile.cxx
 SceneDataFileInfo.cxx
 SceneFile.cxx
-SceneFileSaxReader.cxx
 SceneFileXmlStreamBase.cxx
-SceneFileXmlStreamFormatTester.cxx
 SceneFileXmlStreamReader.cxx
 SceneFileXmlStreamWriter.cxx
 SignedDistanceHelper.cxx
@@ -299,10 +365,15 @@ VolumeEditingModeEnum.cxx
 VolumeFile.cxx
 VolumeFileEditorDelegate.cxx
 VolumeFileVoxelColorizer.cxx
+VolumeGraphicsPrimitiveManager.cxx
 VolumeMapUndoCommand.cxx
 VolumePaddingHelper.cxx
+VolumePlaneIntersection.cxx
 VolumeSliceProjectionTypeEnum.cxx
 VolumeSpline.cxx
+VolumeToImageMapping.cxx
+VolumeVerticesEdgesFaces.cxx
+VoxelInterpolationTypeEnum.cxx
 VtkFileExporter.cxx
 WarpfieldFile.cxx
 XmlStreamReaderHelper.cxx
@@ -317,6 +388,7 @@ TARGET_LINK_LIBRARIES(Files ${CARET_QT5_LINK})
 INCLUDE_DIRECTORIES(
 ${CMAKE_SOURCE_DIR}/Annotations
 ${CMAKE_SOURCE_DIR}/Charting
+${CMAKE_SOURCE_DIR}/CZIlib/CZI
 ${CMAKE_SOURCE_DIR}/Files
 ${CMAKE_SOURCE_DIR}/FilesBase
 ${CMAKE_SOURCE_DIR}/Graphics

@@ -33,7 +33,10 @@
 #include "AnnotationGroup.h"
 #include "AnnotationImage.h"
 #include "AnnotationLine.h"
+#include "AnnotationMetaData.h"
 #include "AnnotationOval.h"
+#include "AnnotationPolyhedron.h"
+#include "AnnotationPolygon.h"
 #include "AnnotationPolyLine.h"
 #include "AnnotationText.h"
 #include "CaretAssert.h"
@@ -87,6 +90,7 @@ AnnotationFileXmlWriter::writeFile(const AnnotationFile* annotationFile)
     if (filename.isEmpty()) {
         throw DataFileException("Name for writing annotation file is empty.");
     }
+    setAnnotationFileDirectory(filename);
     
     /*
      * Open the file
@@ -120,6 +124,8 @@ AnnotationFileXmlWriter::writeFile(const AnnotationFile* annotationFile)
  *
  * @param annotationFile
  *     The annotation file written to the stream writer.
+ * @param fileNameForRelativePaths
+ *    Filename used when relative paths are stored in the annotation file
  * @param fileContentString
  *     Will contain XML version of the file on exit.
  * @throws
@@ -127,12 +133,14 @@ AnnotationFileXmlWriter::writeFile(const AnnotationFile* annotationFile)
  */
 void
 AnnotationFileXmlWriter::writeFileToString(const AnnotationFile* annotationFile,
+                                           const AString& fileNameForRelativePaths,
                                            QString& fileContentString)
 {
     fileContentString.clear();
     
     m_stream.grabNew(new QXmlStreamWriter(&fileContentString));
     
+    setAnnotationFileDirectory(fileNameForRelativePaths);
     writeFileContentToXmlStreamWriter(annotationFile,
                                       "Scene Annotation File");
     
@@ -227,6 +235,31 @@ AnnotationFileXmlWriter::writeGroup(const AnnotationGroup* group)
     m_stream->writeAttribute(ATTRIBUTE_UNIQUE_KEY,
                              QString::number(group->getUniqueKey()));
     
+    switch (group->getCoordinateSpace()) {
+        case AnnotationCoordinateSpaceEnum::MEDIA_FILE_NAME_AND_PIXEL:
+        {
+            m_stream->writeTextElement(ELEMENT_COORDINATE_MEDIA_FILE_NAME,
+                                       group->getMediaFileName());
+        }
+            break;
+        case AnnotationCoordinateSpaceEnum::CHART:
+            break;
+        case AnnotationCoordinateSpaceEnum::HISTOLOGY:
+        {
+            const AString encodedText(group->getHistologySpaceKey().toEncodedString(getAnnotationFileDirectory()));
+            m_stream->writeTextElement(ELEMENT_COORDINATE_HISTOLOGY_SPACE_KEY,
+                                       encodedText);
+        }
+            break;
+        case AnnotationCoordinateSpaceEnum::SPACER:
+        case AnnotationCoordinateSpaceEnum::STEREOTAXIC:
+        case AnnotationCoordinateSpaceEnum::SURFACE:
+        case AnnotationCoordinateSpaceEnum::TAB:
+        case AnnotationCoordinateSpaceEnum::VIEWPORT:
+        case AnnotationCoordinateSpaceEnum::WINDOW:
+            break;
+    }
+    
     std::vector<Annotation*> annotations;
     group->getAllAnnotations(annotations);
     
@@ -255,7 +288,13 @@ AnnotationFileXmlWriter::writeGroup(const AnnotationGroup* group)
             case AnnotationTypeEnum::OVAL:
                 writeOval(dynamic_cast<const AnnotationOval*>(annotation));
                 break;
-            case AnnotationTypeEnum::POLY_LINE:
+            case AnnotationTypeEnum::POLYHEDRON:
+                writePolyhedron(annotation->castToPolyhedron());
+                break;
+            case AnnotationTypeEnum::POLYGON:
+                writePolygon(annotation->castToPolygon());
+                break;
+            case AnnotationTypeEnum::POLYLINE:
                 writePolyLine(dynamic_cast<const AnnotationPolyLine*>(annotation));
                 break;
             case AnnotationTypeEnum::SCALE_BAR:
@@ -266,7 +305,7 @@ AnnotationFileXmlWriter::writeGroup(const AnnotationGroup* group)
                 break;
         }
     }
-    
+        
     m_stream->writeEndElement();
 }
 
@@ -327,6 +366,7 @@ AnnotationFileXmlWriter::writeImage(const AnnotationImage* image)
     m_stream->writeAttributes(attributes);
 
     writeCoordinate(image->getCoordinate(),
+                    image->getCoordinateSpace(),
                     ELEMENT_COORDINATE_ONE);
     
     m_stream->writeStartElement(ELEMENT_IMAGE_RGBA_BYTES_IN_BASE64);
@@ -350,6 +390,36 @@ AnnotationFileXmlWriter::writeLine(const AnnotationLine* line)
     
     writeTwoCoordinateShapeAnnotation(line,
                                   ELEMENT_LINE);
+}
+
+/**
+ * Write the given annotation polyhedron in XML.
+ *
+ * @param polyhedron
+ *     The annotation polyhedron.
+ */
+void
+AnnotationFileXmlWriter::writePolyhedron(const AnnotationPolyhedron* polyhedron)
+{
+    CaretAssert(polyhedron);
+    
+    writeMultiPairedCoordinateShapeAnnotation(polyhedron,
+                                              ELEMENT_POLYHEDRON);
+}
+
+/**
+ * Write the given annotation polygon in XML.
+ *
+ * @param polygonb
+ *     The annotation polygon.
+ */
+void
+AnnotationFileXmlWriter::writePolygon(const AnnotationPolygon* polygon)
+{
+    CaretAssert(polygon);
+    
+    writeMultiCoordinateShapeAnnotation(polygon,
+                                        ELEMENT_POLYGON);
 }
 
 /**
@@ -447,6 +517,7 @@ AnnotationFileXmlWriter::writeText(const AnnotationText* text)
     m_stream->writeAttributes(attributes);
     
     writeCoordinate(text->getCoordinate(),
+                    text->getCoordinateSpace(),
                     ELEMENT_COORDINATE_ONE);
     
     /*
@@ -459,6 +530,42 @@ AnnotationFileXmlWriter::writeText(const AnnotationText* text)
     m_stream->writeCharacters(text->getText());
     m_stream->writeEndElement();
     
+    writeAnnotationMetaData(text);
+    
+    m_stream->writeEndElement();
+}
+
+/**
+ * Write the font attributes
+ * @param fontAttributes
+ *   The font attributres
+ */
+void
+AnnotationFileXmlWriter::writeFontAttributes(const AnnotationFontAttributesInterface* fontAttributes)
+{
+    CaretAssert(fontAttributes);
+    
+    QXmlStreamAttributes attributes;
+    
+    attributes.append(ATTRIBUTE_TEXT_FONT_NAME,
+                      AnnotationTextFontNameEnum::toName(fontAttributes->getFont()));
+    attributes.append(ATTRIBUTE_TEXT_FONT_PERCENT_VIEWPORT_SIZE,
+                      AString::number(fontAttributes->getFontPercentViewportSize()));
+    attributes.append(ATTRIBUTE_TEXT_CARET_COLOR,
+                      CaretColorEnum::toName(fontAttributes->getTextColor()));
+    float rgba[4];
+    fontAttributes->getCustomTextColor(rgba);
+    attributes.append(ATTRIBUTE_TEXT_CUSTOM_RGBA,
+                      realArrayToString(rgba, 4));
+    attributes.append(ATTRIBUTE_TEXT_FONT_BOLD,
+                      AString::fromBool(fontAttributes->isBoldStyleEnabled()));
+    attributes.append(ATTRIBUTE_TEXT_FONT_ITALIC,
+                      AString::fromBool(fontAttributes->isItalicStyleEnabled()));
+    attributes.append(ATTRIBUTE_TEXT_FONT_UNDERLINE,
+                      AString::fromBool(fontAttributes->isUnderlineStyleEnabled()));
+    
+    m_stream->writeStartElement(ELEMENT_FONT_ATTRIBUTES);
+    m_stream->writeAttributes(attributes);
     m_stream->writeEndElement();
 }
 
@@ -563,7 +670,10 @@ AnnotationFileXmlWriter::writeOneCoordinateShapeAnnotation(const AnnotationOneCo
     m_stream->writeAttributes(attributes);
     
     writeCoordinate(shape->getCoordinate(),
+                    shape->getCoordinateSpace(),
                     ELEMENT_COORDINATE_ONE);
+    
+    writeAnnotationMetaData(shape);
     
     m_stream->writeEndElement();
 }
@@ -600,10 +710,78 @@ AnnotationFileXmlWriter::writeTwoCoordinateShapeAnnotation(const AnnotationTwoCo
     m_stream->writeAttributes(attributes);
     
     writeCoordinate(shape->getStartCoordinate(),
+                    shape->getCoordinateSpace(),
                     ELEMENT_COORDINATE_ONE);
     
     writeCoordinate(shape->getEndCoordinate(),
+                    shape->getCoordinateSpace(),
                     ELEMENT_COORDINATE_TWO);
+    
+    writeAnnotationMetaData(shape);
+    
+    m_stream->writeEndElement();
+}
+
+/**
+ * Write the given paired mult-coordinate annotation in XML.
+ *
+ * @param shape
+ *     The paired multi-coordinate annotation.
+ * @param annotationXmlElement
+ *     The XML element for the annotation.
+ */
+void
+AnnotationFileXmlWriter::writeMultiPairedCoordinateShapeAnnotation(const AnnotationMultiPairedCoordinateShape* shape,
+                                                                   const QString& annotationXmlElement)
+{
+    CaretAssert(shape);
+    
+    QXmlStreamAttributes attributes;
+    getAnnotationPropertiesAsAttributes(shape,
+                                        attributes);
+    
+    m_stream->writeStartElement(annotationXmlElement);
+    
+    m_stream->writeAttributes(attributes);
+    
+    const int32_t numCoords = shape->getNumberOfCoordinates();
+    
+    m_stream->writeStartElement(ELEMENT_COORDINATE_LIST);
+    m_stream->writeAttribute(ATTRIBUTE_COORDINATE_LIST_COUNT,
+                             AString::number(numCoords));
+    for (int32_t i = 0; i < numCoords; i++) {
+        const AnnotationCoordinate* ac = shape->getCoordinate(i);
+        writeCoordinate(ac,
+                        shape->getCoordinateSpace(),
+                        ELEMENT_COORDINATE);
+    }
+    m_stream->writeEndElement();
+    
+    const AnnotationPolyhedron* polyhedron(shape->castToPolyhedron());
+    if (polyhedron != NULL) {
+        m_stream->writeStartElement(ELEMENT_POLYHEDRON_DATA);
+        m_stream->writeAttribute(ATTRIBUTE_PLANE_ONE,
+                                 polyhedron->getPlaneOne().toFormattedString());
+        
+        /*
+         * Note: plane two may not be valid for some older polyhedrons
+         */
+        if (polyhedron->getPlaneTwo().isValidPlane()) {
+            m_stream->writeAttribute(ATTRIBUTE_PLANE_TWO,
+                                     polyhedron->getPlaneTwo().toFormattedString());
+        }
+        
+        m_stream->writeAttribute(ATTRIBUTE_PLANE_ONE_NAME_XYZ,
+                                 AString::fromNumbers(polyhedron->getPlaneOneNameStereotaxicXYZ()));
+        m_stream->writeAttribute(ATTRIBUTE_PLANE_TWO_NAME_XYZ,
+                                 AString::fromNumbers(polyhedron->getPlaneTwoNameStereotaxicXYZ()));
+
+        m_stream->writeEndElement();
+
+        writeFontAttributes(polyhedron);        
+    }
+    
+    writeAnnotationMetaData(shape);
     
     m_stream->writeEndElement();
 }
@@ -637,9 +815,13 @@ AnnotationFileXmlWriter::writeMultiCoordinateShapeAnnotation(const AnnotationMul
                              AString::number(numCoords));
     for (int32_t i = 0; i < numCoords; i++) {
         const AnnotationCoordinate* ac = shape->getCoordinate(i);
-        writeCoordinate(ac, ELEMENT_COORDINATE);
+        writeCoordinate(ac,
+                        shape->getCoordinateSpace(),
+                        ELEMENT_COORDINATE);
     }
     m_stream->writeEndElement();
+    
+    writeAnnotationMetaData(shape);
     
     m_stream->writeEndElement();
 }
@@ -649,11 +831,14 @@ AnnotationFileXmlWriter::writeMultiCoordinateShapeAnnotation(const AnnotationMul
  *
  * @param coordinate
  *     The annotation coordinate.
+ * @param coordinateSpace
+ *     Coordinate space of annotation
  * @param coordinateXmlElement
  *     The XML element for the annotation coordinate.
  */
 void
 AnnotationFileXmlWriter::writeCoordinate(const AnnotationCoordinate* coordinate,
+                                         const AnnotationCoordinateSpaceEnum::Enum coordinateSpace,
                                          const QString& coordinateXmlElement)
 {
     CaretAssert(coordinate);
@@ -698,6 +883,27 @@ AnnotationFileXmlWriter::writeCoordinate(const AnnotationCoordinate* coordinate,
     m_stream->writeAttribute(ATTRIBUTE_COORD_SURFACE_NODE_OFFSET_VECTOR_TYPE,
                              AnnotationSurfaceOffsetVectorTypeEnum::toName(surfaceOffsetVectorType));
     
+    switch (coordinateSpace) {
+        case AnnotationCoordinateSpaceEnum::MEDIA_FILE_NAME_AND_PIXEL:
+            m_stream->writeTextElement(ELEMENT_COORDINATE_MEDIA_FILE_NAME,
+                                       coordinate->getMediaFileName());
+            break;
+        case AnnotationCoordinateSpaceEnum::CHART:
+        case AnnotationCoordinateSpaceEnum::HISTOLOGY:
+        {
+            m_stream->writeTextElement(ELEMENT_COORDINATE_HISTOLOGY_SPACE_KEY,
+                                       coordinate->getHistologySpaceKey().toEncodedString(getAnnotationFileDirectory()));
+            break;
+        }
+        case AnnotationCoordinateSpaceEnum::SPACER:
+        case AnnotationCoordinateSpaceEnum::STEREOTAXIC:
+        case AnnotationCoordinateSpaceEnum::SURFACE:
+        case AnnotationCoordinateSpaceEnum::TAB:
+        case AnnotationCoordinateSpaceEnum::VIEWPORT:
+        case AnnotationCoordinateSpaceEnum::WINDOW:
+            break;
+    }
+    
     m_stream->writeEndElement();
 }
 
@@ -737,6 +943,15 @@ AnnotationFileXmlWriter::realArrayToString(const float values[],
     }
                     
     return text;
+}
+
+/**
+ * Write an annotation's metadata
+ */
+void
+AnnotationFileXmlWriter::writeAnnotationMetaData(const Annotation* annotation)
+{
+    m_streamHelper->writeMetaData(annotation->getMetaData());
 }
 
 

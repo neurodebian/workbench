@@ -28,8 +28,8 @@
 namespace caret {
 
     class ImageFile;
-    class SelectionItemImage;
     class SelectionItemImageControlPoint;
+    class SelectionItemMediaLogicalCoordinate;
     class SelectionItemVoxel;
     class UserInputModeImageWidget;
     
@@ -41,7 +41,7 @@ namespace caret {
             EDIT_OPERATION_DELETE
         };
         
-        UserInputModeImage(const int32_t windowIndex);
+        UserInputModeImage(const int32_t browserIndexIndex);
         
         virtual ~UserInputModeImage();
         
@@ -77,7 +77,7 @@ namespace caret {
         
         void updateAfterControlPointsChanged();
         
-        void addControlPoint(SelectionItemImage* imageSelection,
+        void addControlPoint(SelectionItemMediaLogicalCoordinate* imageSelection,
                              const SelectionItemVoxel* voxelSelection);
         
         void deleteControlPoint(SelectionItemImageControlPoint* idImageControlPoint);
@@ -90,8 +90,6 @@ namespace caret {
         
         // ADD_NEW_MEMBERS_HERE
         
-        const int32_t m_windowIndex;
-
         UserInputModeImageWidget* m_inputModeImageWidget;
         
         EditOperation m_editOperation;

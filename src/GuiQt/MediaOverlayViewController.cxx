@@ -37,10 +37,13 @@
 #include "MediaOverlayViewController.h"
 #undef __MEDIA_OVERLAY_VIEW_CONTROLLER_DECLARE__
 
+#include "BrowserTabContent.h"
 #include "CaretMappableDataFile.h"
+#include "EventBrowserTabGet.h"
 #include "EventDataFileReload.h"
-#include "EventGraphicsUpdateAllWindows.h"
-#include "EventGraphicsUpdateOneWindow.h"
+#include "EventGraphicsPaintNowOneWindow.h"
+#include "EventGraphicsPaintSoonAllWindows.h"
+#include "EventGraphicsPaintSoonOneWindow.h"
 #include "EventManager.h"
 #include "EventMapYokingSelectMap.h"
 #include "EventOverlaySettingsEditorDialogRequest.h"
@@ -52,6 +55,7 @@
 #include "MapYokingGroupComboBox.h"
 #include "MediaFile.h"
 #include "MediaOverlay.h"
+#include "MediaOverlaySettingsMenu.h"
 #include "UsernamePasswordWidget.h"
 #include "WuQFactory.h"
 #include "WuQMacroManager.h"
@@ -91,8 +95,9 @@ MediaOverlayViewController::MediaOverlayViewController(const Qt::Orientation ori
                                              const QString& parentObjectName,
                                              QObject* parent)
 : QObject(parent),
-  browserWindowIndex(browserWindowIndex),
-  m_overlayIndex(overlayIndex)
+  m_browserWindowIndex(browserWindowIndex),
+  m_overlayIndex(overlayIndex),
+  m_parentObjectName(parentObjectName)
 {
     m_mediaOverlay = NULL;
     m_constructionReloadFileAction = NULL;
@@ -115,28 +120,28 @@ MediaOverlayViewController::MediaOverlayViewController(const Qt::Orientation ori
      * Enabled Check Box
      */
     const QString checkboxText = ((orientation == Qt::Horizontal) ? " " : " ");
-    this->enabledCheckBox = new QCheckBox(checkboxText);
-    this->enabledCheckBox->setObjectName(objectNamePrefix
+    m_enabledCheckBox = new QCheckBox(checkboxText);
+    m_enabledCheckBox->setObjectName(objectNamePrefix
                                          + "OnOff");
-    QObject::connect(this->enabledCheckBox, SIGNAL(clicked(bool)),
-                     this, SLOT(enabledCheckBoxClicked(bool)));
-    this->enabledCheckBox->setToolTip("Enables display of this overlay");
-    macroManager->addMacroSupportToObject(this->enabledCheckBox,
+    QObject::connect(m_enabledCheckBox, &QCheckBox::clicked,
+                     this, &MediaOverlayViewController::enabledCheckBoxClicked);
+    m_enabledCheckBox->setToolTip("Enables display of this overlay");
+    macroManager->addMacroSupportToObject(m_enabledCheckBox,
                                           "Enable " + descriptivePrefix);
     
     /*
      * File Selection Combo Box
      */
-    this->fileComboBox = WuQFactory::newComboBox();
-    this->fileComboBox->setObjectName(objectNamePrefix
+    m_fileComboBox = WuQFactory::newComboBox();
+    m_fileComboBox->setObjectName(objectNamePrefix
                                       + "FileSelection");
-    this->fileComboBox->setMinimumWidth(minComboBoxWidth);
-    this->fileComboBox->setMaximumWidth(maxComboBoxWidth);
-    QObject::connect(this->fileComboBox, SIGNAL(activated(int)),
-                     this, SLOT(fileComboBoxSelected(int)));
-    this->fileComboBox->setToolTip("Selects file for this overlay");
-    this->fileComboBox->setSizeAdjustPolicy(comboSizePolicy);
-    macroManager->addMacroSupportToObject(this->fileComboBox,
+    m_fileComboBox->setMinimumWidth(minComboBoxWidth);
+    m_fileComboBox->setMaximumWidth(maxComboBoxWidth);
+    QObject::connect(m_fileComboBox, static_cast<void (QComboBox::*)(int)>(&QComboBox::activated),
+                     this, &MediaOverlayViewController::fileComboBoxSelected);
+    m_fileComboBox->setToolTip("Selects file for this overlay");
+    m_fileComboBox->setSizeAdjustPolicy(comboSizePolicy);
+    macroManager->addMacroSupportToObject(m_fileComboBox,
                                           ("Select file in " + descriptivePrefix));
     
     /*
@@ -144,44 +149,47 @@ MediaOverlayViewController::MediaOverlayViewController(const Qt::Orientation ori
      */
     m_frameIndexSpinBox = WuQFactory::newSpinBox();
     m_frameIndexSpinBox->setMinimumWidth(50);
-    this->m_frameIndexSpinBox->setObjectName(objectNamePrefix
+    m_frameIndexSpinBox->setObjectName(objectNamePrefix
                                          + "FrameIndex");
-    QObject::connect(m_frameIndexSpinBox, SIGNAL(valueChanged(int)),
-                     this, SLOT(frameIndexSpinBoxValueChanged(int)));
-    m_frameIndexSpinBox->setToolTip("Select frame by its index");
+    QObject::connect(m_frameIndexSpinBox, QOverload<int>::of(&QSpinBox::valueChanged),
+                     this, &MediaOverlayViewController::frameIndexSpinBoxValueChanged);
+    WuQtUtilities::setWordWrappedToolTip(m_frameIndexSpinBox,
+                                         "Select frame (CZI scene) by its index");
     macroManager->addMacroSupportToObject(m_frameIndexSpinBox,
                                           ("Select " + descriptivePrefix + " frame index"));
     
     /*
      * Frame Name Combo Box
      */
-    this->frameNameComboBox = WuQFactory::newComboBox();
-    this->frameNameComboBox->setObjectName(objectNamePrefix
+    m_nameToolTipText = ("Select frame (CZI scene) by its name");
+    m_frameNameComboBox = WuQFactory::newComboBox();
+    m_frameNameComboBox->setObjectName(objectNamePrefix
                                       + "FrameSelection");
-    this->frameNameComboBox->setMinimumWidth(minComboBoxWidth);
-    this->frameNameComboBox->setMaximumWidth(maxComboBoxWidth);
-    QObject::connect(this->frameNameComboBox, SIGNAL(activated(int)),
-                     this, SLOT(frameNameComboBoxSelected(int)));
-    this->frameNameComboBox->setToolTip("Select frame by its name");
-    this->frameNameComboBox->setSizeAdjustPolicy(comboSizePolicy);
-    macroManager->addMacroSupportToObject(this->frameNameComboBox,
+    m_frameNameComboBox->setMinimumWidth(minComboBoxWidth);
+    m_frameNameComboBox->setMaximumWidth(maxComboBoxWidth);
+    QObject::connect(m_frameNameComboBox, static_cast<void (QComboBox::*)(int)>(&QComboBox::activated),
+                     this, &MediaOverlayViewController::frameNameComboBoxSelected);
+    WuQtUtilities::setWordWrappedToolTip(m_frameNameComboBox,
+                                         m_nameToolTipText);
+    m_frameNameComboBox->setSizeAdjustPolicy(comboSizePolicy);
+    macroManager->addMacroSupportToObject(m_frameNameComboBox,
                                           ("Select " + descriptivePrefix + " frame name"));
     
     /*
      * Opacity double spin box
      */
-    this->opacityDoubleSpinBox = WuQFactory::newDoubleSpinBox();
-    this->opacityDoubleSpinBox->setObjectName(objectNamePrefix
+    m_opacityDoubleSpinBox = WuQFactory::newDoubleSpinBox();
+    m_opacityDoubleSpinBox->setObjectName(objectNamePrefix
                                               + "Opacity");
-    this->opacityDoubleSpinBox->setMinimum(0.0);
-    this->opacityDoubleSpinBox->setMaximum(1.0);
-    this->opacityDoubleSpinBox->setSingleStep(0.05);
-    this->opacityDoubleSpinBox->setDecimals(2);
-    this->opacityDoubleSpinBox->setFixedWidth(50);
-    QObject::connect(this->opacityDoubleSpinBox, SIGNAL(valueChanged(double)),
-                     this, SLOT(opacityDoubleSpinBoxValueChanged(double)));
-    this->opacityDoubleSpinBox->setToolTip("Opacity (0.0=transparent, 1.0=opaque)");
-    macroManager->addMacroSupportToObject(this->opacityDoubleSpinBox,
+    m_opacityDoubleSpinBox->setMinimum(0.0);
+    m_opacityDoubleSpinBox->setMaximum(1.0);
+    m_opacityDoubleSpinBox->setSingleStep(0.05);
+    m_opacityDoubleSpinBox->setDecimals(2);
+    m_opacityDoubleSpinBox->setFixedWidth(50);
+    QObject::connect(m_opacityDoubleSpinBox, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+                     this, &MediaOverlayViewController::opacityDoubleSpinBoxValueChanged);
+    m_opacityDoubleSpinBox->setToolTip("Opacity (0.0=transparent, 1.0=opaque)");
+    macroManager->addMacroSupportToObject(m_opacityDoubleSpinBox,
                                           ("Set " + descriptivePrefix + " opacity"));
     
     /*
@@ -191,19 +199,19 @@ MediaOverlayViewController::MediaOverlayViewController(const Qt::Orientation ori
     const bool settingsIconValid = WuQtUtilities::loadIcon(":/LayersPanel/wrench.png",
                                                            settingsIcon);
 
-    this->settingsAction = WuQtUtilities::createAction("S",
+    m_settingsAction = WuQtUtilities::createAction("S",
                                                           "Edit settings for this frame and overlay",
                                                           this, 
                                                           this, 
                                                           SLOT(settingsActionTriggered()));
-    this->settingsAction->setObjectName(objectNamePrefix
+    m_settingsAction->setObjectName(objectNamePrefix
                                         + "ShowSettingsDialog");
     if (settingsIconValid) {
-        this->settingsAction->setIcon(settingsIcon);
+        m_settingsAction->setIcon(settingsIcon);
     }
-    QToolButton* settingsToolButton = new QToolButton();
-    settingsToolButton->setDefaultAction(this->settingsAction);
-    macroManager->addMacroSupportToObject(this->settingsAction,
+    m_settingsToolButton = new QToolButton();
+    m_settingsToolButton->setDefaultAction(m_settingsAction);
+    macroManager->addMacroSupportToObject(m_settingsAction,
                                           ("Display " + descriptivePrefix + " palette settings"));
     
     /*
@@ -213,30 +221,29 @@ MediaOverlayViewController::MediaOverlayViewController(const Qt::Orientation ori
     QIcon constructionIcon;
     const bool constructionIconValid = WuQtUtilities::loadIcon(":/LayersPanel/construction.png",
                                                            constructionIcon);
-    this->constructionAction = WuQtUtilities::createAction("M", 
+    m_constructionAction = WuQtUtilities::createAction("M",
                                                            "Add/Move/Remove Overlays", 
                                                            this);
     if (constructionIconValid) {
-        this->constructionAction->setIcon(constructionIcon);
+        m_constructionAction->setIcon(constructionIcon);
     }
     m_constructionToolButton = new QToolButton();
     QMenu* constructionMenu = createConstructionMenu(m_constructionToolButton,
                                                      descriptivePrefix,
                                                      (objectNamePrefix
                                                       + "ConstructionMenu:"));
-    this->constructionAction->setMenu(constructionMenu);
-    m_constructionToolButton->setDefaultAction(this->constructionAction);
+    m_constructionAction->setMenu(constructionMenu);
+    m_constructionToolButton->setDefaultAction(m_constructionAction);
     m_constructionToolButton->setPopupMode(QToolButton::InstantPopup);
     
-    const AString yokeToolTip =
-    ("Select a yoking group.\n"
-     "\n"
-     "When files with more than one frame are yoked,\n"
-     "the seleted frames are synchronized by frame index.\n"
-     "\n"
-     "If the SAME FILE is in yoked in multiple overlays,\n"
-     "the overlay enabled statuses are synchronized.\n");
-    
+    const AString yokeToolTip("Select a yoking group.\n"
+                              "\n"
+                              "When files with more than one frame are yoked,\n"
+                              "the seleted frames are synchronized by frame index.\n"
+                              "If the SAME FILE is in yoked in multiple overlays,\n"
+                              "the overlay enabled statuses are synchronized.\n"
+                              "This control is disabled if file contains one frame.");
+
     /*
      * Yoking Group
      * Note: macro support is in the class MapYokingGroupComboBox
@@ -246,35 +253,35 @@ MediaOverlayViewController::MediaOverlayViewController(const Qt::Orientation ori
                                                            + "FrameYokingSelection"),
                                                           descriptivePrefix);
     m_frameYokingGroupComboBox->getWidget()->setStatusTip("Synchronize enabled status and frame indices)");
-    m_frameYokingGroupComboBox->getWidget()->setToolTip("Yoke to Files");
-    QObject::connect(m_frameYokingGroupComboBox, SIGNAL(itemActivated()),
-                     this, SLOT(yokingGroupActivated()));
+    m_frameYokingGroupComboBox->getWidget()->setToolTip(yokeToolTip);
+    QObject::connect(m_frameYokingGroupComboBox, &MapYokingGroupComboBox::itemActivated,
+                     this, &MediaOverlayViewController::yokingGroupActivated);
 
     /*
      * Use layout group so that items can be shown/hidden
      */
-    this->gridLayoutGroup = new WuQGridLayoutGroup(gridLayout, this);
+    m_gridLayoutGroup = new WuQGridLayoutGroup(gridLayout, this);
     
     if (orientation == Qt::Horizontal) {
-        int row = this->gridLayoutGroup->rowCount();
-        this->gridLayoutGroup->addWidget(this->enabledCheckBox,
+        int row = m_gridLayoutGroup->rowCount();
+        m_gridLayoutGroup->addWidget(m_enabledCheckBox,
                                          row, 0,
                                          Qt::AlignHCenter);
-        this->gridLayoutGroup->addWidget(settingsToolButton,
+        m_gridLayoutGroup->addWidget(m_settingsToolButton,
                                          row, 1,
                                          Qt::AlignHCenter);
-        this->gridLayoutGroup->addWidget(m_constructionToolButton,
+        m_gridLayoutGroup->addWidget(m_constructionToolButton,
                                          row, 3);
-        this->gridLayoutGroup->addWidget(this->opacityDoubleSpinBox,
+        m_gridLayoutGroup->addWidget(m_opacityDoubleSpinBox,
                                          row, 4);
-        this->gridLayoutGroup->addWidget(this->fileComboBox,
+        m_gridLayoutGroup->addWidget(m_fileComboBox,
                                          row, 5);
-        this->gridLayoutGroup->addWidget(this->m_frameYokingGroupComboBox->getWidget(),
+        m_gridLayoutGroup->addWidget(m_frameYokingGroupComboBox->getWidget(),
                                          row, 6,
                                          Qt::AlignHCenter);
-        this->gridLayoutGroup->addWidget(m_frameIndexSpinBox,
+        m_gridLayoutGroup->addWidget(m_frameIndexSpinBox,
                                          row, 7);
-        this->gridLayoutGroup->addWidget(this->frameNameComboBox,
+        m_gridLayoutGroup->addWidget(m_frameNameComboBox,
                                          row, 8);
         
     }
@@ -285,37 +292,39 @@ MediaOverlayViewController::MediaOverlayViewController(const Qt::Orientation ori
         bottomHorizontalLineWidget->setFrameStyle(QFrame::HLine | QFrame::Raised);
         
         QLabel* fileLabel = new QLabel("File");
-        QLabel* frameLabel = new QLabel("Frame");
+        QLabel* frameLabel = new QLabel("Frame ");
+        QLabel* yokeLabel = new QLabel("Yoke");
         
-        int row = this->gridLayoutGroup->rowCount();
-        this->gridLayoutGroup->addWidget(this->enabledCheckBox,
+        int row = m_gridLayoutGroup->rowCount();
+        m_gridLayoutGroup->addWidget(m_enabledCheckBox,
                                          row, 0);
-        this->gridLayoutGroup->addWidget(settingsToolButton,
+        m_gridLayoutGroup->addWidget(m_settingsToolButton,
                                          row, 1);
-        this->gridLayoutGroup->addWidget(m_constructionToolButton,
-                                         row, 3);
-        this->gridLayoutGroup->addWidget(fileLabel,
+        m_gridLayoutGroup->addWidget(m_constructionToolButton,
+                                         row, 2);
+        m_gridLayoutGroup->addWidget(yokeLabel,
+                                         row, 3, Qt::AlignHCenter);
+        m_gridLayoutGroup->addWidget(fileLabel,
                                          row, 4);
-        this->gridLayoutGroup->addWidget(this->fileComboBox,
+        m_gridLayoutGroup->addWidget(m_fileComboBox,
                                          row, 5, 1, 2);
         
         row++;
-        this->gridLayoutGroup->addWidget(this->opacityDoubleSpinBox,
+        m_gridLayoutGroup->addWidget(m_opacityDoubleSpinBox,
                                          row, 0,
-                                         1, 2,
+                                         1, 3,
                                          Qt::AlignCenter);
-        this->gridLayoutGroup->addWidget(this->m_frameYokingGroupComboBox->getWidget(),
-                                         row, 2,
-                                         1, 2);
-        this->gridLayoutGroup->addWidget(frameLabel,
+        m_gridLayoutGroup->addWidget(m_frameYokingGroupComboBox->getWidget(),
+                                         row, 3);
+        m_gridLayoutGroup->addWidget(frameLabel,
                                          row, 4);
-        this->gridLayoutGroup->addWidget(m_frameIndexSpinBox,
+        m_gridLayoutGroup->addWidget(m_frameIndexSpinBox,
                                          row, 5);
-        this->gridLayoutGroup->addWidget(this->frameNameComboBox,
+        m_gridLayoutGroup->addWidget(m_frameNameComboBox,
                                          row, 6);
-        
+    
         row++;
-        this->gridLayoutGroup->addWidget(bottomHorizontalLineWidget,
+        m_gridLayoutGroup->addWidget(bottomHorizontalLineWidget,
                                          row, 0, 1, -1);
     }
 }
@@ -334,7 +343,7 @@ MediaOverlayViewController::~MediaOverlayViewController()
 void 
 MediaOverlayViewController::setVisible(bool visible)
 {
-    this->gridLayoutGroup->setVisible(visible);
+    m_gridLayoutGroup->setVisible(visible);
 }
 
 /*
@@ -347,15 +356,12 @@ MediaOverlayViewController::updateOverlaySettingsEditor()
         return;
     }
 
-    MediaFile* mediaFile = NULL;
-    int32_t frameIndex = -1;
-    m_mediaOverlay->getSelectionData(mediaFile,
-                              frameIndex);
+    const MediaOverlay::SelectionData selectionData(m_mediaOverlay->getSelectionData());
     
-    if ((mediaFile != NULL)
-        && (frameIndex >= 0)) {
+    if ((selectionData.m_selectedMediaFile != NULL)
+        && (selectionData.m_selectedFrameIndex >= 0)) {
 //        EventOverlaySettingsEditorDialogRequest pcme(EventOverlaySettingsEditorDialogRequest::MODE_OVERLAY_MAP_CHANGED,
-//                                                     this->browserWindowIndex,
+//                                                     m_browserWindowIndex,
 //                                                     m_mediaOverlay,
 //                                                     mediaFile,
 //                                                     frameIndex);
@@ -375,17 +381,12 @@ MediaOverlayViewController::fileComboBoxSelected(int indx)
         return;
     }
     
-    void* pointer = this->fileComboBox->itemData(indx).value<void*>();
+    void* pointer = m_fileComboBox->itemData(indx).value<void*>();
     MediaFile* file = (MediaFile*)pointer;
     m_mediaOverlay->setSelectionData(file, 0);
     
     validateYokingSelection();
     
-    //validateYokingSelection(overlay->getYokingGroup());
-    // not needed with call to validateYokingSelection: this->updateViewController(this->overlay);
-    
-    // called inside validateYokingSelection();  this->updateUserInterfaceAndGraphicsWindow();
-
     updateOverlaySettingsEditor();
     updateViewController(m_mediaOverlay);
     
@@ -400,92 +401,102 @@ MediaOverlayViewController::fileComboBoxSelected(int indx)
 void
 MediaOverlayViewController::frameIndexSpinBoxValueChanged(int indx)
 {
-    if (m_mediaOverlay == NULL)
-    {
-        //TSC: not sure how to put the displayed integer back to 0 where it starts when opening without data files
+    if (m_mediaOverlay == NULL) {
         return;
     }
-    /*
-     * Get the file that is selected from the file combo box
-     */
-    const int32_t fileIndex = this->fileComboBox->currentIndex();
-    void* pointer = this->fileComboBox->itemData(fileIndex).value<void*>();
-    MediaFile* file = (MediaFile*)pointer;
     
     /*
-     * Overlay indices range [0, N-1] but spin box shows [1, N].
+     * Get the selection information for the overlay.
      */
-    const int overlayIndex = indx - 1;
+    MediaOverlay::SelectionData selectionData(m_mediaOverlay->getSelectionData());
     
-    m_mediaOverlay->setSelectionData(file, overlayIndex);
+    /*
+     * spin box is 1..N but frame indices are 0..N-1
+     */
+    const int32_t frameIndex(indx - 1);
+    m_mediaOverlay->setSelectionData(selectionData.m_selectedMediaFile,
+                                     frameIndex);
     
+    /*
+     * Selecting index implies All Frames is OFF
+     */
+    const MapYokingGroupEnum::MediaAllFramesStatus mediaAllFramesStatus(MapYokingGroupEnum::MediaAllFramesStatus::ALL_FRAMES_OFF);
+
     const MapYokingGroupEnum::Enum frameYoking = m_mediaOverlay->getMapYokingGroup();
     if (frameYoking != MapYokingGroupEnum::MAP_YOKING_GROUP_OFF) {
-//        EventMapYokingSelectMap selectMapEvent(frameYoking,
-//                                               file,
-//                                               NULL,
-//                                               overlayIndex,
-//                                               m_mediaOverlay->isEnabled());
-//        EventManager::get()->sendEvent(selectMapEvent.getPointer());
+        EventMapYokingSelectMap selectMapEvent(frameYoking,
+                                               NULL,
+                                               NULL,
+                                               NULL,
+                                               selectionData.m_selectedMediaFile,
+                                               frameIndex,
+                                               mediaAllFramesStatus,
+                                               m_mediaOverlay->isEnabled());
+        EventManager::get()->sendEvent(selectMapEvent.getPointer());
     }
     
-    /*
-     * Need to update frame name combo box.
-     */
-    frameNameComboBox->blockSignals(true);
-    if ((overlayIndex >= 0)
-        && (overlayIndex < frameNameComboBox->count())) {
-        frameNameComboBox->setCurrentIndex(overlayIndex);
-    }
-    frameNameComboBox->blockSignals(false);
+    updateViewController(m_mediaOverlay);
     
-    this->updateUserInterface();
-    this->updateGraphicsWindow();
+    updateUserInterface();
+    updateGraphicsWindow();
     
     updateOverlaySettingsEditor();
 }
 
 /**
  * Called when a selection is made from the frame name combo box.
- * @parm indx
+ * @parm itemIndex
  *    Index of selection.
  */
 void 
-MediaOverlayViewController::frameNameComboBoxSelected(int indx)
+MediaOverlayViewController::frameNameComboBoxSelected(int itemIndex)
 {
     if (m_mediaOverlay == NULL) {
         return;
     }
     
     /*
-     * Get the file that is selected from the file combo box
+     * Get the selection information for the overlay.
      */
-    const int32_t fileIndex = this->fileComboBox->currentIndex();
-    void* pointer = this->fileComboBox->itemData(fileIndex).value<void*>();
-    MediaFile* file = (MediaFile*)pointer;
-    
-    m_mediaOverlay->setSelectionData(file, indx);
-    
-    const MapYokingGroupEnum::Enum frameYoking = m_mediaOverlay->getMapYokingGroup();
-    if (frameYoking != MapYokingGroupEnum::MAP_YOKING_GROUP_OFF) {
-//        EventMapYokingSelectMap selectMapEvent(frameYoking,
-//                                               file,
-//                                               NULL,
-//                                               indx,
-//                                               m_mediaOverlay->isEnabled());
-//        EventManager::get()->sendEvent(selectMapEvent.getPointer());
-    }
-    
+    MediaOverlay::SelectionData selectionData(m_mediaOverlay->getSelectionData());
+
     /*
-     * Need to update frame index spin box.
-     * Note that the frame index spin box ranges [1, N].
+     * ALL_FRAMES or frame index is in combo box item data
      */
-    m_frameIndexSpinBox->blockSignals(true);
-    m_frameIndexSpinBox->setValue(indx + 1);
-    m_frameIndexSpinBox->blockSignals(false);
+    if ((itemIndex >= 0)
+        && (itemIndex < m_frameNameComboBox->count())) {
+        MapYokingGroupEnum::MediaAllFramesStatus mediaAllFramesStatus(MapYokingGroupEnum::MediaAllFramesStatus::ALL_FRAMES_NO_CHANGE);
+        const int32_t frameIndex = m_frameNameComboBox->itemData(itemIndex).toInt();
+        if (frameIndex == s_ALL_FRAMES_IDENTIFIER) {
+            m_mediaOverlay->setCziAllScenesSelected(true);
+            mediaAllFramesStatus = MapYokingGroupEnum::MediaAllFramesStatus::ALL_FRAMES_ON;
+        }
+        else {
+            m_mediaOverlay->setCziAllScenesSelected(false);
+            m_mediaOverlay->setSelectionData(selectionData.m_selectedMediaFile,
+                                             frameIndex);
+            mediaAllFramesStatus = MapYokingGroupEnum::MediaAllFramesStatus::ALL_FRAMES_OFF;
+        }
+        
+        const MapYokingGroupEnum::Enum frameYoking = m_mediaOverlay->getMapYokingGroup();
+        if (frameYoking != MapYokingGroupEnum::MAP_YOKING_GROUP_OFF) {
+            EventMapYokingSelectMap selectMapEvent(frameYoking,
+                                                   NULL,
+                                                   NULL,
+                                                   NULL,
+                                                   selectionData.m_selectedMediaFile,
+                                                   frameIndex,
+                                                   mediaAllFramesStatus,
+                                                   m_mediaOverlay->isEnabled());
+            EventManager::get()->sendEvent(selectMapEvent.getPointer());
+        }
+    }
+
     
-    this->updateUserInterface();
-    this->updateGraphicsWindow();
+    updateViewController(m_mediaOverlay);
+
+    updateUserInterface();
+    updateGraphicsWindow();
     
     updateOverlaySettingsEditor();
 }
@@ -505,22 +516,23 @@ MediaOverlayViewController::enabledCheckBoxClicked(bool checked)
     
     const MapYokingGroupEnum::Enum frameYoking = m_mediaOverlay->getMapYokingGroup();
     if (frameYoking != MapYokingGroupEnum::MAP_YOKING_GROUP_OFF) {
-        MediaFile* myFile = NULL;
-        int32_t myIndex = -1;
-        m_mediaOverlay->getSelectionData(myFile,
-                                         myIndex);
-        
-//        EventMapYokingSelectMap selectMapEvent(frameYoking,
-//                                               myFile,
-//                                               NULL,
-//                                               myIndex,
-//                                               m_mediaOverlay->isEnabled());
-//        EventManager::get()->sendEvent(selectMapEvent.getPointer());
+        const MediaOverlay::SelectionData selectionData(m_mediaOverlay->getSelectionData());
+
+        const MapYokingGroupEnum::MediaAllFramesStatus mediaAllFramesStatus(MapYokingGroupEnum::MediaAllFramesStatus::ALL_FRAMES_NO_CHANGE);
+        EventMapYokingSelectMap selectMapEvent(frameYoking,
+                                               NULL,
+                                               NULL,
+                                               NULL,
+                                               selectionData.m_selectedMediaFile,
+                                               selectionData.m_selectedFrameIndex,
+                                               mediaAllFramesStatus,
+                                               m_mediaOverlay->isEnabled());
+        EventManager::get()->sendEvent(selectMapEvent.getPointer());
     }
     
-    this->updateUserInterface();
+    updateUserInterface();
 
-    this->updateGraphicsWindow();
+    updateGraphicsWindow();
 }
 
 
@@ -538,7 +550,7 @@ MediaOverlayViewController::opacityDoubleSpinBoxValueChanged(double value)
     
     m_mediaOverlay->setOpacity(value);
     
-    this->updateGraphicsWindow();
+    updateGraphicsWindow();
 }
 
 /**
@@ -547,7 +559,7 @@ MediaOverlayViewController::opacityDoubleSpinBoxValueChanged(double value)
 void
 MediaOverlayViewController::validateYokingSelection()
 {
-//    m_frameYokingGroupComboBox->validateYokingChange(m_mediaOverlay);
+    m_frameYokingGroupComboBox->validateYokingChange(m_mediaOverlay);
     updateViewController(m_mediaOverlay);
     updateGraphicsWindow();
 }
@@ -580,13 +592,13 @@ MediaOverlayViewController::settingsActionTriggered()
         return;
     }
     
-    MediaFile* mediaFile;
-    int32_t frameIndex = -1;
-    m_mediaOverlay->getSelectionData(mediaFile,
-                                     frameIndex);
-    if (mediaFile != NULL) {
+    const MediaOverlay::SelectionData selectionData(m_mediaOverlay->getSelectionData());
+    if (selectionData.m_selectedMediaFile != NULL) {
+        MediaOverlaySettingsMenu menu(m_mediaOverlay,
+                                      m_parentObjectName);
+        menu.exec(m_settingsToolButton->mapToGlobal(QPoint(0,0)));
 //        EventOverlaySettingsEditorDialogRequest pcme(EventOverlaySettingsEditorDialogRequest::MODE_SHOW_EDITOR,
-//                                                     this->browserWindowIndex,
+//                                                     m_browserWindowIndex,
 //                                                     m_mediaOverlay,
 //                                                     mediaFile,
 //                                                     frameIndex);
@@ -604,69 +616,87 @@ MediaOverlayViewController::updateViewController(MediaOverlay* overlay)
 {
     m_mediaOverlay = overlay;
 
-    this->fileComboBox->clear();
-    
     /*
      * Get the selection information for the overlay.
      */
-    std::vector<MediaFile*> mediaFiles;
-    MediaFile* selectedFile = NULL;
-    int32_t selectedFrameIndex = -1;
+    MediaOverlay::SelectionData selectionData;
     if (m_mediaOverlay != NULL) {
-        m_mediaOverlay->getSelectionData(mediaFiles,
-                                  selectedFile, 
-                                  selectedFrameIndex);
+        selectionData = m_mediaOverlay->getSelectionData();
     }
     
-    std::vector<CaretDataFile*> caretDataFiles(mediaFiles.begin(),
-                                               mediaFiles.end());
+    m_fileComboBox->clear();
+    
+    std::vector<CaretDataFile*> caretDataFiles(selectionData.m_mediaFiles.begin(),
+                                               selectionData.m_mediaFiles.end());
     std::vector<AString> displayNames;
     FilePathNamePrefixCompactor::removeMatchingPathPrefixFromCaretDataFiles(caretDataFiles,
                                                                             displayNames);
-    CaretAssert(mediaFiles.size() == displayNames.size());
+    CaretAssert(selectionData.m_mediaFiles.size() == displayNames.size());
 
     /*
      * Load the file selection combo box.
      */
     int32_t selectedFileIndex = -1;
-    const int32_t numFiles = static_cast<int32_t>(mediaFiles.size());
+    const int32_t numFiles = static_cast<int32_t>(selectionData.m_mediaFiles.size());
     for (int32_t i = 0; i < numFiles; i++) {
-        MediaFile* dataFile = mediaFiles[i];
+        MediaFile* dataFile = selectionData.m_mediaFiles[i];
         
         AString dataTypeName = DataFileTypeEnum::toOverlayTypeName(dataFile->getDataFileType());
         CaretAssertVectorIndex(displayNames, i);
-        this->fileComboBox->addItem(displayNames[i],
+        m_fileComboBox->addItem(displayNames[i],
                                     QVariant::fromValue((void*)dataFile));
-        if (dataFile == selectedFile) {
+        if (dataFile == selectionData.m_selectedMediaFile) {
             selectedFileIndex = i;
         }
     }
     if (selectedFileIndex >= 0) {
-        this->fileComboBox->setCurrentIndex(selectedFileIndex);
+        m_fileComboBox->setCurrentIndex(selectedFileIndex);
     }
     
     /*
      * Load the frame selection combo box
      */
     int32_t numberOfFrames = 0;
-    this->frameNameComboBox->blockSignals(true);
-    this->frameNameComboBox->clear();
-    if (selectedFile != NULL) {
-        numberOfFrames = selectedFile->getNumberOfFrames();
-        for (int32_t i = 0; i < numberOfFrames; i++) {
-            this->frameNameComboBox->addItem(AString::number(i + 1));
+    m_frameNameComboBox->blockSignals(true);
+    m_frameNameComboBox->clear();
+    if (selectionData.m_selectedMediaFile != NULL) {
+        numberOfFrames = selectionData.m_selectedMediaFile->getNumberOfFrames();
+        
+        /*
+         * User data of combo box items contains either ALL_FRAMES
+         * or selected frame index
+         */
+        int32_t selectedComboBoxIndex(0);
+        if (selectionData.m_fileSupportsAllFramesFlag) {
+            m_frameNameComboBox->addItem("All Frames",
+                                               s_ALL_FRAMES_IDENTIFIER);
+            if (selectionData.m_allFramesSelectedFlag) {
+                selectedComboBoxIndex = m_frameNameComboBox->count() - 1;
+            }
         }
-        this->frameNameComboBox->setCurrentIndex(selectedFrameIndex);
+        for (int32_t frameIndex = 0; frameIndex < numberOfFrames; frameIndex++) {
+            m_frameNameComboBox->addItem(selectionData.m_selectedMediaFile->getFrameName(frameIndex),
+                                             frameIndex);
+            if ( ! selectionData.m_allFramesSelectedFlag) {
+                if (frameIndex == selectionData.m_selectedFrameIndex) {
+                    selectedComboBoxIndex = m_frameNameComboBox->count() - 1;
+                }
+            }
+        }
+        
+        if (selectedComboBoxIndex < m_frameNameComboBox->count()) {
+            m_frameNameComboBox->setCurrentIndex(selectedComboBoxIndex);
+        }
     }
-    this->frameNameComboBox->blockSignals(false);
+    m_frameNameComboBox->blockSignals(false);
     
-    /*
-     * Load the frame index spin box that ranges [1, N].
-     */
     m_frameIndexSpinBox->blockSignals(true);
     m_frameIndexSpinBox->setRange(1, numberOfFrames);
-    if (selectedFile != NULL) {
-        m_frameIndexSpinBox->setValue(selectedFrameIndex + 1);
+    if (selectionData.m_selectedMediaFile != NULL) {
+        /*
+         * Spin box is 1..N but frame index is 0..N-1
+         */
+        m_frameIndexSpinBox->setValue(selectionData.m_selectedFrameIndex + 1);
     }
     m_frameIndexSpinBox->blockSignals(false);
 
@@ -679,19 +709,19 @@ MediaOverlayViewController::updateViewController(MediaOverlay* overlay)
             checkState = Qt::Checked;
         }
     }
-    this->enabledCheckBox->setCheckState(checkState);
+    m_enabledCheckBox->setCheckState(checkState);
     
     m_frameYokingGroupComboBox->setMapYokingGroup(overlay->getMapYokingGroup());
     
-    this->opacityDoubleSpinBox->blockSignals(true);
-    this->opacityDoubleSpinBox->setValue(m_mediaOverlay->getOpacity());
-    this->opacityDoubleSpinBox->blockSignals(false);
+    m_opacityDoubleSpinBox->blockSignals(true);
+    m_opacityDoubleSpinBox->setValue(m_mediaOverlay->getOpacity());
+    m_opacityDoubleSpinBox->blockSignals(false);
 
-    const bool haveFile = (selectedFile != NULL);
+    const bool haveFile = (selectionData.m_selectedMediaFile != NULL);
     bool haveMultipleFrames = false;
     bool haveOpacity = false;
     if (haveFile) {
-        haveMultipleFrames = (selectedFile->getNumberOfFrames() > 1);
+        haveMultipleFrames = (selectionData.m_selectedMediaFile->getNumberOfFrames() > 1);
     }
     
     /**
@@ -711,9 +741,9 @@ MediaOverlayViewController::updateViewController(MediaOverlay* overlay)
      * as names may be too long to fit into combo boxes
      */
     AString fileComboBoxToolTip("Select file for this overlay");
-    AString nameComboBoxToolTip("Select frame by its name");
-    if (selectedFile != NULL) {
-        FileInformation fileInfo(selectedFile->getFileName());
+    AString nameComboBoxToolTip(m_nameToolTipText);
+    if (selectionData.m_selectedMediaFile != NULL) {
+        FileInformation fileInfo(selectionData.m_selectedMediaFile->getFileName());
         fileComboBoxToolTip.append(":\n"
                                    + fileInfo.getFileName()
                                    + "\n"
@@ -721,23 +751,28 @@ MediaOverlayViewController::updateViewController(MediaOverlay* overlay)
                                    + "\n\n"
                                    + "Copy File Name/Path to Clipboard with Construction Menu");
         
-        nameComboBoxToolTip.append(":\n"
-                                   + this->frameNameComboBox->currentText());
+        const QString frameName(m_frameNameComboBox->currentText());
+        if (frameName.length() > 15) {
+            nameComboBoxToolTip.append(":\n"
+                                       + frameName);
+        }
     }
-    this->fileComboBox->setToolTip(fileComboBoxToolTip);
-    this->frameNameComboBox->setToolTip(nameComboBoxToolTip);
+    m_fileComboBox->setToolTip(fileComboBoxToolTip);
+    WuQtUtilities::setWordWrappedToolTip(m_frameNameComboBox,
+                                         nameComboBoxToolTip);
 
     /*
      * Make sure items are enabled at the appropriate time
      */
-    this->fileComboBox->setEnabled(haveFile);
-    this->frameNameComboBox->setEnabled(haveFile);
-    this->m_frameIndexSpinBox->setEnabled(haveMultipleFrames);
-    this->enabledCheckBox->setEnabled(haveFile);
-    this->constructionAction->setEnabled(true);
-    this->opacityDoubleSpinBox->setEnabled(haveOpacity);
-    this->m_frameYokingGroupComboBox->getWidget()->setEnabled(haveYoking);
-    this->settingsAction->setEnabled(true);
+    m_fileComboBox->setEnabled(haveFile);
+    m_frameNameComboBox->setEnabled(haveMultipleFrames);
+    m_frameIndexSpinBox->setEnabled( (! selectionData.m_allFramesSelectedFlag)
+                                          && haveMultipleFrames);
+    m_enabledCheckBox->setEnabled(haveFile);
+    m_constructionAction->setEnabled(true);
+    m_opacityDoubleSpinBox->setEnabled(haveOpacity);
+    m_frameYokingGroupComboBox->getWidget()->setEnabled(haveYoking);
+    m_settingsAction->setEnabled(true);
 }
 
 /**
@@ -756,12 +791,13 @@ MediaOverlayViewController::updateUserInterfaceAndGraphicsWindow()
 void
 MediaOverlayViewController::updateUserInterface()
 {
-//    if (this->overlay->getMapYokingGroup() != MapYokingGroupEnum::MAP_YOKING_GROUP_OFF) {
-//        EventManager::get()->sendEvent(EventUserInterfaceUpdate().getPointer());
-//    }
-//    else {
-//        EventManager::get()->sendEvent(EventUserInterfaceUpdate().setWindowIndex(this->browserWindowIndex).getPointer());
-//    }
+    if (m_frameYokingGroupComboBox->getWidget()->isEnabled()
+        && (m_frameYokingGroupComboBox->getMapYokingGroup() != MapYokingGroupEnum::MAP_YOKING_GROUP_OFF)) {
+        EventManager::get()->sendEvent(EventUserInterfaceUpdate().getPointer());
+    }
+    else {
+        EventManager::get()->sendEvent(EventUserInterfaceUpdate().setWindowIndex(m_browserWindowIndex).getPointer());
+    }
 }
 
 /**
@@ -771,12 +807,13 @@ void
 MediaOverlayViewController::updateGraphicsWindow()
 {
     EventManager::get()->sendEvent(EventSurfaceColoringInvalidate().getPointer());
-//    if (this->overlay->getMapYokingGroup() != MapYokingGroupEnum::MAP_YOKING_GROUP_OFF) {
-//        EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
-//    }
-//    else {
-        EventManager::get()->sendEvent(EventGraphicsUpdateOneWindow(this->browserWindowIndex).getPointer());
-//    }
+    if (m_frameYokingGroupComboBox->getWidget()->isEnabled()
+        && (m_frameYokingGroupComboBox->getMapYokingGroup() != MapYokingGroupEnum::MAP_YOKING_GROUP_OFF)) {
+        EventManager::get()->sendEvent(EventGraphicsPaintSoonAllWindows().getPointer());
+    }
+    else {
+        EventManager::get()->sendEvent(EventGraphicsPaintSoonOneWindow(m_browserWindowIndex).getPointer());
+    }
 }
 
 /**
@@ -797,8 +834,8 @@ MediaOverlayViewController::createConstructionMenu(QWidget* parent,
     CaretAssert(macroManager);
     
     QMenu* menu = new QMenu(parent);
-    QObject::connect(menu, SIGNAL(aboutToShow()),
-                     this, SLOT(menuConstructionAboutToShow()));
+    QObject::connect(menu, &QMenu::aboutToShow,
+                     this, &MediaOverlayViewController::menuConstructionAboutToShow);
     
     QAction* addAboveAction = menu->addAction("Add Overlay Above",
                                               this,
@@ -891,86 +928,15 @@ void
 MediaOverlayViewController::menuConstructionAboutToShow()
 {
     if (m_mediaOverlay != NULL) {
-        MediaFile* mediaFile = NULL;
-        int32_t frameIndex = -1;
-        m_mediaOverlay->getSelectionData(mediaFile,
-                                         frameIndex);
+        const MediaOverlay::SelectionData selectionData(m_mediaOverlay->getSelectionData());
     
         QString menuText = "Reload Selected File";
-        if (mediaFile != NULL) {
-            if (mediaFile->isModified()) {
+        if (selectionData.m_selectedMediaFile != NULL) {
+            if (selectionData.m_selectedMediaFile->isModified()) {
                 QString suffix = " (MODIFIED)";
                 menuText += suffix;
             }
             
-            bool dynConnFlag(false);
-            switch (mediaFile->getDataFileType()) {
-                case DataFileTypeEnum::ANNOTATION:
-                    break;
-                case DataFileTypeEnum::ANNOTATION_TEXT_SUBSTITUTION:
-                    break;
-                case DataFileTypeEnum::BORDER:
-                    break;
-                case DataFileTypeEnum::CONNECTIVITY_DENSE:
-                    break;
-                case DataFileTypeEnum::CONNECTIVITY_DENSE_DYNAMIC:
-                    dynConnFlag = true;
-                    break;
-                case DataFileTypeEnum::CONNECTIVITY_DENSE_LABEL:
-                    break;
-                case DataFileTypeEnum::CONNECTIVITY_DENSE_PARCEL:
-                    break;
-                case DataFileTypeEnum::CONNECTIVITY_PARCEL:
-                    break;
-                case DataFileTypeEnum::CONNECTIVITY_PARCEL_DENSE:
-                    break;
-                case DataFileTypeEnum::CONNECTIVITY_PARCEL_LABEL:
-                    break;
-                case DataFileTypeEnum::CONNECTIVITY_PARCEL_SCALAR:
-                    break;
-                case DataFileTypeEnum::CONNECTIVITY_PARCEL_SERIES:
-                    break;
-                case DataFileTypeEnum::CONNECTIVITY_DENSE_SCALAR:
-                    break;
-                case DataFileTypeEnum::CONNECTIVITY_DENSE_TIME_SERIES:
-                    break;
-                case DataFileTypeEnum::CONNECTIVITY_FIBER_ORIENTATIONS_TEMPORARY:
-                    break;
-                case DataFileTypeEnum::CONNECTIVITY_FIBER_TRAJECTORY_TEMPORARY:
-                    break;
-                case DataFileTypeEnum::CONNECTIVITY_SCALAR_DATA_SERIES:
-                    break;
-                case DataFileTypeEnum::FOCI:
-                    break;
-                case DataFileTypeEnum::IMAGE:
-                    break;
-                case DataFileTypeEnum::LABEL:
-                    break;
-                case DataFileTypeEnum::METRIC:
-                    break;
-                case DataFileTypeEnum::METRIC_DYNAMIC:
-                    dynConnFlag = true;
-                    break;
-                case DataFileTypeEnum::PALETTE:
-                    break;
-                case DataFileTypeEnum::RGBA:
-                    break;
-                case DataFileTypeEnum::SCENE:
-                    break;
-                case DataFileTypeEnum::SPECIFICATION:
-                    break;
-                case DataFileTypeEnum::SURFACE:
-                    break;
-                case DataFileTypeEnum::UNKNOWN:
-                    break;
-                case DataFileTypeEnum::VOLUME:
-                    break;
-                case DataFileTypeEnum::VOLUME_DYNAMIC:
-                    dynConnFlag = true;
-                    break;
-            }
-            m_constructionReloadFileAction->setEnabled( ! dynConnFlag);
-            m_copyPathAndFileNameToClipboardAction->setEnabled( ! dynConnFlag);
         }
         
         m_constructionReloadFileAction->setText(menuText);
@@ -1029,13 +995,10 @@ void
 MediaOverlayViewController::menuCopyFileNameToClipBoard()
 {
     if (m_mediaOverlay != NULL) {
-        MediaFile* mediaFile = NULL;
-        int32_t frameIndex = -1;
-        m_mediaOverlay->getSelectionData(mediaFile,
-                                         frameIndex);
+        const MediaOverlay::SelectionData selectionData(m_mediaOverlay->getSelectionData());
         
-        if (mediaFile != NULL) {
-            QApplication::clipboard()->setText(mediaFile->getFileName().trimmed(),
+        if (selectionData.m_selectedMediaFile != NULL) {
+            QApplication::clipboard()->setText(selectionData.m_selectedMediaFile->getFileName().trimmed(),
                                                QClipboard::Clipboard);
         }
     }
@@ -1048,17 +1011,10 @@ void
 MediaOverlayViewController::menuCopyFrameNameToClipBoard()
 {
     if (m_mediaOverlay != NULL) {
-        MediaFile* mediaFile = NULL;
-        int32_t frameIndex = -1;
-        m_mediaOverlay->getSelectionData(mediaFile,
-                                         frameIndex);
-        
-        if (mediaFile != NULL) {
-            if ((frameIndex >= 0)
-                && (frameIndex < mediaFile->getNumberOfFrames())) {
-                QApplication::clipboard()->setText(mediaFile->getFrameName(frameIndex).trimmed(),
-                                                   QClipboard::Clipboard);
-            }
+        const MediaOverlay::SelectionData selectionData(m_mediaOverlay->getSelectionData());
+        if (selectionData.m_selectedMediaFile != NULL) {
+            QApplication::clipboard()->setText(selectionData.m_selectedFrameName,
+                                               QClipboard::Clipboard);
         }
     }
 }
@@ -1069,16 +1025,13 @@ MediaOverlayViewController::menuCopyFrameNameToClipBoard()
 void MediaOverlayViewController::menuReloadFileTriggered()
 {
     if (m_mediaOverlay != NULL) {
-        MediaFile* mediaFile = NULL;
-        int32_t frameIndex = -1;
-        m_mediaOverlay->getSelectionData(mediaFile,
-                                         frameIndex);
+        const MediaOverlay::SelectionData selectionData(m_mediaOverlay->getSelectionData());
         
-        if (mediaFile != NULL) {
+        if (selectionData.m_selectedMediaFile != NULL) {
             AString username;
             AString password;
             
-            if (DataFile::isFileOnNetwork(mediaFile->getFileName())) {
+            if (DataFile::isFileOnNetwork(selectionData.m_selectedMediaFile->getFileName())) {
                 const QString msg("This file is on the network.  "
                                   "If accessing the file requires a username and "
                                   "password, enter it here.  Otherwise, remove any "
@@ -1098,7 +1051,7 @@ void MediaOverlayViewController::menuReloadFileTriggered()
             }
             
             EventDataFileReload reloadEvent(GuiManager::get()->getBrain(),
-                                            mediaFile);
+                                            selectionData.m_selectedMediaFile);
             reloadEvent.setUsernameAndPassword(username,
                                                password);
             EventManager::get()->sendEvent(reloadEvent.getPointer());
@@ -1111,6 +1064,27 @@ void MediaOverlayViewController::menuReloadFileTriggered()
             updateOverlaySettingsEditor();
             
             updateUserInterfaceAndGraphicsWindow();
+        }
+    }
+}
+
+/**
+ * Reset the view since displayed data (frame or all frames has changed)
+ */
+void
+MediaOverlayViewController::resetUserView()
+{
+    if (m_mediaOverlay != NULL) {
+        const MediaOverlay::SelectionData selectionData(m_mediaOverlay->getSelectionData());
+        EventBrowserTabGet tabEvent(selectionData.m_tabIndex);
+        EventManager::get()->sendEvent(tabEvent.getPointer());
+        BrowserTabContent* btc(tabEvent.getBrowserTab());
+        if (btc != NULL) {
+            EventGraphicsPaintNowOneWindow graphicsEvent(m_browserWindowIndex);
+            EventManager::get()->sendEvent(graphicsEvent.getPointer());
+
+            btc->resetView();
+            updateGraphicsWindow();
         }
     }
 }

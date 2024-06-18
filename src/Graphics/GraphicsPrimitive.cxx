@@ -37,7 +37,9 @@
 #include "GraphicsPrimitiveV3fC4f.h"
 #include "GraphicsPrimitiveV3fC4ub.h"
 #include "GraphicsPrimitiveV3fN3f.h"
+#include "GraphicsPrimitiveV3fN3fC4f.h"
 #include "GraphicsPrimitiveV3fN3fC4ub.h"
+#include "GraphicsPrimitiveV3fT2f.h"
 #include "GraphicsPrimitiveV3fT3f.h"
 #include "MathFunctions.h"
 #include "Matrix4x4Interface.h"
@@ -64,36 +66,55 @@ using namespace caret;
  *     Data type of the colors.
  * @param vertexColorType
  *     Type of vertex coloring
- * @param textureDataType
- *     Data type of texture coordinates.
- * @param textureWrappingType
- *     Type of texture wrapping
- * @param textureFilteringType
- *     Type of texture filtering
+ * @param textureSettings
+ *     Settings for primitives that use textures
  * @param primitiveType
  *     Type of primitive drawn (triangles, lines, etc.)
  */
-GraphicsPrimitive::GraphicsPrimitive(const VertexDataType       vertexDataType,
-                                     const NormalVectorDataType normalVectorDataType,
-                                     const ColorDataType        colorDataType,
-                                     const VertexColorType      vertexColorType,
-                                     const TextureDataType      textureDataType,
-                                     const TextureWrappingType  textureWrappingType,
-                                     const TextureFilteringType textureFilteringType,
-                                     const PrimitiveType        primitiveType)
+GraphicsPrimitive::GraphicsPrimitive(const VertexDataType           vertexDataType,
+                                     const NormalVectorDataType     normalVectorDataType,
+                                     const ColorDataType            colorDataType,
+                                     const VertexColorType          vertexColorType,
+                                     const GraphicsTextureSettings& textureSettings,
+                                     const PrimitiveType            primitiveType)
 : CaretObject(),
- EventListenerInterface(),
- m_vertexDataType(vertexDataType),
- m_normalVectorDataType(normalVectorDataType),
- m_colorDataType(colorDataType),
- m_vertexColorType(vertexColorType),
- m_textureDataType(textureDataType),
- m_textureWrappingType(textureWrappingType),
- m_textureFilteringType(textureFilteringType),
- m_primitiveType(primitiveType),
- m_boundingBoxValid(false)
+EventListenerInterface(),
+m_vertexDataType(vertexDataType),
+m_normalVectorDataType(normalVectorDataType),
+m_colorDataType(colorDataType),
+m_vertexColorType(vertexColorType),
+m_textureSettings(textureSettings),
+m_primitiveType(primitiveType),
+m_boundingBoxValid(false)
 {
     invalidateVertexMeasurements();
+    
+    switch (m_textureSettings.getDimensionType()) {
+        case GraphicsTextureSettings::DimensionType::NONE:
+            break;
+        case GraphicsTextureSettings::DimensionType::FLOAT_STR_2D:
+        case GraphicsTextureSettings::DimensionType::FLOAT_STR_3D:
+            switch (m_textureSettings.getMipMappingType()) {
+                case GraphicsTextureSettings::MipMappingType::DISABLED:
+                    switch (m_textureSettings.getMinificationFilter()) {
+                        case GraphicsTextureMinificationFilterEnum::NEAREST:
+                        case GraphicsTextureMinificationFilterEnum::LINEAR:
+                            break;
+                        case GraphicsTextureMinificationFilterEnum::LINEAR_MIPMAP_LINEAR:
+                        case GraphicsTextureMinificationFilterEnum::LINEAR_MIPMAP_NEAREST:
+                        case GraphicsTextureMinificationFilterEnum::NEAREST_MIPMAP_LINEAR:
+                        case GraphicsTextureMinificationFilterEnum::NEAREST_MIPMAP_NEAREST:
+                            CaretLogSevere("Mip Mapping is disabled but the minification factor="
+                                           + GraphicsTextureMinificationFilterEnum::toName(m_textureSettings.getMinificationFilter())
+                                           + " requires mip mapping.  ");
+                            break;
+                    }
+                    break;
+                case GraphicsTextureSettings::MipMappingType::ENABLED:
+                    break;
+            }
+            break;
+    }
 }
 
 /**
@@ -116,9 +137,6 @@ GraphicsPrimitive::GraphicsPrimitive(const GraphicsPrimitive& obj)
  m_normalVectorDataType(obj.m_normalVectorDataType),
  m_colorDataType(obj.m_colorDataType),
  m_vertexColorType(obj.m_vertexColorType),
- m_textureDataType(obj.m_textureDataType),
- m_textureWrappingType(obj.m_textureWrappingType),
- m_textureFilteringType(obj.m_textureFilteringType),
  m_primitiveType(obj.m_primitiveType),
  m_boundingBoxValid(false)
 {
@@ -147,9 +165,10 @@ GraphicsPrimitive::copyHelperGraphicsPrimitive(const GraphicsPrimitive& obj)
     m_polygonalLinePrimitiveRestartIndices     = obj.m_polygonalLinePrimitiveRestartIndices;
     m_sphereSizeType              = obj.m_sphereSizeType;
     m_sphereDiameterValue         = obj.m_sphereDiameterValue;
-    m_textureImageBytesRGBA       = obj.m_textureImageBytesRGBA;
-    m_textureImageWidth           = obj.m_textureImageWidth;
-    m_textureImageHeight          = obj.m_textureImageHeight;
+    m_textureSettings             = obj.m_textureSettings;
+    m_arrayIndicesSubsetFirstVertexIndex = obj.m_arrayIndicesSubsetFirstVertexIndex;
+    m_arrayIndicesSubsetCount     = obj.m_arrayIndicesSubsetCount;
+    m_voxelColorUpdate            = obj.m_voxelColorUpdate;
     invalidateVertexMeasurements();
 
 
@@ -194,10 +213,13 @@ GraphicsPrimitive::reserveForNumberOfVertices(const int32_t numberOfVertices)
             break;
     }
     
-    switch (m_textureDataType) {
-        case GraphicsPrimitive::TextureDataType::NONE:
+    switch (m_textureSettings.getDimensionType()) {
+        case GraphicsTextureSettings::DimensionType::NONE:
             break;
-        case GraphicsPrimitive::TextureDataType::FLOAT_STR:
+        case GraphicsTextureSettings::DimensionType::FLOAT_STR_2D:
+            m_floatTextureSTR.reserve(numberOfVertices * 3);
+            break;
+        case GraphicsTextureSettings::DimensionType::FLOAT_STR_3D:
             m_floatTextureSTR.reserve(numberOfVertices * 3);
             break;
     }
@@ -388,10 +410,11 @@ GraphicsPrimitive::isValid() const
         
         bool haveTextureFlag = false;
         uint32_t numTextureSTR = 0;
-        switch (m_textureDataType) {
-            case TextureDataType::NONE:
+        switch (m_textureSettings.getDimensionType()) {
+            case GraphicsTextureSettings::DimensionType::NONE:
                 break;
-            case TextureDataType::FLOAT_STR:
+            case GraphicsTextureSettings::DimensionType::FLOAT_STR_2D:
+            case GraphicsTextureSettings::DimensionType::FLOAT_STR_3D:
                 numTextureSTR = m_floatTextureSTR.size();
                 haveTextureFlag = true;
                 break;
@@ -402,8 +425,34 @@ GraphicsPrimitive::isValid() const
                 return false;
             }
             
-            if (m_textureImageBytesRGBA.empty()) {
-                CaretLogWarning("ERROR: GraphicsPrimitive has invalid texture data");
+            if (m_textureSettings.getImageBytesPointer() == NULL) {
+                CaretLogWarning("ERROR: Texture has NULL pointer to image data");
+                return false;
+            }
+            switch (m_textureSettings.getPixelFormatType()) {
+                case GraphicsTextureSettings::PixelFormatType::NONE:
+                    CaretLogWarning("ERROR: GraphicsPrimitive has texture but NONE for pixel format type");
+                    break;
+                case GraphicsTextureSettings::PixelFormatType::BGR:
+                    break;
+                case GraphicsTextureSettings::PixelFormatType::BGRA:
+                    break;
+                case GraphicsTextureSettings::PixelFormatType::BGRX:
+                    break;
+                case GraphicsTextureSettings::PixelFormatType::RGB:
+                    break;
+                case GraphicsTextureSettings::PixelFormatType::RGBA:
+                    break;
+            }
+            
+            switch (m_textureSettings.getPixelOrigin()) {
+                case GraphicsTextureSettings::PixelOrigin::NONE:
+                    CaretLogWarning("ERROR: GraphicsPrimitive has texture but NONE for pixel origin");
+                    break;
+                case GraphicsTextureSettings::PixelOrigin::BOTTOM_LEFT:
+                    break;
+                case GraphicsTextureSettings::PixelOrigin::TOP_LEFT:
+                    break;
             }
         }
         
@@ -670,13 +719,17 @@ GraphicsPrimitive::toStringPrivate(const bool includeAllDataFlag) const
     const int32_t numVertices = getNumberOfVertices();
     s.appendWithNewLine("Number of Vertices: " + AString::number(numVertices) + "\n");
     
-    switch (m_textureDataType) {
-        case TextureDataType::NONE:
+    switch (m_textureSettings.getDimensionType()) {
+        case GraphicsTextureSettings::DimensionType::NONE:
             break;
-        case TextureDataType::FLOAT_STR:
+        case GraphicsTextureSettings::DimensionType::FLOAT_STR_2D:
+        case GraphicsTextureSettings::DimensionType::FLOAT_STR_3D:
             s.appendWithNewLine("Texture: " + AString::number(m_floatTextureSTR.size()) + " Float Texture 0.0 to 1.0.  ");
-            s.appendWithNewLine("   Width: " + AString::number(m_textureImageWidth)
-                                + " Height: " + AString::number(m_textureImageHeight));
+            s.appendWithNewLine("   Width: " + AString::number(m_textureSettings.getImageWidth())
+                                + " Height: " + AString::number(m_textureSettings.getImageHeight())
+                                + " Slices: " + AString::number(m_textureSettings.getImageSlices()));
+            s.appendWithNewLine("Texture Settings");
+            s.appendWithNewLine(m_textureSettings.toString());
             break;
     }
     
@@ -808,10 +861,11 @@ GraphicsPrimitive::toStringPrivate(const bool includeAllDataFlag) const
                 }
             }
             
-            switch (m_textureDataType) {
-                case TextureDataType::NONE:
+            switch (m_textureSettings.getDimensionType()) {
+                case GraphicsTextureSettings::DimensionType::NONE:
                     break;
-                case TextureDataType::FLOAT_STR:
+                case GraphicsTextureSettings::DimensionType::FLOAT_STR_2D:
+                case GraphicsTextureSettings::DimensionType::FLOAT_STR_3D:
                 {
                     CaretAssertVectorIndex(m_floatTextureSTR, i*3 + 2);
                     const float* str = &m_floatTextureSTR[i * 3];
@@ -876,10 +930,11 @@ GraphicsPrimitive::addVertexProtected(const float xyz[3],
             break;
     }
     
-    switch (m_textureDataType) {
-        case TextureDataType::NONE:
+    switch (m_textureSettings.getDimensionType()) {
+        case GraphicsTextureSettings::DimensionType::NONE:
             break;
-        case TextureDataType::FLOAT_STR:
+        case GraphicsTextureSettings::DimensionType::FLOAT_STR_2D:
+        case GraphicsTextureSettings::DimensionType::FLOAT_STR_3D:
             CaretAssert(textureSTR);
             m_floatTextureSTR.insert(m_floatTextureSTR.end(),
                                      textureSTR,
@@ -1014,6 +1069,16 @@ GraphicsPrimitive::setFloatYComponents(const std::vector<float>& yComponents)
 }
 
 /**
+ * @return Number of vertices in primitive
+ */
+int32_t
+GraphicsPrimitive::getNumberOfVertices() const
+{
+    const int32_t numVertices(m_xyz.size() / 3);
+    return numVertices;
+}
+
+/**
  * Replace the XYZ coordinate at the given index
  *
  * @param vertexIndex
@@ -1052,6 +1117,47 @@ GraphicsPrimitive::replaceVertexFloatXYZ(const int32_t vertexIndex,
         m_graphicsEngineDataForOpenGL->invalidateCoordinates();
     }
 }
+
+/**
+ * Replace the STR coordinate at the given index
+ *
+ * @param vertexIndex
+ *     Index of the vertex
+ * @param str
+ *     The new STR texture coordinate
+ */
+void
+GraphicsPrimitive::replaceVertexTextureSTR(const int32_t vertexIndex,
+                                           const float str[3])
+{
+    switch (m_releaseInstanceDataMode) {
+        case ReleaseInstanceDataMode::COMPLETED:
+        {
+            const QString msg("A vertex's STR Data in primitive cannot be replaced.  "
+                              "Instance data was removed to save memory.  "
+                              "setReleaseInstanceDataMode() should not be called for this primitive.");
+            CaretAssertMessage(0, msg);
+            CaretLogSevere(msg);
+            return;
+        }
+            break;
+        case ReleaseInstanceDataMode::DISABLED:
+            break;
+        case ReleaseInstanceDataMode::ENABLED:
+            break;
+    }
+    
+    const int32_t offset = vertexIndex * 3;
+    CaretAssertVectorIndex(m_floatTextureSTR, offset + 2);
+    m_floatTextureSTR[offset]     = str[0];
+    m_floatTextureSTR[offset + 1] = str[1];
+    m_floatTextureSTR[offset + 2] = str[2];
+    
+    if (m_graphicsEngineDataForOpenGL != NULL) {
+        m_graphicsEngineDataForOpenGL->invalidateTextureCoordinates();
+    }
+}
+
 
 /**
  * Replace the XYZ vertices in this primitive with vertices from other primitive
@@ -1387,9 +1493,18 @@ GraphicsPrimitive::getVertexBounds(BoundingBox& boundingBoxOut) const
         }
         m_boundingBox->resetForUpdate();
         
-        const int32_t numberOfVertices = static_cast<int32_t>(m_xyz.size() / 3);
+        int32_t firstVertexIndex(0);
+        int32_t numberOfVertices(static_cast<int32_t>(m_xyz.size() / 3));
+        int32_t subsetFirstVertex(-1);
+        int32_t subsetVertexCount(-1);
+        if (getDrawArrayIndicesSubset(subsetFirstVertex,
+                                      subsetVertexCount)) {
+            firstVertexIndex  = subsetFirstVertex;
+            numberOfVertices  = subsetVertexCount;
+        }
+        
         for (int32_t i = 0; i < numberOfVertices; i++) {
-            const int32_t i3 = i * 3;
+            const int32_t i3 = (firstVertexIndex + i) * 3;
             CaretAssertVectorIndex(m_xyz, i3 + 2);
             m_boundingBox->updateExcludeNanInf(&m_xyz[i3]);
         }
@@ -1400,6 +1515,45 @@ GraphicsPrimitive::getVertexBounds(BoundingBox& boundingBoxOut) const
     boundingBoxOut = *m_boundingBox;
     return m_boundingBoxValid;
 }
+
+/**
+ * Get indices for drawing a subset of the coordinates in the primitive
+ * @param firstVertexIndexOut
+ *    Output with index of first vertex to draw
+ * @param vertexCountOut
+ *    Output with number of vertices to draw starting at firstVertexIndexOut
+ * @return
+ *    True if the output first vertex and count are valid.
+ *    False implies that all vertices should be drawn.
+ */
+bool
+GraphicsPrimitive::getDrawArrayIndicesSubset(int32_t& firstVertexIndexOut,
+                                             int32_t& vertexCountOut) const
+{
+    firstVertexIndexOut = m_arrayIndicesSubsetFirstVertexIndex;
+    vertexCountOut      = m_arrayIndicesSubsetCount;
+    return ((firstVertexIndexOut >= 0)
+            && (vertexCountOut > 0));
+}
+
+/**
+ * Set indices for drawing a subset of the coordinates in the primitive.
+ * Set to negative numbers to disable drawing a subset of vertices and instead
+ * draw all of the vertices.
+ * @param firstVertexIndex
+ *    Index of first vertex to draw
+ * @param vertexCount
+ *    Number of vertices to draw starting at firstVertexIndexOut
+ */
+void
+GraphicsPrimitive::setDrawArrayIndicesSubset(const int32_t firstVertexIndex,
+                               const int32_t vertexCount) const
+{
+    m_arrayIndicesSubsetFirstVertexIndex = firstVertexIndex;
+    m_arrayIndicesSubsetCount       = vertexCount;
+    m_boundingBoxValid              = false;
+}
+
 
 /**
  * There may be instances where a primitive should stop and restart at
@@ -1527,10 +1681,11 @@ GraphicsPrimitive::copyVertex(const int32_t copyFromIndex,
                 break;
         }
         
-        switch (m_textureDataType) {
-            case TextureDataType::NONE:
+        switch (m_textureSettings.getDimensionType()) {
+            case GraphicsTextureSettings::DimensionType::NONE:
                 break;
-            case TextureDataType::FLOAT_STR:
+            case GraphicsTextureSettings::DimensionType::FLOAT_STR_2D:
+            case GraphicsTextureSettings::DimensionType::FLOAT_STR_3D:
                 CaretAssertVectorIndex(m_floatTextureSTR, from3 + i);
                 CaretAssertVectorIndex(m_floatTextureSTR, to3 + i);
                 m_floatTextureSTR[to3 + i] = m_floatTextureSTR[from3 + i];
@@ -1720,32 +1875,34 @@ GraphicsPrimitive::setSphereDiameter(const SphereSizeType sizeType,
 }
 
 /**
- * Set the image for the texture.
- *
- * @param imageBytesRGBA
- *     Bytes containing the image data.  4 bytes per pixel.
- * @param imageWidth
- *     Width of the actual image.
- * @param imageHeight
- *     Height of the image.
+ * @return Number of bytes per pixel for the texture pixel format
  */
-void
-GraphicsPrimitive::setTextureImage(const uint8_t* imageBytesRGBA,
-                                   const int32_t imageWidth,
-                                   const int32_t imageHeight)
+int32_t
+GraphicsPrimitive::getTexturePixelFormatBytesPerPixel() const
 {
-    m_textureImageBytesRGBA.clear();
-    m_textureImageWidth  = -1;
-    m_textureImageHeight = -1;
-    
-    const int32_t numBytes = imageWidth * imageHeight * 4;
-    if (numBytes > 0) {
-        m_textureImageBytesRGBA.reserve(numBytes);
-        m_textureImageWidth  = imageWidth;
-        m_textureImageHeight = imageHeight;
-        m_textureImageBytesRGBA.insert(m_textureImageBytesRGBA.end(),
-                                       imageBytesRGBA, imageBytesRGBA + numBytes);
+    int32_t numBytesPerPixel(0);
+    switch (m_textureSettings.getPixelFormatType()) {
+        case GraphicsTextureSettings::PixelFormatType::NONE:
+            numBytesPerPixel = 0;
+            break;
+        case GraphicsTextureSettings::PixelFormatType::BGR:
+            numBytesPerPixel = 3;
+            break;
+        case GraphicsTextureSettings::PixelFormatType::BGRA:
+            numBytesPerPixel = 4;
+            break;
+        case GraphicsTextureSettings::PixelFormatType::BGRX:
+            numBytesPerPixel = 4;
+            break;
+        case GraphicsTextureSettings::PixelFormatType::RGB:
+            numBytesPerPixel = 3;
+            break;
+        case GraphicsTextureSettings::PixelFormatType::RGBA:
+            numBytesPerPixel = 4;
+            break;
     }
+    
+    return numBytesPerPixel;
 }
 
 /**
@@ -1882,13 +2039,14 @@ GraphicsPrimitive::simplfyLines(const int32_t skipVertexCount)
                     break;
             }
             
-            switch (m_textureDataType) {
-                case TextureDataType::FLOAT_STR:
+            switch (m_textureSettings.getDimensionType()) {
+                case GraphicsTextureSettings::DimensionType::FLOAT_STR_2D:
+                case GraphicsTextureSettings::DimensionType::FLOAT_STR_3D:
                     textureSTR.push_back(m_floatTextureSTR[i3]);
                     textureSTR.push_back(m_floatTextureSTR[i3+1]);
                     textureSTR.push_back(m_floatTextureSTR[i3+2]);
                     break;
-                case TextureDataType::NONE:
+                case GraphicsTextureSettings::DimensionType::NONE:
                     break;
             }
         }
@@ -1942,31 +2100,22 @@ GraphicsPrimitive::getMeanAndStandardDeviationForY(float& yMeanOut,
 
 /**
  * Apply a new mean and/or deviation to the Y-components
- * @param applyNewMeanFlag
- *   Apply the new mean
- * @param newMean
- *   Value for new mean
- * @param applyNewDeviationFlag
- *   Apply the new deviation
- * @param newDeviation
- *   Value for new deviation
- * @param applyAbsoluteValueFlag
- *   Make result absolute value
+ * @param settings
+ *   Settings containing how to modify mean and deviation
  * @param haveNanInfFlagOut
  *   Output: True if Not a Number or Infinity found in the data
  */
 void
-GraphicsPrimitive::applyNewMeanAndDeviationToYComponents(const bool applyNewMeanFlag,
-                                                         const float newMean,
-                                                         const bool applyNewDeviationFlag,
-                                                         const float newDeviation,
-                                                         const bool applyAbsoluteValueFlag,
+GraphicsPrimitive::applyNewMeanAndDeviationToYComponents(const GraphicsLineMeanDeviationSettings& settings,
                                                          bool& haveNanInfFlagOut)
 {
     haveNanInfFlagOut = false;
-    if ( ! (applyNewMeanFlag
-            || applyNewDeviationFlag
-            || applyAbsoluteValueFlag)) {
+    const bool anyModsFlag(settings.m_newMeanEnabled
+                           || settings.m_newDeviationEnabled
+                           || settings.m_multiplyDeviationEnabled
+                           || settings.m_absoluteValueEnabled
+                           || settings.m_dataOffsetEnabled);
+    if ( ! anyModsFlag) {
         return;
     }
     
@@ -1982,19 +2131,11 @@ GraphicsPrimitive::applyNewMeanAndDeviationToYComponents(const bool applyNewMean
     
     if (haveNanInfFlagOut) {
         applyNewMeanAndDeviationToYComponentsWithNaNs(data,
-                                                      applyNewMeanFlag,
-                                                      newMean,
-                                                      applyNewDeviationFlag,
-                                                      newDeviation,
-                                                      applyAbsoluteValueFlag);
+                                                      settings);
     }
     else {
         applyNewMeanAndDeviationToYComponentsNoNaNs(data,
-                                                    applyNewMeanFlag,
-                                                    newMean,
-                                                    applyNewDeviationFlag,
-                                                    newDeviation,
-                                                    applyAbsoluteValueFlag);
+                                                    settings);
     }
     
     setFloatYComponents(data);
@@ -2002,24 +2143,14 @@ GraphicsPrimitive::applyNewMeanAndDeviationToYComponents(const bool applyNewMean
 
 /**
  * Apply a new mean and/or deviation to the Y-components that have NaNs or INFs
- * @param applyNewMeanFlag
- *   Apply the new mean
- * @param newMean
- *   Value for new mean
- * @param applyNewDeviationFlag
- *   Apply the new deviation
- * @param newDeviation
- *   Value for new deviation
- * @param applyAbsoluteValueFlag
- *   Make result absolute value
+ * @param data
+ *    The data for modification
+ * @param settings
+ *    Settings containing how to modify mean and deviation
  */
 void
 GraphicsPrimitive::applyNewMeanAndDeviationToYComponentsWithNaNs(std::vector<float>& data,
-                                                                 const bool applyNewMeanFlag,
-                                                                 const float newMean,
-                                                                 const bool applyNewDeviationFlag,
-                                                                 const float newDeviation,
-                                                                 const bool applyAbsoluteValueFlag)
+                                                                 const GraphicsLineMeanDeviationSettings& settings)
 {
 
     /*
@@ -2029,7 +2160,7 @@ GraphicsPrimitive::applyNewMeanAndDeviationToYComponentsWithNaNs(std::vector<flo
     double dataSum(0.0);
     for (auto& d : data) {
         if (MathFunctions::isNumeric(d)) {
-            if (applyAbsoluteValueFlag) {
+            if (settings.m_absoluteValueEnabled) {
                 if (d < 0.0) {
                     d = -d;
                 }
@@ -2059,7 +2190,8 @@ GraphicsPrimitive::applyNewMeanAndDeviationToYComponentsWithNaNs(std::vector<flo
         d -= dataMean;
     }
 
-    if (applyNewDeviationFlag) {
+    if (settings.m_multiplyDeviationEnabled
+        || settings.m_newDeviationEnabled) {
         /*
          * Compute deviation of data.
          * Note: mean has been already been subtracted from data
@@ -2071,54 +2203,58 @@ GraphicsPrimitive::applyNewMeanAndDeviationToYComponentsWithNaNs(std::vector<flo
             }
         }
         const double variance(sumSQ / numValuesDouble);
-        const double dataDeviation((variance > 0.0)
-                                   ? (std::sqrt(variance))
-                                   : 0.0);
+        double dataDeviation((variance > 0.0)
+                             ? (std::sqrt(variance))
+                             : 0.0);
+        
+        double deviationRatio(1.0);
+        if (settings.m_multiplyDeviationEnabled) {
+            deviationRatio = dataDeviation = settings.m_multiplyDeviationValue;
+        }
+        else if (settings.m_newDeviationEnabled) {
+            /*
+             * Data = (Data / dataDeviation) * newDevation
+             *      => Data * (newDeviation / dataDeviation);
+             */
+            deviationRatio = ((dataDeviation != 0.0)
+                              ? (settings.m_newDeviationValue / dataDeviation)
+                              : settings.m_newDeviationValue);
+        }
+        else {
+            CaretAssert(0);
+        }
 
-        /*
-         * Data = (Data / dataDeviation) * newDevation
-         *      => Data * (newDeviation / dataDeviation);
-         */
-        const double deviationRatio((dataDeviation != 0.0)
-                                    ? (newDeviation / dataDeviation)
-                                    : newDeviation);
         for (auto& d : data) {
             d *= deviationRatio;
         }
     }
 
-    if (applyNewMeanFlag) {
-        for (auto& d : data) {
-            d += newMean;
-        }
+    double totalOffset(0.0);
+    if (settings.m_newMeanEnabled) {
+        totalOffset += settings.m_newMeanValue;
     }
     else {
-        for (auto& d : data) {
-            d += dataMean;
-        }
+        totalOffset += dataMean;
+    }
+    if (settings.m_dataOffsetEnabled) {
+        totalOffset += settings.m_dataOffsetValue;
+    }
+    
+    for (auto& d : data) {
+        d += totalOffset;
     }
 }
 
 /**
  * Apply a new mean and/or deviation to the Y-components that DO NOT have NaNs or INFs
- * @param applyNewMeanFlag
- *   Apply the new mean
- * @param newMean
- *   Value for new mean
- * @param applyNewDeviationFlag
- *   Apply the new deviation
- * @param newDeviation
- *   Value for new deviation
- * @param applyAbsoluteValueFlag
- *   Make result absolute value
+ * @param data
+ *    The data for modification
+ * @param settings
+ *    Settings containing how to modify mean and deviation
  */
 void
 GraphicsPrimitive::applyNewMeanAndDeviationToYComponentsNoNaNs(std::vector<float>& data,
-                                                               const bool applyNewMeanFlag,
-                                                               const float newMean,
-                                                               const bool applyNewDeviationFlag,
-                                                               const float newDeviation,
-                                                               const bool applyAbsoluteValueFlag)
+                                                               const GraphicsLineMeanDeviationSettings& settings)
 {
     const int32_t num = static_cast<int32_t>(data.size());
     if (num < 1) {
@@ -2131,7 +2267,7 @@ GraphicsPrimitive::applyNewMeanAndDeviationToYComponentsNoNaNs(std::vector<float
      */
     double dataSum(0.0);
     for (auto& d : data) {
-        if (applyAbsoluteValueFlag) {
+        if (settings.m_absoluteValueEnabled) {
             if (d < 0.0) {
                 d = -d;
             }
@@ -2139,7 +2275,7 @@ GraphicsPrimitive::applyNewMeanAndDeviationToYComponentsNoNaNs(std::vector<float
         dataSum += d;
     }
     const double dataMean(dataSum / numValuesDouble);
-    
+
     /*
      * Subtract mean from data
      */
@@ -2147,7 +2283,8 @@ GraphicsPrimitive::applyNewMeanAndDeviationToYComponentsNoNaNs(std::vector<float
         d -= dataMean;
     }
     
-    if (applyNewDeviationFlag) {
+    if (settings.m_multiplyDeviationEnabled
+        || settings.m_newDeviationEnabled) {
         /*
          * Compute deviation of data.
          * Note: mean has been already been subtracted from data
@@ -2157,31 +2294,45 @@ GraphicsPrimitive::applyNewMeanAndDeviationToYComponentsNoNaNs(std::vector<float
             sumSQ += (d * d);
         }
         const double variance(sumSQ / numValuesDouble);
-        const double dataDeviation((variance > 0.0)
-                                   ? (std::sqrt(variance))
-                                   : 0.0);
+        double dataDeviation((variance > 0.0)
+                             ? (std::sqrt(variance))
+                             : 0.0);
         
-        /*
-         * Data = (Data / dataDeviation) * newDevation
-         *      => Data * (newDeviation / dataDeviation);
-         */
-        const double deviationRatio((dataDeviation != 0.0)
-                                    ? (newDeviation / dataDeviation)
-                                    : newDeviation);
+        double deviationRatio(1.0);
+        if (settings.m_multiplyDeviationEnabled) {
+            deviationRatio = dataDeviation = settings.m_multiplyDeviationValue;
+        }
+        else if (settings.m_newDeviationEnabled) {
+            /*
+             * Data = (Data / dataDeviation) * newDevation
+             *      => Data * (newDeviation / dataDeviation);
+             */
+            deviationRatio = ((dataDeviation != 0.0)
+                              ? (settings.m_newDeviationValue / dataDeviation)
+                              : settings.m_newDeviationValue);
+        }
+        else {
+            CaretAssert(0);
+        }
+        
         for (auto& d : data) {
             d *= deviationRatio;
         }
     }
     
-    if (applyNewMeanFlag) {
-        for (auto& d : data) {
-            d += newMean;
-        }
+    double totalOffset(0.0);
+    if (settings.m_newMeanEnabled) {
+        totalOffset += settings.m_newMeanValue;
     }
     else {
-        for (auto& d : data) {
-            d += dataMean;
-        }
+        totalOffset += dataMean;
+    }
+    if (settings.m_dataOffsetEnabled) {
+        totalOffset += settings.m_dataOffsetValue;
+    }
+
+    for (auto& d : data) {
+        d += totalOffset;
     }
 }
 
@@ -2197,11 +2348,15 @@ GraphicsPrimitive::getNewMeanDeviationOperationDescriptionInHtml()
     txt.appendWithNewLine("Order of data elements transformation");
     txt.appendWithNewLine("<ol>");
     txt.appendWithNewLine("<li> If <i>Absolute Values</i> is checked, convert data elements to absolute values.");
+    txt.appendWithNewLine("<li> Compute Mean of Data.");
     txt.appendWithNewLine("<li> Subtract <i>Data Mean</i> from data elements.");
+    txt.appendWithNewLine("<li> If <i>Multiply Deviation</i> is checked, multiply Data Deviation by"
+                          "<i>Multiply Deviation Value</i>.");
     txt.appendWithNewLine("<li> if <i>New Deviation</i> is checked, multiply data elements by "
-                          "<i>(New Deviation</i> / <i>Data Deviation></i>).");
+                          "<i>(New Deviation</i> / <i>Data Deviation</i>).");
     txt.appendWithNewLine("<li> If <i>New Mean</i> is checked, add <i>New Mean</i> to data elements.  "
                           "Otherwise, add <i>Data Mean</i> to data elements.");
+    txt.appendWithNewLine("<li> If <i>Data Offset</i> is checked, add <i>Data Offset Value</i> to Data.");
     txt.appendWithNewLine("</ol>");
     txt.appendWithNewLine("Note: NaNs are ignored in all computations.");
     txt.appendWithNewLine("</html>");
@@ -2292,6 +2447,20 @@ GraphicsPrimitive::newPrimitiveV3fN3f(const GraphicsPrimitive::PrimitiveType pri
  * @param primitiveType
  *     Type of primitive drawn (triangles, lines, etc.)
  */
+GraphicsPrimitiveV3fN3fC4f*
+GraphicsPrimitive::newPrimitiveV3fN3fC4f(const GraphicsPrimitive::PrimitiveType primitiveType)
+{
+    GraphicsPrimitiveV3fN3fC4f* primitive = new GraphicsPrimitiveV3fN3fC4f(primitiveType);
+    return primitive;
+}
+
+/**
+ * @return A new primitive for XYZ with normals and RGBS.  Caller is responsible
+ * for deleting the returned pointer.
+ *
+ * @param primitiveType
+ *     Type of primitive drawn (triangles, lines, etc.)
+ */
 GraphicsPrimitiveV3fN3fC4ub*
 GraphicsPrimitive::newPrimitiveV3fN3fC4ub(const GraphicsPrimitive::PrimitiveType primitiveType)
 {
@@ -2344,36 +2513,38 @@ GraphicsPrimitive::newPrimitiveV3fC4ub(const GraphicsPrimitive::PrimitiveType pr
 }
 
 /**
+ * @return A new primitive with XYZ and texture ST.  Caller is responsible for
+ * deleting the returned pointer.
+ *
+ * @param primitiveType
+ *     Type of primitive drawn (triangles, lines, etc.)
+ * @param textureSettings
+ *     Settings for textures
+ */
+GraphicsPrimitiveV3fT2f*
+GraphicsPrimitive::newPrimitiveV3fT2f(const GraphicsPrimitive::PrimitiveType primitiveType,
+                                      const GraphicsTextureSettings& textureSettings)
+{
+    GraphicsPrimitiveV3fT2f* primitive = new GraphicsPrimitiveV3fT2f(primitiveType,
+                                                                     textureSettings);
+    return primitive;
+}
+
+/**
  * @return A new primitive with XYZ and texture STR.  Caller is responsible for
  * deleting the returned pointer.
  *
  * @param primitiveType
  *     Type of primitive drawn (triangles, lines, etc.)
- * @param imageBytesRGBA
- *     Bytes containing the image data.
- * @param imageWidth
- *     Width of the actual image.
- * @param imageHeight
- *     Height of the image.
- * @param textureWrappingType
- *     Type of texture wrapping
- * @param textureFilteringType
- *     Type of texture filtering
+ * @param textureSettings
+ *     Settings for textures
  */
 GraphicsPrimitiveV3fT3f*
 GraphicsPrimitive::newPrimitiveV3fT3f(const GraphicsPrimitive::PrimitiveType primitiveType,
-                                      const uint8_t* imageBytesRGBA,
-                                      const int32_t imageWidth,
-                                      const int32_t imageHeight,
-                                      const TextureWrappingType textureWrappingType,
-                                      const TextureFilteringType textureFilteringType)
+                                      const GraphicsTextureSettings& textureSettings)
 {
     GraphicsPrimitiveV3fT3f* primitive = new GraphicsPrimitiveV3fT3f(primitiveType,
-                                                                     imageBytesRGBA,
-                                                                     imageWidth,
-                                                                     imageHeight,
-                                                                     textureWrappingType,
-                                                                     textureFilteringType);
+                                                                     textureSettings);
     return primitive;
 }
 
@@ -2404,7 +2575,6 @@ GraphicsPrimitive::setOpenGLBuffersHaveBeenLoadedByGraphicsEngine()
             std::vector<float>().swap(m_floatNormalVectorXYZ);
             std::vector<uint8_t>().swap(m_unsignedByteRGBA);
             std::vector<float>().swap(m_floatTextureSTR);
-            std::vector<uint8_t>().swap(m_textureImageBytesRGBA);
             
             m_releaseInstanceDataMode = ReleaseInstanceDataMode::COMPLETED;
         }
@@ -2422,5 +2592,35 @@ GraphicsPrimitive::invalidateVertexMeasurements()
     m_yMean              = 0.0;
     m_yStandardDeviation = -1.0;
 }
+
+/**
+ * @return The voxel color update
+ * @param mapIndex
+ *    The map index
+ */
+const VoxelColorUpdate*
+GraphicsPrimitive::getVoxelColorUpdate() const
+{
+    return &m_voxelColorUpdate;
+}
+
+/**
+ * Set the voxel color update
+ */
+void
+GraphicsPrimitive::setVoxelColorUpdate(const VoxelColorUpdate& voxelColorUpdate)
+{
+    m_voxelColorUpdate = voxelColorUpdate;
+}
+
+/**
+ * Reset the voxel color update
+ */
+void
+GraphicsPrimitive::resetVoxelColorUpdate()
+{
+    m_voxelColorUpdate.clear();
+}
+
 
 

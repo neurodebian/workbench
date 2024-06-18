@@ -24,7 +24,7 @@
 #include "AnnotationCoordinateSpaceEnum.h"
 #include "AnnotationTypeEnum.h"
 #include "Event.h"
-
+#include "UserInputModeEnum.h"
 
 
 namespace caret {
@@ -34,17 +34,32 @@ namespace caret {
     class EventAnnotationCreateNewType : public Event {
         
     public:
-        enum PolyLineDrawingMode {
-            CONTINUOUS,
-            DISCRETE
+        /**
+         * Mode for drawing polyhedron annotations
+         */
+        enum class PolyhedronDrawingMode {
+            /**
+             * Normal drawing
+             */
+            ANNOTATION_DRAWING,
+            /*
+             * Samples Mode drawing
+             */
+            SAMPLES_DRAWING
         };
         
-        EventAnnotationCreateNewType(AnnotationFile* annotationFile,
+        EventAnnotationCreateNewType(const int32_t browserWindowIndex,
+                                     const UserInputModeEnum::Enum userInputMode,
+                                     AnnotationFile* annotationFile,
                                      const AnnotationCoordinateSpaceEnum::Enum annotationSpace,
                                      const AnnotationTypeEnum::Enum annotationType,
-                                     const PolyLineDrawingMode polyLineDrawingMode);
+                                     const PolyhedronDrawingMode polyhedronDrawingMode);
         
         virtual ~EventAnnotationCreateNewType();
+        
+        int32_t getBrowserWindowIndex() const;
+        
+        UserInputModeEnum::Enum getUserInputMode() const;
         
         AnnotationFile* getAnnotationFile() const;
         
@@ -52,7 +67,7 @@ namespace caret {
         
         AnnotationTypeEnum::Enum getAnnotationType() const;
         
-        PolyLineDrawingMode getPolyLineDrawingMode() const;
+        PolyhedronDrawingMode getPolyhedronDrawingMode() const;
         
         // ADD_NEW_METHODS_HERE
 
@@ -61,13 +76,17 @@ namespace caret {
 
         EventAnnotationCreateNewType& operator=(const EventAnnotationCreateNewType&);
         
+        const int32_t m_browserWindowIndex;
+        
+        const UserInputModeEnum::Enum m_userInputMode;
+
         AnnotationFile* m_annotationFile;
         
         const AnnotationCoordinateSpaceEnum::Enum m_annotationSpace;
         
         const AnnotationTypeEnum::Enum m_annotationType;
 
-        const PolyLineDrawingMode m_polyLineDrawingMode;
+        const PolyhedronDrawingMode m_polyhedronDrawingMode;
         
         // ADD_NEW_MEMBERS_HERE
 

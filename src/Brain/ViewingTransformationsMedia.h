@@ -27,7 +27,12 @@
 
 
 namespace caret {
-
+    
+    class BrowserTabContent;
+    class GraphicsRegionSelectionBox;
+    class HistologySlice;
+    class MouseEvent;
+    
     class ViewingTransformationsMedia : public ViewingTransformations {
         
     public:
@@ -39,7 +44,25 @@ namespace caret {
 
         ViewingTransformationsMedia& operator=(const ViewingTransformationsMedia& obj);
         
-
+        virtual void copyTransformsForYoking(const ViewingTransformationsMedia& otherTransformation,
+                                             const float otherImageWidthHeight[2],
+                                             const float myImageWidthHeight[2]);
+        
+        virtual void scaleAboutMouse(const GraphicsObjectToWindowTransform* transform,
+                                     const int32_t mousePressX,
+                                     const int32_t mousePressY,
+                                     const float mouseDY,
+                                     const float dataX,
+                                     const float dataY,
+                                     const bool dataXYValidFlag) override;
+        
+        virtual void setMediaScaling(const GraphicsObjectToWindowTransform* transform,
+                                     const float scaling) override;
+        
+        virtual bool setMediaViewToBounds(const MouseEvent* mouseEvent,
+                                          const GraphicsRegionSelectionBox* selectionRegion,
+                                          const GraphicsObjectToWindowTransform* transform,
+                                          const HistologySlice* histologySlice);
         virtual void resetView();
         
         // ADD_NEW_METHODS_HERE

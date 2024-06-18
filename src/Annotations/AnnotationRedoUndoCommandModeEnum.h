@@ -43,10 +43,12 @@ public:
         BOUNDS_2D_ALL,
         /** Set one of the bounds in 2D */
         BOUNDS_2D_SINGLE,
-        /** Color - Background */
-        COLOR_BACKGROUND,
+        /** Color - Background Note "COLOR_BACKGROUND no longer compiles on Windows */
+        COLOR_OF_BACKGROUND,
         /** Color - Foreground */
         COLOR_FOREGROUND,
+        /** Coordinate All */
+        COORDINATE_ALL,
         /** Coordinate One */
         COORDINATE_ONE,
         /** Coordinate One And Two */
@@ -79,8 +81,18 @@ public:
         LINE_WIDTH_FOREGROUND,
         /** Location and size of annotations (coords, size, space, window, tab) */
         LOCATION_AND_SIZE,
+        /** Add a coordinate to an annotation */
+        MULTI_COORD_ADD_COORDINATE,
+        /** Insert a multi-coord annotation  coordinate */
+        MULTI_COORD_INSERT_COORDINATE,
+        /** Remove a multi-coord annotation coordinate */
+        MULTI_COORD_REMOVE_COORDINATE,
+        /** Remove a multi-coord annotation coordinate */
+        MULTI_COORD_REMOVE_LAST_COORDINATE,
         /** Paste Annotation */
         PASTE_ANNOTATION,
+        /** Reset a polyhedron's range*/
+        POLYHEDRON_RESET_RANGE_TO_PLANES,
         /** Rotation Angle */
         ROTATION_ANGLE,
         /** Stacking order for annotations (except browser tabs) */

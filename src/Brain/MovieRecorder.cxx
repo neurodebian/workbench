@@ -149,7 +149,11 @@ MovieRecorder::addImageToMovie(const QImage* image)
         {
             ImageWriter* iw = new ImageWriter(image, imageFileName);
             m_imageWriters.push_back(iw);
+#if QT_VERSION >= 0x060000
+            QFuture<bool> f = QtConcurrent::run(&ImageWriter::writeImage, iw);
+#else
             QFuture<bool> f = QtConcurrent::run(iw, &ImageWriter::writeImage);
+#endif
             m_imageWriteResultFutures.push_back(f);
             m_imageFileNames.push_back(imageFileName);
         }
@@ -514,30 +518,19 @@ MovieRecorder::createMovie(const AString& filename,
                                         + "d");
     
     const AString imagesRegularExpressionMatch(m_temporaryImagesDirectory
-                                               + "/"
+                                               + QDir::separator()
                                                + m_tempImageFileNamePrefix
                                                + sequenceDigitsPattern
                                                + m_tempImageFileNameSuffix);
-    QString workbenchHomeDir = SystemUtilities::getWorkbenchHome();
-
-    /* Qt after 5.? const QString ffmpegDir = qEnvironmentVariable("WORKBENCH_FFMPEG_DIR"); */
-    const QString ffmpegDir = qgetenv("WORKBENCH_FFMPEG_DIR").constData();
-    if ( ! ffmpegDir.isEmpty()) {
-        workbenchHomeDir = ffmpegDir;
-    }
 
     const bool qProcessPipeFlag(false);
     const QString textFileName(m_temporaryImagesDirectory
-                               + "/"
+                               + QDir::separator()
                                + "images.txt");
     
-    const QString programName(workbenchHomeDir
-                              + "/ffmpeg");
-    FileInformation ffmpegInfo(programName);
-    if ( ! ffmpegInfo.exists()) {
-        errorMessageOut = ("Invalid path for ffmpeg: "
-                           + programName
-                           + "\n  WORKBENCH_FFMPEG_DIR can be set to directory containing ffmpeg.");
+    AString programName;
+    if ( ! findFFmpegProgram(programName,
+                             errorMessageOut)) {
         return false;
     }
     
@@ -550,8 +543,6 @@ MovieRecorder::createMovie(const AString& filename,
         /* list of images in file */
         arguments.append("-f");
         arguments.append("concat");
-//        arguments.append("-safe");
-//        arguments.append("0");
         arguments.append("-i");
         arguments.append(textFileName);
     }
@@ -591,6 +582,110 @@ MovieRecorder::createMovie(const AString& filename,
     }
     
     return successFlag;
+}
+
+/*
+ * Find the FFMPEG program in the distribution
+ * @param programNameOut
+ *    Path to program
+ * @param errorMessageOut
+ *    Output with error message if unable to find ffmpeg
+ * @return
+ *    True if found, else false.
+ */
+bool
+MovieRecorder::findFFmpegProgram(AString& programNameOut,
+                                 AString& errorMessageOut) const
+{
+    programNameOut.clear();
+    errorMessageOut.clear();
+    
+    const AString workbenchHomeDirectory(QCoreApplication::applicationDirPath());
+    
+    std::vector<AString> ffmpegPaths;
+
+    bool linuxFlag(false);
+    bool macosFlag(false);
+    bool windowsFlag(false);
+#ifdef CARET_OS_LINUX
+    linuxFlag = true;
+#endif
+#ifdef CARET_OS_MACOSX
+    macosFlag = true;
+#endif
+#ifdef CARET_OS_WINDOWS
+    windowsFlag = true;
+#endif
+    CaretAssert(linuxFlag
+                || macosFlag
+                || windowsFlag);
+    
+    const AString executableName(windowsFlag
+                                 ? "ffmpeg.exe"
+                                 : "ffmpeg");
+
+    const QString ffmpegEnv = qgetenv("WORKBENCH_FFMPEG_DIR").constData();
+    if ( ! ffmpegEnv.isEmpty()) {
+        ffmpegPaths.push_back(ffmpegEnv
+                        + QDir::separator()
+                        + executableName);
+    }
+
+    if (linuxFlag
+        || windowsFlag) {
+        /*
+         * ffmpeg in same directory as wb_view (Linux and Windows)
+         */
+        ffmpegPaths.push_back(workbenchHomeDirectory
+                              + QDir::separator()
+                              + executableName);
+    }
+    
+    if (macosFlag) {
+        /*
+         * Newer mac with ffmpeg in wb_view.app/Contents/usr/exe
+         */
+        ffmpegPaths.push_back(workbenchHomeDirectory
+                              + QDir::separator()
+                              + ".."
+                              + QDir::separator()
+                              + "usr"
+                              + QDir::separator()
+                              + "exe"
+                              + QDir::separator()
+                              + executableName);
+        
+        /*
+         * Older Macs with ffmpeg in <path>/workbench/macosx64_apps"
+         */
+        ffmpegPaths.push_back(workbenchHomeDirectory
+                              + QDir::separator()
+                              + ".."
+                              + QDir::separator()
+                              + "..."
+                              + QDir::separator()
+                              + "..."
+                              + QDir::separator()
+                              + executableName);
+    }
+
+    for (auto ff : ffmpegPaths) {
+        const FileInformation fileInfo(ff);
+        if (fileInfo.exists()) {
+            programNameOut = ff;
+            return true;
+        }
+    }
+    
+    AString msg("Unable to find the program \"ffmpeg\".  Tried paths:");
+    for (auto ff : ffmpegPaths) {
+        msg.append("\n   " + ff);
+    }
+    msg.append("\n");
+    msg.append("Environment variable WORKBENCH_FFMPEG_DIR can be set to directory containing ffmpeg.\n");
+    errorMessageOut = msg;
+    
+    return false;
 }
 
 /**

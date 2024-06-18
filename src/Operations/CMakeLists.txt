@@ -6,14 +6,15 @@ PROJECT (Operations)
 #
 # Add QT for includes
 #
+if(Qt6_FOUND)
+    include_directories(${Qt6Core_INCLUDE_DIRS})
+    include_directories(${Qt6Core5Compat_INCLUDE_DIRS})
+    include_directories(${Qt6Gui_INCLUDE_DIRS})
+endif()
 if(Qt5_FOUND)
     include_directories(${Qt5Core_INCLUDE_DIRS})
     include_directories(${Qt5Gui_INCLUDE_DIRS})
 endif()
-IF (QT4_FOUND)
-    SET(QT_DONT_USE_QTGUI)
-    INCLUDE(${QT_USE_FILE})
-ENDIF ()
 
 #
 # Create the helper library
@@ -26,6 +27,7 @@ OperationBorderExportColorTable.h
 OperationBorderFileExportToCaret5.h
 OperationBorderLength.h
 OperationBorderMerge.h
+OperationCiftiAverage.h
 OperationCiftiChangeMapping.h
 OperationCiftiChangeTimestep.h
 OperationCiftiConvert.h
@@ -77,10 +79,12 @@ OperationNiftiInformation.h
 OperationProbtrackXDotConvert.h
 OperationSceneFileMerge.h
 OperationSceneFileRelocate.h
+OperationSceneFileUpdate.h
 OperationSetMapName.h
 OperationSetMapNames.h
 OperationSetStructure.h
 OperationShowScene.h
+OperationShowSceneTwo.h
 OperationSpecFileMerge.h
 OperationSpecFileRelocate.h
 OperationSurfaceClosestVertex.h
@@ -93,8 +97,10 @@ OperationSurfaceGeodesicROIs.h
 OperationSurfaceInformation.h
 OperationSurfaceNormals.h
 OperationSurfaceSetCoordinates.h
+OperationSurfaceSphereTriangularPatches.h
 OperationSurfaceVertexAreas.h
 OperationVolumeCapturePlane.h
+OperationVolumeComponentsToFrames.h
 OperationVolumeCopyExtensions.h
 OperationVolumeCreate.h
 OperationVolumeLabelExportTable.h
@@ -117,6 +123,7 @@ OperationBorderExportColorTable.cxx
 OperationBorderFileExportToCaret5.cxx
 OperationBorderLength.cxx
 OperationBorderMerge.cxx
+OperationCiftiAverage.cxx
 OperationCiftiChangeMapping.cxx
 OperationCiftiChangeTimestep.cxx
 OperationCiftiConvert.cxx
@@ -168,10 +175,12 @@ OperationNiftiInformation.cxx
 OperationProbtrackXDotConvert.cxx
 OperationSceneFileMerge.cxx
 OperationSceneFileRelocate.cxx
+OperationSceneFileUpdate.cxx
 OperationSetMapName.cxx
 OperationSetMapNames.cxx
 OperationSetStructure.cxx
 OperationShowScene.cxx
+OperationShowSceneTwo.cxx
 OperationSpecFileMerge.cxx
 OperationSpecFileRelocate.cxx
 OperationSurfaceClosestVertex.cxx
@@ -184,8 +193,10 @@ OperationSurfaceGeodesicROIs.cxx
 OperationSurfaceInformation.cxx
 OperationSurfaceNormals.cxx
 OperationSurfaceSetCoordinates.cxx
+OperationSurfaceSphereTriangularPatches.cxx
 OperationSurfaceVertexAreas.cxx
 OperationVolumeCapturePlane.cxx
+OperationVolumeComponentsToFrames.cxx
 OperationVolumeCopyExtensions.cxx
 OperationVolumeCreate.cxx
 OperationVolumeLabelExportTable.cxx
@@ -214,6 +225,8 @@ ${CMAKE_SOURCE_DIR}/Operations
 ${CMAKE_SOURCE_DIR}/OperationsBase
 ${CMAKE_SOURCE_DIR}/Brain
 ${CMAKE_SOURCE_DIR}/Charting
+${CMAKE_SOURCE_DIR}/CZIlib/CZICmd
+${CMAKE_SOURCE_DIR}/CZIlib/CZI
 ${CMAKE_SOURCE_DIR}/Palette
 ${CMAKE_SOURCE_DIR}/FilesBase
 ${CMAKE_SOURCE_DIR}/Files

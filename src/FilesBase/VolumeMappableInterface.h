@@ -22,13 +22,20 @@
 /*LICENSE_END*/
 
 #include "DisplayGroupEnum.h"
+#include "Vector3D.h"
 #include "VolumeSliceViewPlaneEnum.h"
 #include "VolumeSpace.h"
+#include "VolumeToImageMappingModeEnum.h"
 
 namespace caret {
     
     class BoundingBox;
-    
+    class CaretMappableDataFile;
+    class HistologySlice;
+    class MediaFile;
+    class GraphicsPrimitive;
+    class GraphicsPrimitiveV3fT3f;
+
     /**
      * \class caret::VolumeMappableInterface
      * \brief Interface for data that is mapped to volumes
@@ -49,6 +56,15 @@ namespace caret {
         VolumeMappableInterface& operator=(const VolumeMappableInterface&);
         
     public:
+        /**
+         * @return Instance cast to a Volume Mappable CaretMappableDataFile
+         */
+        virtual CaretMappableDataFile* castToVolumeMappableDataFile() = 0;
+        
+        /**
+         * @return Instance cast to a Volume Mappable CaretMappableDataFile (const method)
+         */
+        virtual const CaretMappableDataFile* castToVolumeMappableDataFile() const = 0;
         
         /**
          * Get the dimensions of the volume.
@@ -78,6 +94,10 @@ namespace caret {
          * (2) Z-dimension, (3) time, (4) components.
          */
         virtual void getDimensions(std::vector<int64_t>& dimsOut) const = 0;
+
+        void getDimensionsPCA(int64_t& dimParasagittalOut,
+                              int64_t& dimCoronalOut,
+                              int64_t& dimAxialOut) const;
 
         bool matchesDimensions(const int64_t dim1,
                                const int64_t dim2,
@@ -181,6 +201,22 @@ namespace caret {
         /**
          * Convert an index to space (coordinates).
          *
+         * @param indexIn1
+         *     First dimension (i).
+         * @param indexIn2
+         *     Second dimension (j).
+         * @param indexIn3
+         *     Third dimension (k).
+         * @return coordOut
+         *     The XYZ coordinate.
+         */
+        Vector3D indexToSpace(const float& indexIn1,
+                              const float& indexIn2,
+                              const float& indexIn3) const;
+
+       /**
+         * Convert an index to space (coordinates).
+         *
          * @param indexIn
          *     IJK indices
          * @param coordOut
@@ -191,7 +227,7 @@ namespace caret {
         
         /**
          * Convert a coordinate to indices.  Note that output indices
-         * MAY NOT BE WITHING THE VALID VOXEL DIMENSIONS.
+         * MAY NOT BE WITHIN THE VALID VOXEL DIMENSIONS.
          *
          * @param coordIn1
          *     First (x) input coordinate.
@@ -213,6 +249,18 @@ namespace caret {
                                     int64_t& indexOut2,
                                     int64_t& indexOut3) const = 0;
         
+        /**
+         * Convert a coordinate to indices.  Note that output indices
+         * MAY NOT BE WITHIN THE VALID VOXEL DIMENSIONS.
+         *
+         * @param coordIn1
+         *     First (x) input coordinate.
+         * @param coordIn2
+         *     Second (y) input coordinate.
+         */
+        virtual void enclosingVoxel(const float* coordIn,
+                                    int64_t* indexOut) const = 0;
+
         /**
          * Determine in the given voxel indices are valid (within the volume).
          *
@@ -236,12 +284,36 @@ namespace caret {
                                 const int64_t component = 0) const = 0;
         
         /**
+         * Determine in the given voxel indices are valid (within the volume).
+         *
+         * @param indexIn
+         *     IJK
+         * @param brickIndex
+         *     Time/map index (default 0).
+         * @param component
+         *     Voxel component (default 0).
+         */
+        virtual bool indexValid(const int64_t* indexIn,
+                                const int64_t brickIndex = 0,
+                                const int64_t component = 0) const = 0;
+        
+        /**
          * Get a bounding box for the voxel coordinate ranges.
          *
          * @param boundingBoxOut
          *    The output bounding box.
          */
         virtual void getVoxelSpaceBoundingBox(BoundingBox& boundingBoxOut) const = 0;
+        
+        /**
+         * Get a bounding box containing the non-zero voxel coordinate ranges
+         * @param mapIndex
+         *    Index of map
+         * @param boundingBoxOut
+         *    Output containing coordinate range of non-zero voxels
+         */
+        virtual void getNonZeroVoxelCoordinateBoundingBox(const int32_t mapIndex,
+                                                   BoundingBox& boundingBoxOut) const = 0;
         
         /**
          * Get the voxel spacing for each of the spatial dimensions.
@@ -256,6 +328,22 @@ namespace caret {
         void getVoxelSpacing(float& spacingOut1,
                              float& spacingOut2,
                              float& spacingOut3) const;
+        
+        /**
+         * Get the voxel spacing for parasagittal (X), coronal (Y), and axial (Z)
+         *
+         * @param spacingParasagittalXOut
+         *    Spacing for the first dimension (typically X).
+         * @param spacingCoronalYOut
+         *    Spacing for the first dimension (typically Y).
+         * @param spacingAxialZOut
+         *    Spacing for the first dimension (typically Z).
+         */
+        void getVoxelSpacingPCA(float& spacingParasagittalXOut,
+                                float& spacingCoronalYOut,
+                                float& spacingAxialZOut) const;
+
+        float getMaximumVoxelSpacing() const;
         
         /**
          * Get the voxel colors for a slice in the map.
@@ -378,6 +466,54 @@ namespace caret {
                                         const int32_t tabIndex,
                                         uint8_t rgbaOut[4]) const = 0;
         
+        /**
+         * Get the voxel coloring for the voxel at the given indices.
+         *
+         * @param indexIn1
+         *     First dimension (i).
+         * @param indexIn2
+         *     Second dimension (j).
+         * @param indexIn3
+         *     Third dimension (k).
+         * @param brickIndex
+         *     Time/map index.
+         * @param rgbaOut
+         *     Output containing RGBA values for voxel at the given indices.
+         */
+        virtual void getVoxelColorInMap(const int64_t indexIn1,
+                                        const int64_t indexIn2,
+                                        const int64_t indexIn3,
+                                        const int64_t tabIndex,
+                                        uint8_t rgbaOut[4]) const = 0;
+        
+        virtual GraphicsPrimitiveV3fT3f* getVolumeDrawingTriangleStripPrimitive(const int32_t mapIndex,
+                                                                           const DisplayGroupEnum::Enum displayGroup,
+                                                                           const int32_t tabIndex) const = 0;
+        
+        virtual GraphicsPrimitiveV3fT3f* getVolumeDrawingTriangleFanPrimitive(const int32_t mapIndex,
+                                                                      const DisplayGroupEnum::Enum displayGroup,
+                                                                      const int32_t tabIndex) const = 0;
+        
+        virtual GraphicsPrimitiveV3fT3f* getVolumeDrawingTrianglesPrimitive(const int32_t mapIndex,
+                                                                            const DisplayGroupEnum::Enum displayGroup,
+                                                                            const int32_t tabIndex) const = 0;
+
+        virtual GraphicsPrimitive* getHistologyImageIntersectionPrimitive(const int32_t mapIndex,
+                                                                          const DisplayGroupEnum::Enum displayGroup,
+                                                                          const int32_t tabIndex,
+                                                                          const MediaFile* mediaFile,
+                                                                          const VolumeToImageMappingModeEnum::Enum volumeMappingMode,
+                                                                          const float volumeSliceThickness,
+                                                                          AString& errorMessageOut) const = 0;
+        
+        virtual std::vector<GraphicsPrimitive*> getHistologySliceIntersectionPrimitive(const int32_t mapIndex,
+                                                                                       const DisplayGroupEnum::Enum displayGroup,
+                                                                                       const int32_t tabIndex,
+                                                                                       const HistologySlice* histologySlice,
+                                                                                       const VolumeToImageMappingModeEnum::Enum volumeMappingMode,
+                                                                                       const float volumeSliceThickness,
+                                                                                       AString& errorMessageOut) const = 0;
+
         /**
          * Get the volume space object, so we have access to all functions associated with volume spaces
          */

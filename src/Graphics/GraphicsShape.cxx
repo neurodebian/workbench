@@ -35,6 +35,7 @@
 #include "GraphicsPrimitiveV3fC4ub.h"
 #include "GraphicsPrimitiveV3fN3f.h"
 #include "GraphicsUtilitiesOpenGL.h"
+#include "GraphicsViewport.h"
 #include "MathFunctions.h"
 #include "Matrix4x4.h"
 
@@ -65,6 +66,46 @@ GraphicsShape::~GraphicsShape()
 }
 
 /**
+ * @return New primitive for drawing a circle
+ *
+ * @param radius
+ *    Radius of circle
+ * @param rgba
+ *    Color of circle
+ * @param lineThicknessType
+ *    Type of line thickness
+ * @param lineThickness
+ *    Thickness of line
+ * @return
+ *    Primitive for drawing circle
+ */
+GraphicsPrimitiveV3f*
+GraphicsShape::newInstanceCircleByteColor(const float radius,
+                                                       const uint8_t rgba[4],
+                                                       const GraphicsPrimitive::LineWidthType lineThicknessType,
+                                                       const double lineThickness)
+{
+    std::vector<float> ellipseXYZ;
+    const float minorAxis(radius * 2.0);
+    const float majorAxis(minorAxis);
+    createEllipseVertices(majorAxis, minorAxis, ellipseXYZ);
+    
+    GraphicsPrimitiveV3f* primitive(GraphicsPrimitive::newPrimitiveV3f(GraphicsPrimitive::PrimitiveType::POLYGONAL_LINE_LOOP_MITER_JOIN,
+                                                                       rgba));
+    const int32_t numVertices = static_cast<int32_t>(ellipseXYZ.size() / 3);
+    primitive->reserveForNumberOfVertices(numVertices);
+    for (int32_t i = 0; i < numVertices; i++) {
+        primitive->addVertex(&ellipseXYZ[i * 3]);
+    }
+    
+    primitive->setLineWidth(lineThicknessType,
+                            lineThickness);
+    primitive->setUsageTypeAll(GraphicsPrimitive::UsageType::MODIFIED_ONCE_DRAWN_FEW_TIMES);
+
+    return primitive;
+}
+
+/**
  * Delete all primitives.
  */
 void
@@ -91,6 +132,7 @@ GraphicsShape::deleteAllPrimitives()
      * is deleted.
      */
     s_byteSquarePrimitive.reset();
+    s_yellowCrossPrimitive.reset();
 }
 
 
@@ -1662,12 +1704,109 @@ GraphicsShape::drawOutlineRectangleVerticesAtInside(const double bottomLeft[3],
 }
 
 /**
- * Get a description of this object's content.
- * @return String describing this object's content.
+ * Draw a yellow cross at the viewport center
  */
-AString
-GraphicsShape::toString() const
+void
+GraphicsShape::drawYellowCrossAtViewportCenter()
 {
-    return "GraphicsShape";
+    if ( ! s_yellowCrossPrimitive) {
+        uint8_t yellow[4] { 255, 255, 0, 255 };
+        s_yellowCrossPrimitive.reset(GraphicsPrimitive::newPrimitiveV3f(GraphicsPrimitive::PrimitiveType::OPENGL_LINES, yellow));
+        s_yellowCrossPrimitive->addVertex(-0.5, 0.0);
+        s_yellowCrossPrimitive->addVertex( 0.5, 0.0);
+        s_yellowCrossPrimitive->addVertex( 0.0,-0.5);
+        s_yellowCrossPrimitive->addVertex( 0.0, 0.5);
+        s_yellowCrossPrimitive->setLineWidth(GraphicsPrimitive::LineWidthType::PIXELS, 2.0);
+    }
+    
+    CaretAssert(s_yellowCrossPrimitive);
+    
+    GLint vp[4];
+    glGetIntegerv(GL_VIEWPORT, vp);
+//    const float vpX(vp[0]);
+//    const float vpY(vp[1]);
+    const float vpW(vp[2]);
+    const float vpH(vp[3]);
+    
+    const float halfWidth(vpW / 2.0);
+    const float halfHeight(vpH / 2.0);
+    const float lineLength(std::min(halfWidth, halfHeight));
+    
+    glMatrixMode(GL_PROJECTION);
+    glPushMatrix();
+    glLoadIdentity();
+    glOrtho(-halfWidth, halfWidth, -halfHeight, halfHeight, -1.0, 1.0);
+    
+    glMatrixMode(GL_MODELVIEW);
+    glPushMatrix();
+    glLoadIdentity();
+    glScalef(lineLength, lineLength, 1.0);
+    
+    glPushAttrib(GL_DEPTH_BUFFER_BIT);
+    glDisable(GL_DEPTH_TEST);
+    GraphicsEngineDataOpenGL::draw(s_yellowCrossPrimitive.get());
+    glPopAttrib();
+    
+    
+    glPopMatrix();
+    
+    glMatrixMode(GL_PROJECTION);
+    glPopMatrix();
+    glMatrixMode(GL_MODELVIEW);
 }
+
+/**
+ * Draw an X in the given rgba color with line thickness as percentage of viewport height
+ * @param rgba
+ *    RGBA color components
+ * @param percentageThickness
+ *    Thickness of line as percentage of viewport height [0, 100]
+ */
+void
+GraphicsShape::drawViewportCrossPercentageLineWidth(const uint8_t rgba[4],
+                                                    const float percentageThickness)
+{
+    GraphicsViewport vp(GraphicsViewport::newInstanceCurrentViewport());
+    glPushAttrib(GL_DEPTH_BUFFER_BIT);
+    glDisable(GL_DEPTH_TEST);
+    glMatrixMode(GL_PROJECTION);
+    glPushMatrix();
+    glLoadIdentity();
+    glOrtho(vp.getLeftF(),
+            vp.getRightF(),
+            vp.getBottomF(),
+            vp.getTopF(),
+            -1.0,
+            1.0);
+    glMatrixMode(GL_MODELVIEW);
+    glPushMatrix();
+    glLoadIdentity();
+    
+    std::vector<float> linesXYZ;
+    linesXYZ.push_back(vp.getLeftF());
+    linesXYZ.push_back(vp.getBottomF());
+    linesXYZ.push_back(0.0);
+    linesXYZ.push_back(vp.getRightF());
+    linesXYZ.push_back(vp.getTopF());
+    linesXYZ.push_back(0.0);
+    linesXYZ.push_back(vp.getLeftF());
+    linesXYZ.push_back(vp.getTopF());
+    linesXYZ.push_back(0.0);
+    linesXYZ.push_back(vp.getRightF());
+    linesXYZ.push_back(vp.getBottomF());
+    linesXYZ.push_back(0.0);
+    GraphicsShape::drawLinesByteColor(linesXYZ,
+                                      rgba,
+                                      GraphicsPrimitive::LineWidthType::PIXELS,
+                                      percentageThickness);
+    
+    
+    glPopMatrix();
+    
+    glMatrixMode(GL_PROJECTION);
+    glPopMatrix();
+    glMatrixMode(GL_MODELVIEW);
+    glPopAttrib();
+}
+
 

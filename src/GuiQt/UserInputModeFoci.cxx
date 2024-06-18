@@ -29,8 +29,8 @@
 #include "BrainStructure.h"
 #include "BrowserTabContent.h"
 #include "CaretAssert.h"
-#include "EventGraphicsUpdateAllWindows.h"
-#include "EventGraphicsUpdateOneWindow.h"
+#include "EventGraphicsPaintSoonAllWindows.h"
+#include "EventGraphicsPaintSoonOneWindow.h"
 #include "EventManager.h"
 #include "EventUserInterfaceUpdate.h"
 #include "FociFile.h"
@@ -38,7 +38,8 @@
 #include "Focus.h"
 #include "GuiManager.h"
 #include "SelectionItemFocusSurface.h"
-#include "SelectionItemFocusVolume.h"
+#include "SelectionItemFocus.h"
+#include "SelectionItemHistologyCoordinate.h"
 #include "SelectionItemSurfaceNode.h"
 #include "SelectionItemVoxel.h"
 #include "SelectionManager.h"
@@ -59,14 +60,15 @@ using namespace caret;
 
 /**
  * Constructor.
+ * @param browserIndexIndex
+ *    Index of window
  */
-UserInputModeFoci::UserInputModeFoci(const int32_t windowIndex)
-: UserInputModeView(windowIndex,
-                    UserInputModeEnum::Enum::FOCI),
-  m_windowIndex(windowIndex)
+UserInputModeFoci::UserInputModeFoci(const int32_t browserIndexIndex)
+: UserInputModeView(browserIndexIndex,
+                    UserInputModeEnum::Enum::FOCI)
 {
     m_inputModeFociWidget = new UserInputModeFociWidget(this,
-                                                        windowIndex);
+                                                        browserIndexIndex);
     m_mode = MODE_CREATE_AT_ID;
     setWidgetForToolBar(m_inputModeFociWidget);
 }
@@ -98,7 +100,7 @@ UserInputModeFoci::setMode(const Mode mode)
 {
     if (m_mode != mode) {
         m_mode = mode;
-        EventManager::get()->sendEvent(EventGraphicsUpdateOneWindow(m_windowIndex).getPointer());
+        EventManager::get()->sendEvent(EventGraphicsPaintSoonOneWindow(getBrowserWindowIndex()).getPointer());
     }
     this->m_inputModeFociWidget->updateWidget();
 }
@@ -160,7 +162,7 @@ UserInputModeFoci::updateAfterFociChanged()
     /*
      * Need to update all graphics windows and all border controllers.
      */
-    EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+    EventManager::get()->sendEvent(EventGraphicsPaintSoonAllWindows().getPointer());
     EventManager::get()->sendEvent(EventUserInterfaceUpdate().addFoci().getPointer());
 }
 
@@ -200,15 +202,16 @@ UserInputModeFoci::mouseLeftClick(const MouseEvent& mouseEvent)
     BrainOpenGLWidget* openGLWidget = mouseEvent.getOpenGLWidget();
     BrowserTabContent* browserTabContent = viewportContent->getBrowserTabContent();
     SelectionManager* idManager =
-    openGLWidget->performIdentification(mouseEvent.getX(),
-                                        mouseEvent.getY(),
-                                        true);
+    openGLWidget->performIdentificationAll(mouseEvent.getX(),
+                                           mouseEvent.getY(),
+                                           true);
     
     switch (m_mode) {
         case MODE_CREATE_AT_ID:
         {
             SelectionItemSurfaceNode* idNode = idManager->getSurfaceNodeIdentification();
             SelectionItemVoxel* idVoxel = idManager->getVoxelIdentification();
+            SelectionItemHistologyCoordinate* idHistology(idManager->getHistologyPlaneCoordinateIdentification());
             if (idNode->isValid()) {
                 Surface* surfaceViewed = idNode->getSurface();
                 CaretAssert(surfaceViewed);
@@ -235,14 +238,10 @@ UserInputModeFoci::mouseLeftClick(const MouseEvent& mouseEvent)
             else if (idVoxel->isValid()) {
                 const VolumeMappableInterface* vf = idVoxel->getVolumeFile();
                 const CaretMappableDataFile* cmdf = dynamic_cast<const CaretMappableDataFile*>(vf);
-                int64_t ijk[3];
-                idVoxel->getVoxelIJK(ijk);
-                float xyz[3];
-                vf->indexToSpace(ijk, xyz);
-                
+                const Vector3D xyz(idVoxel->getVoxelXYZ());
                 const AString focusName = (cmdf->getFileNameNoPath()
-                                           + " IJK ("
-                                           + AString::fromNumbers(ijk, 3, ",")
+                                           + " XYZ ("
+                                           + AString::fromNumbers(xyz, 3, ",")
                                            + ")");
                 
                 const AString comment = ("Created from "
@@ -256,6 +255,27 @@ UserInputModeFoci::mouseLeftClick(const MouseEvent& mouseEvent)
                                                         browserTabContent,
                                                         m_inputModeFociWidget);
             }
+            else if (idHistology->isValid()) {
+                const HistologyCoordinate histCoord(idHistology->getCoordinate());
+                if (histCoord.isStereotaxicXYZValid()) {
+                    const Vector3D xyz(histCoord.getStereotaxicXYZ());
+                    const AString focusName = (histCoord.getHistologySlicesFileName()
+                                               + " Slice ("
+                                               + histCoord.getSliceName()
+                                               + ")");
+                    
+                    const AString comment = ("Created from "
+                                             + focusName);
+                    
+                    Focus* focus = new Focus();
+                    focus->setName(focusName);
+                    focus->getProjection(0)->setStereotaxicXYZ(xyz);
+                    focus->setComment(comment);
+                    FociPropertiesEditorDialog::createFocus(focus,
+                                                            browserTabContent,
+                                                            m_inputModeFociWidget);
+                }
+            }
         }            break;
         case MODE_DELETE:
         case MODE_EDIT:
@@ -263,18 +283,18 @@ UserInputModeFoci::mouseLeftClick(const MouseEvent& mouseEvent)
             FociFile* fociFile = NULL;
             Focus*    focus = NULL;
             
-            SelectionItemFocusVolume* idVolFocus = idManager->getVolumeFocusIdentification();
+            SelectionItemFocus* idVolFocus = idManager->getFocusIdentification();
             if (idVolFocus->isValid()) {
                 fociFile = idVolFocus->getFociFile();
                 CaretAssert(fociFile);
                 focus    = idVolFocus->getFocus();
                 CaretAssert(focus);
             }
-            SelectionItemFocusSurface* idFocus = idManager->getSurfaceFocusIdentification();
-            if (idFocus->isValid()) {
-                fociFile = idFocus->getFociFile();
+            SelectionItemFocusSurface* idFocusSurface = idManager->getSurfaceFocusIdentification();
+            if (idFocusSurface->isValid()) {
+                fociFile = idFocusSurface->getFociFile();
                 CaretAssert(fociFile);
-                focus    = idFocus->getFocus();
+                focus    = idFocusSurface->getFocus();
                 CaretAssert(focus);
                 
             }

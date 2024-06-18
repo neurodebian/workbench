@@ -39,7 +39,7 @@
 #include "DisplayGroupEnumComboBox.h"
 #include "DisplayPropertiesImages.h"
 #include "EnumComboBoxTemplate.h"
-#include "EventGraphicsUpdateAllWindows.h"
+#include "EventGraphicsPaintSoonAllWindows.h"
 #include "EventManager.h"
 #include "EventUserInterfaceUpdate.h"
 #include "GuiManager.h"
@@ -60,6 +60,8 @@ static const int COLUMN_RADIO_BUTTON = 0;
  * \brief View controller for image selection
  * \ingroup GuiQt
  */
+
+static const bool disableSomeItemsFlag(true);
 
 /**
  * Constructor.
@@ -137,6 +139,10 @@ m_objectNamePrefix(parentObjectName
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_USER_INTERFACE_UPDATE);
     
     s_allImageSelectionViewControllers.insert(this);
+    
+    if (disableSomeItemsFlag) {
+        m_controlPointsDisplayCheckBox->setEnabled(false);
+    }
 }
 
 /**
@@ -186,8 +192,13 @@ QWidget*
 ImageSelectionViewController::createSelectionWidget()
 {
     m_imageRadioButtonGroup = new QButtonGroup(this);
+#if QT_VERSION >= 0x060000
+    QObject::connect(m_imageRadioButtonGroup, &QButtonGroup::idClicked,
+                     this, &ImageSelectionViewController::imageRadioButtonClicked);
+#else
     QObject::connect(m_imageRadioButtonGroup, SIGNAL(buttonClicked(int)),
                      this, SLOT(imageRadioButtonClicked(int)));
+#endif
     
     QWidget* imageRadioButtonWidget = new QWidget();
     imageRadioButtonWidget->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
@@ -301,6 +312,14 @@ ImageSelectionViewController::createAttributesWidget()
     layout->addWidget(gridWidget);
     layout->addStretch();
     
+    if (disableSomeItemsFlag) {
+        thresholdMinimumLabel->setEnabled(false);
+        thresholdMaximumLabel->setEnabled(false);
+        m_thresholdMinimumSpinBox->setEnabled(false);
+        m_thresholdMaximumSpinBox->setEnabled(false);
+        opacityLabel->setEnabled(false);
+        m_opacitySpinBox->setEnabled(false);
+    }
     return widget;
 }
 
@@ -341,7 +360,7 @@ ImageSelectionViewController::processAttributesChanges()
                              browserTabIndex,
                              m_opacitySpinBox->value());
     
-    EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+    EventManager::get()->sendEvent(EventGraphicsPaintSoonAllWindows().getPointer());
     
     updateOtherImageViewControllers();
 }
@@ -374,7 +393,7 @@ ImageSelectionViewController::imageDisplayGroupSelected(const DisplayGroupEnum::
      * Since display group has changed, need to update controls
      */
     updateImageViewController();
-    EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+    EventManager::get()->sendEvent(EventGraphicsPaintSoonAllWindows().getPointer());
 }
 
 /**
@@ -403,7 +422,7 @@ ImageSelectionViewController::imageRadioButtonClicked(int buttonID)
                               allImageFiles[buttonID]);
 
     updateOtherImageViewControllers();
-    EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+    EventManager::get()->sendEvent(EventGraphicsPaintSoonAllWindows().getPointer());
 }
 
 /**

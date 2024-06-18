@@ -44,9 +44,10 @@ namespace caret {
     class CiftiConnectivityMatrixDataFileManager;
     class CiftiFiberTrajectoryManager;
     class DataToolTipsManager;
+    class DrawingViewportContentManager;
     class EventBrowserTabClose;
     class EventBrowserTabDelete;
-    class ImageCaptureSettings;
+    class ImageCaptureDialogSettings;
     class Model;
     class MovieRecorder;
     class SpacerTabContent;
@@ -83,9 +84,9 @@ namespace caret {
         
         const DataToolTipsManager* getDataToolTipsManager() const;
         
-        ImageCaptureSettings* getImageCaptureDialogSettings();
+        ImageCaptureDialogSettings* getImageCaptureDialogSettings();
         
-        const ImageCaptureSettings* getImageCaptureDialogSettings() const;
+        const ImageCaptureDialogSettings* getImageCaptureDialogSettings() const;
         
         MovieRecorder* getMovieRecorder();
         
@@ -101,6 +102,11 @@ namespace caret {
         
         void resetSceneWithChartOld();
         
+        bool hasSceneWithMprOld() const;
+        
+        void resetSceneWithMprOld();
+        
+
     private:
         SessionManager();
         
@@ -179,7 +185,9 @@ namespace caret {
         std::unique_ptr<DataToolTipsManager> m_dataToolTipsManager;
         
         /** Settings for image capture dialog */
-        ImageCaptureSettings* m_imageCaptureDialogSettings;
+        ImageCaptureDialogSettings* m_imageCaptureDialogSettings;
+        
+        std::unique_ptr<DrawingViewportContentManager> m_drawingViewportContentManager;
         
         /** Map to spacer tabs where key is window index, row index, column index */
         std::map<SpacerTabIndex, SpacerTabContent*> m_spacerTabsMap;
@@ -189,6 +197,10 @@ namespace caret {
         std::vector<std::unique_ptr<ChartTwoCartesianAxis>> m_chartingAxisDisplayGroups;
         
         bool m_sceneRestoredWithChartOldFlag = false;
+        
+        bool m_sceneRestoredWithMprOldFlag = false;
+        
+        bool m_sceneRestorationInProgressFlag = false;
     };
     
 #ifdef __SESSION_MANAGER_DECLARE__

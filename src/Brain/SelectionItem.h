@@ -41,6 +41,10 @@ namespace caret {
     public:
         virtual ~SelectionItem();
         
+        int64_t getIdentifiedItemUniqueIdentifier() const;
+        
+        void setIdentifiedItemUniqueIdentifier(const int64_t uniqueIdentifier);
+        
         SelectionItemDataTypeEnum::Enum getItemDataType() const;
         
         bool isEnabledForSelection() const;
@@ -61,9 +65,15 @@ namespace caret {
         
         void setScreenXYZ(const double screenXYZ[3]);
         
+        void setScreenXYZ(const float screenXYZ[3]);
+        
         void getModelXYZ(double modelXYZ[3]) const;
         
+        void getModelXYZ(float modelXYZ[3]) const;
+        
         void setModelXYZ(const double modelXYZ[3]);
+        
+        void setModelXYZ(const float modelXYZ[3]);
         
         /**
          * @return  Is the selected item valid?
@@ -88,6 +98,8 @@ namespace caret {
         double m_screenXYZ[3];
         
         double m_modelXYZ[3];
+        
+        int64_t m_identifiedItemUniqueIdentifier = -1;
         
     private:
         void copyHelperSelectionItem(const SelectionItem& idItem);

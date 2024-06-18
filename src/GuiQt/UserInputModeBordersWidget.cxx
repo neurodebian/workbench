@@ -56,7 +56,7 @@
 #include "CaretLogger.h"
 #include "DisplayPropertiesBorders.h"
 #include "EventBrainReset.h"
-#include "EventGraphicsUpdateAllWindows.h"
+#include "EventGraphicsPaintSoonAllWindows.h"
 #include "EventManager.h"
 #include "EventUserInterfaceUpdate.h"
 #include "GuiManager.h"
@@ -541,7 +541,7 @@ UserInputModeBordersWidget::executeFinishOperation()
 void 
 UserInputModeBordersWidget::drawFinishButtonClicked()
 {
-    BrainBrowserWindow* browserWindow = GuiManager::get()->getBrowserWindowByWindowIndex(this->inputModeBorders->windowIndex);
+    BrainBrowserWindow* browserWindow = GuiManager::get()->getBrowserWindowByWindowIndex(this->inputModeBorders->getBrowserWindowIndex());
     if (browserWindow == NULL) {
         return;
     }
@@ -794,7 +794,7 @@ UserInputModeBordersWidget::drawFinishButtonClicked()
                     }
                     
                     EventManager::get()->sendEvent(EventUserInterfaceUpdate().getPointer());
-                    EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+                    EventManager::get()->sendEvent(EventGraphicsPaintSoonAllWindows().getPointer());
                 }
             }
         }
@@ -964,7 +964,7 @@ UserInputModeBordersWidget::processBorderOptimization(const DisplayGroupEnum::En
 void 
 UserInputModeBordersWidget::adjustViewActionTriggered()
 {
-    EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+    EventManager::get()->sendEvent(EventGraphicsPaintSoonAllWindows().getPointer());
 }
 
 /**

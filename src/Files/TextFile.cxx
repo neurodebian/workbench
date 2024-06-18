@@ -19,6 +19,7 @@
 /*LICENSE_END*/
 
 #include <QFile>
+#include <QRegularExpression>
 #include <QTextStream>
 
 #include "CaretLogger.h"
@@ -146,6 +147,35 @@ AString
 TextFile::getText() const
 {
     return this->text;
+}
+
+/**
+ * @return A vector with each element containing one line of text from the file.  Any newlines are removed
+ */
+std::vector<AString>
+TextFile::getTextLines() const
+{
+    /*
+     * Split lines with return and new line characters
+     * Cannot split with whitespace since files names may contain spaces
+     */
+#if QT_VERSION >= 0x060000
+    QStringList linesList(this->text.split(QRegularExpression("[\\n|\\r]"),
+                                           Qt::SkipEmptyParts));
+#else
+    QStringList linesList(this->text.split(QRegularExpression("[\\n|\\r]"),
+                                           QString::SkipEmptyParts));
+#endif
+    std::vector<AString> lines;
+    QStringListIterator iter(linesList);
+    while (iter.hasNext()) {
+        AString s(iter.next().trimmed()); /* could have empty lines */
+        if ( ! s.isEmpty()) {
+            lines.push_back(s);
+        }
+    }
+    
+    return lines;
 }
 
 /**

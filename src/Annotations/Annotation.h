@@ -41,13 +41,19 @@
 
 
 namespace caret {
+    class AnnotationCoordinate;
     class AnnotationScaleBar;
-    
+    class AnnotationMetaData;
     class AnnotationMultiCoordinateShape;
+    class AnnotationMultiPairedCoordinateShape;
     class AnnotationOneCoordinateShape;
+    class AnnotationPolyhedron;
+    class AnnotationPolygon;
+    class AnnotationPolyLine;
     class AnnotationSpatialModification;
     class AnnotationTwoCoordinateShape;
     class DisplayGroupAndTabItemHelper;
+    class GiftiMetaData;
     class SceneClassAssistant;
 
     class Annotation : public CaretObjectTracksModification, public DisplayGroupAndTabItemInterface, public SceneableInterface {
@@ -116,6 +122,17 @@ namespace caret {
             VIEWPORT_ANNOTATION
         };
         
+        static AnnotationPolyhedron* getSelectionLockedPolyhedronInWindow(const int32_t windowIndex);
+        
+        static void setSelectionLockedPolyhedronInWindow(const int32_t windowIndex,
+                                                         AnnotationPolyhedron* annotationPolyhedron);
+        
+        static void unlockPolyhedronInAnyWindow(AnnotationPolyhedron* annotationPolyhedron);
+
+        static void unlockPolyhedronInWindow(const int32_t windowIndex);
+        
+        static void unlockAllPolyhedronsInAllWindows();
+        
         Annotation(const AnnotationTypeEnum::Enum type,
                    const AnnotationAttributesDefaultTypeEnum::Enum attributeDefaultType);
         
@@ -131,35 +148,74 @@ namespace caret {
         Annotation* clone() const;
         
         /**
-         * @return Cast to multi-coordinate (NULL if NOT multi-coordinate annotation
+         * @return Cast to multi-coordinate (NULL if NOT multi-coordinate annotation)
          */
         virtual AnnotationMultiCoordinateShape* castToMultiCoordinateShape() { return NULL; }
         
         /**
-         * @return Cast to multi-coordinate (NULL if NOT multi-coordinate annotation
+         * @return Cast to  multi-coordinate (NULL if NOT multi-coordinate annotation)
         */
         virtual const AnnotationMultiCoordinateShape* castToMultiCoordinateShape() const { return NULL; }
         
         /**
-         * @return Cast to one-coordinate (NULL if NOT one-coordinate annotation
+         * @return Cast to paired multi-coordinate (NULL if NOT multi-coordinate annotation)
+         */
+        virtual AnnotationMultiPairedCoordinateShape* castToMultiPairedCoordinateShape() { return NULL; }
+        
+        /**
+         * @return Cast to  paired multi-coordinate (NULL if NOT multi-coordinate annotation)
+         */
+        virtual const AnnotationMultiPairedCoordinateShape* castToMultiPairedCoordinateShape() const { return NULL; }
+        
+        /**
+         * @return Cast to one-coordinate (NULL if NOT one-coordinate annotation)
         */
         virtual AnnotationOneCoordinateShape* castToOneCoordinateShape() { return NULL; }
         
         /**
-         * @return Cast to one-coordinate (NULL if NOT one-coordinate annotation
+         * @return Cast to one-coordinate (NULL if NOT one-coordinate annotation)
         */
         virtual const AnnotationOneCoordinateShape* castToOneCoordinateShape() const { return NULL; }
 
         /**
-         * @return Cast to two-coordinate (NULL if NOT two-coordinate annotation
+         * @return Cast to two-coordinate (NULL if NOT two-coordinate annotation)
         */
         virtual AnnotationTwoCoordinateShape* castToTwoCoordinateShape()  { return NULL; }
         
         /**
-         * @return Cast to two-coordinate (NULL if NOT two-coordinate annotation
+         * @return Cast to two-coordinate (NULL if NOT two-coordinate annotation)
         */
         virtual const AnnotationTwoCoordinateShape* castToTwoCoordinateShape() const  { return NULL; }
         
+        /**
+         * @return Cast to polygon (NULL if NOT polygon)
+         */
+        virtual AnnotationPolygon* castToPolygon() { return NULL; }
+
+        /**
+         * @return Cast to polygon (NULL if NOT polygon) const method
+         */
+        virtual const AnnotationPolygon* castToPolygon() const { return NULL; }
+        
+        /**
+         * @return Cast to polyhedron (NULL if NOT polygon)
+         */
+        virtual AnnotationPolyhedron* castToPolyhedron() { return NULL; }
+        
+        /**
+         * @return Cast to polyhedron (NULL if NOT polygon) const method
+         */
+        virtual const AnnotationPolyhedron* castToPolyhedron() const { return NULL; }
+        
+        /**
+         * @return Cast to polyline (NULL if NOT polyline)
+         */
+        virtual AnnotationPolyLine* castToPolyline() { return NULL; }
+        
+        /**
+         * @return Cast to polyline (NULL if NOT polyline) const method
+         */
+        virtual const AnnotationPolyLine* castToPolyline() const { return NULL; }
         /**
          * @return this annotation cast to AnnotationScaleBar (NULL if not a scale bar)
          * Intended for overriding by the annotation type
@@ -187,7 +243,11 @@ namespace caret {
         
         void setPropertiesForSpecializedUsage(const PropertiesSpecializedUsage specializedUsage);
         
-        virtual void setModified();
+        virtual void setModified() override;
+
+        virtual void clearModified() override;
+        
+        virtual bool isModified() const override;
 
         AnnotationGroupKey getAnnotationGroupKey() const;
         
@@ -209,6 +269,20 @@ namespace caret {
         void setCoordinateSpace(const AnnotationCoordinateSpaceEnum::Enum coordinateSpace);
         
         bool isInSameCoordinateSpace(const Annotation* annotation) const;
+        
+        virtual int32_t getNumberOfCoordinates() const = 0;
+        
+        virtual AnnotationCoordinate* getCoordinate(const int32_t index) = 0;
+        
+        virtual const AnnotationCoordinate* getCoordinate(const int32_t index) const = 0;
+
+        std::vector<std::unique_ptr<AnnotationCoordinate>> getCopyOfAllCoordinates() const;
+        
+        std::vector<const AnnotationCoordinate*> getAllCoordinates() const;
+        
+        void replaceAllCoordinatesNotConst(const std::vector<std::unique_ptr<AnnotationCoordinate>>& coordinates);
+
+        virtual void replaceAllCoordinates(const std::vector<std::unique_ptr<const AnnotationCoordinate>>& coordinates) = 0;
         
         virtual AnnotationSurfaceOffsetVectorTypeEnum::Enum getSurfaceOffsetVectorType() const = 0;
         
@@ -269,6 +343,10 @@ namespace caret {
         void setCustomBackgroundColor(const float rgba[4]);
         
         void setCustomBackgroundColor(const uint8_t rgba[4]);
+        
+        AnnotationMetaData* getMetaData();
+        
+        const AnnotationMetaData* getMetaData() const;
         
         void convertObsoleteLineWidthPixelsToPercentageWidth(const float viewportHeight) const;
         
@@ -400,6 +478,12 @@ namespace caret {
                                                     const bool matchPositionFlag,
                                                     const bool matchSizeFlag);
         
+        virtual bool validate(AString& messageOut) const;
+        
+        void setDrawingNewAnnotationStatus(const bool status);
+        
+        bool isDrawingNewAnnotation() const;
+        
     protected:
         virtual void saveSubClassDataToScene(const SceneAttributes* sceneAttributes,
                                              SceneClass* sceneClass) = 0;
@@ -476,9 +560,13 @@ namespace caret {
         
         AString m_name;
         
+        std::unique_ptr<AnnotationMetaData> m_metaData;
+        
         int32_t m_uniqueKey;
         
         AnnotationGroupKey m_annotationGroupKey;
+        
+        bool m_drawingNewAnnotationStatusFlag = false;
         
         /** Stacking order (depth in screen) of tab, greater value is 'in front'*/
         int32_t m_stackingOrder = 1;
@@ -518,6 +606,9 @@ namespace caret {
         
         static float s_userDefaultLineWidthPercentage;
         
+        static std::array<AnnotationPolyhedron*, BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_WINDOWS>
+        s_selectionLockedPolyhedronInWindow;
+        
         // ADD_NEW_MEMBERS_HERE
 
         friend class AnnotationFile;
@@ -543,6 +634,10 @@ namespace caret {
     float Annotation::s_userDefaultLineWidthPixelsObsolete = 3.0f;
     
     float Annotation::s_userDefaultLineWidthPercentage = 1.0f;
+    
+    std::array<AnnotationPolyhedron*, BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_WINDOWS>
+       Annotation::s_selectionLockedPolyhedronInWindow =
+          { NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL };
 #endif // __ANNOTATION_DECLARE__
 
 } // namespace

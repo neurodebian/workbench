@@ -27,7 +27,7 @@
 class QCheckBox;
 class QLineEdit;
 class QPlainTextEdit;
-
+class QToolButton;
 
 namespace caret {
 
@@ -42,6 +42,10 @@ namespace caret {
         static Scene* createNewScene(QWidget* parent,
                                      SceneFile* sceneFile);
         
+        static void editSceneInfo(QWidget* parent,
+                                  SceneFile* sceneFile,
+                                  Scene* scene);
+        
         static Scene* createNewSceneInsertBeforeScene(QWidget* parent,
                                                      SceneFile* sceneFile,
                                                      const Scene* insertBeforeScene);
@@ -50,10 +54,12 @@ namespace caret {
                                     SceneFile* sceneFile,
                                     Scene* sceneToReplace);
         
-        static void addImageToScene(Scene* scene,
-                                    AString& errorMessageOut);
-        
+        static void addImageAndWorkbenchInfoToScene(Scene* scene,
+                                                    const bool cropImageFlag,
+                                                    AString& errorMessageOut);
+
         static bool createSceneImage(QImage& imageOut,
+                                     const bool cropImageFlag,
                                      AString& errorMessageOut);
         
         virtual ~SceneCreateReplaceDialog();
@@ -61,6 +67,7 @@ namespace caret {
     private:
         enum Mode {
             MODE_ADD_NEW_SCENE,
+            MODE_EDIT_SCENE_INFO,
             MODE_INSERT_NEW_SCENE,
             MODE_REPLACE_SCENE
         };
@@ -85,6 +92,8 @@ namespace caret {
     private slots:
         void addWindowContentToolButtonClicked();
         
+        void lockUnlockBalseSceneIdToolButtonClicked();
+        
     private:
         // ADD_NEW_MEMBERS_HERE
 
@@ -103,6 +112,8 @@ namespace caret {
         
         QLineEdit* m_balsaSceneIDLineEdit;
         
+        QToolButton* m_lockUnlockBalseSceneIdToolButton;
+        
         QPlainTextEdit* m_descriptionTextEdit;
         
         QCheckBox* m_addSpecFileNameToSceneCheckBox;
@@ -113,6 +124,8 @@ namespace caret {
         
         QCheckBox* m_addModifiedPaletteSettingsCheckBox;
         
+        QCheckBox* m_cropImageCheckBox;
+        
         AString m_sceneWindowDescription;
         
         struct PreviousSelections {
@@ -120,6 +133,7 @@ namespace caret {
             bool m_addAllTabs;
             bool m_addAllLoadedFiles;
             bool m_addModifiedPaletteSettings;
+            bool m_cropImage;
         };
         
         static PreviousSelections s_previousSelections;

@@ -21,10 +21,12 @@
  */
 /*LICENSE_END*/
 
+#include "BrowserTabContent.h"
 #include "EventListenerInterface.h"
 #include "WuQDialogNonModal.h"
 
 class QDoubleSpinBox;
+class QLabel;
 class QPushButton;
 
 namespace caret {
@@ -57,7 +59,11 @@ namespace caret {
         CustomViewDialog& operator=(const CustomViewDialog&);
         
     private slots:
+        void zoomValueChanged(double value);
+        
         void transformValueChanged();
+        
+        void mprThreeRotationValueChanged();
         
         void newCustomViewPushButtonClicked();
         
@@ -73,6 +79,9 @@ namespace caret {
         
         void copyToTransformPushButtonClicked();
         
+        void resetViewToolButtonClicked();
+        
+        void viewTransformPushButtonClicked();
         
     public:
 
@@ -87,6 +96,8 @@ namespace caret {
         
         void updateGraphicsWindow();
         
+        void updateViewInBrowserTabContent(const BrowserTabContent::MprThreeRotationUpdateType mprThreeRotationUpdateType);
+        
         void getTransformationControlValues(double& panX,
                                             double& panY,
                                             double& panZ,
@@ -96,6 +107,12 @@ namespace caret {
                                             double& obRotX,
                                             double& obRotY,
                                             double& obRotZ,
+                                            double& mprTwoRotX,
+                                            double& mprTwoRotY,
+                                            double& mprTwoRotZ,
+                                            double& mprThreeRotX,
+                                            double& mprThreeRotY,
+                                            double& mprThreeRotZ,
                                             double& flatRotate,
                                             double& zoom,
                                             double& rightFlatX,
@@ -111,6 +128,12 @@ namespace caret {
                                             const double obRotX,
                                             const double obRotY,
                                             const double obRotZ,
+                                            const double mprTwoRotX,
+                                            const double mprTwoRotY,
+                                            const double mprTwoRotZ,
+                                            const double mprThreeRotX,
+                                            const double mprThreeRotY,
+                                            const double mprThreeRotZ,
                                             const double flatRotate,
                                             const double zoom,
                                             const double rightFlatX,
@@ -121,19 +144,24 @@ namespace caret {
         
         CaretPreferences* getCaretPreferences();
 
-        //std::vector<AString> getAllCustomViewNames();
-        
         QWidget* createCustomViewWidget();
         
         QWidget* createCopyWidget();
         
         QWidget* createTransformsWidget();
         
-        //UserView* getSelectedUserView();
-        
         AString getSelectedCustomViewName();
         
-        void moveTransformToCustomView(ModelTransform& modelTransform);
+        void moveTransformValuesToModelTransform(ModelTransform& modelTransform);
+        
+        void updateSpinBoxSingleStepValue(QDoubleSpinBox* spinBox,
+                                          const double singleStep);
+        
+        void updateSpinBoxValue(QDoubleSpinBox* spinBox,
+                                const double newValue) const;
+
+        int64_t createScaledInt(const double value,
+                                const int32_t decimals) const;
         
         QWidget* m_copyWidget;
         
@@ -155,6 +183,20 @@ namespace caret {
         
         QDoubleSpinBox* m_zObliqueRotateDoubleSpinBox;
         
+        QLabel* m_mprTwoRotateLabel;
+        
+        QDoubleSpinBox* m_xMprTwoRotateDoubleSpinBox;
+        
+        QDoubleSpinBox* m_yMprTwoRotateDoubleSpinBox;
+        
+        QDoubleSpinBox* m_zMprTwoRotateDoubleSpinBox;
+        
+        QDoubleSpinBox* m_xMprThreeRotateDoubleSpinBox;
+        
+        QDoubleSpinBox* m_yMprThreeRotateDoubleSpinBox;
+        
+        QDoubleSpinBox* m_zMprThreeRotateDoubleSpinBox;
+        
         QDoubleSpinBox* m_flatRotationDoubleSpinBox;
         
         QDoubleSpinBox* m_zoomDoubleSpinBox;
@@ -173,14 +215,20 @@ namespace caret {
         
         QPushButton* m_deleteCustomViewPushButton;
         
+        QPushButton* m_viewTransformPushButton;
+        
         WuQListWidget* m_customViewListWidget;
         
         bool m_blockDialogUpdate;
         
+        static const bool s_flipSignOfMprTwoRotationsFlag;
+        
+        static const bool s_flipSignOfMprThreeRotationsFlag;
     };
     
 #ifdef __CUSTOM_VIEW_DIALOG_DECLARE__
-    // <PLACE DECLARATIONS OF STATIC MEMBERS HERE>
+    const bool CustomViewDialog::s_flipSignOfMprTwoRotationsFlag = true;
+    const bool CustomViewDialog::s_flipSignOfMprThreeRotationsFlag = true;
 #endif // __CUSTOM_VIEW_DIALOG_DECLARE__
 
 } // namespace

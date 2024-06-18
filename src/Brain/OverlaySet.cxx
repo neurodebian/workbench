@@ -22,8 +22,6 @@
 #include <algorithm>
 #include <deque>
 
-#include <QRegExp>
-
 #define __OVERLAY_SET_DECLARE__
 #include "OverlaySet.h"
 #undef __OVERLAY_SET_DECLARE__
@@ -254,6 +252,21 @@ OverlaySet::getUnderlayVolume()
     return vf;
 }
 
+/*
+ * Get the bottom-most overlay that is a volume file for the given
+ * browser tab and return its volume file.
+ * @param browserTabContent
+ *    Content of browser tab.
+ * @return Returns the bottom-most overlay that is set a a volume file.
+ * Will return NULL if no, enabled overlays are set to a volume file.
+ */
+const VolumeMappableInterface*
+OverlaySet::getUnderlayVolume() const
+{
+    OverlaySet* nonConstOverlaySet(const_cast<OverlaySet*>(this));
+    return nonConstOverlaySet->getUnderlayVolume();
+}
+
 /**
  * If NO overlay (any overlay) is set to a volume, set the underlay to the first
  * volume that it finds.
@@ -270,11 +283,9 @@ OverlaySet::setUnderlayToVolume()
         if (overlayIndex >= 0) {
             std::vector<CaretMappableDataFile*> mapFiles;
             CaretMappableDataFile* mapFile;
-            //AString mapUniqueID;
             int32_t mapIndex;
             m_overlays[overlayIndex]->getSelectionData(mapFiles, 
                                                           mapFile, 
-                                                          //mapUniqueID,
                                                           mapIndex);
             
             const int32_t numMapFiles = static_cast<int32_t>(mapFiles.size());
@@ -558,9 +569,10 @@ OverlaySet::findFilesWithMapNamed(std::vector<CaretMappableDataFile*>& matchedFi
     /*
      * Aggregate matching names and make them lower case
      */
-    QRegExp regularExpression;
-    if (matchToNamesRegularExpressionText.isEmpty() == false) {
-        regularExpression = QRegExp(matchToNamesRegularExpressionText);
+    QRegularExpression regularExpression;
+    if ( ! matchToNamesRegularExpressionText.isEmpty()) {
+        regularExpression = QRegularExpression(matchToNamesRegularExpressionText);
+        regularExpression.setPatternOptions(QRegularExpression::CaseInsensitiveOption);
     }
     
     /*
@@ -596,7 +608,7 @@ OverlaySet::findFilesWithMapNamed(std::vector<CaretMappableDataFile*>& matchedFi
         /*
          * Test structures?
          */
-        if (matchToStructures.empty() == false) {
+        if ( ! matchToStructures.empty()) {
             const StructureEnum::Enum mapFileStructure = mapFile->getStructure();
             /*
              * File maps to ALL structures?
@@ -637,7 +649,7 @@ OverlaySet::findFilesWithMapNamed(std::vector<CaretMappableDataFile*>& matchedFi
     /*
      * If there are names to match
      */
-    if (matchToNamesRegularExpressionText.isEmpty() == false) {
+    if ( ! matchToNamesRegularExpressionText.isEmpty()) {
         /*
          * First preference is matching MAP name
          */
@@ -654,10 +666,10 @@ OverlaySet::findFilesWithMapNamed(std::vector<CaretMappableDataFile*>& matchedFi
                 /*
                  * If NOT matching, exclude files whose name matches
                  */
-                if (matchToNamesRegularExpressionResult == false) {
+                if ( ! matchToNamesRegularExpressionResult) {
                     const AString fileName = mapFile->getFileNameNoPath().toLower();
                     
-                    const bool fileNameMatch = (regularExpression.indexIn(fileName) >= 0);
+                    const bool fileNameMatch = regularExpression.match(fileName).hasMatch();
                     if (fileNameMatch) {
                         continue;
                     }
@@ -666,7 +678,7 @@ OverlaySet::findFilesWithMapNamed(std::vector<CaretMappableDataFile*>& matchedFi
                 const int32_t numMaps = mapFile->getNumberOfMaps();
                 for (int32_t iMap = 0; iMap < numMaps; iMap++) {
                     const AString mapName = mapFile->getMapName(iMap).toLower();
-                    const bool match = (regularExpression.indexIn(mapName) >= 0);
+                    const bool match = (regularExpression.match(mapName).hasMatch());
                     if (match == matchToNamesRegularExpressionResult) {
                         matchedFiles.push_back(mapFile);
                         matchedFileIndices.push_back(iMap);
@@ -692,7 +704,7 @@ OverlaySet::findFilesWithMapNamed(std::vector<CaretMappableDataFile*>& matchedFi
                 }
                 
                 const AString fileName = mapFile->getFileNameNoPath().toLower();
-                const bool match = (regularExpression.indexIn(fileName) >= 0);
+                const bool match = (regularExpression.match(fileName).hasMatch());
                 if (match == matchToNamesRegularExpressionResult) {
                     matchedFiles.push_back(mapFile);
                     matchedFileIndices.push_back(0);
@@ -725,7 +737,7 @@ OverlaySet::findFilesWithMapNamed(std::vector<CaretMappableDataFile*>& matchedFi
     
     CaretAssert(matchedFiles.size() == matchedFileIndices.size());
     
-    const bool filesFound = (matchedFiles.empty() == false);
+    const bool filesFound = ( ! matchedFiles.empty());
     
     /*
      * APPEND to output, do not replace
@@ -761,14 +773,14 @@ OverlaySet::findUnderlayFiles( const std::vector<StructureEnum::Enum>& matchToSt
     /*
      * First, try to find CIFTI shape files
      */
-    if (findFilesWithMapNamed(filesOut,
+    if ( ! findFilesWithMapNamed(filesOut,
                               mapIndicesOut,
                               matchToStructures,
                               DataFileTypeEnum::CONNECTIVITY_DENSE_SCALAR,
                               false,
                               s_shapeMatchRegularExpressionText,
                               true,
-                              true) == false) {
+                              true)) {
         
         /*
          * Second, try to find METRIC shape files
@@ -802,7 +814,7 @@ OverlaySet::findUnderlayFiles( const std::vector<StructureEnum::Enum>& matchToSt
                 }
             }
             
-            if (foundAnatomyVolume == false) {
+            if ( ! foundAnatomyVolume) {
                 for (int32_t i = 0; i < numVolumes; i++) {
                     VolumeFile* vf = volumeFiles[i];
                     bool testIt = true;
@@ -811,15 +823,17 @@ OverlaySet::findUnderlayFiles( const std::vector<StructureEnum::Enum>& matchToSt
                     }
                     if (testIt) {
                         if (vf->getNumberOfMaps() > 0) {
-                            PaletteColorMapping* pcm = vf->getMapPaletteColorMapping(0);
-                            if (pcm != NULL) {
-                                const AString paletteName = pcm->getSelectedPaletteName();
-                                if (paletteName.contains("gray")
-                                    || paletteName.contains("grey")) {
-                                    filesOut.push_back(vf);
-                                    mapIndicesOut.push_back(0);
-                                    foundAnatomyVolume = true;
-                                    break;
+                            if (vf->isMappedWithPalette()) {
+                                PaletteColorMapping* pcm = vf->getMapPaletteColorMapping(0);
+                                if (pcm != NULL) {
+                                    const AString paletteName = pcm->getSelectedPaletteName();
+                                    if (paletteName.contains("gray")
+                                        || paletteName.contains("grey")) {
+                                        filesOut.push_back(vf);
+                                        mapIndicesOut.push_back(0);
+                                        foundAnatomyVolume = true;
+                                        break;
+                                    }
                                 }
                             }
                         }
@@ -880,14 +894,14 @@ OverlaySet::findMiddleLayerFiles(const std::vector<StructureEnum::Enum>& matchTo
     /*
      * First, try to find CIFTI scalar files with myelin
      */
-    if (findFilesWithMapNamed(filesOut,
+    if ( ! findFilesWithMapNamed(filesOut,
                               mapIndicesOut,
                               matchToStructures,
                               DataFileTypeEnum::CONNECTIVITY_DENSE_SCALAR,
                               includeVolumeFiles,
                               s_myelinMatchRegularExpressionText,
                               true,
-                              false) == false) {
+                              false)) {
         
         /*
          * Second, try to find METRIC files with neither shape nor myelin
@@ -905,14 +919,14 @@ OverlaySet::findMiddleLayerFiles(const std::vector<StructureEnum::Enum>& matchTo
     /*
      * Second, try to find CIFTI scalar files with neither shape nor myelin
      */
-    if (findFilesWithMapNamed(filesOut,
+    if ( ! findFilesWithMapNamed(filesOut,
                               mapIndicesOut,
                               matchToStructures,
                               DataFileTypeEnum::CONNECTIVITY_DENSE_SCALAR,
                               includeVolumeFiles,
                               s_shapeMyelinMatchRegularExpressionText,
                               false,
-                              false) == false) {
+                              false)) {
         
         /*
          * Second, try to find METRIC files with neither shape nor myelin
@@ -966,14 +980,14 @@ OverlaySet::findOverlayFiles(const std::vector<StructureEnum::Enum>& matchToStru
     /*
      * First, try to find CIFTI LABEL files
      */
-    if (findFilesWithMapNamed(filesOut,
+    if ( ! findFilesWithMapNamed(filesOut,
                               mapIndicesOut,
                               matchToStructures,
                               DataFileTypeEnum::CONNECTIVITY_DENSE_LABEL,
                               includeVolumeFiles,
                               "",
                               true,
-                              true) == false) {
+                              true)) {
         
         /*
          * Second, try to find LABEL files
@@ -993,7 +1007,27 @@ OverlaySet::findOverlayFiles(const std::vector<StructureEnum::Enum>& matchToStru
         const int32_t numVolumes = static_cast<int32_t>(volumeFiles.size());
         for (int32_t i = 0; i < numVolumes; i++) {
             VolumeFile* vf = volumeFiles[i];
-            if (vf->getType() == SubvolumeAttributes::LABEL) {
+            bool includeFlag(false);
+            switch (vf->getType()) {
+                case SubvolumeAttributes::ANATOMY:
+                    break;
+                case SubvolumeAttributes::FUNCTIONAL:
+                    break;
+                case SubvolumeAttributes::LABEL:
+                    includeFlag = true;
+                    break;
+                case SubvolumeAttributes::RGB:
+                    break;
+                case SubvolumeAttributes::RGB_WORKBENCH:
+                    break;
+                case SubvolumeAttributes::SEGMENTATION:
+                    break;
+                case SubvolumeAttributes::VECTOR:
+                    break;
+                case SubvolumeAttributes::UNKNOWN:
+                    break;
+            }
+            if (includeFlag) {
                 if (vf->getNumberOfMaps() > 0) {
                     filesOut.push_back(vf);
                     mapIndicesOut.push_back(0);
@@ -1014,6 +1048,7 @@ OverlaySet::initializeOverlays()
 {
     bool isMatchToVolumeUnderlay = false;
     bool isMatchToVolumeOverlays = false;
+    bool isVolumesForHistology   = false;
     
     switch (m_includeVolumeFiles) {
         case Overlay::INCLUDE_VOLUME_FILES_NO:
@@ -1027,6 +1062,9 @@ OverlaySet::initializeOverlays()
                 isMatchToVolumeOverlays = true;
             }
             isMatchToVolumeUnderlay = true;
+            break;
+        case Overlay::INCLUDE_VOLUME_FILES_FOR_HISTOLOGY_MODEL:
+            isVolumesForHistology = true;
             break;
     }
     
@@ -1123,7 +1161,7 @@ OverlaySet::initializeOverlays()
          */
         int32_t upperLayerOverlayIndex = -1;
         for (int32_t overlayIndex = 0; overlayIndex < numberOfDisplayedOverlays; overlayIndex++) {
-            if (overlayInitializedFlag[overlayIndex] == false) {
+            if ( ! overlayInitializedFlag[overlayIndex]) {
                 upperLayerOverlayIndex = overlayIndex;
                 break;
             }
@@ -1143,9 +1181,39 @@ OverlaySet::initializeOverlays()
     /*
      * Disable overlays that were not initialized
      */
+    bool atLeastOneOverlayEnabledFlag(false);
     for (int32_t i = 0; i < numberOfDisplayedOverlays; i++) {
         CaretAssertVectorIndex(overlayInitializedFlag, i);
         getOverlay(i)->setEnabled(overlayInitializedFlag[i]);
+        if (overlayInitializedFlag[i]) {
+            atLeastOneOverlayEnabledFlag = true;
+        }
+    }
+    
+    /*
+     * If no overlays were enabled, enable the underlay
+     * if it contains a file.  This problem was observed
+     * if one loaded an RGB volume (no overlay was enabled).
+     */
+    if ( ! atLeastOneOverlayEnabledFlag) {
+        if (numberOfDisplayedOverlays > 0) {
+            const int32_t overlayIndex(numberOfDisplayedOverlays - 1);
+            Overlay* overlay(getOverlay(overlayIndex));
+            CaretMappableDataFile* mapFile(NULL);
+            int32_t mapIndex(0);
+            overlay->getSelectionData(mapFile, mapIndex);
+            if ((mapFile != NULL)
+                && (mapIndex >= 0)) {
+                overlay->setEnabled(true);
+            }
+        }
+    }
+    
+    if (isVolumesForHistology) {
+        for (Overlay* overlay : m_overlays) {
+            CaretAssert(overlay);
+            overlay->setEnabled(false);
+        }
     }
 }
 
@@ -1219,7 +1287,7 @@ OverlaySet::getSelectedMapIndicesForFile(const CaretMappableDataFile* caretMappa
         Overlay* overlay = const_cast<Overlay*>(getOverlay(i));
         bool checkIt = true;
         if (isLimitToEnabledOverlays) {
-            if (overlay->isEnabled() == false) {
+            if ( ! overlay->isEnabled()) {
                 checkIt = false;
             }
         }
@@ -1277,7 +1345,6 @@ OverlaySet::saveToScene(const SceneAttributes* sceneAttributes,
     m_sceneAssistant->saveMembers(sceneAttributes, 
                                   sceneClass);
     
-//    const int32_t numOverlaysToSave = BrainConstants::MAXIMUM_NUMBER_OF_OVERLAYS;
     const int32_t numOverlaysToSave = getNumberOfDisplayedOverlays();
     
     std::vector<SceneClass*> overlayClassVector;

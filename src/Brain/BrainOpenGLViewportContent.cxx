@@ -37,7 +37,11 @@
 #include "EventManager.h"
 #include "EventSpacerTabGet.h"
 #include "GapsAndMargins.h"
+#include "GraphicsObjectToWindowTransform.h"
 #include "MathFunctions.h"
+#include "MediaFile.h"
+#include "MediaOverlay.h"
+#include "MediaOverlaySet.h"
 #include "ModelSurfaceMontage.h"
 #include "SpacerTabContent.h"
 #include "SurfaceMontageConfigurationAbstract.h"
@@ -100,6 +104,9 @@ m_windowBeforeAspectLockingY(windowBeforeAspectLockingViewport[1]),
 m_windowBeforeAspectLockingWidth(windowBeforeAspectLockingViewport[2]),
 m_windowBeforeAspectLockingHeight(windowBeforeAspectLockingViewport[3])
 {
+    /*
+     * Note all members initialized in the header file
+     */
     m_windowX      = windowViewport[0];
     m_windowY      = windowViewport[1];
     m_windowWidth  = windowViewport[2];
@@ -118,14 +125,6 @@ m_windowBeforeAspectLockingHeight(windowBeforeAspectLockingViewport[3])
     m_modelY      = modelViewport[1];
     m_modelWidth  = modelViewport[2];
     m_modelHeight = modelViewport[3];
-    
-    m_chartDataProjectionMatrix.identity();
-    m_chartDataModelViewMatrix.identity();
-    m_chartDataX = 0;
-    m_chartDataY = 0;
-    m_chartDataWidth = 0;
-    m_chartDataHeight = 0;
-    m_chartDataViewportValidFlag = false;
 }
 
 /**
@@ -150,7 +149,9 @@ m_windowBeforeAspectLockingY(obj.m_windowBeforeAspectLockingY),
 m_windowBeforeAspectLockingWidth(obj.m_windowBeforeAspectLockingWidth),
 m_windowBeforeAspectLockingHeight(obj.m_windowBeforeAspectLockingHeight)
 {
-    this->initializeMembersBrainOpenGLViewportContent();
+    /*
+     * Note all members initialized in the header file
+     */
     this->copyHelperBrainOpenGLViewportContent(obj);
 }
 
@@ -169,42 +170,6 @@ BrainOpenGLViewportContent::operator=(const BrainOpenGLViewportContent& obj)
         this->copyHelperBrainOpenGLViewportContent(obj);
     }
     return *this;
-}
-
-/**
- * Initialize members of a new instance.
- */
-void
-BrainOpenGLViewportContent::initializeMembersBrainOpenGLViewportContent()
-{
-    m_chartDataProjectionMatrix.identity();
-    m_chartDataModelViewMatrix.identity();
-    m_chartDataX      = 0;
-    m_chartDataY      = 0;
-    m_chartDataWidth  = 0;
-    m_chartDataHeight = 0;
-    m_chartDataViewportValidFlag = false;
-    m_modelX       = 0;
-    m_modelY       = 0;
-    m_modelWidth   = 0;
-    m_modelHeight  = 0;
-    m_tabX         = 0;
-    m_tabY         = 0;
-    m_tabWidth     = 0;
-    m_tabHeight    = 0;
-    m_windowX      = 0;
-    m_windowY      = 0;
-    m_windowWidth  = 0;
-    m_windowHeight = 0;
-    m_windowBeforeAspectLockingX      = 0;
-    m_windowBeforeAspectLockingY      = 0;
-    m_windowBeforeAspectLockingWidth  = 0;
-    m_windowBeforeAspectLockingHeight = 0;
-    m_browserTabContent = NULL;
-    m_spacerTabContent  = NULL;
-    for (int32_t i = 0; i < 4; i++) {
-        m_tabViewportManualLayoutBeforeAspectLocking[i] = 0;
-    }
 }
 
 /**
@@ -245,6 +210,26 @@ BrainOpenGLViewportContent::copyHelperBrainOpenGLViewportContent(const BrainOpen
 
     m_browserTabContent = obj.m_browserTabContent;
     m_spacerTabContent  = obj.m_spacerTabContent;
+    m_histologyGraphicsObjectToWindowTransform.reset();
+    if (obj.m_histologyGraphicsObjectToWindowTransform) {
+        m_histologyGraphicsObjectToWindowTransform.reset(new GraphicsObjectToWindowTransform(*obj.m_histologyGraphicsObjectToWindowTransform));
+    }
+    m_mediaGraphicsObjectToWindowTransform.reset();
+    if (obj.m_mediaGraphicsObjectToWindowTransform) {
+        m_mediaGraphicsObjectToWindowTransform.reset(new GraphicsObjectToWindowTransform(*obj.m_mediaGraphicsObjectToWindowTransform));
+    }
+    m_volumeAxialGraphicsObjectToWindowTransform.reset();
+    if (obj.m_volumeAxialGraphicsObjectToWindowTransform) {
+        m_volumeAxialGraphicsObjectToWindowTransform.reset(new GraphicsObjectToWindowTransform(*obj.m_volumeAxialGraphicsObjectToWindowTransform));
+    }
+    m_volumeCoronalGraphicsObjectToWindowTransform.reset();
+    if (obj.m_volumeCoronalGraphicsObjectToWindowTransform) {
+        m_volumeCoronalGraphicsObjectToWindowTransform.reset(new GraphicsObjectToWindowTransform(*obj.m_volumeCoronalGraphicsObjectToWindowTransform));
+    }
+    m_volumeParasagittalGraphicsObjectToWindowTransform.reset();
+    if (obj.m_volumeParasagittalGraphicsObjectToWindowTransform) {
+        m_volumeParasagittalGraphicsObjectToWindowTransform.reset(new GraphicsObjectToWindowTransform(*obj.m_volumeParasagittalGraphicsObjectToWindowTransform));
+    }
 }
 
 /**
@@ -1345,6 +1330,164 @@ BrainOpenGLViewportContent::getSurfaceMontageModelViewport(const int32_t montage
     }
 }
 
+/**
+ * Set the object to window transformation for histology.  This instance will take ownership of the given transform and delete when appropriate.
+ */
+void
+BrainOpenGLViewportContent::setHistologyGraphicsObjectToWindowTransform(GraphicsObjectToWindowTransform* transform) const
+{
+    m_histologyGraphicsObjectToWindowTransform.reset(transform);
+}
+
+/**
+ * @return Object to window transformation (MAY BE NULL !!!) for histology
+ */
+const GraphicsObjectToWindowTransform*
+BrainOpenGLViewportContent::getHistologyGraphicsObjectToWindowTransform() const
+{
+    return m_histologyGraphicsObjectToWindowTransform.get();
+}
+
+/**
+ * Set the object to window transformation for media.  This instance will take ownership of the given transform and delete when appropriate.
+ */
+void
+BrainOpenGLViewportContent::setMediaGraphicsObjectToWindowTransform(GraphicsObjectToWindowTransform* transform) const
+{
+    m_mediaGraphicsObjectToWindowTransform.reset(transform);
+}
+
+/**
+ * @return Object to window transformation (MAY BE NULL !!!) for media
+ */
+const GraphicsObjectToWindowTransform*
+BrainOpenGLViewportContent::getMediaGraphicsObjectToWindowTransform() const
+{
+    return m_mediaGraphicsObjectToWindowTransform.get();
+}
+
+/**
+ * Set the object to window transformation for volume.  This instance will take ownership of the given transform and delete when appropriate.
+ */
+void
+BrainOpenGLViewportContent::setVolumeMprGraphicsObjectToWindowTransform(const VolumeSliceViewPlaneEnum::Enum sliceViewPlane,
+                                                                        GraphicsObjectToWindowTransform* transform) const
+{
+    switch (sliceViewPlane) {
+        case VolumeSliceViewPlaneEnum::ALL:
+            CaretAssert(0);
+            break;
+        case VolumeSliceViewPlaneEnum::AXIAL:
+            m_volumeAxialGraphicsObjectToWindowTransform.reset(transform);
+            break;
+        case VolumeSliceViewPlaneEnum::CORONAL:
+            m_volumeCoronalGraphicsObjectToWindowTransform.reset(transform);
+            break;
+        case VolumeSliceViewPlaneEnum::PARASAGITTAL:
+            m_volumeParasagittalGraphicsObjectToWindowTransform.reset(transform);
+            break;
+    }
+}
+
+/**
+ * @return Object to window transformation (MAY BE NULL !!!) for volume
+ */
+const GraphicsObjectToWindowTransform*
+BrainOpenGLViewportContent::getVolumeGraphicsObjectToWindowTransform(const VolumeSliceViewPlaneEnum::Enum sliceViewPlane) const
+{
+    switch (sliceViewPlane) {
+        case VolumeSliceViewPlaneEnum::ALL:
+            CaretAssert(0);
+            break;
+        case VolumeSliceViewPlaneEnum::AXIAL:
+            return m_volumeAxialGraphicsObjectToWindowTransform.get();
+            break;
+        case VolumeSliceViewPlaneEnum::CORONAL:
+            return m_volumeCoronalGraphicsObjectToWindowTransform.get();
+            break;
+        case VolumeSliceViewPlaneEnum::PARASAGITTAL:
+            return m_volumeParasagittalGraphicsObjectToWindowTransform.get();
+            break;
+    }
+    return NULL;
+}
+
+/**
+ * @return Step value for custom view dialog that depends upon model in selected tab
+ */
+float
+BrainOpenGLViewportContent::getTranslationStepValueForCustomViewDialog() const
+{
+    float customViewStepValue(1.0);
+    float mousePanningFactor(1.0);
+    getTranslationFactors(customViewStepValue,
+                          mousePanningFactor);
+    return customViewStepValue;
+}
+
+/**
+ * @return Factor for panning with mouse depends upon model in selected tab
+ */
+float
+BrainOpenGLViewportContent::getTranslationFactorForMousePanning() const
+{
+    float customViewStepValue(1.0);
+    float mousePanningFactor(1.0);
+    getTranslationFactors(customViewStepValue,
+                          mousePanningFactor);
+    return mousePanningFactor;
+}
+
+/**
+ * Get factors for translation
+ * @param customViewStepValueOut
+ *    Step value for translation on custom view dialog
+ * @param mousePanningFactor
+ *    Factor for panning with mouse
+ */
+void
+BrainOpenGLViewportContent::getTranslationFactors(float& customViewStepValueOut,
+                                                  float& mousePanningFactorOut) const
+{
+    customViewStepValueOut = 1.0;
+    mousePanningFactorOut  = 1.0;
+    
+    BrowserTabContent* tabContent = getBrowserTabContent();
+    if (tabContent->isMediaDisplayed()) {
+        switch (tabContent->getMediaDisplayCoordinateMode()) {
+            case MediaDisplayCoordinateModeEnum::PIXEL:
+            {
+                MediaOverlaySet* overlaySet = tabContent->getMediaOverlaySet();
+                CaretAssert(overlaySet);
+                MediaOverlay* underlay = overlaySet->getBottomMostEnabledOverlay();
+                if (underlay != NULL) {
+                    const MediaOverlay::SelectionData selectionData(underlay->getSelectionData());
+                    if (selectionData.m_selectedMediaFile != NULL) {
+                        const float height(selectionData.m_selectedMediaFile->getHeight());
+                        if (height > 0.0) {
+                            int32_t viewport[4];
+                            getModelViewport(viewport);
+                            const float viewportHeight(viewport[3]);
+                            if (viewportHeight > 0.0) {
+                                const float factor(height / viewportHeight);
+                                mousePanningFactorOut = factor * 0.5;
+                                customViewStepValueOut = factor;
+                            }
+                        }
+                    }
+                }
+            }
+                break;
+            case MediaDisplayCoordinateModeEnum::PLANE:
+                break;
+        }
+    }
+}
+
+
+
+
+
 /* =================================================================================================== */
 
 
@@ -1585,6 +1728,39 @@ BrainOpenGLViewportContent::getSliceAllViewViewport(const int32_t tabViewport[4]
  *    Output viewport (region of graphics area) for drawing slices.
  */
 VolumeSliceViewPlaneEnum::Enum
+BrainOpenGLViewportContent::getSliceViewPlaneForVolumeAllSliceView(const GraphicsViewport& viewport,
+                                                                   const VolumeSliceViewAllPlanesLayoutEnum::Enum allPlanesLayout,
+                                                                   const Vector3D& mousePressXY,
+                                                                   GraphicsViewport& sliceViewportOut)
+{
+    int32_t sliceViewport[4];
+    const VolumeSliceViewPlaneEnum::Enum viewPlane(getSliceViewPlaneForVolumeAllSliceView(viewport.getViewport().data(),
+                                                                                          allPlanesLayout,
+                                                                                          mousePressXY[0],
+                                                                                          mousePressXY[1],
+                                                                                          sliceViewport));
+    sliceViewportOut = GraphicsViewport(sliceViewport);
+    return viewPlane;
+}
+
+
+/*
+ * @return The slice view plane for the given viewport coordinate.
+ * If ALL is returned, is indicates that the given viewport coordinate
+ * is in the bottom left region in which volume slices are not displayed.
+ *
+ * @param viewport
+ *   The viewport.
+ * @param mousePressX
+ *   X Location of the mouse press.
+ * @param mousePressY
+ *   Y Location of the mouse press.
+ * @param allPlanesLayout
+ *    The layout in ALL slices view.
+ * @param sliceViewportOut
+ *    Output viewport (region of graphics area) for drawing slices.
+ */
+VolumeSliceViewPlaneEnum::Enum
 BrainOpenGLViewportContent::getSliceViewPlaneForVolumeAllSliceView(const int32_t viewport[4],
                                                                    const VolumeSliceViewAllPlanesLayoutEnum::Enum allPlanesLayout,
                                                                    const int32_t mousePressX,
@@ -1614,3 +1790,54 @@ BrainOpenGLViewportContent::getSliceViewPlaneForVolumeAllSliceView(const int32_t
     return view;
 }
 
+/**
+ * @return Pair with GraphicsViewport and slice plane.
+ *
+ * The viewport at the mouse XY.  If this is a volume slice with ALL view, the
+ * viewport will be for the individual slice (axial, coronal, parasagittal) NOT all three slices.
+ * Otherwise, the viewport is the same as getModelViewport().
+ *
+ * The graphics viewport will be invalid if there is a failure to find the viewport.
+ */
+std::pair<GraphicsViewport,
+VolumeSliceViewPlaneEnum::Enum>
+BrainOpenGLViewportContent::getVolumeSliceViewportAtMouseXY(const int32_t mouseX,
+                                                            const int32_t mouseY) const
+{
+    std::array<int32_t, 4> viewport;
+    getModelViewport(viewport.data());
+    
+    VolumeSliceViewPlaneEnum::Enum slicePlaneOut = VolumeSliceViewPlaneEnum::ALL;
+    const BrowserTabContent* btc(getBrowserTabContent());
+    if (btc != NULL) {
+        if (btc->isVolumeSlicesDisplayed()) {
+            switch (btc->getVolumeSliceViewPlane()) {
+                case VolumeSliceViewPlaneEnum::ALL:
+                {
+                    std::array<int32_t, 4>  sliceViewport;
+                    slicePlaneOut = getSliceViewPlaneForVolumeAllSliceView(viewport.data(),
+                                                                           btc->getVolumeSlicePlanesAllViewLayout(),
+                                                                           mouseX,
+                                                                           mouseY,
+                                                                           sliceViewport.data());
+                    if (slicePlaneOut == VolumeSliceViewPlaneEnum::ALL) {
+                        return std::make_pair(GraphicsViewport(),
+                                              VolumeSliceViewPlaneEnum::ALL);
+                    }
+                    viewport = sliceViewport;
+                }
+                    break;
+                case VolumeSliceViewPlaneEnum::AXIAL:
+                    break;
+                case VolumeSliceViewPlaneEnum::CORONAL:
+                    break;
+                case VolumeSliceViewPlaneEnum::PARASAGITTAL:
+                    break;
+            }
+        }
+    }
+    
+    return std::make_pair(GraphicsViewport(viewport),
+                          slicePlaneOut);
+    
+}

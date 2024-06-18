@@ -24,6 +24,7 @@
 #undef __VOLUME_FILE_CREATE_DIALOG_DECLARE__
 
 #include <QComboBox>
+#include <QDesktopServices>
 #include <QDoubleSpinBox>
 #include <QGridLayout>
 #include <QGroupBox>
@@ -41,7 +42,9 @@
 #include "CiftiMappableDataFile.h"
 #include "CaretVolumeExtension.h"
 #include "GuiManager.h"
+#include "MathFunctions.h"
 #include "VolumeFile.h"
+#include "VolumeFileResampleDialog.h"
 #include "WuQDataEntryDialog.h"
 #include "WuQFactory.h"
 #include "WuQMessageBox.h"
@@ -59,11 +62,18 @@ using namespace caret;
 
 /**
  * Constructor.
+ * @param underlayVolume
+ *    Current underlay volume
+ * @param parent
+ *    The parent dialog
  */
-VolumeFileCreateDialog::VolumeFileCreateDialog(QWidget* parent)
+VolumeFileCreateDialog::VolumeFileCreateDialog(const VolumeMappableInterface* underlayVolume,
+                                               QWidget* parent)
 : WuQDialogModal("Create Volume",
                  parent)
 {
+    m_blockVoxelEdgeLabelUpdateFlag = true;
+    
     if ( ! s_previousVolumeSettingsValid) {
         s_previousVolumeSettings.m_dimensions.clear();
         s_previousVolumeSettings.m_dimensions.push_back(182);
@@ -95,13 +105,43 @@ VolumeFileCreateDialog::VolumeFileCreateDialog(QWidget* parent)
         row4.push_back(0);
         row4.push_back(1);
         
+        /*
+         * If available, match underlay volume
+         */
+        if (underlayVolume != NULL) {
+            const VolumeFile* vf(dynamic_cast<const VolumeFile*>(underlayVolume));
+            if (vf != NULL) {
+                std::vector<int64_t> dims;
+                vf->getDimensions(dims);
+                if (dims.size() >= 4) {
+                    s_previousVolumeSettings.m_dimensions.clear();
+                    s_previousVolumeSettings.m_dimensions.push_back(dims[0]);
+                    s_previousVolumeSettings.m_dimensions.push_back(dims[1]);
+                    s_previousVolumeSettings.m_dimensions.push_back(dims[2]);
+                    s_previousVolumeSettings.m_dimensions.push_back(1);
+                    
+                    std::vector<std::vector<float>> sform(vf->getSform());
+                    if (sform.size() == 4) {
+                        if ((sform[0].size() == 4)
+                            && (sform[1].size() == 4)
+                            && (sform[2].size() == 4)
+                            && (sform[3].size() == 4)) {
+                            row1 = sform[0];
+                            row2 = sform[1];
+                            row3 = sform[2];
+                            row4 = sform[3];
+                        }
+                    }
+                }
+            }
+        }
         s_previousVolumeSettings.m_indexToSpace.clear();
         s_previousVolumeSettings.m_indexToSpace.push_back(row1);
         s_previousVolumeSettings.m_indexToSpace.push_back(row2);
         s_previousVolumeSettings.m_indexToSpace.push_back(row3);
         s_previousVolumeSettings.m_indexToSpace.push_back(row4);
         
-        s_previousVolumeSettings.m_volumeType = SubvolumeAttributes::FUNCTIONAL;
+        s_previousVolumeSettings.m_volumeType = SubvolumeAttributes::UNKNOWN;
         
         s_previousVolumeSettingsValid = true;
     }
@@ -114,6 +154,9 @@ VolumeFileCreateDialog::VolumeFileCreateDialog(QWidget* parent)
     
     setCentralWidget(widget,
                      WuQDialog::SCROLL_AREA_NEVER);
+    
+    m_blockVoxelEdgeLabelUpdateFlag = false;
+    updateVoxelEdgeLabels();
 }
 
 /**
@@ -144,21 +187,23 @@ VolumeFileCreateDialog::createNewVolumeFileWidget()
                                      + ".nii.gz");
     s_fileNameCounter++;
     
-    QLabel* newFileNameLabel = new QLabel("Name:");
+    QLabel* newFileNameLabel = new QLabel("Volume Filename:");
     m_newFileNameLineEdit = new QLineEdit();
     m_newFileNameLineEdit->setText(defaultFileName);
     QPushButton* newFileNamePushButton = new QPushButton("Select...");
     QObject::connect(newFileNamePushButton, SIGNAL(clicked()),
                      this, SLOT(newFileNamePushButtonClicked()));
     
-    QLabel* newFileTypeLabel = new QLabel("Type:");
+    QLabel* newFileTypeLabel = new QLabel("Volume Type:");
     m_newFileTypeComboBox = new QComboBox();
-    m_newFileTypeComboBox->addItem("Functional (Scalar)",
+    m_newFileTypeComboBox->addItem("Choose Type",
+                                   SubvolumeAttributes::UNKNOWN);
+    m_newFileTypeComboBox->addItem("Functional (Scalars)",
                                    SubvolumeAttributes::FUNCTIONAL);
-    m_newFileTypeComboBox->addItem("Label",
+    m_newFileTypeComboBox->addItem("Label (Names)",
                                    SubvolumeAttributes::LABEL);
     
-    QLabel* newFileNumberOfMapsLabel = new QLabel("Maps:");
+    QLabel* newFileNumberOfMapsLabel = new QLabel("Number of Maps:");
     m_newFileNumberOfMapsSpinBox = WuQFactory::newSpinBoxWithMinMaxStep(1, s_maximumNumberOfMaps, 1);
     m_newFileNumberOfMapsSpinBox->setFixedWidth(50);
     QObject::connect(m_newFileNumberOfMapsSpinBox, SIGNAL(valueChanged(int)),
@@ -204,43 +249,96 @@ VolumeFileCreateDialog::createNewVolumeFileWidget()
     const int SPIN_BOX_WIDTH = 80;
     
     QLabel* dimensionsLabel = new QLabel("Dimensions:");
-    m_newDimXSpinBox = WuQFactory::newSpinBoxWithMinMaxStep(1, 100000, 1);
-    m_newDimYSpinBox = WuQFactory::newSpinBoxWithMinMaxStep(1, 100000, 1);
-    m_newDimZSpinBox = WuQFactory::newSpinBoxWithMinMaxStep(1, 100000, 1);
-    m_newDimXSpinBox->setFixedWidth(SPIN_BOX_WIDTH);
-    m_newDimYSpinBox->setFixedWidth(SPIN_BOX_WIDTH);
-    m_newDimZSpinBox->setFixedWidth(SPIN_BOX_WIDTH);
+    m_dimXSpinBox = WuQFactory::newSpinBoxWithMinMaxStep(1, 100000, 1);
+    m_dimXSpinBox->setToolTip("Number of voxels along X-axis");
+    m_dimXSpinBox->setFixedWidth(SPIN_BOX_WIDTH);
+    m_dimXSpinBox->setKeyboardTracking(true);
+    QObject::connect(m_dimXSpinBox, QOverload<int>::of(&QSpinBox::valueChanged),
+                     [=] { this->updateVoxelEdgeLabels(); } );
+    m_dimYSpinBox = WuQFactory::newSpinBoxWithMinMaxStep(1, 100000, 1);
+    m_dimYSpinBox->setToolTip("Number of voxels along Y-axis");
+    m_dimYSpinBox->setFixedWidth(SPIN_BOX_WIDTH);
+    m_dimYSpinBox->setKeyboardTracking(true);
+    QObject::connect(m_dimYSpinBox, QOverload<int>::of(&QSpinBox::valueChanged),
+                     [=] { this->updateVoxelEdgeLabels(); } );
+    m_dimZSpinBox = WuQFactory::newSpinBoxWithMinMaxStep(1, 100000, 1);
+    m_dimZSpinBox->setToolTip("Number of voxels along Z-axis");
+    m_dimZSpinBox->setFixedWidth(SPIN_BOX_WIDTH);
+    m_dimZSpinBox->setKeyboardTracking(true);
+    QObject::connect(m_dimZSpinBox, QOverload<int>::of(&QSpinBox::valueChanged),
+                     [=] { this->updateVoxelEdgeLabels(); } );
     
     const double bigDouble = 100000000.0;
     
-    QLabel* originLabel = new QLabel("Origin:");
-    m_newOriginXSpinBox = WuQFactory::newDoubleSpinBoxWithMinMaxStepDecimals(-bigDouble, bigDouble, 1.0, 1);
-    m_newOriginYSpinBox = WuQFactory::newDoubleSpinBoxWithMinMaxStepDecimals(-bigDouble, bigDouble, 1.0, 1);
-    m_newOriginZSpinBox = WuQFactory::newDoubleSpinBoxWithMinMaxStepDecimals(-bigDouble, bigDouble, 1.0, 1);
-    m_newOriginXSpinBox->setFixedWidth(SPIN_BOX_WIDTH);
-    m_newOriginYSpinBox->setFixedWidth(SPIN_BOX_WIDTH);
-    m_newOriginZSpinBox->setFixedWidth(SPIN_BOX_WIDTH);
+    QLabel* originLabel = new QLabel("Origin (Center of Voxel):");
+    m_originXSpinBox = WuQFactory::newDoubleSpinBoxWithMinMaxStepDecimals(-bigDouble, bigDouble, 1.0, s_spacingDecimals);
+    m_originXSpinBox->setToolTip("X-coordinate at CENTER of first voxel in volume");
+    m_originXSpinBox->setFixedWidth(SPIN_BOX_WIDTH);
+    m_originXSpinBox->setKeyboardTracking(true);
+    QObject::connect(m_originXSpinBox, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+                     [=] { this->updateVoxelEdgeLabels(); } );
+    m_originYSpinBox = WuQFactory::newDoubleSpinBoxWithMinMaxStepDecimals(-bigDouble, bigDouble, 1.0, s_spacingDecimals);
+    m_originYSpinBox->setToolTip("Y-coordinate at CENTER of first voxel in volume");
+    m_originYSpinBox->setFixedWidth(SPIN_BOX_WIDTH);
+    m_originYSpinBox->setKeyboardTracking(true);
+    QObject::connect(m_originYSpinBox, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+                     [=] { this->updateVoxelEdgeLabels(); } );
+    m_originZSpinBox = WuQFactory::newDoubleSpinBoxWithMinMaxStepDecimals(-bigDouble, bigDouble, 1.0, s_spacingDecimals);
+    m_originZSpinBox->setToolTip("Z-coordinate at CENTER of first voxel in volume");
+    m_originZSpinBox->setFixedWidth(SPIN_BOX_WIDTH);
+    m_originZSpinBox->setKeyboardTracking(true);
+    QObject::connect(m_originZSpinBox, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+                     [=] { this->updateVoxelEdgeLabels(); } );
     
     QLabel* spacingLabel = new QLabel("Spacing:");
-    m_newSpacingXSpinBox = WuQFactory::newDoubleSpinBoxWithMinMaxStepDecimals(-bigDouble, bigDouble, 1.0, 1);
-    m_newSpacingYSpinBox = WuQFactory::newDoubleSpinBoxWithMinMaxStepDecimals(-bigDouble, bigDouble, 1.0, 1);
-    m_newSpacingZSpinBox = WuQFactory::newDoubleSpinBoxWithMinMaxStepDecimals(-bigDouble, bigDouble, 1.0, 1);
-    m_newSpacingXSpinBox->setValue(1.0);
-    m_newSpacingYSpinBox->setValue(1.0);
-    m_newSpacingZSpinBox->setValue(1.0);
-    m_newSpacingXSpinBox->setFixedWidth(SPIN_BOX_WIDTH);
-    m_newSpacingYSpinBox->setFixedWidth(SPIN_BOX_WIDTH);
-    m_newSpacingZSpinBox->setFixedWidth(SPIN_BOX_WIDTH);
+    m_spacingXSpinBox = WuQFactory::newDoubleSpinBoxWithMinMaxStepDecimals(-bigDouble, bigDouble, s_spacingSingleStep, s_spacingDecimals);
+    m_spacingXSpinBox->setToolTip("Size of voxel along X-axis");
+    m_spacingXSpinBox->setFixedWidth(SPIN_BOX_WIDTH);
+    m_spacingXSpinBox->setKeyboardTracking(true);
+    QObject::connect(m_spacingXSpinBox, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+                     [=] { this->updateVoxelEdgeLabels(); } );
+    m_spacingYSpinBox = WuQFactory::newDoubleSpinBoxWithMinMaxStepDecimals(-bigDouble, bigDouble, s_spacingSingleStep, s_spacingDecimals);
+    m_spacingYSpinBox->setToolTip("Size of voxel along Y-axis");
+    m_spacingYSpinBox->setFixedWidth(SPIN_BOX_WIDTH);
+    m_spacingYSpinBox->setKeyboardTracking(true);
+    QObject::connect(m_spacingYSpinBox, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+                     [=] { this->updateVoxelEdgeLabels(); } );
+    m_spacingZSpinBox = WuQFactory::newDoubleSpinBoxWithMinMaxStepDecimals(-bigDouble, bigDouble, s_spacingSingleStep, s_spacingDecimals);
+    m_spacingZSpinBox->setToolTip("Size of voxel along Z-axis");
+    m_spacingZSpinBox->setFixedWidth(SPIN_BOX_WIDTH);
+    m_spacingZSpinBox->setKeyboardTracking(true);
+    QObject::connect(m_spacingZSpinBox, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+                     [=] { this->updateVoxelEdgeLabels(); } );
+    m_spacingXSpinBox->setValue(1.0);
+    m_spacingYSpinBox->setValue(1.0);
+    m_spacingZSpinBox->setValue(1.0);
     
     QLabel* xLabel = new QLabel("X");
     QLabel* yLabel = new QLabel("Y");
     QLabel* zLabel = new QLabel("Z");
     
-    QLabel* loadFromLabel = new QLabel("Load From");
-    m_paramFromFilePushButton = new QPushButton("File...");
-    QObject::connect(m_paramFromFilePushButton, SIGNAL(clicked()),
-                     this, SLOT(loadVolumeParametersFromFilePushButtonClicked()));
+    QLabel* niftiLabel(new QLabel("These values follow the <a href=\"https://nifti.nimh.nih.gov\">NIFTI volume file specification</a>"));
+    QObject::connect(niftiLabel, &QLabel::linkActivated,
+                     this, &VolumeFileCreateDialog::linkActivated);
+    QLabel* firstEdgeLabel(new QLabel("First Voxel Edge: "));
+    QLabel* lastEdgeLabel(new QLabel("Last Voxel Edge: "));
+    m_xFirstVoxelEdgeLabel = new QLabel();
+    m_xLastVoxelEdgeLabel  = new QLabel();
+    m_yFirstVoxelEdgeLabel = new QLabel();
+    m_yLastVoxelEdgeLabel  = new QLabel();
+    m_zFirstVoxelEdgeLabel = new QLabel();
+    m_zLastVoxelEdgeLabel  = new QLabel();
+
+    m_paramFromFilePushButton = new QPushButton("Match Volume...");
+    m_paramFromFilePushButton->setToolTip("Set the voxel parameters to match a volume loaded in wb_view");
+    QObject::connect(m_paramFromFilePushButton, &QPushButton::clicked,
+                     this, &VolumeFileCreateDialog::loadVolumeParametersFromFilePushButtonClicked);
     
+    m_resamplePushButton = new QPushButton("Resample...");
+    m_resamplePushButton->setToolTip("Enter a different spacing that automatically updates dimensions and origin");
+    QObject::connect(m_resamplePushButton, &QPushButton::clicked,
+                     this, &VolumeFileCreateDialog::resamplePushButtonClicked);
+
     const int COL_LABEL = 0;
     const int COL_X = COL_LABEL + 1;
     const int COL_Y = COL_X + 1;
@@ -249,31 +347,49 @@ VolumeFileCreateDialog::createNewVolumeFileWidget()
     
     QGroupBox* paramGroupBox = new QGroupBox("Voxels");
     QGridLayout* paramsLayout = new QGridLayout(paramGroupBox);
+    paramsLayout->setVerticalSpacing(5);
     
     int paramsRow = 0;
     paramsLayout->addWidget(xLabel, paramsRow, COL_X, Qt::AlignHCenter);
     paramsLayout->addWidget(yLabel, paramsRow, COL_Y, Qt::AlignHCenter);
     paramsLayout->addWidget(zLabel, paramsRow, COL_Z, Qt::AlignHCenter);
-    paramsLayout->addWidget(loadFromLabel, paramsRow, COL_LOAD, Qt::AlignHCenter);
     paramsRow++;
     
     paramsLayout->addWidget(dimensionsLabel, paramsRow, COL_LABEL);
-    paramsLayout->addWidget(m_newDimXSpinBox, paramsRow, COL_X);
-    paramsLayout->addWidget(m_newDimYSpinBox, paramsRow, COL_Y);
-    paramsLayout->addWidget(m_newDimZSpinBox, paramsRow, COL_Z);
+    paramsLayout->addWidget(m_dimXSpinBox, paramsRow, COL_X);
+    paramsLayout->addWidget(m_dimYSpinBox, paramsRow, COL_Y);
+    paramsLayout->addWidget(m_dimZSpinBox, paramsRow, COL_Z);
     paramsLayout->addWidget(m_paramFromFilePushButton, paramsRow, COL_LOAD);
     paramsRow++;
     
     paramsLayout->addWidget(originLabel, paramsRow, COL_LABEL);
-    paramsLayout->addWidget(m_newOriginXSpinBox, paramsRow, COL_X);
-    paramsLayout->addWidget(m_newOriginYSpinBox, paramsRow, COL_Y);
-    paramsLayout->addWidget(m_newOriginZSpinBox, paramsRow, COL_Z);
+    paramsLayout->addWidget(m_originXSpinBox, paramsRow, COL_X);
+    paramsLayout->addWidget(m_originYSpinBox, paramsRow, COL_Y);
+    paramsLayout->addWidget(m_originZSpinBox, paramsRow, COL_Z);
     paramsRow++;
     
     paramsLayout->addWidget(spacingLabel, paramsRow, COL_LABEL);
-    paramsLayout->addWidget(m_newSpacingXSpinBox, paramsRow, COL_X);
-    paramsLayout->addWidget(m_newSpacingYSpinBox, paramsRow, COL_Y);
-    paramsLayout->addWidget(m_newSpacingZSpinBox, paramsRow, COL_Z);
+    paramsLayout->addWidget(m_spacingXSpinBox, paramsRow, COL_X);
+    paramsLayout->addWidget(m_spacingYSpinBox, paramsRow, COL_Y);
+    paramsLayout->addWidget(m_spacingZSpinBox, paramsRow, COL_Z);
+    paramsLayout->addWidget(m_resamplePushButton,  paramsRow, COL_LOAD);
+    paramsRow++;
+    
+    paramsLayout->addWidget(firstEdgeLabel, paramsRow, COL_LABEL);
+    paramsLayout->addWidget(m_xFirstVoxelEdgeLabel, paramsRow, COL_X, Qt::AlignRight);
+    paramsLayout->addWidget(m_yFirstVoxelEdgeLabel, paramsRow, COL_Y, Qt::AlignRight);
+    paramsLayout->addWidget(m_zFirstVoxelEdgeLabel, paramsRow, COL_Z, Qt::AlignRight);
+    paramsRow++;
+    
+    paramsLayout->addWidget(lastEdgeLabel, paramsRow, COL_LABEL);
+    paramsLayout->addWidget(m_xLastVoxelEdgeLabel, paramsRow, COL_X, Qt::AlignRight);
+    paramsLayout->addWidget(m_yLastVoxelEdgeLabel, paramsRow, COL_Y, Qt::AlignRight);
+    paramsLayout->addWidget(m_zLastVoxelEdgeLabel, paramsRow, COL_Z, Qt::AlignRight);
+    paramsRow++;
+    
+    paramsLayout->addWidget(new QLabel(" "), paramsRow, COL_LABEL);
+    paramsRow++;
+    paramsLayout->addWidget(niftiLabel, paramsRow, COL_LABEL, 1, 4, Qt::AlignLeft);
     paramsRow++;
     
     QWidget* widget = new QWidget();
@@ -282,9 +398,9 @@ VolumeFileCreateDialog::createNewVolumeFileWidget()
     layout->addWidget(paramGroupBox);
     
     if (s_previousVolumeSettingsValid) {
-        m_newDimXSpinBox->setValue(s_previousVolumeSettings.m_dimensions[0]);
-        m_newDimYSpinBox->setValue(s_previousVolumeSettings.m_dimensions[1]);
-        m_newDimZSpinBox->setValue(s_previousVolumeSettings.m_dimensions[2]);
+        m_dimXSpinBox->setValue(s_previousVolumeSettings.m_dimensions[0]);
+        m_dimYSpinBox->setValue(s_previousVolumeSettings.m_dimensions[1]);
+        m_dimZSpinBox->setValue(s_previousVolumeSettings.m_dimensions[2]);
         m_newFileNumberOfMapsSpinBox->setValue(s_previousVolumeSettings.m_dimensions[3]);
 
         const int typeIndex = m_newFileTypeComboBox->findData(static_cast<int>(s_previousVolumeSettings.m_volumeType));
@@ -293,13 +409,13 @@ VolumeFileCreateDialog::createNewVolumeFileWidget()
         }
         
         std::vector<std::vector<float> > m = s_previousVolumeSettings.m_indexToSpace;
-        m_newSpacingXSpinBox->setValue(m[0][0]);
-        m_newSpacingYSpinBox->setValue(m[1][1]);
-        m_newSpacingZSpinBox->setValue(m[2][2]);
+        m_spacingXSpinBox->setValue(m[0][0]);
+        m_spacingYSpinBox->setValue(m[1][1]);
+        m_spacingZSpinBox->setValue(m[2][2]);
 
-        m_newOriginXSpinBox->setValue(m[0][3]);
-        m_newOriginYSpinBox->setValue(m[1][3]);
-        m_newOriginZSpinBox->setValue(m[2][3]);
+        m_originXSpinBox->setValue(m[0][3]);
+        m_originYSpinBox->setValue(m[1][3]);
+        m_originZSpinBox->setValue(m[2][3]);
     }
     
     m_newFileNameLineEdit->selectAll();
@@ -406,21 +522,25 @@ VolumeFileCreateDialog::okButtonClicked()
 
     const int typeIndex = m_newFileTypeComboBox->currentIndex();
     const SubvolumeAttributes::VolumeType volumeType = static_cast<SubvolumeAttributes::VolumeType>(m_newFileTypeComboBox->itemData(typeIndex).toInt());
+    if (volumeType == SubvolumeAttributes::UNKNOWN) {
+        WuQMessageBox::errorOk(this, "Select a valid Volume Type.");
+        return;
+    }
     
     const int32_t numMaps = m_newFileNumberOfMapsSpinBox->value();
     std::vector<int64_t> dimensions;
-    dimensions.push_back(m_newDimXSpinBox->value());
-    dimensions.push_back(m_newDimYSpinBox->value());
-    dimensions.push_back(m_newDimZSpinBox->value());
+    dimensions.push_back(m_dimXSpinBox->value());
+    dimensions.push_back(m_dimYSpinBox->value());
+    dimensions.push_back(m_dimZSpinBox->value());
     dimensions.push_back(numMaps);
     
-    const float xOrigin = m_newOriginXSpinBox->value();
-    const float yOrigin = m_newOriginYSpinBox->value();
-    const float zOrigin = m_newOriginZSpinBox->value();
+    const float xOrigin = m_originXSpinBox->value();
+    const float yOrigin = m_originYSpinBox->value();
+    const float zOrigin = m_originZSpinBox->value();
     
-    const float xSpacing = m_newSpacingXSpinBox->value();
-    const float ySpacing = m_newSpacingYSpinBox->value();
-    const float zSpacing = m_newSpacingZSpinBox->value();
+    const float xSpacing = m_spacingXSpinBox->value();
+    const float ySpacing = m_spacingYSpinBox->value();
+    const float zSpacing = m_spacingZSpinBox->value();
     if ((xSpacing == 0.0)
         || (ySpacing == 0.0)
         || (zSpacing == 0.0)) {
@@ -472,6 +592,9 @@ VolumeFileCreateDialog::okButtonClicked()
                 defaultValue = m_volumeFile->getMapLabelTable(0)->getUnassignedLabelKey();
                 break;
             case SubvolumeAttributes::RGB:
+                CaretAssert(0);
+                break;
+            case SubvolumeAttributes::RGB_WORKBENCH:
                 CaretAssert(0);
                 break;
             case SubvolumeAttributes::SEGMENTATION:
@@ -614,18 +737,22 @@ VolumeFileCreateDialog::loadVolumeParametersFromFilePushButtonClicked()
                     m_newFileNumberOfMapsSpinBox->setValue(numberOfMaps);
                 }
                 
-                m_newDimXSpinBox->setValue(dimensions[0]);
-                m_newDimYSpinBox->setValue(dimensions[1]);
-                m_newDimZSpinBox->setValue(dimensions[2]);
+                m_blockVoxelEdgeLabelUpdateFlag = true;
+                
+                m_dimXSpinBox->setValue(dimensions[0]);
+                m_dimYSpinBox->setValue(dimensions[1]);
+                m_dimZSpinBox->setValue(dimensions[2]);
                 
                 
-                m_newOriginXSpinBox->setValue(origin[0]);
-                m_newOriginYSpinBox->setValue(origin[1]);
-                m_newOriginZSpinBox->setValue(origin[2]);
+                m_originXSpinBox->setValue(origin[0]);
+                m_originYSpinBox->setValue(origin[1]);
+                m_originZSpinBox->setValue(origin[2]);
                 
-                m_newSpacingXSpinBox->setValue(spacing[0]);
-                m_newSpacingYSpinBox->setValue(spacing[1]);
-                m_newSpacingZSpinBox->setValue(spacing[2]);
+                m_spacingXSpinBox->setValue(spacing[0]);
+                m_spacingYSpinBox->setValue(spacing[1]);
+                m_spacingZSpinBox->setValue(spacing[2]);
+                
+                m_blockVoxelEdgeLabelUpdateFlag = false;
                 
                 break;
             }
@@ -633,4 +760,95 @@ VolumeFileCreateDialog::loadVolumeParametersFromFilePushButtonClicked()
     }
 }
 
+/**
+ * Called when a hyperlink is clicked
+ * @param link
+ *    Link that was clicked
+ */
+void
+VolumeFileCreateDialog::linkActivated(const QString& link)
+{
+    QDesktopServices::openUrl(link);
+}
+
+/**
+ * Update the voxel edges as values are changed
+ */
+void
+VolumeFileCreateDialog::updateVoxelEdgeLabels()
+{
+    if (m_blockVoxelEdgeLabelUpdateFlag) {
+        return;
+    }
+    
+    const Vector3D dimensions(m_dimXSpinBox->value(),
+                              m_dimYSpinBox->value(),
+                              m_dimZSpinBox->value());
+    const Vector3D spacing(m_spacingXSpinBox->value(),
+                           m_spacingYSpinBox->value(),
+                           m_spacingZSpinBox->value());
+    const Vector3D origin(m_originXSpinBox->value(),
+                          m_originYSpinBox->value(),
+                          m_originZSpinBox->value());
+
+    Vector3D firstVoxelEdge;
+    Vector3D lastVoxelEdge;
+    
+    VolumeFile::dimensionOriginSpacingXyzToVoxelEdges(dimensions,
+                                                      origin,
+                                                      spacing,
+                                                      firstVoxelEdge,
+                                                      lastVoxelEdge);
+    const int32_t decimals(3);
+    m_xFirstVoxelEdgeLabel->setText(AString::number(firstVoxelEdge[0], 'f', decimals));
+    m_yFirstVoxelEdgeLabel->setText(AString::number(firstVoxelEdge[1], 'f', decimals));
+    m_zFirstVoxelEdgeLabel->setText(AString::number(firstVoxelEdge[2], 'f', decimals));
+    m_xLastVoxelEdgeLabel->setText(AString::number(lastVoxelEdge[0], 'f', decimals));
+    m_yLastVoxelEdgeLabel->setText(AString::number(lastVoxelEdge[1], 'f', decimals));
+    m_zLastVoxelEdgeLabel->setText(AString::number(lastVoxelEdge[2], 'f', decimals));
+}
+
+/**
+ * Called when the resample push button is clicked
+ */
+void
+VolumeFileCreateDialog::resamplePushButtonClicked()
+{
+    const Vector3D dimensions(m_dimXSpinBox->value(),
+                              m_dimYSpinBox->value(),
+                              m_dimZSpinBox->value());
+    const Vector3D spacing(m_spacingXSpinBox->value(),
+                           m_spacingYSpinBox->value(),
+                           m_spacingZSpinBox->value());
+    const Vector3D origin(m_originXSpinBox->value(),
+                          m_originYSpinBox->value(),
+                          m_originZSpinBox->value());
+
+    VolumeFileResampleDialog dialog(dimensions,
+                                    origin,
+                                    spacing,
+                                    s_spacingSingleStep,
+                                    s_spacingDecimals);
+    if (dialog.exec() == VolumeFileResampleDialog::Accepted) {
+        m_blockVoxelEdgeLabelUpdateFlag = true;
+        
+        const Vector3D dim(dialog.getDimensions());
+        m_dimXSpinBox->setValue(dim[0]);
+        m_dimYSpinBox->setValue(dim[1]);
+        m_dimZSpinBox->setValue(dim[2]);
+        
+        const Vector3D origin(dialog.getOrigin());
+        m_originXSpinBox->setValue(origin[0]);
+        m_originYSpinBox->setValue(origin[1]);
+        m_originZSpinBox->setValue(origin[2]);
+        
+        const Vector3D spacing(dialog.getSpacing());
+        m_spacingXSpinBox->setValue(spacing[0]);
+        m_spacingYSpinBox->setValue(spacing[1]);
+        m_spacingZSpinBox->setValue(spacing[2]);
+        
+        m_blockVoxelEdgeLabelUpdateFlag = true;
+        updateVoxelEdgeLabels();
+    }
+}
 

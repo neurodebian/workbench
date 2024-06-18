@@ -18,25 +18,28 @@
  */
 /*LICENSE_END*/
 
+#include <utility>
+
+#include <QActionGroup>
 #include <QApplication>
 #include <QCheckBox>
 #include <QCloseEvent>
 #include <QDesktopServices>
 #include <QDoubleSpinBox>
 #include <QGroupBox>
+#include <QGuiApplication>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListIterator>
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
+#include <QScreen>
 #include <QTabBar>
+#include <QTextEdit>
 #include <QToolButton>
 #include <QUrl>
 #include <QUuid>
-#ifdef HAVE_WEBKIT
-#include <QWebEngineView>
-#endif
 
 #define __BRAIN_BROWSER_WINDOW_DECLARE__
 #include "BrainBrowserWindow.h"
@@ -56,10 +59,12 @@
 #include "BrowserTabContent.h"
 #include "BrowserWindowContent.h"
 #include "CaretAssert.h"
+#include "CaretDataFileSelectionComboBox.h"
 #include "CaretFileDialog.h"
 #include "CaretFileRemoteDialog.h"
 #include "CaretPreferences.h"
 #include "CursorDisplayScoped.h"
+#include "CziImageFile.h"
 #include "DataFileException.h"
 #include "DeveloperFlagsEnum.h"
 #include "DisplayPropertiesImages.h"
@@ -71,6 +76,7 @@
 #include "EventBrowserWindowCreateTabs.h"
 #include "EventBrowserWindowContent.h"
 #include "EventBrowserWindowGetTabs.h"
+#include "EventBrowserWindowPixelSizeInfoEvent.h"
 #include "EventBrowserTabIndicesGetAllViewed.h"
 #include "EventCaretMappableDataFilesAndMapsInDisplayedOverlays.h"
 #include "EventDataFileRead.h"
@@ -78,8 +84,8 @@
 #include "EventModelGetAll.h"
 #include "EventGetOrSetUserInputModeProcessor.h"
 #include "EventGraphicsTimingOneWindow.h"
-#include "EventGraphicsUpdateAllWindows.h"
-#include "EventGraphicsUpdateOneWindow.h"
+#include "EventGraphicsPaintSoonAllWindows.h"
+#include "EventGraphicsPaintSoonOneWindow.h"
 #include "EventSpecFileReadDataFiles.h"
 #include "EventSurfaceColoringInvalidate.h"
 #include "EventTileTabsGridConfigurationModification.h"
@@ -95,13 +101,14 @@
 #include "PlainTextStringBuilder.h"
 #include "ProgressReportingDialog.h"
 #include "RecentFilesDialog.h"
+#include "RecentSceneMenu.h"
+#include "SamplesMetaDataManager.h"
 #include "SceneAttributes.h"
 #include "SceneClass.h"
 #include "SceneClassArray.h"
 #include "SceneClassAssistant.h"
 #include "SceneEnumeratedType.h"
 #include "SceneFile.h"
-#include "SceneFileXmlStreamFormatTester.h"
 #include "SceneWindowGeometry.h"
 #include "SessionManager.h"
 #include "SpacerTabContent.h"
@@ -114,11 +121,13 @@
 #include "TileTabsLayoutGridConfiguration.h"
 #include "TileTabsLayoutManualConfiguration.h"
 #include "TileTabsGridConfigurationModifier.h"
+#include "WindowTabAspectRatios.h"
 #include "WuQDataEntryDialog.h"
 #include "WuQDoubleSpinBox.h"
 #include "WuQMacroManager.h"
 #include "WuQMacroMenu.h"
 #include "WuQMessageBox.h"
+#include "WuQMessageBoxTwo.h"
 #include "WuQTabBar.h"
 #include "WuQtUtilities.h"
 #include "WuQTextEditorDialog.h"
@@ -166,6 +175,10 @@ m_browserWindowIndex(browserWindowIndex)
     setWindowTitle(ApplicationInformation().getName()
                          + " "
                          + AString::number(m_browserWindowIndex + 1));
+#if QT_VERSION >= 0x060000
+    setWindowTitle(windowTitle()
+                   + " Qt6");
+#endif
     setObjectName(windowTitle());
     
     BrainOpenGLWidget* shareOpenGLContextWidget = NULL;
@@ -240,6 +253,7 @@ m_browserWindowIndex(browserWindowIndex)
                                               m_overlayToolBoxAction,
                                               m_featuresToolBoxAction,
                                               m_toolBarLockWindowAndAllTabAspectRatioButton,
+                                              m_toolBarUndoUnlockWindowAndAllTabAspectRatioButton,
                                               m_objectNamePrefix,
                                               this);
     m_showToolBarAction = m_toolbar->toolBarToolButtonAction;
@@ -262,18 +276,20 @@ m_browserWindowIndex(browserWindowIndex)
     
     m_sceneAssistant = new SceneClassAssistant();
     
-    m_defaultWindowComponentStatus.isFeaturesToolBoxDisplayed = m_featuresToolBoxAction->isChecked();
-    m_defaultWindowComponentStatus.isOverlayToolBoxDisplayed  = m_overlayToolBoxAction->isChecked();
-    m_defaultWindowComponentStatus.isToolBarDisplayed = m_showToolBarAction->isChecked();
+    m_defaultWindowComponentStatus.isFeaturesToolBoxDisplayed = false;
+    m_defaultWindowComponentStatus.isOverlayToolBoxDisplayed  = true;
+    m_defaultWindowComponentStatus.isToolBarDisplayed         = true;
     
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_BROWSER_WINDOW_MENUS_UPDATE);
+    EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_BROWSER_WINDOW_PIXEL_SIZE_INFO);
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_BROWSER_WINDOW_GET_TABS);
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_BROWSER_TAB_INDICES_GET_ALL_VIEWED);
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_CARET_MAPPABLE_DATA_FILES_AND_MAPS_IN_DISPLAYED_OVERLAYS);
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_GET_VIEWPORT_SIZE);
-    EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_GRAPHICS_UPDATE_ALL_WINDOWS);
-    EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_GRAPHICS_UPDATE_ONE_WINDOW);
+    EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_GRAPHICS_PAINT_SOON_ALL_WINDOWS);
+    EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_GRAPHICS_PAINT_SOON_ONE_WINDOW);
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_TILE_TABS_MODIFICATION);
+    EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_USER_INTERFACE_UPDATE);
 
     if (m_overlayHorizontalToolBox == m_overlayActiveToolBox) {
         /*
@@ -513,7 +529,7 @@ BrainBrowserWindow::receiveEvent(Event* event)
                             if (btc != NULL) {
                                 const Model* model = btc->getModelForDisplay();
                                 if (model->getModelType() == ModelTypeEnum::MODEL_TYPE_VOLUME_SLICES) {
-                                    if (btc->getSliceDrawingType() == VolumeSliceDrawingTypeEnum::VOLUME_SLICE_DRAW_MONTAGE) {
+                                    if (btc->getVolumeSliceDrawingType() == VolumeSliceDrawingTypeEnum::VOLUME_SLICE_DRAW_MONTAGE) {
                                         vpContent->getTabViewportBeforeApplyingMargins(viewport);
                                         viewportValid = true;
                                         break;
@@ -597,8 +613,8 @@ BrainBrowserWindow::receiveEvent(Event* event)
             modifyTileTabsConfiguration(modEvent);
         }
     }
-    else if ((event->getEventType() == EventTypeEnum::EVENT_GRAPHICS_UPDATE_ONE_WINDOW)
-             || (event->getEventType() == EventTypeEnum::EVENT_GRAPHICS_UPDATE_ALL_WINDOWS)) {
+    else if ((event->getEventType() == EventTypeEnum::EVENT_GRAPHICS_PAINT_SOON_ONE_WINDOW)
+             || (event->getEventType() == EventTypeEnum::EVENT_GRAPHICS_PAINT_SOON_ALL_WINDOWS)) {
         /*
          * When in annotations mode, items on the Edit Menu are enabled/disabled
          * based upon the selected annotations.  While we can update the menu items
@@ -611,6 +627,38 @@ BrainBrowserWindow::receiveEvent(Event* event)
          * shortcut keys will function.
          */
         processEditMenuAboutToShow();
+    }
+    else if (event->getEventType() == EventTypeEnum::EVENT_BROWSER_WINDOW_PIXEL_SIZE_INFO) {
+        EventBrowserWindowPixelSizeInfoEvent* pixelEvent(dynamic_cast<EventBrowserWindowPixelSizeInfoEvent*>(event));
+        CaretAssert(pixelEvent);
+        const QScreen* screen(NULL);
+#if QT_VERSION >= QT_VERSION_CHECK(6, 2, 0)
+        switch (pixelEvent->getMode()) {
+            case EventBrowserWindowPixelSizeInfoEvent::Mode::WIDGET_POINTER:
+                if (isAncestorOf(pixelEvent->getWidget())) {
+                    screen = pixelEvent->getWidget()->screen();
+                }
+                break;
+            case EventBrowserWindowPixelSizeInfoEvent::Mode::WINDOW_INDEX:
+                screen = m_openGLWidget->screen();
+                break;
+        }
+#else
+        QList<QScreen*> allScreens(QGuiApplication::screens());
+        if ( ! allScreens.empty()) {
+            screen = allScreens.at(0);
+        }
+#endif
+        if (screen != NULL) {
+            if (pixelEvent->getWindowIndex() == this->getBrowserWindowIndex()) {
+                pixelEvent->setPhysicalDotsPerInch(screen->physicalDotsPerInch());
+                pixelEvent->setLogicalDotsPerInch(screen->logicalDotsPerInch());
+                pixelEvent->setEventProcessed();
+            }
+        }
+    }
+    else if (event->getEventType() == EventTypeEnum::EVENT_USER_INTERFACE_UPDATE) {
+        updateActionsForLockingAspectRatios();
     }
 }
 
@@ -795,6 +843,64 @@ BrainBrowserWindow::getBrowserWindowIndex() const
 }
 
 /**
+ * Override changeEvent from QWidget
+ * @param event
+ */
+void
+BrainBrowserWindow::changeEvent(QEvent *event)
+{
+    if (event->type() == QEvent::WindowStateChange) {
+        QWindowStateChangeEvent* changeEvent(dynamic_cast<QWindowStateChangeEvent*>(event));
+
+        const Qt::WindowStates oldWindowState((changeEvent != NULL)
+                                              ? changeEvent->oldState()
+                                              : Qt::WindowStates());
+
+        const Qt::WindowStates newWindowState(QWidget::windowState());
+
+        if (newWindowState != oldWindowState) {
+            if (oldWindowState.testFlag(Qt::WindowState::WindowMaximized)) {
+            }
+            if (oldWindowState.testFlag(Qt::WindowState::WindowMinimized)) {
+            }
+            if (oldWindowState.testFlag(Qt::WindowState::WindowFullScreen)) {
+                /*
+                 * Exiting Full Screen - Restore toolbar and toolbox info
+                 */
+                restoreWindowComponentStatus(m_normalWindowComponentStatus);
+            }
+            if (oldWindowState.testFlag(Qt::WindowState::WindowNoState)) {
+            }
+
+            if (newWindowState.testFlag(Qt::WindowState::WindowMaximized)) {
+            }
+            if (newWindowState.testFlag(Qt::WindowState::WindowMinimized)) {
+            }
+            if (newWindowState.testFlag(Qt::WindowState::WindowFullScreen)) {
+                /*
+                 * Entering Full Screen, save toolbar and toolbox info
+                 */
+                if ( ! m_restoringSceneNoSaveWindowCompontentStatusFlag) {
+                    saveWindowComponentStatus(m_normalWindowComponentStatus);
+                }
+
+                /*
+                 * Hide Toolboxes in Full Screen
+                 */
+                processHideFeaturesToolBox();
+                processHideOverlayToolBox();
+            }
+            if (newWindowState.testFlag(Qt::WindowState::WindowNoState)) {
+            }
+        }
+    }
+    
+    m_restoringSceneNoSaveWindowCompontentStatusFlag = false;
+    
+    QMainWindow::changeEvent(event);
+}
+
+/**
  * Called when the window is requested to close.
  *
  * @param event
@@ -806,6 +912,18 @@ BrainBrowserWindow::closeEvent(QCloseEvent* event)
 {
     if (m_closeWithoutConfirmationFlag) {
         m_closeWithoutConfirmationFlag = false;
+        event->accept();
+        return;
+    }
+    
+    /*
+     * If the application is terminating, we can ignore
+     * this close event.  If the user selects Exit from
+     * the file menu, it displays the exit dialog so we
+     * do not need to call GuiManager::allowBrainBrowserWindowToClose()
+     * below.  This prevents two exit dialogs from being displayed.
+     */
+    if (GuiManager::get()->isApplicationTerminating()) {
         event->accept();
         return;
     }
@@ -856,6 +974,10 @@ BrainBrowserWindow::keyPressEvent(QKeyEvent* event)
         if (event->modifiers() == Qt::NoModifier) {
             if (isFullScreen()) {
                 processViewFullScreenSelected();
+                keyEventWasProcessed = true;
+            }
+            else if (isMaximized()) {
+                processViewMaximizedSelected();
                 keyEventWasProcessed = true;
             }
         }
@@ -943,7 +1065,7 @@ BrainBrowserWindow::createActionsUsedByToolBar()
     m_windowMenuLockWindowAspectRatioAction->setCheckable(true);
     m_windowMenuLockWindowAspectRatioAction->setChecked(m_browserWindowContent->isWindowAspectLocked());
     m_windowMenuLockWindowAspectRatioAction->setText("Lock Window Aspect Ratio");
-    m_windowMenuLockWindowAspectRatioAction->setShortcut(Qt::SHIFT + Qt::CTRL+Qt::Key_K);
+    m_windowMenuLockWindowAspectRatioAction->setShortcut(QKeySequence(Qt::SHIFT | Qt::CTRL | Qt::Key_K));
     QObject::connect(m_windowMenuLockWindowAspectRatioAction, &QAction::triggered,
                      this, &BrainBrowserWindow::processWindowMenuLockWindowAspectRatioTriggered);
 
@@ -951,7 +1073,7 @@ BrainBrowserWindow::createActionsUsedByToolBar()
     m_windowMenuLockAllTabAspectRatioAction->setCheckable(true);
     m_windowMenuLockAllTabAspectRatioAction->setChecked(false);
     m_windowMenuLockAllTabAspectRatioAction->setText("Lock All Tab Aspect Ratios");
-    m_windowMenuLockAllTabAspectRatioAction->setShortcut(Qt::CTRL+Qt::Key_K);
+    m_windowMenuLockAllTabAspectRatioAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_K));
     QObject::connect(m_windowMenuLockAllTabAspectRatioAction, &QAction::triggered,
                      this, &BrainBrowserWindow::processWindowMenuLockAllTabAspectRatioTriggered);
     
@@ -988,6 +1110,31 @@ BrainBrowserWindow::createActionsUsedByToolBar()
     QObject::connect(m_toolBarLockWindowAndAllTabAspectRatioButton, &QToolButton::customContextMenuRequested,
                      this, &BrainBrowserWindow::processToolBarLockWindowAndAllTabAspectMenu);
     m_toolBarLockWindowAndAllTabAspectRatioButton->setContextMenuPolicy(Qt::CustomContextMenu);
+    
+    /*
+     * Undo unlocking of aspect ratio
+     */
+    QIcon undoIcon;
+    const bool undoIconValid(WuQtUtilities::loadIcon(":/ToolBar/undo.png",
+                                                     undoIcon));
+    m_toolBarUndoUnlockWindowAndAllTabAspectRatioAction = new QAction();
+    if (undoIconValid) {
+        m_toolBarUndoUnlockWindowAndAllTabAspectRatioAction->setIcon(undoIcon);
+    }
+    else {
+        m_toolBarUndoUnlockWindowAndAllTabAspectRatioAction->setText("U");
+    }
+    m_toolBarUndoUnlockWindowAndAllTabAspectRatioAction->setToolTip("Relock to aspect ratios before unlocking");
+    m_toolBarUndoUnlockWindowAndAllTabAspectRatioAction->setObjectName(m_objectNamePrefix
+                                                                 + ":ToolBar:UndoUnlockAspectRatio");
+    QObject::connect(m_toolBarUndoUnlockWindowAndAllTabAspectRatioAction, &QAction::triggered,
+                     this, &BrainBrowserWindow::processToolBarUndoUnlockWindowAndAllTabAspectTriggered);
+    WuQMacroManager::instance()->addMacroSupportToObject(m_toolBarUndoUnlockWindowAndAllTabAspectRatioAction,
+                                                         ("Undo unlock aspect ratio in window " + QString::number(m_browserWindowIndex + 1)));
+
+    m_toolBarUndoUnlockWindowAndAllTabAspectRatioButton = new QToolButton();
+    m_toolBarUndoUnlockWindowAndAllTabAspectRatioButton->setDefaultAction(m_toolBarUndoUnlockWindowAndAllTabAspectRatioAction);
+    WuQtUtilities::setToolButtonStyleForQt5Mac(m_toolBarUndoUnlockWindowAndAllTabAspectRatioButton);
 }
 
 /**
@@ -1115,6 +1262,52 @@ BrainBrowserWindow::processToolBarLockWindowAndAllTabAspectTriggered(bool checke
 }
 
 /**
+ * Called when the toolbar's undo unlock window and all tab aspect is triggered
+ */
+void
+BrainBrowserWindow::processToolBarUndoUnlockWindowAndAllTabAspectTriggered()
+{
+    const WindowTabAspectRatios windowTabAspectRatios(m_browserWindowContent->getWindowTabAspectRatios());
+    if (windowTabAspectRatios.isValid()) {
+        if (windowTabAspectRatios.getWindowIndex() == m_browserWindowIndex) {
+            std::vector<BrowserTabContent*> allTabContent;
+            m_toolbar->getAllTabContent(allTabContent);
+
+            std::set<int32_t> currentTabs;
+            for (const auto tab : allTabContent) {
+                currentTabs.insert(tab->getTabNumber());
+            }
+            
+            AString tabsChangedMessage;
+            if ( ! windowTabAspectRatios.testMatchingTabs(currentTabs,
+                                                          tabsChangedMessage)) {
+                if ( ! WuQMessageBox::warningOkCancel(m_toolBarUndoUnlockWindowAndAllTabAspectRatioButton,
+                                                      "Tabs have changed since they were locked",
+                                                      tabsChangedMessage)) {
+                    return;
+                }
+            }
+            
+            m_browserWindowContent->setWindowAspectLocked(true);
+            m_browserWindowContent->setWindowAspectLockedRatio(windowTabAspectRatios.getWindowAspectRatio());
+            
+            for (auto tab : allTabContent) {
+                const float aspectRatio(windowTabAspectRatios.getTabAspectRatio(tab->getTabNumber()));
+                if (aspectRatio > 0.0) {
+                    tab->setAspectRatio(aspectRatio);
+                    tab->setAspectRatioLocked(true);
+                }
+            }
+            
+            m_browserWindowContent->setWindowTabAspectRatios(WindowTabAspectRatios());
+            m_browserWindowContent->setAllTabsInWindowAspectRatioLocked(true);
+            EventManager::get()->sendEvent(EventUserInterfaceUpdate().getPointer());
+            EventManager::get()->sendEvent(EventGraphicsPaintSoonAllWindows().getPointer());
+        }
+    }
+}
+
+/**
  * Called when the toolbar's lock window and all tab aspect is triggered
  *
  * @param checked
@@ -1123,6 +1316,24 @@ BrainBrowserWindow::processToolBarLockWindowAndAllTabAspectTriggered(bool checke
 void
 BrainBrowserWindow::processToolBarLockWindowAndAllTabAspectsRatios(bool checked)
 {
+    /*
+     * If turning off
+     */
+    if ( ! checked) {
+        CaretAssert(m_browserWindowContent);
+        WindowTabAspectRatios windowTabAspectRatios;
+        windowTabAspectRatios.setWindowAspectRatio(m_browserWindowIndex,
+                                                   m_browserWindowContent->getWindowAspectLockedRatio());
+        
+        std::vector<BrowserTabContent*> allTabs;
+        getAllTabContent(allTabs);
+        for (const BrowserTabContent* btc : allTabs) {
+            if (btc->isAspectRatioLocked()) {
+                windowTabAspectRatios.addTabAspectRatio(btc->getTabNumber(), btc->getAspectRatio());
+            }
+        }
+        m_browserWindowContent->setWindowTabAspectRatios(windowTabAspectRatios);
+    }
     lockWindowAspectRatio(checked);
     lockAllTabAspectRatios(checked);
     updateActionsForLockingAspectRatios();
@@ -1262,7 +1473,7 @@ BrainBrowserWindow::aspectRatioDialogUpdateForTab(const double aspectRatio)
     }
     
     updateActionsForLockingAspectRatios();
-    EventManager::get()->sendEvent(EventGraphicsUpdateOneWindow(getBrowserWindowIndex()).getPointer());
+    EventManager::get()->sendEvent(EventGraphicsPaintSoonOneWindow(getBrowserWindowIndex()).getPointer());
 }
 
 /**
@@ -1280,7 +1491,7 @@ BrainBrowserWindow::aspectRatioDialogUpdateForWindow(const double aspectRatio)
     }
     
     updateActionsForLockingAspectRatios();
-    EventManager::get()->sendEvent(EventGraphicsUpdateOneWindow(getBrowserWindowIndex()).getPointer());
+    EventManager::get()->sendEvent(EventGraphicsPaintSoonOneWindow(getBrowserWindowIndex()).getPointer());
 }
 
 /**
@@ -1300,7 +1511,10 @@ BrainBrowserWindow::updateActionsForLockingAspectRatios()
     m_toolBarLockWindowAndAllTabAspectRatioAction->setChecked(m_browserWindowContent->isWindowAspectLocked()
                                                               && m_browserWindowContent->isAllTabsInWindowAspectRatioLocked());
     
-    EventManager::get()->sendEvent(EventGraphicsUpdateOneWindow(getBrowserWindowIndex()).getPointer());
+    const bool undoValid(m_browserWindowContent->getWindowTabAspectRatios().isValid());
+    m_toolBarUndoUnlockWindowAndAllTabAspectRatioAction->setEnabled(undoValid);
+    
+    EventManager::get()->sendEvent(EventGraphicsPaintSoonOneWindow(getBrowserWindowIndex()).getPointer());
 }
 
 /**
@@ -1367,7 +1581,7 @@ BrainBrowserWindow::createActions()
     m_newWindowAction =
     WuQtUtilities::createAction("New Window",
                                 "Creates a new window for viewing brain models",
-                                Qt::CTRL+Qt::Key_N,
+                                QKeySequence(Qt::CTRL | Qt::Key_N),
                                 this,
                                 this,
                                 SLOT(processNewWindow()));
@@ -1375,7 +1589,7 @@ BrainBrowserWindow::createActions()
     m_newTabAction =
     WuQtUtilities::createAction("New Tab", 
                                 "Create a new tab (window pane) in the window",
-                                Qt::CTRL + Qt::Key_T,
+                                QKeySequence(Qt::CTRL | Qt::Key_T),
                                 this,
                                 this,
                                 SLOT(processNewTab()));
@@ -1387,7 +1601,7 @@ BrainBrowserWindow::createActions()
     m_duplicateTabAction =
     WuQtUtilities::createAction("Duplicate Tab",
                                 "Create a new tab (window pane) that duplicates the selected tab in the window",
-                                Qt::CTRL + Qt::Key_D,
+                                QKeySequence(Qt::CTRL | Qt::Key_D),
                                 this,
                                 this,
                                 SLOT(processDuplicateTab()));
@@ -1400,7 +1614,7 @@ BrainBrowserWindow::createActions()
     m_reopenLastClosedTabAction =
     WuQtUtilities::createAction("Reopen Last Closed Tab",
                                 "Reopen the last closed tab",
-                                Qt::CTRL + Qt::SHIFT + Qt::Key_T,
+                                QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_T),
                                 this);
     QObject::connect(m_reopenLastClosedTabAction, &QAction::triggered,
                      this, [=] { guiManager->processReopenLastClosedTab(this); });
@@ -1410,7 +1624,7 @@ BrainBrowserWindow::createActions()
     m_openFileAction =
     WuQtUtilities::createAction("Open File...", 
                                 "Open a data file including a spec file located on the computer",
-                                Qt::CTRL+Qt::Key_O,
+                                QKeySequence(Qt::CTRL | Qt::Key_O),
                                 this,
                                 this,
                                 SLOT(processDataFileOpen()));
@@ -1419,7 +1633,7 @@ BrainBrowserWindow::createActions()
     m_openLocationAction = 
     WuQtUtilities::createAction("Open Location...", 
                                 "Open a data file including a spec file located on a web server (http)",
-                                Qt::CTRL+Qt::Key_L,
+                                QKeySequence(Qt::CTRL | Qt::Key_L),
                                 this,
                                 this,
                                 SLOT(processDataFileLocationOpen()));
@@ -1428,7 +1642,7 @@ BrainBrowserWindow::createActions()
     m_openRecentAction =
     WuQtUtilities::createAction("Open Recent...",
                                 "Open a recent file or directory",
-                                Qt::CTRL + Qt::SHIFT + Qt::Key_O,
+                                QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_O),
                                 this,
                                 this,
                                 SLOT(processOpenRecent()));
@@ -1436,7 +1650,7 @@ BrainBrowserWindow::createActions()
     m_manageFilesAction =
     WuQtUtilities::createAction("Save/Manage Files...", 
                                 "Save and Manage Loaded Files",
-                                Qt::CTRL + Qt::Key_S,
+                                QKeySequence(Qt::CTRL | Qt::Key_S),
                                 this,
                                 this,
                                 SLOT(processManageSaveLoadedFiles()));
@@ -1452,7 +1666,7 @@ BrainBrowserWindow::createActions()
     m_closeTabAction =
     WuQtUtilities::createAction("Close Tab",
                                 "Close the active tab (window pane) in the window",
-                                Qt::CTRL + Qt::Key_W,
+                                QKeySequence(Qt::CTRL | Qt::Key_W),
                                 this,
                                 m_toolbar,
                                 SLOT(closeSelectedTabFromFileMenu()));
@@ -1463,7 +1677,7 @@ BrainBrowserWindow::createActions()
     m_closeWindowAction =
     WuQtUtilities::createAction(m_closeWindowActionConfirmTitle,
                                 "Close the window",
-                                Qt::CTRL + Qt::SHIFT + Qt::Key_W,
+                                QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_W),
                                 this,
                                 this,
                                 SLOT(processCloseWindow()));
@@ -1482,14 +1696,7 @@ BrainBrowserWindow::createActions()
                                 this,
                                 SLOT(processMovieRecording()));
     
-    m_recordMovieAction =
-    WuQtUtilities::createAction("(obsolete)Animation Control...",
-                                "Animate Brain Surface",
-                                this,
-                                this,
-                                SLOT(processRecordMovie()));
-    
-    m_preferencesAction = 
+    m_preferencesAction =
     WuQtUtilities::createAction("Preferences...",
                                 "Edit the preferences",
                                 this,
@@ -1499,7 +1706,7 @@ BrainBrowserWindow::createActions()
     m_exitProgramAction =
     WuQtUtilities::createAction("Exit", 
                                 "Exit (quit) the program",
-                                Qt::CTRL+Qt::Key_Q, 
+                                QKeySequence(Qt::CTRL | Qt::Key_Q),
                                 this,
                                 this,
                                 SLOT(processExitProgram()));
@@ -1524,7 +1731,7 @@ BrainBrowserWindow::createActions()
 
     m_viewFullScreenAction = WuQtUtilities::createAction("Full Screen",
                                                          "View using all of screen",
-                                                         Qt::CTRL+Qt::Key_F,
+                                                         QKeySequence(Qt::CTRL | Qt::Key_F),
                                                          this);
     QObject::connect(m_viewFullScreenAction, SIGNAL(triggered()),
                      this, SLOT(processViewFullScreenSelected()));
@@ -1534,13 +1741,23 @@ BrainBrowserWindow::createActions()
      */
     m_viewFullScreenAction->setMenuRole(QAction::NoRole);
 
+    m_viewMaximizedAction = new QAction(this);
+    m_viewMaximizedAction->setText("Maximize");
+    m_viewMaximizedAction->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_F));
+    QObject::connect(m_viewMaximizedAction, &QAction::triggered,
+                     this, &BrainBrowserWindow::processViewMaximizedSelected);
+    /*
+     * On macOS, this prevents macOS from removing the menu
+     */
+    m_viewMaximizedAction->setMenuRole(QAction::NoRole);
+
     /*
      * Note: If shortcut key is changed, also change the shortcut key
      * for the tile tabs configuration dialog menu item to match.
      */
     m_viewTileTabsAction = WuQtUtilities::createAction("Tile Tabs",
                                                        "View all tabs in a tiled layout",
-                                                       Qt::CTRL+Qt::Key_M,
+                                                       QKeySequence(Qt::CTRL | Qt::Key_M),
                                                        this);
     QObject::connect(m_viewTileTabsAction, SIGNAL(triggered()),
                      this, SLOT(processViewTileTabs()));
@@ -1557,7 +1774,7 @@ BrainBrowserWindow::createActions()
                                                                           this,
                                                                           this,
                                                                           SLOT(processViewTileTabsConfigurationDialog()));
-    m_viewTileTabsConfigurationDialogAction->setShortcut((Qt::CTRL + Qt::SHIFT + Qt::Key_M));
+    m_viewTileTabsConfigurationDialogAction->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_M));
 
     m_viewAutomaticTileTabsConfigurationAction = new QAction("Automatic",
                                                              this);
@@ -1589,7 +1806,7 @@ BrainBrowserWindow::createActions()
     m_nextTabAction =
     WuQtUtilities::createAction("Next Tab",
                                 "Move to the next tab",
-                                Qt::CTRL + Qt::Key_Right,
+                                QKeySequence(Qt::CTRL | Qt::Key_Right),
                                 this,
                                 m_toolbar,
                                 SLOT(nextTab()));
@@ -1597,7 +1814,7 @@ BrainBrowserWindow::createActions()
     m_previousTabAction =
     WuQtUtilities::createAction("Previous Tab",
                                 "Move to the previous tab",
-                                Qt::CTRL + Qt::Key_Left,
+                                QKeySequence(Qt::CTRL | Qt::Key_Left),
                                 this,
                                 m_toolbar,
                                 SLOT(previousTab()));
@@ -1706,12 +1923,26 @@ BrainBrowserWindow::createActions()
                                 this,
                                 SLOT(processDevelopGraphicsTimingDuration()));
     
+    m_developerOpenMPTestingAction =
+    WuQtUtilities::createAction("Test OpenMP...",
+                                "Test OpenMP with a parallel for loop",
+                                this,
+                                this,
+                                SLOT(processDevelopOpenMPTesting()));
+    
     m_developerExportVtkFileAction =
     WuQtUtilities::createAction("Export to VTK File",
                                 "Export model(s) to VTK File",
                                 this,
                                 this,
                                 SLOT(processDevelopExportVtkFile()));
+    
+    m_developerCziFileTransformTestingAction =
+    WuQtUtilities::createAction("Test CZI File Transforms...",
+                                "Test CZI File Transformation IJK -> XYZ -> IJK",
+                                this,
+                                this,
+                                SLOT(processDevelopCziFileTransformTesting()));
 }
 
 /**
@@ -1770,53 +2001,58 @@ BrainBrowserWindow::createMenuDevelop()
                             this);
     QObject::connect(menu, SIGNAL(aboutToShow()),
                      this, SLOT(developerMenuAboutToShow()));
-    menu->addAction(m_developerExportVtkFileAction);
     
-    /*
-     * Hide the Export to VTK menu item
-     */
-    m_developerExportVtkFileAction->setVisible(false);
+    const bool showPaletteEditorFlag(false);
+    if (showPaletteEditorFlag) {
+        menu->addAction(m_dataPaletteEditorDialogAction);
+    }
+    const bool showExportToVTKFlag(false);
+    if (showExportToVTKFlag) {
+        menu->addAction(m_developerExportVtkFileAction);
+    }
     
+    const bool showParallelQtFlag(false);
+    if (showParallelQtFlag) {
+        QAction* qtParallelTestAction = new QAction("Qt Parallel");
+        QObject::connect(qtParallelTestAction, &QAction::triggered,
+                         this, &BrainBrowserWindow::processParallelTest);
+        menu->addAction(qtParallelTestAction);
+    }
+    
+    menu->addAction(m_developerCziFileTransformTestingAction);
+    
+    if ( ! menu->isEmpty()) {
+        menu->addSeparator();
+    }
+    menu->addAction(m_developerOpenMPTestingAction);
+
+    menu->addSeparator();
     menu->addAction(m_developerGraphicsTimingAction);
     menu->addAction(m_developerGraphicsTimingDurationAction);
     
-    std::vector<DeveloperFlagsEnum::Enum> developerFlags;
-    DeveloperFlagsEnum::getAllEnums(developerFlags);
-    
-    m_developerFlagsActionGroup = NULL;
-    
-    if ( ! developerFlags.empty()) {
-        menu->addSeparator();
-        
-        m_developerFlagsActionGroup = new QActionGroup(this);
-        m_developerFlagsActionGroup->setExclusive(false);
-        QObject::connect(m_developerFlagsActionGroup, SIGNAL(triggered(QAction*)),
-                         this, SLOT(developerMenuFlagTriggered(QAction*)));
-        
-        bool lastItemCheckableFlag(true);
-        for (std::vector<DeveloperFlagsEnum::Enum>::iterator iter = developerFlags.begin();
-             iter != developerFlags.end();
-             iter++) {
-            const DeveloperFlagsEnum::Enum flag = *iter;
-
-            const bool itemCheckableFlag = DeveloperFlagsEnum::isCheckable(flag);
-            if (itemCheckableFlag != lastItemCheckableFlag) {
-                menu->addSeparator();
-            }
-
-            QAction* action = menu->addAction(DeveloperFlagsEnum::toGuiName(flag));
-            action->setMenuRole(QAction::NoRole); // Menu item containing "Setup" is moved by Qt, see QTBUG-43588
-            action->setCheckable(itemCheckableFlag);
-            action->setData(static_cast<int>(DeveloperFlagsEnum::toIntegerCode(flag)));
-            m_developerFlagsActionGroup->addAction(action);
-
-            lastItemCheckableFlag = itemCheckableFlag;
-        }
-    }
-    
-    menu->addAction(m_dataPaletteEditorDialogAction);
-
     return menu;
+}
+
+/**
+ * Called to test a parallel for loop using Qt
+ */
+void
+BrainBrowserWindow::processParallelTest()
+{
+    WuQMessageBox::errorOk(this, "Parallel test commented out");
+/*
+    Will need #include <QtConcurrent>
+
+    std::cout << "Loop started: " << std::endl;
+    std::vector<int> list;
+    for(int i =0 ; i < 100; i++) list.push_back(i);
+    auto future = QtConcurrent::map(list, [=](const int &i) {
+        std::cout << " " << i << " ";
+    });
+    future.waitForFinished();
+    std::cout << std::endl;
+    std::cout << "Loop done: " << std::endl;
+ */
 }
 
 /**
@@ -1825,85 +2061,7 @@ BrainBrowserWindow::createMenuDevelop()
 void
 BrainBrowserWindow::developerMenuAboutToShow()
 {
-    std::vector<DeveloperFlagsEnum::Enum> developerFlags;
-    DeveloperFlagsEnum::getAllEnums(developerFlags);
-    
-    QList<QAction*> actions = m_developerFlagsActionGroup->actions();
-    QListIterator<QAction*> iter(actions);
-    while (iter.hasNext()) {
-        QAction* action = iter.next();
-        const int integerCode = action->data().toInt();
-        
-        bool valid = false;
-        const DeveloperFlagsEnum::Enum enumValue = DeveloperFlagsEnum::fromIntegerCode(integerCode,
-                                                                                       &valid);
-        if (valid) {
-            const bool flag = DeveloperFlagsEnum::isFlag(enumValue);
-            action->setChecked(flag);
-        }
-        else {
-            CaretLogSevere("Failed to find develper flag for updating menu: "
-                           + action->text());
-        }
-    }
 }
-
-/**
- * Called when developer flag is checked/unchecked.
- *
- * @param action
- *    Action that is checked/unchecked.
- */
-void
-BrainBrowserWindow::developerMenuFlagTriggered(QAction* action)
-{
-    const int integerCode = action->data().toInt();
-    
-    bool valid = false;
-    const DeveloperFlagsEnum::Enum enumValue = DeveloperFlagsEnum::fromIntegerCode(integerCode,
-                                                                                   &valid);
-    if (valid) {
-        DeveloperFlagsEnum::setFlag(enumValue,
-                                    action->isChecked());
-
-        /*
-         * If a developer flag is "not checkable" and should call a function
-         * test for the flag here and call the function
-         *
-         * if (enumValue == DeveloperFlagsEnum::<flag>) {
-         *     someFunction();
-         * }
-         */
-#ifdef HAVE_WEBKIT
-        if (enumValue == DeveloperFlagsEnum::DEVELOPER_FLAG_BALSA) {
-            static WuQDialogModal* balsaDialog(NULL);
-            if (balsaDialog == NULL) {
-                QCoreApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
-                balsaDialog = new WuQDialogModal("BALSA",
-                                                 this);
-                QWebEngineView* webView = new QWebEngineView();
-                balsaDialog->setCentralWidget(webView, WuQDialogModal::SCROLL_AREA_NEVER);
-                webView->setUrl(QUrl(QStringLiteral("https://balsa.wustl.edu")));
-                webView->resize(600, 800);
-            }
-            CaretAssert(balsaDialog);
-            balsaDialog->show();
-        }
-#endif
-        
-        /*
-         * Update graphics and GUI
-         */
-        EventManager::get()->sendEvent(EventSurfaceColoringInvalidate().getPointer());
-        EventManager::get()->sendEvent(EventUserInterfaceUpdate().getPointer());
-        EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
-    }
-    else {
-        CaretLogSevere("Failed to find develper flag for reading menu: "
-                       + action->text());
-    }
-}
-
 
 /**
  * Create the file menu.
@@ -1928,11 +2086,12 @@ BrainBrowserWindow::createMenuFile()
     menu->addSeparator();
     menu->addAction(m_openFileAction);
     menu->addAction(m_openRecentAction);
+    menu->addMenu(new RecentSceneMenu(RecentSceneMenu::MenuLocation::FILE_MENU,
+                                      this));
     menu->addAction(m_openLocationAction);
     menu->addAction(m_manageFilesAction);
     menu->addAction(m_closeSpecFileAction);
     menu->addSeparator();
-    menu->addAction(m_recordMovieAction);
     menu->addAction(m_captureImageAction);
     menu->addAction(m_movieRecordingAction);
     menu->addSeparator();
@@ -2293,14 +2452,18 @@ BrainBrowserWindow::isMacOptionKeyDown() const
 void 
 BrainBrowserWindow::processViewMenuAboutToShow()
 {
-    m_viewMoveFeaturesToolBoxMenu->setEnabled(isFullScreen() == false);
-    m_viewMoveOverlayToolBoxMenu->setEnabled(isFullScreen()== false);
-    
     if (isFullScreen()) {
         m_viewFullScreenAction->setText("Exit Full Screen");
     }
     else {
         m_viewFullScreenAction->setText("Enter Full Screen");
+    }
+    
+    if (isMaximized()) {
+        m_viewMaximizedAction->setText("Exit Maximized");
+    }
+    else {
+        m_viewMaximizedAction->setText("Enter Maximized");
     }
     
     if (isTileTabsSelected()) {
@@ -2454,7 +2617,7 @@ BrainBrowserWindow::modifyTileTabsConfiguration(EventTileTabsGridConfigurationMo
      */
     EventManager::get()->sendEvent(EventSurfaceColoringInvalidate().getPointer());
     EventManager::get()->sendEvent(EventUserInterfaceUpdate().getPointer());
-    EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+    EventManager::get()->sendEvent(EventGraphicsPaintSoonAllWindows().getPointer());
 
     modEvent->setEventProcessed();
 }
@@ -2483,7 +2646,7 @@ BrainBrowserWindow::processViewTileTabsAutomaticCustomTriggered(QAction* action)
     }
 
     EventManager::get()->sendEvent(EventUserInterfaceUpdate().getPointer());
-    EventManager::get()->sendEvent(EventGraphicsUpdateOneWindow(getBrowserWindowIndex()).getPointer());
+    EventManager::get()->sendEvent(EventGraphicsPaintSoonOneWindow(getBrowserWindowIndex()).getPointer());
 }
 
 /**
@@ -2515,6 +2678,7 @@ BrainBrowserWindow::createMenuView()
     menu->addSeparator();
 
     menu->addAction(m_viewFullScreenAction);
+    menu->addAction(m_viewMaximizedAction);
     menu->addSeparator();
     menu->addAction(m_gapsAndMarginsAction);
     menu->addSeparator();
@@ -2525,6 +2689,15 @@ BrainBrowserWindow::createMenuView()
     }
     
     return menu;
+}
+
+/**
+ * @return Action for tile tabs configuration dialog also used in Tile Layout toolbar
+ */
+QAction*
+BrainBrowserWindow::getViewTileTabsConfigurationDialogAction()
+{
+    return m_viewTileTabsConfigurationDialogAction;
 }
 
 /**
@@ -2683,7 +2856,7 @@ BrainBrowserWindow::processSurfaceMenuPrimaryAnatomical()
             BrainStructure* bs = brain->getBrainStructure(i);
             bs->setPrimaryAnatomicalSurface(surfaceSelectionControls[i]->getSurface());
         }
-        EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+        EventManager::get()->sendEvent(EventGraphicsPaintSoonAllWindows().getPointer());
     }
 }
 
@@ -2937,6 +3110,36 @@ BrainBrowserWindow::processDevelopGraphicsTimingDuration()
 }
 
 /**
+ * Test OpenMP
+ */
+void
+BrainBrowserWindow::processDevelopOpenMPTesting()
+{
+#ifdef _OPENMP
+    AString message("<html>Maximum number of threads: "
+                    + AString::number(omp_get_max_threads())
+                    + "<br>This list of numbers is unlikely to be sequential if OpenMP is functioning:<br>");
+    
+    /*
+     * Small loop run in parallel
+     */
+    CaretMutex mutex;
+#pragma omp CARET_PARFOR
+    for (int64_t i = 0; i < 100; i++) {
+        CaretMutexLocker locked(&mutex);
+        message.append(" "
+                       + AString::number(i));
+    }
+    message.append("</html>");
+    WuQMessageBox::informationOk(this,
+                                 message);
+#else
+    WuQMessageBox::informationOk(this,
+                                 "<html>This version of wb_view was built without OpenMP Support.</html>");
+#endif
+}
+
+/**
  * Export to VTK file.
  */
 void
@@ -3013,6 +3216,62 @@ BrainBrowserWindow::processDevelopExportVtkFile()
 }
 
 /**
+ * Test CZI file transformations
+ */
+void
+BrainBrowserWindow::processDevelopCziFileTransformTesting()
+{
+    WuQDataEntryDialog ded("Test CZI Transforms",
+                           this);
+    
+    QSpinBox* pixelIndexStepSpinBox = ded.addSpinBox("Pixel Index Step", 5000);
+    pixelIndexStepSpinBox->setRange(1, 1000000);
+    std::vector<DataFileTypeEnum::Enum> fileType { DataFileTypeEnum::CZI_IMAGE_FILE };
+    CaretDataFileSelectionComboBox* comboBox = ded.addFileSelectionComboBox("CZI File", fileType);
+    QCheckBox* nonLinearCheckBox = ded.addCheckBox("Include Non-Linear Part of Transformation");
+    nonLinearCheckBox->setChecked(true);
+    QCheckBox* verboseCheckBox = ded.addCheckBox("Verbose (print each pixel tested)");
+    verboseCheckBox->setChecked(true);
+    
+    if (ded.exec() == WuQDataEntryDialog::Accepted) {
+        const CaretDataFile* dataFile = comboBox->getSelectedFile();
+        if (dataFile == NULL) {
+            WuQMessageBox::errorOk(this, "No CZI File selected");
+            return;
+        }
+        
+        const CziImageFile* cziFile = dataFile->castToCziImageFile();
+        if (cziFile == NULL) {
+            WuQMessageBox::errorOk(this, "Selected file is not a CZI File");
+            return;
+        }
+        
+        AString resultsText;
+        QImage resultsImage;
+        cziFile->testPixelTransforms(pixelIndexStepSpinBox->value(),
+                                     nonLinearCheckBox->isChecked(),
+                                     verboseCheckBox->isChecked(),
+                                     resultsText,
+                                     resultsImage);
+        
+        WuQDataEntryDialog resultsDialog("Test Results",
+                                         this);
+        if ( ! resultsImage.isNull()) {
+            if ((resultsImage.width() > 0)
+                && (resultsImage.height() > 0)) {
+                resultsDialog.addImage("", resultsImage);
+            }
+        }
+        QTextEdit* textEdit = resultsDialog.addTextEdit("", resultsText, true);
+        textEdit->setFont(WuQtUtilities::getFixedFont());
+        resultsDialog.setCancelButtonText("");
+        resultsDialog.exec();
+    }
+    
+    GuiManager::beep();
+}
+
+/**
  * Project foci.
  */
 void
@@ -3060,15 +3319,6 @@ BrainBrowserWindow::processGapsAndMargins()
 }
 
 /**
- * Called when record movie is selected.
- */
-void 
-BrainBrowserWindow::processRecordMovie()
-{
-    GuiManager::get()->processShowMovieDialog(this);
-}
-
-/**
  * Called when capture image is selected.
  */
 void 
@@ -3099,11 +3349,11 @@ BrainBrowserWindow::processCloseAllFiles()
     brain->resetBrain();
     
     CaretPreferences* prefs = SessionManager::get()->getCaretPreferences();
-    prefs->setBackgroundAndForegroundColorsMode(BackgroundAndForegroundColorsModeEnum::USER_PREFERENCES);
+    prefs->setBackgroundAndForegroundColorsSceneOverrideMode(CaretPreferenceValueSceneOverrideModeEnum::USER_PREFERENCES);
     prefs->invalidateSceneDataValues();
     
     EventManager::get()->sendEvent(EventUserInterfaceUpdate().getPointer());
-    EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+    EventManager::get()->sendEvent(EventGraphicsPaintSoonAllWindows().getPointer());
     
     GuiManager::get()->closeAllOtherWindows(this);
     
@@ -3119,7 +3369,7 @@ BrainBrowserWindow::processNewWindow()
     CursorDisplayScoped cursor;
     cursor.showWaitCursor();
 
-    EventManager::get()->blockEvent(EventTypeEnum::EVENT_GRAPHICS_UPDATE_ONE_WINDOW, 
+    EventManager::get()->blockEvent(EventTypeEnum::EVENT_GRAPHICS_PAINT_SOON_ONE_WINDOW, 
                                     true);
     EventBrowserWindowNew eventNewBrowser(this, NULL);
     EventManager::get()->sendEvent(eventNewBrowser.getPointer());
@@ -3132,9 +3382,9 @@ BrainBrowserWindow::processNewWindow()
     }
     const int32_t newWindowIndex = eventNewBrowser.getBrowserWindowCreated()->getBrowserWindowIndex();
     EventManager::get()->sendEvent(EventUserInterfaceUpdate().setWindowIndex(newWindowIndex).getPointer());
-    EventManager::get()->blockEvent(EventTypeEnum::EVENT_GRAPHICS_UPDATE_ONE_WINDOW, 
+    EventManager::get()->blockEvent(EventTypeEnum::EVENT_GRAPHICS_PAINT_SOON_ONE_WINDOW, 
                                     false);
-    EventManager::get()->sendEvent(EventGraphicsUpdateOneWindow(newWindowIndex).getPointer());
+    EventManager::get()->sendEvent(EventGraphicsPaintSoonOneWindow(newWindowIndex).getPointer());
 }
 
 /**
@@ -3165,7 +3415,7 @@ BrainBrowserWindow::processDataFileOpen()
 {
     if (s_previousOpenFileNameFilter.isEmpty()) {
         s_previousOpenFileNameFilter = 
-            DataFileTypeEnum::toQFileDialogFilterForReading(DataFileTypeEnum::SPECIFICATION);
+            DataFileTypeEnum::toQFileDialogFilterForReading(DataFileTypeEnum::SCENE);
     }
     
     /*
@@ -3381,6 +3631,69 @@ BrainBrowserWindow::loadFilesFromCommandLine(const std::vector<AString>& filenam
         prefs->addToRecentFilesAndOrDirectories(name);
     }
 
+}
+
+/**
+ * Load a recent scene from the scene file
+ */
+void
+BrainBrowserWindow::loadRecentScene(const AString& sceneFileName,
+                                    const AString& sceneName)
+{
+    /*
+     * Scene file may already be loaded
+     */
+    Brain* brain = GuiManager::get()->getBrain();
+    SceneFile* sceneFile(brain->getSceneFileWithName(sceneFileName));
+    if (sceneFile == NULL) {
+        /*
+         * Load the scene file
+         */
+        EventDataFileRead readFileEvent(brain);
+        readFileEvent.addDataFile(DataFileTypeEnum::SCENE,
+                                  sceneFileName);
+        EventManager::get()->sendEvent(readFileEvent.getPointer());
+        
+        const int32_t fileIndex(0);
+        if (readFileEvent.getEventProcessCount() > 0) {
+            if (readFileEvent.isFileError(fileIndex)) {
+                WuQMessageBox::errorOk(this,
+                                       readFileEvent.getFileErrorMessage(fileIndex));
+                return;
+            }
+        }
+        
+        CaretDataFile* caretDataFile(readFileEvent.getDataFileRead(fileIndex));
+        if (caretDataFile != NULL) {
+            sceneFile = dynamic_cast<SceneFile*>(caretDataFile);
+        }
+    }
+    
+    if (sceneFile == NULL) {
+        WuQMessageBox::errorOk(this,
+                               ("Failed to read scene file " + sceneFileName));
+        return;
+    }
+    
+    Scene* scene = sceneFile->getSceneWithName(sceneName);
+    if (scene == NULL) {
+        WuQMessageBox::errorOk(this,
+                               ("Scene \""
+                                + sceneName
+                                + "\" not found in scene file: "
+                                + sceneFileName));
+        return;
+    }
+
+    ProgressReportingDialog progressDialog("Loading " + sceneName,
+                                           "Initializing",
+                                           this);
+    
+    const bool showSceneDialogFlag(false);
+    GuiManager::get()->processShowSceneDialogAndScene(this,
+                                                      sceneFile,
+                                                      scene,
+                                                      showSceneDialogFlag);
 }
 
 /**
@@ -3792,7 +4105,7 @@ BrainBrowserWindow::loadFiles(QWidget* parentForDialogs,
     const float guiStartTime = timer.getElapsedTimeSeconds();
     EventManager::get()->sendEvent(EventSurfaceColoringInvalidate().getPointer());
     EventManager::get()->sendEvent(EventUserInterfaceUpdate().getPointer());
-    EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+    EventManager::get()->sendEvent(EventGraphicsPaintSoonAllWindows().getPointer());
     const float guiTime = timer.getElapsedTimeSeconds() - guiStartTime;
     
     if (specFileName.isEmpty() == false) {
@@ -3810,10 +4123,10 @@ BrainBrowserWindow::loadFiles(QWidget* parentForDialogs,
     
     bool successFlag = true;
     if (errorMessages.isEmpty() == false) {
+        WuQMessageBoxTwo::critical(parentWidget,
+                                   "ERROR",
+                                   errorMessages);
         successFlag = false;
-        QMessageBox::critical(parentWidget, 
-                              "ERROR", 
-                              errorMessages);
     }
     
     if (sceneFileWasLoaded) {
@@ -3873,19 +4186,16 @@ BrainBrowserWindow::processViewFullScreen(bool showFullScreenDisplay,
          */
         m_showToolBarAction->setChecked(true);
         m_showToolBarAction->trigger();
-        m_showToolBarAction->setEnabled(false);
         m_overlayToolBoxAction->setChecked(true);
         m_overlayToolBoxAction->trigger();
-        m_overlayToolBoxAction->setEnabled(false);
         m_featuresToolBoxAction->setChecked(true);
         m_featuresToolBoxAction->trigger();
-        m_featuresToolBoxAction->setEnabled(false);
         
         showFullScreen();
     }
     
     EventManager::get()->sendEvent(EventUserInterfaceUpdate().setWindowIndex(m_browserWindowIndex).addToolBar().getPointer());
-    EventManager::get()->sendEvent(EventGraphicsUpdateOneWindow(m_browserWindowIndex).getPointer());
+    EventManager::get()->sendEvent(EventGraphicsPaintSoonOneWindow(m_browserWindowIndex).getPointer());
 }
 
 
@@ -3895,9 +4205,26 @@ BrainBrowserWindow::processViewFullScreen(bool showFullScreenDisplay,
 void
 BrainBrowserWindow::processViewFullScreenSelected()
 {
-    const bool toggledStatus = (! isFullScreen());
-    processViewFullScreen(toggledStatus,
-                          true);
+    if (isFullScreen()) {
+        showNormal();
+    }
+    else {
+        showFullScreen();
+    }
+}
+
+/**
+ * Called when view maximized is selected and toggles the status of full screen.
+ */
+void
+BrainBrowserWindow::processViewMaximizedSelected()
+{
+    if (isMaximized()) {
+        showNormal();
+    }
+    else {
+        showMaximized();
+    }
 }
 
 /**
@@ -3919,7 +4246,7 @@ BrainBrowserWindow::setViewTileTabs(const bool newStatus)
 {
     m_browserWindowContent->setTileTabsEnabled(newStatus);
     EventManager::get()->sendEvent(EventUserInterfaceUpdate().setWindowIndex(m_browserWindowIndex).addToolBar().getPointer());
-    EventManager::get()->sendEvent(EventGraphicsUpdateOneWindow(m_browserWindowIndex).getPointer());
+    EventManager::get()->sendEvent(EventGraphicsPaintSoonOneWindow(m_browserWindowIndex).getPointer());
 }
 
 /**
@@ -3932,6 +4259,22 @@ BrainBrowserWindow::processViewTileTabsConfigurationDialog()
 }
 
 /**
+ * Print the status of window components.
+ * @param wcs
+ *    Window component status that is restored.
+ */
+void
+BrainBrowserWindow::printWindowComponentStatus(const QString& modeText,
+                                               const WindowComponentStatus& wcs)
+{
+    std::cout << modeText << " " << wcs.name
+    << " toolbar=" << AString::fromBool(wcs.isToolBarDisplayed)
+    << " overlay tb=" << AString::fromBool(wcs.isOverlayToolBoxDisplayed)
+    << " features tb=" << AString::fromBool(wcs.isFeaturesToolBoxDisplayed)
+    << std::endl;
+}
+
+/**
  * Restore the status of window components.
  * @param wcs
  *    Window component status that is restored.
@@ -3939,14 +4282,12 @@ BrainBrowserWindow::processViewTileTabsConfigurationDialog()
 void 
 BrainBrowserWindow::restoreWindowComponentStatus(const WindowComponentStatus& wcs)
 {
-    if (wcs.windowGeometry.isEmpty() == false) {
-        restoreGeometry(wcs.windowGeometry);
-    }
+    /*printWindowComponentStatus("Restoring", wcs);*/
+    
     if (wcs.windowState.isEmpty() == false) {
         restoreState(wcs.windowState);
     }
     
-    m_showToolBarAction->setEnabled(true);
     if (wcs.isToolBarDisplayed) {
         m_showToolBarAction->setChecked(false);
         m_showToolBarAction->trigger();
@@ -3956,7 +4297,6 @@ BrainBrowserWindow::restoreWindowComponentStatus(const WindowComponentStatus& wc
         m_showToolBarAction->trigger();
     }
     
-    m_overlayToolBoxAction->setEnabled(true);
     if (wcs.isOverlayToolBoxDisplayed) {
         m_overlayToolBoxAction->blockSignals(true);
         m_overlayToolBoxAction->setChecked(false);
@@ -3970,7 +4310,6 @@ BrainBrowserWindow::restoreWindowComponentStatus(const WindowComponentStatus& wc
         m_overlayToolBoxAction->trigger();
     }
     
-    m_featuresToolBoxAction->setEnabled(true);
     if (wcs.isFeaturesToolBoxDisplayed) {
         m_featuresToolBoxAction->blockSignals(true);
         m_featuresToolBoxAction->setChecked(false);
@@ -4001,7 +4340,6 @@ void
 BrainBrowserWindow::saveWindowComponentStatus(WindowComponentStatus& wcs)
 {
     wcs.windowState = saveState();
-    wcs.windowGeometry = saveGeometry();
     if (m_featuresToolBoxAction->isChecked()) {
         if (m_featuresToolBox != NULL) {
             wcs.featuresGeometry = m_featuresToolBox->saveGeometry();
@@ -4010,9 +4348,8 @@ BrainBrowserWindow::saveWindowComponentStatus(WindowComponentStatus& wcs)
     wcs.isToolBarDisplayed = m_showToolBarAction->isChecked();
     wcs.isOverlayToolBoxDisplayed = m_overlayToolBoxAction->isChecked();
     wcs.isFeaturesToolBoxDisplayed  = m_featuresToolBoxAction->isChecked();
-    m_showToolBarAction->setEnabled(false);
-    m_overlayToolBoxAction->setEnabled(false);
-    m_featuresToolBoxAction->setEnabled(false);
+    
+    /*printWindowComponentStatus("Saving", wcs);*/
 }
 
 /**
@@ -4069,7 +4406,7 @@ BrainBrowserWindow::processMoveAllTabsToOneWindow()
     
     EventManager::get()->sendEvent(EventSurfaceColoringInvalidate().getPointer());
     EventManager::get()->sendEvent(EventUserInterfaceUpdate().getPointer());
-    EventManager::get()->sendEvent(EventGraphicsUpdateOneWindow(m_browserWindowIndex).getPointer());
+    EventManager::get()->sendEvent(EventGraphicsPaintSoonOneWindow(m_browserWindowIndex).getPointer());
 }
 
 /**
@@ -4429,6 +4766,29 @@ BrainBrowserWindow::getAllBrainOpenGLViewportContent(std::vector<const BrainOpen
 }
 
 /**
+ * @return The OpenGL Viewport content for the selected tab
+ */
+const BrainOpenGLViewportContent*
+BrainBrowserWindow::getViewportContentForSelectedTab() const
+{
+    const BrowserTabContent* activeTabContent = getBrowserTabContent();
+    if (activeTabContent == NULL) {
+        return NULL;
+    }
+    
+    std::vector<const BrainOpenGLViewportContent*> viewportContent;
+    getAllBrainOpenGLViewportContent(viewportContent);
+    
+    for (const auto& vpc : viewportContent) {
+        if (vpc->getBrowserTabContent() == activeTabContent) {
+            return vpc;
+        }
+    }
+    return NULL;
+}
+
+
+/**
  * Returns a popup menu for the main window.
  * Overrides that in QMainWindow and prevents the 
  * default context menu from appearing.
@@ -4727,6 +5087,8 @@ BrainBrowserWindow::restoreFromScene(const SceneAttributes* sceneAttributes,
         setViewTileTabs(restoreToTabTiles);
     }
 
+    m_restoringSceneNoSaveWindowCompontentStatusFlag = restoreToFullScreen;
+    
     m_normalWindowComponentStatus = m_defaultWindowComponentStatus;
     processViewFullScreen(restoreToFullScreen,
                           false);
@@ -4875,12 +5237,16 @@ BrainBrowserWindow::restoreFromScene(const SceneAttributes* sceneAttributes,
                                                   allTabContent.end(),
                                                   [](BrowserTabContent* btc) { return btc->isAspectRatioLocked(); });
 
-        EventManager::get()->sendEvent(EventGraphicsUpdateOneWindow(getBrowserWindowIndex()).getPointer());
+        EventManager::get()->sendEvent(EventGraphicsPaintSoonOneWindow(getBrowserWindowIndex()).getPointer());
 
         lockAllTabAspectRatios(lockedCount > 0);
     }
-    
+
+    m_normalWindowComponentStatus = m_defaultWindowComponentStatus;
+
     updateActionsForLockingAspectRatios();
+    
+    m_restoringSceneNoSaveWindowCompontentStatusFlag = restoreToFullScreen;
 }
 
 /**
@@ -4964,7 +5330,7 @@ BrainBrowserWindow::showDataFileReadWarningsDialog()
     
     AString messages;
     for (auto file : dataFiles) {
-        const AString msg = file->getFileReadWarnings();
+        const AString msg = file->getFileReadWarnings().replace("\n", "<br>");
         if ( ! msg.isEmpty()) {
             messages.append("<LI>"
                             + file->getFileName()
@@ -4982,7 +5348,7 @@ BrainBrowserWindow::showDataFileReadWarningsDialog()
         WuQTextEditorDialog::runNonModal("Data File Warnings",
                                          messages,
                                          WuQTextEditorDialog::TextMode::HTML,
-                                         WuQTextEditorDialog::WrapMode::NO,
+                                         WuQTextEditorDialog::WrapMode::YES,
                                          this);
     }
 }

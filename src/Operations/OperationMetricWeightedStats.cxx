@@ -69,17 +69,17 @@ OperationParameters* OperationMetricWeightedStats::getParameters()
     stdevOpt->createOptionalParameter(1, "-sample", "estimate population stdev from the sample");
     
     OptionalParameter* percentileOpt = ret->createOptionalParameter(8, "-percentile", "compute weighted percentile");
-    percentileOpt->addDoubleParameter(1, "percent", "the percentile to find");
+    percentileOpt->addDoubleParameter(1, "percent", "the percentile to find, must be between 0 and 100");
     
     ret->createOptionalParameter(9, "-sum", "compute weighted sum");
     
     ret->createOptionalParameter(10, "-show-map-name", "print map index and name before each output");
     
     ret->setHelpText(
-        AString("For each column of the input, a single number is printed, resulting from the specified operation.  ") +
+        AString("For each column of the input, a line of text is printed, resulting from the specified operation.  ") +
         "You must specify exactly one of -area-surface or -weight-metric.  " +
         "Use -column to only give output for a single column.  " +
-        "Use -roi to consider only the data within a region.  " +
+        "If the -roi option is used without -match-maps, then each line will contain as many numbers as there are maps in the ROI file, separated by tab characters.  " +
         "Exactly one of -mean, -stdev, -percentile or -sum must be specified.\n\n" +
         "Using -sum with -area-surface (or -weight-metric with a metric containing similar data) is equivalent to integrating with respect to surface area.  " +
         "For example, if you want to find the surface area within an roi, do this:\n\n" +

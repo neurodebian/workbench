@@ -34,7 +34,7 @@
 #include "BrainConstants.h"
 #include "BrowserTabContent.h"
 #include "CaretAssert.h"
-#include "EventGraphicsUpdateOneWindow.h"
+#include "EventGraphicsPaintSoonOneWindow.h"
 #include "EventManager.h"
 #include "EventSurfaceColoringInvalidate.h"
 #include "EventUserInterfaceUpdate.h"
@@ -100,7 +100,7 @@ MediaOverlaySetViewController::MediaOverlaySetViewController(const Qt::Orientati
         gridLayout->addWidget(opacityLabel, row, 4, Qt::AlignHCenter);
         gridLayout->addWidget(fileLabel, row, 5, Qt::AlignHCenter);
         gridLayout->addWidget(yokeLabel, row, 6, Qt::AlignHCenter);
-        gridLayout->addWidget(mapLabel, row, 8, 1, 2, Qt::AlignHCenter);
+        gridLayout->addWidget(mapLabel, row, 7, 1, 2, Qt::AlignHCenter);
     }
     else {
         gridLayout->setColumnStretch(0, 0);
@@ -312,7 +312,7 @@ MediaOverlaySetViewController::updateColoringAndGraphics()
     this->updateViewController();
     
     EventManager::get()->sendEvent(EventSurfaceColoringInvalidate().getPointer());
-    EventGraphicsUpdateOneWindow graphicsUpdate(m_browserWindowIndex);
+    EventGraphicsPaintSoonOneWindow graphicsUpdate(m_browserWindowIndex);
     EventManager::get()->sendEvent(graphicsUpdate.getPointer());
 }
 

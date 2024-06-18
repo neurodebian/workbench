@@ -30,6 +30,7 @@
 #include <GL/osmesa.h>
 #endif // HAVE_OSMESA
 
+#include <QDir>
 #include <QImage>
 #include <QColor>
 
@@ -45,6 +46,7 @@
 #include "DataFileException.h"
 #include "EventBrowserTabGet.h"
 #include "EventBrowserWindowContent.h"
+#include "EventGraphicsOpenGLDeleteTextureName.h"
 #include "EventMapYokingSelectMap.h"
 #include "EventManager.h"
 #include "FileInformation.h"
@@ -70,6 +72,22 @@
 using namespace caret;
 
 /**
+ *  @return A message indicating that the command is not available due to lack of Mesa3D library
+ */
+AString
+OperationShowScene::getCommandNotAvailableMessage(const AString& commandSwitch)
+{
+    AString s(commandSwitch
+              + " is not available !\n"
+              "A required library for this command, Mesa3D (software version of OpenGL), was not available when this "
+              "software was created.  This command is not available for the Windows version of this software but should "
+              "always be available in the Linux and MacOS versions.");
+
+    return s;
+}
+
+
+/**
  * \class caret::OperationShowScene
  * \brief Offscreen rendering of scene to an image file
  *
@@ -91,7 +109,7 @@ OperationShowScene::getCommandSwitch()
 AString
 OperationShowScene::getShortDescription()
 {
-    return ("OFFSCREEN RENDERING OF SCENE TO AN IMAGE FILE");
+    return ("DEPRECATED: use -scene-capture-image");
 }
 
 /**
@@ -125,7 +143,8 @@ OperationShowScene::getParameters()
     connDbOpt->addStringParameter(1, "Username", "Connectome DB Username");
     connDbOpt->addStringParameter(2, "Password", "Connectome DB Password");
     
-    AString helpText("Render content of browser windows displayed in a scene "
+    AString helpText("DEPRECATED: this command may be removed in a future release, use -scene-capture-image.\n\n"
+                     "Render content of browser windows displayed in a scene "
                      "into image file(s).  The image file name should be "
                      "similar to \"capture.png\".  If there is only one image "
                      "to render, the image name will not change.  If there is "
@@ -173,6 +192,12 @@ OperationShowScene::getParameters()
                  );
     
     
+#ifndef HAVE_OSMESA
+    helpText += ("\n\nERROR: "
+                 + getCommandNotAvailableMessage(OperationShowScene::getCommandSwitch())
+                 + "\n");
+#endif
+    
     ret->setHelpText(helpText);
     
     return ret;
@@ -186,14 +211,20 @@ void
 OperationShowScene::useParameters(OperationParameters* /*myParams*/,
                                   ProgressObject* /*myProgObj*/)
 {
-    throw OperationException("Show scene command not available due to this software version "
-                             "not being built with the Mesa OffScreen Library");
+    throw OperationException(getCommandNotAvailableMessage(OperationShowScene::getCommandSwitch()));
 }
 #else // HAVE_OSMESA
 void
 OperationShowScene::useParameters(OperationParameters* myParams,
                                   ProgressObject* myProgObj)
 {
+    /*
+     * Kludge to prevent warning message about failure to delete texture.
+     * This is caused by the Mesa Context being deleted prior to a CZI or Image file
+     * being deleted.
+     */
+    EventGraphicsOpenGLDeleteTextureName::setDisableFailureToDeleteWarningMessages(true);
+    
     LevelProgress myProgress(myProgObj);
     AString sceneFileName = FileInformation(myParams->getString(1)).getAbsoluteFilePath();
     AString sceneNameOrNumber = myParams->getString(2);
@@ -329,7 +360,10 @@ OperationShowScene::useParameters(OperationParameters* myParams,
         EventMapYokingSelectMap yokeEvent(mapYokingGroup,
                                           NULL,
                                           NULL,
+                                          NULL,
+                                          NULL,
                                           mapYokingMapIndex,
+                                          MapYokingGroupEnum::MediaAllFramesStatus::ALL_FRAMES_OFF,
                                           true);
         EventManager::get()->sendEvent(yokeEvent.getPointer());
     }
@@ -449,6 +483,7 @@ OperationShowScene::useParameters(OperationParameters* myParams,
                                      + " failed.");
         }
         
+        
         //
         // Assign buffer to Mesa Context and make current
         //
@@ -457,7 +492,23 @@ OperationShowScene::useParameters(OperationParameters* myParams,
                               GL_UNSIGNED_BYTE,
                               imageWidth,
                               imageHeight) == 0) {
-            throw OperationException("Assigning buffer to context and make current failed.");
+            GLint mesaMaxWidth(0);
+            GLint mesaMaxHeight(0);
+            OSMesaGetIntegerv(OSMESA_MAX_WIDTH,
+                              &mesaMaxWidth);
+            OSMesaGetIntegerv(OSMESA_MAX_HEIGHT,
+                              &mesaMaxHeight);
+            AString msg("Assigning buffer to context and make current failed.  This may occur if the "
+                            "image pixel width="
+                            + AString::number(imageWidth)
+                            + " or pixel height="
+                            + AString::number(imageHeight)
+                            + " exceeds the Mesa System's maximum width="
+                            + AString::number(mesaMaxWidth)
+                            + " or height="
+                            + AString::number(mesaMaxHeight)
+                            + ".");
+            throw OperationException(msg);
         }
         
         /*
@@ -465,7 +516,10 @@ OperationShowScene::useParameters(OperationParameters* myParams,
          */
         if (restoreToTabTiles) {
             CaretPointer<BrainOpenGL> brainOpenGL(createBrainOpenGL());
-            
+            if (iWindow == 0) {
+                CaretLogConfig(brainOpenGL->getOpenGLInformation());
+            }
+
             TileTabsLayoutGridConfiguration* gridConfig = NULL; //tileTabsConfiguration->castToGridConfiguration();
             bool manualFlag(false);
             switch (bwc->getTileTabsConfigurationMode()) {
@@ -531,11 +585,13 @@ OperationShowScene::useParameters(OperationParameters* myParams,
                     
                     std::vector<const BrainOpenGLViewportContent*> constViewports(viewports.begin(),
                                                                                   viewports.end());
+                    const GraphicsFramesPerSecond* noGraphicsTiming(NULL);
                     brainOpenGL->drawModels(windowIndex,
                                             UserInputModeEnum::Enum::VIEW,
                                             brain,
                                             mesaContext,
-                                            constViewports);
+                                            constViewports,
+                                            noGraphicsTiming);
                     
                     const int32_t outputImageIndex = ((numberOfWindows > 1)
                                                       ? iWindow
@@ -561,7 +617,11 @@ OperationShowScene::useParameters(OperationParameters* myParams,
         }
         else {
             CaretPointer<BrainOpenGL> brainOpenGL(createBrainOpenGL());
-            
+            if (iWindow == 0) {
+                CaretLogFine(brainOpenGL->getOpenGLInformation());
+                
+            }
+
             const int32_t selectedTabIndex = bwc->getSceneSelectedTabIndex();
             
             EventBrowserTabGet getTabContent(selectedTabIndex);
@@ -586,11 +646,13 @@ OperationShowScene::useParameters(OperationParameters* myParams,
             std::vector<const BrainOpenGLViewportContent*> viewportContents;
             viewportContents.push_back(content);
             
+            const GraphicsFramesPerSecond* noGraphicsTiming(NULL);
             brainOpenGL->drawModels(windowIndex,
                                     UserInputModeEnum::Enum::VIEW,
                                     brain,
                                     mesaContext,
-                                    viewportContents);
+                                    viewportContents,
+                                    noGraphicsTiming);
             
             const int32_t outputImageIndex = ((numberOfWindows > 1)
                                               ? iWindow

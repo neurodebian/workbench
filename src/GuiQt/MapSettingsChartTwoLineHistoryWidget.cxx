@@ -42,7 +42,7 @@
 #include "ChartableTwoFileLineSeriesChart.h"
 #include "ChartTwoLineSeriesHistory.h"
 #include "ChartTwoOverlay.h"
-#include "EventGraphicsUpdateAllWindows.h"
+#include "EventGraphicsPaintSoonAllWindows.h"
 #include "EventManager.h"
 #include "MapFileDataSelector.h"
 #include "WuQDoubleSpinBox.h"
@@ -105,16 +105,31 @@ MapSettingsChartTwoLineHistoryWidget::MapSettingsChartTwoLineHistoryWidget(QWidg
                      this, SLOT(viewedMaximumSpinBoxValueChanged(int)));
     
     m_removeHistoryItemSignalMapper = new QSignalMapper(this);
+#if QT_VERSION >= 0x060000
+    QObject::connect(m_removeHistoryItemSignalMapper, &QSignalMapper::mappedInt,
+                     this, &MapSettingsChartTwoLineHistoryWidget::removeHistoryItemSelected);
+#else
     QObject::connect(m_removeHistoryItemSignalMapper, SIGNAL(mapped(int)),
                      this, SLOT(removeHistoryItemSelected(int)));
+#endif
     
     m_colorItemSignalMapper = new QSignalMapper(this);
+#if QT_VERSION >= 0x060000
+    QObject::connect(m_colorItemSignalMapper, &QSignalMapper::mappedInt,
+                     this, &MapSettingsChartTwoLineHistoryWidget::colorItemSelected);
+#else
     QObject::connect(m_colorItemSignalMapper, SIGNAL(mapped(int)),
                      this, SLOT(colorItemSelected(int)));
+#endif
     
     m_lineWidthItemSignalMapper = new QSignalMapper(this);
+#if QT_VERSION >= 0x060000
+    QObject::connect(m_lineWidthItemSignalMapper, &QSignalMapper::mappedInt,
+                     this, &MapSettingsChartTwoLineHistoryWidget::lineWidthItemSelected);
+#else
     QObject::connect(m_lineWidthItemSignalMapper, SIGNAL(mapped(int)),
                      this, SLOT(lineWidthItemSelected(int)));
+#endif
     
     m_tableWidget = new QTableWidget();
     m_tableWidget->setSelectionBehavior(QTableWidget::SelectItems);
@@ -470,7 +485,7 @@ MapSettingsChartTwoLineHistoryWidget::tableWidgetCellChanged(int rowIndex, int c
                 CaretAssert(data);
                 data->setSelected(WuQtUtilities::checkStateToBool(item->checkState()));
                 
-                EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+                EventManager::get()->sendEvent(EventGraphicsPaintSoonAllWindows().getPointer());
             }
         }
     }
@@ -494,7 +509,7 @@ MapSettingsChartTwoLineHistoryWidget::removeHistoryItemSelected(int rowIndex)
     ChartTwoLineSeriesHistory* lineSeriesHistory = getLineSeriesHistory();
     lineSeriesHistory->removeHistoryItem(rowIndex);
     updateDialogContentPrivate();
-    EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+    EventManager::get()->sendEvent(EventGraphicsPaintSoonAllWindows().getPointer());
 }
 
 /**
@@ -509,7 +524,7 @@ MapSettingsChartTwoLineHistoryWidget::moveUpHistoryItemSelected(int rowIndex)
     ChartTwoLineSeriesHistory* lineSeriesHistory = getLineSeriesHistory();
     lineSeriesHistory->moveUpHistoryItem(rowIndex);
     updateDialogContentPrivate();
-    EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+    EventManager::get()->sendEvent(EventGraphicsPaintSoonAllWindows().getPointer());
 }
 
 /**
@@ -524,7 +539,7 @@ MapSettingsChartTwoLineHistoryWidget::moveDownHistoryItemSelected(int rowIndex)
     ChartTwoLineSeriesHistory* lineSeriesHistory = getLineSeriesHistory();
     lineSeriesHistory->moveDownHistoryItem(rowIndex);
     updateDialogContentPrivate();
-    EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+    EventManager::get()->sendEvent(EventGraphicsPaintSoonAllWindows().getPointer());
 }
 
 /**
@@ -545,7 +560,7 @@ MapSettingsChartTwoLineHistoryWidget::colorItemSelected(int rowIndex)
         CaretAssert(data);
         data->setColorEnum(m_colorComboBoxes[rowIndex]->getSelectedColor());
         
-        EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+        EventManager::get()->sendEvent(EventGraphicsPaintSoonAllWindows().getPointer());
     }
 }
 
@@ -567,7 +582,7 @@ MapSettingsChartTwoLineHistoryWidget::lineWidthItemSelected(int rowIndex)
         CaretAssert(data);
         data->setLineWidth(m_lineWidthSpinBoxes[rowIndex]->value());
         
-        EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+        EventManager::get()->sendEvent(EventGraphicsPaintSoonAllWindows().getPointer());
     }
 }
 
@@ -583,7 +598,7 @@ MapSettingsChartTwoLineHistoryWidget::removeAllHistoryButtonClicked()
         ChartTwoLineSeriesHistory* lineSeriesHistory = getLineSeriesHistory();
         lineSeriesHistory->clearHistory();
         updateDialogContentPrivate();
-        EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+        EventManager::get()->sendEvent(EventGraphicsPaintSoonAllWindows().getPointer());
     }
 }
 
@@ -630,7 +645,7 @@ MapSettingsChartTwoLineHistoryWidget::viewedMaximumSpinBoxValueChanged(int num)
     if (lineSeriesHistory != NULL) {
         lineSeriesHistory->setDisplayCount(num);
         updateDialogContentPrivate();
-        EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+        EventManager::get()->sendEvent(EventGraphicsPaintSoonAllWindows().getPointer());
     }
 }
 

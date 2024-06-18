@@ -219,9 +219,16 @@ namespace caret {
         void addInteger(const AString& name,
                         const int32_t value);
         
+        void addLongInteger(const AString& name,
+                            const int64_t value);
+        
         void addIntegerArray(const AString& name,
                              const int32_t values[],
                              const int32_t arrayNumberOfElements);
+        
+        void addLongIntegerArray(const AString& name,
+                                 const int64_t values[],
+                                 const int32_t arrayNumberOfElements);
         
         void addUnsignedByteArray(const AString& name,
                              const uint8_t values[],
@@ -238,6 +245,9 @@ namespace caret {
                              const int32_t arrayNumberOfElements);
         
         void addChild(SceneObject* sceneObject);
+        
+        bool replaceChild(const SceneObject* sceneObjectToReplace,
+                          SceneObject* newObjectToInsert);
         
         bool getBooleanValue(const AString& name,
                              const bool defaultValue = false) const;
@@ -270,6 +280,14 @@ namespace caret {
                                    int32_t values[],
                                    const int32_t arrayNumberOfElements,
                                    const int32_t defaultValue = 0) const;
+        
+        int64_t getLongIntegerValue(const AString& name,
+                                    const int64_t defaultValue = 0) const;
+        
+        int32_t getLongIntegerArrayValue(const AString& name,
+                                         int64_t values[],
+                                         const int32_t arrayNumberOfElements,
+                                         const int64_t defaultValue = 0) const;
         
         int32_t getUnsignedByteArrayValue(const AString& name,
                                      uint8_t values[],

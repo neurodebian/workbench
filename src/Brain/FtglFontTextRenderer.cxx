@@ -196,6 +196,10 @@ FtglFontTextRenderer::getFont(const AnnotationText& annotationText,
     switch (annotationText.getCoordinateSpace()) {
         case AnnotationCoordinateSpaceEnum::CHART:
             break;
+        case AnnotationCoordinateSpaceEnum::HISTOLOGY:
+            break;
+        case AnnotationCoordinateSpaceEnum::MEDIA_FILE_NAME_AND_PIXEL:
+            break;
         case AnnotationCoordinateSpaceEnum::SPACER:
             break;
         case AnnotationCoordinateSpaceEnum::STEREOTAXIC:
@@ -1570,7 +1574,7 @@ FtglFontTextRenderer::saveStateOfOpenGL()
     glPushMatrix();
     glLoadIdentity();
     glMatrixMode(GL_PROJECTION);
-    glPushMatrix();
+    GraphicsUtilitiesOpenGL::pushMatrix();  /* Projection stack too small (4) on nvidia systems */
     glMatrixMode(GL_MODELVIEW);
     glPushMatrix();
     
@@ -1593,7 +1597,7 @@ FtglFontTextRenderer::restoreStateOfOpenGL()
     glMatrixMode(GL_TEXTURE);
     glPopMatrix();
     glMatrixMode(GL_PROJECTION);
-    glPopMatrix();
+    GraphicsUtilitiesOpenGL::popMatrix();  /* Projection stack too small (4) on nvidia systems */
     glMatrixMode(GL_MODELVIEW);
     glPopMatrix();
     glPopAttrib();
@@ -2262,8 +2266,13 @@ m_textDrawingSpace(TextDrawingSpace::VIEWPORT)
     QString textString = (flags.isDrawSubstitutedText()
                           ? m_annotationText.getTextWithSubstitutionsApplied()
                           : m_annotationText.getText());
+#if QT_VERSION >= 0x060000
+    QStringList textList = textString.split('\n',
+                                            Qt::KeepEmptyParts);
+#else
     QStringList textList = textString.split('\n',
                                             QString::KeepEmptyParts);
+#endif
     const int32_t textListSize = textList.size();
     
     for (int32_t i = 0; i < textListSize; i++) {

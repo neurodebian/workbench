@@ -44,7 +44,7 @@ using namespace caret;
  *    Type for attribute defaults
  */
 AnnotationPolyLine::AnnotationPolyLine(const AnnotationAttributesDefaultTypeEnum::Enum attributeDefaultType)
-: AnnotationMultiCoordinateShape(AnnotationTypeEnum::POLY_LINE,
+: AnnotationMultiCoordinateShape(AnnotationTypeEnum::POLYLINE,
                                 attributeDefaultType)
 {
     initializeMembersAnnotationPolyLine();
@@ -105,6 +105,24 @@ AnnotationPolyLine::initializeMembersAnnotationPolyLine()
     m_sceneAssistant.grabNew(new SceneClassAssistant());
     if (testProperty(Property::SCENE_CONTAINS_ATTRIBUTES)) {
     }
+}
+
+/**
+ * @return Cast to polyline (NULL if NOT polyline)
+ */
+AnnotationPolyLine*
+AnnotationPolyLine::castToPolyline()
+{
+    return this;
+}
+
+/**
+ * @return Cast to polyline (NULL if NOT polyline) const method
+ */
+const AnnotationPolyLine*
+AnnotationPolyLine::castToPolyline() const
+{
+    return this;
 }
 
 /**

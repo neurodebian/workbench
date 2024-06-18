@@ -24,6 +24,9 @@
 #undef __VOLUME_MAPPABLE_INTERFACE_DECLARE__
 
 #include "CaretAssert.h"
+#include "DataFile.h"
+#include "VolumeSpace.h"
+
 using namespace caret;
 
 
@@ -50,6 +53,76 @@ VolumeMappableInterface::getVoxelSpacing(float& spacingOut1,
     spacingOut2 = jstep.length();
     spacingOut3 = kstep.length();
 }
+
+/**
+ * Get the voxel spacing for parasagittal (X), coronal (Y), and axial (Z)
+ *
+ * @param spacingParasagittalXOut
+ *    Spacing for the first dimension (typically X).
+ * @param spacingCoronalYOut
+ *    Spacing for the first dimension (typically Y).
+ * @param spacingAxialZOut
+ *    Spacing for the first dimension (typically Z).
+ */
+void
+VolumeMappableInterface::getVoxelSpacingPCA(float& spacingParasagittalXOut,
+                                            float& spacingCoronalYOut,
+                                            float& spacingAxialZOut) const
+{
+    spacingParasagittalXOut = 0.0;
+    spacingCoronalYOut      = 0.0;
+    spacingAxialZOut        = 0.0;
+    
+    Vector3D spacing;
+    getVoxelSpacing(spacing[0], spacing[1], spacing[2]);
+    
+    VolumeSpace::OrientTypes orientation[3];
+    getVolumeSpace().getOrientation(orientation);
+    
+    if (getVolumeSpace().isPlumb()) {
+        for (int32_t i = 0; i < 3; i++) {
+            switch (orientation[i]) {
+                case VolumeSpace::LEFT_TO_RIGHT:
+                case VolumeSpace::RIGHT_TO_LEFT:
+                    spacingParasagittalXOut = spacing[i];
+                    break;
+                case VolumeSpace::ANTERIOR_TO_POSTERIOR:
+                case VolumeSpace::POSTERIOR_TO_ANTERIOR:
+                    spacingCoronalYOut = spacing[i];
+                    break;
+                case VolumeSpace::INFERIOR_TO_SUPERIOR:
+                case VolumeSpace::SUPERIOR_TO_INFERIOR:
+                    spacingAxialZOut = spacing[i];
+                    break;
+            }
+        }
+    }
+    else {
+        spacingParasagittalXOut = spacing[0];
+        spacingCoronalYOut      = spacing[1];
+        spacingAxialZOut        = spacing[2];
+    }
+}
+
+/**
+ * @return The maximum voxel spacing
+ */
+float
+VolumeMappableInterface::getMaximumVoxelSpacing() const
+{
+    float maxSpacing(1.0);
+    
+    float sp, sc, sa;
+    getVoxelSpacing(sp, sc, sa);
+    maxSpacing = std::max(sp, std::max(sc, sa));
+    
+    if (maxSpacing == 0.0) {
+        maxSpacing = 1.0;
+    }
+
+    return maxSpacing;
+}
+
 
 /**
  * Does this volume have these spatial dimensions?
@@ -123,5 +196,95 @@ VolumeMappableInterface::limitIndicesToValidIndices(int64_t& index1,
             index3 = 0;
         }
     }
+}
+
+/**
+ * Get the dimensions for the parasagittal, coronal, and axial dimensions.
+ * If the volume is 'plumb', these dimensions will be correct for any orientation.
+ * Otherwise, if the volume is NOT plumb, parasagittal will contain first dimension,
+ * coronal the second dimension, and axial the third dimension.
+ * 
+ * @param dimParasagittalOut
+ *   Dimension for parasagittal axis
+ * @param dimCoronalOut
+ *   Dimension for coronal axis
+ * @param dimAxialOut
+ *   Dimension for axial axis
+ */
+void
+VolumeMappableInterface::getDimensionsPCA(int64_t& dimParasagittalOut,
+                                          int64_t& dimCoronalOut,
+                                          int64_t& dimAxialOut) const
+{
+    dimParasagittalOut = 0;
+    dimCoronalOut      = 0;
+    dimAxialOut        = 0;
+    
+    std::vector<int64_t> dimensions;
+    getDimensions(dimensions);
+    if (dimensions.size() < 3) {
+        return;
+    }
+    
+    const VolumeSpace& volumeSpace(getVolumeSpace());
+    
+    VolumeSpace::OrientTypes orientation[3];
+    volumeSpace.getOrientation(orientation);
+    
+    if (volumeSpace.isPlumb()) {
+        dimParasagittalOut = -1;
+        dimCoronalOut      = -1;
+        dimAxialOut        = -1;
+        for (int32_t i = 0; i < 3; i++) {
+            switch (orientation[i]) {
+                case VolumeSpace::LEFT_TO_RIGHT:
+                case VolumeSpace::RIGHT_TO_LEFT:
+                    dimParasagittalOut = dimensions[i];
+                    break;
+                case VolumeSpace::ANTERIOR_TO_POSTERIOR:
+                case VolumeSpace::POSTERIOR_TO_ANTERIOR:
+                    dimCoronalOut = dimensions[i];
+                    break;
+                case VolumeSpace::INFERIOR_TO_SUPERIOR:
+                case VolumeSpace::SUPERIOR_TO_INFERIOR:
+                    dimAxialOut = dimensions[i];
+                    break;
+            }
+        }
+        CaretAssert(dimParasagittalOut >= 0);
+        CaretAssert(dimCoronalOut      >= 0);
+        CaretAssert(dimAxialOut        >= 0);
+    }
+    else {
+        dimParasagittalOut = dimensions[0];
+        dimCoronalOut      = dimensions[1];
+        dimAxialOut        = dimensions[2];
+    }
+}
+
+/**
+ * Convert an index to space (coordinates).
+ *
+ * @param indexIn1
+ *     First dimension (i).
+ * @param indexIn2
+ *     Second dimension (j).
+ * @param indexIn3
+ *     Third dimension (k).
+ * @return coordOut
+ *     The XYZ coordinate.
+ */
+Vector3D
+VolumeMappableInterface::indexToSpace(const float& indexIn1,
+                                      const float& indexIn2,
+                                      const float& indexIn3) const
+{
+    Vector3D xyz;
+    
+    indexToSpace(indexIn1,
+                 indexIn2,
+                 indexIn3,
+                 xyz);
+    return xyz;
 }
 

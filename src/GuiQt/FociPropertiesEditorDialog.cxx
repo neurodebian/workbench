@@ -41,7 +41,7 @@
 #include "CaretAssert.h"
 #include "CaretFileDialog.h"
 #include "DisplayPropertiesFoci.h"
-#include "EventGraphicsUpdateAllWindows.h"
+#include "EventGraphicsPaintSoonAllWindows.h"
 #include "EventDataFileAdd.h"
 #include "EventManager.h"
 #include "EventUserInterfaceUpdate.h"
@@ -572,12 +572,14 @@ FociPropertiesEditorDialog::okButtonClicked()
         
         std::vector<const SurfaceFile*> surfaceFiles = brain->getPrimaryAnatomicalSurfaceFiles();
         
-        try {
-            SurfaceProjector projector(surfaceFiles);
-            projector.projectFocus(0, m_focus);
-        }
-        catch (SurfaceProjectorException& spe) {
-            CaretLogSevere(spe.whatString());
+        if ( ! surfaceFiles.empty()) {
+            try {
+                SurfaceProjector projector(surfaceFiles);
+                projector.projectFocus(0, m_focus);
+            }
+            catch (SurfaceProjectorException& spe) {
+                CaretLogSevere(spe.whatString());
+            }
         }
     }
     
@@ -607,7 +609,7 @@ void
 FociPropertiesEditorDialog::updateGraphicsAndUserInterface()
 {
     EventManager::get()->sendEvent(EventUserInterfaceUpdate().getPointer());
-    EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+    EventManager::get()->sendEvent(EventGraphicsPaintSoonAllWindows().getPointer());
 }
 
 

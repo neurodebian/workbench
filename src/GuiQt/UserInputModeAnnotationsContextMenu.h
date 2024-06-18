@@ -32,9 +32,11 @@ namespace caret {
 
     class Annotation;
     class AnnotationFile;
+    class AnnotationPolyhedron;
     class AnnotationText;
     class BrainOpenGLWidget;
     class BrowserTabContent;
+    class SelectionItemAnnotation;
     class SelectionManager;
     class UserInputModeAnnotations;
 
@@ -53,6 +55,14 @@ namespace caret {
         
         Annotation* getNewAnnotationCreatedByContextMenu();
 
+        static void insertPolylineCoordinateAtMouse(UserInputModeAnnotations* userInputModeAnnotations,
+                                                    const MouseEvent& mouseEvent);
+        
+        static bool processPolyhedronResetSliceRange(AnnotationPolyhedron* polyhedron,
+                                                     const int32_t browserWindowIndex,
+                                                     const Vector3D& mouseXY,
+                                                     const AString& extraMessageInfo,
+                                                     QWidget* parentWidgetForErrorMessage);
         // ADD_NEW_METHODS_HERE
 
     private slots:
@@ -72,6 +82,8 @@ namespace caret {
         
         void setAnnotationText();
         
+        void editMetaDataDialog();
+        
         void turnOffDisplayInOtherTabs();
         
         void turnOnDisplayInAllTabs();
@@ -88,6 +100,18 @@ namespace caret {
         
         void duplicateAnnotationSelected(QAction*);
                 
+        void insertPolylineCoordinate();
+        
+        void removePolylineCoordinateSelected();
+        
+        void resetPolyhedronSliceRangeSelected();
+        
+        void polyhedronInformationSelected();
+        
+        void lockPolyhedronSelected();
+        
+        void unlockPolyhedronSelected();
+        
     private:
         UserInputModeAnnotationsContextMenu(const UserInputModeAnnotationsContextMenu&);
 
@@ -100,6 +124,8 @@ namespace caret {
         QMenu* createDuplicateTabSpaceAnnotationMenu();
         
         void processAnnotationOrderOperation(const AnnotationStackingOrderTypeEnum::Enum orderType);
+        
+        static const SelectionItemAnnotation* getSelectionItem(UserInputModeAnnotations* userInputModeAnnotations);
         
         UserInputModeAnnotations* m_userInputModeAnnotations;
         
@@ -120,9 +146,13 @@ namespace caret {
         
         std::vector<std::pair<AnnotationFile*, Annotation*>> m_tabSpaceFileAndAnnotations;
         
-        Annotation* m_annotation;
+        Annotation* m_annotation = NULL;
         
-        AnnotationText* m_textAnnotation;
+        AnnotationPolyhedron* m_polyhedronAnnotation = NULL;
+        
+        AnnotationText* m_textAnnotation = NULL;
+        
+        int32_t m_polyAnnCoordinateSelected;
         
         Annotation* m_newAnnotationCreatedByContextMenu;
         

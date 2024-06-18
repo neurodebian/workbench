@@ -22,6 +22,7 @@
 #include <array>
 #include <cmath>
 #include <iostream>
+#include <map>
 #include <sstream>
 #include <string>
 
@@ -37,9 +38,12 @@
 #include "ElapsedTimer.h"
 #include "EventManager.h"
 #include "GiftiLabel.h"
+#include "GraphicsPrimitiveV3fT2f.h"
+#include "GraphicsPrimitiveV3fT3f.h"
 #include "GroupAndNameHierarchyModel.h"
 #include "FastStatistics.h"
 #include "Histogram.h"
+#include "ImageFile.h"
 #include "MapFileDataSelector.h"
 #include "MultiDimIterator.h"
 #include "NiftiIO.h"
@@ -49,7 +53,9 @@
 #include "VolumeFile.h"
 #include "VolumeFileEditorDelegate.h"
 #include "VolumeFileVoxelColorizer.h"
+#include "VolumeGraphicsPrimitiveManager.h"
 #include "VolumeSpline.h"
+#include "VoxelColorUpdate.h"
 
 #include <limits>
 
@@ -82,7 +88,10 @@ VolumeFile::setVoxelColoringEnabled(const bool enabled)
 
 /** protected, used by dynamic volume file */
 VolumeFile::VolumeFile(const DataFileTypeEnum::Enum dataFileType)
-: VolumeBase(), CaretMappableDataFile(dataFileType)
+: VolumeBase(),
+CaretMappableDataFile(dataFileType),
+ChartableLineSeriesBrainordinateInterface(),
+GroupAndNameHierarchyUserInterface()
 {//CaretPointers initialize to NULL, and this isn't an operator=
     CaretAssert((dataFileType == DataFileTypeEnum::VOLUME)
                 || (dataFileType == DataFileTypeEnum::VOLUME_DYNAMIC));
@@ -94,12 +103,16 @@ VolumeFile::VolumeFile(const DataFileTypeEnum::Enum dataFileType)
     m_writingDType = NIFTI_TYPE_FLOAT32;
     m_minScalingVal = -1.0;//unused, but make them consistent
     m_maxScalingVal = 1.0;
+    m_graphicsPrimitiveManager.reset(new VolumeGraphicsPrimitiveManager(this, this));
     validateMembers();
 }
 
 
 VolumeFile::VolumeFile()
-: VolumeBase(), CaretMappableDataFile(DataFileTypeEnum::VOLUME)
+: VolumeBase(),
+CaretMappableDataFile(DataFileTypeEnum::VOLUME),
+ChartableLineSeriesBrainordinateInterface(),
+GroupAndNameHierarchyUserInterface()
 {//CaretPointers initialize to NULL, and this isn't an operator=
     m_forceUpdateOfGroupAndNameHierarchy = true;
     for (int32_t i = 0; i < BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_TABS; i++) {
@@ -109,12 +122,16 @@ VolumeFile::VolumeFile()
     m_writingDType = NIFTI_TYPE_FLOAT32;
     m_minScalingVal = -1.0;//unused, but make them consistent
     m_maxScalingVal = 1.0;
+    m_graphicsPrimitiveManager.reset(new VolumeGraphicsPrimitiveManager(this, this));
     validateMembers();
 }
 
 VolumeFile::VolumeFile(const vector<int64_t>& dimensionsIn, const vector<vector<float> >& indexToSpace, const int64_t numComponents,
                        SubvolumeAttributes::VolumeType whatType, const AbstractHeader* templateHeader)
-: VolumeBase(dimensionsIn, indexToSpace, numComponents), CaretMappableDataFile(DataFileTypeEnum::VOLUME)
+: VolumeBase(dimensionsIn, indexToSpace, numComponents),
+CaretMappableDataFile(DataFileTypeEnum::VOLUME),
+ChartableLineSeriesBrainordinateInterface(),
+GroupAndNameHierarchyUserInterface()
 {//CaretPointers initialize to NULL, and this isn't an operator=
     m_forceUpdateOfGroupAndNameHierarchy = true;
     for (int32_t i = 0; i < BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_TABS; i++) {
@@ -125,6 +142,7 @@ VolumeFile::VolumeFile(const vector<int64_t>& dimensionsIn, const vector<vector<
     m_writingDType = NIFTI_TYPE_FLOAT32;
     m_minScalingVal = -1.0;//unused, but make them consistent
     m_maxScalingVal = 1.0;
+    m_graphicsPrimitiveManager.reset(new VolumeGraphicsPrimitiveManager(this, this));
     validateMembers();
     setType(whatType);
 }
@@ -135,6 +153,7 @@ void VolumeFile::reinitialize(const vector<int64_t>& dimensionsIn, const vector<
     clear();
     VolumeBase::reinitialize(dimensionsIn, indexToSpace, numComponents);
     if (templateHeader != NULL) m_header.grabNew(templateHeader->clone());
+    m_graphicsPrimitiveManager->clear();
     validateMembers();
     setType(whatType);
 }
@@ -150,6 +169,8 @@ void VolumeFile::reinitialize(const VolumeSpace& volSpaceIn, const int64_t numFr
         dims.push_back(numFrames);
     }
     reinitialize(dims, volSpaceIn.getSform(), numComponents, whatType, templateHeader);
+    m_graphicsPrimitiveManager->clear();
+
 }
 
 void VolumeFile::reinitialize(const VolumeFile* headerTemplate, const int64_t numFrames, const int64_t numComponents)
@@ -167,6 +188,12 @@ SubvolumeAttributes::VolumeType VolumeFile::getType() const
 {
     CaretAssertVectorIndex(m_caretVolExt.m_attributes, 0);
     CaretAssert(m_caretVolExt.m_attributes[0] != NULL);
+    //it is an error to get the palette for a label-type volume
+    if (!isMappedWithLabelTable() && getNumberOfMaps() >= 3) {
+        if (getMapPaletteColorMapping(0)->getSelectedPaletteName() == Palette::SPECIAL_RGB_VOLUME_PALETTE_NAME) {
+            return SubvolumeAttributes::RGB_WORKBENCH;
+        }
+    }
     return m_caretVolExt.m_attributes[0]->m_type;
 }
 
@@ -224,6 +251,7 @@ VolumeFile::clear()
     m_frameSplines.clear();
     
     m_dataRangeValid = false;
+    m_nonZeroVoxelCoordinateBoundingBoxes.clear();
     VolumeBase::clear();
     
     m_volumeFileEditorDelegate->clear();
@@ -233,6 +261,8 @@ VolumeFile::clear()
     m_writingDType = NIFTI_TYPE_FLOAT32;
     m_minScalingVal = -1.0;//unused, but make them consistent
     m_maxScalingVal = 1.0;
+    
+    m_graphicsPrimitiveManager->clear();
 }
 
 void VolumeFile::readFile(const AString& filename)
@@ -467,6 +497,33 @@ bool VolumeFile::hasGoodSpatialInformation() const
     return true;
 }
 
+float
+VolumeFile::interpolateValue(const float* coordIn,
+                             const VoxelInterpolationTypeEnum::Enum interpType,
+                             bool* validOut,
+                             const int64_t brickIndex,
+                             const int64_t component) const
+{
+    InterpType interp = CUBIC;
+    switch (interpType) {
+        case VoxelInterpolationTypeEnum::CUBIC:
+            interp = CUBIC;
+            break;
+        case VoxelInterpolationTypeEnum::TRILINEAR:
+            interp = TRILINEAR;
+            break;
+        case VoxelInterpolationTypeEnum::ENCLOSING_VOXEL:
+            interp = ENCLOSING_VOXEL;
+            break;
+    }
+    
+    return interpolateValue(coordIn,
+                            interp,
+                            validOut,
+                            brickIndex,
+                            component);
+}
+
 float VolumeFile::interpolateValue(const float* coordIn, InterpType interp, bool* validOut, const int64_t brickIndex, const int64_t component) const
 {
     return interpolateValue(coordIn[0], coordIn[1], coordIn[2], interp, validOut, brickIndex, component);
@@ -688,7 +745,6 @@ void VolumeFile::parseExtensions()
                 default:
                     break;
             }
-            break;
         }
         if (whichExt != -1)
         {
@@ -751,6 +807,7 @@ void VolumeFile::updateCaretExtension()
 void VolumeFile::validateMembers()
 {
     m_dataRangeValid = false;
+    m_nonZeroVoxelCoordinateBoundingBoxes.clear();
     const int64_t* dimensions = getDimensionsPtr();
     m_frameSplineValid = vector<bool>(dimensions[3] * dimensions[4], false);
     m_frameSplines = vector<VolumeSpline>(dimensions[3] * dimensions[4]);//release any previous spline memory
@@ -824,7 +881,7 @@ void VolumeFile::validateMembers()
         m_voxelColorizer.grabNew(new VolumeFileVoxelColorizer(this));
     }
     if (m_classNameHierarchy == NULL) {
-        m_classNameHierarchy.grabNew(new GroupAndNameHierarchyModel());
+        m_classNameHierarchy.grabNew(new GroupAndNameHierarchyModel(this));
     }
     m_classNameHierarchy->clear();
     m_forceUpdateOfGroupAndNameHierarchy = true;
@@ -1355,6 +1412,9 @@ VolumeFile::isMappedWithPalette() const
         case SubvolumeAttributes::RGB:
             mapsWithPaletteFlag = false;
             break;
+        case SubvolumeAttributes::RGB_WORKBENCH:
+            mapsWithPaletteFlag = false;
+            break;
         case SubvolumeAttributes::SEGMENTATION:
             break;
         case SubvolumeAttributes::UNKNOWN:
@@ -1491,6 +1551,9 @@ VolumeFile::isMappedWithRGBA() const
         case SubvolumeAttributes::RGB:
             mapsWithRgbaFlag = true;
             break;
+        case SubvolumeAttributes::RGB_WORKBENCH:
+            mapsWithRgbaFlag = true;
+            break;
         case SubvolumeAttributes::SEGMENTATION:
             break;
         case SubvolumeAttributes::UNKNOWN:
@@ -1540,6 +1603,137 @@ VolumeFile::getVoxelSpaceBoundingBox(BoundingBox& boundingBoxOut) const
 }
 
 /**
+ * (static method) Given dimensions, origin, and spacing, find the edges of the voxels
+ * @param dimensions
+ *    Dimensions of volume
+ * @param origin
+ *    Origin of volume
+ * @param spacing
+ *    Spacing of volume
+ * @param firstVoxelEdgeOut
+ *    Output with edge of first voxel in volume
+ * @param lastVoxelEdgeOut
+ *    Output with edge of last voxel in volume
+ */
+void
+VolumeFile::dimensionOriginSpacingXyzToVoxelEdges(const Vector3D& dimensions,
+                                                  const Vector3D& origin,
+                                                  const Vector3D& spacing,
+                                                  Vector3D& firstVoxelEdgeOut,
+                                                  Vector3D& lastVoxelEdgeOut)
+{
+    const Vector3D halfSpacing(spacing / 2.0);
+    firstVoxelEdgeOut = (origin
+                         - halfSpacing);
+    lastVoxelEdgeOut = (firstVoxelEdgeOut
+                        + Vector3D(spacing[0] * dimensions[0],
+                                   spacing[1] * dimensions[1],
+                                   spacing[2] * dimensions[2]));
+}
+
+/**
+ * Get a bounding box containing the non-zero voxel coordinate ranges
+ * @param mapIndex
+ *    Index of map
+ * @param boundingBoxOut
+ *    Output containing coordinate range of non-zero voxels
+ */
+void
+VolumeFile::getNonZeroVoxelCoordinateBoundingBox(const int32_t mapIndex,
+                                           BoundingBox& boundingBoxOut) const
+{
+    if (static_cast<int32_t>(m_nonZeroVoxelCoordinateBoundingBoxes.size()) <= mapIndex) {
+        m_nonZeroVoxelCoordinateBoundingBoxes.resize(mapIndex + 1);
+    }
+    CaretAssertVectorIndex(m_nonZeroVoxelCoordinateBoundingBoxes, mapIndex);
+    
+    /*
+     * If pointer is valid, then the bounding box is valid
+     * and does not need to be updated.
+     */
+    if (m_nonZeroVoxelCoordinateBoundingBoxes[mapIndex]) {
+        boundingBoxOut = *m_nonZeroVoxelCoordinateBoundingBoxes[mapIndex];
+        return;
+    }
+    
+    m_nonZeroVoxelCoordinateBoundingBoxes[mapIndex].reset(new BoundingBox());
+    m_nonZeroVoxelCoordinateBoundingBoxes[mapIndex]->resetForUpdate();
+    
+    int64_t dimI(0), dimJ(0), dimK(0), dimTime(0), dimComp(0);
+    getDimensions(dimI, dimJ, dimK, dimTime, dimComp);
+    
+    const int64_t BIG_DIMS(400 * 400 * 400);
+    const int64_t volDim3(dimI * dimJ * dimK);
+    if (volDim3 > BIG_DIMS) {
+        /*
+         * Computation below can be very slow for LARGE
+         * VOLUMES.  Until that code can be improved
+         * just use coordinate bounds for entire volume.
+         * In almost every instance the non-zero volume
+         * data fills the volume.
+         */
+        getVoxelSpaceBoundingBox(boundingBoxOut);
+        return;
+    }
+    
+    CaretAssert((mapIndex >= 0) && (mapIndex < getNumberOfMaps()));
+    
+    /*
+     * Note: Adding "collapse(4)" was faster but results were
+     * incorrect.  Adding "collapse(3) was not faster than
+     * without it but results were correct.
+     *
+     * For a 1000x1000x1000 volume using OpenMP reduces
+     * computation time from 915 second to 247 seconds
+     * on a MacBook Air with M1 processor.
+     *
+     * Optimization suggestion for a 'plumb' volume.
+     * Start at each face of volume
+     * and move one slice at a time until a non-zero voxel is
+     * encountered.  In other words, start with axial slice 0,
+     * then slice 1, etc.  Then start with last axial slice,
+     * next to last axial slice, etc. and same for other axis.
+     */
+#pragma omp CARET_PARFOR schedule(dynamic)
+    for (int32_t i = 0; i < dimI; i++) {
+        for (int32_t j = 0; j < dimJ; j++) {
+            for (int32_t k = 0; k < dimK; k++) {
+                for (int32_t m = 0; m < dimComp; m++) {
+                    if (getValue(i, j, k, mapIndex, m) != 0.0) {
+                        float xyz[3];
+                        indexToSpace(i, j, k, xyz);
+#pragma omp critical
+                        {
+                            m_nonZeroVoxelCoordinateBoundingBoxes[mapIndex]->update(xyz);
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    boundingBoxOut = *m_nonZeroVoxelCoordinateBoundingBoxes[mapIndex];
+}
+
+/**
+ * @return Instance cast to a Volume Mappable CaretMappableDataFile
+ */
+CaretMappableDataFile*
+VolumeFile::castToVolumeMappableDataFile()
+{
+    return this;
+}
+
+/**
+ * @return Instance cast to a Volume Mappable CaretMappableDataFile (const method)
+ */
+const CaretMappableDataFile*
+VolumeFile::castToVolumeMappableDataFile() const
+{
+    return this;
+}
+
+/**
  * Update coloring for a map.
  * Does nothing if coloring is not enabled.
  *
@@ -1555,8 +1749,10 @@ VolumeFile::updateScalarColoringForMap(const int32_t mapIndex)
     
     CaretAssertVectorIndex(m_caretVolExt.m_attributes, mapIndex);
     CaretAssert(m_voxelColorizer);
-    
+
     m_voxelColorizer->assignVoxelColorsForMap(mapIndex);
+
+    m_graphicsPrimitiveManager->invalidateColoringForMap(mapIndex);
     
     invalidateHistogramChartColoring();
 }
@@ -1708,6 +1904,153 @@ VolumeFile::getVoxelColorsForSubSliceInMap(const int32_t mapIndex,
                                                      rgbaOut);
 }
 
+/**
+ * Get the graphics primitive for drawing this volume using a graphics primitive
+ *
+ * @param mapIndex
+ *    Index of the map.
+ * @param displayGroup
+ *    The selected display group.
+ * @param tabIndex
+ *    Index of selected tab.
+ * @param rgbaOut
+ *    Output containing the rgba values (must have been allocated
+ *    by caller to sufficient count of elements in the slice).
+ * @return
+ *    Graphics primitive or NULL if unable to draw
+ */
+GraphicsPrimitiveV3fT3f*
+VolumeFile::getVolumeDrawingTriangleStripPrimitive(const int32_t mapIndex,
+                                              const DisplayGroupEnum::Enum displayGroup,
+                                              const int32_t tabIndex) const
+{
+    return m_graphicsPrimitiveManager->getVolumeDrawingPrimitiveForMap(VolumeGraphicsPrimitiveManager::PrimitiveShape::TRIANGLE_STRIP,
+                                                                       mapIndex,
+                                                                       displayGroup,
+                                                                       tabIndex);
+}
+
+/**
+ * Get the graphics primitive for drawing this volume using a FAN graphics primitive
+ *
+ * @param mapIndex
+ *    Index of the map.
+ * @param displayGroup
+ *    The selected display group.
+ * @param tabIndex
+ *    Index of selected tab.
+ * @param rgbaOut
+ *    Output containing the rgba values (must have been allocated
+ *    by caller to sufficient count of elements in the slice).
+ * @return
+ *    Graphics primitive or NULL if unable to draw
+ */
+GraphicsPrimitiveV3fT3f*
+VolumeFile::getVolumeDrawingTriangleFanPrimitive(const int32_t mapIndex,
+                                      const DisplayGroupEnum::Enum displayGroup,
+                                      const int32_t tabIndex) const
+{
+    return m_graphicsPrimitiveManager->getVolumeDrawingPrimitiveForMap(VolumeGraphicsPrimitiveManager::PrimitiveShape::TRIANGLE_FAN,
+                                                                       mapIndex,
+                                                                       displayGroup,
+                                                                       tabIndex);
+}
+
+/**
+ * Get the graphics primitive for drawing this volume using a TRIANGLES graphics primitive
+ *
+ * @param mapIndex
+ *    Index of the map.
+ * @param displayGroup
+ *    The selected display group.
+ * @param tabIndex
+ *    Index of selected tab.
+ * @param rgbaOut
+ *    Output containing the rgba values (must have been allocated
+ *    by caller to sufficient count of elements in the slice).
+ * @return
+ *    Graphics primitive or NULL if unable to draw
+ */
+GraphicsPrimitiveV3fT3f*
+VolumeFile::getVolumeDrawingTrianglesPrimitive(const int32_t mapIndex,
+                                               const DisplayGroupEnum::Enum displayGroup,
+                                               const int32_t tabIndex) const
+{
+    return m_graphicsPrimitiveManager->getVolumeDrawingPrimitiveForMap(VolumeGraphicsPrimitiveManager::PrimitiveShape::TRIANGLES,
+                                                                       mapIndex,
+                                                                       displayGroup,
+                                                                       tabIndex);
+}
+
+/**
+ * Create a graphics primitive for showing part of volume that intersects with an image from histology
+ * @param mapIndex
+ *    Index of the map.
+ * @param displayGroup
+ *    The selected display group.
+ * @param tabIndex
+ *    Index of selected tab.
+ * @param mediaFile
+ *    The medial file for drawing histology
+ * @param volumeMappingMode
+ *    The volume to image mapping mode
+ * @param volumeSliceThickness
+ *    The volume slice thickness for mapping volume to image
+ * @param errorMessageOut
+ *    Ouput with error message
+ * @return
+ *    Primitive for drawing intersection or NULL if failure
+ */
+GraphicsPrimitive*
+VolumeFile::getHistologyImageIntersectionPrimitive(const int32_t mapIndex,
+                                                   const DisplayGroupEnum::Enum displayGroup,
+                                                   const int32_t tabIndex,
+                                                   const MediaFile* mediaFile,
+                                                   const VolumeToImageMappingModeEnum::Enum volumeMappingMode,
+                                                   const float volumeSliceThickness,
+                                                   AString& errorMessageOut) const
+{
+    return m_graphicsPrimitiveManager->getImageIntersectionDrawingPrimitiveForMap(mediaFile,
+                                                                                  mapIndex,
+                                                                                  displayGroup,
+                                                                                  tabIndex,
+                                                                                  volumeMappingMode,
+                                                                                  volumeSliceThickness,
+                                                                                  errorMessageOut);
+}
+
+/**
+ * Create a graphics primitive for showing part of volume that intersects with an image from histology
+ * @param mapIndex
+ *    Index of the map.
+ * @param displayGroup
+ *    The selected display group.
+ * @param tabIndex
+ *    Index of selected tab.
+ * @param histologySlice
+ *    The histology slice being drawn
+ * @param errorMessageOut
+ *    Ouput with error message
+ * @return
+ *    Primitive for drawing intersection or NULL if failure
+ */
+std::vector<GraphicsPrimitive*>
+VolumeFile::getHistologySliceIntersectionPrimitive(const int32_t mapIndex,
+                                                   const DisplayGroupEnum::Enum displayGroup,
+                                                   const int32_t tabIndex,
+                                                   const HistologySlice* histologySlice,
+                                                   const VolumeToImageMappingModeEnum::Enum volumeMappingMode,
+                                                   const float volumeSliceThickness,
+                                                   AString& errorMessageOut) const
+{
+    return m_graphicsPrimitiveManager->getImageIntersectionDrawingPrimitiveForMap(histologySlice,
+                                                                                  mapIndex,
+                                                                                  displayGroup,
+                                                                                  tabIndex,
+                                                                                  volumeMappingMode,
+                                                                                  volumeSliceThickness,
+                                                                                  errorMessageOut);
+}
 
 /**
  * Get the voxel values for a slice in a map.
@@ -1781,7 +2124,43 @@ VolumeFile::getVoxelValuesForSliceInMap(const int32_t mapIndex,
 
 
 /**
- * Get the RGBA color components for voxel.
+ * Get the RGBA color components for voxel in a map.
+ * Does nothing if coloring is not enabled and output colors are undefined
+ * in this case.
+ *
+ * @param i
+ *    Parasaggital index
+ * @param j
+ *    Coronal index
+ * @param k
+ *    Axial index
+ * @param mapIndex
+ *    Index of map.
+ * @param rgbaOut
+ *    Contains voxel coloring on exit.
+ */
+void
+VolumeFile::getVoxelColorInMap(const int64_t i,
+                               const int64_t j,
+                               const int64_t k,
+                               const int64_t mapIndex,
+                               uint8_t rgbaOut[4]) const
+{
+    if (s_voxelColoringEnabled == false) {
+        return;
+    }
+    
+    CaretAssert(m_voxelColorizer);
+
+    m_voxelColorizer->getVoxelColorInMap(i,
+                                         j,
+                                         k,
+                                         mapIndex,
+                                         rgbaOut);
+}
+
+/**
+ * Get the RGBA color components for voxel in map with display group and tab.
  * Does nothing if coloring is not enabled and output colors are undefined
  * in this case.
  *
@@ -1814,7 +2193,7 @@ VolumeFile::getVoxelColorInMap(const int64_t i,
     }
     
     CaretAssert(m_voxelColorizer);
-
+    
     m_voxelColorizer->getVoxelColorInMap(i,
                                          j,
                                          k,
@@ -1844,6 +2223,8 @@ VolumeFile::clearVoxelColoringForMap(const int64_t mapIndex)
     if (isMappedWithLabelTable()) {
         m_forceUpdateOfGroupAndNameHierarchy = true;
     }
+    
+    m_graphicsPrimitiveManager->invalidateColoringForMap(mapIndex);
 }
 
 /**
@@ -2473,6 +2854,7 @@ bool
 VolumeFile::getVolumeVoxelIdentificationForMaps(const std::vector<int32_t>& mapIndices,
                                                 const float xyz[3],
                                                 const AString& dataValueSeparator,
+                                                const int32_t digitsRightOfDecimal,
                                                 int64_t ijkOut[3],
                                                 AString& textOut) const
 {
@@ -2511,7 +2893,7 @@ VolumeFile::getVolumeVoxelIdentificationForMaps(const std::vector<int32_t>& mapI
                                   + ")");
             }
             else {
-                valuesText.append(AString::number(value, 'f', 3));
+                valuesText.append(AString::number(value, 'f', digitsRightOfDecimal));
             }
         }
         else {
@@ -2715,5 +3097,98 @@ VolumeFile::getPaletteColorMappingModifiedStatus() const
     }
     
     return modStatus;
+}
+
+/**
+ * Called when a group and name hierarchy item has attribute/status changed
+ */
+void
+VolumeFile::groupAndNameHierarchyItemStatusChanged()
+{
+    m_graphicsPrimitiveManager->invalidateAllColoring();
+}
+
+/**
+ * Set the values for the given voxels in the given map to the given value.
+ * This is used when the user is editing voxels and may  be more efficient
+ * than calling setValue() for each voxel.
+ * @param mapIndex
+ *    Index of the map
+ * @param voxelsIJK
+ *    IJK indices of the voxels
+ * @param value
+ *    New data value for the voxels
+ */
+void
+VolumeFile::setValuesForVoxelEditing(const int32_t mapIndex,
+                                     const std::vector<VoxelIJK>& voxelsIJK,
+                                     const float value)
+{
+    if ((mapIndex >= 0)
+        && (mapIndex < getNumberOfMaps())) {
+        /*
+         * Set the voxels
+         */
+        for (const auto& ijk : voxelsIJK) {
+            setValue(value,
+                     ijk.m_ijk,
+                     mapIndex);
+        }
+        
+        bool updateAllColoringFlag(true);
+        
+        if (isMappedWithLabelTable()) {
+            /*
+             * Update coloring for voxels with color from label
+             */
+            const GiftiLabelTable* labelTable(getMapLabelTable(mapIndex));
+            CaretAssert(labelTable);
+            const int32_t labelIndex(static_cast<int32_t>(value));
+            const GiftiLabel* label(labelTable->getLabel(labelIndex));
+            if (label != NULL) {
+                float rgbaFloat[4];
+                label->getColor(rgbaFloat);
+                
+                std::array<uint8_t, 4> rgba {
+                    static_cast<uint8_t>(rgbaFloat[0] * 255.0),
+                    static_cast<uint8_t>(rgbaFloat[1] * 255.0),
+                    static_cast<uint8_t>(rgbaFloat[2] * 255.0),
+                    static_cast<uint8_t>(rgbaFloat[3] * 255.0)
+                };
+                
+                VoxelColorUpdate voxelColorUpdate;
+                voxelColorUpdate.setMapIndex(mapIndex);
+                voxelColorUpdate.setRGBA(rgba);
+                voxelColorUpdate.addVoxels(voxelsIJK);
+                
+                if (m_voxelColorizer) {
+                    m_voxelColorizer->updateVoxelColorsInMap(voxelColorUpdate);
+                    updateAllColoringFlag = false;
+                }
+                
+                if (m_graphicsPrimitiveManager) {
+                    m_graphicsPrimitiveManager->updateVoxelColorsInMapTexture(voxelColorUpdate);
+                }
+            }
+        }
+        
+        if (updateAllColoringFlag) {
+            /*
+             * Still need to update all coloring since changing
+             * values may affect palette parameters
+             */
+            if (m_voxelColorizer) {
+                m_voxelColorizer->invalidateColoring();
+            }
+            
+            if (m_graphicsPrimitiveManager) {
+                /*
+                 * Need to invalidate the GraphicsPrimitive so that the
+                 * texture gets reloaded with the new RGBA coloring.
+                 */
+                m_graphicsPrimitiveManager->invalidateColoringForMap(mapIndex);
+            }
+        }
+    }
 }
 

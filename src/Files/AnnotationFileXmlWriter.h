@@ -21,7 +21,7 @@
  */
 /*LICENSE_END*/
 
-
+#include "AnnotationCoordinateSpaceEnum.h"
 #include "AnnotationFileXmlFormatBase.h"
 #include "CaretPointer.h"
 
@@ -34,10 +34,14 @@ namespace caret {
     class AnnotationBox;
     class AnnotationCoordinate;
     class AnnotationFile;
+    class AnnotationFontAttributesInterface;
     class AnnotationGroup;
     class AnnotationImage;
     class AnnotationLine;
+    class AnnotationMultiPairedCoordinateShape;
     class AnnotationMultiCoordinateShape;
+    class AnnotationPolygon;
+    class AnnotationPolyhedron;
     class AnnotationPolyLine;
     class AnnotationTwoCoordinateShape;
     class AnnotationOval;
@@ -55,6 +59,7 @@ namespace caret {
         void writeFile(const AnnotationFile* annotationFile);
         
         void writeFileToString(const AnnotationFile* annotationFile,
+                               const AString& fileNameForRelativePaths,
                                QString& fileContentString);
         
         // ADD_NEW_METHODS_HERE
@@ -81,6 +86,7 @@ namespace caret {
         void writeBox(const AnnotationBox* box);
         
         void writeCoordinate(const AnnotationCoordinate* coordinate,
+                             const AnnotationCoordinateSpaceEnum::Enum coordinateSpace,
                              const QString& coordinateXmlElement);
         
         void writeGroup(const AnnotationGroup* group);
@@ -89,8 +95,15 @@ namespace caret {
         
         void writeLine(const AnnotationLine* line);
         
+        void writePolyhedron(const AnnotationPolyhedron* polygonhedron);
+        
+        void writePolygon(const AnnotationPolygon* polygon);
+        
         void writePolyLine(const AnnotationPolyLine* polyLine);
         
+        void writeMultiPairedCoordinateShapeAnnotation(const AnnotationMultiPairedCoordinateShape* shape,
+                                                       const QString& annotationXmlElement);
+
         void writeMultiCoordinateShapeAnnotation(const AnnotationMultiCoordinateShape* shape,
                                                  const QString& annotationXmlElement);
         
@@ -103,6 +116,10 @@ namespace caret {
         void writeOval(const AnnotationOval* oval);
         
         void writeText(const AnnotationText* text);
+        
+        void writeAnnotationMetaData(const Annotation* annotation);
+        
+        void writeFontAttributes(const AnnotationFontAttributesInterface* fontAttributes);
         
         CaretPointer<QXmlStreamWriter> m_stream;
         

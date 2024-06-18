@@ -53,6 +53,14 @@ namespace caret {
         
         const AnnotationCoordinate* getEndCoordinate() const;
         
+        virtual int32_t getNumberOfCoordinates() const override;
+        
+        virtual AnnotationCoordinate* getCoordinate(const int32_t index) override;
+        
+        virtual const AnnotationCoordinate* getCoordinate(const int32_t index) const override;
+
+        virtual void replaceAllCoordinates(const std::vector<std::unique_ptr<const AnnotationCoordinate>>& coordinates) override;
+        
         virtual AnnotationSurfaceOffsetVectorTypeEnum::Enum getSurfaceOffsetVectorType() const override;
         
         virtual bool isModified() const;
@@ -93,6 +101,10 @@ namespace caret {
         void initializeMembersAnnotationTwoCoordinateShape();
         
         bool applySpatialModificationChartSpace(const AnnotationSpatialModification& spatialModification);
+        
+        bool applySpatialModificationHistologySpace(const AnnotationSpatialModification& spatialModification);
+        
+        bool applySpatialModificationMediaSpace(const AnnotationSpatialModification& spatialModification);
         
         bool applySpatialModificationSurfaceSpace(const AnnotationSpatialModification& spatialModification);
         

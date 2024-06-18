@@ -36,10 +36,13 @@
 #include <QTextEdit>
 
 #include "CaretColorEnumComboBox.h"
+#include "CaretDataFileSelectionComboBox.h"
+#include "CaretDataFileSelectionModel.h"
 #include "StructureEnumComboBox.h"
 #include "SurfaceSelectionViewController.h"
 #include "WuQDataEntryDialog.h"
 #include "WuQFactory.h"
+#include "WuQImageLabel.h"
 #include "WuQMessageBox.h"
 #include "WuQtUtilities.h"
 
@@ -419,7 +422,48 @@ WuQDataEntryDialog::addComboBox(const QString& labelText,
    
    return comboBox;
 }
-                       
+
+/**
+ * Add file selection combo box for given data file types loaded in wb_view
+ * @param labelText
+ *     Text for label
+ * @param dataFileTypes
+ *     Data file types for selection
+ */
+CaretDataFileSelectionComboBox*
+WuQDataEntryDialog::addFileSelectionComboBox(const QString& labelText,
+                                             const std::vector<DataFileTypeEnum::Enum> dataFileTypes)
+{
+    CaretDataFileSelectionComboBox* comboBox(new CaretDataFileSelectionComboBox(this));
+    comboBox->updateComboBox(CaretDataFileSelectionModel::newInstanceForCaretDataFileTypes(dataFileTypes));
+    
+    addWidget(labelText, comboBox->getWidget());
+    
+    return comboBox;
+}
+
+/**
+ * Add labels in both columns
+ * @param labelTextLeft
+ *    Text for left label
+ * @param labelTextRight
+ *    Text for right label
+ */
+QLabel*
+WuQDataEntryDialog::addLabel(const QString& labelLeftText,
+                             const QString& labelRightText)
+{
+    QLabel* rightLabel(new QLabel(labelRightText));
+    
+    //
+    // Add to dialog
+    //
+    addWidget(labelLeftText, rightLabel);
+    
+    return rightLabel;
+}
+
+
 /**
  * add line edit.
  */
@@ -595,6 +639,21 @@ WuQDataEntryDialog::addSurfaceSelectionViewController(const QString& labelText,
                     surfaceSelectionViewController->getWidget());
     
     return surfaceSelectionViewController;
+}
+
+/**
+ * Add an image
+ * @param labelText
+ *    Text for label
+ * @param image
+ *    Image for display
+ */
+void
+WuQDataEntryDialog::addImage(const QString labelText,
+                             const QImage& image)
+{
+    WuQImageLabel* imageLabel = new WuQImageLabel(&image, "");
+    addWidget(labelText, imageLabel);
 }
 
 

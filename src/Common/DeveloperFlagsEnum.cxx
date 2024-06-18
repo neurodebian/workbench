@@ -121,44 +121,70 @@ DeveloperFlagsEnum::initialize()
                                                 false));
     checkableItems.push_back(DeveloperFlagsEnum(DEVELOPER_FLAG_FLIP_PALETTE_NOT_DATA,
                                                 "DEVELOPER_FLAG_FLIP_PALETTE_NOT_DATA",
-                                                "Flip Palette Not Data",
+                                                "Drawing: Flip Palette Not Data",
                                                 CheckableEnum::YES,
                                                 false));
-    checkableItems.push_back(DeveloperFlagsEnum(DEVELOPER_FLAG_TEXTURE_VOLUME,
-                                                "DEVELOPER_FLAG_TEXTURE_VOLUME",
-                                                "Texture Volume Drawing",
+    
+    checkableItems.push_back(DeveloperFlagsEnum(DELELOPER_FLAG_TEXTURE_ANATOMY_VOLUME_SMOOTH,
+                                                "DELELOPER_FLAG_TEXTURE_ANATOMY_VOLUME_SMOOTH",
+                                                "Volume: MPR Smooth Anatomy Volume Voxels",
                                                 CheckableEnum::YES,
-                                                false));
-    checkableItems.push_back(DeveloperFlagsEnum(DELELOPER_FLAG_VOXEL_SMOOTH,
-                                                "DELELOPER_FLAG_VOXEL_SMOOTH",
-                                                "Smooth Texture Volume Voxels",
-                                                CheckableEnum::YES,
-                                                false));
+                                                true));
 
+    checkableItems.push_back(DeveloperFlagsEnum(DELELOPER_FLAG_TEXTURE_FUNCTIONAL_VOLUME_SMOOTH,
+                                                "DELELOPER_FLAG_TEXTURE_FUNCTIONAL_VOLUME_SMOOTH",
+                                                "Volume: MPR Smooth Functional Volume Voxels",
+                                                CheckableEnum::YES,
+                                                false));
+    
+    checkableItems.push_back(DeveloperFlagsEnum(DEVELOPER_FLAG_SURFACE_BUFFER,
+                                                "DEVELOPER_FLAG_SURFACE_BUFFER",
+                                                "Drawing: Draw Surfaces Using Buffers",
+                                                CheckableEnum::YES,
+                                                false));
+    
     checkableItems.push_back(DeveloperFlagsEnum(DEVELOPER_FLAG_VOXEL_CUBES_TEST,
                                                 "DEVELOPER_FLAG_VOXEL_CUBES_TEST",
-                                                "Voxel Cubes Drawing Test",
+                                                "Drawing: All View Voxel Cubes Outside Faces",
                                                 CheckableEnum::YES,
                                                 true));
     
     checkableItems.push_back(DeveloperFlagsEnum(DEVELOPER_FLAG_CHART_OPENGL_LINES,
                                                 "DEVELOPER_FLAG_CHART_OPENGL_LINES",
-                                                "Draw Chart Lines with OpenGL Lines",
+                                                "Drawing: Draw Chart Lines with OpenGL Lines",
                                                 CheckableEnum::YES,
                                                 true));
     
     checkableItems.push_back(DeveloperFlagsEnum(DEVELOPER_FLAG_BLENDING,
                                                 "DEVELOPER_FLAG_BLENDING",
-                                                "Separate RGB / Alpha Opacity",
+                                                "Drawing: Separate RGB / Alpha Opacity",
                                                 CheckableEnum::YES,
                                                 true));
-#ifdef HAVE_WEBKIT
-    checkableItems.push_back(DeveloperFlagsEnum(DEVELOPER_FLAG_BALSA,
-                                                "DEVELOPER_FLAG_BALSA",
-                                                "Visit BALSA...",
-                                                CheckableEnum::NO,
-                                                false));
-#endif
+    
+    checkableItems.push_back(DeveloperFlagsEnum(DEVELOPER_FLAG_MPR_THREE_SLICES_CHANGED_JUMP_FIX,
+                                                "DEVELOPER_FLAG_MPR_THREE_SLICES_CHANGED_JUMP_FIX",
+                                                "MPR Three: Fix Selected Slices Changed Jumping",
+                                                CheckableEnum::YES,
+                                                true));
+    
+    checkableItems.push_back(DeveloperFlagsEnum(DEVELOPER_FLAG_HISTOLOGY_CORRECT_FOR_NON_LINEAR_DISTORTION,
+                                                "DEVELOPER_FLAG_HISTOLOGY_CORRECT_FOR_NON_LINEAR_DISTORTION",
+                                                "Histology - Correct for non-linear distortion",
+                                                CheckableEnum::YES,
+                                                true));
+    
+    checkableItems.push_back(DeveloperFlagsEnum(DEVELOPER_FLAG_HISTOLOGY_CORRECT_IMAGE_OVERLAP,
+                                                "DEVELOPER_FLAG_HISTOLOGY_CORRECT_IMAGE_OVERLAP",
+                                                "Histology - Correct for image overlap",
+                                                CheckableEnum::YES,
+                                                true));
+        
+    checkableItems.push_back(DeveloperFlagsEnum(DEVELOPER_FLAG_VOXEL_EDIT,
+                                                "DEVELOPER_FLAG_VOXEL_EDIT",
+                                                "Voxel Edit Performance",
+                                                CheckableEnum::YES,
+                                                true));
+    
     
     std::vector<DeveloperFlagsEnum> notCheckableItems;
 
@@ -242,6 +268,62 @@ DeveloperFlagsEnum::fromName(const AString& name, bool* isValidOut)
         CaretAssertMessage(0, AString("Name " + name + "failed to match enumerated value for type DeveloperFlagsEnum"));
     }
     return enumValue;
+}
+
+AString
+DeveloperFlagsEnum::toToolTip(Enum enumValue)
+{
+    AString toolTip;
+    
+    switch (enumValue) {
+        case DELELOPER_FLAG_TEXTURE_ANATOMY_VOLUME_SMOOTH:
+            toolTip = ("Smooth MPR volume anatomy volume drawing voxels");
+            break;
+        case DELELOPER_FLAG_TEXTURE_FUNCTIONAL_VOLUME_SMOOTH:
+            toolTip = ("Smooth MPR volume functional volume drawing voxels");
+            break;
+        case DEVELOPER_FLAG_SURFACE_BUFFER:
+            toolTip = ("Draw surface using buffers (improved performance)");
+            break;
+        case DEVELOPER_FLAG_BLENDING:
+            toolTip = ("Separately blend RGB and Alpha components so Alpha is always 1.0 in frame buffer"
+                       " (fixes coloring problems and colors in some captured image formats)");
+            break;
+        case DEVELOPER_FLAG_CHART_OPENGL_LINES:
+            toolTip = ("Draw chart lines using OpenGL lines instead of polylines "
+                       "(faster but OpenGL lines have limited line width).  This setting "
+                       "DOES NOT affect files currently loaded.  Any files that produce "
+                       "line charts must be reloaded.");
+            break;
+        case DEVELOPER_FLAG_FLIP_PALETTE_NOT_DATA:
+            toolTip = ("When Invert Data is selected on Overlay and Map Settings Dialog,  "
+                       "flip the palette instead of flipping the data (not recommended)");
+            break;
+        case DEVELOPER_FLAG_MPR_THREE_SLICES_CHANGED_JUMP_FIX:
+            toolTip = ("MPR Three: Prevents slices from jumping if the selected slices are changed "
+                       " and there is non-zero rotation.");
+            break;
+        case DEVELOPER_FLAG_HISTOLOGY_CORRECT_FOR_NON_LINEAR_DISTORTION:
+            toolTip = ("Corrects for non-linear distortion in images from meta-images files.");
+            break;
+        case DEVELOPER_FLAG_HISTOLOGY_CORRECT_IMAGE_OVERLAP:
+            toolTip = ("Corrects to fix overlap when there are multiple images for a slice from "
+                       "a meta-image file.");
+            break;
+        case DEVELOPER_FLAG_VOXEL_EDIT:
+            toolTip = ("Voxel edit performance improvements");
+            break;
+        case DEVELOPER_FLAG_UNUSED:
+            toolTip = "Unused";
+            break;
+        case DEVELOPER_FLAG_VOXEL_CUBES_TEST:
+            toolTip = ("For voxel cubes in ALL view, only draw \"outside faces\" "
+                       "(faster but causes problem when opacity is less than one so disable "
+                       "in that instance)");
+            break;
+    }
+    
+    return toolTip;
 }
 
 /**
@@ -368,6 +450,34 @@ DeveloperFlagsEnum::getAllEnums(std::vector<DeveloperFlagsEnum::Enum>& allEnums)
          iter != enumData.end();
          iter++) {
         allEnums.push_back(iter->enumValue);
+    }
+}
+
+/**
+ * Get all of the enumerated type values.  The values can be used
+ * as parameters to toXXX() methods to get associated metadata.
+ *
+ * @param allEnums
+ *     A vector that is OUTPUT containing all of the enumerated values.
+ */
+void
+DeveloperFlagsEnum::getAllEnumsSortedByGuiName(std::vector<Enum>& allEnums)
+{
+    if (initializedFlag == false) initialize();
+    
+    allEnums.clear();
+
+    std::vector<AString> allNames;
+    const bool sortedFlag(true);
+    getAllGuiNames(allNames, sortedFlag);
+    
+    for (auto& name : allNames) {
+        bool validFlag(false);
+        const Enum enumValue(fromGuiName(name, &validFlag));
+        CaretAssert(validFlag);
+        if (validFlag) {
+            allEnums.push_back(enumValue);
+        }
     }
 }
 

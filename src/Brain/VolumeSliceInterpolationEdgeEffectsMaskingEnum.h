@@ -64,12 +64,19 @@ public:
 
     static void getAllGuiNames(std::vector<AString>& allGuiNames, const bool isSorted);
 
+    static AString toToolTip(Enum enumValue);
+    
     static AString getToolTip();
     
+    static AString toShortGuiName(Enum enumValue);
+    
+    static Enum nextEnum(const Enum enumValue);
 private:
     VolumeSliceInterpolationEdgeEffectsMaskingEnum(const Enum enumValue, 
-                 const AString& name,
-                 const AString& guiName);
+                                                   const AString& name,
+                                                   const AString& guiName,
+                                                   const AString& shortGuiName,
+                                                   const AString& toolTip);
 
     static const VolumeSliceInterpolationEdgeEffectsMaskingEnum* findData(const Enum enumValue);
 
@@ -96,6 +103,10 @@ private:
     
     /** A user-friendly name that is displayed in the GUI */
     AString guiName;
+    
+    AString shortGuiName;
+    
+    AString toolTip;
 };
 
 #ifdef __VOLUME_SLICE_INTERPOLATION_EDGE_EFFECTS_MASKING_ENUM_DECLARE__

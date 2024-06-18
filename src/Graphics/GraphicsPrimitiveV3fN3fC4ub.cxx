@@ -45,9 +45,7 @@ GraphicsPrimitiveV3fN3fC4ub::GraphicsPrimitiveV3fN3fC4ub(const PrimitiveType pri
                     NormalVectorDataType::FLOAT_XYZ,
                     ColorDataType::UNSIGNED_BYTE_RGBA,
                     VertexColorType::PER_VERTEX_RGBA,
-                    TextureDataType::NONE,
-                    TextureWrappingType::CLAMP,
-                    TextureFilteringType::LINEAR,
+                    GraphicsTextureSettings(),
                     primitiveType)
 {
     

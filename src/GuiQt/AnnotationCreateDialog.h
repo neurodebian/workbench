@@ -26,30 +26,41 @@
 #include "AnnotationCoordinateInformation.h"
 #include "AnnotationCoordinateSpaceEnum.h"
 #include "AnnotationTypeEnum.h"
+#include "UserInputModeEnum.h"
 #include "Vector3D.h"
 #include "WuQDialogModal.h"
 
 class QButtonGroup;
+class QCheckBox;
+class QDoubleSpinBox;
+class QSpinBox;
 class QTextEdit;
 
 namespace caret {
     class Annotation;
     class AnnotationFile;
     class BrowserTabContent;
+    class GiftiMetaData;
     class MouseEvent;
-    
+    class Plane;
+    class SelectionItemVoxel;
+
     class AnnotationCreateDialog : public WuQDialogModal {
         
         Q_OBJECT
 
     public:
-        static Annotation* newAnnotationFromSpaceAndType(const MouseEvent& mouseEvent,
+        static Annotation* newAnnotationFromSpaceAndType(const UserInputModeEnum::Enum userInputMode,
+                                                         const MouseEvent& mouseEvent,
+                                                         const SelectionItemVoxel* selectionItemVoxel,
                                                          const std::vector<Vector3D>& drawingCoordinates,
                                                          const AnnotationCoordinateSpaceEnum::Enum annotationSpace,
                                                          const AnnotationTypeEnum::Enum annotationType,
                                                          AnnotationFile* annotationFile);
         
-        static Annotation* newAnnotationFromSpaceTypeAndBounds(const MouseEvent& mouseEvent,
+        static Annotation* newAnnotationFromSpaceTypeAndBounds(const UserInputModeEnum::Enum userInputMode,
+                                                               const MouseEvent& mouseEvent,
+                                                               const SelectionItemVoxel* selectionItemVoxel,
                                                                const std::vector<Vector3D>& drawingCoordinates,
                                                                const AnnotationCoordinateSpaceEnum::Enum annotationSpace,
                                                                const AnnotationTypeEnum::Enum annotationType,
@@ -78,6 +89,7 @@ namespace caret {
         class NewAnnotationInfo {
         public:
             NewAnnotationInfo(const MouseEvent& mouseEvent,
+                              const SelectionItemVoxel* selectionItemVoxel,
                               const std::vector<Vector3D>& drawingCoordinates,
                               const AnnotationCoordinateSpaceEnum::Enum selectedSpace,
                               const AnnotationTypeEnum::Enum annotationType,
@@ -96,6 +108,8 @@ namespace caret {
                                                  float& heightOut);
             
             const MouseEvent& m_mouseEvent;
+            
+            const SelectionItemVoxel* m_selectionItemVoxel;
             
             AnnotationCoordinateSpaceEnum::Enum m_selectedSpace;
             
@@ -119,14 +133,17 @@ namespace caret {
             
         };
         
-        static Annotation* newAnnotationFromSpaceTypeAndCoords(const Mode mode,
+        static Annotation* newAnnotationFromSpaceTypeAndCoords(const UserInputModeEnum::Enum userInputMode,
+                                                               const Mode mode,
                                                                const MouseEvent& mouseEvent,
+                                                               const SelectionItemVoxel* selectionItemVoxel,
                                                                const std::vector<Vector3D>& drawingCoordinates,
                                                                const AnnotationCoordinateSpaceEnum::Enum annotationSpace,
                                                                const AnnotationTypeEnum::Enum annotationType,
                                                                AnnotationFile* annotationFile);
 
-        AnnotationCreateDialog(const Mode mode,
+        AnnotationCreateDialog(const UserInputModeEnum::Enum userInputMode,
+                               const Mode mode,
                                NewAnnotationInfo& newAnnotationInfo,
                                const AnnotationCoordinateSpaceEnum::Enum annotationSpace,
                                const bool annotationSpaceValidFlag,
@@ -140,16 +157,22 @@ namespace caret {
         
         QWidget* createImageWidget();
         
+        QWidget* createMetaDataEditorWidget();
+        
         void invalidateImage();
         
-        static Annotation* createAnnotation(NewAnnotationInfo& newAnnotationInfo,
+        static Annotation* createAnnotation(const UserInputModeEnum::Enum userInputMode,
+                                            NewAnnotationInfo& newAnnotationInfo,
                                             const AnnotationCoordinateSpaceEnum::Enum annotationSpace,
                                             AString& errorMessageOut);
         
-        static void finishAnnotationCreation(AnnotationFile* annotationFile,
-                                             Annotation* annotation,
+        static void finishAnnotationCreation(const UserInputModeEnum::Enum userInputMode,
                                              const int32_t browswerWindowIndex,
-                                             const int32_t tabIndex);
+                                             const int32_t tabIndex,
+                                             AnnotationFile* annotationFile,
+                                             Annotation* annotation);
+        
+        const UserInputModeEnum::Enum m_userInputMode;
         
         const Mode m_mode;
         
@@ -157,22 +180,22 @@ namespace caret {
         
         const AnnotationCoordinateSpaceEnum::Enum m_annotationSpace;
         
-        Annotation* m_annotationThatWasCreated;
+        Annotation* m_annotationThatWasCreated = NULL;
         
-        QButtonGroup* m_annotationSpaceButtonGroup;
+        QButtonGroup* m_annotationSpaceButtonGroup = NULL;
         
-        QTextEdit* m_textEdit;
+        QTextEdit* m_textEdit = NULL;
         
-        QLabel* m_imageFileNameLabel;
+        QLabel* m_imageFileNameLabel = NULL;
         
-        QLabel* m_imageThumbnailLabel;
+        QLabel* m_imageThumbnailLabel = NULL;
         
         std::vector<uint8_t> m_imageRgbaBytes;
         int32_t m_imageWidth;
         int32_t m_imageHeight;
-        
+                
         static const int s_MAXIMUM_THUMB_NAIL_SIZE;
-        
+                
         // ADD_NEW_MEMBERS_HERE
 
     };

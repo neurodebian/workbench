@@ -66,6 +66,7 @@ NiftiHeader::NiftiHeader(const NiftiHeader& rhs)
     m_header = rhs.m_header;
     m_isSwapped = rhs.m_isSwapped;
     m_version = rhs.m_version;
+    m_filename = rhs.m_filename;
     m_extensions.reserve(rhs.m_extensions.size());
     for (size_t i = 0; i < rhs.m_extensions.size(); ++i)
     {
@@ -79,6 +80,7 @@ NiftiHeader& NiftiHeader::operator=(const NiftiHeader& rhs)
     m_header = rhs.m_header;
     m_isSwapped = rhs.m_isSwapped;
     m_version = rhs.m_version;
+    m_filename = rhs.m_filename;
     m_extensions.clear();
     m_extensions.reserve(rhs.m_extensions.size());
     for (size_t i = 0; i < rhs.m_extensions.size(); ++i)
@@ -143,7 +145,10 @@ int64_t NiftiHeader::computeVoxOffset(const int& version) const
 
 bool NiftiHeader::getDataScaling(double& mult, double& offset) const
 {
-    if (m_header.datatype == NIFTI_TYPE_RGB24 || m_header.scl_slope == 0.0 || (m_header.scl_slope == 1.0 && m_header.scl_inter == 0.0))//the "if slope is zero" case is in the nifti spec
+    if (m_header.datatype == NIFTI_TYPE_RGB24 ||
+        m_header.scl_slope == 0.0 ||
+        (m_header.scl_slope == 1.0 && m_header.scl_inter == 0.0) ||
+        (!(MathFunctions::isNumeric(m_header.scl_slope) && MathFunctions::isNumeric(m_header.scl_inter))))//the RGB and "if slope is zero" cases are in the nifti spec
     {
         mult = 1.0;//in case someone ignores the boolean
         offset = 0.0;
@@ -214,19 +219,67 @@ bool NiftiHeader::operator==(const NiftiHeader& rhs) const
     return memcmp(&m_header, &(rhs.m_header), sizeof(m_header)) == 0;
 }
 
+namespace
+{
+    bool sformToQform(const vector<vector<float> >& sForm, double pixdimOut[4], double quatOut[4])
+    {//NOTE: this must generate valid pixdim (including the [0] left-handed flag), even if qform fails
+        Vector3D ivec, jvec, kvec;
+        ivec[0] = sForm[0][0]; ivec[1] = sForm[1][0]; ivec[2] = sForm[2][0];
+        jvec[0] = sForm[0][1]; jvec[1] = sForm[1][1]; jvec[2] = sForm[2][1];
+        kvec[0] = sForm[0][2]; kvec[1] = sForm[1][2]; kvec[2] = sForm[2][2];
+        pixdimOut[0] = 1.0f;
+        pixdimOut[1] = ivec.length();
+        pixdimOut[2] = jvec.length();
+        pixdimOut[3] = kvec.length();
+        ivec = ivec.normal();
+        jvec = jvec.normal();
+        kvec = kvec.normal();
+        if (kvec.dot(ivec.cross(jvec)) < 0.0f)//left handed sform!
+        {
+            pixdimOut[0] = -1.0f;
+            kvec = -kvec;//because to nifti, "left handed" apparently means "up is down", not "left is right"
+        }
+        float rotmat[3][3];
+        rotmat[0][0] = ivec[0]; rotmat[1][0] = ivec[1]; rotmat[2][0] = ivec[2];
+        rotmat[0][1] = jvec[0]; rotmat[1][1] = jvec[1]; rotmat[2][1] = jvec[2];
+        rotmat[0][2] = kvec[0]; rotmat[1][2] = kvec[1]; rotmat[2][2] = kvec[2];
+        float quat[4];
+        if (!MathFunctions::matrixToQuatern(rotmat, quat))
+        {
+            quatOut[0] = 0.0;//set dummy values anyway
+            quatOut[1] = 0.0;
+            quatOut[2] = 0.0;
+            quatOut[3] = 0.0;
+            return false;
+        } else {
+            quatOut[0] = quat[0];
+            quatOut[1] = quat[1];
+            quatOut[2] = quat[2];
+            quatOut[3] = quat[3];
+            return true;
+        }
+    }
+}
+
 vector<vector<float> > NiftiHeader::getSForm() const
 {
+    //because of cifti using a nifti header, report spatial information warnings in this function, as cifti should not call this function
     FloatMatrix ret = FloatMatrix::zeros(4, 4);
     ret[3][3] = 1.0f;//force 0 0 0 1 last row
+    FloatMatrix sform = ret, qform = ret;
+    bool sformGood = false, qformGood = false;
     if (m_header.sform_code != 0)//prefer sform
     {
         for(int i = 0; i < 4; i++)
         {
-            ret[0][i] = m_header.srow_x[i];
-            ret[1][i] = m_header.srow_y[i];
-            ret[2][i] = m_header.srow_z[i];
+            sform[0][i] = m_header.srow_x[i];
+            sform[1][i] = m_header.srow_y[i];
+            sform[2][i] = m_header.srow_z[i];
         }
-    } else if (m_header.qform_code != 0) {//fall back to qform
+        sformGood = true;
+    }
+    if (m_header.qform_code != 0)
+    {
         float rotmat[3][3], quat[4];
         quat[1] = m_header.quatern_b;
         quat[2] = m_header.quatern_c;
@@ -258,23 +311,69 @@ vector<vector<float> > NiftiHeader::getSForm() const
             {
                 for (int j = 0; j < 3; ++j)
                 {
-                    ret[i][j] = rotmat[i][j];
+                    qform[i][j] = rotmat[i][j];
                 }
             }
-            ret[0][3] = m_header.qoffset_x;
-            ret[1][3] = m_header.qoffset_y;
-            ret[2][3] = m_header.qoffset_z;
+            qform[0][3] = m_header.qoffset_x;
+            qform[1][3] = m_header.qoffset_y;
+            qform[2][3] = m_header.qoffset_z;
+            qformGood = true;
         } else {
-            CaretLogWarning("found quaternion with length greater than 1 in nifti header, using ANALYZE coordinates!");
+            CaretLogWarning("found quaternion with length greater than 1 in file '" + m_filename + "'");
+        }
+    }
+    if (sformGood)//prefer sform
+    {
+        ret = sform;
+    } else {
+        if (qformGood)
+        {
+            ret = qform;
+        } else {//fall back to analyze and complain
+            CaretLogWarning("no sform or qform code found, using ANALYZE coordinates for file '" + m_filename + "'");
             ret[0][0] = m_header.pixdim[1];
             ret[1][1] = m_header.pixdim[2];
             ret[2][2] = m_header.pixdim[3];
         }
-    } else {//fall back to analyze and complain
-        CaretLogWarning("no sform or qform code found, using ANALYZE coordinates!");
-        ret[0][0] = m_header.pixdim[1];
-        ret[1][1] = m_header.pixdim[2];
-        ret[2][2] = m_header.pixdim[3];
+    }
+    {//do sanity checks based on how we would write this header (because when we get to the writing code, we don't know about the input file headers)
+        //we compare to the raw pixdim, so do this before checking units
+        //note, getSform gets called multiple times when interpreting FSL transforms, could track whether we have warned from this header instance
+        double pixdimd[4], quat[4];
+        sformToQform(ret.getMatrix(), pixdimd, quat);//even if sformToQform returns false, pixdim gets populated correctly, including left handed flag
+        if (qformGood && ((pixdimd[0] < 0.0) != (m_header.pixdim[0] < 0.0)))//if the new qform is hand-flipped compared to the original, things are on fire, yo
+        {
+            CaretLogWarning("sform and qform are flipped in file '" + m_filename + "'");
+        }
+        //check if oblique, and don't warn about FSL's pixdim pickiness
+        bool plumb = true;
+        for (int j = 0; plumb && j < 3; ++j)
+        {
+            int countnonzero = 0;
+            for (int i = 0; i < 3; ++i)
+            {
+                if (ret[i][j] != 0.0f)
+                {
+                    ++countnonzero;
+                    if (countnonzero > 1)
+                    {
+                        plumb = false;
+                        break;
+                    }
+                }
+            }
+        }
+        if (plumb)
+        {
+            for (int i = 1; i < 4; ++i)//check for whether FSL will complain about changed pixdim (which is probably all they check)
+            {//assume nifti-1, so convert to float before checking equality
+                if (float(pixdimd[i]) != m_header.pixdim[i])
+                {
+                    CaretLogWarning("recomputed pixdim doesn't exactly match the original header in file '" + m_filename + "', FSL may complain about output file(s)");
+                    break;
+                }
+            }
+        }
     }
     int32_t spaceUnit = XYZT_TO_SPACE(m_header.xyzt_units);
     switch (spaceUnit)
@@ -288,11 +387,11 @@ vector<vector<float> > NiftiHeader::getSForm() const
             ret[3][3] = 1.0f;
             break;
         case 0:
-            CaretLogFine("found spatial unit of '0' in nifti header, assuming millimeters");
+            CaretLogFine("found spatial unit of '0' in file '" + m_filename + "', assuming millimeters");
         case NIFTI_UNITS_MM:
             break;
         default:
-            CaretLogWarning("unrecognized spatial unit in nifti header");
+            CaretLogWarning("unrecognized spatial unit in file '" + m_filename + "'");
     }
     return ret.getMatrix();
 }
@@ -420,7 +519,7 @@ void NiftiHeader::setDataType(const int16_t& type)
 
 void NiftiHeader::setDimensions(const vector<int64_t>& dimsIn)
 {
-    if (dimsIn.size() > 7 || dimsIn.empty()) throw DataFileException("Number of dimensions must be between 1 and 7, inclusive.");
+    if (dimsIn.size() > 7 || dimsIn.empty()) throw DataFileException("Unable to put " + QString::number(dimsIn.size()) + " dimensions into a nifti header, maximum is 7");
     m_header.dim[0] = dimsIn.size();
     int i = 0;
     for(; i < (int)dimsIn.size(); i++)
@@ -458,6 +557,7 @@ void NiftiHeader::setSForm(const vector<vector<float> >& sForm)
         CaretAssert(sForm[i].size() >= 4);//ditto
         if (sForm[i].size() < 4) throw DataFileException("internal error: setSForm matrix badly sized");
     }
+    m_filename = "";//don't blame previous file if we changed the sform
     int timeUnit = XYZT_TO_TIME(m_header.xyzt_units);
     m_header.xyzt_units = SPACE_TIME_TO_XYZT(NIFTI_UNITS_MM, timeUnit);//overwrite whatever spatial unit we read in
     for (int i = 0; i < 4; i++)
@@ -467,45 +567,22 @@ void NiftiHeader::setSForm(const vector<vector<float> >& sForm)
         m_header.srow_z[i] = sForm[2][i];
     }
     m_header.sform_code = NIFTI_XFORM_MNI_152;
-    Vector3D ivec, jvec, kvec;
-    ivec[0] = sForm[0][0]; ivec[1] = sForm[1][0]; ivec[2] = sForm[2][0];
-    jvec[0] = sForm[0][1]; jvec[1] = sForm[1][1]; jvec[2] = sForm[2][1];
-    kvec[0] = sForm[0][2]; kvec[1] = sForm[1][2]; kvec[2] = sForm[2][2];
-    m_header.pixdim[0] = 1.0f;
-    m_header.pixdim[1] = ivec.length();
-    m_header.pixdim[2] = jvec.length();
-    m_header.pixdim[3] = kvec.length();
-    ivec = ivec.normal();
-    jvec = jvec.normal();
-    kvec = kvec.normal();
-    if (kvec.dot(ivec.cross(jvec)) < 0.0f)//left handed sform!
-    {
-        m_header.pixdim[0] = -1.0f;
-        kvec = -kvec;//because to nifti, "left handed" apparently means "up is down", not "left is right"
-    }
-    float rotmat[3][3];
-    rotmat[0][0] = ivec[0]; rotmat[1][0] = ivec[1]; rotmat[2][0] = ivec[2];
-    rotmat[0][1] = jvec[0]; rotmat[1][1] = jvec[1]; rotmat[2][1] = jvec[2];
-    rotmat[0][2] = kvec[0]; rotmat[1][2] = kvec[1]; rotmat[2][2] = kvec[2];
-    float quat[4];
-    if (!MathFunctions::matrixToQuatern(rotmat, quat))
+    double quat[4];
+    if (!sformToQform(sForm, m_header.pixdim, quat))
     {
         m_header.qform_code = NIFTI_XFORM_UNKNOWN;//0, implies that there is no qform
         m_header.quatern_b = 0.0;//set dummy values anyway
         m_header.quatern_c = 0.0;
         m_header.quatern_d = 0.0;
-        m_header.qoffset_x = sForm[0][3];
-        m_header.qoffset_y = sForm[1][3];
-        m_header.qoffset_z = sForm[2][3];
     } else {
         m_header.qform_code = NIFTI_XFORM_MNI_152;
         m_header.quatern_b = quat[1];
         m_header.quatern_c = quat[2];
         m_header.quatern_d = quat[3];
-        m_header.qoffset_x = sForm[0][3];
-        m_header.qoffset_y = sForm[1][3];
-        m_header.qoffset_z = sForm[2][3];
     }
+    m_header.qoffset_x = sForm[0][3];
+    m_header.qoffset_y = sForm[1][3];
+    m_header.qoffset_z = sForm[2][3];
 }
 
 void NiftiHeader::setTimeStep(const double& seconds)
@@ -539,6 +616,11 @@ namespace
             double mymin = mylimits::lowest();
             mult = (maxval - minval) / ((double)mylimits::max() - mymin);//multiplying is the first step of decoding (after byteswap), so start with the range
             offset = minval - mymin * mult;//offset is added after multiplying the encoded value by mult
+            if (!(MathFunctions::isNumeric(mult) && MathFunctions::isNumeric(offset)))
+            {//don't do something stupid to the header and values
+                mult = 1.0;
+                offset = 0.0;
+            }
         }
     };
 }
@@ -745,6 +827,7 @@ void NiftiHeader::read(CaretBinaryFile& inFile)
     }
     m_isSwapped = swapped;//now that we know there were no errors (because they throw), complete the internal state
     m_version = version;
+    m_filename = inFile.getFilename();
 }
 
 NiftiHeader::Quirks NiftiHeader::setupFrom(const nifti_1_header& header, const AString& filename)

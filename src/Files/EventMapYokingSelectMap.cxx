@@ -43,25 +43,34 @@ using namespace caret;
  *    Map yoking group that has a status change (selected map or enabled status)
  * @param caretMappableDataFile
  *    Caret mappable file that is causing this event.
+ * @param mediaFile
+ *    Media file causing this event
  * @param mapIndex
  *    Index of map selected.
+ * @param mediaAllFramesStatus
+ *    The media all frames status
  * @param selectionStatus
  *    Status of selection.
  */
 EventMapYokingSelectMap::EventMapYokingSelectMap(const MapYokingGroupEnum::Enum mapYokingGroup,
                                                  const CaretMappableDataFile* caretMappableDataFile,
                                                  const AnnotationTextSubstitutionFile* annotationTextSubstitutionFile,
+                                                 const HistologySlicesFile* histologySlicesFile,
+                                                 const MediaFile* mediaFile,
                                                  const int32_t mapIndex,
+                                                 const MapYokingGroupEnum::MediaAllFramesStatus mediaAllFramesStatus,
                                                  const bool mapOverlaySelectionStatus)
 : Event(EventTypeEnum::EVENT_MAP_YOKING_SELECT_MAP),
 m_mapYokingGroup(mapYokingGroup),
 m_caretMappableDataFile(caretMappableDataFile),
 m_annotationTextSubstitutionFile(annotationTextSubstitutionFile),
-m_mapIndex(mapIndex),
-m_selectionStatus(mapOverlaySelectionStatus)
+m_histologySlicesFile(histologySlicesFile),
+m_mediaFile(mediaFile),
+m_mapIndex(mapIndex)
 {
     if (mapYokingGroup != MapYokingGroupEnum::MAP_YOKING_GROUP_OFF) {
         MapYokingGroupEnum::setSelectedMapIndex(mapYokingGroup, mapIndex);
+        MapYokingGroupEnum::setMediaAllFramesStatus(mapYokingGroup, mediaAllFramesStatus);
         MapYokingGroupEnum::setEnabled(mapYokingGroup, mapOverlaySelectionStatus);
     }
 }
@@ -102,6 +111,25 @@ EventMapYokingSelectMap::getAnnotationTextSubstitutionFile() const
     return m_annotationTextSubstitutionFile;
 }
 
+/**
+ * @return Histology slices  file for which event was issued.
+ * Might be NULL.
+ */
+const HistologySlicesFile*
+EventMapYokingSelectMap::getHistologySlicesFile() const
+{
+    return m_histologySlicesFile;
+}
+
+/**
+ * @return Media  file for which event was issued.
+ * Might be NULL.
+ */
+const MediaFile*
+EventMapYokingSelectMap::getMediaFile() const
+{
+    return m_mediaFile;
+}
 
 /**
  * @return Map index selected.
@@ -111,14 +139,4 @@ EventMapYokingSelectMap::getMapIndex() const
 {
     return m_mapIndex;
 }
-
-/**
- * @return Selection status but ONLY for SAME FILE !
- */
-bool
-EventMapYokingSelectMap::getSelectionStatus() const
-{
-    return m_selectionStatus;
-}
-
 

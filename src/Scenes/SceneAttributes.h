@@ -29,6 +29,7 @@
 
 namespace caret {
     
+    class CaretMappableDataFile;
     class Scene;
     
     class SceneAttributes : public CaretObject {
@@ -86,6 +87,15 @@ namespace caret {
         
         void setModifiedPaletteSettingsSavedToScene(const bool status);
         
+        bool isLogFilesWithPaletteSettingsErrors() const;
+        
+        void setLogFilesWithPaletteSettingsErrors(const bool status);
+        
+        void addToMapFilesWithPaletteSettingsErrors(CaretMappableDataFile* mapFile,
+                                                    const AString& dataFileName) const;
+        
+        std::vector<std::pair<CaretMappableDataFile*, AString>> getMapFilesWithPaletteSettingsErrors() const;
+        
         void addToErrorMessage(const AString& message) const;
         
         AString getErrorMessage() const;
@@ -99,6 +109,10 @@ namespace caret {
         void setSceneRestoreWarningCode(const SceneRestoreWarningCodesEnum::Enum warningCode) const;
         
         AString getSceneLoadWarningMessage() const;
+        
+        void setKeepAllFilesInScene(const bool status) const;
+        
+        bool isKeepAllFilesInScene() const;
         
     private:
         SceneAttributes& operator=(const SceneAttributes&);
@@ -131,9 +145,15 @@ namespace caret {
         
         bool m_useSceneForgroundAndBackgroundColorsFlag;
         
+        bool m_logFilesWithPaletteSettingsErrorsFlag;
+        
+        mutable std::vector<std::pair<CaretMappableDataFile*, AString>> m_mapFilesWithPaletteSettingsErrors;
+        
         mutable AString m_errorMessage;
         
         mutable std::set<SceneRestoreWarningCodesEnum::Enum> m_sceneWarningCodes;
+        
+        mutable bool m_keepAllFilesInSceneFlag;
         
         // ADD_NEW_MEMBERS_HERE
 

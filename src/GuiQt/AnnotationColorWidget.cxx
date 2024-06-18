@@ -39,7 +39,8 @@
 #include "BrainOpenGL.h"
 #include "CaretAssert.h"
 #include "CaretColorEnumMenu.h"
-#include "EventGraphicsUpdateAllWindows.h"
+#include "EventAnnotationGetBeingDrawnInWindow.h"
+#include "EventGraphicsPaintSoonAllWindows.h"
 #include "EventManager.h"
 #include "GuiManager.h"
 #include "WuQFactory.h"
@@ -60,25 +61,57 @@ using namespace caret;
 /**
  * Constructor.
  *
+ * @param userInputMode
+ *    The input mode
+ * @param parentWidgetType
+ *   Type of parent widget
+ * @param browserWindowIndex
+ *    Index of browser window
  * @param parent
+
  *     Parent for this widget.
  */
-AnnotationColorWidget::AnnotationColorWidget(const AnnotationWidgetParentEnum::Enum parentWidgetType,
+AnnotationColorWidget::AnnotationColorWidget(const UserInputModeEnum::Enum userInputMode,
+                                             const AnnotationWidgetParentEnum::Enum parentWidgetType,
                                              const int32_t browserWindowIndex,
                                              QWidget* parent)
 : QWidget(parent),
+m_userInputMode(userInputMode),
 m_parentWidgetType(parentWidgetType),
 m_browserWindowIndex(browserWindowIndex)
 {
+    bool showFillFlag = true;
+    switch (userInputMode) {
+        case UserInputModeEnum::Enum::ANNOTATIONS:
+            showFillFlag = true;
+            break;
+        case UserInputModeEnum::Enum::BORDERS:
+            break;
+        case UserInputModeEnum::Enum::FOCI:
+            break;
+        case UserInputModeEnum::Enum::IMAGE:
+            break;
+        case UserInputModeEnum::Enum::INVALID:
+            break;
+        case UserInputModeEnum::Enum::SAMPLES_EDITING:
+            showFillFlag = false;
+            break;
+        case UserInputModeEnum::Enum::TILE_TABS_LAYOUT_EDITING:
+            break;
+        case UserInputModeEnum::Enum::VIEW:
+            break;
+        case UserInputModeEnum::Enum::VOLUME_EDIT:
+            break;
+    }
     
-    QLabel* backFillLabel      = new QLabel("Fill");
-    QLabel* backFillColorLabel = new QLabel("Color");
-    QLabel* foreLineLabel      = new QLabel("Line");
-    QLabel* foreLineColorLabel = new QLabel("Color");
+    QLabel* backFillLabel(new QLabel("Fill\nColor"));
+    backFillLabel->setAlignment(Qt::AlignHCenter);
     
-    QLabel* lineLabel = new QLabel("Line");
-    QLabel* lineWidthLabel = new QLabel("Width");
+    QLabel* foreLineLabel      = new QLabel("Line\nColor");
+    foreLineLabel->setAlignment(Qt::AlignHCenter);
     
+    QLabel* lineLabel = new QLabel("Line\nWidth");
+    lineLabel->setAlignment(Qt::AlignHCenter);
     
     const QSize toolButtonSize(16, 16);
     
@@ -107,9 +140,8 @@ m_browserWindowIndex(browserWindowIndex)
      */
     m_backgroundColorWidgetGroup = new WuQWidgetObjectGroup(this);
     m_backgroundColorWidgetGroup->add(backFillLabel);
-    m_backgroundColorWidgetGroup->add(backFillColorLabel);
     m_backgroundColorWidgetGroup->add(m_backgroundToolButton);
-    
+
     /*
      * Line color menu
      */
@@ -132,7 +164,6 @@ m_browserWindowIndex(browserWindowIndex)
     
     m_lineColorWidgetGroup = new WuQWidgetObjectGroup(this);
     m_lineColorWidgetGroup->add(foreLineLabel);
-    m_lineColorWidgetGroup->add(foreLineColorLabel);
     m_lineColorWidgetGroup->add(m_lineColorMenu);
     m_lineColorWidgetGroup->add(m_lineToolButton);
     
@@ -154,7 +185,6 @@ m_browserWindowIndex(browserWindowIndex)
     m_lineThicknessSpinBox->setSuffix("%");
     
     m_lineThicknessWidgetGroup->add(lineLabel);
-    m_lineThicknessWidgetGroup->add(lineWidthLabel);
     m_lineThicknessWidgetGroup->add(m_lineThicknessSpinBox);
 
     /*
@@ -162,22 +192,17 @@ m_browserWindowIndex(browserWindowIndex)
      */
     QGridLayout* gridLayout = new QGridLayout(this);
     WuQtUtilities::setLayoutSpacingAndMargins(gridLayout, 2, 0);
+    gridLayout->setVerticalSpacing(0);
+    gridLayout->setHorizontalSpacing(2);
     
     switch (m_parentWidgetType) {
         case AnnotationWidgetParentEnum::ANNOTATION_TOOL_BAR_WIDGET:
         {
-            CaretAssert(lineWidthLabel);
             gridLayout->addWidget(lineLabel,
                                   0, 0,
                                   Qt::AlignHCenter);
-            gridLayout->addWidget(lineWidthLabel,
-                                  1, 0,
-                                  Qt::AlignHCenter);
             gridLayout->addWidget(foreLineLabel,
                                   0, 1,
-                                  Qt::AlignHCenter);
-            gridLayout->addWidget(foreLineColorLabel,
-                                  1, 1,
                                   Qt::AlignHCenter);
             gridLayout->addWidget(m_lineThicknessSpinBox,
                                   2, 0,
@@ -185,15 +210,18 @@ m_browserWindowIndex(browserWindowIndex)
             gridLayout->addWidget(m_lineToolButton,
                                   2, 1,
                                   Qt::AlignHCenter);
-            gridLayout->addWidget(backFillLabel,
-                                  0, 2,
-                                  Qt::AlignHCenter);
-            gridLayout->addWidget(backFillColorLabel,
-                                  1, 2,
-                                  Qt::AlignHCenter);
-            gridLayout->addWidget(m_backgroundToolButton,
-                                  2, 2,
-                                  Qt::AlignHCenter);
+            if (showFillFlag) {
+                gridLayout->addWidget(backFillLabel,
+                                      0, 2,
+                                      Qt::AlignHCenter);
+                gridLayout->addWidget(m_backgroundToolButton,
+                                      2, 2,
+                                      Qt::AlignHCenter);
+            }
+            else {
+                backFillLabel->setHidden(true);
+                m_backgroundToolButton->setHidden(true);
+            }
         }
             break;
         case AnnotationWidgetParentEnum::PARENT_ENUM_FOR_LATER_USE:
@@ -219,13 +247,39 @@ AnnotationColorWidget::~AnnotationColorWidget()
 }
 
 /**
- * Update with the given annotation.
+ * Receive an event.
  *
- * @param annotations
+ * @param event
+ *     The event that the receive can respond to.
  */
 void
-AnnotationColorWidget::updateContent(std::vector<Annotation*>& annotations)
+AnnotationColorWidget::receiveEvent(Event* /*event*/)
 {
+}
+
+/**
+ * Update with the given annotation.
+ *
+ * @param annotationsIn
+ */
+void
+AnnotationColorWidget::updateContent(std::vector<Annotation*>& annotationsIn)
+{
+    EventAnnotationGetBeingDrawnInWindow annDrawEvent(m_userInputMode,
+                                                      m_browserWindowIndex);
+    EventManager::get()->sendEvent(annDrawEvent.getPointer());
+    m_annotationBeingDrawn = annDrawEvent.getAnnotation();
+
+    std::vector<Annotation*> annotations(annotationsIn);
+    if (annotations.empty()) {
+        if (m_annotationBeingDrawn != NULL) {
+            annotations.push_back(m_annotationBeingDrawn);
+        }
+    }
+    else {
+        m_annotationBeingDrawn = NULL;
+    }
+
     m_lineColorAnnotations.clear();
     m_lineColorAnnotations.reserve(annotations.size());
     
@@ -301,26 +355,31 @@ AnnotationColorWidget::backgroundColorSelected(const CaretColorEnum::Enum caretC
             return;
         }
         
-        AnnotationRedoUndoCommand* undoCommand = new AnnotationRedoUndoCommand();
-        undoCommand->setModeColorBackground(caretColor,
-                                            rgba,
-                                            m_backgroundColorAnnotations);
-        AnnotationManager* annMan = GuiManager::get()->getBrain()->getAnnotationManager();
-        
-        AString errorMessage;
-        if ( ! annMan->applyCommand(UserInputModeEnum::Enum::ANNOTATIONS,
-                                    undoCommand,
-                                    errorMessage)) {
-            WuQMessageBox::errorOk(this,
-                                   errorMessage);
+        if (m_annotationBeingDrawn) {
+            m_annotationBeingDrawn->setBackgroundColor(caretColor);
+            m_annotationBeingDrawn->setCustomBackgroundColor(rgba);
         }
-        
+        else {
+            AnnotationRedoUndoCommand* undoCommand = new AnnotationRedoUndoCommand();
+            undoCommand->setModeColorBackground(caretColor,
+                                                rgba,
+                                                m_backgroundColorAnnotations);
+            AnnotationManager* annMan = GuiManager::get()->getBrain()->getAnnotationManager(m_userInputMode);
+            
+            AString errorMessage;
+            if ( ! annMan->applyCommand(undoCommand,
+                                        errorMessage)) {
+                WuQMessageBox::errorOk(this,
+                                       errorMessage);
+            }
+        }
+
         Annotation::setUserDefaultBackgroundColor(caretColor);
         EventManager::get()->sendSimpleEvent(EventTypeEnum::EVENT_ANNOTATION_TOOLBAR_UPDATE);
     }
 
     updateBackgroundColorButton();
-    EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+    EventManager::get()->sendEvent(EventGraphicsPaintSoonAllWindows().getPointer());
 }
 
 /**
@@ -388,7 +447,7 @@ AnnotationColorWidget::updateBackgroundColorButton()
     if ( ! enableBackgroundFlag) {
         colorEnum = CaretColorEnum::NONE;
     }
-
+    
     QPixmap pm = WuQtUtilities::createCaretColorEnumPixmap(m_backgroundToolButton,
                                                            24, 24,
                                                            colorEnum,
@@ -398,6 +457,18 @@ AnnotationColorWidget::updateBackgroundColorButton()
     
     m_backgroundColorAction->setIcon(icon);
     m_backgroundColorMenu->setSelectedColor(colorEnum);
+    
+    /*
+     * Used for event requesting color for drawing a new annotation
+     */
+    m_currentBackgroundColorForDrawingNewAnnotation.setCaretColorEnum(colorEnum);
+    std::array<uint8_t, 4> rgbaByte {
+        static_cast<uint8_t>(rgba[0] * 255.0),
+        static_cast<uint8_t>(rgba[1] * 255.0),
+        static_cast<uint8_t>(rgba[2] * 255.0),
+        255
+    };
+    m_currentBackgroundColorForDrawingNewAnnotation.setCustomColorRGBA(rgbaByte);
 }
 
 
@@ -470,6 +541,18 @@ AnnotationColorWidget::updateLineColorButton()
     QPixmap pm = WuQtUtilities::createCaretColorEnumPixmap(m_lineToolButton, 24, 24, colorEnum, rgba, true);
     m_lineColorAction->setIcon(QIcon(pm));
     m_lineColorMenu->setSelectedColor(colorEnum);
+    
+    /*
+     * Used for event requesting color for drawing a new annotation
+     */
+    m_currentLineColorForDrawingNewAnnotation.setCaretColorEnum(colorEnum);
+    std::array<uint8_t, 4> rgbaByte {
+        static_cast<uint8_t>(rgba[0] * 255.0),
+        static_cast<uint8_t>(rgba[1] * 255.0),
+        static_cast<uint8_t>(rgba[2] * 255.0),
+        255
+    };
+    m_currentLineColorForDrawingNewAnnotation.setCustomColorRGBA(rgbaByte);
 }
 
 /**
@@ -520,7 +603,13 @@ AnnotationColorWidget::isBothColorsSetToNoneAllowed(QWidget* widget,
                 case AnnotationTypeEnum::OVAL:
                     allowBothColorsNoneFlag = false;
                     break;
-                case AnnotationTypeEnum::POLY_LINE:
+                case AnnotationTypeEnum::POLYHEDRON:
+                    allowBothColorsNoneFlag = false;
+                    break;
+                case AnnotationTypeEnum::POLYGON:
+                    allowBothColorsNoneFlag = false;
+                    break;
+                case AnnotationTypeEnum::POLYLINE:
                     allowBothColorsNoneFlag = false;
                     break;
                 case AnnotationTypeEnum::SCALE_BAR:
@@ -578,19 +667,25 @@ AnnotationColorWidget::lineColorSelected(const CaretColorEnum::Enum caretColor)
             return;
         }
         
-        AnnotationRedoUndoCommand* undoCommand = new AnnotationRedoUndoCommand();
-        undoCommand->setModeColorLine(caretColor,
-                                      rgba,
-                                      m_lineColorAnnotations);
-        AnnotationManager* annMan = GuiManager::get()->getBrain()->getAnnotationManager();
-        
-        AString errorMessage;
-        if ( ! annMan->applyCommand(UserInputModeEnum::Enum::ANNOTATIONS,
-                                    undoCommand,
-                                    errorMessage)) {
-            WuQMessageBox::errorOk(this,
-                                   errorMessage);
+        if (m_annotationBeingDrawn != NULL) {
+            m_annotationBeingDrawn->setLineColor(caretColor);
+            m_annotationBeingDrawn->setCustomLineColor(rgba);
         }
+        else {
+            AnnotationRedoUndoCommand* undoCommand = new AnnotationRedoUndoCommand();
+            undoCommand->setModeColorLine(caretColor,
+                                          rgba,
+                                          m_lineColorAnnotations);
+            AnnotationManager* annMan = GuiManager::get()->getBrain()->getAnnotationManager(m_userInputMode);
+            
+            AString errorMessage;
+            if ( ! annMan->applyCommand(undoCommand,
+                                        errorMessage)) {
+                WuQMessageBox::errorOk(this,
+                                       errorMessage);
+            }
+        }
+        
         setUserDefaultLineColor(caretColor,
                                 rgba);
     }
@@ -605,7 +700,7 @@ AnnotationColorWidget::lineColorSelected(const CaretColorEnum::Enum caretColor)
             break;
     }
     
-    EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+    EventManager::get()->sendEvent(EventGraphicsPaintSoonAllWindows().getPointer());
 }
 
 /**
@@ -681,23 +776,27 @@ AnnotationColorWidget::lineThicknessSpinBoxValueChanged(double value)
         }
     }
     
-    AnnotationRedoUndoCommand* undoCommand = new AnnotationRedoUndoCommand();
-    undoCommand->setModeLineWidth(value,
-                                  m_lineThicknessAnnotations);
-    AnnotationManager* annMan = GuiManager::get()->getBrain()->getAnnotationManager();
-    
-    AString errorMessage;
-    if ( ! annMan->applyCommand(UserInputModeEnum::Enum::ANNOTATIONS,
-                                undoCommand,
-                                errorMessage)) {
-        WuQMessageBox::errorOk(this,
-                               errorMessage);
+    if (m_annotationBeingDrawn != NULL) {
+        m_annotationBeingDrawn->setLineWidthPercentage(value);
     }
-    
+    else {
+        AnnotationRedoUndoCommand* undoCommand = new AnnotationRedoUndoCommand();
+        undoCommand->setModeLineWidth(value,
+                                      m_lineThicknessAnnotations);
+        AnnotationManager* annMan = GuiManager::get()->getBrain()->getAnnotationManager(m_userInputMode);
+        
+        AString errorMessage;
+        if ( ! annMan->applyCommand(undoCommand,
+                                    errorMessage)) {
+            WuQMessageBox::errorOk(this,
+                                   errorMessage);
+        }
+    }
+
     EventManager::get()->sendSimpleEvent(EventTypeEnum::EVENT_ANNOTATION_TOOLBAR_UPDATE);
     Annotation::setUserDefaultLineWidthPercentage(value);
     
-    EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+    EventManager::get()->sendEvent(EventGraphicsPaintSoonAllWindows().getPointer());
 }
 
 /**

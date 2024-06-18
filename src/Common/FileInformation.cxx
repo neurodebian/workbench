@@ -29,6 +29,8 @@
 #include "DataFile.h"
 #include "DataFileTypeEnum.h"
 
+#include <cstdio>
+
 using namespace caret;
 
 /**
@@ -178,7 +180,7 @@ AString FileInformation::getAbsoluteFilePath() const
 
 /**
  * Removes the file.
- * Remove files cannot be removed.
+ * Remote files cannot be removed.
  *
  * @return
  *    true if file deleted successfully.
@@ -194,7 +196,9 @@ FileInformation::remove()
     
     bool result = false;
     if (m_fileInfo.exists()) {
-        result = QFile::remove(m_fileInfo.absoluteFilePath());
+        //result = QFile::remove(m_fileInfo.absoluteFilePath());
+        //don't let QT check permissions and refuse to try, just try it and let the filesystem figure it out
+        result = (std::remove(QDir::toNativeSeparators(m_fileInfo.absoluteFilePath()).toLocal8Bit()) == 0);
     }
     return result;
 }
@@ -562,7 +566,12 @@ FileInformation::assembleFileComponents(const AString& pathName,
 {
     AString name;
     if ( ! pathName.isEmpty()) {
-        name += (pathName + "/");
+        if (pathName == "/") {
+            name = "/";
+        }
+        else {
+            name += (pathName + "/");
+        }
     }
     name += fileNameWithoutExtension;
     if ( ! extensionWithoutDot.isEmpty()) {
@@ -746,7 +755,11 @@ FileInformation::getAbsolutePath() const
 
 AString FileInformation::getLastDirectory() const
 {
+#if QT_VERSION >= 0x060000
+    QStringList myList = getPathName().split('/', Qt::SkipEmptyParts);//QT always uses /, even on windows
+#else
     QStringList myList = getPathName().split('/', QString::SkipEmptyParts);//QT always uses /, even on windows
+#endif
     return myList[myList.size() - 1];
 }
 

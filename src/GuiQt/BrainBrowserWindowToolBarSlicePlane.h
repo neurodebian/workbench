@@ -44,11 +44,12 @@ namespace caret {
         
         virtual void updateContent(BrowserTabContent* browserTabContent);
         
+        static QPixmap createCrosshairsIcon(const QWidget* widget);
+        
         // ADD_NEW_METHODS_HERE
         
     private slots:
         void volumePlaneActionGroupTriggered(QAction*);
-        void volumePlaneResetToolButtonTriggered(bool checked);
         
         void viewAllSliceLayoutMenuTriggered(QAction* action);
 
@@ -66,8 +67,6 @@ namespace caret {
         
         void updateViewAllSlicesLayoutMenu(BrowserTabContent* browserTabContent);
         
-        QPixmap createCrosshairsIcon(const QWidget* widget);
-        
         QPixmap createCrosshairLabelsIcon(const QWidget* widget);
         
         QMenu* createCrosshairMenu(const QString& objectNamePrefix);
@@ -84,7 +83,6 @@ namespace caret {
         QAction* m_volumePlaneCoronalToolButtonAction;
         QAction* m_volumePlaneAxialToolButtonAction;
         QAction* m_volumePlaneAllToolButtonAction;
-        QAction* m_volumePlaneResetToolButtonAction;
         QAction* m_volumeAxisCrosshairsToolButtonAction;
         QAction* m_volumeAxisCrosshairLabelsToolButtonAction;
         

@@ -81,18 +81,18 @@ OperationParameters* OperationCiftiWeightedStats::getParameters()
     stdevOpt->createOptionalParameter(1, "-sample", "estimate population stdev from the sample");
     
     OptionalParameter* percentileOpt = ret->createOptionalParameter(8, "-percentile", "compute weighted percentile");
-    percentileOpt->addDoubleParameter(1, "percent", "the percentile to find");
+    percentileOpt->addDoubleParameter(1, "percent", "the percentile to find, must be between 0 and 100");
     
     ret->createOptionalParameter(9, "-sum", "compute weighted sum");
     
     ret->createOptionalParameter(10, "-show-map-name", "print map index and name before each output");
     
     ret->setHelpText(
-        AString("If the mapping along column is brain models, for each column of the input, the specified operation is done on each surface and across all voxels, and the results are printed separately.  ") +
-        "For other mapping types, the operation is done on each column, and one number per map is printed.  " +
+        AString("If the mapping along column is brain models, for each column of the input, the specified operation is done on each surface and across all voxels, and the results are printed on separate lines.  ") +
+        "For other mapping types, the operation is done on each column, and one line per map is printed.  " +
         "Exactly one of -spatial-weights or -cifti-weights must be specified.  " +
         "Use -column to only give output for a single column.  " +
-        "Use -roi to consider only the data within a region.  " +
+        "If the -roi option is used without -match-maps, then each line will contain as many numbers as there are maps in the ROI file, separated by tab characters.  " +
         "Exactly one of -mean, -stdev, -percentile or -sum must be specified.\n\n" +
         "Using -sum with -spatial-weights (or with -cifti-weights and a cifti containing weights of similar meaning) is equivalent to integrating with respect to area and volume.  " +
         "When the input is binary ROIs, this will therefore output the area or volume of each ROI."

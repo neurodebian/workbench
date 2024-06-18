@@ -106,6 +106,8 @@ AnnotationCoordinate::copyHelperAnnotationCoordinate(const AnnotationCoordinate&
     m_surfaceSpaceNodeIndex     = obj.m_surfaceSpaceNodeIndex;
     m_surfaceOffsetLength       = obj.m_surfaceOffsetLength;
     m_surfaceOffsetVectorType   = obj.m_surfaceOffsetVectorType;
+    m_mediaFileName             = obj.m_mediaFileName;
+    m_histologySpaceKey         = obj.m_histologySpaceKey;
 }
 
 /**
@@ -133,6 +135,9 @@ AnnotationCoordinate::initializeAnnotationCoordinateMembers()
             break;
     }
     
+    m_mediaFileName = "";
+    m_histologySpaceKey = HistologySpaceKey();
+    
     m_sceneAssistant = new SceneClassAssistant();
     m_sceneAssistant->addArray("m_xyz",
                                m_xyz, 3, 0.0);
@@ -147,18 +152,37 @@ AnnotationCoordinate::initializeAnnotationCoordinateMembers()
                           &m_surfaceOffsetLength);
     m_sceneAssistant->add<AnnotationSurfaceOffsetVectorTypeEnum, AnnotationSurfaceOffsetVectorTypeEnum::Enum>("m_surfaceOffsetVectorType",
                                                                                                               &m_surfaceOffsetVectorType);
-    
+    m_sceneAssistant->add("m_mediaFileName",
+                          &m_mediaFileName);
+    m_sceneAssistant->add("m_histologySpaceKey",
+                          "HistologySpaceKey",
+                          &m_histologySpaceKey);
 }
+
+/**
+ * @return True if the XYZ coordinates of this and the given XYZ are equal
+ * @param xyz
+ *    XYZ for testing equality
+ */
+bool
+AnnotationCoordinate::equalXYZ(const Vector3D& xyz) const
+{
+    if (m_xyz[0] != xyz[0]) return false;
+    if (m_xyz[1] != xyz[1]) return false;
+    if (m_xyz[2] != xyz[2]) return false;
+    return true;
+}
+
 
 /**
  * @return The annotation's coordinate.
  *
  * For tab and window spaces, the Z value is a depth for ordering.
  */
-const float*
+const Vector3D
 AnnotationCoordinate::getXYZ() const
 {
-    return m_xyz;
+    return Vector3D(m_xyz);
 }
 
 /**
@@ -456,6 +480,102 @@ AnnotationCoordinate::getSurfaceOffsetVectorType() const
 }
 
 /**
+ * Set the media file name and pixel IJK
+ */
+void
+AnnotationCoordinate::setMediaFileNameAndPixelSpace(const AString& mediaFileName,
+                                                    const float xyz[3])
+{
+    setMediaFileName(mediaFileName);
+    for (int32_t i = 0; i < 3; i++) {
+        if (xyz[i] != m_xyz[i]) {
+            m_xyz[i] = xyz[i];
+            setModified();
+        }
+    }
+}
+
+/**
+ * @return The histology space key
+ */
+const HistologySpaceKey&
+AnnotationCoordinate::getHistologySpaceKey() const
+{
+    return m_histologySpaceKey;
+}
+
+/**
+ * Get the histology space info
+ * @param histologySpaceKeyOut
+ *    Key for histology space
+ * @param xyzOut
+ *    Histology coordinate XYZ
+ */
+void
+AnnotationCoordinate::getHistologySpace(HistologySpaceKey& histologySpaceKeyOut,
+                                        float xyzOut[3]) const
+{
+    histologySpaceKeyOut = m_histologySpaceKey;
+    xyzOut[0] = m_xyz[0];
+    xyzOut[1] = m_xyz[1];
+    xyzOut[2] = m_xyz[2];
+
+}
+
+/**
+ * Set the histology space key
+ * @param histologySpaceKey
+ *    Key for histology space
+ */
+void
+AnnotationCoordinate::setHistologySpaceKey(const HistologySpaceKey& histologySpaceKey)
+{
+    if (histologySpaceKey != m_histologySpaceKey) {
+        m_histologySpaceKey = histologySpaceKey;
+        setModified();
+    }
+}
+
+
+/**
+ * Set the histology space info
+ * @param histologySpaceKey
+ *    Key for histology space
+ * @param xyz
+ *    Histology coordinate XYZ
+ */
+void
+AnnotationCoordinate::setHistologySpace(const HistologySpaceKey& histologySpaceKey,
+                                        const float xyz[3])
+{
+    setHistologySpaceKey(histologySpaceKey);
+    setXYZ(xyz);
+}
+
+/**
+ * @return Media file name for
+ */
+AString
+AnnotationCoordinate::getMediaFileName() const
+{
+    return m_mediaFileName;
+}
+
+/**
+ * Set the media file name
+ * @param mediaFileName
+ *    Name of media file.
+ */
+void
+AnnotationCoordinate::setMediaFileName(const AString& mediaFileName)
+{
+    if (mediaFileName != m_mediaFileName) {
+        m_mediaFileName = mediaFileName;
+        setModified();
+    }
+}
+
+/**
  * Get a description of this object's content.
  * @return String describing this object's content.
  */
@@ -464,6 +584,66 @@ AnnotationCoordinate::toString() const
 {
     return "AnnotationCoordinate";
 }
+
+/**
+ * @return A descritption of the coordinates for the given space
+ * @param space
+ *    The coordinate space
+ */
+AString
+AnnotationCoordinate::toStringForCoordinateSpace(const AnnotationCoordinateSpaceEnum::Enum space) const
+{
+    AString s(AnnotationCoordinateSpaceEnum::toGuiName(space) + " ");
+    
+    switch (space) {
+        case AnnotationCoordinateSpaceEnum::CHART:
+            s.append(AString::fromNumbers(m_xyz, 3, " "));
+            break;
+        case AnnotationCoordinateSpaceEnum::HISTOLOGY:
+            s.append("Histology Space Key: "
+                     + m_histologySpaceKey.toString()
+                     + " "
+                     + AString::fromNumbers(m_xyz, 3, " "));
+            break;
+        case AnnotationCoordinateSpaceEnum::MEDIA_FILE_NAME_AND_PIXEL:
+            s.append("Media File Name: "
+                     + m_mediaFileName
+                     + " "
+                     + AString::fromNumbers(m_xyz, 3, " "));
+            break;
+        case AnnotationCoordinateSpaceEnum::SPACER:
+            s.append(AString::fromNumbers(m_xyz, 3, " "));
+            break;
+        case AnnotationCoordinateSpaceEnum::STEREOTAXIC:
+            s.append(AString::fromNumbers(m_xyz, 3, " "));
+            break;
+        case AnnotationCoordinateSpaceEnum::SURFACE:
+        {
+            StructureEnum::Enum structure(StructureEnum::INVALID);
+            int32_t surfaceVertexCount(-1);
+            int32_t vertexIndex(-1);
+            getSurfaceSpace(structure,
+                                       surfaceVertexCount,
+                                       vertexIndex);
+            s.append("Structure: " + StructureEnum::toGuiName(m_surfaceSpaceStructure));
+            s.append(" Surface Num Vertices: " + AString::number(m_surfaceSpaceNumberOfNodes));
+            s.append(" Surface Vertex: " + AString::number(m_surfaceSpaceNodeIndex));
+        }
+            break;
+        case AnnotationCoordinateSpaceEnum::TAB:
+            s.append(AString::fromNumbers(m_xyz, 3, " "));
+            break;
+        case AnnotationCoordinateSpaceEnum::VIEWPORT:
+            s.append("Invalid");
+            break;
+        case AnnotationCoordinateSpaceEnum::WINDOW:
+            s.append(AString::fromNumbers(m_xyz, 3, " "));
+            break;
+    }
+    
+    return s;
+}
+
 
 /**
  * Set the user default for the surface offset vector type.

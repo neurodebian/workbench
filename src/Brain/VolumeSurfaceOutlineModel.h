@@ -27,11 +27,13 @@
 #include "EventListenerInterface.h"
 #include "SceneableInterface.h"
 #include "VolumeSurfaceOutlineColorOrTabModel.h"
+#include "VolumeSurfaceOutlineDrawingModeEnum.h"
 #include "VolumeSurfaceOutlineModelCacheKey.h"
 
 namespace caret {
 
     class GraphicsPrimitive;
+    class HistologySlice;
     class Surface;
     class SceneAttributes;
     class SceneClassAssistant;
@@ -42,6 +44,8 @@ namespace caret {
     class VolumeSurfaceOutlineModel : public CaretObject, public EventListenerInterface, public SceneableInterface {
         
     public:
+        static float getDefaultSurfaceDepthMillimeters();
+        
         VolumeSurfaceOutlineModel();
         
         virtual ~VolumeSurfaceOutlineModel();
@@ -62,6 +66,14 @@ namespace caret {
         
         void setThicknessPixelsObsolete(const float thickness);
         
+        float getSlicePlaneDepth() const;
+        
+        void setSlicePlaneDepth(const float depth);
+        
+        float getOpacity() const;
+        
+        void setOpacity(const float opacity);
+        
         SurfaceSelectionModel* getSurfaceSelectionModel();
         
         const Surface* getSurface() const;
@@ -72,11 +84,21 @@ namespace caret {
         
         const VolumeSurfaceOutlineColorOrTabModel* getColorOrTabModel() const;
         
-        void setOutlineCachePrimitives(const VolumeMappableInterface* underlayVolume,
+        VolumeSurfaceOutlineDrawingModeEnum::Enum getDrawingMode() const;
+        
+        void setDrawingMode(const VolumeSurfaceOutlineDrawingModeEnum::Enum drawingMode);
+        
+//        bool isDrawLinesModeSelected() const;
+//        
+//        bool isDrawSurfaceModeSelected() const;
+
+        void setOutlineCachePrimitives(const HistologySlice*          histologySlice,
+                                       const VolumeMappableInterface* underlayVolume,
                                        const VolumeSurfaceOutlineModelCacheKey& key,
                                        const std::vector<GraphicsPrimitive*>& primitives);
         
-        bool getOutlineCachePrimitives(const VolumeMappableInterface* underlayVolume,
+        bool getOutlineCachePrimitives(const HistologySlice*          histologySlice,
+                                       const VolumeMappableInterface* underlayVolume,
                                        const VolumeSurfaceOutlineModelCacheKey& key,
                                        std::vector<GraphicsPrimitive*>& primitivesOut);
         
@@ -106,9 +128,15 @@ namespace caret {
         
         float m_thicknessPercentageViewportHeight;
         
+        float m_slicePlaneDepth = 0.0;
+        
+        float m_opacity = 1.0;
+        
         SurfaceSelectionModel* m_surfaceSelectionModel;
         
         VolumeSurfaceOutlineColorOrTabModel* m_colorOrTabModel;
+        
+        VolumeSurfaceOutlineDrawingModeEnum::Enum m_drawingMode = VolumeSurfaceOutlineDrawingModeEnum::LINES;
         
         SceneClassAssistant* m_sceneAssistant;
         
@@ -121,16 +149,33 @@ namespace caret {
             void clear();
             
             bool isValid(VolumeSurfaceOutlineModel* surfaceOutlineModel,
+                         const HistologySlice*          histologySlice,
                          const VolumeMappableInterface* underlayVolume);
             
             void update(VolumeSurfaceOutlineModel* surfaceOutlineModel,
+                        const HistologySlice*      histologySlice,
                         const VolumeMappableInterface* underlayVolume);
+            
+            /** The histology slice */
+            const HistologySlice* m_histologySlice;
             
             /** The underlay volume */
             const VolumeMappableInterface* m_underlayVolume;
             
+            /** drawing type */
+            VolumeSurfaceOutlineDrawingModeEnum::Enum m_drawingType = VolumeSurfaceOutlineDrawingModeEnum::LINES;
+            
             /** Thickness when first outline is added to outline cache */
             float m_thicknessPercentageViewportHeight = -1.0;
+            
+            /** slice plane depth when first added to cache */
+            float m_slicePlaneDepth = 0.0;
+            
+            /** opacity when first added to cache */
+            float m_opacity = 0.0;
+            
+            /** Tracks changes in surface outline separation in preferences */
+            float m_preferencesVolumeSurfaceOutlineSeparation = 0.0;
             
             /** Surface when first outline is added to outline cache */
             Surface* m_surface = NULL;

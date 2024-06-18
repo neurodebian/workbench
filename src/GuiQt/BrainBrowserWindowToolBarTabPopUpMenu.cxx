@@ -33,7 +33,7 @@
 #include "EventBrowserTabGet.h"
 #include "EventBrowserWindowContent.h"
 #include "EventGetOrSetUserInputModeProcessor.h"
-#include "EventGraphicsUpdateOneWindow.h"
+#include "EventGraphicsPaintSoonOneWindow.h"
 #include "EventManager.h"
 #include "EventUserInterfaceUpdate.h"
 #include "GuiManager.h"
@@ -264,7 +264,7 @@ BrainBrowserWindowToolBarTabPopUpMenu::menuItemSelected(QAction* action)
                 break;
             case MenuItem::MANUAL_LAYOUT_SELECT_FOR_EDITING:
                 if (m_selectedBrowserTabAnnotation != NULL) {
-                    AnnotationManager* annMan = GuiManager::get()->getBrain()->getAnnotationManager();
+                    AnnotationManager* annMan = GuiManager::get()->getBrain()->getAnnotationManager(UserInputModeEnum::Enum::TILE_TABS_LAYOUT_EDITING);
                     CaretAssert(annMan);
                     annMan->selectAnnotationForEditing(m_browserWindowIndex,
                                                        AnnotationManager::SELECTION_MODE_EXTENDED,
@@ -341,7 +341,7 @@ BrainBrowserWindowToolBarTabPopUpMenu::menuItemSelected(QAction* action)
         }
         
         if (updateGraphicsFlag) {
-            EventManager::get()->sendEvent(EventGraphicsUpdateOneWindow(m_browserWindowIndex).getPointer());
+            EventManager::get()->sendEvent(EventGraphicsPaintSoonOneWindow(m_browserWindowIndex).getPointer());
         }
         if (updateUserIterfaceFlag) {
             EventManager::get()->sendEvent(EventUserInterfaceUpdate().getPointer());
@@ -397,7 +397,9 @@ BrainBrowserWindowToolBarTabPopUpMenu::isEnabled(const MenuItem menuItem) const
                     break;
                 case UserInputModeEnum::Enum::INVALID:
                     break;
-                case UserInputModeEnum::Enum::TILE_TABS_MANUAL_LAYOUT_EDITING:
+                case UserInputModeEnum::Enum::SAMPLES_EDITING:
+                    break;
+                case UserInputModeEnum::Enum::TILE_TABS_LAYOUT_EDITING:
                     if (m_selectedBrowserTabAnnotation != NULL) {
                         enabledFlag = true;
                     }

@@ -25,8 +25,10 @@
 #include "FileInformation.h"
 #include "NiftiIO.h"
 
+#include <QDir>
 #include <QFile>
 
+#include <cstdio>
 #include <fstream>
 #include <sstream>
 #include <string>
@@ -65,12 +67,29 @@ FloatMatrix AffineFile::read34(const AString& filename)
             if (!affineFile) throw DataFileException("error while reading file '" + filename + "'");
         }
     }
+    float junk;
+    bool warnFourth = false;
+    if (affineFile >> junk) //check if 4th row exists, if so ensure it equals 0 0 0 1
+    {
+        if (junk != 0.0f) warnFourth = true;
+        for (int i = 0; i < 3; ++i)
+        {
+            if (!(affineFile >> junk)) warnFourth = true;
+            if (i < 2 && junk != 0.0f) warnFourth = true;
+        }
+        if (junk != 1.0f) warnFourth = true;
+    }
+    if (warnFourth)
+    {
+        CaretLogWarning("fourth row of affine '" + filename + "' is not equal to 0 0 0 1");
+    }
     return ret;
 }
 
 void AffineFile::write44(const FloatMatrix& out, const AString& filename)
 {
-    QFile::remove(filename);
+    //QFile::remove(filename);
+    remove(QDir::toNativeSeparators(filename).toLocal8Bit());//QFile::remove inappropriately checks file permissions and refuses to try deleting (when folder permissions may allow it)
     ofstream affineFile(filename.toStdString());
     if (!affineFile.good())
     {

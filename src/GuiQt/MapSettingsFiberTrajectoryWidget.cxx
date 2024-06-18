@@ -36,7 +36,7 @@
 
 #include "CiftiFiberTrajectoryFile.h"
 #include "EventManager.h"
-#include "EventGraphicsUpdateAllWindows.h"
+#include "EventGraphicsPaintSoonAllWindows.h"
 #include "EventUserInterfaceUpdate.h"
 #include "FiberTrajectoryColorModel.h"
 #include "FiberTrajectoryMapProperties.h"
@@ -117,8 +117,13 @@ QWidget*
 MapSettingsFiberTrajectoryWidget::createDisplayModeWidget()
 {
     m_displayModeButtonGroup = new QButtonGroup(this);
+#if QT_VERSION >= 0x060000
+    QObject::connect(m_displayModeButtonGroup, &QButtonGroup::idClicked,
+                     this, &MapSettingsFiberTrajectoryWidget::processAttributesChanges);
+#else
     QObject::connect(m_displayModeButtonGroup, SIGNAL(buttonClicked(int)),
                      this, SLOT(processAttributesChanges()));
+#endif
     
     std::vector<FiberTrajectoryDisplayModeEnum::Enum> displayModes;
     FiberTrajectoryDisplayModeEnum::getAllEnums(displayModes);
@@ -322,7 +327,7 @@ MapSettingsFiberTrajectoryWidget::processAttributesChanges()
     ftmp->setDistanceMaximumOpacity(m_distanceMaximumSpinBox->value());
     ftmp->setDistanceMinimumOpacity(m_distanceMinimumSpinBox->value());
     
-    EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+    EventManager::get()->sendEvent(EventGraphicsPaintSoonAllWindows().getPointer());
 }
 
 /**

@@ -444,6 +444,16 @@ SurfaceNodeColoring::colorSurfaceNodes(const DisplayPropertiesLabels* displayPro
                                                                             overlayRGBV);
                 }
                     break;
+                case DataFileTypeEnum::CONNECTIVITY_PARCEL_DYNAMIC:
+                {
+                    CiftiMappableConnectivityMatrixDataFile* cmf = dynamic_cast<CiftiMappableConnectivityMatrixDataFile*>(selectedMapFile);
+                    isColoringValid = assignCiftiMappableConnectivityMatrixColoring(brainStructure,
+                                                                                    cmf,
+                                                                                    selectedMapIndex,
+                                                                                    numNodes,
+                                                                                    overlayRGBV);
+                }
+                    break;
                 case DataFileTypeEnum::CONNECTIVITY_PARCEL_LABEL:
                 {
                     CiftiParcelLabelFile* cplf = dynamic_cast<CiftiParcelLabelFile*>(selectedMapFile);
@@ -473,7 +483,11 @@ SurfaceNodeColoring::colorSurfaceNodes(const DisplayPropertiesLabels* displayPro
                     break;
                 case DataFileTypeEnum::CONNECTIVITY_SCALAR_DATA_SERIES:
                     break;
+                case DataFileTypeEnum::CZI_IMAGE_FILE:
+                    break;
                 case DataFileTypeEnum::FOCI:
+                    break;
+                case DataFileTypeEnum::HISTOLOGY_SLICES:
                     break;
                 case DataFileTypeEnum::IMAGE:
                     break;
@@ -503,6 +517,8 @@ SurfaceNodeColoring::colorSurfaceNodes(const DisplayPropertiesLabels* displayPro
                                                                selectedMapIndex,
                                                                numNodes, 
                                                                overlayRGBV);
+                    break;
+                case DataFileTypeEnum::SAMPLES:
                     break;
                 case DataFileTypeEnum::SCENE:
                     break;
@@ -1052,7 +1068,7 @@ SurfaceNodeColoring::assignCiftiMappableConnectivityMatrixColoring(const BrainSt
         
         if(selectedParcelValid)	{
             const CaretColorEnum::Enum parcelColor = parcelFile->getSelectedParcelColor();
-            const float* rgb = CaretColorEnum::toRGB(parcelColor);
+            const float* rgb = CaretColorEnum::toRGBA(parcelColor);
             CaretAssert(rgb);
             
             switch (parcelFile->getSelectedParcelColoringMode()) {
