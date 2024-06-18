@@ -1,3 +1,11 @@
+connectome-workbench (2.0.0-1) unstable; urgency=medium
+
+  * Fresh upstream release
+  * debian/patches
+    - drop upstream patch
+
+ -- Yaroslav Halchenko <debian@onerussian.com>  Tue, 18 Jun 2024 14:02:57 -0400
+
 connectome-workbench (1.5.0-2) unstable; urgency=medium
 
   * Include upstream patch
