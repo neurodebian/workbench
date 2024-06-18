@@ -61,6 +61,8 @@ public:
         CONNECTIVITY_PARCEL,
         /** Connectivity - Parcel Dense*/
         CONNECTIVITY_PARCEL_DENSE,
+        /** Connectivity - Parcel Dynamic (correlate from parcel-series)*/
+        CONNECTIVITY_PARCEL_DYNAMIC,
         /** Connectivity - Parcel Label*/
         CONNECTIVITY_PARCEL_LABEL,
         /** Connectivity - Parcel Scalar */
@@ -69,8 +71,12 @@ public:
         CONNECTIVITY_PARCEL_SERIES,
         /** Connectivity - Scalar Data Series */
         CONNECTIVITY_SCALAR_DATA_SERIES,
+        /** Zeiss CZI Image File */
+        CZI_IMAGE_FILE,
         /** Foci */
         FOCI,
+        /** Histology Slices File */
+        HISTOLOGY_SLICES,
         /** Image */
         IMAGE,
         /** Labels */
@@ -83,6 +89,8 @@ public:
         PALETTE,
         /** RGBA */
         RGBA,
+        /** Samples */
+        SAMPLES,
         /** Scene */
         SCENE,
         /** Specification */
@@ -106,16 +114,20 @@ public:
         OPTIONS_NONE = 0,
         /** Include the dense dynamic data file type */
         OPTIONS_INCLUDE_CONNECTIVITY_DENSE_DYNAMIC = 1,
+        /** Include the parcel dynamic data file type */
+        OPTIONS_INCLUDE_CONNECTIVITY_PARCEL_DYNAMIC = 2,
         /** Include the metric dynamic data file type */
-        OPTIONS_INCLUDE_METRIC_DENSE_DYNAMIC = 2,
+        OPTIONS_INCLUDE_METRIC_DENSE_DYNAMIC = 4,
         /** Include the volume dynamic data file type */
-        OPTIONS_INCLUDE_VOLUME_DENSE_DYNAMIC = 4,
+        OPTIONS_INCLUDE_VOLUME_DENSE_DYNAMIC = 8,
         /** Include the unknown data file type */
-        OPTIONS_INCLUDE_UNKNOWN = 8
+        OPTIONS_INCLUDE_UNKNOWN = 16
     };
     
     ~DataFileTypeEnum();
 
+    static void reinitializeDataFileTypeEnums();
+    
     static AString toName(Enum enumValue);
     
     static Enum fromName(const AString& name, bool* isValidOut);
@@ -148,7 +160,14 @@ public:
     static bool isValidFileExtension(const AString& filename,
                                      const Enum enumValue);
     
+    static bool isValidWriteFileExtension(const AString& filename,
+                                          const Enum enumValue);
+    
     static std::vector<AString> getAllFileExtensions(const Enum enumValue);
+    
+    static std::vector<AString> getAllFileExtensionsForReading(const Enum enumValue);
+    
+    static std::vector<AString> getAllFileExtensionsForWriting(const Enum enumValue);
     
     static std::vector<AString> getFilesExtensionsForEveryFile(const bool includeNonWritableFileTypesFlag = false);
     
@@ -177,6 +196,8 @@ public:
                                                          AString& defaultWritableExtension);
 
     static void getQtSupportedMovieFileExtensions(std::vector<AString>& readableExtensionsOut);
+    
+    static AString toCziImageFileExtension() { return ".czi"; }
     
 private:
     DataFileTypeEnum(const Enum enumValue, 

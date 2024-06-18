@@ -22,8 +22,9 @@
 #if QT_VERSION >= 0x040400
 #include <qthread.h>
 #include <qfuture.h>
-#include <qtconcurrentrun.h>
+//#include <qtconcurrentrun.h>
 #endif
+#include <QtConcurrent>
 
 #define DEBUG_RENDER 0
 
@@ -288,11 +289,7 @@ bool QwtPlotSpectrogram::testConrecFlag(
 void QwtPlotSpectrogram::setContourLevels( const QList<double> &levels )
 {
     d_data->contourLevels = levels;
-#ifdef WORKBENCH_REPLACE_QT_DEPRECATED
     std::sort(d_data->contourLevels.begin(), d_data->contourLevels.end());
-#else
-    qSort( d_data->contourLevels );
-#endif
     
     legendChanged();
     itemChanged();
@@ -441,6 +438,11 @@ QImage QwtPlotSpectrogram::renderImage(
 
     if ( numThreads <= 0 )
         numThreads = 1;
+    
+#if QT_VERSION >= 0x060000
+    /* Until QtConncurrent::run() is figured out */
+    numThreads = 1;
+#endif
 
     const int numRows = imageSize.height() / numThreads;
 
@@ -455,9 +457,14 @@ QImage QwtPlotSpectrogram::renderImage(
         }
         else
         {
-            futures += QtConcurrent::run(
-                this, &QwtPlotSpectrogram::renderTile,
-                xMap, yMap, tile, &image );
+#if QT_VERSION >= 0x060000
+//            auto f = QtConcurrent::run(/*this,*/ &QwtPlotSpectrogram::renderTile,
+//                                         xMap, yMap, tile, &image );
+//            futures += f;
+#else
+            futures += QtConcurrent::run(this, &QwtPlotSpectrogram::renderTile,
+                                         xMap, yMap, tile, &image );
+#endif
         }
     }
     for ( int i = 0; i < futures.size(); i++ )

@@ -56,6 +56,8 @@ namespace caret {
         
         void invalidateColors();
         
+        void invalidateTextureCoordinates();
+        
         // ADD_NEW_METHODS_HERE
 
     private:
@@ -67,6 +69,16 @@ namespace caret {
         enum SpaceMode {
             MODEL,
             WINDOW,
+        };
+        
+        /**
+         * Texture loading mode
+         */
+        enum TextureLoadMode {
+            /** Load full texture */
+            FULL,
+            /** Load voxel color update */
+            VOXEL_COLOR_UPDATE
         };
         
         GraphicsEngineDataOpenGL(const GraphicsEngineDataOpenGL&);
@@ -85,6 +97,11 @@ namespace caret {
         
         void loadTextureImageDataBuffer(GraphicsPrimitive* primitive);
         
+        void loadTextureImageDataBuffer2D(GraphicsPrimitive* primitive);
+        
+        void loadTextureImageDataBuffer3D(GraphicsPrimitive* primitive,
+                                          const TextureLoadMode textureLoadMode);
+        
         static void drawPrivate(const PrivateDrawMode drawMode,
                                 GraphicsPrimitive* primitive,
                                 GraphicsPrimitiveSelectionHelper* primitiveSelectionHelper);
@@ -93,10 +110,6 @@ namespace caret {
                                            const PrivateDrawMode drawMode,
                                            GraphicsPrimitive* primitive,
                                            GraphicsPrimitiveSelectionHelper* primitiveSelectionHelper);
-        
-//        static void drawWindowSpace(const PrivateDrawMode drawMode,
-//                                GraphicsPrimitive* primitive,
-//                                GraphicsPrimitiveSelectionHelper* primitiveSelectionHelper);
         
         static void drawPointsPrimitiveMillimeters(const GraphicsPrimitive* primitive);
         
@@ -116,6 +129,13 @@ namespace caret {
         
         GLsizei m_arrayIndicesCount = 0;
         
+        void setDrawArrayIndicesSubset(const GLint firstVertexIndex,
+                                       const GLsizei vertexCount) const;
+        
+        mutable GLint m_arrayIndicesSubsetFirstVertex = -1;
+        
+        mutable GLsizei m_arrayIndicesSubsetCount = -1;
+        
         std::unique_ptr<GraphicsOpenGLBufferObject> m_coordinateBufferObject;
         
         GLenum m_coordinateDataType = GL_FLOAT;
@@ -125,6 +145,8 @@ namespace caret {
         bool m_reloadCoordinatesFlag = false;
         
         bool m_reloadColorsFlag = false;
+        
+        bool m_reloadTextureCoordinatesFlag = false;
         
         std::unique_ptr<GraphicsOpenGLBufferObject> m_normalVectorBufferObject;
         

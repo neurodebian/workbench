@@ -57,6 +57,9 @@ namespace caret {
                  int32_t* intAddress);
         
         void add(const AString& name,
+                 int64_t* longIntAddress);
+        
+        void add(const AString& name,
                  bool* boolAddress);
         
         void add(const AString& name,
@@ -102,6 +105,11 @@ namespace caret {
                       int32_t* integerArray,
                       const int32_t numberOfElements,
                       const int32_t defaultValue);
+        
+        void addArray(const AString& name,
+                      int64_t* longIntegerArray,
+                      const int32_t numberOfElements,
+                      const int64_t defaultValue);
         
         void addArray(const AString& name,
                       uint8_t* byteArray,
@@ -164,7 +172,11 @@ namespace caret {
                                                                                               enumeratedValueArray);
             m_dataStorage.push_back(etmap);
         }
-                                              
+                 
+        void addPathName(const AString& name,
+                         AString* pathNameAddress);
+        
+        
         // ADD_NEW_METHODS_HERE
 
     private:
@@ -292,6 +304,25 @@ namespace caret {
             int32_t m_defaultValue; 
         };
         
+        /* ========================================= */
+        class LongIntegerData : public Data {
+        public:
+            LongIntegerData(const AString& name,
+                            int64_t* dataPointer,
+                            const int64_t defaultValue);
+            
+            virtual ~LongIntegerData() { }
+            
+            void restore(const SceneAttributes& sceneAttributes,
+                         const SceneClass& sceneClass);
+            void save(const SceneAttributes& sceneAttributes,
+                      SceneClass& sceneClass);
+            
+        private:
+            int64_t* m_dataPointer;
+            int64_t m_defaultValue;
+        };
+        
 //        /* ========================================= */
 //        class UnsignedByteData : public Data {
 //        public:
@@ -347,6 +378,25 @@ namespace caret {
         private:
             AString* m_dataPointer;
             AString m_defaultValue; 
+        };
+        
+        /* ========================================= */
+        class PathData : public Data {
+        public:
+            PathData(const AString& name,
+                       AString* dataPointer,
+                       const AString& defaultValue);
+            
+            virtual ~PathData() { }
+            
+            void restore(const SceneAttributes& sceneAttributes,
+                         const SceneClass& sceneClass);
+            void save(const SceneAttributes& sceneAttributes,
+                      SceneClass& sceneClass);
+            
+        private:
+            AString* m_dataPointer;
+            AString m_defaultValue;
         };
         
         /* ========================================= */
@@ -515,6 +565,24 @@ namespace caret {
             int32_t m_defaultValue;
         };
         
+        /* ========================================= */
+        class LongIntegerArrayData : public ArrayData {
+        public:
+            LongIntegerArrayData(const AString& name,
+                                 int64_t* longIntegerArray,
+                                 const int32_t numberOfArrayElements,
+                                 const int64_t defaultValue);
+            
+            virtual ~LongIntegerArrayData() { }
+            void restore(const SceneAttributes& sceneAttributes,
+                         const SceneClass& sceneClass);
+            void save(const SceneAttributes& sceneAttributes,
+                      SceneClass& sceneClass);
+        private:
+            int64_t* m_longIntegerArray;
+            int64_t m_defaultValue;
+        };
+
         /* ========================================= */
         class UnsignedByteArrayData : public ArrayData {
         public:

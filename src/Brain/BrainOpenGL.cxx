@@ -22,6 +22,7 @@
 
 #include <cstdlib>
 
+#include <QRegularExpression>
 #include <QStringList>
 
 #define __BRAIN_OPENGL_DEFINE_H
@@ -233,12 +234,15 @@ BrainOpenGL::receiveEvent(Event* event)
  *    Pointer to the active OpenGL context.
  * @param viewportContents
  *    Viewport info for drawing.
+ * @param graphicsFramesPerSecond
+ *    Frames for second for display in window
  */
 void BrainOpenGL::drawModels(const int32_t windowIndex,
                              const UserInputModeEnum::Enum windowsUserInputMode,
                              Brain* brain,
                              void* contextSharingGroupPointer,
-                             const std::vector<const BrainOpenGLViewportContent*>& viewportContents)
+                             const std::vector<const BrainOpenGLViewportContent*>& viewportContents,
+                             const GraphicsFramesPerSecond* graphicsFramesPerSecond)
 {
     m_contextSharingGroupPointer = contextSharingGroupPointer;
     
@@ -252,7 +256,8 @@ void BrainOpenGL::drawModels(const int32_t windowIndex,
     drawModelsImplementation(windowIndex,
                              windowsUserInputMode,
                              brain,
-                             vpContents);
+                             vpContents,
+                             graphicsFramesPerSecond);
     
     deleteUnusedOpenGLNames();
     
@@ -605,22 +610,34 @@ BrainOpenGL::testForVersionOfOpenGLSupported(const AString& versionOfOpenGL)
 
 /**
  * Test for the required version of OpenGL Workbench needs.
- *
+ * @param guiFlag
+ *    True if in GUI
  * @param errorMessageOut
  *     Output with error message if required version is not available.
  * @return 
  *     True if required version available, else false.
  */
 bool
-BrainOpenGL::testForRequiredOpenGLVersion(AString& errorMessageOut)
+BrainOpenGL::testForRequiredOpenGLVersion(const bool guiFlag,
+                                          AString& errorMessageOut)
 {
-    const AString minimumOpenGLVersion("1.5");
+    const AString minimumOpenGLVersion("2.1");
     if ( ! BrainOpenGL::testForVersionOfOpenGLSupported(minimumOpenGLVersion)) {
-        const AString msg("OpenGL Version "
+        AString msg("OpenGL Version "
                           + minimumOpenGLVersion
                           + " or later is required.  This computer has version "
-                          + BrainOpenGL::getOpenGLVersion()
-                          + "\nYou may continue but the software may crash.");
+                          + BrainOpenGL::getOpenGLVersion());
+        if (guiFlag) {
+            msg += ("\nYou may continue but the software may crash.");
+        }
+        else {
+            msg += ("\nIf Virtual GL is running, it will intercept OpenGL function "
+                    "\ncalls and prevent the correct OpenGL libraries from being "
+                    "\nused resulting in an invalid OpenGL version number.  "
+                    "\nYou will need to disable Virtual GL.  If the environment "
+                    "\nvariable LD_PRELOAD contains 'faker' libraries, unsetting "
+                    "\nthis environment variable may disable Virtual GL.");
+        }
         errorMessageOut = msg;
         return false;
     }
@@ -635,7 +652,22 @@ BrainOpenGL::testForRequiredOpenGLVersion(AString& errorMessageOut)
 AString
 BrainOpenGL::getOpenGLVersion()
 {
-    return QLatin1String(reinterpret_cast<const char*>(glGetString(GL_VERSION)));
+    QString versionStr;
+    
+    const GLubyte* versionPtr(glGetString(GL_VERSION));
+    if (versionPtr != NULL) {
+        versionStr = QLatin1String(reinterpret_cast<const char*>(versionPtr));
+        if (versionStr.isEmpty()) {
+            /*
+             * Note: version may be empty in 1.1
+             */
+            versionStr = "1.1  (Unknown/Empty)";
+        }
+    }
+    else {
+        versionStr = "1.1  Error (pointer == 0)";
+    }
+    return versionStr;
 }
 
 
@@ -658,7 +690,7 @@ BrainOpenGL::getOpenGLMajorMinorVersions(const AString& versionString,
      * Major and minor version are separated by a period.
      * Vendor information may follow and begin with whitespace.
      */
-    const QStringList sl = versionString.split(QRegExp("[\\s|\\.]"));
+    const QStringList sl = versionString.split(QRegularExpression("[\\s|\\.]"));
     
     if (sl.count() >= 2) {
         minorVersionOut = sl.at(1);
@@ -683,10 +715,7 @@ void
 BrainOpenGL::initializeOpenGL()
 {
 
-    s_runtimeLibraryVersionOfOpenGL = QLatin1String(reinterpret_cast<const char*>(glGetString(GL_VERSION)));
-    if (s_runtimeLibraryVersionOfOpenGL.isEmpty()) {
-        s_runtimeLibraryVersionOfOpenGL = "1.1";
-    }
+    s_runtimeLibraryVersionOfOpenGL = getOpenGLVersion();
     getOpenGLMajorMinorVersions(s_runtimeLibraryVersionOfOpenGL,
                                 s_runtimeLibraryMajorVersionOfOpenGL,
                                 s_runtimeLibraryMinorVersionOfOpenGL);
@@ -905,20 +934,25 @@ BrainOpenGL::getOpenGLInformation()
     lineInfo += ("\n\nMaximum number of clipping planes is "
                  + AString::number(maximumNumberOfClipPlanes));
     
-    GLint maxNameStackDepth, maxModelStackDepth, maxProjStackDepth;
+    GLint maxNameStackDepth, maxModelStackDepth, maxProjStackDepth, maxAttributeStackDepth;
     glGetIntegerv(GL_MAX_PROJECTION_STACK_DEPTH,
                   &maxProjStackDepth);
     glGetIntegerv(GL_MAX_MODELVIEW_STACK_DEPTH,
                   &maxModelStackDepth);
     glGetIntegerv(GL_MAX_NAME_STACK_DEPTH,
                   &maxNameStackDepth);
+    glGetIntegerv(GL_MAX_ATTRIB_STACK_DEPTH,
+                  &maxAttributeStackDepth);
+    
     lineInfo += ("\n\nMaximum Modelview Matrix Stack Depth "
                  + QString::number(maxModelStackDepth));
     lineInfo += ("\nMaximum Name Matrix Stack Depth "
                  + QString::number(maxNameStackDepth));
     lineInfo += ("\nMaximum Projection Matrix Stack Depth "
                  + QString::number(maxProjStackDepth));
-    
+    lineInfo += ("\nMaximum Attribute Stack Depth "
+                 + QString::number(maxAttributeStackDepth));
+
     GLint redBits, greenBits, blueBits, alphaBits;
     glGetIntegerv(GL_RED_BITS,   &redBits);
     glGetIntegerv(GL_GREEN_BITS, &greenBits);
@@ -929,6 +963,15 @@ BrainOpenGL::getOpenGLInformation()
                  + AString::number(greenBits) + ", "
                  + AString::number(blueBits) + ", "
                  + AString::number(alphaBits) + ")");
+    
+    GLint depthBits;
+    glGetIntegerv(GL_DEPTH_BITS, &depthBits);
+    lineInfo += ("\nDepth Bits: "
+                 + AString::number(depthBits));
+    GLint stencilBits;
+    glGetIntegerv(GL_STENCIL_BITS, &stencilBits);
+    lineInfo += ("\nStencil Bits: "
+                 + AString::number(stencilBits));
     
     lineInfo += ("\n\nBest Drawing Mode: "
                  + BrainOpenGL::getBestDrawingModeName());
@@ -959,6 +1002,69 @@ BrainOpenGL::getOpenGLInformation()
     lineInfo += ("\nTexture 3D Max: " + AString::number(texture3DMax));
     lineInfo += "\n";
 
+    GLint numCompTexFormats(0);
+    glGetIntegerv(GL_NUM_COMPRESSED_TEXTURE_FORMATS, &numCompTexFormats);
+    lineInfo += ("\nNum Compressed Texture Formats: " + AString::number(numCompTexFormats));
+    
+    if (numCompTexFormats > 0) {
+        std::vector<GLint> compTextureFormats;
+        compTextureFormats.resize(numCompTexFormats);
+        glGetIntegerv(GL_COMPRESSED_TEXTURE_FORMATS, &compTextureFormats[0]);
+        for (GLint fmt : compTextureFormats) {
+            QString name;
+            QString decimalValue;
+            QString hexValue;
+            GraphicsUtilitiesOpenGL::getTextCompressionEnumInfo(fmt, name, decimalValue, hexValue);
+            lineInfo += ("\n   Comp Texture Format: "
+                         + decimalValue
+                         + " "
+                         + hexValue
+                         + " "
+                         + name);
+        }
+    }
+
+    GLint numCompTexFormatsARB(0);
+    glGetIntegerv(GL_NUM_COMPRESSED_TEXTURE_FORMATS_ARB, &numCompTexFormatsARB);
+    lineInfo += ("\nNum ARB Compressed Texture Formats: " + AString::number(numCompTexFormatsARB));
+    
+    if (numCompTexFormatsARB > 0) {
+        std::vector<GLint> compTextureFormats;
+        compTextureFormats.resize(numCompTexFormats);
+        glGetIntegerv(GL_COMPRESSED_TEXTURE_FORMATS_ARB, &compTextureFormats[0]);
+        for (GLint fmt : compTextureFormats) {
+            QString name;
+            QString decimalValue;
+            QString hexValue;
+            GraphicsUtilitiesOpenGL::getTextCompressionEnumInfo(fmt, name, decimalValue, hexValue);
+            lineInfo += ("\n   ARB Comp Texture Format: "
+                         + decimalValue
+                         + " "
+                         + hexValue
+                         + " "
+                         + name);
+        }
+    }
+
+    std::vector<GLenum> compRgbEnums;
+    compRgbEnums.push_back(GL_COMPRESSED_RGB);
+    compRgbEnums.push_back(GL_COMPRESSED_RGBA);
+    if ( ! compRgbEnums.empty()) {
+        lineInfo += ("\nCompressed RGB(A) Formats:");
+        for (GLint fmt : compRgbEnums) {
+            QString name;
+            QString decimalValue;
+            QString hexValue;
+            GraphicsUtilitiesOpenGL::getTextCompressionEnumInfo(fmt, name, decimalValue, hexValue);
+            lineInfo += ("\n   ARB Comp Texture Format: "
+                         + decimalValue
+                         + " "
+                         + hexValue
+                         + " "
+                         + name);
+        }
+    }
+    
     lineInfo += "\n";
     lineInfo += "\n";
     lineInfo += "Note that State of OpenGL may be different when drawing objects.\n";

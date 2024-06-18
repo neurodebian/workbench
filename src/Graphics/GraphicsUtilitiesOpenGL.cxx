@@ -27,6 +27,7 @@
 #include <cmath>
 
 #include "CaretAssert.h"
+#include "CaretLogger.h"
 #include "CaretOpenGLInclude.h"
 #include "GraphicsOpenGLError.h"
 #include "EventManager.h"
@@ -277,6 +278,54 @@ GraphicsUtilitiesOpenGL::convertMillimetersToPixels(const float millimeters)
 }
 
 /**
+ * Get information about an OpenGL Texture Compression Enum
+ * @param enumValue
+ *    The OpenGL compression enum value
+ * @param nameOut
+ *    Text name if available
+ * @param decimalValueOut
+ *    Decimal value of OpenGL enum
+ * @param hexadecimalValueOut
+ *    Hexadecimal value of OpenGL enum
+ */
+void
+GraphicsUtilitiesOpenGL::getTextCompressionEnumInfo(const GLenum enumValue,
+                                                    QString& nameOut,
+                                                    QString& decimalValueOut,
+                                                    QString& hexadecimalValueOut)
+{
+    nameOut             = "Unknown";
+    decimalValueOut     = "";
+    hexadecimalValueOut = "";
+    
+    switch (enumValue) {
+        case GL_COMPRESSED_RGB_S3TC_DXT1_EXT:
+            nameOut = "GL_COMPRESSED_RGB_S3TC_DXT1_EXT";
+            break;
+        case GL_COMPRESSED_RGBA_S3TC_DXT1_EXT:
+            nameOut = "GL_COMPRESSED_RGBA_S3TC_DXT1_EXT";
+            break;
+        case GL_COMPRESSED_RGBA_S3TC_DXT3_EXT:
+            nameOut = "GL_COMPRESSED_RGBA_S3TC_DXT3_EXT";
+            break;
+        case GL_COMPRESSED_RGBA_S3TC_DXT5_EXT:
+            nameOut = "GL_COMPRESSED_RGBA_S3TC_DXT5_EXT";
+            break;
+        case GL_COMPRESSED_RGB:
+            nameOut = "GL_COMPRESSED_RGB";
+            break;
+        case GL_COMPRESSED_RGBA:
+            nameOut = "GL_COMPRESSED_RGBA";
+            break;
+        default:
+            break;
+    }
+    
+    decimalValueOut     = QString::number(static_cast<int32_t>(enumValue));
+    hexadecimalValueOut = ("0x" + QString::number(static_cast<int32_t>(enumValue), 16));
+}
+
+/**
  * Reset and ignore any OpenGL errors.
  */
 void
@@ -311,6 +360,56 @@ GraphicsUtilitiesOpenGL::getOpenGLError(const AString& message)
     }
     
     return errorInfo;
+}
+
+/**
+ * Print depths of the matrix stacks for debugging
+ * @param messagePrefix
+ *    Text printed before matrix depths
+ */
+void
+GraphicsUtilitiesOpenGL::printMatrixDepths(const AString messagePrefix)
+{
+    GLint projectionStackDepth, modelviewStackDepth, nameStackDepth, attribStackDepth;
+    glGetIntegerv(GL_PROJECTION_STACK_DEPTH,
+                  &projectionStackDepth);
+    glGetIntegerv(GL_MODELVIEW_STACK_DEPTH,
+                  &modelviewStackDepth);
+    glGetIntegerv(GL_NAME_STACK_DEPTH,
+                  &nameStackDepth);
+    glGetIntegerv(GL_ATTRIB_STACK_DEPTH,
+                  &attribStackDepth);
+
+    GLint maxNameStackDepth, maxModelStackDepth, maxProjStackDepth, maxAttribStackDepth;
+    glGetIntegerv(GL_MAX_PROJECTION_STACK_DEPTH,
+                  &maxProjStackDepth);
+    glGetIntegerv(GL_MAX_MODELVIEW_STACK_DEPTH,
+                  &maxModelStackDepth);
+    glGetIntegerv(GL_MAX_NAME_STACK_DEPTH,
+                  &maxNameStackDepth);
+    glGetIntegerv(GL_MAX_ATTRIB_STACK_DEPTH,
+                  &maxAttribStackDepth);
+    
+    AString msg(messagePrefix
+                + " Matrices: ");
+    msg.append("Projection: "
+               + AString::number(projectionStackDepth)
+               + "  of "
+               + AString::number(maxProjStackDepth));
+    msg.append("; Model: "
+               + AString::number(modelviewStackDepth)
+               + "  of "
+               + AString::number(maxModelStackDepth));
+    msg.append("; Name: "
+               + AString::number(nameStackDepth)
+               + "  of "
+               + AString::number(maxNameStackDepth));
+    msg.append("; Attrib: "
+               + AString::number(attribStackDepth)
+               + "  of "
+               + AString::number(maxAttribStackDepth));
+
+    std::cout << msg << std::endl;
 }
 
 /**
@@ -402,7 +501,7 @@ GraphicsUtilitiesOpenGL::setMaximumTextureDimension(const int32_t widthHeightMax
     if (widthHeightMaximumDimension > 0) {
         s_textureWidthHeightMaximumDimension = widthHeightMaximumDimension;
     }
-    if (depthMaximumDimension) {
+    if (depthMaximumDimension > 0) {
         s_textureDepthMaximumDimension = depthMaximumDimension;
     }
 }
@@ -423,5 +522,103 @@ int32_t
 GraphicsUtilitiesOpenGL::getTextureDepthMaximumDimension()
 {
     return s_textureDepthMaximumDimension;
+}
+
+/**
+ * Push the current OpenGL matrix.  This function behaves just like
+ * "glPushMatrix".  With some graphics systems, the projection stack
+ * depth is too small (4 on some nvidia systems) and this may
+ * cause an OpenGL stack overflow error.  A call to this function
+ * MUST be paired with a call to popMatrix().
+ */
+void
+GraphicsUtilitiesOpenGL::pushMatrix()
+{
+    GLint matrixMode(-1);
+    glGetIntegerv(GL_MATRIX_MODE, &matrixMode);
+    if (matrixMode == GL_PROJECTION) {
+        const int32_t stackDepth(s_projectionMatrixStack.size());
+        if (stackDepth > 32) {
+            const QString msg("Projection matrix overflow.");
+            CaretLogSevere(msg);
+            CaretAssertMessage(0, msg);
+        }
+        else {
+            std::array<double, 16> matrix;
+            glGetDoublev(GL_PROJECTION_MATRIX, matrix.data());
+            s_projectionMatrixStack.push(matrix);
+        }
+    }
+    else {
+        const QString msg("Matrix mode not supported for push/pop matrix.");
+        CaretLogSevere(msg);
+        CaretAssertMessage(0, msg);
+    }
+}
+
+/**
+ * Pop the current OpenGL matrix.  MUST be paired with cal to pushMatrix().
+ */
+void
+GraphicsUtilitiesOpenGL::popMatrix()
+{
+    GLint matrixMode(-1);
+    glGetIntegerv(GL_MATRIX_MODE, &matrixMode);
+    if (matrixMode == GL_PROJECTION) {
+        const int32_t stackDepth(s_projectionMatrixStack.size());
+        if (stackDepth < 1) {
+            const QString msg("Projection matrix underflow.");
+            CaretLogSevere(msg);
+            CaretAssertMessage(0, msg);
+        }
+        else {
+            std::array<double, 16> matrix(s_projectionMatrixStack.top());
+            s_projectionMatrixStack.pop();
+            glLoadMatrixd(matrix.data());
+        }
+    }
+    else {
+        const QString msg("Matrix mode not supported for push/pop matrix.");
+        CaretLogSevere(msg);
+        CaretAssertMessage(0, msg);
+    }
+}
+
+/**
+ * Transform the given window coordinates to model coordinates.
+ * OpenGL MUST BE "current".
+ * @param windowX
+ *    Window X-coordinate.
+ * @param windowY
+ *    Window Y-coordinate.
+ * @param modelXyzOut
+ *    Output with model coordinates.
+ * @return True if successful, else false.
+ */
+bool
+GraphicsUtilitiesOpenGL::unproject(const float windowX,
+                                   const float windowY,
+                                   float modelXyzOut[3])
+{
+    GLdouble modelviewMatrix[16];
+    GLdouble projectionMatrix[16];
+    GLint viewport[4];
+    glGetDoublev(GL_MODELVIEW_MATRIX, modelviewMatrix);
+    glGetDoublev(GL_PROJECTION_MATRIX, projectionMatrix);
+    glGetIntegerv(GL_VIEWPORT, viewport);
+    
+    double modelX(0.0), modelY(0.0), modelZ(0.0);
+    float windowZ(0.0);
+    if (gluUnProject(windowX, windowY, windowZ ,
+                     modelviewMatrix, projectionMatrix, viewport,
+                     &modelX, &modelY, &modelZ) == GL_TRUE) {
+        modelXyzOut[0] = modelX;
+        modelXyzOut[1] = modelY;
+        modelXyzOut[2] = modelZ;
+        
+        return true;
+    }
+
+    return false;
 }
 

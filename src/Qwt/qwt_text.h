@@ -20,6 +20,7 @@ class QColor;
 class QPen;
 class QBrush;
 class QRectF;
+class QPaintDevice;
 class QPainter;
 class QwtTextEngine;
 
@@ -139,7 +140,7 @@ public:
     //! Layout attributes
     typedef QFlags<LayoutAttribute> LayoutAttributes;
 
-    QwtText( const QString & = QString::null,
+    QwtText( const QString & = QString(),
              TextFormat textFormat = AutoText );
     QwtText( const QwtText & );
     ~QwtText();
@@ -195,6 +196,8 @@ public:
     static const QwtTextEngine *textEngine( QwtText::TextFormat );
     static void setTextEngine( QwtText::TextFormat, QwtTextEngine * );
 
+    static QPaintDevice* getPaintDevice();
+    
 private:
     class PrivateData;
     PrivateData *d_data;

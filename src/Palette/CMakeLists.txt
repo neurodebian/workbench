@@ -6,14 +6,14 @@ project (Palette)
 #
 # Add QT for includes
 #
+if(Qt6_FOUND)
+    SET(QT_DONT_USE_QTGUI)
+    include_directories(${Qt6Core_INCLUDE_DIRS})
+endif()
 if(Qt5_FOUND)
     SET(QT_DONT_USE_QTGUI)
     include_directories(${Qt5Core_INCLUDE_DIRS})
 endif()
-IF (QT4_FOUND)
-    INCLUDE(${QT_USE_FILE})
-ENDIF ()
-
 
 #
 # Create the NIFTI library

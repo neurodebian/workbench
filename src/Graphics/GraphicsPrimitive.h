@@ -21,13 +21,16 @@
  */
 /*LICENSE_END*/
 
-
+#include <array>
 #include <map>
 #include <memory>
 #include <set>
 
 #include "CaretObject.h"
 #include "EventListenerInterface.h"
+#include "GraphicsLineMeanDeviationSettings.h"
+#include "GraphicsTextureSettings.h"
+#include "VoxelColorUpdate.h"
 
 namespace caret {
 
@@ -37,7 +40,9 @@ namespace caret {
     class GraphicsPrimitiveV3fC4f;
     class GraphicsPrimitiveV3fC4ub;
     class GraphicsPrimitiveV3fN3f;
+    class GraphicsPrimitiveV3fN3fC4f;
     class GraphicsPrimitiveV3fN3fC4ub;
+    class GraphicsPrimitiveV3fT2f;
     class GraphicsPrimitiveV3fT3f;
     class Matrix4x4Interface;
     
@@ -84,36 +89,6 @@ namespace caret {
             SOLID_RGBA,
             /** Unique RGBA for each vertex */
             PER_VERTEX_RGBA
-        };
-        
-        /**
-         * Data type of texture components
-         */
-        enum class TextureDataType {
-            /** No texture coordinates */
-            NONE,
-            /** Three float values per vertex contains S, T, and R texture coordinates */
-            FLOAT_STR
-        };
-        
-        /**
-         * Texture wrapping type
-         */
-        enum class TextureWrappingType {
-            /** Clamp so max STR is 1.0 (default) */
-            CLAMP,
-            /** Repeat so max STR is greater than 1.0) */
-            REPEAT
-        };
-        
-        /**
-         * Texture filtering type
-         */
-        enum class TextureFilteringType {
-            /* Nearest texel - no interpolation */
-            NEAREST,
-            /* Linear interpolate using nearest texels */
-            LINEAR
         };
         
         /**
@@ -318,14 +293,12 @@ namespace caret {
         };
         
     protected:
-        GraphicsPrimitive(const VertexDataType       vertexDataType,
-                          const NormalVectorDataType normalVectorDataType,
-                          const ColorDataType        colorDataType,
-                          const VertexColorType      vertexColorType,
-                          const TextureDataType      textureDataType,
-                          const TextureWrappingType  textureWrappingType,
-                          const TextureFilteringType textureFilteringType,
-                          const PrimitiveType        primitiveType);
+        GraphicsPrimitive(const VertexDataType        vertexDataType,
+                          const NormalVectorDataType  normalVectorDataType,
+                          const ColorDataType         colorDataType,
+                          const VertexColorType       vertexColorType,
+                          const GraphicsTextureSettings& textureSettings,
+                          const PrimitiveType         primitiveType);
         
         GraphicsPrimitive(const GraphicsPrimitive& obj);
         
@@ -342,19 +315,21 @@ namespace caret {
         static GraphicsPrimitiveV3fN3f* newPrimitiveV3fN3f(const GraphicsPrimitive::PrimitiveType primitiveType,
                                                            const uint8_t unsignedByteRGBA[4]);
         
+        static GraphicsPrimitiveV3fN3fC4f* newPrimitiveV3fN3fC4f(const GraphicsPrimitive::PrimitiveType primitiveType);
+        
         static GraphicsPrimitiveV3fN3fC4ub* newPrimitiveV3fN3fC4ub(const GraphicsPrimitive::PrimitiveType primitiveType);
         
         static GraphicsPrimitiveV3fC4f* newPrimitiveV3fC4f(const GraphicsPrimitive::PrimitiveType primitiveType);
         
         static GraphicsPrimitiveV3fC4ub* newPrimitiveV3fC4ub(const GraphicsPrimitive::PrimitiveType primitiveType);
         
-        static GraphicsPrimitiveV3fT3f* newPrimitiveV3fT3f(const GraphicsPrimitive::PrimitiveType primitiveType,
-                                                           const uint8_t* imageBytesRGBA,
-                                                           const int32_t imageWidth,
-                                                           const int32_t imageHeight,
-                                                           const TextureWrappingType textureWrappingType,
-                                                           const TextureFilteringType textureFilteringType);
+        static GraphicsPrimitiveV3fT2f* newPrimitiveV3fT2f(const GraphicsPrimitive::PrimitiveType primitiveType,
+                                                           const GraphicsTextureSettings& textureSettings);
         
+        static GraphicsPrimitiveV3fT3f* newPrimitiveV3fT3f(const GraphicsPrimitive::PrimitiveType primitiveType,
+                                                           const GraphicsTextureSettings& textureSettings);
+        
+
         virtual ~GraphicsPrimitive();
         
         void reserveForNumberOfVertices(const int32_t numberOfVertices);
@@ -417,21 +392,27 @@ namespace caret {
         void setReleaseInstanceDataMode(const ReleaseInstanceDataMode releaseDataMode) {
             m_releaseInstanceDataMode = releaseDataMode;
         }
+
+        /**
+         * @return The texture settings
+         */
+        const GraphicsTextureSettings& getTextureSettings() const { return m_textureSettings; }
+                
+        int32_t getTexturePixelFormatBytesPerPixel() const;
+
+        /**
+         * Set type of magnification filter (pixel smaller than texel)
+         */
+        inline void setTextureMagnificationFilter(const GraphicsTextureMagnificationFilterEnum::Enum magFilter) {
+            m_textureSettings.setMagnificationFilter(magFilter);
+        }
         
         /**
-         * @return Data type of texture.
+         * Set type of minification filter (pixel bigger than texel)
          */
-        inline TextureDataType getTextureDataType() const { return m_textureDataType; }
-        
-        /**
-         * @return Type of texture wrapping
-         */
-        inline TextureWrappingType getTextureWrappingType() const { return m_textureWrappingType; }
-        
-        /**
-         * @return Type of texture filtering
-         */
-        inline TextureFilteringType getTextureFilteringType() const { return m_textureFilteringType; }
+        inline void setTextureMinificationFilter(const GraphicsTextureMinificationFilterEnum::Enum minFilter) {
+            m_textureSettings.setMinificationFilter(minFilter);
+        }
         
         /**
          * @return The float coordinates.
@@ -447,11 +428,8 @@ namespace caret {
         
         void setFloatYComponents(const std::vector<float>& yComponents);
         
-        /**
-         * @return The number of vertices
-         */
-        inline int32_t getNumberOfVertices() const { return (m_xyz.size() / 3); }
-        
+        int32_t getNumberOfVertices() const;
+
         void replaceVertexFloatXYZ(const int32_t vertexIndex,
                                    const float xyz[3]);
         
@@ -476,9 +454,18 @@ namespace caret {
         
         void replaceAllVertexSolidFloatRGBA(const float rgba[4]);
         
+        void replaceVertexTextureSTR(const int32_t vertexIndex,
+                                     const float str[3]);
+        
         bool getVertexBounds(BoundingBox& boundingBoxOut) const;
         
         void addPrimitiveRestart();
+        
+        bool getDrawArrayIndicesSubset(int32_t& firstVertexIndexOut,
+                                       int32_t& vertexCountOut) const;
+        
+        void setDrawArrayIndicesSubset(const int32_t firstVertexIndex,
+                                       const int32_t vertexCount) const;
         
         void getPointDiameter(PointSizeType& sizeTypeOut,
                               float& pointDiameterOut) const;
@@ -516,21 +503,19 @@ namespace caret {
         void getMeanAndStandardDeviationForY(float& yMeanOut,
                                              float& yStandardDeviationOut) const;
         
-        void applyNewMeanAndDeviationToYComponents(const bool applyNewMeanFlag,
-                                                   const float newMean,
-                                                   const bool applyNewDeviationFlag,
-                                                   const float newDeviation,
-                                                   const bool applyAbsoluteValueFlag,
+        void applyNewMeanAndDeviationToYComponents(const GraphicsLineMeanDeviationSettings& settings,
                                                    bool& haveNanInfFlagOut);
         
+        const VoxelColorUpdate* getVoxelColorUpdate() const;
+        
+        void setVoxelColorUpdate(const VoxelColorUpdate& voxelColorUpdate);
+        
+        void resetVoxelColorUpdate();
+
         static AString getNewMeanDeviationOperationDescriptionInHtml();
         
     protected:
         AString toStringPrivate(const bool includeAllDataFlag) const;
-        
-        void setTextureImage(const uint8_t* imageBytesRGBA,
-                             const int32_t imageWidth,
-                             const int32_t imageHeight);
         
         void addVertexProtected(const float xyz[3],
                                 const float normalVector[3],
@@ -558,11 +543,7 @@ namespace caret {
         
         const VertexColorType m_vertexColorType;
         
-        const TextureDataType m_textureDataType;
-        
-        const TextureWrappingType m_textureWrappingType;
-        
-        const TextureFilteringType m_textureFilteringType;
+        GraphicsTextureSettings m_textureSettings;
         
         const PrimitiveType m_primitiveType;
 
@@ -580,10 +561,6 @@ namespace caret {
         
         std::unique_ptr<GraphicsEngineDataOpenGL> m_graphicsEngineDataForOpenGL;
         
-        int32_t m_textureImageWidth = -1;
-        
-        int32_t m_textureImageHeight = -1;
-        
         mutable PointSizeType m_pointSizeType = PointSizeType::PIXELS;
         
         mutable float m_pointDiameterValue = 1.0f;
@@ -597,6 +574,10 @@ namespace caret {
         mutable float m_sphereDiameterValue = 1.0f;
         
         mutable std::unique_ptr<BoundingBox> m_boundingBox;
+        
+        mutable int32_t m_arrayIndicesSubsetFirstVertexIndex = -1;
+        
+        mutable int32_t m_arrayIndicesSubsetCount = -1;
         
         std::set<int32_t> m_polygonalLinePrimitiveRestartIndices;
         
@@ -614,19 +595,13 @@ namespace caret {
         void setOpenGLBuffersHaveBeenLoadedByGraphicsEngine();
         
         void applyNewMeanAndDeviationToYComponentsNoNaNs(std::vector<float>& data,
-                                                         const bool applyNewMeanFlag,
-                                                         const float newMean,
-                                                         const bool applyNewDeviationFlag,
-                                                         const float newDeviation,
-                                                         const bool applyAbsoluteValueFlag);
+                                                         const GraphicsLineMeanDeviationSettings& settings);
         
         void applyNewMeanAndDeviationToYComponentsWithNaNs(std::vector<float>& data,
-                                                           const bool applyNewMeanFlag,
-                                                           const float newMean,
-                                                           const bool applyNewDeviationFlag,
-                                                           const float newDeviation,
-                                                           const bool applyAbsoluteValueFlag);
+                                                           const GraphicsLineMeanDeviationSettings& settings);
 
+        mutable VoxelColorUpdate m_voxelColorUpdate;
+        
         std::vector<float> m_xyz;
         
         std::vector<float> m_floatNormalVectorXYZ;
@@ -637,8 +612,6 @@ namespace caret {
         
         std::vector<float> m_floatTextureSTR;
         
-        std::vector<uint8_t> m_textureImageBytesRGBA;
-
         mutable float m_yMean = 0.0;
         
         mutable float m_yStandardDeviation = -1.0;

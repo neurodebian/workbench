@@ -28,6 +28,7 @@
 #include "CaretAssert.h"
 #include "CaretPointer.h"
 #include "CaretUndoStack.h"
+#include "DeveloperFlagsEnum.h"
 #include "Matrix4x4.h"
 #include "VolumeFile.h"
 #include "VolumeMapUndoCommand.h"
@@ -108,6 +109,12 @@ VolumeFileEditorDelegate::clear()
  *     The editing mode.
  * @param slicePlane
  *     The selected slice plane.
+ * @param sliceProjectionType
+ *     The slice projection type
+ * @param obliqueMprRotationMatrix
+ *     The matrix for oblique or MPR rotation
+ * @param voxelDiffXYZ
+ *     Difference from voxel bottom left to top right on screen.
  * @param voxelIJK
  *     Indices of voxel selected by the user.
  * @param brushSize
@@ -126,7 +133,7 @@ VolumeFileEditorDelegate::performEditingOperation(const int64_t mapIndex,
                                                   const VolumeEditingModeEnum::Enum mode,
                                                   const VolumeSliceViewPlaneEnum::Enum slicePlane,
                                                   const VolumeSliceProjectionTypeEnum::Enum sliceProjectionType,
-                                                  const Matrix4x4& obliqueRotationMatrix,
+                                                  const Matrix4x4& obliqueMprRotationMatrix,
                                                   const float voxelDiffXYZ[3],
                                                   const int64_t voxelIJK[3],
                                                   const int64_t brushSize[3],
@@ -170,6 +177,10 @@ VolumeFileEditorDelegate::performEditingOperation(const int64_t mapIndex,
             break;
         case VolumeSliceProjectionTypeEnum::VOLUME_SLICE_PROJECTION_ORTHOGONAL:
             break;
+        case VolumeSliceProjectionTypeEnum::VOLUME_SLICE_PROJECTION_MPR:
+            break;
+        case VolumeSliceProjectionTypeEnum::VOLUME_SLICE_PROJECTION_MPR_THREE:
+            break;
     }
     
     int64_t iHalf = brushSize[0] / 2;
@@ -194,7 +205,7 @@ VolumeFileEditorDelegate::performEditingOperation(const int64_t mapIndex,
                             mode,
                             slicePlane,
                             sliceProjectionType,
-                            obliqueRotationMatrix,
+                            obliqueMprRotationMatrix,
                             voxelDiffXYZ,
                             voxelIJK,
                             ijkMin,
@@ -210,12 +221,20 @@ VolumeFileEditorDelegate::performEditingOperation(const int64_t mapIndex,
         case VolumeEditingModeEnum::VOLUME_EDITING_MODE_OFF:
             switch (sliceProjectionType) {
                 case VolumeSliceProjectionTypeEnum::VOLUME_SLICE_PROJECTION_OBLIQUE:
-                    result = performTurnOnOrOffOblique(editInfo,
-                                                       errorMessageOut);
+                    result = performTurnOnOrOffOrthogonal(editInfo,
+                                                          errorMessageOut);
                     break;
                 case VolumeSliceProjectionTypeEnum::VOLUME_SLICE_PROJECTION_ORTHOGONAL:
                     result = performTurnOnOrOffOrthogonal(editInfo,
                                                        errorMessageOut);
+                    break;
+                case VolumeSliceProjectionTypeEnum::VOLUME_SLICE_PROJECTION_MPR:
+                    result = performTurnOnOrOffOrthogonal(editInfo,
+                                                          errorMessageOut);
+                    break;
+                case VolumeSliceProjectionTypeEnum::VOLUME_SLICE_PROJECTION_MPR_THREE:
+                    result = performTurnOnOrOffOrthogonal(editInfo,
+                                                          errorMessageOut);
                     break;
             }
             break;
@@ -464,65 +483,6 @@ VolumeFileEditorDelegate::redo(const int64_t mapIndex,
  */
 bool
 VolumeFileEditorDelegate::performTurnOnOrOffOrthogonal(const EditInfo& editInfo,
-                                        AString& errorMessageOut)
-{
-    float redoVoxelValue = 0.0;
-    switch (editInfo.m_mode){
-        case VolumeEditingModeEnum::VOLUME_EDITING_MODE_OFF:
-            redoVoxelValue = editInfo.m_voxelValueOff;
-            break;
-        case VolumeEditingModeEnum::VOLUME_EDITING_MODE_ON:
-            redoVoxelValue = editInfo.m_voxelValueOn;
-            break;
-        case VolumeEditingModeEnum::VOLUME_EDITING_MODE_DILATE:
-        case VolumeEditingModeEnum::VOLUME_EDITING_MODE_ERODE:
-        case VolumeEditingModeEnum::VOLUME_EDITING_MODE_FLOOD_FILL_2D:
-        case VolumeEditingModeEnum::VOLUME_EDITING_MODE_FLOOD_FILL_3D:
-        case VolumeEditingModeEnum::VOLUME_EDITING_MODE_REMOVE_CONNECTED_2D:
-        case VolumeEditingModeEnum::VOLUME_EDITING_MODE_REMOVE_CONNECTED_3D:
-        case VolumeEditingModeEnum::VOLUME_EDITING_MODE_RETAIN_CONNECTED_3D:
-            CaretAssert(0);
-            errorMessageOut = "Program error in performTurnOnOrOff but mode not valid.";
-            return false;
-            break;
-    }
-    
-    CaretPointer<VolumeMapUndoCommand> modifiedVoxels;
-    modifiedVoxels.grabNew(new VolumeMapUndoCommand(m_volumeFile,
-                                                 editInfo.m_mapIndex));
-    for (int64_t i = editInfo.m_ijkMin[0]; i <= editInfo.m_ijkMax[0]; i++) {
-        for (int64_t j = editInfo.m_ijkMin[1]; j <= editInfo.m_ijkMax[1]; j++) {
-            for (int64_t k = editInfo.m_ijkMin[2]; k <= editInfo.m_ijkMax[2]; k++) {
-                const int64_t ijk[3] = { i, j, k };
-                modifiedVoxels->addVoxelRedoUndo(ijk,
-                                                 redoVoxelValue,
-                                                 m_volumeFile->getValue(ijk, editInfo.m_mapIndex));
-                m_volumeFile->setValue(redoVoxelValue,
-                                       ijk,
-                                       editInfo.m_mapIndex);
-            }
-        }
-    }
-
-    addToMapUndoStacks(editInfo.m_mapIndex,
-                       modifiedVoxels.releasePointer());
-    
-    return true;
-}
-
-/**
- * Perform an editing operation that turns voxels on or off
- * for oblique slice viewing.
- *
- * @param editInfo
- *     The editing information.
- * @param errorMessageOut
- *     Will contain error information.
- * @return
- *     True if there was an error, else false.
- */
-bool
-VolumeFileEditorDelegate::performTurnOnOrOffOblique(const EditInfo& editInfo,
                                                        AString& errorMessageOut)
 {
     float redoVoxelValue = 0.0;
@@ -546,96 +506,120 @@ VolumeFileEditorDelegate::performTurnOnOrOffOblique(const EditInfo& editInfo,
             break;
     }
     
-//    float voxelDiffXYZ[3];
+    std::vector<VoxelIJK> voxelsIJK;
+    
+    CaretPointer<VolumeMapUndoCommand> modifiedVoxels;
+    modifiedVoxels.grabNew(new VolumeMapUndoCommand(m_volumeFile,
+                                                 editInfo.m_mapIndex));
+    for (int64_t i = editInfo.m_ijkMin[0]; i <= editInfo.m_ijkMax[0]; i++) {
+        for (int64_t j = editInfo.m_ijkMin[1]; j <= editInfo.m_ijkMax[1]; j++) {
+            for (int64_t k = editInfo.m_ijkMin[2]; k <= editInfo.m_ijkMax[2]; k++) {
+                const int64_t ijk[3] = { i, j, k };
+                if (m_volumeFile->indexValid(ijk)) {
+                    if ( ! DeveloperFlagsEnum::isFlag(DeveloperFlagsEnum::DEVELOPER_FLAG_VOXEL_EDIT)) {
+                        m_volumeFile->setValue(redoVoxelValue,
+                                               ijk,
+                                               editInfo.m_mapIndex);
+                    }
+                    modifiedVoxels->addVoxelRedoUndo(ijk,
+                                                     redoVoxelValue,
+                                                     m_volumeFile->getValue(ijk, editInfo.m_mapIndex));
+                    voxelsIJK.emplace_back(ijk[0], ijk[1], ijk[2]);
+                }
+            }
+        }
+    }
+
+    if (DeveloperFlagsEnum::isFlag(DeveloperFlagsEnum::DEVELOPER_FLAG_VOXEL_EDIT)) {
+        if ( ! voxelsIJK.empty()) {
+            m_volumeFile->setValuesForVoxelEditing(editInfo.m_mapIndex,
+                                                   voxelsIJK,
+                                                   redoVoxelValue);
+        }
+    }
+    else {
+        updateAllMapColoring(editInfo.m_mapIndex);
+    }
+    
+    addToMapUndoStacks(editInfo.m_mapIndex,
+                       modifiedVoxels.releasePointer());
+    
+    return true;
+}
+
+/**
+ * Perform an editing operation that turns voxels on or off
+ * for oblique slice viewing.
+ *
+ * @param editInfo
+ *     The editing information.
+ * @param errorMessageOut
+ *     Will contain error information.
+ * @return
+ *     True if there was an error, else false.
+ */
+bool
+VolumeFileEditorDelegate::performTurnOnOrOffOblique(const EditInfo& editInfo,
+                                                       AString& errorMessageOut)
+{
+    CaretAssertMessage(0, "This functionality is no different that turning on/off "
+                       "orthogonal.  We have not defined how this should function "
+                       "for non-orthgonal views.");
+    float redoVoxelValue = 0.0;
+    switch (editInfo.m_mode){
+        case VolumeEditingModeEnum::VOLUME_EDITING_MODE_OFF:
+            redoVoxelValue = editInfo.m_voxelValueOff;
+            break;
+        case VolumeEditingModeEnum::VOLUME_EDITING_MODE_ON:
+            redoVoxelValue = editInfo.m_voxelValueOn;
+            break;
+        case VolumeEditingModeEnum::VOLUME_EDITING_MODE_DILATE:
+        case VolumeEditingModeEnum::VOLUME_EDITING_MODE_ERODE:
+        case VolumeEditingModeEnum::VOLUME_EDITING_MODE_FLOOD_FILL_2D:
+        case VolumeEditingModeEnum::VOLUME_EDITING_MODE_FLOOD_FILL_3D:
+        case VolumeEditingModeEnum::VOLUME_EDITING_MODE_REMOVE_CONNECTED_2D:
+        case VolumeEditingModeEnum::VOLUME_EDITING_MODE_REMOVE_CONNECTED_3D:
+        case VolumeEditingModeEnum::VOLUME_EDITING_MODE_RETAIN_CONNECTED_3D:
+            CaretAssert(0);
+            errorMessageOut = "Program error in performTurnOnOrOff but mode not valid.";
+            return false;
+            break;
+    }
     
     float voxelXYZ[3];
     m_volumeFile->indexToSpace(editInfo.m_voxelIJK,
                                voxelXYZ);
     
-//    const int64_t planeVoxelsDI = (editInfo.m_ijkMax[0] - editInfo.m_ijkMin[0]) / 2 ;
-//    const int64_t planeVoxelsDJ = (editInfo.m_ijkMax[1] - editInfo.m_ijkMin[1]) / 2 ;
-//    const int64_t planeVoxelsDK = (editInfo.m_ijkMax[2] - editInfo.m_ijkMin[2]) / 2 ;
-    
     CaretPointer<VolumeMapUndoCommand> modifiedVoxels;
     modifiedVoxels.grabNew(new VolumeMapUndoCommand(m_volumeFile,
                                                     editInfo.m_mapIndex));
-//    const float planeZ = voxelXYZ[2];
-//    for (int64_t i = -planeVoxelsDI; i <= planeVoxelsDI; i++) {
-//        const float planeX = voxelXYZ[0] + i * editInfo.m_voxelDiffXYZ[0];
-//        for (int64_t j = -planeVoxelsDJ; j <= planeVoxelsDJ; j++) {
-//            const float planeY = voxelXYZ[1] + j * editInfo.m_voxelDiffXYZ[1];
-//            const float xyz[3] = { planeX, planeY, planeZ };
-//            float ijkFloat[3];
-//            m_volumeFile->spaceToIndex(xyz, ijkFloat);
-//            int64_t ijk[3] = { ijkFloat[0], ijkFloat[1], ijkFloat[2] };
-//            modifiedVoxels->addVoxelRedoUndo(ijk,
-//                                             redoVoxelValue,
-//                                             m_volumeFile->getValue(ijk, editInfo.m_mapIndex));
-//            m_volumeFile->setValue(redoVoxelValue,
-//                                   ijk,
-//                                   editInfo.m_mapIndex);
-//        }
-//    }
     
     const int64_t halfBrushI = editInfo.m_brushSize[0] / 2;
     const int64_t halfBrushJ = editInfo.m_brushSize[1] / 2;
     const int64_t halfBrushK = editInfo.m_brushSize[2] / 2;
     
-    VolumeSpace::OrientTypes orient[3];
     float spacing[3];
-    float origin[3];
-    m_volumeFile->getVolumeSpace().getOrientAndSpacingForPlumb(orient,
-                                                               spacing,
-                                                               origin);
+    m_volumeFile->getVoxelSpacingPCA(spacing[0], spacing[1], spacing[2]);
     for (int64_t k = -halfBrushK; k <= halfBrushK; k++) {
         for (int64_t i = -halfBrushI; i <= halfBrushI; i++) {
             for (int64_t j = -halfBrushJ; j <= halfBrushJ; j++) {
-                float localXYZ[3] = {
-                    i * spacing[0],
-                    j * spacing[1],
-                    k * spacing[2]
+                int64_t ijk[3] {
+                    i + editInfo.m_voxelIJK[0],
+                    j + editInfo.m_voxelIJK[1],
+                    k + editInfo.m_voxelIJK[2]
                 };
-                editInfo.m_obliqueRotationMatrix.multiplyPoint3(localXYZ);
-                
-                float brushXYZ[3] = {
-                    voxelXYZ[0] + localXYZ[0],
-                    voxelXYZ[1] + localXYZ[1],
-                    voxelXYZ[2] + localXYZ[2]
-                };
-                
-                float ijkFloat[3];
-                m_volumeFile->spaceToIndex(brushXYZ, ijkFloat);
-                int64_t ijk[3] = { (int64_t)ijkFloat[0], (int64_t)ijkFloat[1], (int64_t)ijkFloat[2] };
-                modifiedVoxels->addVoxelRedoUndo(ijk,
-                                                 redoVoxelValue,
-                                                 m_volumeFile->getValue(ijk, editInfo.m_mapIndex));
-                m_volumeFile->setValue(redoVoxelValue,
-                                       ijk,
-                                       editInfo.m_mapIndex);
+                if (m_volumeFile->indexValid(ijk)) {
+                    modifiedVoxels->addVoxelRedoUndo(ijk,
+                                                     redoVoxelValue,
+                                                     m_volumeFile->getValue(ijk, editInfo.m_mapIndex));
+                    m_volumeFile->setValue(redoVoxelValue,
+                                           ijk,
+                                           editInfo.m_mapIndex);
+                }
             }
         }
     }
-    
-//    for (int64_t k = -planeVoxelsDZ; k <= planeVoxelsDZ; ++k) {
-//        
-//    }
-//    CaretPointer<VolumeMapUndoCommand> modifiedVoxels;
-//    modifiedVoxels.grabNew(new VolumeMapUndoCommand(m_volumeFile,
-//                                                    editInfo.m_mapIndex));
-//    for (int64_t i = editInfo.m_ijkMin[0]; i <= editInfo.m_ijkMax[0]; i++) {
-//        for (int64_t j = editInfo.m_ijkMin[1]; j <= editInfo.m_ijkMax[1]; j++) {
-//            for (int64_t k = editInfo.m_ijkMin[2]; k <= editInfo.m_ijkMax[2]; k++) {
-//                const int64_t ijk[3] = { i, j, k };
-//                modifiedVoxels->addVoxelRedoUndo(ijk,
-//                                                 redoVoxelValue,
-//                                                 m_volumeFile->getValue(ijk, editInfo.m_mapIndex));
-//                m_volumeFile->setValue(redoVoxelValue,
-//                                       ijk,
-//                                       editInfo.m_mapIndex);
-//            }
-//        }
-//    }
-    
+        
     addToMapUndoStacks(editInfo.m_mapIndex,
                        modifiedVoxels.releasePointer());
     
@@ -845,6 +829,10 @@ VolumeFileEditorDelegate::performDilateOrErode(const EditInfo& editInfo,
     addToMapUndoStacks(editInfo.m_mapIndex,
                        modifiedVoxels.releasePointer());
     
+    if (validFlag) {
+        updateAllMapColoring(editInfo.m_mapIndex);
+    }
+    
     return validFlag;
 }
 
@@ -1052,6 +1040,8 @@ VolumeFileEditorDelegate::performRetainConnected3D(const EditInfo& editInfo,
     addToMapUndoStacks(editInfo.m_mapIndex,
                        modifiedVoxels.releasePointer());
 
+    updateAllMapColoring(editInfo.m_mapIndex);
+    
     return true;
 }
 
@@ -1221,8 +1211,24 @@ VolumeFileEditorDelegate::performFloodFillAndRemoveConnected(const EditInfo& edi
     addToMapUndoStacks(editInfo.m_mapIndex,
                        modifiedVoxels.releasePointer());
     
+    updateAllMapColoring(editInfo.m_mapIndex);
+    
     return true;
 }
 
+/**
+ * Update all map coloring
+ * @param mapIndex
+ *    Index of the map
+ */
+void
+VolumeFileEditorDelegate::updateAllMapColoring(const int32_t mapIndex)
+{
+    CaretAssert(m_volumeFile);
+    CaretAssert((mapIndex >= 0) && (mapIndex < m_volumeFile->getNumberOfMaps()));
+    
+    m_volumeFile->clearVoxelColoringForMap(mapIndex);
+    m_volumeFile->updateScalarColoringForMap(mapIndex);
 
+}
 

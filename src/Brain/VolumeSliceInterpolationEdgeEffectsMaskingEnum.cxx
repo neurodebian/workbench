@@ -77,15 +77,23 @@ using namespace caret;
  *
  * @param guiName
  *    User-friendly name for use in user-interface.
+ * @param shortGuiName
+ *    Short name for use in GUI
+ * @param toolTip
+ *    Tooltip for enum
  */
 VolumeSliceInterpolationEdgeEffectsMaskingEnum::VolumeSliceInterpolationEdgeEffectsMaskingEnum(const Enum enumValue,
-                           const AString& name,
-                           const AString& guiName)
+                                                                                               const AString& name,
+                                                                                               const AString& guiName,
+                                                                                               const AString& shortGuiName,
+                                                                                               const AString& toolTip)
 {
     this->enumValue = enumValue;
     this->integerCode = integerCodeCounter++;
     this->name = name;
     this->guiName = guiName;
+    this->shortGuiName = shortGuiName;
+    this->toolTip = toolTip;
 }
 
 /**
@@ -108,18 +116,20 @@ VolumeSliceInterpolationEdgeEffectsMaskingEnum::getToolTip()
     getAllEnums(allEnums);
     
     for (const auto enumValue : allEnums) {
-        AString description(toGuiName(enumValue) + " - ");
-        switch (enumValue) {
-            case OFF:
-                description.append("No masking");
-                break;
-            case LOOSE:
-                description.append("Mask with Trilinear Interpolation");
-                break;
-            case TIGHT:
-                description.append("Mask with Enclosing Voxel");
-                break;
-        }
+        AString description(toGuiName(enumValue)
+                            + " - "
+                            + toToolTip(enumValue));
+//        switch (enumValue) {
+//            case OFF:
+//                description.append("No masking");
+//                break;
+//            case LOOSE:
+//                description.append("Mask with Trilinear Interpolation");
+//                break;
+//            case TIGHT:
+//                description.append("Mask with Enclosing Voxel");
+//                break;
+//        }
         toolTip.append(description + "<br>");
     }
     
@@ -139,18 +149,23 @@ VolumeSliceInterpolationEdgeEffectsMaskingEnum::initialize()
     }
     initializedFlag = true;
 
-    enumData.push_back(VolumeSliceInterpolationEdgeEffectsMaskingEnum(OFF, 
-                                    "OFF", 
-                                    "Masking Off"));
+    enumData.push_back(VolumeSliceInterpolationEdgeEffectsMaskingEnum(OFF,
+                                                                      "OFF",
+                                                                      "Masking Off",
+                                                                      "Off",
+                                                                      "No masking"));
     
-    enumData.push_back(VolumeSliceInterpolationEdgeEffectsMaskingEnum(LOOSE, 
-                                    "LOOSE", 
-                                    "Masking Loose"));
+    enumData.push_back(VolumeSliceInterpolationEdgeEffectsMaskingEnum(LOOSE,
+                                                                      "LOOSE",
+                                                                      "Masking Loose",
+                                                                      "Loose",
+                                                                      "Mask with Trilinear Interpolation"));
     
-    enumData.push_back(VolumeSliceInterpolationEdgeEffectsMaskingEnum(TIGHT, 
-                                    "TIGHT", 
-                                    "Masking Tight"));
-    
+    enumData.push_back(VolumeSliceInterpolationEdgeEffectsMaskingEnum(TIGHT,
+                                                                      "TIGHT",
+                                                                      "Masking Tight",
+                                                                      "Tight",
+                                                                      "Mask with Enclosing Voxel"));
 }
 
 /**
@@ -237,11 +252,44 @@ VolumeSliceInterpolationEdgeEffectsMaskingEnum::fromName(const AString& name, bo
  *     String representing enumerated value.
  */
 AString 
-VolumeSliceInterpolationEdgeEffectsMaskingEnum::toGuiName(Enum enumValue) {
+VolumeSliceInterpolationEdgeEffectsMaskingEnum::toGuiName(Enum enumValue)
+{
     if (initializedFlag == false) initialize();
     
     const VolumeSliceInterpolationEdgeEffectsMaskingEnum* enumInstance = findData(enumValue);
     return enumInstance->guiName;
+}
+
+/**
+ * Get a SHORT GUI string representation of the enumerated type.
+ * @param enumValue
+ *     Enumerated value.
+ * @return
+ *     short String representing enumerated value.
+ */
+AString
+VolumeSliceInterpolationEdgeEffectsMaskingEnum::toShortGuiName(Enum enumValue)
+{
+    if (initializedFlag == false) initialize();
+    
+    const VolumeSliceInterpolationEdgeEffectsMaskingEnum* enumInstance = findData(enumValue);
+    return enumInstance->shortGuiName;
+}
+
+/**
+ * ToolTip of the enumerated type.
+ * @param enumValue
+ *     Enumerated value.
+ * @return
+ *     Tool tip representing enumerated value.
+ */
+AString
+VolumeSliceInterpolationEdgeEffectsMaskingEnum::toToolTip(Enum enumValue)
+{
+    if (initializedFlag == false) initialize();
+    
+    const VolumeSliceInterpolationEdgeEffectsMaskingEnum* enumInstance = findData(enumValue);
+    return enumInstance->toolTip;
 }
 
 /**
@@ -406,5 +454,38 @@ VolumeSliceInterpolationEdgeEffectsMaskingEnum::getAllGuiNames(std::vector<AStri
     if (isSorted) {
         std::sort(allGuiNames.begin(), allGuiNames.end());
     }
+}
+
+/**
+ * @return The next enum value after the given enum value
+ * @param enumValue
+ *    Enum value for which next enum value is requested
+ */
+VolumeSliceInterpolationEdgeEffectsMaskingEnum::Enum
+VolumeSliceInterpolationEdgeEffectsMaskingEnum::nextEnum(const Enum enumValue)
+{
+    int32_t enumIndex(-1);
+    const int32_t numEnums = static_cast<int32_t>(enumData.size());
+    for (int32_t i = 0; i < numEnums; i++) {
+        CaretAssertVectorIndex(enumData, i);
+        if (enumData[i].enumValue == enumValue) {
+            enumIndex = i + 1;
+            break;
+        }
+    }
+    CaretAssertMessage((enumIndex >= 0),
+                       ("Invalid input enumValue="
+                        + AString::number(static_cast<int32_t>(enumValue))));
+    if (enumIndex < 0) {
+        return enumValue;
+    }
+    
+    if (enumIndex >= numEnums) {
+        enumIndex = 0;
+    }
+    CaretAssertVectorIndex(enumData, enumIndex);
+    
+    const Enum nextEnum(enumData[enumIndex].enumValue);
+    return nextEnum;
 }
 

@@ -26,24 +26,28 @@
 #include <utility>
 
 #include "BackgroundAndForegroundColors.h"
-#include "BackgroundAndForegroundColorsModeEnum.h"
+#include "CaretPreferenceValueSceneOverrideModeEnum.h"
 #include "CaretObject.h"
+#include "DisplayHighDpiModeEnum.h"
 #include "FileOpenFromOpSysTypeEnum.h"
 #include "IdentificationDisplayModeEnum.h"
 #include "ImageCaptureMethodEnum.h"
 #include "LogLevelEnum.h"
 #include "OpenGLDrawingMethodEnum.h"
 #include "RecentFilesSystemAccessModeEnum.h"
+#include "RecentSceneInfoContainer.h"
 #include "SpecFileDialogViewFilesTypeEnum.h"
 #include "ToolBarWidthModeEnum.h"
+#include "VolumeMontageCoordinateDisplayTypeEnum.h"
 #include "VolumeSliceViewAllPlanesLayoutEnum.h"
 
 class QSettings;
-class QStringList;
+//class QStringList;
 
 namespace caret {
 
     class CaretPreferenceDataValue;
+    class CaretPreferenceDataValueList;
     class ModelTransform;
     class RecentFileItemsContainer;
     class TileTabsLayoutBaseConfiguration;
@@ -62,11 +66,13 @@ namespace caret {
         
         void setUserBackgroundAndForegroundColors(const BackgroundAndForegroundColors& colors);
         
-        BackgroundAndForegroundColorsModeEnum::Enum getBackgroundAndForegroundColorsMode() const;
+         BackgroundAndForegroundColors getSceneBackgroundAndForegroundColors();
         
         void setSceneBackgroundAndForegroundColors(const BackgroundAndForegroundColors& colors);
         
-        void setBackgroundAndForegroundColorsMode(const BackgroundAndForegroundColorsModeEnum::Enum colorsMode);
+        CaretPreferenceValueSceneOverrideModeEnum::Enum getBackgroundAndForegroundColorsSceneOverrideMode() const;
+        
+        void setBackgroundAndForegroundColorsSceneOverrideMode(const CaretPreferenceValueSceneOverrideModeEnum::Enum colorsMode);
                 
         void addToRecentFilesAndOrDirectories(const AString& directoryOrFileName);
         
@@ -148,6 +154,10 @@ namespace caret {
         bool isVolumeAxesLabelsDisplayed() const;
         
         void setVolumeAxesLabelsDisplayed(const bool displayed);
+        
+        VolumeMontageCoordinateDisplayTypeEnum::Enum getVolumeMontageCoordinatesDislayType() const;
+        
+        void setVolumeMontageCoordinateDisplayType(const VolumeMontageCoordinateDisplayTypeEnum::Enum displayType);
         
         bool isVolumeMontageAxesCoordinatesDisplayed() const;
         
@@ -239,9 +249,21 @@ namespace caret {
         
         void setVolumeIdentificationDefaultedOn(const bool status);
         
+        bool isHistologyIdentificationDefaultedOn() const;
+        
+        void setHistologyIdentificationDefaultedOn(const bool status);
+        
         SpecFileDialogViewFilesTypeEnum::Enum getManageFilesViewFileType() const;
         
         void setManageFilesViewFileType(const SpecFileDialogViewFilesTypeEnum::Enum manageFilesViewFileType);
+        
+        bool isShowHistologyIdentificationSymbols() const;
+        
+        void setShowHistologyIdentificationSymbols(const bool showSymbols);
+        
+        bool isShowMediaIdentificationSymbols() const;
+        
+        void setShowMediaIdentificationSymbols(const bool showSymbols);
         
         bool isShowSurfaceIdentificationSymbols() const;
         
@@ -251,6 +273,10 @@ namespace caret {
         
         void setShowVolumeIdentificationSymbols(const bool showSymbols);
         
+        float getIdentificationStereotaxicDistance() const;
+        
+        void setIdentificationStereotaxicDistance(const float distance);
+        
         bool isDynamicConnectivityDefaultedOn() const;
         
         void setDynamicConnectivityDefaultedOn(const bool defaultedOn);
@@ -258,6 +284,28 @@ namespace caret {
         bool isGuiGesturesEnabled() const;
         
         void setGuiGesturesEnabled(const bool status);
+        
+        bool isImageFileTextureCompressionEnabled() const;
+        
+        void setImageFileTextureCompressionEnabled(const bool status);
+        
+        bool isCrossAtViewportCenterEnabled() const;
+        
+        void setCrossAtViewportCenterEnabled(const bool status);
+        
+        bool isGraphicsFramesPerSecondEnabled() const;
+        
+        void setGraphicsFramesPerSecondEnabled(const bool status);
+        
+        DisplayHighDpiModeEnum::Enum getDisplayHighDpiMode() const;
+        
+        void setDisplayHighDpiMode(const DisplayHighDpiModeEnum::Enum highDpiMode);
+
+        int32_t getCziDimension() const;
+        
+        void setCziDimension(const int32_t dimension);
+        
+        static void getSupportedCziDimensions(std::vector<std::pair<int32_t, QString>>& supportedValuesOut);
         
         WuQMacroGroup* getMacros();
         
@@ -294,6 +342,23 @@ namespace caret {
                                      const AString& paletteXML,
                                      AString& errorMessageOut);
 
+        void getMostRecentScenes(std::vector<RecentSceneInfoContainer>& recentSceneInfoOut);
+        
+        void addToMostRecentScenes(const AString& sceneFileName,
+                                   const AString& sceneName);
+        
+        bool isMostRecentScenesEnabled() const;
+        
+        void setMostRecentScenesEnabled(const bool status);
+        
+        float getVolumeSurfaceOutlineSeparation() const;
+        
+        void setVolumeSurfaceOutlineSeparation(const float separation);
+        
+        bool getVolumeSurfaceOutlineSeparationPreferenceValue(float& preferenceValueOut) const;
+        
+        bool getVolumeSurfaceOutlineSeparationSceneValue(float& sceneValueOut) const;
+        
     private:
         CaretPreferences(const CaretPreferences&);
 
@@ -360,7 +425,7 @@ namespace caret {
         BackgroundAndForegroundColors sceneColors;
         
         /** NOTE: colors mode is NOT saved to preferences */
-        BackgroundAndForegroundColorsModeEnum::Enum m_colorsMode;
+        CaretPreferenceValueSceneOverrideModeEnum::Enum m_colorsMode;
         
         std::vector<AString> previousSpecFiles;
         
@@ -382,6 +447,8 @@ namespace caret {
         
         bool displayVolumeAxesCoordinates;
         
+        std::unique_ptr<CaretPreferenceDataValue> m_volumeMontageCoordinateDisplayType;
+        
         int32_t volumeMontageGap;
         
         int32_t volumeMontageCoordinatePrecision;
@@ -398,6 +465,8 @@ namespace caret {
         
         std::unique_ptr<CaretPreferenceDataValue> m_fileOpenFromOperatingSystemTypePreference;
         
+        std::unique_ptr<CaretPreferenceDataValue> m_displayHighDpiModePreference;
+        
         std::vector<CaretPreferenceDataValue*> m_preferenceStoredInSceneDataValues;
         
         std::unique_ptr<CaretPreferenceDataValue> m_recentMaximumNumberOfSceneAndSpecFilesPreference;
@@ -406,6 +475,22 @@ namespace caret {
 
         std::unique_ptr<CaretPreferenceDataValue> m_recentFilesSystemAccessMode;
         
+        std::unique_ptr<CaretPreferenceDataValue> m_graphicsFramePerSecondEnabled;
+        
+        std::unique_ptr<CaretPreferenceDataValue> m_cziDimension;
+        
+        std::unique_ptr<CaretPreferenceDataValue> m_identificationStereotaxicDistance;
+        
+        std::unique_ptr<CaretPreferenceDataValue> m_imageFileTextureCompressionEnabled;
+        
+        std::unique_ptr<CaretPreferenceDataValue> m_crossAtViewportCenterEnabled;
+        
+        std::unique_ptr<CaretPreferenceDataValueList> m_mostRecentScenesList;
+        
+        std::unique_ptr<CaretPreferenceDataValue> m_mostRecentScenesEnabled;
+        
+        std::unique_ptr<CaretPreferenceDataValue> m_volumeSurfaceOutlineSeparation;
+
         bool splashScreenEnabled;
         
         bool developMenuEnabled;
@@ -413,6 +498,12 @@ namespace caret {
         double animationStartTime;
         
         bool volumeIdentificationDefaultedOn;
+        
+        bool histologyIdentificationDefaultedOn;
+        
+        bool showHistologyIdentificationSymbols;
+        
+        bool showMediaIdentificationSymbols;
         
         bool showSurfaceIdentificationSymbols;
         
@@ -449,6 +540,8 @@ namespace caret {
         static const AString NAME_COLOR_FOREGROUND_ALL;
         static const AString NAME_COLOR_BACKGROUND_CHART;
         static const AString NAME_COLOR_FOREGROUND_CHART;
+        static const AString NAME_COLOR_BACKGROUND_HISTOLOGY;
+        static const AString NAME_COLOR_FOREGROUND_HISTOLOGY;
         static const AString NAME_COLOR_BACKGROUND_MEDIA;
         static const AString NAME_COLOR_FOREGROUND_MEDIA;
         static const AString NAME_COLOR_BACKGROUND_SURFACE;
@@ -477,12 +570,21 @@ namespace caret {
         static const AString NAME_REMOTE_FILE_USER_NAME;
         static const AString NAME_REMOTE_FILE_PASSWORD;
         static const AString NAME_REMOTE_FILE_LOGIN_SAVED;
+        static const AString NAME_SCENE_FILE_MOST_RECENT;
+        static const AString NAME_SCENE_MOST_RECENT;
+        static const AString NAME_SHOW_HISTOLOGY_IDENTIFICATION_SYMBOLS;
+        static const AString NAME_SHOW_MEDIA_IDENTIFICATION_SYMBOLS;
         static const AString NAME_SHOW_SURFACE_IDENTIFICATION_SYMBOLS;
         static const AString NAME_SHOW_VOLUME_IDENTIFICATION_SYMBOLS;
         static const AString NAME_TILE_TABS_CONFIGURATIONS;
         static const AString NAME_TILE_TABS_CONFIGURATIONS_TWO;
         static const AString NAME_VOLUME_IDENTIFICATION_DEFAULTED_ON;
+        static const AString NAME_HISTOLOGY_IDENTIFICATION_DEFAULTED_ON;
         static const AString NAME_YOKING_DEFAULT_ON;
+        
+        static const int32_t s_defaultCziDimension = 2048;
+        
+
         
     };
     
@@ -502,6 +604,8 @@ namespace caret {
     const AString CaretPreferences::NAME_COLOR_FOREGROUND_ALL     = "colorForegroundAll";
     const AString CaretPreferences::NAME_COLOR_BACKGROUND_CHART     = "colorBackgroundChart";
     const AString CaretPreferences::NAME_COLOR_FOREGROUND_CHART     = "colorForegroundChart";
+    const AString CaretPreferences::NAME_COLOR_BACKGROUND_HISTOLOGY  = "colorBackgroundHistology";
+    const AString CaretPreferences::NAME_COLOR_FOREGROUND_HISTOLOGY = "colorForegroundHistology";
     const AString CaretPreferences::NAME_COLOR_BACKGROUND_MEDIA     = "colorBackgroundMedia";
     const AString CaretPreferences::NAME_COLOR_FOREGROUND_MEDIA     = "colorForegroundMedia";
     const AString CaretPreferences::NAME_COLOR_BACKGROUND_SURFACE     = "colorBackgroundSurface";
@@ -530,11 +634,16 @@ namespace caret {
     const AString CaretPreferences::NAME_REMOTE_FILE_USER_NAME = "remoteFileUserName";
     const AString CaretPreferences::NAME_REMOTE_FILE_PASSWORD = "remoteFilePassword";
     const AString CaretPreferences::NAME_REMOTE_FILE_LOGIN_SAVED = "removeFileLoginSaved";
+    const AString CaretPreferences::NAME_SCENE_FILE_MOST_RECENT = "sceneFileMostRecent";
+    const AString CaretPreferences::NAME_SCENE_MOST_RECENT = "sceneMostRecent";
+    const AString CaretPreferences::NAME_SHOW_HISTOLOGY_IDENTIFICATION_SYMBOLS = "showHistologyIdentificationSymbols";
+    const AString CaretPreferences::NAME_SHOW_MEDIA_IDENTIFICATION_SYMBOLS = "showMediaIdentificationSymbols";
     const AString CaretPreferences::NAME_SHOW_SURFACE_IDENTIFICATION_SYMBOLS = "showSurfaceIdentificationSymbols";
     const AString CaretPreferences::NAME_SHOW_VOLUME_IDENTIFICATION_SYMBOLS = "showVolumeIdentificationSymbols";
     const AString CaretPreferences::NAME_TILE_TABS_CONFIGURATIONS = "tileTabsConfigurations";
     const AString CaretPreferences::NAME_TILE_TABS_CONFIGURATIONS_TWO = "tileTabsConfigurationsTwo";
     const AString CaretPreferences::NAME_VOLUME_IDENTIFICATION_DEFAULTED_ON = "volumeIdentificationDefaultedOn";
+    const AString CaretPreferences::NAME_HISTOLOGY_IDENTIFICATION_DEFAULTED_ON = "histologyIdentificationDefaultedOn";
     const AString CaretPreferences::NAME_YOKING_DEFAULT_ON = "yokingDefaultedOn";
 #endif // __CARET_PREFERENCES_DECLARE__
 

@@ -6,24 +6,25 @@ PROJECT (OperationsBase)
 #
 # Add QT for includes
 #
+if(Qt6_FOUND)
+    include_directories(${Qt6Core_INCLUDE_DIRS})
+endif()
 if(Qt5_FOUND)
     include_directories(${Qt5Core_INCLUDE_DIRS})
     #include_directories(${Qt5Network_INCLUDE_DIRS})
 endif()
-IF (QT4_FOUND)
-    SET(QT_DONT_USE_QTGUI)
-    INCLUDE(${QT_USE_FILE})
-ENDIF ()
 
 #
 # Create the helper library
 #
 ADD_LIBRARY(OperationsBase
 AbstractOperation.h
+CaretCommandGlobalOptions.h
 OperationParameters.h
 OperationParametersEnum.h
 
 AbstractOperation.cxx
+CaretCommandGlobalOptions.cxx
 OperationParameters.cxx
 OperationParametersEnum.cxx
 )

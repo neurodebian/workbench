@@ -27,13 +27,13 @@
 
 #include <QAction>
 #include <QCheckBox>
-#include <QDateTime>
 #include <QGridLayout>
 #include <QGroupBox>
 #include <QLabel>
 #include <QLineEdit>
 #include <QPlainTextEdit>
 #include <QPushButton>
+#include <QToolButton>
 #include <QVBoxLayout>
 
 #include "ApplicationInformation.h"
@@ -96,6 +96,9 @@ SceneCreateReplaceDialog::SceneCreateReplaceDialog(const AString& dialogTitle,
     switch (m_mode) {
         case MODE_ADD_NEW_SCENE:
             break;
+        case MODE_EDIT_SCENE_INFO:
+            CaretAssert(sceneToInsertOrReplace);
+            break;
         case MODE_INSERT_NEW_SCENE:
             CaretAssert(sceneToInsertOrReplace);
             break;
@@ -111,6 +114,7 @@ SceneCreateReplaceDialog::SceneCreateReplaceDialog(const AString& dialogTitle,
         s_previousSelections.m_addAllTabs                 = true;
         s_previousSelections.m_addModifiedPaletteSettings = true;
         s_previousSelections.m_addSpecFileNameToScene     = true;
+        s_previousSelections.m_cropImage                  = true;
     }
     
     m_sceneFile = sceneFile;
@@ -130,9 +134,28 @@ SceneCreateReplaceDialog::SceneCreateReplaceDialog(const AString& dialogTitle,
     QLabel* nameLabel = new QLabel("Name");
     m_nameLineEdit = new QLineEdit();
     
+    const QString sceneIdWarningToolTip("The BALSA Scene ID is an identifier created by BALSA.  ALTERING "
+                                        "THE BALSA SCENE ID MAY CORRUPT THE SCENE FILE.");
     QLabel* sceneIDLabel = new QLabel("BALSA Scene ID");
+    const QString sceneIdLineEditToolTip(sceneIdWarningToolTip
+                                         + "  Click the "
+                                         "\"Unlock\" button if you must edit the ID.");
     m_balsaSceneIDLineEdit = new QLineEdit();
-    m_balsaSceneIDLineEdit->setToolTip("Scene ID is for use with BALSA Database");
+    m_balsaSceneIDLineEdit->setReadOnly(true);
+    m_balsaSceneIDLineEdit->setMaxLength(10);
+    WuQtUtilities::setWordWrappedToolTip(m_balsaSceneIDLineEdit,
+                                         sceneIdLineEditToolTip);
+    
+    const QString balsaIdToolTipText("Click this button to unlock (lock) and enable (disable) editing of the "
+                                     "BALSA Scene ID.  "
+                                     + sceneIdWarningToolTip);
+    m_lockUnlockBalseSceneIdToolButton = new QToolButton();
+    m_lockUnlockBalseSceneIdToolButton->setText("Unlock");
+    WuQtUtilities::setWordWrappedToolTip(m_lockUnlockBalseSceneIdToolButton,
+                                         balsaIdToolTipText);
+    QObject::connect(m_lockUnlockBalseSceneIdToolButton, &QToolButton::clicked,
+                     this, &SceneCreateReplaceDialog::lockUnlockBalseSceneIdToolButtonClicked);
+    
     
     QPushButton* addWindowDescriptionPushButton = new QPushButton("Add Window Info");
     QObject::connect(addWindowDescriptionPushButton, &QPushButton::clicked,
@@ -140,6 +163,12 @@ SceneCreateReplaceDialog::SceneCreateReplaceDialog(const AString& dialogTitle,
     
     QLabel* descriptionLabel = new QLabel("Description");
     m_descriptionTextEdit = new QPlainTextEdit();
+    
+    QHBoxLayout* idLayout = new QHBoxLayout();
+    idLayout->setContentsMargins(0, 0, 0, 0);
+    idLayout->addWidget(m_balsaSceneIDLineEdit);
+    idLayout->addWidget(m_lockUnlockBalseSceneIdToolButton);
+    idLayout->addStretch();
     
     const Qt::Alignment labelAlignment = (Qt::AlignLeft | Qt::AlignTop);
     
@@ -160,7 +189,9 @@ SceneCreateReplaceDialog::SceneCreateReplaceDialog(const AString& dialogTitle,
     infoGridLayout->addWidget(sceneIDLabel,
                               rowCounter, labelColumn,
                               labelAlignment);
-    infoGridLayout->addWidget(m_balsaSceneIDLineEdit,
+//    infoGridLayout->addWidget(m_balsaSceneIDLineEdit,
+//                              rowCounter, widgetColumn);
+    infoGridLayout->addLayout(idLayout,
                               rowCounter, widgetColumn);
     rowCounter++;
     infoGridLayout->addWidget(descriptionLabel,
@@ -222,6 +253,14 @@ SceneCreateReplaceDialog::SceneCreateReplaceDialog(const AString& dialogTitle,
             m_sceneWindowDescription = ("Created on " + dataTimeCommitText + "\n");
             m_sceneWindowDescription.appendWithNewLine(windowDescription);
             break;
+        case MODE_EDIT_SCENE_INFO:
+            m_nameLineEdit->setText(sceneToInsertOrReplace->getName());
+            m_descriptionTextEdit->setPlainText(sceneToInsertOrReplace->getDescription());
+            m_balsaSceneIDLineEdit->setText(sceneToInsertOrReplace->getBalsaSceneID());
+            addWindowDescriptionPushButton->setHidden(true);
+            optionsLabel->setHidden(true);
+            optionsWidget->setHidden(true);
+            break;
         case MODE_REPLACE_SCENE:
             m_nameLineEdit->setText(sceneToInsertOrReplace->getName());
             m_balsaSceneIDLineEdit->setText(sceneToInsertOrReplace->getBalsaSceneID());
@@ -274,6 +313,56 @@ SceneCreateReplaceDialog::createNewScene(QWidget* parent,
     
     Scene* scene = dialog.m_sceneThatWasCreated;
     return scene;
+}
+
+/**
+ * Called when the scene ID lock unlock button is clicked
+ */
+void
+SceneCreateReplaceDialog::lockUnlockBalseSceneIdToolButtonClicked()
+{
+    if (m_balsaSceneIDLineEdit->isReadOnly()) {
+        m_balsaSceneIDLineEdit->setReadOnly(false);
+        const AString text("WARNING: Are you sure you want to edit the BALSA Scene ID?");
+        const AString infoText("Changing the BALSA Scene ID may corrupt the Scene File.  Editing of the "
+                               "Scene ID should only be performed by those with expert knowledge of the BALSA "
+                               "Database.");
+        if (WuQMessageBox::warningYesNo(m_lockUnlockBalseSceneIdToolButton,
+                                        text,
+                                        infoText,
+                                        WuQMessageBox::DefaultButtonYesNo::NO)) {
+            m_lockUnlockBalseSceneIdToolButton->setText("Lock");
+        }
+    }
+    else {
+        m_balsaSceneIDLineEdit->setReadOnly(true);
+        m_lockUnlockBalseSceneIdToolButton->setText("Unlock");
+    }
+}
+
+/**
+ * Static method that creates a dialog for editing a scene's info
+ *
+ * @param parent
+ *     Parent widget on which dialog is displayed.
+ * @param sceneFile
+ *     Scene file to which new scene is added.
+ * @param scene
+ *     Scene that is edited
+ * @return
+ *     Scene that was created or NULL if user cancelled or there was an error.
+ */
+void
+SceneCreateReplaceDialog::editSceneInfo(QWidget* parent,
+                                        SceneFile* sceneFile,
+                                        Scene* scene)
+{
+    SceneCreateReplaceDialog dialog("Edit Scene",
+                                    parent,
+                                    sceneFile,
+                                    MODE_EDIT_SCENE_INFO,
+                                    scene);
+    dialog.exec();
 }
 
 /**
@@ -346,14 +435,19 @@ SceneCreateReplaceDialog::replaceExistingScene(QWidget* parent,
 }
 
 /**
- * Add an image to the scene.
+ * Add an image to the scene and also info about Workbench.
  *
  * @param scene
  *    Scene to which image is added.
+ * @param cropImageFlag
+ *   If true, crop the image
+ * @param errorMessageOut
+ *   Output with any error messages
  */
 void
-SceneCreateReplaceDialog::addImageToScene(Scene* scene,
-                                          AString& errorMessageOut)
+SceneCreateReplaceDialog::addImageAndWorkbenchInfoToScene(Scene* scene,
+                                                          const bool cropImageFlag,
+                                                          AString& errorMessageOut)
 {
     errorMessageOut.clear();
     
@@ -381,7 +475,7 @@ SceneCreateReplaceDialog::addImageToScene(Scene* scene,
                 errorMessageOut.appendWithNewLine(imageCaptureEvent.getErrorMessage());
             }
             else {
-                imageFiles.push_back(new ImageFile(imageCaptureEvent.getImage()));
+                imageFiles.push_back(new ImageFile(imageCaptureEvent.getCapturedImage()));
                 if ( ! backgroundColorValid) {
                     imageCaptureEvent.getBackgroundColor(backgroundColor);
                     backgroundColorValid = true;
@@ -405,9 +499,11 @@ SceneCreateReplaceDialog::addImageToScene(Scene* scene,
                                                                       backgroundColor);
             
             if (backgroundColorValid) {
-                const int marginSize = 5;
-                compositeImageFile.cropImageRemoveBackground(marginSize,
-                                                             backgroundColor);
+                if (cropImageFlag) {
+                    const int marginSize = 5;
+                    compositeImageFile.cropImageRemoveBackground(marginSize,
+                                                                 backgroundColor);
+                }
             }
             
             const int MAXIMUM_IMAGE_WIDTH = 1024;
@@ -436,6 +532,8 @@ SceneCreateReplaceDialog::addImageToScene(Scene* scene,
          iter++) {
         delete *iter;
     }
+    
+    scene->getSceneInfo()->addWorkbenchVersionInfoToSceneMetaData();
 }
 
 /**
@@ -443,6 +541,8 @@ SceneCreateReplaceDialog::addImageToScene(Scene* scene,
  *
  * @param imageOut
  *     Output image of the scene.
+ * @param cropImageFlag
+ *     If true, crop the image
  * @param errorMessageOut
  *     Contains error information if image was not created.
  * @return
@@ -450,6 +550,7 @@ SceneCreateReplaceDialog::addImageToScene(Scene* scene,
  */
 bool
 SceneCreateReplaceDialog::createSceneImage(QImage& imageOut,
+                                           const bool cropImageFlag,
                                            AString& errorMessageOut)
 {
     bool validImageFlag = false;
@@ -478,7 +579,7 @@ SceneCreateReplaceDialog::createSceneImage(QImage& imageOut,
                 errorMessageOut.appendWithNewLine(imageCaptureEvent.getErrorMessage());
             }
             else {
-                imageFiles.push_back(new ImageFile(imageCaptureEvent.getImage()));
+                imageFiles.push_back(new ImageFile(imageCaptureEvent.getCapturedImage()));
                 if ( ! backgroundColorValid) {
                     imageCaptureEvent.getBackgroundColor(backgroundColor);
                     backgroundColorValid = true;
@@ -502,9 +603,11 @@ SceneCreateReplaceDialog::createSceneImage(QImage& imageOut,
                                                                       backgroundColor);
             
             if (backgroundColorValid) {
-                const int marginSize = 5;
-                compositeImageFile.cropImageRemoveBackground(marginSize,
-                                                             backgroundColor);
+                if (cropImageFlag) {
+                    const int marginSize = 5;
+                    compositeImageFile.cropImageRemoveBackground(marginSize,
+                                                                 backgroundColor);
+                }
             }
             
             const int MAXIMUM_IMAGE_WIDTH = 1024;
@@ -577,6 +680,16 @@ SceneCreateReplaceDialog::createSceneOptionsWidget()
                                          "and the data files with modified palette color mapping do not need "
                                          "to be saved.");
     
+    m_cropImageCheckBox = new QCheckBox("Crop Image");
+    m_cropImageCheckBox->setChecked(s_previousSelections.m_cropImage);
+    WuQtUtilities::setWordWrappedToolTip(m_cropImageCheckBox,
+                                         "Crop the image by removing background pixels on the sides of the "
+                                         "brain models.  "
+                                         "Disabling of image cropping may be useful when "
+                                         "debugging scenes where the content occupies a "
+                                         "portion of the viewing region (data may be "
+                                         "panned/zoomed");
+    
     /*
      * Layout for scene options widgets
      */
@@ -585,6 +698,7 @@ SceneCreateReplaceDialog::createSceneOptionsWidget()
     optionsLayout->addWidget(m_addAllTabsCheckBox);
     optionsLayout->addWidget(m_addAllLoadedFilesCheckBox);
     optionsLayout->addWidget(m_addModifiedPaletteSettingsCheckBox);
+    optionsLayout->addWidget(m_cropImageCheckBox);
     
     /*
      * Add the layout to a widget and return the widget.
@@ -608,6 +722,7 @@ SceneCreateReplaceDialog::okButtonClicked()
     s_previousSelections.m_addAllTabs                 = m_addAllTabsCheckBox->isChecked();
     s_previousSelections.m_addModifiedPaletteSettings = m_addModifiedPaletteSettingsCheckBox->isChecked();
     s_previousSelections.m_addSpecFileNameToScene     = m_addSpecFileNameToSceneCheckBox->isChecked();
+    s_previousSelections.m_cropImage                  = m_cropImageCheckBox->isChecked();
     
     const AString newSceneName = m_nameLineEdit->text();
     
@@ -621,6 +736,11 @@ SceneCreateReplaceDialog::okButtonClicked()
             bool nameErrorFlag = true;
             switch (m_mode) {
                 case MODE_ADD_NEW_SCENE:
+                    break;
+                case MODE_EDIT_SCENE_INFO:
+                    if (m_sceneToInsertOrReplace == sceneWithName) {
+                        nameErrorFlag = false;
+                    }
                     break;
                 case MODE_INSERT_NEW_SCENE:
                     break;
@@ -644,7 +764,25 @@ SceneCreateReplaceDialog::okButtonClicked()
                                errorMessage);
         return;
     }
-    
+
+    switch (m_mode) {
+        case MODE_ADD_NEW_SCENE:
+            break;
+        case MODE_EDIT_SCENE_INFO:
+        {
+            m_sceneToInsertOrReplace->setName(newSceneName);
+            m_sceneToInsertOrReplace->setDescription(m_descriptionTextEdit->toPlainText());
+            m_sceneToInsertOrReplace->setBalsaSceneID(m_balsaSceneIDLineEdit->text().trimmed());
+            WuQDialogModal::okButtonClicked();
+            return;
+        }
+            break;
+        case MODE_INSERT_NEW_SCENE:
+            break;
+        case MODE_REPLACE_SCENE:
+            break;
+    }
+
     if ( ! s_previousSelections.m_addModifiedPaletteSettings) {
         if ( ! SceneDialog::checkForModifiedFiles(GuiManager::TEST_FOR_MODIFIED_FILES_PALETTE_ONLY_MODE_FOR_SCENE_ADD,
                                                   this)) {
@@ -696,8 +834,9 @@ SceneCreateReplaceDialog::okButtonClicked()
                                                       "guiManager"));
     
     AString imageErrorMessage;
-    addImageToScene(newScene,
-                    imageErrorMessage);
+    addImageAndWorkbenchInfoToScene(newScene,
+                                    s_previousSelections.m_cropImage,
+                                    imageErrorMessage);
     if ( ! imageErrorMessage.isEmpty()) {
         WuQMessageBox::errorOk(this,
                                imageErrorMessage);
@@ -716,6 +855,9 @@ SceneCreateReplaceDialog::okButtonClicked()
     switch (m_mode) {
         case MODE_ADD_NEW_SCENE:
             m_sceneFile->addScene(newScene);
+            break;
+        case MODE_EDIT_SCENE_INFO:
+            CaretAssert(0);
             break;
         case MODE_INSERT_NEW_SCENE:
             m_sceneFile->insertScene(newScene,

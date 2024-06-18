@@ -51,6 +51,8 @@ namespace caret {
     public:
         virtual AString getFileName() const;
         
+        virtual AString getFilePath() const;
+        
         virtual AString getFileNameNoPath() const;
         
         virtual void setFileName(const AString& filename);
@@ -101,6 +103,8 @@ namespace caret {
         
         bool isModifiedSinceTimeOfLastReadOrWrite() const;
         
+        virtual std::vector<AString> getChildDataFilePathNames() const;
+
     private:
         void copyHelperDataFile(const DataFile& df);
         

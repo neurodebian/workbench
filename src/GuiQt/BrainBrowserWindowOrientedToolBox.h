@@ -40,11 +40,13 @@ namespace caret {
     class CiftiConnectivityMatrixViewController;
     class FiberOrientationSelectionViewController;
     class FociSelectionViewController;
+    class HistologyOverlaySetViewController;
     class IdentificationDisplayWidget;
     class ImageSelectionViewController;
     class LabelSelectionViewController;
     class MediaOverlaySetViewController;
     class OverlaySetViewController;
+    class SamplesSelectionViewController;
     class VolumeSurfaceOutlineSetViewController;
     class WuQTabWidgetWithSizeHint;
     
@@ -112,11 +114,15 @@ namespace caret {
         
         FociSelectionViewController* m_fociSelectionViewController;
         
+        HistologyOverlaySetViewController* m_histologyOverlaySetViewController;
+        
         ImageSelectionViewController* m_imageSelectionViewController;
         
         LabelSelectionViewController* m_labelSelectionViewController;
         
         MediaOverlaySetViewController* m_mediaSelectionViewController;
+        
+        SamplesSelectionViewController* m_samplesSelectionViewController;
         
         VolumeSurfaceOutlineSetViewController* m_volumeSurfaceOutlineSetViewController;
         
@@ -144,11 +150,15 @@ namespace caret {
         
         int32_t m_fociTabIndex;
         
+        int32_t m_histologyTabIndex;
+        
         int32_t m_imageTabIndex;
         
         int32_t m_labelTabIndex;
         
         int32_t m_mediaTabIndex;
+        
+        int32_t m_samplesTabIndex;
         
         int32_t m_volumeSurfaceOutlineTabIndex;
         

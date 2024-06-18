@@ -47,7 +47,7 @@
 #include "DisplayGroupEnumComboBox.h"
 #include "EnumComboBoxTemplate.h"
 #include "EventChartTwoCartesianAxisDisplayGroup.h"
-#include "EventGraphicsUpdateAllWindows.h"
+#include "EventGraphicsPaintSoonAllWindows.h"
 #include "EventManager.h"
 #include "ModelChartTwo.h"
 #include "WuQDataEntryDialog.h"
@@ -235,7 +235,7 @@ m_axisLocation(axisLocation)
     m_paddingSizeSpinBox->setRangePercentage(0.0, 99.0);
     QObject::connect(m_paddingSizeSpinBox, static_cast<void (WuQDoubleSpinBox::*)(double)>(&WuQDoubleSpinBox::valueChanged),
                      [=](double value) { m_chartAxis->setPaddingSize(value); valueChanged(); });
-    m_paddingSizeSpinBox->setToolTip("Set padding (space between edge and labels) as percentage of tab height for selected axis");
+    m_paddingSizeSpinBox->setToolTip("Set padding (space between edge and labels/ticks) as percentage of tab height for selected axis");
     m_paddingSizeSpinBox->getWidget()->setObjectName(objectNamePrefix
                                                  + "PaddingSize");
     macroManager->addMacroSupportToObject(m_paddingSizeSpinBox->getWidget(),
@@ -564,7 +564,7 @@ ChartTwoAxisPropertiesEditorWidget::valueChanged()
 void
 ChartTwoAxisPropertiesEditorWidget::updateGraphics()
 {
-    EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+    EventManager::get()->sendEvent(EventGraphicsPaintSoonAllWindows().getPointer());
 }
 
 /**

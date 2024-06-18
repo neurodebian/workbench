@@ -43,6 +43,8 @@ public:
         CURSOR_CLOSED_HAND,
         /** Cross (plus symbol) */
         CURSOR_CROSS,
+        /** Delete (X) cursor */
+        CURSOR_DELETE,
         /** Drawing Pen */
         CURSOR_DRAWING_PEN,
         /** Size All "four arrows", Qt::SizeAllCursor */
@@ -57,6 +59,8 @@ public:
         CURSOR_RESIZE_HORIZONTAL,
         /** Resize Vertical */
         CURSOR_RESIZE_VERTICAL,
+        /** Half Rotation Cursor */
+        CURSOR_HALF_ROTATION,
         /** Rotation Cursor */
         CURSOR_ROTATION,
         /** Wait, Qt::WaitCursor*/

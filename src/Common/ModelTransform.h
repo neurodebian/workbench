@@ -21,14 +21,17 @@
  */
 /*LICENSE_END*/
 
-
 #include "CaretObject.h"
 
 namespace caret {
 
+    class Matrix4x4Interface;
+    
     class ModelTransform : public CaretObject {
         
     public:
+        static void getIdentityQuaternion(float quaternionSXYZ[4]);
+        
         ModelTransform();
         
         virtual ~ModelTransform();
@@ -44,6 +47,10 @@ namespace caret {
         void getRotation(float rotation[4][4]) const;
         
         void getObliqueRotation(float obliqueRotation[4][4]) const;
+        
+        void getMprTwoRotationAngles(float mprRotationAngles[3]) const;
+        
+        void getMprThreeRotationAngles(float mprRotationAngles[3]) const;
         
         void getFlatRotation(float flatRotation[4][4]) const;
         
@@ -70,6 +77,10 @@ namespace caret {
         
         void setObliqueRotation(const float obliqueRotation[4][4]);
         
+        void setMprTwoRotationAngles(const float mprRotationAngles[3]);
+        
+        void setMprThreeRotationAngles(const float mprRotationAngles[3]);
+        
         void setFlatRotation(const float flatRotation[4][4]);
         
         void setRightCortexFlatMapOffset(const float rightCortexFlatMapOffsetX,
@@ -84,6 +95,8 @@ namespace caret {
                                              const float panZ,
                                              const float rotationMatrix[4][4],
                                              const float obliqueRotationMatrix[4][4],
+                                             const float mprTwoRotationAngles[3],
+                                             const float mprThreeRotationAngles[3],
                                              const float flatRotationMatrix[4][4],
                                              const float zoom,
                                              const float rightCortexFlatMapOffsetX,
@@ -95,6 +108,8 @@ namespace caret {
                                              float& panZ,
                                              float rotationMatrix[4][4],
                                              float obliqueRotationMatrix[4][4],
+                                             float mprTwoRotationAngles[3],
+                                             float mprThreeRotationAngles[3],
                                              float flatRotationMatrix[4][4],
                                              float& zoom,
                                              float& rightCortexFlatMapOffsetX,
@@ -102,6 +117,9 @@ namespace caret {
                                              float& rightCortexFlatMapZoomFactor) const;
         
         AString getAsString() const;
+        
+        AString getAsPrettyString(Matrix4x4Interface& matrixForCalculations,
+                                  const float leftRotationMatrix[4][4]) const;
         
         bool setFromString(const AString& s);
         
@@ -126,6 +144,10 @@ namespace caret {
         float rotation[4][4];
         
         float obliqueRotation[4][4];
+        
+        float mprTwoRotationAngles[3];
+        
+        float mprThreeRotationAngles[3];
         
         float flatRotation[4][4];
         

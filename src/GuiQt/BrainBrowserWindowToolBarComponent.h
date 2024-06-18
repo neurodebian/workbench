@@ -67,11 +67,13 @@ namespace caret {
         
         BrainBrowserWindowToolBar* getParentToolBar();
         
+        BrainBrowserWindowToolBar* getParentToolBar() const;
+        
     public:
 
         // ADD_NEW_METHODS_HERE
 
-        virtual void receiveEvent(Event* event);
+        virtual void receiveEvent(Event* event) override;
 
     private:
         BrainBrowserWindowToolBar* m_parentToolBar;

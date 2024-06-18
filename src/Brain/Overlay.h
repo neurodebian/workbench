@@ -29,6 +29,7 @@
 #include "MapYokingGroupEnum.h"
 #include "PlainTextStringBuilder.h"
 #include "SceneableInterface.h"
+#include "VolumeToImageMappingModeEnum.h"
 #include "WholeBrainVoxelDrawingMode.h"
 #include "StructureEnum.h"
 
@@ -42,7 +43,8 @@ namespace caret {
     public:
         enum IncludeVolumeFiles {
             INCLUDE_VOLUME_FILES_YES,
-            INCLUDE_VOLUME_FILES_NO
+            INCLUDE_VOLUME_FILES_NO,
+            INCLUDE_VOLUME_FILES_FOR_HISTOLOGY_MODEL
         };
         
         Overlay(const std::vector<StructureEnum::Enum>& includeSurfaceStructures,
@@ -94,6 +96,14 @@ namespace caret {
         
         const AnnotationColorBar* getColorBar() const;
         
+        VolumeToImageMappingModeEnum::Enum getVolumeToImageMappingMode() const;
+        
+        float getVolumeToImageMappingThickness() const;
+
+        void setVolumeToImageMappingMode(const VolumeToImageMappingModeEnum::Enum mode);
+        
+        void setVolumeToImageMappingThickness(const float thickness);
+        
         virtual SceneClass* saveToScene(const SceneAttributes* sceneAttributes,
                                         const AString& instanceName);
         
@@ -125,23 +135,23 @@ namespace caret {
         /** map yoking group */
         MapYokingGroupEnum::Enum m_mapYokingGroup;
         
-        /** available mappable files */
-        //std::vector<CaretMappableDataFile*> m_mapFiles;
-        
         /** selected mappable file */
         CaretMappableDataFile* m_selectedMapFile;
         
         /** selected map index */
         int32_t m_selectedMapIndex;
         
-        /** selected data file map unique id */
-        //AString m_selectedMapUniqueID;
-        
         /** Voxel drawing mode in Whole Brain View */
         WholeBrainVoxelDrawingMode::Enum m_wholeBrainVoxelDrawingMode;
         
         /** The color bar displayed in the graphics window */
         AnnotationColorBar* m_colorBar;
+        
+        /** Volume to image mapping mode */
+        VolumeToImageMappingModeEnum::Enum m_volumeToImageMappingMode = VolumeToImageMappingModeEnum::NORMAL;
+        
+        /** Volume to image mapping thickness */
+        float m_volumeToImageMappingThickness = 0.0;
         
         /** helps with scene save/restore */
         SceneClassAssistant* m_sceneAssistant;

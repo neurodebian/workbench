@@ -23,6 +23,7 @@
  */
 /*LICENSE_END*/
 
+#include <memory>
 #include <set>
 #include <vector>
 #include <stdint.h>
@@ -37,7 +38,6 @@ class QAction;
 class QDialog;
 class QMenu;
 class QWidget;
-class MovieDialog;
 class WuQWebView;
 
 namespace caret {    
@@ -55,6 +55,7 @@ namespace caret {
     class IdentificationDisplayDialog;
     class ImageFile;
     class ImageCaptureDialog;
+    class InfoItem;
     class InformationDisplayDialog;
     class MovieRecordingDialog;
     class OverlaySettingsEditorDialog;
@@ -100,6 +101,8 @@ namespace caret {
                                            const QString& workingDirectory,
                                            QWidget* parent);
         
+        static std::vector<std::unique_ptr<InfoItem>> getScreensInfo();
+
         Brain* getBrain() const;
         
         int32_t getNumberOfOpenBrainBrowserWindows() const;
@@ -117,6 +120,8 @@ namespace caret {
         
         bool exitProgram(BrainBrowserWindow* parent);
         
+        bool isApplicationTerminating() const;
+
         bool processShowOpenSpecFileDialog(SpecFile* specFile,
                                            BrainBrowserWindow* browserWindow);
         
@@ -153,7 +158,6 @@ namespace caret {
         void processShowGapsAndMarginsDialog(BrainBrowserWindow* browserWindow);
         void processShowImageCaptureDialog(BrainBrowserWindow* browserWindow);
         void processShowMovieRecordingDialog(BrainBrowserWindow* browserWindow);
-        void processShowMovieDialog(BrainBrowserWindow* browserWindow);
         void processShowPreferencesDialog(BrainBrowserWindow* browserWindow);
         void processShowInformationDisplayDialog(const bool forceDisplayOfDialog);
         void processShowTileTabsConfigurationDialog(BrainBrowserWindow* browserWindow);
@@ -235,6 +239,7 @@ namespace caret {
         void sceneDialogWasClosed();
         void identifyBrainordinateDialogWasClosed();
         void dataToolTipsActionTriggered(bool);
+        void toolTipHyperlinkClicked(const QString& hyperlink);
         
     private:
         GuiManager(QObject* parent = 0);
@@ -301,8 +306,6 @@ namespace caret {
         MovieRecordingDialog* m_movieRecordingDialog;
         
         GapsAndMarginsDialog* m_gapsAndMarginsDialog;
-        
-        MovieDialog* movieDialog;
         
         PreferencesDialog* preferencesDialog;       
         
@@ -373,6 +376,12 @@ namespace caret {
          * the data file is opened.
          */
         AString m_nameOfDataFileToOpenAfterStartup;
+        
+        /**
+         * Is true when the application is closing and all BrainBrowserWindows
+         * should ignore a close event.
+         */
+        bool m_applicationIsTerminating = false;
     };
     
 #ifdef __GUI_MANAGER_DEFINE__

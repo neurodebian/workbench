@@ -33,6 +33,7 @@
 #include "CaretAssert.h"
 #include "CaretLogger.h"
 #include "CaretPreferenceDataValue.h"
+#include "CaretPreferenceDataValueList.h"
 #include "DataFileTypeEnum.h"
 #include "FileInformation.h"
 #include "ModelTransform.h"
@@ -81,12 +82,43 @@ CaretPreferences::CaretPreferences()
                                                                     defAllSliceLayout));
     m_preferenceStoredInSceneDataValues.push_back(m_volumeAllSlicePlanesLayout.get());
     
+    m_imageFileTextureCompressionEnabled.reset(new CaretPreferenceDataValue(this->qSettings,
+                                                                            "m_imageFileTextureCompressionEnabled",
+                                                                            CaretPreferenceDataValue::DataType::BOOLEAN,
+                                                                            CaretPreferenceDataValue::SavedInScene::SAVE_NO,
+                                                                            true));
+    
     m_guiGesturesEnabled.reset(new CaretPreferenceDataValue(this->qSettings,
                                                             "guiGesturesEnabled",
                                                             CaretPreferenceDataValue::DataType::BOOLEAN,
                                                             CaretPreferenceDataValue::SavedInScene::SAVE_NO,
                                                             false));
  
+    m_graphicsFramePerSecondEnabled.reset(new CaretPreferenceDataValue(this->qSettings,
+                                                                       "graphicsFramePerSecondEnabled",
+                                                                       CaretPreferenceDataValue::DataType::BOOLEAN,
+                                                                       CaretPreferenceDataValue::SavedInScene::SAVE_NO,
+                                                                       false));
+    
+    m_cziDimension.reset(new CaretPreferenceDataValue(this->qSettings,
+                                                      "cziDimension",
+                                                      CaretPreferenceDataValue::DataType::INTEGER,
+                                                      CaretPreferenceDataValue::SavedInScene::SAVE_NO,
+                                                      s_defaultCziDimension));
+    
+    m_volumeSurfaceOutlineSeparation.reset(new CaretPreferenceDataValue(this->qSettings,
+                                                                        "volumeSurfaceOutlineSeparation",
+                                                                        CaretPreferenceDataValue::DataType::FLOAT,
+                                                                        CaretPreferenceDataValue::SavedInScene::SAVE_YES,
+                                                                        0.0));
+    m_preferenceStoredInSceneDataValues.push_back(m_volumeSurfaceOutlineSeparation.get());
+    
+    m_identificationStereotaxicDistance.reset(new CaretPreferenceDataValue(this->qSettings,
+                                                                                "m_identificationStereotaxicDistance",
+                                                                                CaretPreferenceDataValue::DataType::FLOAT,
+                                                                                CaretPreferenceDataValue::SavedInScene::SAVE_NO,
+                                                                                3.0));
+    
     m_toolBarWidthModePreference.reset(new CaretPreferenceDataValue(this->qSettings,
                                                                     "toolBarWidthMode",
                                                                     CaretPreferenceDataValue::DataType::STRING,
@@ -98,6 +130,12 @@ CaretPreferences::CaretPreferences()
                                                                                    CaretPreferenceDataValue::DataType::STRING,
                                                                                    CaretPreferenceDataValue::SavedInScene::SAVE_NO,
                                                                                    FileOpenFromOpSysTypeEnum::toName(FileOpenFromOpSysTypeEnum::ASK_USER)));
+    
+    m_displayHighDpiModePreference.reset(new CaretPreferenceDataValue(this->qSettings,
+                                                                      "m_displayHighDpiModePreference",
+                                                                      CaretPreferenceDataValue::DataType::STRING,
+                                                                      CaretPreferenceDataValue::SavedInScene::SAVE_NO,
+                                                                      DisplayHighDpiModeEnum::toName(DisplayHighDpiModeEnum::getDefaultValue())));
     
     m_identificationDisplayModePreference.reset(new CaretPreferenceDataValue(this->qSettings,
                                                                              "identificationDisplayMode",
@@ -126,7 +164,30 @@ CaretPreferences::CaretPreferences()
                                                                      CaretPreferenceDataValue::SavedInScene::SAVE_NO,
                                                                      RecentFilesSystemAccessModeEnum::toName(RecentFilesSystemAccessModeEnum::ON)));
     
-    m_colorsMode = BackgroundAndForegroundColorsModeEnum::USER_PREFERENCES;
+    m_crossAtViewportCenterEnabled.reset(new CaretPreferenceDataValue(this->qSettings,
+                                                                      "m_crossAtViewportCenterEnabled",
+                                                                      CaretPreferenceDataValue::DataType::BOOLEAN,
+                                                                      CaretPreferenceDataValue::SavedInScene::SAVE_NO,
+                                                                      false));
+        
+    m_mostRecentScenesList.reset(new CaretPreferenceDataValueList(this->qSettings,
+                                                                  "m_mostRecentScenesList",
+                                                                  CaretPreferenceDataValueList::DataType::QVARIANT,
+                                                                  5)); /* maximum number of elements */
+    
+    m_mostRecentScenesEnabled.reset(new CaretPreferenceDataValue(this->qSettings,
+                                                                 "m_mostRecentScenesEnabled",
+                                                                 CaretPreferenceDataValue::DataType::BOOLEAN,
+                                                                 CaretPreferenceDataValue::SavedInScene::SAVE_NO,
+                                                                 false));
+    
+    m_volumeMontageCoordinateDisplayType.reset(new CaretPreferenceDataValue(this->qSettings,
+                                                                            "m_volumeMontageCoordinateDisplayType",
+                                                                            CaretPreferenceDataValue::DataType::STRING,
+                                                                            CaretPreferenceDataValue::SavedInScene::SAVE_NO,
+                                                                            VolumeMontageCoordinateDisplayTypeEnum::toName(VolumeMontageCoordinateDisplayTypeEnum::OFFSET)));
+    
+    m_colorsMode = CaretPreferenceValueSceneOverrideModeEnum::USER_PREFERENCES;
 }
 
 /**
@@ -710,17 +771,23 @@ CaretPreferences::getTileTabsUserConfigurationsNamesAndUniqueIdentifiers(const b
         QString typeString;
         switch (ttc->getLayoutType()) {
             case TileTabsLayoutConfigurationTypeEnum::AUTOMATIC_GRID:
-                typeString = " (AG)";
+                typeString = " (Auto)";
                 break;
             case TileTabsLayoutConfigurationTypeEnum::CUSTOM_GRID:
-                typeString = (" (G,"
-                              + AString::number(ttc->getNumberOfTabs())
+            {
+                const TileTabsLayoutGridConfiguration* gc(ttc->castToGridConfiguration());
+                CaretAssert(gc);
+                typeString = (" (Grid R="
+                              + AString::number(gc->getNumberOfRows())
+                              + ",C="
+                              + AString::number(gc->getNumberOfColumns())
                               + ")");
+            }
                 break;
             case TileTabsLayoutConfigurationTypeEnum::MANUAL:
-                typeString = (" (M,"
+                typeString = (" (Manual "
                               + AString::number(ttc->getNumberOfTabs())
-                              + ")");
+                              + " Tabs)");
                 break;
         }
         nameIDs.push_back(std::make_pair(ttc->getName() + typeString,
@@ -951,10 +1018,10 @@ const BackgroundAndForegroundColors*
 CaretPreferences::getBackgroundAndForegroundColors() const
 {
     switch (m_colorsMode) {
-        case BackgroundAndForegroundColorsModeEnum::SCENE:
+        case CaretPreferenceValueSceneOverrideModeEnum::SCENE:
             return &this->sceneColors;
             break;
-        case BackgroundAndForegroundColorsModeEnum::USER_PREFERENCES:
+        case CaretPreferenceValueSceneOverrideModeEnum::USER_PREFERENCES:
             return &this->userColors;
             break;
     }
@@ -1012,6 +1079,13 @@ CaretPreferences::setUserBackgroundAndForegroundColors(const BackgroundAndForegr
                            this->userColors.m_colorBackgroundChart,
                            3);
     
+    writeUnsignedByteArray(NAME_COLOR_FOREGROUND_HISTOLOGY,
+                           this->userColors.m_colorForegroundHistology,
+                           3);
+    writeUnsignedByteArray(NAME_COLOR_BACKGROUND_HISTOLOGY,
+                           this->userColors.m_colorBackgroundHistology,
+                           3);
+    
     writeUnsignedByteArray(NAME_COLOR_FOREGROUND_MEDIA,
                            this->userColors.m_colorForegroundMedia,
                            3);
@@ -1043,6 +1117,17 @@ CaretPreferences::setUserBackgroundAndForegroundColors(const BackgroundAndForegr
 }
 
 /**
+ * @return The SCENES'S preferred background and foreground colors.
+ *    This method is used only by the PreferencesDialog to
+ *    show the scene's preferred colors.
+ */
+BackgroundAndForegroundColors
+CaretPreferences::getSceneBackgroundAndForegroundColors()
+{
+    return this->sceneColors;
+}
+
+/**
  * Set the SCENE background and foreground colors.
  *    This method is called when scenes are restored.
  */
@@ -1055,8 +1140,8 @@ CaretPreferences::setSceneBackgroundAndForegroundColors(const BackgroundAndForeg
 /**
  * @return Mode for background and foreground colors.
  */
-BackgroundAndForegroundColorsModeEnum::Enum
-CaretPreferences::getBackgroundAndForegroundColorsMode() const
+CaretPreferenceValueSceneOverrideModeEnum::Enum
+CaretPreferences::getBackgroundAndForegroundColorsSceneOverrideMode() const
 {
     return m_colorsMode;
 }
@@ -1069,7 +1154,7 @@ CaretPreferences::getBackgroundAndForegroundColorsMode() const
  *      New colors mode.
  */
 void
-CaretPreferences::setBackgroundAndForegroundColorsMode(const BackgroundAndForegroundColorsModeEnum::Enum colorsMode)
+CaretPreferences::setBackgroundAndForegroundColorsSceneOverrideMode(const CaretPreferenceValueSceneOverrideModeEnum::Enum colorsMode)
 {
     m_colorsMode = colorsMode;
 }
@@ -1166,6 +1251,60 @@ CaretPreferences::setManageFilesViewFileType(const SpecFileDialogViewFilesTypeEn
 }
 
 /**
+ * @return Show histology identification symbols?
+ */
+bool
+CaretPreferences::isShowHistologyIdentificationSymbols() const
+{
+    return this->showHistologyIdentificationSymbols;
+}
+
+/**
+ * Set show media identification symbols.
+ *
+ * @param showSymbols
+ *     New status.
+ */
+void
+CaretPreferences::setShowHistologyIdentificationSymbols(const bool showSymbols)
+{
+    if (this->showHistologyIdentificationSymbols == showSymbols) {
+        return;
+    }
+    
+    this->showHistologyIdentificationSymbols = showSymbols;
+    this->setBoolean(NAME_SHOW_HISTOLOGY_IDENTIFICATION_SYMBOLS,
+                     this->showHistologyIdentificationSymbols);
+}
+
+/**
+ * @return Show media identification symbols?
+ */
+bool
+CaretPreferences::isShowMediaIdentificationSymbols() const
+{
+    return this->showMediaIdentificationSymbols;
+}
+
+/**
+ * Set show media identification symbols.
+ *
+ * @param showSymbols
+ *     New status.
+ */
+void
+CaretPreferences::setShowMediaIdentificationSymbols(const bool showSymbols)
+{
+    if (this->showMediaIdentificationSymbols == showSymbols) {
+        return;
+    }
+    
+    this->showMediaIdentificationSymbols = showSymbols;
+    this->setBoolean(NAME_SHOW_MEDIA_IDENTIFICATION_SYMBOLS,
+                     this->showMediaIdentificationSymbols);
+}
+
+/**
  * @return Show surface identification symbols?
  */
 bool
@@ -1217,6 +1356,26 @@ CaretPreferences::setShowVolumeIdentificationSymbols(const bool showSymbols)
     this->showVolumeIdentificationSymbols = showSymbols;
     this->setBoolean(NAME_SHOW_VOLUME_IDENTIFICATION_SYMBOLS,
                      this->showVolumeIdentificationSymbols);
+}
+
+/**
+ * @return Maximum distance a stereotaxic identification symbol may be for display
+ */
+float
+CaretPreferences::getIdentificationStereotaxicDistance() const
+{
+    return m_identificationStereotaxicDistance->getValue().toFloat();
+}
+
+/**
+ * Set the maximum distance a stereotaxic identification symbol may be for display
+ * @param distance
+ *    The maximum distance.
+ */
+void
+CaretPreferences::setIdentificationStereotaxicDistance(const float distance)
+{
+    m_identificationStereotaxicDistance->setValue(distance);
 }
 
 /**
@@ -1425,6 +1584,30 @@ CaretPreferences::setFileOpenFromOpSysType(const FileOpenFromOpSysTypeEnum::Enum
 }
 
 /**
+ * @return The Display High DPI mode
+ */
+DisplayHighDpiModeEnum::Enum
+CaretPreferences::getDisplayHighDpiMode() const
+{
+    const QString stringValue(m_displayHighDpiModePreference->getValue().toString());
+    bool validFlag(false);
+    const DisplayHighDpiModeEnum::Enum enumValue = DisplayHighDpiModeEnum::fromName(stringValue, &validFlag);
+    return enumValue;
+}
+
+/**
+ * Set the display high dpi mode
+ * @param highDpiMode
+ *    New value for high dpi mode
+ */
+void
+CaretPreferences::setDisplayHighDpiMode(const DisplayHighDpiModeEnum::Enum highDpiMode)
+{
+    const QString stringValue = DisplayHighDpiModeEnum::toName(highDpiMode);
+    m_displayHighDpiModePreference->setValue(stringValue);
+}
+
+/**
  * @return The identification display mode
  */
 IdentificationDisplayModeEnum::Enum
@@ -1524,6 +1707,154 @@ CaretPreferences::setGuiGesturesEnabled(const bool status)
 }
 
 /**
+ * @return True if texture compression is enabled for larger Image Files
+ */
+bool
+CaretPreferences::isImageFileTextureCompressionEnabled() const
+{
+    return m_imageFileTextureCompressionEnabled->getValue().toBool();
+}
+
+/**
+ * Set texture compression is enabled for larger Image Files
+ * @param status
+ *    New status
+ */
+void
+CaretPreferences::setImageFileTextureCompressionEnabled(const bool status)
+{
+    m_imageFileTextureCompressionEnabled->setValue(status);
+}
+
+/**
+ * @return True if cross is displayed at viewport center
+ */
+bool
+CaretPreferences::isCrossAtViewportCenterEnabled() const
+{
+    return m_crossAtViewportCenterEnabled->getValue().toBool();
+}
+
+/**
+ * Set display cross at viewport center
+ * @param status
+ *    New status
+ */
+void
+CaretPreferences::setCrossAtViewportCenterEnabled(const bool status)
+{
+    m_crossAtViewportCenterEnabled->setValue(status);
+}
+
+/**
+ * @retrurn Graphics frames per second enabled
+ */
+bool
+CaretPreferences::isGraphicsFramesPerSecondEnabled() const
+{
+    return m_graphicsFramePerSecondEnabled->getValue().toBool();
+}
+
+/**
+ * Set graphics frames per second enabled
+ *
+ *  @param status
+ *   New enabled status
+ */
+void
+CaretPreferences::setGraphicsFramesPerSecondEnabled(const bool status)
+{
+    m_graphicsFramePerSecondEnabled->setValue(status);
+}
+
+/**
+ * @return The CZI Dimension used when loading CZI high resolution images
+ */
+int32_t
+CaretPreferences::getCziDimension() const
+{
+    return m_cziDimension->getValue().toInt();
+}
+
+/**
+ * Set the CZI Dimension used when loading CZI high resolution images
+ * @param dimension
+ */
+void
+CaretPreferences::setCziDimension(const int32_t dimension)
+{
+    m_cziDimension->setValue(dimension);
+}
+
+/**
+ * @return The volume surface outline separartion
+ */
+float
+CaretPreferences::getVolumeSurfaceOutlineSeparation() const
+{
+    return m_volumeSurfaceOutlineSeparation->getValue().toFloat();
+}
+
+/**
+ * @return True if the scene value is active, else if false, preferences value is active.
+ * @param preferenceValueOut
+ *    Contains the scene value
+ */
+bool
+CaretPreferences::getVolumeSurfaceOutlineSeparationPreferenceValue(float& preferenceValueOut) const
+{
+    preferenceValueOut = m_volumeSurfaceOutlineSeparation->getPreferenceValue().toFloat();
+    return m_volumeSurfaceOutlineSeparation->isPreferenceValueActive();
+}
+
+
+/**
+ * @return True if the scene value is active, else if false, preferences value is active.
+ * @param sceneValueOut
+ *    Contains the scene value
+ */
+bool
+CaretPreferences::getVolumeSurfaceOutlineSeparationSceneValue(float& sceneValueOut) const
+{
+    sceneValueOut = m_volumeSurfaceOutlineSeparation->getSceneValue().toFloat();
+    return m_volumeSurfaceOutlineSeparation->isSceneValueActive();
+}
+
+/**
+ * Set the volume surface outline separartion.  Note: Calling this method turn off use of the scene
+ * value if it is active.
+ * @param separation
+ *    New separation
+ */
+void
+CaretPreferences::setVolumeSurfaceOutlineSeparation(const float separation)
+{
+    m_volumeSurfaceOutlineSeparation->setValue(separation);
+}
+
+/**
+ * Get supported dimensions for CZI images as both integers and text
+ * @param supportedValuesOut
+ *    Output with integer values as first element and text as second element in the pairs
+ */
+void
+CaretPreferences::getSupportedCziDimensions(std::vector<std::pair<int32_t, QString>>& supportedValuesOut)
+{
+    supportedValuesOut.clear();
+    
+    const std::vector<int32_t> dimensions { 512, 1024, 2048, 4096, 8192, 16384 };
+    
+    for (auto dim : dimensions) {
+        QString textValue(QString::number(dim));
+        if (dim == s_defaultCziDimension) {
+            textValue.append(" - Recommended");
+        }
+        supportedValuesOut.push_back(std::make_pair(dim, textValue));
+    }
+}
+
+
+/**
  * @return The crosshair gap
  */
 float
@@ -1569,6 +1900,31 @@ CaretPreferences::setVolumeAxesLabelsDisplayed(const bool displayed)
     this->setBoolean(CaretPreferences::NAME_VOLUME_AXES_LABELS, 
                      this->displayVolumeAxesLabels);
     this->qSettings->sync();
+}
+
+/**
+ * @return Type of coordinate displayed on volume montage slices
+ */
+VolumeMontageCoordinateDisplayTypeEnum::Enum
+CaretPreferences::getVolumeMontageCoordinatesDislayType() const
+{
+    QString stringValue(m_volumeMontageCoordinateDisplayType->getValue().toString());
+    bool validFlag(false);
+    const VolumeMontageCoordinateDisplayTypeEnum::Enum enumValue =
+       VolumeMontageCoordinateDisplayTypeEnum::fromName(stringValue, &validFlag);
+    return enumValue;
+}
+
+/**
+ * Set the type of coordinate displayed on volume montage slices
+ * @param displayType
+ *    Type to display
+ */
+void
+CaretPreferences::setVolumeMontageCoordinateDisplayType(const VolumeMontageCoordinateDisplayTypeEnum::Enum displayType)
+{
+    const QString stringValue = VolumeMontageCoordinateDisplayTypeEnum::toName(displayType);
+    m_volumeMontageCoordinateDisplayType->setValue(stringValue);
 }
 
 
@@ -1775,7 +2131,7 @@ bool CaretPreferences::isVolumeIdentificationDefaultedOn() const
  * Set volume identification defaulted on
  *
  * @param status
- *    New status for yoking on.
+ *    New status for volumne identification on.
  */
 void CaretPreferences::setVolumeIdentificationDefaultedOn(const bool status)
 {
@@ -1786,6 +2142,32 @@ void CaretPreferences::setVolumeIdentificationDefaultedOn(const bool status)
     this->volumeIdentificationDefaultedOn = status;
     this->setBoolean(CaretPreferences::NAME_VOLUME_IDENTIFICATION_DEFAULTED_ON,
                      this->volumeIdentificationDefaultedOn);
+    this->qSettings->sync();
+}
+
+/**
+ * @param Is histology identification defaulted on ?
+ */
+bool CaretPreferences::isHistologyIdentificationDefaultedOn() const
+{
+    return this->histologyIdentificationDefaultedOn;
+}
+
+/**
+ * Set histology identification defaulted on
+ *
+ * @param status
+ *    New status for histology identification  on.
+ */
+void CaretPreferences::setHistologyIdentificationDefaultedOn(const bool status)
+{
+    if (this->histologyIdentificationDefaultedOn == status) {
+        return;
+    }
+    
+    this->histologyIdentificationDefaultedOn = status;
+    this->setBoolean(CaretPreferences::NAME_HISTOLOGY_IDENTIFICATION_DEFAULTED_ON,
+                     this->histologyIdentificationDefaultedOn);
     this->qSettings->sync();
 }
 
@@ -1915,6 +2297,18 @@ CaretPreferences::readPreferences()
                           3);
     userColors.setColorBackgroundSurfaceView(colorRGB);
     
+    userColors.getColorForegroundHistologyView(colorRGB);
+    readUnsignedByteArray(NAME_COLOR_FOREGROUND_HISTOLOGY,
+                          colorRGB,
+                          3);
+    userColors.setColorForegroundHistologyView(colorRGB);
+    
+    userColors.getColorBackgroundHistologyView(colorRGB);
+    readUnsignedByteArray(NAME_COLOR_BACKGROUND_HISTOLOGY,
+                          colorRGB,
+                          3);
+    userColors.setColorBackgroundHistologyView(colorRGB);
+    
     userColors.getColorForegroundMediaView(colorRGB);
     readUnsignedByteArray(NAME_COLOR_FOREGROUND_MEDIA,
                           colorRGB,
@@ -1992,7 +2386,7 @@ CaretPreferences::readPreferences()
     this->loggingLevel = logLevel;
     CaretLogger::getLogger()->setLevel(this->loggingLevel);
     
-    ImageCaptureMethodEnum::Enum defaultCaptureType = ImageCaptureMethodEnum::IMAGE_CAPTURE_WITH_RENDER_PIXMAP;
+    ImageCaptureMethodEnum::Enum defaultCaptureType = ImageCaptureMethodEnum::IMAGE_CAPTURE_WITH_OFFSCREEN_FRAME_BUFFER;
     AString imageCaptureMethodName = this->qSettings->value(NAME_IMAGE_CAPTURE_METHOD,
                                                         ImageCaptureMethodEnum::toName(defaultCaptureType)).toString();
     bool validImageCaptureMethodName = false;
@@ -2048,6 +2442,8 @@ CaretPreferences::readPreferences()
     this->yokingDefaultedOn = this->getBoolean(CaretPreferences::NAME_YOKING_DEFAULT_ON,
                                                true);
     
+    this->histologyIdentificationDefaultedOn = this->getBoolean(CaretPreferences::NAME_HISTOLOGY_IDENTIFICATION_DEFAULTED_ON,
+                                                                true);
     this->volumeIdentificationDefaultedOn = this->getBoolean(CaretPreferences::NAME_VOLUME_IDENTIFICATION_DEFAULTED_ON,
                                                              true);
     
@@ -2061,6 +2457,11 @@ CaretPreferences::readPreferences()
     
     this->balsaUserName = this->getString(NAME_BALSA_USER_NAME);
     
+    this->showHistologyIdentificationSymbols = this->getBoolean(NAME_SHOW_HISTOLOGY_IDENTIFICATION_SYMBOLS,
+                                                                true);
+    
+    this->showMediaIdentificationSymbols = this->getBoolean(NAME_SHOW_MEDIA_IDENTIFICATION_SYMBOLS,
+                                                              true);
     this->showSurfaceIdentificationSymbols = this->getBoolean(NAME_SHOW_SURFACE_IDENTIFICATION_SYMBOLS,
                                                               true);
     this->showVolumeIdentificationSymbols = this->getBoolean(NAME_SHOW_VOLUME_IDENTIFICATION_SYMBOLS,
@@ -3076,5 +3477,83 @@ CaretPreferences::paletteUserCustomRename(const AString& paletteName,
                               paletteXML);
     
     return true;
+}
+
+/**
+ * Get the info about the most recently loaded scenes
+ * @param sceneFileNameOut
+ *    Name of scene file
+ * @param sceneNameOut
+ *    Name of scene
+ * @return
+ *    True if the scene file name and scene name are valid, else false.
+ */
+void
+CaretPreferences::getMostRecentScenes(std::vector<RecentSceneInfoContainer>& recentSceneInfoOut)
+{
+    recentSceneInfoOut.clear();
+    
+    const int32_t numElements(m_mostRecentScenesList->getSize());
+    for (int32_t i = 0; i < numElements; i++) {
+        bool validFlag(false);
+        RecentSceneInfoContainer rsic(m_mostRecentScenesList->getValue(i),
+                                      validFlag);
+        if (validFlag) {
+            recentSceneInfoOut.push_back(rsic);
+        }
+    }
+}
+
+/**
+ * @return True if most recent scenes is enabled
+ */
+bool
+CaretPreferences::isMostRecentScenesEnabled() const
+{
+    return m_mostRecentScenesEnabled->getValue().toBool();
+}
+
+/**
+ * Set most recent scenes enabled
+ * @param status
+ *    New enabled status
+ */
+void
+CaretPreferences::setMostRecentScenesEnabled(const bool status)
+{
+    m_mostRecentScenesEnabled->setValue(status);
+}
+
+/**
+ * Set the most recent scene and the file containing the scene
+ * @param sceneFileName
+ *    Name of scene file
+ * @param sceneName
+ *    Name of scene
+ */
+void
+CaretPreferences::addToMostRecentScenes(const AString& sceneFileName,
+                                        const AString& sceneName)
+{
+    RecentSceneInfoContainer newElement(sceneFileName,
+                                        sceneName);
+    
+    /*
+     * Remove any pre-existing items with the same scene file and scene name
+     * NOTE: Start at end since we may remove multiple
+     * items and the list will shrink.
+     */
+    std::vector<RecentSceneInfoContainer> recentSceneInfo;
+    getMostRecentScenes(recentSceneInfo);
+    const int32_t numElements(recentSceneInfo.size());
+    for (int32_t i (numElements - 1); i >= 0; --i) {
+        if (newElement == recentSceneInfo[i]) {
+            if (m_mostRecentScenesList->removeAt(i)) {
+                /* removed a duplicate */
+            }
+        }
+    }
+
+    m_mostRecentScenesList->pushFront(newElement.toQVariant());
 }
 

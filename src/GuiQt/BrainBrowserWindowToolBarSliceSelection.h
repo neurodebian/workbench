@@ -28,12 +28,16 @@
 class QAction;
 class QCheckBox;
 class QDoubleSpinBox;
+class QMenu;
 class QSpinBox;
+class QToolButton;
 class WuQWidgetObjectGroup;
 
 namespace caret {
 
     class EnumComboBoxTemplate;
+    class VolumeMprSettingsWidget;
+    class VolumeObliqueOptionsWidget;
     
     class BrainBrowserWindowToolBarSliceSelection : public BrainBrowserWindowToolBarComponent {
         Q_OBJECT
@@ -48,6 +52,8 @@ namespace caret {
 
         virtual void receiveEvent(Event* event) override;
 
+        static QPixmap createVolumeIdentificationUpdatesSlicesIcon(const QWidget* widget);
+        
         // ADD_NEW_METHODS_HERE
 
     private slots:
@@ -63,8 +69,12 @@ namespace caret {
         void volumeIndicesZcoordSpinBoxValueChanged(double d);
         void volumeSliceProjectionTypeEnumComboBoxItemActivated();
         void volumeIdentificationToggled(bool value);
-        void obliqueMaskingActionTriggered(bool);
-        
+        void optionsToolButtonClicked();
+        void mprOptionsMenuAboutToShow();
+        void mprOptionsActionTriggered(bool);
+        void obliqueOptionsMenuAboutToShow();
+        void obliqueOptionsActionTriggered(bool);
+
     private:
         BrainBrowserWindowToolBarSliceSelection(const BrainBrowserWindowToolBarSliceSelection&);
 
@@ -75,12 +85,18 @@ namespace caret {
                                                              const int64_t sliceIndex);
         void updateSliceIndicesAndCoordinatesRanges();
         
-        void updateObliqueMaskingButton();
+        void updateOptionsButton();
         
-        QPixmap createVolumeIdentificationUpdatesSlicesIcon(const QWidget* widget);
-        
+        QAction* createMprOptionsAction();
+        QMenu* createMprOptionsMenu();
+        void updateMprOptionsAction();
+        QAction* createObliqueOptionsAction();
+        QMenu* createObliqueOptionsMenu();
+        void updateObliqueOptionsAction();
+
 
         BrainBrowserWindowToolBar* m_parentToolBar;
+        const QString m_objectNamePrefix;
         
         WuQWidgetObjectGroup* m_volumeIndicesWidgetGroup;
         
@@ -94,7 +110,14 @@ namespace caret {
         QDoubleSpinBox* m_volumeIndicesXcoordSpinBox;
         QDoubleSpinBox* m_volumeIndicesYcoordSpinBox;
         QDoubleSpinBox* m_volumeIndicesZcoordSpinBox;
-        QAction* m_obliqueMaskingAction;
+        QToolButton* m_optionsToolButton;
+        bool m_newOptionsToolButtonFlag = true;
+        QAction* m_mprOptionsAction;
+        QMenu* m_mprOptionsMenu;
+        VolumeMprSettingsWidget* m_volumeMprSettingsWidget;
+        QAction* m_obliqueOptionsAction;
+        QMenu* m_obliqueOptionsMenu;
+        VolumeObliqueOptionsWidget* m_obliqueOptionsWidget;
         
         EnumComboBoxTemplate* m_volumeSliceProjectionTypeEnumComboBox;
         // ADD_NEW_MEMBERS_HERE

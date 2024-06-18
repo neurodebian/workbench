@@ -187,6 +187,10 @@ BrainOpenGLChartTwoDrawingFixedPipeline::drawChartOverlaySet(Brain* brain,
             switch (cb->getCoordinateSpace()) {
                 case AnnotationCoordinateSpaceEnum::CHART:
                     break;
+                case AnnotationCoordinateSpaceEnum::HISTOLOGY:
+                    break;
+                case AnnotationCoordinateSpaceEnum::MEDIA_FILE_NAME_AND_PIXEL:
+                    break;
                 case AnnotationCoordinateSpaceEnum::SPACER:
                     break;
                 case AnnotationCoordinateSpaceEnum::STEREOTAXIC:
@@ -483,14 +487,16 @@ BrainOpenGLChartTwoDrawingFixedPipeline::drawHistogramOrLineChart(const ChartTwo
                 GraphicsPrimitive* primitive = matrixChart->getMatrixChartingGraphicsPrimitive(triangleMode,
                                                                                                CiftiMappableDataFile::MatrixGridMode::FILLED_TEXTURE,
                                                                                                chartOverlay->getMatrixOpacity());
-                if (primitive->isValid()) {
-                    BoundingBox boundingBox;
-                    if (primitive->getVertexBounds(boundingBox)) {
-                        matrixChartsToDraw.push_back(MatrixChartDrawingInfo(matrixChart,
-                                                                            primitive,
-                                                                            chartOverlay,
-                                                                            triangleMode,
-                                                                            chartOverlay->getMatrixOpacity()));
+                if (primitive != NULL) {
+                    if (primitive->isValid()) {
+                        BoundingBox boundingBox;
+                        if (primitive->getVertexBounds(boundingBox)) {
+                            matrixChartsToDraw.push_back(MatrixChartDrawingInfo(matrixChart,
+                                                                                primitive,
+                                                                                chartOverlay,
+                                                                                triangleMode,
+                                                                                chartOverlay->getMatrixOpacity()));
+                        }
                     }
                 }
             }
@@ -2029,7 +2035,7 @@ m_tabViewportHeight(tabViewport[3])
         /*
          * If axis is not displayed, use padding with a small percentage of space.
          */
-        const float emptyAxisPaddingPercentage = 1.0f;
+        const float emptyAxisPaddingPercentage = 0.0f;
         switch (axisLocation) {
             case ChartAxisLocationEnum::CHART_AXIS_LOCATION_BOTTOM:
             case ChartAxisLocationEnum::CHART_AXIS_LOCATION_TOP:
@@ -2074,7 +2080,10 @@ m_tabViewportHeight(tabViewport[3])
     /*
      * Padding values are percentages so convert to pixels.
      */
-    const float numericsTicksPaddingPercentage = 1.0f;
+    const float numericsTicksPaddingPercentage((m_axis->isShowTickmarks()
+                                                && m_axis->isNumericsTextDisplayed())
+                                               ? 1.0
+                                               : 0.0);
     m_labelPaddingSizePixels = 0.0f;
     m_numericsTicksPaddingSizePixels = 0.0f;
     switch (axisLocation) {
@@ -2229,6 +2238,11 @@ BrainOpenGLChartTwoDrawingFixedPipeline::AxisDrawingInfo::initializeNumericText(
                                                                                 float& maxWidthOut,
                                                                                 float& maxHeightOut)
 {
+    /*
+     * Note Even if numerics are off, we still need to set the positions of the labels
+     * since these positions are also used for the ticks that may be displayed.
+     */
+    
     maxWidthOut = 0.0f;
     maxHeightOut = 0.0f;
     
@@ -2277,28 +2291,10 @@ BrainOpenGLChartTwoDrawingFixedPipeline::AxisDrawingInfo::initializeNumericText(
                 xyz[0] = scaleValuePositions[i];
                 if (rotateNumericFlag) {
                     horizontalAlignment = AnnotationTextAlignHorizontalEnum::RIGHT;
-//                    if (i == firstIndex) {
-//                        verticalAlignment = AnnotationTextAlignVerticalEnum::TOP;
-//                    }
-//                    else if (i == lastIndex) {
-//                        verticalAlignment = AnnotationTextAlignVerticalEnum::BOTTOM;
-//                    }
-//                    else {
-//                        verticalAlignment = AnnotationTextAlignVerticalEnum::MIDDLE;
-//                    }
                     verticalAlignment = AnnotationTextAlignVerticalEnum::MIDDLE;
                 }
                 else {
                     verticalAlignment = AnnotationTextAlignVerticalEnum::TOP;
-//                    if (i == firstIndex) {
-//                        horizontalAlignment = AnnotationTextAlignHorizontalEnum::LEFT;
-//                    }
-//                    else if (i == lastIndex) {
-//                        horizontalAlignment = AnnotationTextAlignHorizontalEnum::RIGHT;
-//                    }
-//                    else {
-//                        horizontalAlignment = AnnotationTextAlignHorizontalEnum::CENTER;
-//                    }
                     horizontalAlignment = AnnotationTextAlignHorizontalEnum::CENTER;
                 }
                 break;
@@ -2306,28 +2302,10 @@ BrainOpenGLChartTwoDrawingFixedPipeline::AxisDrawingInfo::initializeNumericText(
                 xyz[0] = scaleValuePositions[i];
                 if (rotateNumericFlag) {
                     horizontalAlignment = AnnotationTextAlignHorizontalEnum::LEFT;
-//                    if (i == firstIndex) {
-//                        verticalAlignment = AnnotationTextAlignVerticalEnum::TOP;
-//                    }
-//                    else if (i == lastIndex) {
-//                        verticalAlignment = AnnotationTextAlignVerticalEnum::BOTTOM;
-//                    }
-//                    else {
-//                        verticalAlignment = AnnotationTextAlignVerticalEnum::MIDDLE;
-//                    }
                     verticalAlignment = AnnotationTextAlignVerticalEnum::MIDDLE;
                 }
                 else {
                     verticalAlignment = AnnotationTextAlignVerticalEnum::BOTTOM;
-//                    if (i == firstIndex) {
-//                        horizontalAlignment = AnnotationTextAlignHorizontalEnum::LEFT;
-//                    }
-//                    else if (i == lastIndex) {
-//                        horizontalAlignment = AnnotationTextAlignHorizontalEnum::RIGHT;
-//                    }
-//                    else {
-//                        horizontalAlignment = AnnotationTextAlignHorizontalEnum::CENTER;
-//                    }
                     horizontalAlignment = AnnotationTextAlignHorizontalEnum::CENTER;
                 }
                 break;
@@ -2335,28 +2313,10 @@ BrainOpenGLChartTwoDrawingFixedPipeline::AxisDrawingInfo::initializeNumericText(
                 xyz[1] = scaleValuePositions[i];
                 if (rotateNumericFlag) {
                     verticalAlignment = AnnotationTextAlignVerticalEnum::BOTTOM;
-//                    if (i == firstIndex) {
-//                        horizontalAlignment = AnnotationTextAlignHorizontalEnum::LEFT;
-//                    }
-//                    else if (i == lastIndex) {
-//                        horizontalAlignment = AnnotationTextAlignHorizontalEnum::RIGHT;
-//                    }
-//                    else {
-//                        horizontalAlignment = AnnotationTextAlignHorizontalEnum::CENTER;
-//                    }
                     horizontalAlignment = AnnotationTextAlignHorizontalEnum::CENTER;
                 }
                 else {
                     horizontalAlignment = AnnotationTextAlignHorizontalEnum::RIGHT;
-//                    if (i == firstIndex) {
-//                        verticalAlignment = AnnotationTextAlignVerticalEnum::BOTTOM;
-//                    }
-//                    else if (i == lastIndex) {
-//                        verticalAlignment = AnnotationTextAlignVerticalEnum::TOP;
-//                    }
-//                    else {
-//                        verticalAlignment = AnnotationTextAlignVerticalEnum::MIDDLE;
-//                    }
                     verticalAlignment = AnnotationTextAlignVerticalEnum::MIDDLE;
                 }
                 
@@ -2366,28 +2326,10 @@ BrainOpenGLChartTwoDrawingFixedPipeline::AxisDrawingInfo::initializeNumericText(
                 xyz[1] = scaleValuePositions[i];
                 if (rotateNumericFlag) {
                     verticalAlignment = AnnotationTextAlignVerticalEnum::TOP;
-//                    if (i == firstIndex) {
-//                        horizontalAlignment = AnnotationTextAlignHorizontalEnum::LEFT;
-//                    }
-//                    else if (i == lastIndex) {
-//                        horizontalAlignment = AnnotationTextAlignHorizontalEnum::RIGHT;
-//                    }
-//                    else {
-//                        horizontalAlignment = AnnotationTextAlignHorizontalEnum::CENTER;
-//                    }
                     horizontalAlignment = AnnotationTextAlignHorizontalEnum::CENTER;
                 }
                 else {
                     horizontalAlignment = AnnotationTextAlignHorizontalEnum::LEFT;
-//                    if (i == firstIndex) {
-//                        verticalAlignment = AnnotationTextAlignVerticalEnum::BOTTOM;
-//                    }
-//                    else if (i == lastIndex) {
-//                        verticalAlignment = AnnotationTextAlignVerticalEnum::TOP;
-//                    }
-//                    else {
-//                        verticalAlignment = AnnotationTextAlignVerticalEnum::MIDDLE;
-//                    }
                     verticalAlignment = AnnotationTextAlignVerticalEnum::MIDDLE;
                 }
                 
@@ -2396,19 +2338,21 @@ BrainOpenGLChartTwoDrawingFixedPipeline::AxisDrawingInfo::initializeNumericText(
         text->setHorizontalAlignment(horizontalAlignment);
         text->setVerticalAlignment(verticalAlignment);
 
-        
-        if (showNumericFlag) {
-            text->setText(scaleValuesText[i]);
-        }
-        
         text->getCoordinate()->setXYZ(xyz);
-        
+
         double textWidth = 0.0;
         double textHeight = 0.0;
-        m_textRenderer->getTextWidthHeightInPixels(*text,
-                                                   BrainOpenGLTextRenderInterface::DrawingFlags(),
-                                                   m_tabViewportWidth, m_tabViewportHeight,
-                                                   textWidth, textHeight);
+        if (showNumericFlag) {
+            text->setText(scaleValuesText[i]);
+            m_textRenderer->getTextWidthHeightInPixels(*text,
+                                                       BrainOpenGLTextRenderInterface::DrawingFlags(),
+                                                       m_tabViewportWidth, m_tabViewportHeight,
+                                                       textWidth, textHeight);
+        }
+        else {
+            text->setText("");
+        }
+        
         if (rotateNumericFlag) {
             std::swap(textWidth,
                       textHeight);
@@ -2738,7 +2682,6 @@ BrainOpenGLChartTwoDrawingFixedPipeline::AxisDrawingInfo::drawAxis(BrainOpenGLCh
                     const float halfTextSize(m_axis->isNumericsTextRotated()
                                              ? (textHeight / 2.0)
                                              : (textWidth / 2.0));
-//                    const float halfTextWidth(textWidth / 2.0);
                     const float textRight(textX + halfTextSize);
                     if (textRight > viewportRight) {
                         textX = viewportRight - halfTextSize;

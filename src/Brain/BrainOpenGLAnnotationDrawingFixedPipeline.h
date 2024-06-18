@@ -22,6 +22,7 @@
 /*LICENSE_END*/
 
 #include <memory>
+#include <set>
 #include <stdint.h>
 
 #include "AnnotationCoordinateSpaceEnum.h"
@@ -31,8 +32,11 @@
 #include "BrainOpenGLTextRenderInterface.h"
 #include "CaretObject.h"
 #include "CaretOpenGLInclude.h"
+#include "FileInformation.h"
+#include "HistologySpaceKey.h"
 #include "Plane.h"
 #include "SpacerTabIndex.h"
+#include "Vector3D.h"
 
 
 namespace caret {
@@ -46,8 +50,10 @@ namespace caret {
     class AnnotationImage;
     class AnnotationLine;
     class AnnotationMultiCoordinateShape;
+    class AnnotationMultiPairedCoordinateShape;
     class AnnotationTwoCoordinateShape;
     class AnnotationOval;
+    class AnnotationPolyhedron;
     class AnnotationPolyLine;
     class AnnotationScaleBar;
     class AnnotationText;
@@ -75,6 +81,7 @@ namespace caret {
                    const int32_t tabIndex,
                    const SpacerTabIndex &spacerTabIndex,
                    const WindowDrawingMode windowDrawingMode,
+                   const std::set<AString>& mediaFileNames,
                    const bool annotationUserInputModeFlag,
                    const bool tileTabsManualLayoutUserInputModeFlag)
             : m_brain(brain),
@@ -84,9 +91,18 @@ namespace caret {
             m_tabIndex(tabIndex),
             m_spacerTabIndex(spacerTabIndex),
             m_windowDrawingMode(windowDrawingMode),
+            m_mediaFileNames(mediaFileNames),
             m_annotationUserInputModeFlag(annotationUserInputModeFlag),
             m_tileTabsManualLayoutUserInputModeFlag(tileTabsManualLayoutUserInputModeFlag)
-            { }
+            {
+                for (const auto& name : m_mediaFileNames) {
+                    m_mediaFileNamesNoPath.insert(FileInformation(name).getFileName());
+                }
+            }
+            
+            void setHistologySpaceKey(const HistologySpaceKey& histologySpaceKey) {
+                m_histologySpaceKey = histologySpaceKey;
+            }
             
             Brain* m_brain;
             const BrainOpenGLFixedPipeline::Mode m_drawingMode;
@@ -95,6 +111,9 @@ namespace caret {
             const int32_t m_tabIndex;
             const SpacerTabIndex m_spacerTabIndex;
             const WindowDrawingMode m_windowDrawingMode;
+            HistologySpaceKey m_histologySpaceKey;
+            const std::set<AString> m_mediaFileNames;
+            std::set<AString> m_mediaFileNamesNoPath;
             const bool m_annotationUserInputModeFlag;
             const bool m_tileTabsManualLayoutUserInputModeFlag;
         };
@@ -111,17 +130,64 @@ namespace caret {
                              const Surface* surfaceDisplayed,
                              const float surfaceViewScaling);
 
+        void drawModelSpaceSamplesOnVolumeSlice(Inputs* inputs,
+                                                const Plane& plane,
+                                                const float sliceThickness);
+
         void drawModelSpaceAnnotationsOnVolumeSlice(Inputs* inputs,
                                                     const Plane& plane,
                                                     const float sliceThickness);
         
+        void drawModelSpaceAnnotationsOnHistologySlice(Inputs* inputs,
+                                                       const HistologySlice* histologySlice,
+                                                       const float sliceThickness);
+        
+        void drawModelSpaceSamplesOnHistologySlice(Inputs* inputs,
+                                                   const HistologySlice* histologySlice,
+                                                   const float sliceThickness);
+
         // ADD_NEW_METHODS_HERE
 
         virtual AString toString() const;
         
+        static void drawTabBounds(const float bottomLeft[3],
+                                  const float bottomRight[3],
+                                  const float topRight[3],
+                                  const float topLeft[3],
+                                  uint8_t foregroundRGBA[4]);
+
     private:
         class SelectionInfo {
         public:
+            SelectionInfo(AnnotationFile* annotationFile,
+                          Annotation* annotation,
+                          AnnotationSizingHandleTypeEnum::Enum sizingHandle,
+                          int32_t polyLineCoordinateIndex,
+                          const float windowXYZ[3],
+                          const std::vector<Vector3D>& coordsInWindowXYZ)
+            : SelectionInfo(annotationFile,
+                            annotation,
+                            sizingHandle,
+                            polyLineCoordinateIndex,
+                            windowXYZ) {
+                m_coordsInWindowXYZ = coordsInWindowXYZ;
+                
+                validate();
+            }
+
+            AnnotationFile* m_annotationFile;
+            
+            Annotation* m_annotation;
+            
+            AnnotationSizingHandleTypeEnum::Enum m_sizingHandle;
+            
+            int32_t m_polyLineCoordinateIndex;
+            
+            double m_windowXYZ[3];
+            
+            std::vector<Vector3D> m_coordsInWindowXYZ;
+        
+        private:
             SelectionInfo(AnnotationFile* annotationFile,
                           Annotation* annotation,
                           AnnotationSizingHandleTypeEnum::Enum sizingHandle,
@@ -136,15 +202,8 @@ namespace caret {
                 m_windowXYZ[2]   = windowXYZ[2];
             }
             
-            AnnotationFile* m_annotationFile;
-            
-            Annotation* m_annotation;
-            
-            AnnotationSizingHandleTypeEnum::Enum m_sizingHandle;
-            
-            int32_t m_polyLineCoordinateIndex;
-            
-            double m_windowXYZ[3];
+            bool validate();
+
         };
         
         class ColorBarLine {
@@ -176,11 +235,24 @@ namespace caret {
             bool m_valid = false;
         };
         
+        /**
+         * Type of data drawing
+         */
+        enum class DrawingDataType {
+            /** Invalid */
+            INVALID,
+            /** Annotations */
+            ANNOTATIONS,
+            /** Samples */
+            SAMPLES
+        };
+        
         BrainOpenGLAnnotationDrawingFixedPipeline(const BrainOpenGLAnnotationDrawingFixedPipeline&);
 
         BrainOpenGLAnnotationDrawingFixedPipeline& operator=(const BrainOpenGLAnnotationDrawingFixedPipeline&);
         
-        void drawAnnotationsInternal(const AnnotationCoordinateSpaceEnum::Enum drawingCoordinateSpace,
+        void drawAnnotationsInternal(const DrawingDataType drawingDataType,
+                                     const AnnotationCoordinateSpaceEnum::Enum drawingCoordinateSpace,
                                      std::vector<AnnotationColorBar*>& colorBars,
                                      std::vector<AnnotationScaleBar*>& scaleBars,
                                      std::vector<Annotation*>& viewportAnnotations,
@@ -210,15 +282,15 @@ namespace caret {
                             Annotation* annotation,
                             const Surface* surfaceDisplayed);
         
-        bool drawOneCoordinateAnnotationSurfaceTextureOffset(AnnotationFile* annotationFile,
+        bool drawOneCoordinateAnnotationSurfaceTangentOffset(AnnotationFile* annotationFile,
                                                       AnnotationOneCoordinateShape* annotation,
                                                       const Surface* surfaceDisplayed);
         
-        bool drawTwoCoordinateAnnotationSurfaceTextureOffset(AnnotationFile* annotationFile,
+        bool drawTwoCoordinateAnnotationSurfaceTangentOffset(AnnotationFile* annotationFile,
                                                       AnnotationTwoCoordinateShape* annotation,
                                                       const Surface* surfaceDisplayed);
         
-        bool drawMultiCoordinateAnnotationSurfaceTextureOffset(AnnotationFile* annotationFile,
+        bool drawMultiCoordinateAnnotationSurfaceTangentOffset(AnnotationFile* annotationFile,
                                                    AnnotationMultiCoordinateShape* annotation,
                                                    const Surface* surfaceDisplayed);
         
@@ -250,7 +322,7 @@ namespace caret {
                       AnnotationLine* line,
                       const Surface* surfaceDisplayed);
         
-        bool drawLineSurfaceTextureOffset(AnnotationFile* annotationFile,
+        bool drawLineSurfaceTangentOffset(AnnotationFile* annotationFile,
                                           AnnotationLine* line,
                                           const Surface* surfaceDisplayed,
                                           const float surfaceExtentZ);
@@ -259,15 +331,31 @@ namespace caret {
                       AnnotationOval* oval,
                       const Surface* surfaceDisplayed);
         
-        bool drawPolyLine(AnnotationFile* annotationFile,
-                          AnnotationPolyLine* polyLine,
-                          const Surface* surfaceDisplayed);
+        bool drawMultiPairedCoordinateShape(AnnotationFile* annotationFile,
+                                            AnnotationMultiPairedCoordinateShape* multiPairedCoordShape,
+                                            const Surface* surfaceDisplayed);
+
+        bool drawPolyhedronEdgesOnPlane(AnnotationFile* annotationFile,
+                                        AnnotationPolyhedron* polyhedron,
+                                        const Plane& plane,
+                                        const uint8_t foregroundRGBA[4]);
+
+        void drawPolyhedronName(AnnotationFile* annotationFile,
+                                AnnotationPolyhedron* polyhedron,
+                                const std::vector<Vector3D>& verticesWindowXYZ,
+                                const Vector3D& nameXYZ,
+                                const AnnotationSizingHandleTypeEnum::Enum sizeHandleType,
+                                const bool selectionFlag);
         
-        bool drawPolyLineSurfaceTextureOffset(AnnotationFile* annotationFile,
-                                              AnnotationPolyLine* polyLine,
-                                              const Surface* surfaceDisplayed,
-                                              const float surfaceExtentZ);
+        bool drawMultiCoordinateShape(AnnotationFile* annotationFile,
+                                      AnnotationMultiCoordinateShape* multiCoordShape,
+                                      const Surface* surfaceDisplayed);
         
+        bool drawMultiCoordinateShapeSurfaceTangentOffset(AnnotationFile* annotationFile,
+                                                          AnnotationMultiCoordinateShape* multiCoordShape,
+                                                          const Surface* surfaceDisplayed,
+                                                          const float surfaceExtentZ);
+
         bool drawOvalSurfaceTangentOffset(AnnotationFile* annotationFile,
                                           AnnotationOval* oval,
                                           const float surfaceExtentZ,
@@ -312,31 +400,42 @@ namespace caret {
         void drawSizingHandle(const AnnotationSizingHandleTypeEnum::Enum handleType,
                               AnnotationFile* annotationFile,
                               Annotation* annotation,
+                              const std::vector<Vector3D>& verticesWindowXYZ,
                               const float xyz[3],
                               const float halfWidthHeight,
                               const float rotationAngle,
                               const int32_t polyLineCoordinateIndex);
         
         void drawAnnotationTwoDimShapeSizingHandles(AnnotationFile* annotationFile,
-                                               Annotation* annotation,
-                                               const float bottomLeft[3],
-                                               const float bottomRight[3],
-                                               const float topRight[3],
-                                               const float topLeft[3],
-                                               const float lineThickness,
-                                               const float rotationAngle);
+                                                    Annotation* annotation,
+                                                    const std::vector<Vector3D>& verticesWindowXYZ,
+                                                    const float bottomLeft[3],
+                                                    const float bottomRight[3],
+                                                    const float topRight[3],
+                                                    const float topLeft[3],
+                                                    const float lineThickness,
+                                                    const float rotationAngle);
 
         void drawAnnotationLineSizingHandles(AnnotationFile* annotationFile,
                                                Annotation* annotation,
+                                             const std::vector<Vector3D>& verticesWindowXYZ,
                                                const float firstPoint[3],
                                                const float secondPoint[3],
                                                const float lineThickness);
         
-        void drawAnnotationPolyLineSizingHandles(AnnotationFile* annotationFile,
-                                                 Annotation* annotation,
-                                                 const GraphicsPrimitive* primitive,
-                                                 const float lineThickness);
-        
+        void drawAnnotationMultiCoordShapeSizingHandles(AnnotationFile* annotationFile,
+                                                        AnnotationMultiCoordinateShape* multiCoordShape,
+                                                        const std::vector<Vector3D>& verticesWindowXYZ,
+                                                        const GraphicsPrimitive* primitive,
+                                                        const float lineThickness);
+
+        void drawAnnotationMultiPairedCoordShapeSizingHandles(const AnnotationSizingHandleTypeEnum::Enum sizingHandleType,
+                                                              AnnotationFile* annotationFile,
+                                                              AnnotationMultiPairedCoordinateShape* multiPairedCoordShape,
+                                                              const std::vector<Vector3D>& verticesWindowXYZ,
+                                                              const GraphicsPrimitive* primitive,
+                                                              const float lineThickness);
+
         bool isDrawnWithDepthTesting(const Annotation* annotation,
                                      const Surface* surface);
         
@@ -383,6 +482,10 @@ namespace caret {
                                const float startXYZ[3],
                                float endXYZ[3]) const;
         
+        void setPrimitiveLineWidthInPixels(const Annotation* annotation,
+                                           const Vector3D& windowXY,
+                                           GraphicsPrimitive* primitive) const;
+        
         void convertObsoleteLineWidthPixelsToPercentageWidth(const Annotation* annotation) const;
         
         float getLineWidthFromPercentageHeight(const float percentageHeight) const;
@@ -399,11 +502,19 @@ namespace caret {
         bool isBackFacing(const float xyz[3],
                           const float normal[3]) const;
         
+        float computePolySizeHandleDiameter(const GraphicsPrimitive* primitive) const;
+        
+        float getLineWidthMultiplierForAnnotationBeingDrawn(const Annotation* annotation) const;
+        
+        float getDotsPerInch() const;
+        
         BrainOpenGLFixedPipeline* m_brainOpenGLFixedPipeline;
         
         Inputs* m_inputs;
         
         float m_surfaceViewScaling;
+        
+        bool m_displaySampleNamesFlag = false;
         
         /**
          * Dummy annotation file is used for annotations that 
@@ -411,6 +522,12 @@ namespace caret {
          * "annotation being drawn" and AnnotationColorBar's.
          */
         AnnotationFile* m_dummyAnnotationFile;
+        
+        Annotation* m_annotationBeingDrawn = NULL;
+        
+        float m_annotationBeingDrawnViewportHeight = 0.0;
+        
+        bool m_annotationBeingDrawnIsSelectableFlag = false;
         
         /** Tracks items drawn for selection */
         std::vector<SelectionInfo> m_selectionInfo;
@@ -427,17 +544,29 @@ namespace caret {
         /** OpenGL Viewport */
         GLint m_modelSpaceViewport[4];
         
-        /** volume space plane */
-        Plane m_volumeSpacePlane;
+        /** volume space plane initialized to an invalid plane */
+        Plane m_volumeSpacePlane = Plane();
         
-        /** Validity of volume space plane */
-        bool m_volumeSpacePlaneValid;
+        /** histology slice plane initialized to invalid plane */
+        Plane m_histologySpacePlane = Plane();
         
         /** Thickness of volume slice when drawing annotations on volume slices */
-        float m_volumeSliceThickness;
+        float m_volumeSliceThickness = 0.0;
+        
+        /** Histology slice used when stereotaxic annotations are drawn on histology slice*/
+        const HistologySlice* m_histologySlice = NULL;
+        
+        /** Validity of histology space plane */
+        bool m_histologySpacePlaneValid = false;;
+        
+        /** Thickness of histology slice when drawing annotations on histology slices */
+        float m_histologySliceThickness = 0.0;
         
         /** Color for selection box and sizing handles */
-        uint8_t m_selectionBoxRGBA[4];
+        uint8_t m_foregroundRGBA[4];
+        
+        /** Background color */
+        uint8_t m_backgroundRGBA[4];
         
         float m_lineWidthMinimum = 1.0f;
         
@@ -445,8 +574,13 @@ namespace caret {
         
         std::unique_ptr<EventOpenGLObjectToWindowTransform> m_transformEvent;
         
+        mutable float m_dotsPerInch = -1.0;
+        
+        mutable bool m_triedToGetDotsPerInchFlag = false;
+        
         static const float s_sizingHandleLineWidthInPixels;
         static const float s_selectionLineMinimumPixelWidth;
+        static const float s_polyCoordLastSizeHandleScaleFactor;
         
         // ADD_NEW_MEMBERS_HERE
 
@@ -455,6 +589,7 @@ namespace caret {
 #ifdef __BRAIN_OPEN_G_L_ANNOTATION_DRAWING_FIXED_PIPELINE_DECLARE__
     const float BrainOpenGLAnnotationDrawingFixedPipeline::s_sizingHandleLineWidthInPixels  = 2.0f;
     const float BrainOpenGLAnnotationDrawingFixedPipeline::s_selectionLineMinimumPixelWidth = 5.0f;
+    const float BrainOpenGLAnnotationDrawingFixedPipeline::s_polyCoordLastSizeHandleScaleFactor = 1.5f;
 #endif // __BRAIN_OPEN_G_L_ANNOTATION_DRAWING_FIXED_PIPELINE_DECLARE__
 
 } // namespace

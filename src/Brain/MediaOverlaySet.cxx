@@ -22,16 +22,18 @@
 #include <algorithm>
 #include <deque>
 
-#include <QRegExp>
-
 #define __MEDIA_OVERLAY_SET_DECLARE__
 #include "MediaOverlaySet.h"
 #undef __MEDIA_OVERLAY_SET_DECLARE__
 
+#include "BoundingBox.h"
 #include "CaretAssert.h"
 #include "CaretLogger.h"
+#include "ImageFile.h"
 #include "MediaFile.h"
 #include "EventManager.h"
+#include "EventMapYokingSelectMap.h"
+#include "EventMapYokingValidation.h"
 #include "MediaOverlay.h"
 #include "ModelMedia.h"
 #include "PlainTextStringBuilder.h"
@@ -78,7 +80,8 @@ m_tabIndex(tabIndex)
                           &m_numberOfDisplayedOverlays);
     
     for (int i = 0; i < BrainConstants::MAXIMUM_NUMBER_OF_OVERLAYS; i++) {
-        m_overlays[i] = new MediaOverlay();
+        m_overlays[i] = new MediaOverlay(m_tabIndex,
+                                         i);
     }
     
     initializeOverlays();
@@ -163,6 +166,41 @@ MediaOverlaySet::getOverlay(const int32_t overlayNumber)
 }
 
 /**
+ * @return The bottom-most overlay that is enabled
+ */
+MediaOverlay*
+MediaOverlaySet::getBottomMostEnabledOverlay()
+{
+    MediaOverlay* overlay(NULL);
+    
+    const int32_t numOverlays(getNumberOfDisplayedOverlays());
+    for (int32_t i = 0; i < numOverlays; i++) {
+        MediaOverlay* ov(getOverlay(i));
+        CaretAssert(ov);
+        if (ov->isEnabled()) {
+            overlay = ov;
+        }
+    }
+    return overlay;
+}
+
+/**
+ * @return Media file in bottom most enabled overlay or NULL if none selected.
+ */
+MediaFile*
+MediaOverlaySet::getBottomMostMediaFile()
+{
+    MediaFile* mediaFile(NULL);
+    MediaOverlay* underlay = getBottomMostEnabledOverlay();
+    if (underlay != NULL) {
+        MediaOverlay::SelectionData selectionData(underlay->getSelectionData());
+        mediaFile = selectionData.m_selectedMediaFile;
+    }
+    return mediaFile;
+}
+
+
+/**
  * Get a description of this object's content.
  * @return String describing this object's content.
  */
@@ -201,6 +239,58 @@ MediaOverlaySet::getDescriptionOfContent(PlainTextStringBuilder& descriptionOut)
             descriptionOut.popIndentation();
         }
     }
+}
+
+/**
+ * @return All displayed media files
+ */
+std::vector<MediaFile*>
+MediaOverlaySet::getDisplayedMediaFiles() const
+{
+    std::vector<MediaFile*> mediaFilesOut;
+
+    const int numOverlays = getNumberOfDisplayedOverlays();
+    for (int32_t i = 0; i < numOverlays; i++) {
+        if (getOverlay(i)->isEnabled()) {
+            MediaOverlay::SelectionData selectionData(getOverlay(i)->getSelectionData());
+            MediaFile* mf(selectionData.m_selectedMediaFile);
+            if (mf != NULL) {
+                mediaFilesOut.push_back(mf);
+            }
+        }
+    }
+    
+    return mediaFilesOut;
+}
+
+/**
+ * Get displayed media files and indices of overlays containing the media files
+ * @param mediaFileOut
+ *    Output containing displayed media files
+ * @param overlayIndicesOut
+ *    Output containing overlay indices of displayed media files
+ */
+void
+MediaOverlaySet::getDisplayedMediaFileAndOverlayIndices(std::vector<MediaFile*>& mediaFilesOut,
+                                                        std::vector<int32_t>& overlayIndicesOut) const
+{
+    mediaFilesOut.clear();
+    overlayIndicesOut.clear();
+    
+    const int numOverlays = getNumberOfDisplayedOverlays();
+    for (int32_t i = 0; i < numOverlays; i++) {
+        if (getOverlay(i)->isEnabled()) {
+            MediaOverlay::SelectionData selectionData(getOverlay(i)->getSelectionData());
+
+            MediaFile* mf(selectionData.m_selectedMediaFile);
+            if (mf != NULL) {
+                mediaFilesOut.push_back(mf);
+                overlayIndicesOut.push_back(i);
+            }
+        }
+    }
+    
+    CaretAssert(mediaFilesOut.size() == overlayIndicesOut.size());
 }
 
 
@@ -401,11 +491,9 @@ MediaOverlaySet::getSelectedIndicesForFile(const MediaFile* mediaFile,
         }
         
         if (checkIt) {
-            MediaFile* file;
-            int32_t mapIndex;
-            overlay->getSelectionData(file, mapIndex);
-            if (file == mediaFile) {
-                indicesSet.insert(mapIndex);
+            const MediaOverlay::SelectionData selectionData(overlay->getSelectionData());
+            if (selectionData.m_selectedMediaFile == mediaFile) {
+                indicesSet.insert(selectionData.m_selectedFrameIndex);
             }
         }
     }
@@ -453,7 +541,6 @@ MediaOverlaySet::saveToScene(const SceneAttributes* sceneAttributes,
     m_sceneAssistant->saveMembers(sceneAttributes, 
                                   sceneClass);
     
-//    const int32_t numOverlaysToSave = BrainConstants::MAXIMUM_NUMBER_OF_OVERLAYS;
     const int32_t numOverlaysToSave = getNumberOfDisplayedOverlays();
     
     std::vector<SceneClass*> overlayClassVector;
@@ -510,8 +597,89 @@ MediaOverlaySet::restoreFromScene(const SceneAttributes* sceneAttributes,
  *    An event for which this instance is listening.
  */
 void
-MediaOverlaySet::receiveEvent(Event* /*event*/)
+MediaOverlaySet::receiveEvent(Event* event)
 {
-
+    if (event->getEventType() == EventTypeEnum::EVENT_MAP_YOKING_VALIDATION) {
+        /*
+         * The events intended for overlays are received here so that
+         * only DISPLAYED overlays are updated.
+         */
+        EventMapYokingValidation* mapYokeEvent = dynamic_cast<EventMapYokingValidation*>(event);
+        CaretAssert(mapYokeEvent);
+        
+        const MapYokingGroupEnum::Enum requestedYokingGroup = mapYokeEvent->getMapYokingGroup();
+        if (requestedYokingGroup != MapYokingGroupEnum::MAP_YOKING_GROUP_OFF) {
+            
+            /*
+             * Find all overlays with the requested yoking
+             */
+            const int32_t overlayCount = getNumberOfDisplayedOverlays();
+            for (int32_t j = 0; j < overlayCount; j++) {
+                MediaOverlay* overlay = getOverlay(j);
+                
+                MediaOverlay::SelectionData selectionData(overlay->getSelectionData());
+                if (selectionData.m_selectedMediaFile != NULL) {
+                    mapYokeEvent->addMediaYokedFile(selectionData.m_selectedMediaFile,
+                                                    overlay->getMapYokingGroup(),
+                                                    m_tabIndex);
+                }
+            }
+        }
+        
+        mapYokeEvent->setEventProcessed();
+    }
+    else if (event->getEventType() == EventTypeEnum::EVENT_MAP_YOKING_SELECT_MAP) {
+        /*
+         * The events intended for overlays are received here so that
+         * only DISPLAYED overlays are updated.
+         */
+        EventMapYokingSelectMap* selectMapEvent = dynamic_cast<EventMapYokingSelectMap*>(event);
+        CaretAssert(selectMapEvent);
+        const MapYokingGroupEnum::Enum eventYokingGroup = selectMapEvent->getMapYokingGroup();
+        if (eventYokingGroup != MapYokingGroupEnum::MAP_YOKING_GROUP_OFF) {
+            const int32_t yokingGroupMapIndex = MapYokingGroupEnum::getSelectedMapIndex(eventYokingGroup);
+            const bool yokingGroupSelectedStatus = MapYokingGroupEnum::isEnabled(eventYokingGroup);
+            const MediaFile* eventMediaFile = selectMapEvent->getMediaFile();
+            const MapYokingGroupEnum::MediaAllFramesStatus allFramesStatus(MapYokingGroupEnum::getMediaAllFramesStatus(eventYokingGroup));
+            
+            /*
+             * Find all overlays with the requested yoking
+             */
+            const int32_t overlayCount = getNumberOfDisplayedOverlays();
+            for (int32_t j = 0; j < overlayCount; j++) {
+                MediaOverlay* mediaOverlay = getOverlay(j);
+                
+                if (mediaOverlay->getMapYokingGroup() == selectMapEvent->getMapYokingGroup()) {
+                    MediaOverlay::SelectionData selectionData(mediaOverlay->getSelectionData());
+                    
+                    if (selectionData.m_selectedMediaFile != NULL) {
+                        if (yokingGroupMapIndex < selectionData.m_selectedMediaFile->getNumberOfFrames()) {
+                            mediaOverlay->setSelectionData(selectionData.m_selectedMediaFile,
+                                                           yokingGroupMapIndex);
+                        }
+                        
+                        switch (allFramesStatus) {
+                            case MapYokingGroupEnum::MediaAllFramesStatus::ALL_FRAMES_NO_CHANGE:
+                                break;
+                            case MapYokingGroupEnum::MediaAllFramesStatus::ALL_FRAMES_ON:
+                                mediaOverlay->setCziAllScenesSelected(true);
+                                break;
+                            case MapYokingGroupEnum::MediaAllFramesStatus::ALL_FRAMES_OFF:
+                                mediaOverlay->setCziAllScenesSelected(false);
+                                break;
+                        }
+                        
+                        if (selectionData.m_selectedMediaFile == eventMediaFile) {
+                            /* only alter status if event was sent by mappable file */
+                            if (selectMapEvent->getMediaFile() != NULL) {
+                                mediaOverlay->setEnabled(yokingGroupSelectedStatus);
+                            }
+                        }
+                    }
+                }
+            }
+            
+            selectMapEvent->setEventProcessed();
+        }
+    }
 }
-

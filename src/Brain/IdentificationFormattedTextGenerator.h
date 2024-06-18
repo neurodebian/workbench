@@ -32,13 +32,18 @@ namespace caret {
 
     class Brain;
     class BrowserTabContent;
+    class CaretDataFile;
     class CaretMappableDataFile;
     class ChartDataSource;
     class DataToolTipsManager;
     class Focus;
+    class HistologySlicesFile;
     class HtmlTableBuilder;
     class IdentificationFilter;
+    class IdentificationManager;
+    class IdentificationStringBuilder;
     class MapFileDataSelector;
+    class MediaFile;
     class Overlay;
     class OverlaySet;
     class SelectionItemBorderSurface;
@@ -53,13 +58,14 @@ namespace caret {
     class SelectionItemCiftiConnectivityMatrixRowColumn;
     class SelectionItemChartTimeSeries;
     class SelectionItemFocusSurface;
-    class SelectionItemFocusVolume;
-    class SelectionItemImage;
+    class SelectionItemFocus;
+    class SelectionItemHistologyCoordinate;
+    class SelectionItemMediaLogicalCoordinate;
+    class SelectionItemMediaPlaneCoordinate;
     class SelectionItemSurfaceNode;
     class SelectionItemVoxel;
     class SelectionManager;
     class Surface;
-    class IdentificationStringBuilder;
     
     class IdentificationFormattedTextGenerator : public CaretObject {
         
@@ -86,16 +92,37 @@ namespace caret {
         virtual AString toString() const;
         
     private:
-        std::vector<EventCaretMappableDataFilesAndMapsInDisplayedOverlays::MapFileInfo> getFilesForIdentification(const IdentificationFilter* filter,
-                                                                                                               const int32_t tabIndex) const;
+        class MapFileAndMapIndices {
+        public:
+            MapFileAndMapIndices(CaretDataFile* mapFile);
+            
+            void addMapIndex(const int32_t mapIndex);
+            
+            void addMapIndices(const std::vector<int32_t> mapIndices);
+            
+            void addMapIndices(const std::set<int32_t> mapIndices);
+            
+            CaretDataFile* m_mapFile;
+            
+            std::set<int32_t> m_mapIndices;
+        };
+        
+        void getFilesForIdentification(const IdentificationFilter* filter,
+                                       const int32_t tabIndex,
+                                       std::vector<MapFileAndMapIndices>& mapFilesAndIndicesOut,
+                                       std::vector<MapFileAndMapIndices>& chartFilesAndIndicesOut,
+                                       std::vector<MapFileAndMapIndices>& histologyFilesAndIndicesOut,
+                                       std::vector<MapFileAndMapIndices>& mediaFilesAndIndicesOut) const;
         
         void generateSurfaceToolTip(const Brain* brain,
+                                    const IdentificationManager* idManager,
                                     const BrowserTabContent* browserTab,
                                     const SelectionManager* selectionManager,
                                     const DataToolTipsManager* dataToolTipsManager,
                                     IdentificationStringBuilder& idText) const;
         
-        void generateVolumeToolTip(const BrowserTabContent* browserTab,
+        void generateVolumeToolTip(const IdentificationManager* idManager,
+                                   const BrowserTabContent* browserTab,
                                    const SelectionManager* selectionManager,
                                    const DataToolTipsManager* dataToolTipsManager,
                                    IdentificationStringBuilder& idText) const;
@@ -104,6 +131,18 @@ namespace caret {
                                   const DataToolTipsManager* dataToolTipsManager,
                                   IdentificationStringBuilder& idText) const;
         
+        void generateHistologyPlaneCoordinateToolTip(const IdentificationManager* idManager,
+                                                     const SelectionManager* selectionManager,
+                                                     const DataToolTipsManager* dataToolTipsManager,
+                                                     IdentificationStringBuilder& idText) const;
+        
+        void generateMediaLogicalCoordinateToolTip(const SelectionManager* selectionManager,
+                                                   const DataToolTipsManager* dataToolTipsManager,
+                                                   IdentificationStringBuilder& idText) const;
+
+        void generateMediaPlaneCoordinateToolTip(const SelectionManager* selectionManager,
+                                                   const DataToolTipsManager* dataToolTipsManager,
+                                                   IdentificationStringBuilder& idText) const;
         void generateSurfaceBorderIdentifcationText(HtmlTableBuilder& htmlTableBuilder,
                                                     IdentificationStringBuilder& idText,
                                                     const SelectionItemBorderSurface* idSurfaceBorder,
@@ -113,15 +152,16 @@ namespace caret {
                                                   const SelectionItemFocusSurface* idSurfaceFocus,
                                                   const bool toolTipFlag) const;
         
-        void generateVolumeFocusIdentifcationText(HtmlTableBuilder& htmlTableBuilder,
-                                                  const SelectionItemFocusVolume* idVolumeFocus) const;
+        void generateFocusIdentifcationText(HtmlTableBuilder& htmlTableBuilder,
+                                            IdentificationStringBuilder& idText,
+                                            const SelectionItemFocus* idFocus,
+                                            const bool toolTipFlag) const;
         
         void generateFocusIdentifcationText(HtmlTableBuilder& htmlTableBuilder,
                                             IdentificationStringBuilder& idText,
                                             const Focus* focus,
                                             const int32_t focusIndex,
                                             const int32_t projectionIndex,
-                                            const Surface* surface,
                                             const bool toolTipFlag) const;
         
         void generateSurfaceVertexIdentificationText(HtmlTableBuilder& htmlTableBuilder,
@@ -135,9 +175,23 @@ namespace caret {
                                                    const Brain* brain,
                                                    const SelectionItemSurfaceNode* idSurfaceNode) const;
 
-        void generateImageIdentificationText(HtmlTableBuilder& htmlTableBuilder,
-                                             const SelectionItemImage* idImage) const;
+        void generateHistologyPlaneCoordinateIdentificationText(const IdentificationManager* idManager,
+                                                                HtmlTableBuilder& htmlTableBuilder,
+                                                            IdentificationStringBuilder& idText,
+                                                            const SelectionItemHistologyCoordinate* idHistology) const;
         
+        void generateMediaLogicalCoordinateIdentificationText(HtmlTableBuilder& htmlTableBuilder,
+                                             IdentificationStringBuilder& idText,
+                                             const MediaFile* mediaFile,
+                                             const std::set<int32_t>& frameIndices,
+                                             const SelectionItemMediaLogicalCoordinate* idMedia) const;
+        
+        void generateMediaPlaneCoordinateIdentificationText(HtmlTableBuilder& htmlTableBuilder,
+                                                            IdentificationStringBuilder& idText,
+                                                            const MediaFile* mediaFile,
+                                                            const std::set<int32_t>& frameIndices,
+                                                            const SelectionItemMediaPlaneCoordinate* idMedia) const;
+
         void generateVolumeVoxelIdentificationText(HtmlTableBuilder& htmlTableBuilder,
                                               const Brain* brain,
                                               const SelectionItemVoxel* idVolumeVoxel) const;
@@ -199,9 +253,6 @@ namespace caret {
         void generateChartTimeSeriesIdentificationText(HtmlTableBuilder& htmlTableBuilder,
                                                        const SelectionItemChartTimeSeries* idChartTimeSeries) const;
         
-        void getMapIndicesOfFileUsedInOverlays(const CaretMappableDataFile* caretMappableDataFile,
-                                               std::vector<int32_t>& mapIndicesOut) const;
-        
         void generateChartDataSourceText(HtmlTableBuilder& htmlTableBuilder,
                                          const AString& typeOfChartText,
                                          const ChartDataSource* chartDataSource) const;
@@ -215,13 +266,30 @@ namespace caret {
         
         bool isParcelAndScalarTypeFile(const DataFileTypeEnum::Enum dataFileType) const;
 
+        void addIfColumnTwoNotEmpty(HtmlTableBuilder& htmlTableBuilder,
+                                    const AString& columnOne,
+                                    const AString& columnTwo) const;
+        
+        AString getTextDistanceToMostRecentIdentificationSymbol(const IdentificationManager* idManager,
+                                                                const float selectionXYZ[3]) const;
+        
+        AString xyToText(const float xy[2],
+                         const int32_t precisionDigits = -1) const;
+        
+        AString xyzToText(const float xyz[3],
+                          const int32_t precisionDigits = -1) const;
+        
+        AString dataValueToText(const float value,
+                                const int32_t precisionDigits = -1) const;
+        
         const AString m_noDataText;
         
+        static const int32_t s_dataValueDigitsRightOfDecimal;
         friend class DataToolTipsManager;
     };
     
 #ifdef __IDENTIFICATION_FORMATTED_TEXT_GENERATOR_DECLARE__
-    // <PLACE DECLARATIONS OF STATIC MEMBERS HERE>
+    const int32_t IdentificationFormattedTextGenerator::s_dataValueDigitsRightOfDecimal = 5;
 #endif // __IDENTIFICATION_SIMPLE_TEXT_GENERATOR_DECLARE__
 
 } // namespace

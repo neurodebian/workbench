@@ -122,27 +122,33 @@ namespace caret {
         
         void updateOverlaySettingsEditor();
         
-        const int32_t browserWindowIndex;
+        void resetUserView();
+        
+        const int32_t m_browserWindowIndex;
         
         const int32_t m_overlayIndex;
         
+        const QString m_parentObjectName;
+        
         MediaOverlay* m_mediaOverlay;
         
-        QCheckBox* enabledCheckBox;
+        QCheckBox* m_enabledCheckBox;
         
-        QComboBox* fileComboBox;
+        QComboBox* m_fileComboBox;
         
-        QComboBox* frameNameComboBox;
+        QComboBox* m_frameNameComboBox;
         
         QSpinBox* m_frameIndexSpinBox;
         
-        QDoubleSpinBox* opacityDoubleSpinBox;
+        QDoubleSpinBox* m_opacityDoubleSpinBox;
         
         QToolButton* m_constructionToolButton;
         
-        QAction* constructionAction;
+        QAction* m_constructionAction;
 
-        QAction* settingsAction;
+        QToolButton* m_settingsToolButton;
+        
+        QAction* m_settingsAction;
         
         MapYokingGroupComboBox* m_frameYokingGroupComboBox;
         
@@ -150,10 +156,11 @@ namespace caret {
         
         QAction* m_copyPathAndFileNameToClipboardAction;
         
-        WuQGridLayoutGroup* gridLayoutGroup;
+        WuQGridLayoutGroup* m_gridLayoutGroup;
         
-    friend class OverlaySetViewController;
-        
+        QString m_nameToolTipText;
+
+        static constexpr int32_t s_ALL_FRAMES_IDENTIFIER = -1;
     };
     
 #ifdef __MEDIA_OVERLAY_VIEW_CONTROLLER_DECLARE__

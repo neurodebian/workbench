@@ -18,11 +18,41 @@
  */
 /*LICENSE_END*/
 
+#include <cmath>
+
+#include "CaretLogger.h"
 #include "MathFunctions.h"
 #include "Plane.h"
-
+#include "Vector3D.h"
 
 using namespace caret;
+
+/**
+ * Static method
+ * @return a plane that is in a string created by Plane::toFormattedString()
+ * @ s
+ *    The string
+ * @sealso toFormattedString
+ */
+Plane
+Plane::fromFormattedString(const AString& s)
+{
+    std::vector<float> v;
+    s.toNumbers(s, v);
+    
+    if (v.size() == 8) {
+        if (v[7] != 0.0) {
+            const Vector3D pointOnPlane(v[4], v[5], v[6]);
+            return Plane(v[0], v[1], v[2], v[3],
+                         pointOnPlane);
+        }
+    }
+    
+    CaretLogSevere("ERROR: Unable to decode Plane from string \""
+                   + s
+                   + "\"");
+    return Plane();
+}
 
 /**
  * Construct an invalid plane.
@@ -117,6 +147,41 @@ Plane::Plane(const float unitNormalVector[3],
     m_D = (-m_A * m_pointOnPlane[0]
                -m_B * m_pointOnPlane[1]
                -m_C * m_pointOnPlane[2]);
+
+    m_validPlaneFlag = (MathFunctions::vectorLength(m_normalVector) > 0.0);
+}
+
+/**
+ * Contructor from plane equation and a point on the plane
+ * @param A
+ *   A component of plane equation
+ * @param B
+ *   B component of plane equation
+ * @param C
+ *   C component of plane equation
+ * @param D
+ *   D component of plane equation
+ * @param pointOnPlane
+ *   Point on the plane
+ */
+Plane::Plane(const float A,
+             const float B,
+             const float C,
+             const float D,
+             const float pointOnPlane[3])
+{
+    m_pointOnPlane[0] = pointOnPlane[0];
+    m_pointOnPlane[1] = pointOnPlane[1];
+    m_pointOnPlane[2] = pointOnPlane[2];
+    
+    m_normalVector[0] = A;
+    m_normalVector[1] = B;
+    m_normalVector[2] = C;
+    
+    m_A = A;
+    m_B = B;
+    m_C = C;
+    m_D = D;
 
     m_validPlaneFlag = (MathFunctions::vectorLength(m_normalVector) > 0.0);
 }
@@ -260,6 +325,21 @@ Plane::getPlane(double& aOut,
 }
 
 /**
+ * @return The plane equation (A, B, C, D) in a 4 element std::array
+ */
+std::array<double, 4>
+Plane::getPlaneEquation() const
+{
+    std::array<double, 4> eq {
+        static_cast<float>(m_A),
+        static_cast<float>(m_B),
+        static_cast<float>(m_C),
+        static_cast<float>(m_D)
+    };
+    return eq;
+}
+
+/**
  * Get the plane's normal vector.
  *
  * @param normalVectorOut
@@ -286,6 +366,32 @@ Plane::getNormalVector(float normalVectorOut[3]) const
     normalVectorOut[1] = m_normalVector[1];
     normalVectorOut[2] = m_normalVector[2];
 }
+
+/**
+ * @return The plane's normal vector.
+ */
+Vector3D
+Plane::getNormalVector() const
+{
+    float n[3];
+    getNormalVector(n);
+    return Vector3D(n);
+}
+
+/**
+ * Invert the normal vector (multiple by -1)
+ */
+void
+Plane::invertNormalVector()
+{
+    m_A *= -1.0;
+    m_B *= -1.0;
+    m_C *= -1.0;
+    m_normalVector[0] = m_A;
+    m_normalVector[1] = m_B;
+    m_normalVector[2] = m_C;
+}
+
 
 /**
  * Get absolute distance of point from the plane.
@@ -409,22 +515,39 @@ Plane::projectPointToPlane(const float pointIn[3],
 }
 
 /**
+ * Project the given point to the plane.
+ * @param pointIn
+ *   Point that will be projected.
+ * @return
+ *   Coordinates of point after projection to the plane.
+ */
+Vector3D
+Plane::projectPointToPlane(const float pointIn[3]) const
+{
+    Vector3D pOut;
+    projectPointToPlane(pointIn, pOut);
+    return pOut;
+}
+
+/**
  * Determine if and where a ray intersects the plane.
  *
  * @param rayOrigin
  *     Origin of the ray
  * @param rayVector
  *     Vector defining the ray.
- * @param intersectionXYZandDistance
- *     Coordinate of where the ray intersects the plane (XYZ) and the
- *     distance of the ray origin from the plane.
+ * @param intersectionOutXYZ
+ *     Coordinate of where the ray intersects the plane (XYZ)
+ * @param distanceOut
+ *     Distance of the ray origin from the plane.
  * @return
  *     True if the ray intersects the plane, else false.
  */
 bool
 Plane::rayIntersection(const float rayOrigin[3],
                        const float rayVector[3],
-                       float intersectionXYZandDistance[4])
+                       Vector3D& intersectionOutXYZ,
+                       float& distanceOut) const
 {
     /* Convert the ray into a unit vector
      *
@@ -439,11 +562,11 @@ Plane::rayIntersection(const float rayOrigin[3],
     if (denom != 0) {
         const double t = -(m_A * rayOrigin[0] + m_B * rayOrigin[1] + m_C * rayOrigin[2] + m_D) / denom;
         
-        intersectionXYZandDistance[0] = (float)(rayOrigin[0] + ray[0] * t);
-        intersectionXYZandDistance[1] = (float)(rayOrigin[1] + ray[1] * t);
-        intersectionXYZandDistance[2] = (float)(rayOrigin[2] + ray[2] * t);
+        intersectionOutXYZ[0] = (float)(rayOrigin[0] + ray[0] * t);
+        intersectionOutXYZ[1] = (float)(rayOrigin[1] + ray[1] * t);
+        intersectionOutXYZ[2] = (float)(rayOrigin[2] + ray[2] * t);
         
-        intersectionXYZandDistance[3] = (float)t;
+        distanceOut = (float)t;
         
         return true;
     }
@@ -451,6 +574,16 @@ Plane::rayIntersection(const float rayOrigin[3],
     return false;
 }
 
+/**
+ * Shift the plane by the given distance
+ * @param distance
+ *    Distance to shift the plane
+ */
+void
+Plane::shiftPlane(const float distance)
+{
+    m_D += distance;
+}
 
 /**
  * @return String describing the plane.
@@ -475,6 +608,76 @@ Plane::toString() const
     
     return s;
 }
+
+/**
+ * @return Formatted string for saving
+ * @seealso fromFormattedString
+ */
+AString
+Plane::toFormattedString() const
+{
+    if ( ! isValidPlane()) {
+        return "";
+    }
+    
+    /*
+     * Default vector to all zeros (invalid plane)
+     */
+    std::vector<float> v(8, 0.0);
+    
+    CaretAssertVectorIndex(v, 7);
+    v[0] = m_A;
+    v[1] = m_B;
+    v[2] = m_C;
+    v[3] = m_D;
+    v[4] = m_pointOnPlane[0];
+    v[5] = m_pointOnPlane[1];
+    v[6] = m_pointOnPlane[2];
+    v[7] = (m_validPlaneFlag ? 1.0 : 0.0);
+    
+    const AString separator(" ");
+    const char    floatingPointFormat('f');
+    const int32_t precision(8);
+    const AString s(AString::fromNumbers(v,
+                                         separator,
+                                         floatingPointFormat,
+                                         precision));
+    
+    return s;
+}
+
+/**
+ * Get text representations of ABCD and point on plane
+ * @param abcdOut
+ *    Output with ABCD
+ * @param pointXyzOut
+ *    Output with point on plane
+ * @return True if valid, else false.
+ */
+bool
+Plane::toAbcdAndPointXYZ(AString& abcdOut,
+                         AString& pointXyzOut) const
+{
+    if (isValidPlane()) {
+        abcdOut = ("A="
+                      + AString::number(m_A)
+                      + ", B="
+                      + AString::number(m_B)
+                      +", C="
+                      + AString::number(m_C)
+                      +", D="
+                      + AString::number(m_D));
+        pointXyzOut = ("Point on Plane: "
+                       + AString::fromNumbers(m_pointOnPlane, 3));
+        return true;
+    }
+    
+    abcdOut = "";
+    pointXyzOut   = "";
+    
+    return false;
+}
+
 
 /**
  * Unit test the class.
@@ -535,6 +738,149 @@ Plane::unitTestLineIntersectPlane(std::ostream& stream,
               + sb);
         stream << sb.toStdString() << std::endl;
     }
+}
+
+/**
+ * Are the plane normal vectors orthogonal?
+ * @param normalVectorOne
+ *    Normal vector from first plane
+ * @param normalVectorTwo
+ *    Normal vector from second plane
+ * @param normalVectorThree
+ *    Normal vector from third plane
+ * @param optionalMessageOut
+ *    Optional (if not NULL) message describing non-orthogonal
+ * @return
+ *   True if planes appear to be orthogonal, else false
+ */
+bool
+Plane::arePlanesOrthogonal(const Vector3D& normalVectorOne,
+                           const Vector3D& normalVectorTwo,
+                           const Vector3D& normalVectorThree,
+                           AString* optionalMessageOut)
+{
+    AString errorMessageOut;
+    
+    /*
+     * Note dot product for 90 degrees is -1 or 1
+     */
+    const float tolerance(0.001);
+    const float tolPosZero(tolerance);
+    const float tolNegZero(- tolerance);
+    const float tolPosOne(1.0 - tolerance);
+    const float tolNegOne(-1.0 + tolerance);
+    
+    /*
+     * Dot poduct of zero indicates 90 degree angle between vectors
+     */
+    const float dotOneTwo(normalVectorOne.dot(normalVectorTwo));
+    const float dotOneThree(normalVectorOne.dot(normalVectorThree));
+    const float dotTwoThree(normalVectorTwo.dot(normalVectorThree));
+    if ((dotOneTwo < tolNegZero)
+        || (dotOneTwo > tolPosZero)) {
+        const float angleDegrees(MathFunctions::toDegrees(std::acos(MathFunctions::limitRange(dotOneTwo, -1.0f, 1.0f))));
+        errorMessageOut.appendWithNewLine("Planes one and two are not 90 degrees; dot product="
+                                          + AString::number(dotOneTwo)
+                                          + ", angle="
+                                          + AString::number(angleDegrees)
+                                          + " degrees");
+    }
+
+    if ((dotOneThree < tolNegZero)
+        || (dotOneThree > tolPosZero)) {
+        const float angleDegrees(MathFunctions::toDegrees(std::acos(MathFunctions::limitRange(dotOneThree, -1.0f, 1.0f))));
+        errorMessageOut.appendWithNewLine("Planes one and three are not 90 degrees; dot product="
+                                          + AString::number(dotOneThree)
+                                          + ", angle="
+                                          + AString::number(angleDegrees)
+                                          + " degrees");
+    }
+
+    if ((dotTwoThree < tolNegZero)
+        || (dotTwoThree > tolPosZero)) {
+        const float angleDegrees(MathFunctions::toDegrees(std::acos(MathFunctions::limitRange(dotTwoThree, -1.0f, 1.0f))));
+        errorMessageOut.appendWithNewLine("Planes two and three are not 90 degrees; dot product="
+                                          + AString::number(dotTwoThree)
+                                          + ", angle="
+                                          + AString::number(angleDegrees)
+                                          + " degrees");
+    }
+    
+    if (errorMessageOut.isEmpty()) {
+        const Vector3D vecOneTwo(normalVectorOne.cross(normalVectorTwo));
+        
+        const float dot(vecOneTwo.dot(normalVectorThree));
+        if ((dot > tolPosOne)
+            || (dot < tolNegOne)) {
+            return true;
+        }
+        else {
+            const float angleDegrees(MathFunctions::toDegrees(std::acos(MathFunctions::limitRange(dot, -1.0f, 1.0f))));
+            errorMessageOut.appendWithNewLine("Vector formed by cross product of first two vectors not aligned with third plane, "
+                                              "should be 0 or 180; dot product="
+                                              + AString::number(dot)
+                                              +", angle="
+                                              + AString::number(angleDegrees)
+                                              + " degrees.");
+        }
+    }
+
+    if (optionalMessageOut != NULL) {
+        *optionalMessageOut = errorMessageOut;
+    }
+    return false;
+}
+
+/**
+ * @return Angle in degrees formed by the normal vectors of the two planes
+ * @param p1
+ *    First plane
+ * @param p2
+ *    Second plane
+ * @param optionalValidFlagOut
+ *    If not NULL, will indicate returned value is valid
+ */
+float
+Plane::angleDegreesOfPlaneNormalVectors(const Plane& p1,
+                                        const Plane& p2,
+                                        bool* optionalValidFlagOut)
+{
+    if (optionalValidFlagOut != NULL) {
+        *optionalValidFlagOut = false;
+    }
+
+    bool validPlanesFlag(true);
+    if ( ! p1.isValidPlane()) {
+        if (optionalValidFlagOut == NULL) {
+            CaretLogSevere("Program error: Plane p1 is invalid.");
+        }
+        validPlanesFlag = false;
+    }
+    if ( ! p2.isValidPlane()) {
+        if (optionalValidFlagOut == NULL) {
+            CaretLogSevere("Program error: Plane p2 is invalid.");
+        }
+        validPlanesFlag = false;
+    }
+    
+    if ( ! validPlanesFlag) {
+        return 0.0;
+    }
+    
+    const Vector3D n1(p1.getNormalVector());
+    const Vector3D n2(p2.getNormalVector());
+    float dot(n1.dot(n2));
+    if (dot <= -1.0) {
+        dot = -1.0;
+    }
+    else if (dot >= 1.0) {
+        dot = 1.0;
+    }
+    const float angle(MathFunctions::toDegrees(std::acos(dot)));
+    if (optionalValidFlagOut != NULL) {
+        *optionalValidFlagOut = true;
+    }
+    return angle;
 }
 
 void

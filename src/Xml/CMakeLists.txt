@@ -6,22 +6,29 @@ PROJECT (Xml)
 #
 # QT include files
 #
+if(Qt6_FOUND)
+    include_directories(${Qt6Core_INCLUDE_DIRS})
+    include_directories(${Qt6Core5Compat_INCLUDE_DIRS})
+    include_directories(${Qt6Network_INCLUDE_DIRS})
+    include_directories(${Qt6Xml_INCLUDE_DIRS})
+endif()
 if(Qt5_FOUND)
     include_directories(${Qt5Core_INCLUDE_DIRS})
     include_directories(${Qt5Network_INCLUDE_DIRS})
     include_directories(${Qt5Xml_INCLUDE_DIRS})
 endif()
-IF (QT4_FOUND)
-    SET(QT_USE_QTXML TRUE)
-    SET(QT_DONT_USE_QTGUI TRUE)
-    SET(QT_USE_QTNETWORK TRUE)
-    INCLUDE(${QT_USE_FILE})
-ENDIF ()
 
 #
 # Create a Library
 #
 ADD_LIBRARY(Xml
+GiftiException.h
+GiftiMetaData.h
+GiftiMetaDataElementDataTypeEnum.h
+GiftiMetaDataValidatorInterface.h
+GiftiMetaDataXmlElements.h
+GiftiXmlElements.h
+
 XmlAttributes.h
 XmlException.h
 XmlSaxParser.h
@@ -31,6 +38,11 @@ XmlSaxParserWithQt.h
 XmlUnexpectedElementSaxParser.h
 XmlUtilities.h
 XmlWriter.h
+
+GiftiException.cxx
+GiftiMetaData.cxx
+GiftiMetaDataElementDataTypeEnum.cxx
+GiftiXmlElements.cxx
 
 XmlAttributes.cxx
 XmlException.cxx

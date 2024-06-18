@@ -42,6 +42,7 @@
 #include "ProgramParameters.h"
 #include "Scene.h"
 #include "SceneFile.h"
+#include "SceneInfo.h"
 
 using namespace caret;
 
@@ -868,6 +869,211 @@ BalsaDatabaseManager::updateSceneIDs(SceneFile* sceneFile,
     return true;
 }
 
+/**
+ * Check scene IDs
+ * @param sceneFile
+ *    The scene file
+ * @param errorMessageOut
+ *    Output error message
+ * @return
+ *    True if successful, else false.
+ */
+bool
+BalsaDatabaseManager::checkSceneIDs(SceneFile* sceneFile,
+                                    AString& errorMessageOut)
+{
+    CaretAssert(sceneFile);
+    errorMessageOut.clear();
+
+    const AString studyID(sceneFile->getBalsaStudyID());
+    if (studyID.isEmpty()) {
+        errorMessageOut = "Study ID is invalid (empty)";
+        return false;
+    }
+    
+    AString sceneIdList;
+    const int32_t numScenes(sceneFile->getNumberOfScenes());
+    for (int32_t i = 0; i < numScenes; i++) {
+        const Scene* scene(sceneFile->getSceneAtIndex(i));
+        CaretAssert(scene);
+        const AString sceneID(scene->getBalsaSceneID());
+        if ( ! sceneID.isEmpty()) {
+            if ( ! sceneIdList.isEmpty()) {
+                sceneIdList.append(",");
+            }
+            sceneIdList.append(sceneID);
+        }
+    }
+    if (sceneIdList.isEmpty()) {
+        /*
+         * There are no scene IDs and that is OK
+         */
+        return true;
+    }
+    
+    const AString checkURL(m_databaseURL
+                           + "/study/checkScenes/"
+                           + studyID
+                           + "?sceneList="
+                           + sceneIdList);
+    if (m_debugFlag) {
+        std::cout << "Check Scenes URL: " << checkURL << std::endl;
+    }
+
+    errorMessageOut.clear();
+    
+    CaretHttpRequest caretRequest;
+    caretRequest.m_method = CaretHttpManager::POST_ARGUMENTS;
+    caretRequest.m_url    = checkURL;
+    caretRequest.m_headers.insert(std::make_pair("Content-Type",
+                                                 "application/x-www-form-urlencoded"));
+    caretRequest.m_headers.insert(std::make_pair("Cookie",
+                                                 getJSessionIdCookie()));
+    caretRequest.m_arguments.push_back(std::make_pair("type",
+                                                      "json"));
+    
+    CaretHttpResponse response;
+    CaretHttpManager::httpRequest(caretRequest, response);
+    
+    if (m_debugFlag) {
+        std::cout << "Check Scene IDs response Code: " << response.m_responseCode << std::endl;
+    }
+    
+    if (response.m_responseCode != 200) {
+        errorMessageOut = ("Check Scene IDs failed with HTTP code="
+                           + AString::number(response.m_responseCode)
+                           + ".  This error may be caused by failure to agree to data use terms.  ");
+        errorMessageOut.appendWithNewLine(response.m_errorMessage);
+        return false;
+    }
+    
+    response.m_body.push_back('\0');
+    const AString responseContent(&response.m_body[0]);
+    if (m_debugFlag) {
+        std::cout << "Check Scene IDs body:\n" << responseContent << std::endl << std::endl;
+    }
+
+    if ( ! processCheckSceneIdResponse(sceneFile,
+                                       responseContent,
+                                       errorMessageOut)) {
+        return false;
+    }
+    
+    
+    return true;
+}
+
+/**
+ * Process the content from checking scene IDs
+ * @param sceneFile
+ *    The scene file
+ * @param responseContent
+ *    The content
+ * @param errorMessageOut
+ *    Output error message
+ * @return
+ *    True if successful, else false.
+ */
+bool
+BalsaDatabaseManager::processCheckSceneIdResponse(SceneFile* sceneFile,
+                                                  const AString& responseContent,
+                                                  AString& errorMessageOut)
+{
+    QJsonParseError jsonError;
+    QJsonDocument jsonDocument = QJsonDocument::fromJson(responseContent.toUtf8(),
+                                                         &jsonError);
+    if (jsonDocument.isNull()) {
+        errorMessageOut = ("Checking Scene IDs failed.  Failed to parse JSON, error:"
+                           + jsonError.errorString()
+                           + " Offset="
+                           + AString::number(jsonError.offset)
+                           + "\n"
+                           + responseContent);
+        return false;
+    }
+    
+    QByteArray json = jsonDocument.toJson();
+    if ( ! jsonDocument.isObject()) {
+        errorMessageOut  = ("Checking Scene IDs failed.  JSON content is not an object."
+                           "  \n"
+                            + responseContent);
+        return false;
+    }
+
+    bool validFlag(false);
+    bool saveSceneFileFlag(false);
+    
+    const QJsonObject object(jsonDocument.object());
+    const QStringList keys(object.keys());
+
+    AString updatedSceneNames;
+    
+    const QString badSceneIdsName("badSceneIds");
+    const QString newSceneIdsName("newSceneIds");
+    if (object.contains(badSceneIdsName) && object.value(badSceneIdsName).isArray()) {
+        if (object.contains(newSceneIdsName) && object.value(newSceneIdsName).isArray()) {
+            const QJsonArray badSceneIdsArray(object.value(badSceneIdsName).toArray());
+            const QJsonArray newSceneIdsArray(object.value(newSceneIdsName).toArray());
+            const int32_t numIDs(badSceneIdsArray.count());
+            
+            if (numIDs == newSceneIdsArray.count()) {
+                /*
+                 * If both arrays contain zero elements, all scene
+                 * IDs are valid
+                 */
+                if (numIDs == 0) {
+                    return true;
+                }
+
+                validFlag = true;
+                for (int32_t i = 0; i < numIDs; i++) {
+                    if (badSceneIdsArray.at(i).isString()
+                        && (newSceneIdsArray.at(i).isString())) {
+                        const AString badSceneID(badSceneIdsArray.at(i).toString());
+                        Scene* scene(sceneFile->getSceneWithSceneID(badSceneID));
+                        if (scene != NULL) {
+                            const AString newSceneID(newSceneIdsArray.at(i).toString());
+                            scene->getSceneInfo()->setBalsaSceneID(newSceneID);
+                            saveSceneFileFlag = true;
+                            
+                            updatedSceneNames.appendWithNewLine("   " + scene->getName());
+                        }
+                        else {
+                            errorMessageOut = ("Program Error: Scene not found with bad Scene ID: "
+                                               + badSceneID);
+                            return false;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (validFlag) {
+        if (saveSceneFileFlag) {
+            try {
+                sceneFile->writeFile(sceneFile->getFileName());
+                
+                if ( ! updatedSceneNames.isEmpty()) {
+                    m_infoMessages.appendWithNewLine("These scenes had their Scene IDs replaced (IDs used by other scenes in BALSA):");
+                    m_infoMessages.appendWithNewLine(updatedSceneNames);
+                }
+            }
+            catch (const DataFileException& dfe) {
+                errorMessageOut = ("Error writing scene file after replacing bad Scene IDs: "
+                                   + dfe.whatString());
+                return false;
+            }
+        }
+    }
+    
+    if ( ! validFlag) {
+        errorMessageOut = ("Response from BALSA for replacing Bad Scene IDs invalid: "
+                           + responseContent);
+    }
+    
+    return validFlag;
+}
 
 /**
  * Request the given number of scene IDs
@@ -943,15 +1149,21 @@ BalsaDatabaseManager::getSceneIDs(const int32_t numberOfSceneIDs,
          * Response from BALSA has Scene IDs separated by '<br>'
          * Example: vp5B<br>Z02A<BR>
          */
+#if QT_VERSION >= 0x060000
+        QStringList sl = responseContent.split("<br>",
+                                               Qt::SkipEmptyParts,
+                                               Qt::CaseInsensitive);
+#else
         QStringList sl = responseContent.split("<br>",
                                                QString::SkipEmptyParts,
                                                Qt::CaseInsensitive);
+#endif
         const int32_t receivedCount = sl.count();
         if (receivedCount != numberOfSceneIDs) {
             errorMessageOut = ("Requested "
                                + AString::number(numberOfSceneIDs)
                                + " but received "
-                               + receivedCount
+                               + AString::number(receivedCount)
                                + " IDs");
             return false;
         }
@@ -1520,6 +1732,7 @@ BalsaDatabaseManager::uploadZippedSceneFile(SceneFile* sceneFile,
                                             AString& errorMessageOut)
 {
     errorMessageOut.clear();
+    m_infoMessages.clear();
     
     /*
      * Check for errors
@@ -1557,6 +1770,7 @@ BalsaDatabaseManager::uploadZippedSceneFile(SceneFile* sceneFile,
     enum ProgressEnum {
         PROGRESS_NONE,
         PROGRESS_LOGIN,
+        PROGRESS_CHECK_SCENE_IDS,
         PROGRESS_ZIPPING,
         PROGRESS_UPLOAD,
         PROGRESS_PROCESS_UPLOAD,
@@ -1568,6 +1782,14 @@ BalsaDatabaseManager::uploadZippedSceneFile(SceneFile* sceneFile,
                                        PROGRESS_LOGIN,
                                        "Logging in...");
     EventManager::get()->sendEvent(progressUpdate.getPointer());
+    
+    
+    progressUpdate.setProgress(PROGRESS_CHECK_SCENE_IDS, "Checking Scene IDs");
+    EventManager::get()->sendEvent(progressUpdate.getPointer());
+    if ( ! checkSceneIDs(sceneFile,
+                         errorMessageOut)) {
+        return false;
+    }
     
     progressUpdate.setProgress(PROGRESS_ZIPPING, "Zipping Scene and Data Files");
     EventManager::get()->sendEvent(progressUpdate.getPointer());
@@ -1771,3 +1993,11 @@ BalsaDatabaseManager::SceneFileIdentifiers::getErrorMessage() const
     return m_errorMessage;
 }
 
+/**
+ * @return Information messages from uploading
+ */
+AString
+BalsaDatabaseManager::getInfoMessages() const
+{
+    return m_infoMessages;
+}

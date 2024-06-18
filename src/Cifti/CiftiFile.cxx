@@ -18,6 +18,7 @@
  */
 /*LICENSE_END*/
 
+#include <QRegularExpression>
 #include "CiftiFile.h"
 
 #include "ByteOrderEnum.h"
@@ -274,7 +275,7 @@ void CiftiFile::setCiftiXML(const CiftiXML& xml, const bool useOldMetadata)
     {
         if (xmlDims[i] < 1) throw DataFileException("cifti xml dimensions must be greater than zero");
     }
-    m_readingImpl.grabNew(NULL);//drop old implementation, as it is now invalid due to XML (and therefore matrix size) change
+    m_readingImpl.grabNew(NULL);//drop old matrix/file, as it is now invalid due to XML (and therefore matrix size) change
     m_writingImpl.grabNew(NULL);
     if (useOldMetadata)
     {
@@ -295,6 +296,7 @@ void CiftiFile::setCiftiXML(const CiftiXML& xml, const bool useOldMetadata)
     } else {
         m_xml = xml;
     }
+    m_xml.clearMutablesModified(); //IO logic uses modified status, so ensure it starts unmodified
     m_dims = xmlDims;
     m_xmlBroken = false;
 }
@@ -410,6 +412,7 @@ void CiftiFile::verifyWriteImpl()
         }
         m_writingImpl.grabNew(new CiftiOnDiskImpl(m_writingFile, m_xml, m_onDiskVersion, shouldSwap(m_endianPref),
                                                   m_writingDataType, m_doWriteScaling, m_minScalingVal, m_maxScalingVal));//this constructor makes new file for writing
+        m_xml.clearMutablesModified(); //we just wrote this version of the xml, so mark it as not modified
         if (m_readingImpl != NULL)
         {
             copyImplData(m_readingImpl, m_writingImpl, m_dims);
@@ -420,12 +423,19 @@ void CiftiFile::verifyWriteImpl()
 
 void CiftiFile::copyImplData(const ReadImplInterface* from, WriteImplInterface* to, const vector<int64_t>& dims)
 {
-    vector<int64_t> iterateDims(dims.begin() + 1, dims.end());
-    vector<float> scratchRow(dims[0]);
-    for (MultiDimIterator<int64_t> iter(iterateDims); !iter.atEnd(); ++iter)
+    if (dims.size() == 2 && dims[0] == 1)
     {
-        from->getRow(scratchRow.data(), *iter, false);
-        to->setRow(scratchRow.data(), *iter);
+        vector<float> scratchCol(dims[1]); //column is fast for the special case of only 1 column
+        from->getColumn(scratchCol.data(), 0);
+        to->setColumn(scratchCol.data(), 0);
+    } else {
+        vector<int64_t> iterateDims(dims.begin() + 1, dims.end());
+        vector<float> scratchRow(dims[0]);
+        for (MultiDimIterator<int64_t> iter(iterateDims); !iter.atEnd(); ++iter)
+        {
+            from->getRow(scratchRow.data(), *iter, false);
+            to->setRow(scratchRow.data(), *iter);
+        }
     }
 }
 
@@ -496,7 +506,16 @@ CiftiOnDiskImpl::CiftiOnDiskImpl(const QString& filename)
         }
     }
     if (whichExt == -1) throw DataFileException("no cifti extension found in file '" + filename + "'");
-    m_xml.readXML(QByteArray(myHeader.m_extensions[whichExt]->m_bytes.data(), myHeader.m_extensions[whichExt]->m_bytes.size()));//CiftiXML should be under 2GB
+    try
+    {
+        m_xml.readXML(QByteArray(myHeader.m_extensions[whichExt]->m_bytes.data(), myHeader.m_extensions[whichExt]->m_bytes.size()));//CiftiXML should be under 2GB
+    } catch (CaretException& e) {
+        throw DataFileException("XML parsing error in cifti file '" + filename + "': " + e.whatString());
+    } catch (exception& e) {//use a different message for std::exception, as this probably isn't from our code
+        throw DataFileException("error while parsing XML in cifti file '" + filename + "': " + e.what());
+    } catch (...) {
+        throw DataFileException("unknown error while parsing XML in cifti file '" + filename + "'");
+    }
     vector<int64_t> dimCheck = m_nifti.getDimensions();
     if (dimCheck.size() < 5)
     {
@@ -553,12 +572,12 @@ namespace
                 CaretAssert(0);//yes, let it fall through to "unknown" in release so that it at least looks for .nii
                 //-fallthrough
             case 3000://unknown
-                if (!filename.contains(QRegExp("\\.[^.]*\\.nii$")))
+                if (!filename.contains(QRegularExpression("\\.[^.]*\\.nii$")))
                 {
                     CaretLogWarning("cifti file of nonstandard mapping combination '" + filename + "' should be saved ending in .<something>.nii, "
                                     + "but not an already used extension (don't use dtseries, dscalar, etc).");
                 }
-                if (filename.contains(QRegExp("\\.(dconn|dtseries|pconn|ptseries|dscalar|dfan|fiberTEMP|dlabel|pscalar|pdconn|dpconn|pconnseries|pconnscalar)\\.nii$")))
+                if (filename.contains(QRegularExpression("\\.(dconn|dtseries|pconn|ptseries|dscalar|dfan|fiberTEMP|dlabel|pscalar|pdconn|dpconn|pconnseries|pconnscalar)\\.nii$")))
                 {
                     CaretLogWarning("cifti file of nonstandard mapping combination '" + filename + "' should NOT be saved using an already-used cifti extension, "
                                     + "please choose a different, reasonable cifti extension of the form .<something>.nii");
@@ -701,14 +720,19 @@ void CiftiOnDiskImpl::getColumn(float* dataOut, const int64_t& index) const
 {
     CaretAssert(m_matrixDims.size() == 2);//otherwise this shouldn't be called
     CaretAssert(index >= 0 && index < m_matrixDims[0]);
-    CaretLogFine("getColumn called on CiftiOnDiskImpl, this will be slow");//generate logging messages at a low priority
-    vector<int64_t> indexSelect(2);
-    indexSelect[0] = index;
-    int64_t colLength = m_matrixDims[1];
-    for (int64_t i = 0; i < colLength; ++i)//assume if they really want getColumn on disk, they don't want their pagecache obliterated, so read it 1 element at a time
+    if (m_matrixDims[0] > 1)
     {
-        indexSelect[1] = i;
-        m_nifti.readData(dataOut + i, 4, indexSelect);//4 means just the 4 reserved dimensions, so 1 element of the matrix
+        CaretLogFine("getColumn called on CiftiOnDiskImpl with multiple columns, this will be slow");//generate logging messages at a low priority
+        vector<int64_t> indexSelect(2);
+        indexSelect[0] = index;
+        int64_t colLength = m_matrixDims[1];
+        for (int64_t i = 0; i < colLength; ++i)//assume if they really want getColumn on disk, they don't want their pagecache obliterated, so read it 1 element at a time
+        {
+            indexSelect[1] = i;
+            m_nifti.readData(dataOut + i, 4, indexSelect);//4 means just the 4 reserved dimensions, so 1 element of the matrix
+        }
+    } else {//special case for single-column cifti
+        m_nifti.readData(dataOut, 6, vector<int64_t>());
     }
 }
 
@@ -747,6 +771,8 @@ void CiftiXnatImpl::init(const QString& url)
 {
     m_baseRequest.m_url = url;
     m_baseRequest.m_method = CaretHttpManager::POST_ARGUMENTS;
+    m_baseRequest.m_timeoutMilliseconds = (30 * 1000);
+    
     int32_t start = url.indexOf('?');
     bool foundSearchID = false;
     bool foundResource = false;

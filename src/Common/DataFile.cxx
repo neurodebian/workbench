@@ -128,6 +128,16 @@ DataFile::getFileNameNoPath() const
 }
 
 /**
+ * @return Name of path excluding file name..
+ */
+AString
+DataFile::getFilePath() const
+{
+    FileInformation fileInfo(m_filename);
+    return fileInfo.getAbsolutePath();
+}
+
+/**
  * Set the name of the data file.
  * This method is virtual so NEVER call it from
  * a constructor.  Instead, use setFileNameProtected().
@@ -413,4 +423,17 @@ DataFile::getLastModifiedTime() const
     return lastModTime;
 }
 
-
+/**
+ * @return Names (path and filename ) of all child data files of this file.
+ * Child data files are "files loaded by a parent file" and not explicitly loaded
+ * by the user.  Child data files are not stored in the 'Brain' (although the parent file
+ * may be in the 'Brain'.  This method is typically used when zipping a scene.
+ * This method should be overridden by data files (such as the CZI Meta File)
+ * that contain child data files.
+ */
+std::vector<AString>
+DataFile::getChildDataFilePathNames() const
+{
+    std::vector<AString> childDataFilePathNames;
+    return childDataFilePathNames;
+}

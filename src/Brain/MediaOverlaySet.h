@@ -50,6 +50,8 @@ namespace caret {
         
         MediaOverlay* getUnderlay();
         
+        MediaOverlay* getBottomMostEnabledOverlay();
+        
         MediaOverlay* getOverlay(const int32_t overlayNumber);
         
         const MediaOverlay* getOverlay(const int32_t overlayNumber) const;
@@ -72,11 +74,18 @@ namespace caret {
         
         void initializeOverlays();
         
+        MediaFile* getBottomMostMediaFile();
+        
         void getSelectedIndicesForFile(const MediaFile* MediaFile,
                                     const bool isLimitToEnabledOverlays,
                                     std::vector<int32_t>& selectedIndicesOut) const;
         
         void resetOverlayYokingToOff();
+        
+        std::vector<MediaFile*> getDisplayedMediaFiles() const;
+        
+        void getDisplayedMediaFileAndOverlayIndices(std::vector<MediaFile*>& mediaFilesOut,
+                                                    std::vector<int32_t>& overlayIndicesOut) const;
         
         virtual SceneClass* saveToScene(const SceneAttributes* sceneAttributes,
                                         const AString& instanceName);
@@ -95,15 +104,6 @@ namespace caret {
         MediaOverlaySet& operator=(const MediaOverlaySet&);
         
         MediaOverlay* m_overlays[BrainConstants::MAXIMUM_NUMBER_OF_OVERLAYS];
-        
-//        bool findFilesWithMapNamed(std::vector<CaretMappableDataFile*>& matchedFilesOut,
-//                                   std::vector<int32_t>& matchedFileIndicesOut,
-//                                   const std::vector<StructureEnum::Enum>& matchToStructures,
-//                                   const DataFileTypeEnum::Enum dataFileType,
-//                                   const bool matchToVolumeData,
-//                                   const AString& matchToNamesRegularExpressionText,
-//                                   const bool matchToNamesRegularExpressionResult,
-//                                   const bool matchOneFilePerStructure);
         
         AString m_name;
         

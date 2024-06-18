@@ -3,13 +3,13 @@
 #
 PROJECT(Quazip)
 
+IF(Qt6_FOUND)
+    include_directories(${Qt6Core_INCLUDE_DIRS})
+    include_directories(${Qt6Core5Compat_INCLUDE_DIRS})
+ENDIF()
 IF(Qt5_FOUND)
     include_directories(${Qt5Core_INCLUDE_DIRS})
 ENDIF()
-IF (QT4_FOUND)
-    SET(QT_DONT_USE_QTGUI TRUE)
-    INCLUDE(${QT_USE_FILE})
-ENDIF ()
 
 #
 # With AUTOMOC, do not need to specify files
@@ -26,9 +26,9 @@ ELSE()
     IF(Qt5_FOUND)
         QT5_WRAP_CPP(MOC_SOURCE_FILES ${MOC_INPUT_HEADER_FILES})
     ENDIF()
-    IF (QT4_FOUND)
-        QT4_WRAP_CPP(MOC_SOURCE_FILES ${MOC_INPUT_HEADER_FILES})
-    ENDIF ()
+    IF(Qt6_FOUND)
+        QT6_WRAP_CPP(MOC_SOURCE_FILES ${MOC_INPUT_HEADER_FILES})
+    ENDIF()
 ENDIF()
 
 #

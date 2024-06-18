@@ -33,6 +33,8 @@
 #include "FiberOrientationColoringTypeEnum.h"
 #include "FiberOrientationSymbolTypeEnum.h"
 #include "FiberTrajectoryColorModel.h"
+#include "GraphicsRegionSelectionBox.h"
+#include "HistologySpaceKey.h"
 #include "ProjectionViewTypeEnum.h"
 #include "SelectionItemDataTypeEnum.h"
 #include "StructureEnum.h"
@@ -63,11 +65,14 @@ namespace caret {
     class FiberOrientation;
     class SelectionItem;
     class SelectionManager;
+    class GraphicsOrthographicProjection;
+    class HistologySlice;
     class IdentificationWithColor;
     class ImageFile;
     class Model;
     class ModelChart;
     class ModelChartTwo;
+    class ModelHistology;
     class ModelMedia;
     class ModelSurface;
     class ModelSurfaceMontage;
@@ -116,11 +121,16 @@ namespace caret {
                                                  int32_t& subViewportSizeOut,
                                                  int32_t& gapOut);
         
+        static void drawGraphicsRegionSelectionBox(const GraphicsRegionSelectionBox* graphicsRegionSelectionBox,
+                                                   const GraphicsRegionSelectionBox::DrawMode drawMode,
+                                                   const float rgba[4]);
+        
     protected:
         void drawModelsImplementation(const int32_t windowIndex,
                                       const UserInputModeEnum::Enum windowUserInputMode,
                                       Brain* brain,
-                                      const std::vector<const BrainOpenGLViewportContent*>& viewportContents) override;
+                                      const std::vector<const BrainOpenGLViewportContent*>& viewportContents,
+                                      const GraphicsFramesPerSecond* graphicsFramesPerSecond) override;
         
         void selectModelImplementation(const int32_t windowIndex,
                                        const UserInputModeEnum::Enum windowUserInputMode,
@@ -141,6 +151,16 @@ namespace caret {
     protected:
         virtual void loadObjectToWindowTransform(EventOpenGLObjectToWindowTransform* transformEvent) override;
         
+        virtual void loadObjectToWindowTransform(GraphicsObjectToWindowTransform* transform,
+                                                 const GraphicsOrthographicProjection& orthographicProjection,
+                                                 const double centerToEyeDistance,
+                                                 const bool centerToEyeDistanceValidFlag) override;
+
+        virtual void loadObjectToWindowTransform(GraphicsObjectToWindowTransform* transform,
+                                                 const std::array<float, 4>& orthoLeftRightBottomTop,
+                                                 const double centerToEyeDistance,
+                                                 const bool centerToEyeDistanceValidFlag) override;
+
     private:
         class VolumeDrawInfo {
         public:
@@ -178,6 +198,12 @@ namespace caret {
             StructureEnum::Enum structure;
         };
         
+        enum class SurfaceTabType {
+            SINGLE_SURFACE,
+            SURFACE_MONTAGE,
+            WHOLE_BRAIN
+        };
+        
         void setFiberOrientationDisplayInfo(const DisplayPropertiesFiberOrientation* dpfo,
                                             const DisplayGroupEnum::Enum displayGroup,
                                             const int32_t tabIndex,
@@ -204,12 +230,17 @@ namespace caret {
                               const int32_t viewport[4]);
         
         void drawSurface(Surface* surface,
+                         const SurfaceTabType surfaceTabType,
                          const float surfaceScaling,
+                         const int32_t viewportHeight,
                          const float* nodeColoringRGBA,
                          const bool drawAnnotationsInModelSpaceFlag);
         
         void drawSurfaceNodes(Surface* surface,
                               const float* nodeColoringRGBA);
+        
+        void drawSurfaceCutEdges(Surface* surface,
+                                 const float* nodeColoringRGBA);
         
         void drawSurfaceTrianglesWithVertexArrays(const Surface* surface,
                                                   const float* nodeColoringRGBA);
@@ -217,7 +248,8 @@ namespace caret {
         void drawSurfaceTriangles(Surface* surface,
                                   const float* nodeColoringRGBA);
         
-        void drawSurfaceNodeAttributes(Surface* surface);
+        void drawSurfaceNodeAttributes(Surface* surface,
+                                       const int32_t viewportHeight);
         
         void drawSurfaceBorderBeingDrawn(const Surface* surface);
         
@@ -267,11 +299,18 @@ namespace caret {
         void drawFiberTrajectories(const Plane* plane,
                                    const StructureEnum::Enum structure);
         
-        void drawMediaModel(BrowserTabContent* browserTabContent,
+        void drawHistologyModel(const BrainOpenGLViewportContent* viewportContent,
+                                BrowserTabContent* browserTabContent,
+                                ModelHistology* mediaHistology,
+                                const int32_t viewport[4]);
+
+        void drawMediaModel(const BrainOpenGLViewportContent* viewportContent,
+                            BrowserTabContent* browserTabContent,
                             ModelMedia* mediaModel,
                             const int32_t viewport[4]);
         
-        void drawVolumeModel(BrowserTabContent* browserTabContent,
+        void drawVolumeModel(const BrainOpenGLViewportContent* viewportContent,
+                             BrowserTabContent* browserTabContent,
                                   ModelVolume* volumeModel,
                                   const int32_t viewport[4]);
         
@@ -319,9 +358,10 @@ namespace caret {
                                  Brain* brain,
                                  std::vector<VolumeDrawInfo>& volumeDrawInfoOut);
         
-        void drawWholeBrainModel(BrowserTabContent* browserTabContent,
-                                      ModelWholeBrain* wholeBrainModel,
-                                      const int32_t viewport[4]);
+        void drawWholeBrainModel(const BrainOpenGLViewportContent* viewportContent,
+                                 BrowserTabContent* browserTabContent,
+                                 ModelWholeBrain* wholeBrainModel,
+                                 const int32_t viewport[4]);
         
         void drawSurfaceMontageModel(BrowserTabContent* browserTabContent,
                                      ModelSurfaceMontage* surfaceMontageModel,
@@ -354,10 +394,18 @@ namespace caret {
         
         void disableLineAntiAliasing();
         
-        bool getPixelDepthAndRGBA(const int32_t pixelX,
-                                  const int32_t pixelY,
+        void applyHistologyOrientationYoking();
+        
+        bool getPixelDepthAndRGBA(const int32_t windowX,
+                                  const int32_t windowY,
                                   float& depthOut,
                                   float rgbaOut[4]);
+        
+        void getIndexFromColorSelection(const int32_t x,
+                                        const int32_t y,
+                                        SelectionItemDataTypeEnum::Enum& dataTypeOut,
+                                        int32_t& indexOut,
+                                        float& depthOut);
         
         void getIndexFromColorSelection(const SelectionItemDataTypeEnum::Enum dataType,
                                            const int32_t x,
@@ -461,7 +509,8 @@ namespace caret {
         void drawTextAtModelCoords(const float modelXYZ[3],
                                    const AnnotationText& annotationText);
         
-        void drawWindowAnnotations(const int windowViewport[4]);
+        void drawWindowAnnotations(const int windowViewport[4],
+                                   const GraphicsFramesPerSecond* graphicsFramesPerSecond);
         
         void drawSpacerAnnotations(const BrainOpenGLViewportContent* tabContent);
         
@@ -469,6 +518,16 @@ namespace caret {
         
         void drawChartCoordinateSpaceAnnotations(const BrainOpenGLViewportContent* viewportContent);
         
+        void drawHistologySpaceAnnotations(const BrainOpenGLViewportContent* viewportContent,
+                                           const HistologySpaceKey& histologySpaceKey,
+                                           const HistologySlice* histologySlice,
+                                           const float sliceSpacing);
+        
+        void drawMediaSpaceAnnotations(const BrainOpenGLViewportContent* viewportContent);
+        
+        void drawGraphicsTiming(const int windowViewport[4],
+                                const GraphicsFramesPerSecond* graphicsFramesPerSecond);
+
         void drawBackgroundImage(const BrainOpenGLViewportContent* vpContent);
         
         void drawImage(const BrainOpenGLViewportContent* vpContent,
@@ -542,9 +601,11 @@ namespace caret {
             CHART_TWO_MATRIX,
             FEATURE_IMAGE, /* older image display selected in Features ToolBox*/
             FIBER_TRAJECTORIES,
+            SEPARATE_BLENDING,
             SURFACE_PROPERTIES_OPACITY,
             VOLUME_ALL_VIEW_CUBES,
             VOLUME_ALL_VIEW_SLICES,
+            VOLUME_MPR_SLICES,
             VOLUME_ORTHOGONAL_SLICES
         };
         
@@ -661,9 +722,18 @@ namespace caret {
         friend class BrainOpenGLAnnotationDrawingFixedPipeline;
         friend class BrainOpenGLChartDrawingFixedPipeline;
         friend class BrainOpenGLChartTwoDrawingFixedPipeline;
+        friend class BrainOpenGLFociDrawing;
+        friend class BrainOpenGLHistologySliceDrawing;
+        friend class BrainOpenGLHistologyStereotaxicSliceDrawing;
+        friend class BrainOpenGLIdentificationDrawing;
+        friend class BrainOpenGLMediaCoordinateDrawing;
         friend class BrainOpenGLMediaDrawing;
+        friend class BrainOpenGLVolumeSurfaceClippedOutlineDrawing;
+        friend class BrainOpenGLVolumeMprThreeDrawing;
+        friend class BrainOpenGLVolumeMprTwoDrawing;
         friend class BrainOpenGLVolumeObliqueSliceDrawing;
         friend class BrainOpenGLVolumeSliceDrawing;
+        friend class BrainOpenGLVolumeSurfaceOutlineDrawing;
         friend class BrainOpenGLVolumeTextureSliceDrawing;
     };
 

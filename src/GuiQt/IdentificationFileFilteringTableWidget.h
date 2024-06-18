@@ -31,7 +31,7 @@ class QComboBox;
 class QTableWidgetItem;
 
 namespace caret {
-    class CaretMappableDataFile;
+    class CaretDataFile;
     class EnumComboBoxTemplate;
     
     class IdentificationFileFilteringTableWidget : public QTableWidget {
@@ -54,13 +54,15 @@ namespace caret {
     private slots:
         void tableCellClicked(int row, int column);
         
+        void displayModeComboBoxChanged(int row);
+        
         void mapModeComboBoxChanged(int row);
         
         void mapNameComboBoxChanged(int row);
         
     private:
         enum COLUMNS {
-            COLUMN_ENABLED_CHECKBOX = 0,
+            COLUMN_DISPLAY_MODE_COMBO_BOX = 0,
             COLUMN_FILE_NAME_LABEL = 1,
             COLUMN_DISPLAYED_LABEL = 2,
             COLUMN_MAP_MODE_COMBO_BOX = 3,
@@ -74,7 +76,9 @@ namespace caret {
         
         int32_t m_lastNumberOfFiles = 0;
         
-        std::vector<CaretMappableDataFile*> m_mapFiles;
+        std::vector<CaretDataFile*> m_dataFiles;
+        
+        std::vector<EnumComboBoxTemplate*> m_displayModeComboBoxes;
         
         std::vector<EnumComboBoxTemplate*> m_mapModeComboBoxes;
         

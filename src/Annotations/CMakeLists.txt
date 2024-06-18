@@ -11,6 +11,11 @@ SET(QT_DONT_USE_QTGUI TRUE)
 #
 # QT include files
 #
+if(Qt6_FOUND)
+    include_directories(${Qt6Core_INCLUDE_DIRS})
+    #include_directories(${Qt6Network_INCLUDE_DIRS})
+    include_directories(${Qt6Xml_INCLUDE_DIRS})
+endif()
 if(Qt5_FOUND)
     include_directories(${Qt5Core_INCLUDE_DIRS})
     #include_directories(${Qt5Network_INCLUDE_DIRS})
@@ -25,6 +30,7 @@ endif()
 ADD_LIBRARY(Annotations
 Annotation.h
 AnnotationAlignmentEnum.h
+AnnotationAndFile.h
 AnnotationAttributesDefaultTypeEnum.h
 AnnotationBox.h
 AnnotationBrowserTab.h
@@ -36,6 +42,7 @@ AnnotationCoordinate.h
 AnnotationCoordinateSpaceEnum.h
 AnnotationDistributeEnum.h
 AnnotationEditingSelectionInformation.h
+AnnotationFontAttributes.h
 AnnotationFontAttributesInterface.h
 AnnotationGroup.h
 AnnotationGroupKey.h
@@ -43,14 +50,20 @@ AnnotationGroupTypeEnum.h
 AnnotationGroupingModeEnum.h
 AnnotationImage.h
 AnnotationLine.h
+AnnotationMetaData.h
+AnnotationMetaDataNames.h
 AnnotationMultiCoordinateShape.h
+AnnotationMultiPairedCoordinateShape.h
 AnnotationOneCoordinateShape.h
 AnnotationOval.h
 AnnotationPercentSizeText.h
 AnnotationPointSizeText.h
+AnnotationPolygon.h
+AnnotationPolyhedron.h
 AnnotationPolyLine.h
 AnnotationRedoUndoCommand.h
 AnnotationRedoUndoCommandModeEnum.h
+AnnotationMetaDataValidator.h
 AnnotationScaleBar.h
 AnnotationScaleBarTextLocationEnum.h
 AnnotationScaleBarUnitsTypeEnum.h
@@ -77,9 +90,11 @@ EventAnnotationTextGetBounds.h
 EventAnnotationTextSubstitutionGet.h
 EventAnnotationTextSubstitutionInvalidate.h
 EventAnnotationValidate.h
+HistologySpaceKey.h
 
 Annotation.cxx
 AnnotationAlignmentEnum.cxx
+AnnotationAndFile.cxx
 AnnotationAttributesDefaultTypeEnum.cxx
 AnnotationBox.cxx
 AnnotationBrowserTab.cxx
@@ -91,20 +106,26 @@ AnnotationCoordinate.cxx
 AnnotationCoordinateSpaceEnum.cxx
 AnnotationDistributeEnum.cxx
 AnnotationEditingSelectionInformation.cxx
+AnnotationFontAttributes.cxx
 AnnotationGroup.cxx
 AnnotationGroupKey.cxx
 AnnotationGroupTypeEnum.cxx
 AnnotationGroupingModeEnum.cxx
 AnnotationImage.cxx
 AnnotationLine.cxx
+AnnotationMetaData.cxx
 AnnotationMultiCoordinateShape.cxx
+AnnotationMultiPairedCoordinateShape.cxx
 AnnotationOneCoordinateShape.cxx
 AnnotationOval.cxx
 AnnotationPercentSizeText.cxx
 AnnotationPointSizeText.cxx
+AnnotationPolygon.cxx
+AnnotationPolyhedron.cxx
 AnnotationPolyLine.cxx
 AnnotationRedoUndoCommand.cxx
 AnnotationRedoUndoCommandModeEnum.cxx
+AnnotationMetaDataValidator.cxx
 AnnotationScaleBar.cxx
 AnnotationScaleBarTextLocationEnum.cxx
 AnnotationScaleBarUnitsTypeEnum.cxx
@@ -131,6 +152,7 @@ EventAnnotationTextGetBounds.cxx
 EventAnnotationTextSubstitutionGet.cxx
 EventAnnotationTextSubstitutionInvalidate.cxx
 EventAnnotationValidate.cxx
+HistologySpaceKey.cxx
 )
 
 TARGET_LINK_LIBRARIES(Annotations ${CARET_QT5_LINK})
@@ -143,5 +165,6 @@ ${CMAKE_SOURCE_DIR}/Common
 ${CMAKE_SOURCE_DIR}/Graphics
 ${CMAKE_SOURCE_DIR}/Scenes
 ${CMAKE_SOURCE_DIR}/Nifti
+${CMAKE_SOURCE_DIR}/Xml
 )
 

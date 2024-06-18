@@ -37,6 +37,7 @@
 #include <vector>
 
 #include <QFile>
+#include <QRegularExpression>
 #include <QStringList>
 
 using namespace caret;
@@ -344,6 +345,11 @@ void OperationCiftiConvert::useParameters(OperationParameters* myParams, Progres
         const int64_t SHORTMAX = numeric_limits<short>::max();//less ugly than writing it out every time
         if (outDims[3] > SHORTMAX) throw OperationException("cifti rows are too long for nifti-1, failing");
         int64_t numRows = myCiftiIn->getNumberOfRows();
+        if (numRows > SHORTMAX * SHORTMAX && !(betterDims || smallerDims))
+        {//don't let the default math hit the pathological case of an extra billion elements, behavior change okay because it is likely nobody has hit it yet
+            CaretLogWarning("input has a very large number of rows, and neither -smaller-file or -smaller-dims were specified, using -smaller-file instead");
+            betterDims = true;
+        }
         if (smallerDims)
         {
             outDims[0] = int64_t(ceil(pow(numRows, 1.0f / 3.0f))) - 1;//deliberately start 1 below what floating point says for a cube
@@ -504,9 +510,17 @@ void OperationCiftiConvert::useParameters(OperationParameters* myParams, Progres
         QStringList entries;
         if (delim.isEmpty())
         {
-            entries = QString(templine.c_str()).split(QRegExp("\\s+"), QString::SkipEmptyParts);
+#if QT_VERSION >= 0x060000
+            entries = QString(templine.c_str()).split(QRegularExpression("\\s+"), Qt::SkipEmptyParts);
+#else
+            entries = QString(templine.c_str()).split(QRegularExpression("\\s+"), QString::SkipEmptyParts);
+#endif
         } else {
+#if QT_VERSION >= 0x060000
+            entries = QString(templine.c_str()).split(delim, Qt::SkipEmptyParts);
+#else
             entries = QString(templine.c_str()).split(delim, QString::SkipEmptyParts);
+#endif
         }
         if (numRows < 1) throw OperationException("template cifti file has no data");//this probably throws an exception in CiftiFile, but double check
         int textRowLength = entries.size();
@@ -547,9 +561,17 @@ void OperationCiftiConvert::useParameters(OperationParameters* myParams, Progres
             if (!getline(textIn, templine)) throw OperationException("failed to read from input text file (not enough rows)");
             if (delim.isEmpty())
             {
-                entries = QString(templine.c_str()).split(QRegExp("\\s+"), QString::SkipEmptyParts);
+#if QT_VERSION >= 0x060000
+                entries = QString(templine.c_str()).split(QRegularExpression("\\s+"), Qt::SkipEmptyParts);
+#else
+                entries = QString(templine.c_str()).split(QRegularExpression("\\s+"), QString::SkipEmptyParts);
+#endif
             } else {
+#if QT_VERSION >= 0x060000
+                entries = QString(templine.c_str()).split(delim, Qt::SkipEmptyParts);
+#else
                 entries = QString(templine.c_str()).split(delim, QString::SkipEmptyParts);
+#endif
             }
             if (entries.size() != textRowLength) throw OperationException("text file has inconsistent line length");
             for (int i = 0; i < textRowLength; ++i)

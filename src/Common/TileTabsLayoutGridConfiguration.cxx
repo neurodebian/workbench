@@ -848,7 +848,7 @@ TileTabsLayoutGridConfiguration::decodeFromXMLWithStreamReaderVersionOne(QXmlStr
         xml.readNext();
         
         if (xml.isStartElement()) {
-            const QStringRef tagName(xml.name());
+            const auto tagName(xml.name());
 
             if (tagName == s_v1_versionTagName) {
                 /* ignore */
@@ -988,7 +988,7 @@ TileTabsLayoutGridConfiguration::decodeFromXMLWithStreamReaderVersionTwo(QXmlStr
         xml.readNext();
         
         if (xml.isStartElement()) {
-            const QStringRef tagName(xml.name());
+            const auto tagName(xml.name());
             
             if (tagName == s_nameTagName) {
                 name = xml.readElementText();
@@ -1042,7 +1042,7 @@ TileTabsLayoutGridConfiguration::decodeFromXMLWithStreamReaderVersionTwo(QXmlStr
             }
         }
         else if (xml.isEndElement()) {
-            const QStringRef tagName(xml.name());
+            const auto tagName(xml.name());
             
             if (tagName == s_v2_columnsTagName) {
                 readMode = ReadMode::OTHER;
@@ -1237,4 +1237,19 @@ void
 TileTabsLayoutGridConfiguration::setCustomDefaultFlag(const bool defaultFlag)
 {
     m_customDefaultFlag = defaultFlag;
+}
+
+/**
+ * @return A tooltip for this tile tabs configuration
+ */
+AString
+TileTabsLayoutGridConfiguration::toToolTip() const
+{
+    AString tooltip(TileTabsLayoutConfigurationTypeEnum::toGuiName(getLayoutType())
+                    + " "
+                    + AString::number(getNumberOfRows())
+                    + " Rows, "
+                    + AString::number(getNumberOfColumns())
+                    + " Columns");
+    return tooltip;
 }

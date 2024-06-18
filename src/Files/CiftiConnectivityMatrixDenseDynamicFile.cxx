@@ -31,9 +31,10 @@
 #include "CaretOMP.h"
 #include "CiftiBrainordinateDataSeriesFile.h"
 #include "CiftiFile.h"
+#include "ConnectivityCorrelationTwo.h"
+#include "ConnectivityCorrelationSettings.h"
 #include "FileInformation.h"
 #include "SceneClassAssistant.h"
-#include "dot_wrapper.h"
 
 using namespace caret;
 
@@ -61,14 +62,18 @@ m_parentDataSeriesCiftiFile(NULL),
 m_numberOfBrainordinates(-1),
 m_numberOfTimePoints(-1),
 m_validDataFlag(false),
-m_enabledAsLayer(true),
-m_cacheDataFlag(false)
+m_enabledAsLayer(true)
 {
     CaretAssert(m_parentDataSeriesFile);
 
+    m_correlationSettings.reset(new ConnectivityCorrelationSettings());
+    
     m_sceneAssistant.grabNew(new SceneClassAssistant());
     m_sceneAssistant->add("m_enabledAsLayer",
                           &m_enabledAsLayer);
+    m_sceneAssistant->add("m_correlationSettings",
+                          "ConnectivityCorrelationSettings",
+                          m_correlationSettings.get());
 }
 
 /**
@@ -146,9 +151,16 @@ CiftiConnectivityMatrixDenseDynamicFile::isDataValid() const
 void
 CiftiConnectivityMatrixDenseDynamicFile::updateAfterReading(const CiftiFile* ciftiFile)
 {
+    CaretAssert(ciftiFile);
     m_validDataFlag = false;
     
     m_parentDataSeriesCiftiFile = const_cast<CiftiFile*>(ciftiFile);
+    CaretAssert(m_parentDataSeriesCiftiFile);
+    if (m_parentDataSeriesCiftiFile == NULL) {
+        CaretLogSevere(ciftiFile->getFileName()
+                       + " is not a data series file !!!");
+        return;
+    }
     
     AString path, nameNoExt, ext;
     FileInformation fileInfo(m_parentDataSeriesCiftiFile->getFileName());
@@ -165,31 +177,8 @@ CiftiConnectivityMatrixDenseDynamicFile::updateAfterReading(const CiftiFile* cif
     m_numberOfBrainordinates = ciftiXML.getBrainModelsMap(CiftiXML::ALONG_COLUMN).getLength();
     m_numberOfTimePoints     = ciftiXML.getSeriesMap(CiftiXML::ALONG_ROW).getLength();
     
-    m_rowData.clear();
-    
     if ((m_numberOfBrainordinates > 0)
         && (m_numberOfTimePoints > 0)) {
-        m_rowData.resize(m_numberOfBrainordinates);
-        
-        if (m_cacheDataFlag) {
-            /*
-             * Read all of the data.  Time-series type files are not
-             * too large and by caching the data, it eliminates
-             * numerous calls to read the data when correlation
-             * is performed.
-             *
-             * READ DATA FROM PARENT FILE
-             */
-            for (int32_t i = 0; i < m_numberOfBrainordinates; i++) {
-                CaretAssertVectorIndex(m_rowData, i);
-                m_rowData[i].m_data.resize(m_numberOfTimePoints);
-                m_parentDataSeriesCiftiFile->getRow(&m_rowData[i].m_data[0],
-                                                    i);
-            }
-        }
-        
-        preComputeRowMeanAndSumSquared();
-        
         m_validDataFlag = true;
     }
 }
@@ -260,7 +249,7 @@ CiftiConnectivityMatrixDenseDynamicFile::getProcessedDataForColumn(float* /*data
  *     Index of the row.
  */
 void
-CiftiConnectivityMatrixDenseDynamicFile::getProcessedDataForRow(float* dataOut,
+CiftiConnectivityMatrixDenseDynamicFile::getProcessedDataForRow(std::vector<float>& dataOut,
                                                                 const int64_t& index) const
 {
     if ((m_numberOfBrainordinates <= 0)
@@ -268,299 +257,20 @@ CiftiConnectivityMatrixDenseDynamicFile::getProcessedDataForRow(float* dataOut,
         return;
     }
     
-    std::vector<float> rowData(m_numberOfTimePoints);
-    m_parentDataSeriesCiftiFile->getRow(&rowData[0], index);
-    const float mean = m_rowData[index].m_mean;
-    const float ssxx = m_rowData[index].m_sqrt_ssxx;
-    
-    /*
-     * TSC: hyperthreading means some cores end up "faster" than others, so "static" scheduling is generally not as fast
-     * there is almost no overhead to dynamic scheduling
-     */
-#pragma omp CARET_PARFOR schedule(dynamic)
-    for (int32_t iRow = 0; iRow < m_numberOfBrainordinates; iRow++) {
-        float coefficient = 1.0;
-        
-        if (iRow != index) {
-            coefficient = correlation(rowData, mean, ssxx, iRow, m_numberOfTimePoints);
-        }
-        
-        dataOut[iRow] = coefficient;
-    }
-}
+    CaretAssert(static_cast<int64_t>(dataOut.size()) == m_numberOfBrainordinates);
 
-/**
- * Some file types may perform additional processing of row average data and
- * can override this method.
- *
- * @param rowAverageDataInOut
- *     The row average data.
- */
-void
-CiftiConnectivityMatrixDenseDynamicFile::processRowAverageData(std::vector<float>& rowAverageDataInOut)
-{
-    if ((m_numberOfBrainordinates <= 0)
-        || (m_numberOfTimePoints <= 0)) {
+    ConnectivityCorrelationTwo* connCorrelationTwo(getConnectivityCorrelationTwo());
+    if (connCorrelationTwo == NULL) {
+        std::fill(dataOut.begin(),
+                  dataOut.end(),
+                  0.0);
         return;
     }
-    
-    const int32_t dataLength = static_cast<int32_t>(rowAverageDataInOut.size());
-    if (dataLength != m_numberOfTimePoints) {
-        CaretLogWarning("Data length incorrect.  Is "
-                        + AString::number(dataLength)
-                        + " but should be "
-                        + AString::number(m_numberOfTimePoints));
-        return;
-    }
-    if (dataLength <= 0) {
-        return;
-    }
-    
-    float mean = 0.0;
-    float sumSquared = 0.0;
-    computeDataMeanAndSumSquared(&rowAverageDataInOut[0],
-                                 dataLength,
-                                 mean,
-                                 sumSquared);
-    
-    std::vector<float> processedRowAverageData(m_numberOfBrainordinates);
-    
-    /*
-     * TSC: hyperthreading means some cores end up "faster" than others, so "static" scheduling is generally not as fast
-     * there is almost no overhead to dynamic scheduling
-     */
-#pragma omp CARET_PARFOR schedule(dynamic)
-    for (int32_t iRow = 0; iRow < m_numberOfBrainordinates; iRow++) {
-        const float coefficient = correlation(rowAverageDataInOut,
-                                              mean,
-                                              sumSquared,
-                                              iRow,
-                                              dataLength);
-        CaretAssertVectorIndex(processedRowAverageData, iRow);
-        processedRowAverageData[iRow] = coefficient;
-    }
-    
-    rowAverageDataInOut = processedRowAverageData;
+
+    connCorrelationTwo->computeForDataSetIndex(index,
+                                               dataOut);
 }
 
-
-/**
- * Compute the mean and sum-squared for each row so that they
- * are only calculated once.
- */
-void
-CiftiConnectivityMatrixDenseDynamicFile::preComputeRowMeanAndSumSquared()
-{
-    CaretAssert(m_numberOfBrainordinates > 0);
-    CaretAssert(m_numberOfTimePoints > 0);
-
-    /*
-     * TSC: hyperthreading means some cores end up "faster" than others, so "static" scheduling is generally not as fast
-     * there is almost no overhead to dynamic scheduling
-     */
-#pragma omp CARET_PARFOR schedule(dynamic)
-    for (int32_t iRow = 0; iRow < m_numberOfBrainordinates; iRow++) {
-
-        CaretAssertVectorIndex(m_rowData, iRow);
-        
-        if (m_cacheDataFlag) {
-            CaretAssertVectorIndex(m_rowData[iRow].m_data, (m_numberOfTimePoints - 1));
-            computeDataMeanAndSumSquared(&m_rowData[iRow].m_data[0],
-                                         m_numberOfTimePoints,
-                                         m_rowData[iRow].m_mean,
-                                         m_rowData[iRow].m_sqrt_ssxx);
-        }
-        else {
-            std::vector<float> data(m_numberOfTimePoints);
-#pragma omp critical
-            {//TSC: this can do disk access, which is not currently thread-safe
-                m_parentDataSeriesCiftiFile->getRow(&data[0], iRow);
-            }
-            computeDataMeanAndSumSquared(&data[0],
-                                         m_numberOfTimePoints,
-                                         m_rowData[iRow].m_mean,
-                                         m_rowData[iRow].m_sqrt_ssxx);
-        }
-        
-//        double sum = 0.0;
-//        double sumSquared = 0.0;
-//        if (m_cacheDataFlag) {
-//            for (int32_t iPoint = 0; iPoint < m_numberOfTimePoints; iPoint++) {
-//                CaretAssertVectorIndex(m_rowData[iRow].m_data, iPoint);
-//                const float d = m_rowData[iRow].m_data[iPoint];
-//                sum        += d;
-//                sumSquared += (d * d);
-//            }
-//        }
-//        else {
-//            std::vector<float> data(m_numberOfTimePoints);
-//            m_parentDataSeriesCiftiFile->getRow(&data[0], iRow);
-//            for (int32_t iPoint = 0; iPoint < m_numberOfTimePoints; iPoint++) {
-//                CaretAssertVectorIndex(data, iPoint);
-//                const float d = data[iPoint];
-//                sum        += d;
-//                sumSquared += (d * d);
-//            }
-//        }
-//        
-//        const float mean       = (sum / numPointsFloat);
-//        const float ssxx = (sumSquared - (numPointsFloat * mean * mean));
-//        CaretAssert(ssxx >= 0.0);
-//        
-//        const float meanDiff = std::fabs(mean - m_rowData[iRow].m_mean);
-//        const float ssDiff   = std::fabs(std::sqrt(ssxx) - m_rowData[iRow].m_sqrt_ssxx);
-//        if ((meanDiff > 0.0001) || (ssDiff > 0.0001)) {
-//            std::cout << "Mean/SS diff" << std::endl;
-//        }
-//        
-//        m_rowData[iRow].m_mean = mean;
-//        m_rowData[iRow].m_sqrt_ssxx = std::sqrt(ssxx);
-    }
-}
-
-/**
- * Compute data's mean and sum-squared
- *
- * @param data
- *     Data on which mean and sum-squared are calculated
- * @param dataLength
- *     Number of items in data.
- * @param meanOut
- *     Output with mean of data.
- * @param sumSquaredOut
- *     Output with sum-squared.
- */
-void
-CiftiConnectivityMatrixDenseDynamicFile::computeDataMeanAndSumSquared(const float* data,
-                                                                      const int32_t dataLength,
-                                                                      float& meanOut,
-                                                                      float& sumSquaredOut) const
-{
-    meanOut = 0.0;
-    sumSquaredOut = 0.0;
-    if (dataLength <= 0) {
-        return;
-    }
-    
-    double sum = 0.0;
-    double sumSquared = 0.0;
-    
-    for (int32_t i = 0; i < dataLength; i++) {
-        const float d = data[i];
-        sum        += d;
-        sumSquared += (d * d);
-    }
-    
-    meanOut = (sum / dataLength);
-    const float ssxx = (sumSquared - (dataLength * meanOut * meanOut));
-    //TSC: do not assert things that depend on input file content (a NaN in the data will trip it), you could print a warning instead
-    //CaretAssert(ssxx >= 0.0);
-    sumSquaredOut = std::sqrt(ssxx);
-}
-
-
-/**
- * Correlation from https://en.wikipedia.org/wiki/Pearson_product-moment_correlation_coefficient
- *
- * @param data
- *     Data for correlation
- * @param mean
- *     Mean of data
- * @param sumSquared
- *     Sum squared of data.
- * @param otherRowIndex
- *     Index of another row
- * @param numberOfPoints
- *     Number of points int the two arrays
- * @return
- *     The correlation coefficient computed on the two arrays.
- */
-float
-CiftiConnectivityMatrixDenseDynamicFile::correlation(const std::vector<float>& data,
-                                                     const float mean,
-                                                     const float sumSquared,
-                                                     const int32_t otherRowIndex,
-                                                     const int32_t numberOfPoints) const
-{
-    const double numFloat = numberOfPoints;
-    double xySum = 0.0;
-    
-    CaretAssertVectorIndex(m_rowData, otherRowIndex);
-    const RowData& otherData = m_rowData[otherRowIndex];
-    
-    if (m_cacheDataFlag) {
-        xySum = dsdot(&data[0], &otherData.m_data[0], numberOfPoints);
-    }
-    else {
-        std::vector<float> otherDataVector(m_numberOfTimePoints);
-        m_parentDataSeriesCiftiFile->getRow(&otherDataVector[0], otherRowIndex);
-        xySum = dsdot(&data[0], &otherDataVector[0], numberOfPoints);
-    }
-    
-    const double ssxy = xySum - (numFloat * mean * otherData.m_mean);
-    
-    float correlationCoefficient = 0.0;
-    if ((sumSquared > 0.0)
-        && (otherData.m_sqrt_ssxx > 0.0)) {
-        correlationCoefficient = (ssxy / (sumSquared * otherData.m_sqrt_ssxx));
-    }
-    return correlationCoefficient;
-}
-
-/**
- * Correlation from https://en.wikipedia.org/wiki/Pearson_product-moment_correlation_coefficient
- *
- * @param rowIndex
- *     Index of a row
- * @param otherRowIndex
- *     Index of another row
- * @param numberOfPoints
- *     Number of points int the two arrays
- * @return
- *     The correlation coefficient computed on the two arrays.
- */
-float
-CiftiConnectivityMatrixDenseDynamicFile::correlation(const int32_t rowIndex,
-                                                     const int32_t otherRowIndex,
-                                                     const int32_t numberOfPoints) const
-{
-    const double numFloat = numberOfPoints;
-    double xySum = 0.0;
-    
-    CaretAssertVectorIndex(m_rowData, rowIndex);
-    CaretAssertVectorIndex(m_rowData, otherRowIndex);
-    const RowData& data = m_rowData[rowIndex];
-    const RowData& otherData = m_rowData[otherRowIndex];
-    
-    if (m_cacheDataFlag) {
-        for (int i = 0; i < numberOfPoints; i++) {
-            CaretAssertVectorIndex(data.m_data, i);
-            CaretAssertVectorIndex(otherData.m_data, i);
-            xySum += data.m_data[i] * otherData.m_data[i];
-        }
-    }
-    else {
-        std::vector<float> dataVector(m_numberOfTimePoints);
-        std::vector<float> otherDataVector(m_numberOfTimePoints);
-        m_parentDataSeriesCiftiFile->getRow(&dataVector[0], rowIndex);
-        m_parentDataSeriesCiftiFile->getRow(&otherDataVector[0], otherRowIndex);
-        
-        for (int i = 0; i < numberOfPoints; i++) {
-            CaretAssertVectorIndex(dataVector, i);
-            CaretAssertVectorIndex(otherDataVector, i);
-            xySum += dataVector[i] * otherDataVector[i];
-        }
-    }
-    
-    const double ssxy = xySum - (numFloat * data.m_mean * otherData.m_mean);
-    
-    float correlationCoefficient = 0.0;
-    if ((data.m_sqrt_ssxx > 0.0)
-        && (otherData.m_sqrt_ssxx > 0.0)) {
-        correlationCoefficient = (ssxy / (data.m_sqrt_ssxx * otherData.m_sqrt_ssxx));
-    }
-    return correlationCoefficient;
-}
 /**
  * Save subclass data to the scene.
  *
@@ -601,5 +311,83 @@ CiftiConnectivityMatrixDenseDynamicFile::restoreSubClassDataFromScene(const Scen
                                      sceneClass);
 }
 
+/**
+ * @return Pointer to connectivity correlation or NULL if not valid
+ */
+ConnectivityCorrelationTwo*
+CiftiConnectivityMatrixDenseDynamicFile::getConnectivityCorrelationTwo() const
+{
+    if ( ! m_connectivityCorrelationFailedFlag) {
+        /**
+         * Need to recreate correlation algorithm if settins have changed
+         */
+        if (m_connectivityCorrelationTwo != NULL) {
+            if (*m_correlationSettings != *m_connectivityCorrelationTwo->getSettings()) {
+                m_connectivityCorrelationTwo.reset();
+                CaretLogFine("Recreating correlation algorithm for "
+                             + getFileName());
+            }
+        }
+        if (m_connectivityCorrelationTwo == NULL) {
+            /*
+             * Need data and timepoint count from parent file
+             */
+            CaretAssert(m_parentDataSeriesFile);
+            CaretAssert(m_numberOfTimePoints >= 2);
+            CaretAssert(m_numberOfBrainordinates >= 2);
+            const int64_t numData(m_numberOfBrainordinates
+                                  * m_numberOfTimePoints);
+            m_dataSeriesMatrixData.resize(numData);
+            
+            std::vector<const float*> rowDataPointers;
+            CaretAssert(m_parentDataSeriesCiftiFile);
+            for (int64_t iRow = 0; iRow < m_numberOfBrainordinates; iRow++) {
+                const int64_t offset(iRow * m_numberOfTimePoints);
+                CaretAssertVectorIndex(m_dataSeriesMatrixData,
+                                       (offset + (m_numberOfTimePoints - 1)));
+                m_parentDataSeriesCiftiFile->getRow(&m_dataSeriesMatrixData[offset],
+                                                    iRow);
+                rowDataPointers.push_back(&m_dataSeriesMatrixData[offset]);
+            }
+            
+            const int64_t nextTimePointStride(1);
+            AString errorMessage;
+            ConnectivityCorrelationTwo* cc = ConnectivityCorrelationTwo::newInstance(getFileName(),
+                                                                                     *m_correlationSettings,
+                                                                                     rowDataPointers,
+                                                                                     m_numberOfTimePoints,
+                                                                                     nextTimePointStride,
+                                                                                     errorMessage);
+            if (cc != NULL) {
+                m_connectivityCorrelationTwo.reset(cc);
+            }
+            else {
+                m_connectivityCorrelationFailedFlag = true;
+                CaretLogSevere("Failed to create connectvity correlation for "
+                               + m_parentDataSeriesFile->getFileNameNoPath());
+            }
+        }
+    }
+    
+    return m_connectivityCorrelationTwo.get();
+}
+
+/**
+ * @return The correlation settings
+ */
+ConnectivityCorrelationSettings*
+CiftiConnectivityMatrixDenseDynamicFile::getCorrelationSettings()
+{
+    return m_correlationSettings.get();
+}
+
+/**
+ * @return The correlation settings (const method)
+ */
+const ConnectivityCorrelationSettings*
+CiftiConnectivityMatrixDenseDynamicFile::getCorrelationSettings() const
+{
+    return m_correlationSettings.get();
+}
 
 

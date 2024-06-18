@@ -23,6 +23,7 @@
 
 #include <QCheckBox>
 #include <QComboBox>
+#include <QDoubleSpinBox>
 #include <QGridLayout>
 #include <QHBoxLayout>
 #include <QVBoxLayout>
@@ -31,12 +32,14 @@
 #include "VolumeSurfaceOutlineViewController.h"
 #undef __VOLUME_SURFACE_OUTLINE_VIEW_CONTROLLER_DECLARE__
 
-#include "EventGraphicsUpdateAllWindows.h"
+#include "EnumComboBoxTemplate.h"
+#include "EventGraphicsPaintSoonAllWindows.h"
 #include "EventManager.h"
 #include "SurfaceSelectionModel.h"
 #include "SurfaceSelectionViewController.h"
 #include "VolumeSurfaceOutlineColorOrTabViewController.h"
 #include "VolumeSurfaceOutlineModel.h"
+#include "WuQDataEntryDialog.h"
 #include "WuQDoubleSpinBox.h"
 #include "WuQFactory.h"
 #include "WuQGridLayoutGroup.h"
@@ -103,18 +106,60 @@ VolumeSurfaceOutlineViewController::VolumeSurfaceOutlineViewController(const Qt:
     macroManager->addMacroSupportToObject(this->colorOrTabSelectionControl->getWidget(),
                                           "Set surface outline color for " + descriptivePrefix);
     
-    this->thicknessSpinBox = new WuQDoubleSpinBox(this);
+    this->thicknessSpinBox = new QDoubleSpinBox();
     this->thicknessSpinBox->setRange(0.0, 100.0);
     this->thicknessSpinBox->setSingleStep(0.10);
     this->thicknessSpinBox->setSuffix("%");
-    QObject::connect(this->thicknessSpinBox, static_cast<void (WuQDoubleSpinBox::*)(double)>(&WuQDoubleSpinBox::valueChanged),
+    QObject::connect(this->thicknessSpinBox, static_cast<void (QDoubleSpinBox::*)(double)>(&QDoubleSpinBox::valueChanged),
                      this, &VolumeSurfaceOutlineViewController::thicknessSpinBoxValueChanged);
-    this->thicknessSpinBox->getWidget()->setToolTip("Thickness of surface outline as percentage of viewport height");
-    this->thicknessSpinBox->getWidget()->setObjectName(objectNamePrefix
+    this->thicknessSpinBox->setToolTip("Thickness of surface outline as percentage of viewport height");
+    this->thicknessSpinBox->setObjectName(objectNamePrefix
                                           + ":Thickness");
-    macroManager->addMacroSupportToObject(this->thicknessSpinBox->getWidget(),
+    macroManager->addMacroSupportToObject(this->thicknessSpinBox,
                                           "Set thickness for volume surface outline for " + descriptivePrefix);
     
+    const QString depthSpecialValueText("Default");
+    const QString slicePlaneToolTip("<html>"
+                                    "Depth in millimeters along slice plane normal vector.  "
+                                    "For <b>" + depthSpecialValueText + "</b>, "
+                                    + VolumeSurfaceOutlineDrawingModeEnum::toGuiName(VolumeSurfaceOutlineDrawingModeEnum::LINES)
+                                    + " are drawn with depth=0mm and "
+                                    + VolumeSurfaceOutlineDrawingModeEnum::toGuiName(VolumeSurfaceOutlineDrawingModeEnum::SURFACE)
+                                    + " is drawn with depth="
+                                    + AString::number(VolumeSurfaceOutlineModel::getDefaultSurfaceDepthMillimeters())
+                                    + "mm"
+                                    "</html>");
+    this->slicePlaneDepthSpinBox = new QDoubleSpinBox();
+    this->slicePlaneDepthSpinBox->setRange(0.0, 100.0);
+    this->slicePlaneDepthSpinBox->setSingleStep(0.10);
+    this->slicePlaneDepthSpinBox->setSuffix("mm");
+    this->slicePlaneDepthSpinBox->setSpecialValueText(depthSpecialValueText);
+    QObject::connect(this->slicePlaneDepthSpinBox, static_cast<void (QDoubleSpinBox::*)(double)>(&QDoubleSpinBox::valueChanged),
+                     this, &VolumeSurfaceOutlineViewController::slicePlaneDepthSpinBoxValueChanged);
+    this->slicePlaneDepthSpinBox->setToolTip(slicePlaneToolTip);
+    this->slicePlaneDepthSpinBox->setObjectName(objectNamePrefix
+                                                + ":SlicePlaneDepth");
+    macroManager->addMacroSupportToObject(this->slicePlaneDepthSpinBox,
+                                          "Set slice plane depth for volume surface outline for " + descriptivePrefix);
+    
+    this->opacitySpinBox = new QDoubleSpinBox();
+    this->opacitySpinBox->setRange(0.0, 1.0);
+    this->opacitySpinBox->setSingleStep(0.1);
+    this->opacitySpinBox->setToolTip("Opacity (Transparency)");
+    QObject::connect(this->opacitySpinBox, static_cast<void (QDoubleSpinBox::*)(double)>(&QDoubleSpinBox::valueChanged),
+                     this, &VolumeSurfaceOutlineViewController::opacityValueChanged);
+    this->opacitySpinBox->setObjectName(objectNamePrefix
+                                                + ":Opacity");
+    macroManager->addMacroSupportToObject(this->opacitySpinBox,
+                                          "Set opacity for volume surface outline for " + descriptivePrefix);
+    
+    std::vector<VolumeSurfaceOutlineDrawingModeEnum::Enum> drawingModes;
+    VolumeSurfaceOutlineDrawingModeEnum::getSupportedEnums(drawingModes);
+    m_volumeSurfaceOutlineDrawingModeEnumComboBox = new EnumComboBoxTemplate(this);
+    m_volumeSurfaceOutlineDrawingModeEnumComboBox->setupWithItems<VolumeSurfaceOutlineDrawingModeEnum,VolumeSurfaceOutlineDrawingModeEnum::Enum>(drawingModes);
+    QObject::connect(m_volumeSurfaceOutlineDrawingModeEnumComboBox, SIGNAL(itemActivated()),
+                     this, SLOT(volumeSurfaceOutlineDrawingModeEnumComboBoxItemActivated()));
+    m_volumeSurfaceOutlineDrawingModeEnumComboBox->getWidget()->setToolTip(VolumeSurfaceOutlineDrawingModeEnum::getToolTip());
     
     if (orientation == Qt::Horizontal) {
         this->gridLayoutGroup = new WuQGridLayoutGroup(gridLayout,
@@ -122,8 +167,11 @@ VolumeSurfaceOutlineViewController::VolumeSurfaceOutlineViewController(const Qt:
         int row = this->gridLayoutGroup->rowCount();
         this->gridLayoutGroup->addWidget(this->enabledCheckBox, row, 0);
         this->gridLayoutGroup->addWidget(this->colorOrTabSelectionControl->getWidget(), row, 1);        
-        this->gridLayoutGroup->addWidget(this->thicknessSpinBox->getWidget(), row, 2);
-        this->gridLayoutGroup->addWidget(this->surfaceSelectionViewController->getWidget(), row, 3);
+        this->gridLayoutGroup->addWidget(this->thicknessSpinBox, row, 2);
+        this->gridLayoutGroup->addWidget(this->slicePlaneDepthSpinBox, row, 3);
+        this->gridLayoutGroup->addWidget(this->opacitySpinBox, row, 4);
+        this->gridLayoutGroup->addWidget(m_volumeSurfaceOutlineDrawingModeEnumComboBox->getWidget(), row, 5);
+        this->gridLayoutGroup->addWidget(this->surfaceSelectionViewController->getWidget(), row, 6);
     }
     else {
         QFrame* bottomHorizontalLineWidget = new QFrame();
@@ -135,10 +183,13 @@ VolumeSurfaceOutlineViewController::VolumeSurfaceOutlineViewController(const Qt:
                                                        this);
         int row = this->gridLayoutGroup->rowCount();
         this->gridLayoutGroup->addWidget(this->enabledCheckBox, row, 0, 2, 1, Qt::AlignCenter);
-        this->gridLayoutGroup->addWidget(this->surfaceSelectionViewController->getWidget(), row, 1, 1, 2);
+        this->gridLayoutGroup->addWidget(this->surfaceSelectionViewController->getWidget(), row, 1, 1, 5);
         row++;
         this->gridLayoutGroup->addWidget(this->colorOrTabSelectionControl->getWidget(), row, 1);        
-        this->gridLayoutGroup->addWidget(this->thicknessSpinBox->getWidget(), row, 2, Qt::AlignLeft);
+        this->gridLayoutGroup->addWidget(this->thicknessSpinBox, row, 2);
+        this->gridLayoutGroup->addWidget(this->slicePlaneDepthSpinBox, row, 3);
+        this->gridLayoutGroup->addWidget(this->opacitySpinBox, row, 4);
+        this->gridLayoutGroup->addWidget(m_volumeSurfaceOutlineDrawingModeEnumComboBox->getWidget(), row, 5, Qt::AlignLeft);
         row++;
         this->gridLayoutGroup->addWidget(bottomHorizontalLineWidget, row, 0, 1, -1);
     }
@@ -215,6 +266,50 @@ VolumeSurfaceOutlineViewController::thicknessSpinBoxValueChanged(double value)
 }
 
 /**
+ * Called when slice plane depth value is changed.
+ * @param value
+ *    Value that was selected.
+ */
+void
+VolumeSurfaceOutlineViewController::slicePlaneDepthSpinBoxValueChanged(double value)
+{
+    if (this->outlineModel != NULL) {
+        this->outlineModel->setSlicePlaneDepth(value);
+        
+        /*
+         * Need to update the value so that the special text value is
+         * displayed when value is at the minimum
+         */
+        QSignalBlocker blocker(this->slicePlaneDepthSpinBox);
+        this->slicePlaneDepthSpinBox->setValue(this->outlineModel->getSlicePlaneDepth());
+    }
+    
+    this->updateGraphics();
+}
+
+/**
+ * Called when slice plane opacity value is changed.
+ * @param value
+ *    Value that was selected.
+ */
+void
+VolumeSurfaceOutlineViewController::opacityValueChanged(double value)
+{
+    if (this->outlineModel != NULL) {
+        this->outlineModel->setOpacity(value);
+        
+        /*
+         * Need to update the value so that the special text value is
+         * displayed when value is at the minimum
+         */
+        QSignalBlocker blocker(this->opacitySpinBox);
+        this->opacitySpinBox->setValue(this->outlineModel->getOpacity());
+    }
+    
+    this->updateGraphics();
+}
+
+/**
  * Update this view controller.
  * @param outlineModel
  *    Outline model for use in this view controller.
@@ -235,10 +330,35 @@ VolumeSurfaceOutlineViewController::updateViewController(VolumeSurfaceOutlineMod
         }
         this->thicknessSpinBox->setValue(thickness);
         this->thicknessSpinBox->blockSignals(false);
+        
+        this->slicePlaneDepthSpinBox->blockSignals(true);
+        this->slicePlaneDepthSpinBox->setValue(outlineModel->getSlicePlaneDepth());
+        this->slicePlaneDepthSpinBox->blockSignals(false);
+
+        this->opacitySpinBox->blockSignals(true);
+        this->opacitySpinBox->setValue(outlineModel->getOpacity());
+        this->opacitySpinBox->blockSignals(false);
+        
         this->surfaceSelectionViewController->updateControl(outlineModel->getSurfaceSelectionModel());
         this->colorOrTabSelectionControl->updateViewController(outlineModel->getColorOrTabModel());
+        m_volumeSurfaceOutlineDrawingModeEnumComboBox->setSelectedItem<VolumeSurfaceOutlineDrawingModeEnum,
+              VolumeSurfaceOutlineDrawingModeEnum::Enum>(outlineModel->getDrawingMode());
     }
 }
+
+/**
+ * Called when drawing mode is  changed
+ */
+void
+VolumeSurfaceOutlineViewController::volumeSurfaceOutlineDrawingModeEnumComboBoxItemActivated()
+{
+    if (this->outlineModel != NULL) {
+        const VolumeSurfaceOutlineDrawingModeEnum::Enum drawMode = m_volumeSurfaceOutlineDrawingModeEnumComboBox->getSelectedItem<VolumeSurfaceOutlineDrawingModeEnum,VolumeSurfaceOutlineDrawingModeEnum::Enum>();
+        this->outlineModel->setDrawingMode(drawMode);
+    }
+    updateGraphics();
+}
+
 
 /**
  * Update the graphics.
@@ -246,7 +366,7 @@ VolumeSurfaceOutlineViewController::updateViewController(VolumeSurfaceOutlineMod
 void 
 VolumeSurfaceOutlineViewController::updateGraphics()
 {
-    EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+    EventManager::get()->sendEvent(EventGraphicsPaintSoonAllWindows().getPointer());
 }
 
 

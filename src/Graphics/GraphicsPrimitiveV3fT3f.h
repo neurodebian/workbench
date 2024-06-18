@@ -33,32 +33,24 @@ namespace caret {
 
     class GraphicsPrimitiveV3fT3f : public GraphicsPrimitive {
         
-    public:
+    public:        
         GraphicsPrimitiveV3fT3f(const PrimitiveType primitiveType,
-                                const uint8_t* imageBytesRGBA,
-                                const int32_t imageWidth,
-                                const int32_t imageHeight,
-                                const TextureWrappingType textureWrappingType,
-                                const TextureFilteringType textureFilteringType);
+                                const GraphicsTextureSettings& textureSettings);
         
         virtual ~GraphicsPrimitiveV3fT3f();
         
         GraphicsPrimitiveV3fT3f(const GraphicsPrimitiveV3fT3f& obj);
 
         void addVertex(const float xyz[3],
-                       const float st[2]);
+                       const float str[3]);
 
         void addVertex(const float x,
                        const float y,
                        const float z,
                        const float s,
-                       const float t);
+                       const float t,
+                       const float r);
         
-        void addVertex(const float x,
-                       const float y,
-                       const float s,
-                       const float t);
-
         virtual GraphicsPrimitive* clone() const;
         
         // ADD_NEW_METHODS_HERE

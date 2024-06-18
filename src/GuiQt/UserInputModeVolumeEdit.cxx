@@ -28,8 +28,12 @@
 #include "BrainOpenGLViewportContent.h"
 #include "BrowserTabContent.h"
 #include "CaretAssert.h"
+#include "CaretLogger.h"
+#include "DrawingViewportContent.h"
+#include "ElapsedTimer.h"
 #include "EventBrowserWindowDrawingContent.h"
-#include "EventGraphicsUpdateAllWindows.h"
+#include "EventDrawingViewportContentGet.h"
+#include "EventGraphicsPaintNowAllWindows.h"
 #include "EventManager.h"
 #include "EventUserInterfaceUpdate.h"
 #include "GiftiLabel.h"
@@ -59,15 +63,15 @@ using namespace caret;
 /**
  * Constructor.
  *
+ * @param browserIndexIndex
  * Index of window using this volume editor input handler.
  */
-UserInputModeVolumeEdit::UserInputModeVolumeEdit(const int32_t windowIndex)
-: UserInputModeView(windowIndex,
-                    UserInputModeEnum::Enum::VOLUME_EDIT),
-m_windowIndex(windowIndex)
+UserInputModeVolumeEdit::UserInputModeVolumeEdit(const int32_t browserIndexIndex)
+: UserInputModeView(browserIndexIndex,
+                    UserInputModeEnum::Enum::VOLUME_EDIT)
 {
     m_inputModeVolumeEditWidget = new UserInputModeVolumeEditWidget(this,
-                                                                    windowIndex);
+                                                                    browserIndexIndex);
     setWidgetForToolBar(m_inputModeVolumeEditWidget);
 }
 
@@ -119,10 +123,32 @@ UserInputModeVolumeEdit::processEditCommandFromMouse(const MouseEvent& mouseEven
         return;
     }
     
-    VolumeEditInfo volumeEditInfo;
-    if ( ! getVolumeEditInfo(volumeEditInfo)) {
+    std::unique_ptr<EventDrawingViewportContentGet> viewportContent(
+               EventDrawingViewportContentGet::newInstanceGetTopModelViewport(getBrowserWindowIndex(),
+                                                                         mouseEvent.getXY()));
+    EventManager::get()->sendEvent(viewportContent.get());
+    if ( ! viewportContent) {
+        WuQMessageBox::errorOk(m_inputModeVolumeEditWidget,
+                               "Failed to find volume slice under the mouse");
+        return;
+
+    }
+    std::shared_ptr<DrawingViewportContent> drawContent(viewportContent->getDrawingViewportContent());
+    const DrawingViewportContentVolumeSlice sliceVP(drawContent->getVolumeSlice());
+    const VolumeSliceViewPlaneEnum::Enum sliceViewPlane(sliceVP.getVolumeSliceViewPlane());
+    if (sliceViewPlane == VolumeSliceViewPlaneEnum::ALL) {
+        WuQMessageBox::errorOk(m_inputModeVolumeEditWidget,
+                               "Mouse was not clicked over a volume slice");
         return;
     }
+    VolumeEditInfo volumeEditInfo;
+    if ( ! getVolumeEditInfoForEditOperation(volumeEditInfo,
+                                             sliceViewPlane)) {
+        return;
+    }
+    
+    ElapsedTimer timer;
+    timer.start();
     
     BrainOpenGLWidget* openGLWidget = mouseEvent.getOpenGLWidget();
     const int mouseX = mouseEvent.getX();
@@ -136,8 +162,7 @@ UserInputModeVolumeEdit::processEditCommandFromMouse(const MouseEvent& mouseEven
                                                                 mouseY);
     if ((volumeEditInfo.m_volumeFile == idEditVoxel->getVolumeFile())
         && idEditVoxel->isValid()) {
-        int64_t ijk[3];
-        idEditVoxel->getVoxelIJK(ijk);
+        const VoxelIJK ijk(idEditVoxel->getVoxelIJK());
         
         VolumeEditingModeEnum::Enum editMode = VolumeEditingModeEnum::VOLUME_EDITING_MODE_ON;
         int32_t brushSizes[3] = { 0, 0, 0 };
@@ -159,7 +184,7 @@ UserInputModeVolumeEdit::processEditCommandFromMouse(const MouseEvent& mouseEven
         const VolumeSliceViewPlaneEnum::Enum slicePlane = volumeEditInfo.m_sliceViewPlane;
         
         const VolumeSliceProjectionTypeEnum::Enum sliceProjectionType = volumeEditInfo.m_sliceProjectionType;
-        const Matrix4x4 obliqueRotationMatrix = volumeEditInfo.m_obliqueRotationMatrix;
+        const Matrix4x4 obliqueMprRotationMatrix = volumeEditInfo.m_obliqueMprRotationMatrix;
         
         bool successFlag = true;
         AString errorMessage;
@@ -194,9 +219,9 @@ UserInputModeVolumeEdit::processEditCommandFromMouse(const MouseEvent& mouseEven
                                                           editMode,
                                                           slicePlane,
                                                           sliceProjectionType,
-                                                          obliqueRotationMatrix,
+                                                          obliqueMprRotationMatrix,
                                                           voxelDiffXYZ,
-                                                          ijk,
+                                                          ijk.m_ijk,
                                                           brushSizesInt64,
                                                           voxelValueOn,
                                                           voxelValueOff,
@@ -208,9 +233,12 @@ UserInputModeVolumeEdit::processEditCommandFromMouse(const MouseEvent& mouseEven
                                    errorMessage);
         }
         
-        updateGraphicsAfterEditing(volumeEditInfo.m_volumeFile,
-                                   volumeEditInfo.m_mapIndex);
+        updateGraphicsAfterEditing();
     }
+    
+    CaretLogInfo("Voxel Edit Time: "
+                 + AString::number(timer.getElapsedTimeMilliseconds())
+                 + "ms");
 }
 
 /**
@@ -257,22 +285,15 @@ UserInputModeVolumeEdit::showContextMenu(const MouseEvent& /*mouseEvent*/,
     
 /**
  * Update the graphics after editing.
- *
- * @param volumeFile
- *    Volume file that needs coloring update.
- * @param mapIndex
- *    Index of the map.
  */
 void
-UserInputModeVolumeEdit::updateGraphicsAfterEditing(VolumeFile* volumeFile,
-                                                    const int32_t mapIndex)
+UserInputModeVolumeEdit::updateGraphicsAfterEditing()
 {
-    CaretAssert(volumeFile);
-    CaretAssert((mapIndex >= 0) && (mapIndex < volumeFile->getNumberOfMaps()));
-
-    volumeFile->clearVoxelColoringForMap(mapIndex);
-    volumeFile->updateScalarColoringForMap(mapIndex);
-    EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+    /*
+     * Note: Coloring is updated in VolumeFileEditorDelegate
+     * We want to repaint the graphics as immediately
+     */
+    EventManager::get()->sendEvent(EventGraphicsPaintNowAllWindows().getPointer());
 }
 
 /**
@@ -284,25 +305,6 @@ UserInputModeVolumeEdit::getCursor() const
     
     CursorEnum::Enum cursor = CursorEnum::CURSOR_DEFAULT;
     
-//    switch (m_mode) {
-//        case MODE_CREATE:
-//            break;
-//        case MODE_EDIT:
-//            cursor = CursorEnum::CURSOR_POINTING_HAND;
-//            switch (m_editOperation) {
-//                case EDIT_OPERATION_DELETE:
-//                    cursor = CursorEnum::CURSOR_CROSS;
-//                    break;
-//                case EDIT_OPERATION_PROPERTIES:
-//                    cursor = CursorEnum::CURSOR_WHATS_THIS;
-//                    break;
-//            }
-//            break;
-//        case MODE_OPERATIONS:
-//            cursor = CursorEnum::CURSOR_POINTING_HAND;
-//            break;
-//    }
-    
     return cursor;
 }
 
@@ -310,24 +312,73 @@ UserInputModeVolumeEdit::getCursor() const
  * Get information about volume data being edited.
  *
  * @param volumeEditInfo
- *    Loaded with editing information upon sucess.
+ *    Loaded with editing information upon sucess BUT oblique / MPR matrix is NOT set
+ *    There may be instance where the slice plane is "ALL" but the matrix is not avaliable
+ *    for ALL, only the individual planes (Axial, Coronal, Parasagittal)
  * @return
  *    True if all ofvolumeEditInfo is valid, else false.  Even
  *    if false the overlay and model volume MAY be valid (non-NULL).
  */
 bool
-UserInputModeVolumeEdit::getVolumeEditInfo(VolumeEditInfo& volumeEditInfo)
+UserInputModeVolumeEdit::getVolumeEditInfoForStatus(VolumeEditInfo& volumeEditInfo)
+{
+    const bool setObliqueMprMatrixFlag(false);
+    return getVolumeEditInfo(volumeEditInfo,
+                             VolumeSliceViewPlaneEnum::ALL,
+                             setObliqueMprMatrixFlag);
+}
+
+/**
+ * Get information about volume data being edited for the given slice plane
+ *
+ * @param volumeEditInfo
+ *    Loaded with editing information upon sucess.
+ * @param sliceViewPlane
+ *    The slice view plane
+ * @return
+ *    True if all ofvolumeEditInfo is valid, else false.  Even
+ *    if false the overlay and model volume MAY be valid (non-NULL).
+ */
+bool
+UserInputModeVolumeEdit::getVolumeEditInfoForEditOperation(VolumeEditInfo& volumeEditInfo,
+                                                           const VolumeSliceViewPlaneEnum::Enum sliceViewPlane)
+{
+    const bool setObliqueMprMatrixFlag(true);
+    return getVolumeEditInfo(volumeEditInfo,
+                             sliceViewPlane,
+                             setObliqueMprMatrixFlag);
+}
+
+
+/**
+ * Get information about volume data being edited.
+ *
+ * @param volumeEditInfo
+ *    Loaded with editing information upon sucess.
+ * @param sliceViewPlane
+ *    The slice view plane
+ * @param setObliqueMprMatrixFlag
+ *    If true, set the oblique/MPR matrix.  Turn this off when the plane is ALL as there is no matrix for ALL
+ * @return
+ *    True if all ofvolumeEditInfo is valid, else false.  Even
+ *    if false the overlay and model volume MAY be valid (non-NULL).
+ */
+bool
+UserInputModeVolumeEdit::getVolumeEditInfo(VolumeEditInfo& volumeEditInfo,
+                                           const VolumeSliceViewPlaneEnum::Enum sliceViewPlane,
+                                           const bool setObliqueMprMatrixFlag)
 {
     volumeEditInfo.m_overlaySet     = NULL;
+    volumeEditInfo.m_underlayVolume = NULL;
     volumeEditInfo.m_topOverlay     = NULL;
     volumeEditInfo.m_volumeOverlay  = NULL;
     volumeEditInfo.m_volumeFile     = NULL;
     volumeEditInfo.m_mapIndex       = -1;
     volumeEditInfo.m_sliceViewPlane = VolumeSliceViewPlaneEnum::ALL;
     volumeEditInfo.m_sliceProjectionType = VolumeSliceProjectionTypeEnum::VOLUME_SLICE_PROJECTION_ORTHOGONAL;
-    volumeEditInfo.m_obliqueRotationMatrix.identity();
+    volumeEditInfo.m_obliqueMprRotationMatrix.identity();
     
-    EventBrowserWindowDrawingContent windowEvent(m_windowIndex);
+    EventBrowserWindowDrawingContent windowEvent(getBrowserWindowIndex());
     EventManager::get()->sendEvent(windowEvent.getPointer());
     
     BrowserTabContent* tabContent = windowEvent.getSelectedBrowserTabContent();
@@ -353,13 +404,32 @@ UserInputModeVolumeEdit::getVolumeEditInfo(VolumeEditInfo& volumeEditInfo)
                         VolumeFile* vf = dynamic_cast<VolumeFile*>(mapFile);
                         if (vf != NULL) {
                             volumeEditInfo.m_overlaySet     = overlaySet;
+                            volumeEditInfo.m_underlayVolume = overlaySet->getUnderlayVolume();
                             volumeEditInfo.m_volumeOverlay  = overlay;
                             volumeEditInfo.m_volumeFile     = vf;
                             volumeEditInfo.m_mapIndex       = mapIndex;
-                            volumeEditInfo.m_sliceViewPlane = tabContent->getSliceViewPlane();
-                            volumeEditInfo.m_sliceProjectionType = tabContent->getSliceProjectionType();
+                            volumeEditInfo.m_sliceViewPlane = sliceViewPlane;
+                            volumeEditInfo.m_sliceProjectionType = tabContent->getVolumeSliceProjectionType();
                             volumeEditInfo.m_volumeFileEditorDelegate = vf->getVolumeFileEditorDelegate();
-                            volumeEditInfo.m_obliqueRotationMatrix = tabContent->getObliqueVolumeRotationMatrix();
+                            volumeEditInfo.m_obliqueMprRotationMatrix = Matrix4x4();
+                            
+                            if (setObliqueMprMatrixFlag) {
+                                switch (tabContent->getVolumeSliceProjectionType()) {
+                                    case VolumeSliceProjectionTypeEnum::VOLUME_SLICE_PROJECTION_MPR:
+                                        volumeEditInfo.m_obliqueMprRotationMatrix = tabContent->getMprRotationMatrix4x4ForSlicePlane(ModelTypeEnum::MODEL_TYPE_VOLUME_SLICES,
+                                                                                                                                     sliceViewPlane);
+                                        break;
+                                    case VolumeSliceProjectionTypeEnum::VOLUME_SLICE_PROJECTION_MPR_THREE:
+                                        volumeEditInfo.m_obliqueMprRotationMatrix = tabContent->getMprThreeRotationMatrixForSlicePlane(sliceViewPlane);
+                                        break;
+                                    case VolumeSliceProjectionTypeEnum::VOLUME_SLICE_PROJECTION_OBLIQUE:
+                                        volumeEditInfo.m_obliqueMprRotationMatrix = tabContent->getObliqueVolumeRotationMatrix();
+                                        break;
+                                    case VolumeSliceProjectionTypeEnum::VOLUME_SLICE_PROJECTION_ORTHOGONAL:
+                                        break;
+                                }
+                            }
+                            
                             return true;
                         }
                     }

@@ -26,7 +26,11 @@
 #include <QApplication>
 #include <QDate>
 #include <QDesktopServices>
+#include <QDir>
+#include <QImageReader>
+#include <QImageWriter>
 #include <QLabel>
+#include <QNetworkProxyFactory>
 #include <QStyle>
 #include <QUrl>
 #include <QVBoxLayout>
@@ -34,7 +38,11 @@
 #include "ApplicationInformation.h"
 #include "BrainOpenGLWidget.h"
 #include "CaretAssert.h"
+#include "CaretOMP.h"
+#include "GuiManager.h"
+#include "libCZI.h"
 #include "ImageFile.h"
+#include "InfoItem.h"
 #include "WuQDataEntryDialog.h"
 #include "WuQtUtilities.h"
 
@@ -98,7 +106,9 @@ AboutWorkbenchDialog::AboutWorkbenchDialog(BrainOpenGLWidget* openGLParentWidget
                                            QDialogButtonBox::NoRole);
     m_openGLPushButton = addUserPushButton("OpenGL...",
                                            QDialogButtonBox::NoRole);
-    
+    m_systemPushButton = addUserPushButton("System...",
+                                            QDialogButtonBox::NoRole);
+
     QWidget* widget = new QWidget();
     QVBoxLayout* layout = new QVBoxLayout(widget);
     WuQtUtilities::setLayoutSpacingAndMargins(layout,
@@ -138,6 +148,9 @@ AboutWorkbenchDialog::userButtonPressed(QPushButton* userPushButton)
     else if (userPushButton == m_morePushButton) {
         displayMoreInformation();
     }
+    else if (userPushButton == m_systemPushButton) {
+        displaySystemInformation();
+    }
     else {
         CaretAssert(0);
     }
@@ -166,12 +179,49 @@ AboutWorkbenchDialog::displayMoreInformation()
     std::vector<AString> informationData;
     appInfo.getAllInformation(informationData);
     
+#ifdef CARET_OMP
+    int numThreads(-1);
+#pragma omp parallel
+    {
+        /*
+         * omp_get_num_threads must be inside parallel region (omp parallel)
+         * to return correct value.  "omp single" results in omp_get_num_threads()
+         * getting called one time.  Without it, it would run once for each thread.
+         * https://stackoverflow.com/questions/11071116/i-got-omp-get-num-threads-always-return-1-in-gcc-works-in-icc
+         */
+#pragma omp single
+        numThreads = omp_get_num_threads();
+    }
+    informationData.push_back("OpenMP Number of Threads: "
+                              + AString::number(numThreads));
+    informationData.push_back("OpenMP Maximum Number of Threads: "
+                              + AString::number(omp_get_max_threads()));
+#endif
+    
+    int32_t cziMajorVersion(-1), cziMinorVersion(-1);
+    libCZI::GetLibCZIVersion(&cziMajorVersion, &cziMinorVersion);
+    informationData.push_back("libCZI Version: "
+                              + AString::number(cziMajorVersion)
+                              + "."
+                              + AString::number(cziMinorVersion));
+    
     QString styleName("Undefined");
     QStyle* appStyle = QApplication::style();
     if (appStyle != NULL) {
         styleName = appStyle->objectName();
     }
     informationData.push_back(QString("Style Name: " + styleName));
+    
+    informationData.push_back("Network Proxies:");
+    QList<QNetworkProxy> proxies(QNetworkProxyFactory::systemProxyForQuery());
+    if (proxies.isEmpty()) {
+        informationData.push_back("   None");
+    }
+    else {
+        for (const auto& proxy : proxies) {
+            informationData.push_back("   Host: " + proxy.hostName());
+        }
+    }
     
     std::vector<AString> imageReadExtensions, imageWriteExtensions;
     ImageFile::getQtSupportedImageFileExtensions(imageReadExtensions,
@@ -180,6 +230,19 @@ AboutWorkbenchDialog::displayMoreInformation()
                               + AString::join(imageReadExtensions, ", "));
     informationData.push_back("Qt Writable Images: "
                               + AString::join(imageWriteExtensions, ", "));
+
+    std::vector<AString> clipRectReadableExtensions;
+    std::vector<AString> scaledClipRectReadableExtensions;
+    std::vector<AString> metaDataReadableWritableExtensions;
+    ImageFile::getImageFileQtSupportedOptionExtensions(clipRectReadableExtensions,
+                                                       scaledClipRectReadableExtensions,
+                                                       metaDataReadableWritableExtensions);
+    informationData.push_back("Qt ClipRect (ROI) Readable Images: "
+                              + AString::join(clipRectReadableExtensions, ", "));
+    informationData.push_back("Qt Scaled ClipRect (ROI) Readable Images: "
+                              + AString::join(scaledClipRectReadableExtensions, ", "));
+    informationData.push_back("Qt Readable/Writable Metadata Support (Text Key/Value) Images: "
+                              + AString::join(metaDataReadableWritableExtensions, ", "));
 
     AString imageWriteDefaultExtension;
     ImageFile::getWorkbenchSupportedImageFileExtensions(imageReadExtensions,
@@ -197,6 +260,80 @@ AboutWorkbenchDialog::displayMoreInformation()
     informationData.push_back("Qt Readable Movies (QMovie): "
                               + AString::join(movieReadExtensions, ", "));
 
+    /*
+     * Show image formats that support "clipRect" which is supposed
+     * to mean reading only a portion, defined as a rectangle,
+     * of an image.  To test this option, it requires an image file
+     * so very small images are created in the temp directory.
+     */
+    const bool testClipRectSupportFlag(false);
+    if (testClipRectSupportFlag) {
+        std::vector<AString> clipRectExtensions;
+        std::vector<AString> scaledClipRectExtensions;
+        std::vector<AString> imageReadExtensions, imageWriteExtensions;
+        ImageFile::getQtSupportedImageFileExtensions(imageReadExtensions,
+                                                     imageWriteExtensions);
+        for (auto ext : imageWriteExtensions) {
+            if (std::find(imageReadExtensions.begin(),
+                          imageReadExtensions.end(),
+                          ext) != imageReadExtensions.end()) {
+                QImage image(2, 2, QImage::Format_RGB32);
+                QString name(QDir::tempPath() + "/file." + ext);
+                QImageWriter writer(name);
+                writer.write(image);
+                
+                QImageReader reader(name);
+                if (reader.supportsOption(QImageIOHandler::ClipRect)) {
+                    clipRectExtensions.push_back(ext);
+                }
+                if (reader.supportsOption(QImageIOHandler::ScaledClipRect)) {
+                    scaledClipRectExtensions.push_back(ext);
+                }
+            }
+        }
+        
+        informationData.push_back("Qt ClipRect Readable: "
+                                  + AString::join(clipRectExtensions, ", "));
+        informationData.push_back("Qt Scaled ClipRect Readable: "
+                                  + AString::join(scaledClipRectExtensions, ", "));
+    }
+    
+    informationData.push_back("Library paths:");
+    QStringList libPaths(QCoreApplication::libraryPaths());
+    QStringListIterator libPathsIter(libPaths);
+    while (libPathsIter.hasNext()) {
+        informationData.push_back("   " + libPathsIter.next());
+    }
+    
+    informationData.push_back("File and extensions for reading and writing:");
+    std::vector<DataFileTypeEnum::Enum> allDataFileTypes;
+    uint32_t dataFileTypeOptions(0);
+    DataFileTypeEnum::getAllEnums(allDataFileTypes,
+                                  dataFileTypeOptions);
+    for (const auto dft : allDataFileTypes) {
+        const AString typeName("   " + DataFileTypeEnum::toGuiName(dft));
+        
+        const std::vector<AString> allReadExtensions(DataFileTypeEnum::getAllFileExtensionsForReading(dft));
+        const AString readExts(AString::join(allReadExtensions, ", "));
+        
+        const std::vector<AString> allWriteExtensions(DataFileTypeEnum::getAllFileExtensionsForWriting(dft));
+        const AString writeExts(AString::join(allWriteExtensions, ", "));
+        
+        if (readExts == writeExts) {
+            informationData.push_back(typeName
+                         + ": "
+                         + readExts);
+        }
+        else {
+            informationData.push_back(typeName
+                         + " Read: "
+                         + readExts);
+            informationData.push_back(QString(typeName.length(), ' ')
+                         + "Write: "
+                         + writeExts);
+        }
+    }
+
     WuQDataEntryDialog ded("More " + appInfo.getName() + " Information",
                            this,
                            true);
@@ -204,6 +341,44 @@ AboutWorkbenchDialog::displayMoreInformation()
     for (int32_t i = 0; i < numInfo; i++) {
         ded.addWidget("", new QLabel(informationData[i]));
     }
+    ded.setCancelButtonText("");
+    ded.exec();
+}
+
+void
+AboutWorkbenchDialog::displaySystemInformation()
+{
+    ApplicationInformation appInfo;
+    std::vector<AString> informationData;
+    WuQDataEntryDialog ded("System Information",
+                           this,
+                           true);
+
+    std::vector<std::unique_ptr<InfoItem>> sysInfo(SystemUtilities::getSystemInfo());
+    for (const auto& infoValue : sysInfo) {
+        QLabel* label(ded.addLabel(infoValue->getName(),
+                                   infoValue->getValue()));
+        const AString toolTip(infoValue->getToolTip());
+        if ( ! toolTip.isEmpty()) {
+            WuQtUtilities::setWordWrappedToolTip(label,
+                                                 toolTip);
+        }
+    }
+
+    std::vector<std::unique_ptr<InfoItem>> screenInfo(GuiManager::getScreensInfo());
+    for (const auto& infoValue : screenInfo) {
+        QLabel* label(ded.addLabel(infoValue->getName(),
+                                   infoValue->getValue()));
+        const AString toolTip(infoValue->getToolTip());
+        if ( ! toolTip.isEmpty()) {
+            WuQtUtilities::setWordWrappedToolTip(label,
+                                                 toolTip);
+        }
+    }
+
+    ded.addLabel("", "");
+    ded.addLabel("Note:", "Move mouse over items above for description");
+    
     ded.setCancelButtonText("");
     ded.exec();
 }

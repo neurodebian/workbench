@@ -34,7 +34,7 @@
 #include "AnnotationOneCoordinateShape.h"
 #include "Brain.h"
 #include "CaretAssert.h"
-#include "EventGraphicsUpdateAllWindows.h"
+#include "EventGraphicsPaintSoonAllWindows.h"
 #include "EventManager.h"
 #include "GuiManager.h"
 #include "WuQFactory.h"
@@ -73,10 +73,36 @@ m_browserWindowIndex(browserWindowIndex)
 {
     QString widthLabelText;
     QString heightLabelText;
+    bool includeSizeLabelFlag(true);
     switch (m_parentWidgetType) {
         case AnnotationWidgetParentEnum::ANNOTATION_TOOL_BAR_WIDGET:
-            widthLabelText  = " W:";
-            heightLabelText = " H:";
+            switch (userInputMode) {
+                case UserInputModeEnum::Enum::ANNOTATIONS:
+                    widthLabelText  = " W:";
+                    heightLabelText = " H:";
+                    break;
+                case UserInputModeEnum::Enum::BORDERS:
+                    break;
+                case UserInputModeEnum::Enum::FOCI:
+                    break;
+                case UserInputModeEnum::Enum::IMAGE:
+                    break;
+                case UserInputModeEnum::Enum::INVALID:
+                    break;
+                case UserInputModeEnum::Enum::SAMPLES_EDITING:
+                    widthLabelText  = "Width:";
+                    heightLabelText = "Height:";
+                    break;
+                case UserInputModeEnum::Enum::TILE_TABS_LAYOUT_EDITING:
+                    widthLabelText  = "Width:";
+                    heightLabelText = "Height:";
+                    includeSizeLabelFlag = false;
+                    break;
+                case UserInputModeEnum::Enum::VIEW:
+                    break;
+                case UserInputModeEnum::Enum::VOLUME_EDIT:
+                    break;
+            }
             break;
         case AnnotationWidgetParentEnum::PARENT_ENUM_FOR_LATER_USE:
             CaretAssert(0);
@@ -109,12 +135,17 @@ m_browserWindowIndex(browserWindowIndex)
             break;
         case Qt::Vertical:
         {
-            QLabel* sizeLabel = new QLabel("Size");
+            QLabel* sizeLabel(NULL);
+            if (includeSizeLabelFlag) {
+                sizeLabel = new QLabel("Size");
+            }
             QGridLayout* layout = new QGridLayout(this);
-            WuQtUtilities::setLayoutSpacingAndMargins(layout, 2, 2);
+            WuQtUtilities::setLayoutSpacingAndMargins(layout, 2, 0);
             int32_t row(0);
-            layout->addWidget(sizeLabel, row, 0, 1, 2, Qt::AlignHCenter);
-            row++;
+            if (sizeLabel != NULL) {
+                layout->addWidget(sizeLabel, row, 0, 1, 2, Qt::AlignHCenter);
+                row++;
+            }
             layout->addWidget(widthLabel, row, 0);
             layout->addWidget(m_widthSpinBox, row, 1);
             row++;
@@ -161,7 +192,11 @@ AnnotationWidthHeightWidget::updateContent(std::vector<AnnotationOneCoordinateSh
                 break;
             case AnnotationTypeEnum::OVAL:
                 break;
-            case AnnotationTypeEnum::POLY_LINE:
+            case AnnotationTypeEnum::POLYHEDRON:
+                break;
+            case AnnotationTypeEnum::POLYGON:
+                break;
+            case AnnotationTypeEnum::POLYLINE:
                 break;
             case AnnotationTypeEnum::SCALE_BAR:
                 /* Scale bar width/height not adjustable */
@@ -276,10 +311,9 @@ AnnotationWidthHeightWidget::heightValueChanged(double value)
     AnnotationRedoUndoCommand* undoCommand = new AnnotationRedoUndoCommand();
     undoCommand->setModeTwoDimHeight(value,
                                      annotations);
-    AnnotationManager* annMan = GuiManager::get()->getBrain()->getAnnotationManager();
+    AnnotationManager* annMan = GuiManager::get()->getBrain()->getAnnotationManager(m_userInputMode);
     AString errorMessage;
-    if ( ! annMan->applyCommand(m_userInputMode,
-                                undoCommand,
+    if ( ! annMan->applyCommand(undoCommand,
                                 errorMessage)) {
         WuQMessageBox::errorOk(this,
                                errorMessage);
@@ -296,7 +330,7 @@ AnnotationWidthHeightWidget::heightValueChanged(double value)
             break;
     }
 
-    EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+    EventManager::get()->sendEvent(EventGraphicsPaintSoonAllWindows().getPointer());
     
 }
 
@@ -315,10 +349,9 @@ AnnotationWidthHeightWidget::widthValueChanged(double value)
     AnnotationRedoUndoCommand* undoCommand = new AnnotationRedoUndoCommand();
     undoCommand->setModeTwoDimWidth(value,
                                     annotations);
-    AnnotationManager* annMan = GuiManager::get()->getBrain()->getAnnotationManager();
+    AnnotationManager* annMan = GuiManager::get()->getBrain()->getAnnotationManager(m_userInputMode);
     AString errorMessage;
-    if ( ! annMan->applyCommand(m_userInputMode,
-                                undoCommand,
+    if ( ! annMan->applyCommand(undoCommand,
                                 errorMessage)) {
         WuQMessageBox::errorOk(this,
                                errorMessage);
@@ -334,6 +367,6 @@ AnnotationWidthHeightWidget::widthValueChanged(double value)
             break;
     }
 
-    EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+    EventManager::get()->sendEvent(EventGraphicsPaintSoonAllWindows().getPointer());
 }
 

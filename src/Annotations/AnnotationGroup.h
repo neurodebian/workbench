@@ -27,6 +27,7 @@
 #include "AnnotationGroupKey.h"
 #include "CaretObjectTracksModification.h"
 #include "DisplayGroupAndTabItemInterface.h"
+#include "HistologySpaceKey.h"
 #include "SceneableInterface.h"
 #include "SpacerTabIndex.h"
 
@@ -44,7 +45,9 @@ namespace caret {
                         const int32_t uniqueKey,
                         const AnnotationCoordinateSpaceEnum::Enum coordinateSpace,
                         const int32_t tabOrWindowIndex,
-                        const SpacerTabIndex& spacerTabIndex);
+                        const SpacerTabIndex& spacerTabIndex,
+                        const AString& mediaFileName,
+                        const HistologySpaceKey& histologySpaceKey);
         
         virtual ~AnnotationGroup();
 
@@ -66,6 +69,14 @@ namespace caret {
         
         SpacerTabIndex getSpacerTabIndex() const;
         
+        AString getMediaFileName() const;
+        
+        const HistologySpaceKey& getHistologySpaceKey() const;
+        
+//        AString getHistologySlicesFileName() const;
+//
+//        int32_t getHistologySliceIndex() const;
+
         int32_t getNumberOfAnnotations() const;
         
         Annotation* getAnnotation(const int32_t index);
@@ -192,6 +203,14 @@ namespace caret {
         SpacerTabIndex m_spacerTabIndex;
         
         int32_t m_tabOrWindowIndex;
+        
+        AString m_mediaFileName;
+        
+        HistologySpaceKey m_histologySpaceKey;
+        
+//        AString m_histologySlicesFileName;
+//
+//        int32_t m_histologySliceIndex;
         
         mutable AString m_name;
         

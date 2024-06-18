@@ -38,7 +38,7 @@
 #include "Brain.h"
 #include "CaretAssert.h"
 #include "EventGetViewportSize.h"
-#include "EventGraphicsUpdateAllWindows.h"
+#include "EventGraphicsPaintSoonAllWindows.h"
 #include "EventManager.h"
 #include "GuiManager.h"
 #include "MathFunctions.h"
@@ -71,16 +71,16 @@ AnnotationRotationWidget::AnnotationRotationWidget(const UserInputModeEnum::Enum
 m_userInputMode(userInputMode),
 m_browserWindowIndex(browserWindowIndex)
 {
-    QLabel* rotationLabel = new QLabel(" R:");
+    QLabel* rotationLabel = new QLabel("Rotate");
     m_rotationSpinBox = WuQFactory::newDoubleSpinBoxWithMinMaxStepDecimalsSignalDouble(0.0, 359, 1.0, 0,
                                                                                        this, SLOT(rotationValueChanged(double)));
     m_rotationSpinBox->setWrapping(true);
     WuQtUtilities::setWordWrappedToolTip(m_rotationSpinBox,
                                          "Rotation, clockwise in degrees");
     
-    QHBoxLayout* layout = new QHBoxLayout(this);
+    QVBoxLayout* layout = new QVBoxLayout(this);
     WuQtUtilities::setLayoutSpacingAndMargins(layout, 2, 2);
-    layout->addWidget(rotationLabel);
+    layout->addWidget(rotationLabel, 0, Qt::AlignHCenter);
     layout->addWidget(m_rotationSpinBox);
     
     setSizePolicy(QSizePolicy::Fixed,
@@ -113,6 +113,12 @@ AnnotationRotationWidget::getValidOneDimAnnotation(Annotation* annotation)
         bool validSpaceFlag = false;
         switch (oneDimAnn->getCoordinateSpace()) {
             case AnnotationCoordinateSpaceEnum::CHART:
+                break;
+            case AnnotationCoordinateSpaceEnum::HISTOLOGY:
+                validSpaceFlag = true;
+                break;
+            case AnnotationCoordinateSpaceEnum::MEDIA_FILE_NAME_AND_PIXEL:
+                validSpaceFlag = true;
                 break;
             case AnnotationCoordinateSpaceEnum::SPACER:
                 break;
@@ -174,6 +180,10 @@ AnnotationRotationWidget::updateContent(std::vector<Annotation*>& annotations)
                         bool viewportValidFlag = false;
                         switch (oneDimAnn->getCoordinateSpace()) {
                             case AnnotationCoordinateSpaceEnum::CHART:
+                                break;
+                            case AnnotationCoordinateSpaceEnum::HISTOLOGY:
+                                break;
+                            case AnnotationCoordinateSpaceEnum::MEDIA_FILE_NAME_AND_PIXEL:
                                 break;
                             case AnnotationCoordinateSpaceEnum::SPACER:
                                 break;
@@ -273,15 +283,14 @@ AnnotationRotationWidget::rotationValueChanged(double value)
         AnnotationRedoUndoCommand* undoCommand = new AnnotationRedoUndoCommand();
         undoCommand->setModeRotationAngle(value,
                                           m_annotations);
-        AnnotationManager* annMan = GuiManager::get()->getBrain()->getAnnotationManager();
+        AnnotationManager* annMan = GuiManager::get()->getBrain()->getAnnotationManager(m_userInputMode);
         AString errorMessage;
-        if ( ! annMan->applyCommand(m_userInputMode,
-                                    undoCommand,
+        if ( ! annMan->applyCommand(undoCommand,
                                     errorMessage)) {
             WuQMessageBox::errorOk(this,
                                    errorMessage);
         }
         EventManager::get()->sendSimpleEvent(EventTypeEnum::EVENT_ANNOTATION_TOOLBAR_UPDATE);
-        EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+        EventManager::get()->sendEvent(EventGraphicsPaintSoonAllWindows().getPointer());
     }
 }

@@ -24,9 +24,7 @@
 #include "CaretLogger.h"
 #include "NetworkException.h"
 #include <QNetworkRequest>
-#if QT_VERSION >= 0x050000
 #include <QUrlQuery>
-#endif // QT_VERSION
 
 using namespace caret;
 using namespace std;
@@ -223,6 +221,16 @@ void CaretHttpManager::httpRequestPrivate(const CaretHttpRequest &request, Caret
 {
     QEventLoop myLoop;
     QNetworkRequest myRequest;
+#if QT_VERSION >= 0x060000
+    /*
+     * Disable automatic redirection.  This typically occurs
+     * when logging into BALSA.  Qt5 did not handle redirection
+     * so code in this class handles the redirection when logging
+     * into BALSA.
+     */
+    myRequest.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
+                           QNetworkRequest::ManualRedirectPolicy);
+#endif
     myRequest.setSslConfiguration(QSslConfiguration::defaultConfiguration());
     CaretHttpManager* myCaretMgr = getHttpManager();
     AString myServerString = getServerString(request.m_url);
@@ -247,19 +255,12 @@ void CaretHttpManager::httpRequestPrivate(const CaretHttpRequest &request, Caret
  * QUrl::addQueryItem() deprecated in Qt5: http://wiki.qt.io/Transition_from_Qt_4.x_to_Qt5
  */
     QUrl myUrl = QUrl::fromUserInput(request.m_url);
-#if QT_VERSION >= 0x050000
     QUrlQuery myUrlQuery(QUrl::fromUserInput(request.m_url));
     for (int32_t i = 0; i < (int32_t)request.m_queries.size(); ++i)
     {
         myUrlQuery.addQueryItem(request.m_queries[i].first, request.m_queries[i].second);
     }
     myUrl.setQuery(myUrlQuery);
-#else // QT_VERSION
-    for (int32_t i = 0; i < (int32_t)request.m_queries.size(); ++i)
-    {
-        myUrl.addQueryItem(request.m_queries[i].first, request.m_queries[i].second);
-    }
-#endif // QT_VERSION
     QNetworkAccessManager* myQNetMgr = &(myCaretMgr->m_netMgr);
     bool first = true;
     QByteArray postData;
@@ -273,7 +274,8 @@ void CaretHttpManager::httpRequestPrivate(const CaretHttpRequest &request, Caret
                 if (!first) postData += "&";
                 if (request.m_arguments[i].second == "")
                 {
-                    postData += request.m_arguments[i].first;
+                    //postData += request.m_arguments[i].first;
+                    postData += QUrl::toPercentEncoding(request.m_arguments[i].first);
                 } else {
                     //postData += request.m_arguments[i].first + "=" + request.m_arguments[i].second;
                     postData += QUrl::toPercentEncoding(request.m_arguments[i].first) + "=" + QUrl::toPercentEncoding(request.m_arguments[i].second);
@@ -286,10 +288,12 @@ void CaretHttpManager::httpRequestPrivate(const CaretHttpRequest &request, Caret
                  headerIter++) {
                 myRequest.setRawHeader(headerIter->first.toLatin1(), headerIter->second.toLatin1());
             }
-#if QT_VERSION >= 0x050000
-            //myUrl.setQuery(myUrlQuery);
-#endif // QT_VERSION
             myRequest.setUrl(myUrl);
+#if QT_VERSION >= QT_VERSION_CHECK(5, 15, 0)
+            if (request.m_timeoutMilliseconds > 0) {
+                myRequest.setTransferTimeout(request.m_timeoutMilliseconds);
+            }
+#endif
             myReply = myQNetMgr->post(myRequest, postData);
             CaretLogFine("POST ARGUMENTS URL: " + myUrl.toString());
         }
@@ -306,9 +310,7 @@ void CaretHttpManager::httpRequestPrivate(const CaretHttpRequest &request, Caret
 //                    std::cout << "POST FILE header: " << qPrintable(headerIter->first)
 //                    << ": " << qPrintable(headerIter->second) << std::endl;
                 }
-#if QT_VERSION >= 0x050000
                 myUrl.setQuery(myUrlQuery);
-#endif // QT_VERSION
                 myRequest.setUrl(myUrl);
                 myReply = myQNetMgr->post(myRequest, postUploadFile);
                 CaretLogFine("POST FILE URL: " + myUrl.toString());
@@ -321,15 +323,9 @@ void CaretHttpManager::httpRequestPrivate(const CaretHttpRequest &request, Caret
     case GET:
         for (int32_t i = 0; i < (int32_t)request.m_arguments.size(); ++i)
         {
-#if QT_VERSION >= 0x050000
             myUrlQuery.addQueryItem(request.m_arguments[i].first, request.m_arguments[i].second);
-#else // QT_VERSION
-            myUrl.addQueryItem(request.m_arguments[i].first, request.m_arguments[i].second);
-#endif // QT_VERSION
         }
-#if QT_VERSION >= 0x050000
         myUrl.setQuery(myUrlQuery);
-#endif // QT_VERSION
         myRequest.setUrl(myUrl);
         CaretLogFine("GET URL: " + myUrl.toString());
         myReply = myQNetMgr->get(myRequest);
@@ -337,15 +333,9 @@ void CaretHttpManager::httpRequestPrivate(const CaretHttpRequest &request, Caret
     case HEAD:
         for (int32_t i = 0; i < (int32_t)request.m_arguments.size(); ++i)
         {
-#if QT_VERSION >= 0x050000
             myUrlQuery.addQueryItem(request.m_arguments[i].first, request.m_arguments[i].second);
-#else // QT_VERSION
-            myUrl.addQueryItem(request.m_arguments[i].first, request.m_arguments[i].second);
-#endif // QT_VERSION
         }
-#if QT_VERSION >= 0x050000
         myUrl.setQuery(myUrlQuery);
-#endif // QT_VERSION
         myRequest.setUrl(myUrl);
         CaretLogFine("HEAD URL: " + myUrl.toString());
         myReply = myQNetMgr->head(myRequest);

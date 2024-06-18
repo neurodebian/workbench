@@ -29,6 +29,8 @@
 
 #include "nifti1.h"
 
+#include <vector>
+
 namespace caret {
 
     class ProgramParameters;
@@ -41,14 +43,6 @@ namespace caret {
         
         void execute(ProgramParameters& parameters, const bool& preventProvenance);
         
-        virtual void setCiftiOutputDTypeAndScale(const int16_t& dtype, const double& minVal, const double& maxVal);
-
-        virtual void setCiftiOutputDTypeNoScale(const int16_t& dtype);
-
-        virtual void setVolumeOutputDTypeAndScale(const int16_t& dtype, const double& minVal, const double& maxVal);
-
-        virtual void setVolumeOutputDTypeNoScale(const int16_t& dtype);
-
         virtual AString doCompletion(ProgramParameters& parameters, const bool& useExtGlob);
 
     protected:
@@ -85,6 +79,8 @@ namespace caret {
         virtual AString getHelpInformation(const AString& programName) = 0;
         
         virtual bool takesParameters();
+        
+        virtual std::vector<AString> getCompatibilitySwitches() const;
         
     private:
         /** Short description listing commands purpose */

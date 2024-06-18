@@ -21,6 +21,7 @@
  */
 /*LICENSE_END*/
 
+#include <memory>
 
 #include "DataFile.h"
 #include "DataFileTypeEnum.h"
@@ -29,6 +30,10 @@
 
 namespace caret {
 
+    class CaretMappableDataFile;
+    class CziImageFile;
+    class FileIdentificationAttributes;
+    class HistologySlicesFile;
     class ImageFile;
     class MediaFile;
     class GiftiMetaData;
@@ -66,6 +71,8 @@ namespace caret {
          */
         virtual const GiftiMetaData* getFileMetaData() const = 0;
         
+        virtual bool supportsFileMetaData() const;
+        
         virtual AString getFileNameNoExtension() const;
         
         virtual AString getFileNameNoPathNoExtension() const;
@@ -87,11 +94,24 @@ namespace caret {
         
         static AString getFileReadingPassword();
         
+        virtual CziImageFile* castToCziImageFile();
+        virtual const CziImageFile* castToCziImageFile() const;
+        
         virtual ImageFile* castToImageFile();
         virtual const ImageFile* castToImageFile() const;
         
         virtual MediaFile* castToMediaFile();
         virtual const MediaFile* castToMediaFile() const;
+        
+        virtual HistologySlicesFile* castToHistologySlicesFile();
+        virtual const HistologySlicesFile* castToHistologySlicesFile() const;
+
+        virtual CaretMappableDataFile* castToCaretMappableDataFile();
+        virtual const CaretMappableDataFile* castToCaretMappableDataFile() const;
+
+        FileIdentificationAttributes* getFileIdentificationAttributes();
+        
+        const FileIdentificationAttributes* getFileIdentificationAttributes() const;
         
     protected:
         CaretDataFile(const CaretDataFile& cdf);
@@ -110,6 +130,8 @@ namespace caret {
         void copyDataCaretDataFile(const CaretDataFile& cdf);
         
         DataFileTypeEnum::Enum m_dataFileType;
+        
+        std::unique_ptr<FileIdentificationAttributes> m_fileIdentificationAttributes;
         
         /** A counter that is used when creating default file names */
         static int64_t s_defaultFileNameCounter;

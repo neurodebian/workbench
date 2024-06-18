@@ -6,15 +6,14 @@ PROJECT (Tests)
 #
 # Add QT for includes
 #
+if(Qt6_FOUND)
+    include_directories(${Qt6Core_INCLUDE_DIRS})
+    include_directories(${Qt6Network_INCLUDE_DIRS})
+endif()
 if(Qt5_FOUND)
     include_directories(${Qt5Core_INCLUDE_DIRS})
     include_directories(${Qt5Network_INCLUDE_DIRS})
 endif()
-IF (QT4_FOUND)
-    SET(QT_USE_QTXML TRUE)
-    SET(QT_USE_QTNETWORK TRUE)
-    INCLUDE(${QT_USE_FILE})
-ENDIF ()
 
 #
 #The individual tests
@@ -80,6 +79,17 @@ ELSE (APPLE)
    )
 ENDIF (APPLE)
 
+if(Qt6_FOUND)
+    set(QT6_LINK_LIBS
+        Qt6::Concurrent
+        Qt6::Core
+        Qt6::Core5Compat
+        Qt6::Gui
+        Qt6::Network
+        Qt6::Test
+        Qt6::Xml)
+endif()
+
 if(Qt5_FOUND)
     set(QT5_LINK_LIBS
         Qt5::Concurrent
@@ -115,14 +125,19 @@ Charting
 Palette
 Scenes
 Xml
+CZICmd
+CZI
+CZIJxrDecode
 Common
 ${QT5_LINK_LIBS}
+${QT6_LINK_LIBS}
 ${QT_LIBRARIES}
 ${GLEW_LIBRARIES}
 ${OSMESA_OFFSCREEN_LIBRARY}
 ${OSMESA_GL_LIBRARY}
 ${OSMESA_GLU_LIBRARY}
 ${ZLIB_LIBRARIES}
+${OPENMP_LIBRARY}
 #${LIBS}
 )
 

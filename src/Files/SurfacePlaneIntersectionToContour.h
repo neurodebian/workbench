@@ -39,11 +39,27 @@ namespace caret {
     class SurfacePlaneIntersectionToContour : public CaretObject {
         
     public:
+        enum DrawingLineType {
+            OPENGL_LINES,
+            POLYGONAL_LINES
+        };
+        
         SurfacePlaneIntersectionToContour(const SurfaceFile* surfaceFile,
-                                          const Plane& plane,
+                                          const Plane& intersectionPlane,
                                           const CaretColorEnum::Enum caretColor,
                                           const float* vertexColoringRGBA,
-                                          const float contourThicknessMillimeters);
+                                          const float opacity,
+                                          const float contourThicknessMillimeters,
+                                          const DrawingLineType drawingLineType);
+        
+        SurfacePlaneIntersectionToContour(const SurfaceFile* surfaceFile,
+                                          const Plane& intersectionPlane,
+                                          const Plane& drawOnPlane,
+                                          const CaretColorEnum::Enum caretColor,
+                                          const float* vertexColoringRGBA,
+                                          const float opacity,
+                                          const float contourThicknessMillimeters,
+                                          const DrawingLineType drawingLineType);
         
         virtual ~SurfacePlaneIntersectionToContour();
 
@@ -184,13 +200,19 @@ namespace caret {
         
         const SurfaceFile* m_surfaceFile;
         
-        const Plane& m_plane;
+        const Plane& m_intersectionPlane;
+        
+        const Plane& m_drawOnPlane;
         
         const CaretColorEnum::Enum m_caretColor;
         
         const float* m_vertexColoringRGBA;
         
+        const float m_opacity;
+        
         const float m_contourThicknessPercentOfViewportHeight;
+        
+        const DrawingLineType m_drawingLineType;
         
         std::array<float, 4> m_solidRGBA;
         

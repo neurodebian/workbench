@@ -12,6 +12,7 @@
 #include "qwt_clipper.h"
 #include "qwt_color_map.h"
 #include "qwt_scale_map.h"
+#include "qwt_text.h"
 #include <qwindowdefs.h>
 #include <qwidget.h>
 #include <qframe.h>
@@ -26,8 +27,8 @@
 #include <qstyleoption.h>
 #include <qpaintengine.h>
 #include <qapplication.h>
-#include <qdesktopwidget.h>
 #include <QPainterPath>
+#include <QWindow>
 
 #if QT_VERSION >= 0x050000
 #include <qwindow.h>
@@ -104,7 +105,7 @@ static inline QSize qwtScreenResolution()
     static QSize screenResolution;
     if ( !screenResolution.isValid() )
     {
-        QDesktopWidget *desktop = QApplication::desktop();
+        auto desktop = QApplication::activeWindow();
         if ( desktop )
         {
             screenResolution.setWidth( desktop->logicalDpiX() );
@@ -126,7 +127,7 @@ static inline void qwtUnscaleFont( QPainter *painter )
     if ( pd->logicalDpiX() != screenResolution.width() ||
         pd->logicalDpiY() != screenResolution.height() )
     {
-        QFont pixelFont( painter->font(), QApplication::desktop() );
+        QFont pixelFont( painter->font(), QwtText::getPaintDevice() );
         pixelFont.setPixelSize( QFontInfo( pixelFont ).pixelSize() );
 
         painter->setFont( pixelFont );
@@ -687,7 +688,7 @@ void QwtPainter::drawFocusRect( QPainter *painter, const QWidget *widget,
     const QRect &rect )
 {
     QStyleOptionFocusRect opt;
-    opt.init( widget );
+    opt.initFrom( widget );
     opt.rect = rect;
     opt.state |= QStyle::State_HasFocus;
 

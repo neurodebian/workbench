@@ -21,13 +21,19 @@
  */
 /*LICENSE_END*/
 
+#include <memory>
 
 #include "CaretObject.h"
 #include "Matrix4x4.h"
 #include "SceneableInterface.h"
 
 namespace caret {
+    class BoundingBox;
+    class BrowserTabContent;
+    class CaretUndoStack;
+    class GraphicsObjectToWindowTransform;
     class SceneClassAssistant;
+    class Vector3D;
 
     class ViewingTransformations : public CaretObject, public SceneableInterface  {
         
@@ -39,6 +45,8 @@ namespace caret {
         ViewingTransformations(const ViewingTransformations& obj);
 
         ViewingTransformations& operator=(const ViewingTransformations& obj);
+        
+        void copyFromOther(const ViewingTransformations& viewingTransform);
         
         const float* getTranslation() const;
         
@@ -53,6 +61,20 @@ namespace caret {
         float getScaling() const;
         
         void setScaling(const float scaling);
+        
+        virtual void scaleAboutMouse(const GraphicsObjectToWindowTransform* transform,
+                                     const int32_t mousePressX,
+                                     const int32_t mousePressY,
+                                     const float mouseDY,
+                                     const float dataX,
+                                     const float dataY,
+                                     const bool dataXYValidFlag);
+
+        virtual void setHistologyScaling(const GraphicsObjectToWindowTransform* transform,
+                                         const float scaling);
+        
+        virtual void setMediaScaling(const GraphicsObjectToWindowTransform* transform,
+                                     const float scaling);
         
         Matrix4x4 getRotationMatrix() const;
         
@@ -96,6 +118,8 @@ namespace caret {
 
         virtual AString toString() const;
 
+        CaretUndoStack* getRedoUndoStack();
+
     protected:
         /** Rotation matrix. */
         Matrix4x4* m_rotationMatrix;
@@ -118,6 +142,9 @@ namespace caret {
         void copyHelperViewingTransformations(const ViewingTransformations& obj);
 
         SceneClassAssistant* m_sceneAssistant;
+        
+        std::unique_ptr<CaretUndoStack> m_undoStack;
+
         // ADD_NEW_MEMBERS_HERE
 
     };

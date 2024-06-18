@@ -42,6 +42,7 @@ float ReductionOperation::reduce(const float* data, const int64_t& numElems, con
         case ReductionEnum::TSNR:
         case ReductionEnum::COV:
             if (numElems < 2) throw CaretException("taking the sample standard deviation of 1 element would require dividing by zero");
+        //fallthrough
         case ReductionEnum::MEAN:
         case ReductionEnum::STDEV:
         case ReductionEnum::VARIANCE:
@@ -57,11 +58,11 @@ float ReductionOperation::reduce(const float* data, const int64_t& numElems, con
                     return sum / numElems;
                 default:
                 {
-                    float mean = sum / numElems;
+                    double mean = sum / numElems;
                     double residsqr = 0.0;
                     for (int64_t i = 0; i < numElems; ++i)
                     {
-                        float tempf = data[i] - mean;
+                        double tempf = data[i] - mean;
                         residsqr += tempf * tempf;
                     }
                     switch(type)
@@ -207,17 +208,17 @@ float ReductionOperation::reduceExcludeDev(const float* data, const int64_t& num
         }
     }
     if (validNum == 0) throw CaretException("all input values to reduceExcludeDev were non-numeric");
-    float mean = sum / validNum;
+    double mean = sum / validNum;
     double residsqr = 0.0;
     for (int64_t i = 0; i < numElems; ++i)
     {
         if (MathFunctions::isNumeric(data[i]))
         {
-            float tempf = data[i] - mean;
+            double tempf = data[i] - mean;
             residsqr += tempf * tempf;
         }
     }
-    float stdev = sqrt(residsqr / validNum);
+    double stdev = sqrt(residsqr / validNum);
     float low = mean - numDevBelow * stdev, high = mean + numDevAbove * stdev;
     switch (type)//special case things that use indices
     {
@@ -256,15 +257,15 @@ float ReductionOperation::reduceExcludeDev(const float* data, const int64_t& num
         default:
             break;
     }
-    vector<float> excluded;
-    excluded.reserve(validNum);
+    vector<float> included;
+    included.reserve(validNum);
     for (int64_t i = 0; i < numElems; ++i)
     {
-        if (MathFunctions::isNumeric(data[i]) && data[i] >= low && data[i] <= high) excluded.push_back(data[i]);
+        if (MathFunctions::isNumeric(data[i]) && data[i] >= low && data[i] <= high) included.push_back(data[i]);
     }
-    if (excluded.size() == 0) throw CaretException("exclusion parameters to reduceExcludeDev resulted in no usable data");
-    if (type == ReductionEnum::SAMPSTDEV && excluded.size() < 2) throw CaretException("SAMPSTDEV requested in reduceExcludeDev when only 1 element passed the exclusion parameters");
-    return reduce(excluded.data(), excluded.size(), type);
+    if (included.size() == 0) throw CaretException("exclusion parameters to reduceExcludeDev resulted in no usable data");
+    if (type == ReductionEnum::SAMPSTDEV && included.size() < 2) throw CaretException("SAMPSTDEV requested in reduceExcludeDev when only 1 element passed the exclusion parameters");
+    return reduce(included.data(), included.size(), type);
 }
 
 float ReductionOperation::reduceOnlyNumeric(const float* data, const int64_t& numElems, const ReductionEnum::Enum& type)
@@ -355,6 +356,7 @@ float ReductionOperation::reduceWeighted(const float* data, const float* weights
         case ReductionEnum::TSNR:
         case ReductionEnum::COV:
             if (numElems < 2) throw CaretException("'SAMPSTDEV' weighted reduction on 1 element would require dividing by zero");
+        //fallthrough
         case ReductionEnum::MEAN:
         case ReductionEnum::STDEV:
         case ReductionEnum::VARIANCE:
@@ -550,6 +552,23 @@ float ReductionOperation::reduceWeightedExcludeDev(const float* data, const floa
     if (excluded.size() < 1) throw CaretException("all input values to reduceWeightedExcludeDev were non-numeric");
     if (type == ReductionEnum::SAMPSTDEV && excluded.size() < 2) throw CaretException("SAMPSTDEV requested in reduceWeightedExcludeDev when only 1 element is numeric");
     return reduceWeighted(excluded.data(), exweights.data(), excluded.size(), type);
+}
+
+bool ReductionOperation::isLengthOneReasonable(const ReductionEnum::Enum& type)
+{
+    switch(type)
+    {
+        case ReductionEnum::MAX:
+        case ReductionEnum::MIN:
+        case ReductionEnum::MEAN:
+        case ReductionEnum::SUM:
+        case ReductionEnum::L2NORM:
+        case ReductionEnum::PRODUCT:
+        case ReductionEnum::MEDIAN:
+            return true;
+        default:
+            return false;
+    }
 }
 
 AString ReductionOperation::getHelpInfo()

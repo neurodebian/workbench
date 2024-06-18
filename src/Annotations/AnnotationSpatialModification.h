@@ -45,6 +45,8 @@ namespace caret {
                                       const int32_t polyLineCoordinateIndex,
                                       const bool  startOfDraggingFlag);
         
+        virtual ~AnnotationSpatialModification();
+        
         void setSurfaceCoordinateAtMouseXY(const StructureEnum::Enum structure,
                                      const int32_t surfaceNumberOfNodes,
                                      const int32_t surfaceNodeIndex);
@@ -61,8 +63,25 @@ namespace caret {
                                                  const float chartY,
                                                  const float chartZ);
         
-        virtual ~AnnotationSpatialModification();
+        void setMediaCoordinateAtMouseXY(const float mediaX,
+                                         const float mediaY,
+                                         const float mediaZ);
+
+        void setMediaCoordinateAtPreviousMouseXY(const float mediaX,
+                                                 const float mediaY,
+                                                 const float mediaZ);
         
+        void setHistologyCoordinateAtMouseXY(const float histologyX,
+                                             const float histologyY,
+                                             const float histologyZ);
+
+        void setHistologyCoordinateAtPreviousMouseXY(const float histologyX,
+                                                     const float histologyY,
+                                                     const float histologyZ);
+        
+        bool isMultiPairedMove() const;
+        
+        void setMultiPairedMove(const bool status);
 
         // ADD_NEW_METHODS_HERE
 
@@ -101,7 +120,37 @@ namespace caret {
             bool m_chartXYZValid;
         };
         
+        class HistologyCoord {
+        public:
+            HistologyCoord() {
+                m_histologyXYZ[0] = 0.0;
+                m_histologyXYZ[1] = 0.0;
+                m_histologyXYZ[2] = 0.0;
+                
+                m_histologyXYZValid = false;
+            }
+            
+            float m_histologyXYZ[3];
+            
+            bool m_histologyXYZValid;
+        };
         
+        class MediaCoord {
+        public:
+            MediaCoord() {
+                m_mediaXYZ[0] = 0.0;
+                m_mediaXYZ[1] = 0.0;
+                m_mediaXYZ[2] = 0.0;
+                
+                m_mediaXYZValid = false;
+            }
+            
+            float m_mediaXYZ[3];
+            
+            bool m_mediaXYZValid;
+        };
+        
+
         class StereotaxicCoord {
         public:
             StereotaxicCoord() {
@@ -147,13 +196,24 @@ namespace caret {
         
         ChartCoord m_chartCoordAtPreviousMouseXY;
         
+        HistologyCoord m_histologyCoordAtMouseXY;
+        
+        HistologyCoord m_histologyCoordAtPreviousMouseXY;
+        
+        MediaCoord m_mediaCoordAtMouseXY;
+        
+        MediaCoord m_mediaCoordAtPreviousMouseXY;
+        
         SurfaceCoord m_surfaceCoordinateAtMouseXY;
         
         StereotaxicCoord m_stereotaxicCoordinateAtMouseXY;
         
+        bool m_multiPairedMoveFlag = false;;
+        
         // ADD_NEW_MEMBERS_HERE
 
         friend class AnnotationMultiCoordinateShape;
+        friend class AnnotationMultiPairedCoordinateShape;
         friend class AnnotationText;
         friend class AnnotationOneCoordinateShape;
         friend class AnnotationTwoCoordinateShape;

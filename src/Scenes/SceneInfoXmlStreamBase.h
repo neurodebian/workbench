@@ -69,7 +69,7 @@ namespace caret {
     const AString SceneInfoXmlStreamBase::ELEMENT_IMAGE          = "Image";
     const AString SceneInfoXmlStreamBase::ELEMENT_NAME           = "Name";
     const AString SceneInfoXmlStreamBase::ELEMENT_SCENE_INFO     = "SceneInfo";
-    
+
     const AString SceneInfoXmlStreamBase::ATTRIBUTE_IMAGE_ENCODING = "Encoding";
     const AString SceneInfoXmlStreamBase::ATTRIBUTE_IMAGE_FORMAT   = "Format";
     const AString SceneInfoXmlStreamBase::ATTRIBUTE_SCENE_INDEX    = "Index";

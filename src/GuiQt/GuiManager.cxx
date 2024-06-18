@@ -25,11 +25,12 @@
 
 #include <QAction>
 #include <QApplication>
-#include <QDesktopWidget>
+#include <QDesktopServices>
 #include <QMenu>
 #include <QPainter>
 #include <QPen>
 #include <QPushButton>
+#include <QScreen>
 #include <QToolTip>
 
 #define __GUI_MANAGER_DEFINE__
@@ -71,8 +72,9 @@
 #include "EventBrowserTabReopenClosed.h"
 #include "EventBrowserWindowNew.h"
 #include "EventShowDataFileReadWarningsDialog.h"
-#include "EventGraphicsUpdateAllWindows.h"
-#include "EventGraphicsUpdateOneWindow.h"
+#include "EventGraphicsPaintNowOneWindow.h"
+#include "EventGraphicsPaintSoonAllWindows.h"
+#include "EventGraphicsPaintSoonOneWindow.h"
 #include "EventHelpViewerDisplay.h"
 #include "EventIdentificationHighlightLocation.h"
 #include "EventManager.h"
@@ -85,29 +87,31 @@
 #include "EventSurfaceColoringInvalidate.h"
 #include "EventUpdateInformationWindows.h"
 #include "EventUserInterfaceUpdate.h"
+#include "ExitProgramModifiedFilesDialog.h"
 #include "FociPropertiesEditorDialog.h"
 #include "GapsAndMarginsDialog.h"
 #include "HelpViewerDialog.h"
 #include "HtmlTableBuilder.h"
 #include "IdentificationDisplayDialog.h"
 #include "IdentificationFilter.h"
-#include "IdentifiedItemNode.h"
-#include "IdentifiedItemVoxel.h"
+#include "IdentifiedItemUniversal.h"
 #include "IdentificationManager.h"
 #include "IdentificationStringBuilder.h"
 #include "IdentifyBrainordinateDialog.h"
 #include "ImageFile.h"
 #include "ImageCaptureDialog.h"
+#include "InfoItem.h"
 #include "InformationDisplayDialog.h"
+#include "MediaFile.h"
 #include "MetricDynamicConnectivityFile.h"
 #include "ModelChartTwo.h"
 #include "OverlaySettingsEditorDialog.h"
 #include "MacDockMenu.h"
-#include "MovieDialog.h"
 #include "MovieRecordingDialog.h"
 #include "PaletteColorMappingEditorDialog.h"
 #include "PaletteEditorDialog.h"
 #include "PreferencesDialog.h"
+#include "SamplesFile.h"
 #include "Scene.h"
 #include "SceneAttributes.h"
 #include "SceneClass.h"
@@ -120,10 +124,12 @@
 #include "SelectionItemChartTwoLineLayerVerticalNearest.h"
 #include "SelectionItemChartTwoMatrix.h"
 #include "SelectionItemCiftiConnectivityMatrixRowColumn.h"
+#include "SelectionItemHistologyCoordinate.h"
+#include "SelectionItemMediaLogicalCoordinate.h"
+#include "SelectionItemMediaPlaneCoordinate.h"
 #include "SelectionItemSurfaceNode.h"
-#include "SelectionItemSurfaceNodeIdentificationSymbol.h"
+#include "SelectionItemUniversalIdentificationSymbol.h"
 #include "SelectionItemVoxel.h"
-#include "SelectionItemVoxelIdentificationSymbol.h"
 #include "SessionManager.h"
 #include "SpecFile.h"
 #include "SpecFileManagementDialog.h"
@@ -133,6 +139,7 @@
 #include "VolumeDynamicConnectivityFile.h"
 #include "VolumeMappableInterface.h"
 #include "VolumePropertiesEditorDialog.h"
+#include "WuQHyperlinkToolTip.h"
 #include "WbMacroCustomOperationManager.h"
 #include "WbMacroHelper.h"
 #include "WuQMessageBox.h"
@@ -185,7 +192,6 @@ GuiManager::initializeGuiManager()
     m_customViewDialog = NULL;
     m_gapsAndMarginsDialog = NULL;
     this->imageCaptureDialog = NULL;
-    this->movieDialog = NULL;
     m_movieRecordingDialog = NULL;
     m_informationDisplayDialog = NULL;
     m_identificationDisplayDialog = NULL;
@@ -312,7 +318,7 @@ GuiManager::initializeGuiManager()
     m_sceneDialogDisplayAction->setToolTip("Show the scenes window");
     WuQMacroManager::instance()->addMacroSupportToObject(m_sceneDialogDisplayAction,
                                                          "Display Scene Dialog");
-    
+
     /*
      * Menu for scene dialog action
      * Disabled because in the Window Menu, it creates a sub menu with
@@ -366,8 +372,8 @@ GuiManager::initializeGuiManager()
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_ALERT_USER);
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_ANNOTATION_GET_DRAWN_IN_WINDOW);
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_BROWSER_WINDOW_NEW);
-    EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_GRAPHICS_UPDATE_ALL_WINDOWS);
-    EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_GRAPHICS_UPDATE_ONE_WINDOW);
+    EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_GRAPHICS_PAINT_SOON_ALL_WINDOWS);
+    EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_GRAPHICS_PAINT_SOON_ONE_WINDOW);
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_HELP_VIEWER_DISPLAY);
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_OVERLAY_SETTINGS_EDITOR_SHOW);
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_OPERATING_SYSTEM_REQUEST_OPEN_DATA_FILE);
@@ -375,6 +381,9 @@ GuiManager::initializeGuiManager()
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_SHOW_FILE_DATA_READ_WARNING_DIALOG);
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_UPDATE_INFORMATION_WINDOWS);
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_USER_INTERFACE_UPDATE);
+    
+    QObject::connect(WuQHyperlinkToolTip::instance(), &WuQHyperlinkToolTip::hyperlinkClicked,
+                     this, &GuiManager::toolTipHyperlinkClicked);
 }
 
 /**
@@ -473,7 +482,7 @@ GuiManager::updateUserInterface()
 void
 GuiManager::updateGraphicsAllWindows()
 {
-    EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+    EventManager::get()->sendEvent(EventGraphicsPaintSoonAllWindows().getPointer());
 }
 
 /**
@@ -482,7 +491,7 @@ GuiManager::updateGraphicsAllWindows()
 void
 GuiManager::updateGraphicsOneWindow(const int32_t windowIndex)
 {
-    EventManager::get()->sendEvent(EventGraphicsUpdateOneWindow(windowIndex).getPointer());
+    EventManager::get()->sendEvent(EventGraphicsPaintSoonOneWindow(windowIndex).getPointer());
 }
 
 /**
@@ -992,8 +1001,13 @@ GuiManager::testForModifiedFiles(const TestModifiedMode testModifiedMode,
                      iter != modifiedDataFiles.end();
                      iter++) {
                     const CaretDataFile* cdf = *iter;
+                    AString name(cdf->getFileName());
+                    if (name.isEmpty()) {
+                        name = ("Unnamed "
+                                + DataFileTypeEnum::toGuiName(cdf->getDataFileType()));
+                    }
                     infoTextMsg.appendWithNewLine("<li> "
-                                                  + cdf->getFileNameNoPath());
+                                                  + name);
                 }
             }
             
@@ -1006,8 +1020,13 @@ GuiManager::testForModifiedFiles(const TestModifiedMode testModifiedMode,
                  iter != paletteModifiedDataFiles.end();
                  iter++) {
                 const CaretDataFile* cdf = *iter;
+                AString name(cdf->getFileName());
+                if (name.isEmpty()) {
+                    name = ("Unnamed "
+                            + DataFileTypeEnum::toGuiName(cdf->getDataFileType()));
+                }
                 infoTextMsg.appendWithNewLine("<li> "
-                                              + cdf->getFileNameNoPath());
+                                              + name);
             }
             infoTextMsg.appendWithNewLine("</ul>");
         }
@@ -1032,6 +1051,7 @@ bool
 GuiManager::exitProgram(BrainBrowserWindow* parent)
 {
     bool okToExit = false;
+    m_applicationIsTerminating = false;
     
     AString textMessage;
     AString modifiedFilesMessage;
@@ -1040,41 +1060,29 @@ GuiManager::exitProgram(BrainBrowserWindow* parent)
                              modifiedFilesMessage)) {
         modifiedFilesMessage.appendWithNewLine("");
         
-        QMessageBox quitDialog(QMessageBox::Warning,
-                               "Exit Workbench",
-                               textMessage,
-                               QMessageBox::NoButton,
-                               parent);
-        quitDialog.setInformativeText(modifiedFilesMessage);
-        
-        QPushButton* saveButton = quitDialog.addButton("Save...", QMessageBox::AcceptRole);
-        saveButton->setToolTip("Display manage files window to save files");
-        
-        QPushButton* dontSaveButton = quitDialog.addButton("Don't Save", QMessageBox::DestructiveRole);
-        dontSaveButton->setToolTip("Do not save changes and exit.");
-        
-        QPushButton* cancelButton = quitDialog.addButton("Cancel", QMessageBox::RejectRole);
-        
-        quitDialog.setDefaultButton(saveButton);
-        quitDialog.setEscapeButton(cancelButton);
-        
-        quitDialog.exec();
-        const QAbstractButton* clickedButton = quitDialog.clickedButton();
-        if (clickedButton == saveButton) {
-            if (SpecFileManagementDialog::runSaveFilesDialogWhileQuittingWorkbench(this->getBrain(),
-                                                                                   parent)) {
+        /*
+         * Allow user to save files, discard and quit, or cancel
+         */
+        ExitProgramModifiedFilesDialog exitProgramDialog(modifiedFilesMessage,
+                                                         parent);
+        exitProgramDialog.exec();
+        switch (exitProgramDialog.getResult()) {
+            case ExitProgramModifiedFilesDialog::Result::INVALID:
+                CaretAssert(0);
+                break;
+            case ExitProgramModifiedFilesDialog::Result::CANCEL_EXIT:
+                okToExit = false;
+                break;
+            case ExitProgramModifiedFilesDialog::Result::DISCARD_AND_EXIT:
                 okToExit = true;
-                
-            }
-        }
-        else if (clickedButton == dontSaveButton) {
-            okToExit = true;
-        }
-        else if (clickedButton == cancelButton) {
-            /* nothing */
-        }
-        else {
-            CaretAssert(0);
+                break;
+            case ExitProgramModifiedFilesDialog::Result::SAVE_AND_EXIT:
+                if (SpecFileManagementDialog::runSaveFilesDialogWhileQuittingWorkbench(this->getBrain(),
+                                                                                       parent)) {
+                    okToExit = true;
+                    
+                }
+                break;
         }
     }
     else {
@@ -1101,7 +1109,21 @@ GuiManager::exitProgram(BrainBrowserWindow* parent)
                                         "\n\n"
                                         " * When sharing data sets with others to provide a particular "
                                         "view of a surface/volume with desired data (overlay and feature) "
-                                        "selections.");
+                                        "selections.\n\n"
+                                        "Try following these steps:\n"
+                                        " * From the Window Menu, select Scenes to display the Scene dialog.\n"
+                                        " * In the Scene Dialog’s top row, click New to create a new scene file.\n"
+                                        " * In the Scene Dialog’s right column, click Add...\n"
+                                        " * In the Create New Scene dialog, Enter a name for your scene and click the OK button.\n"
+                                        " * In the Scene Dialog’s second row, click the Save As button.  Select a directory for your scene file and enter a name for your scene file; click Save.\n"
+                                        " * Close the Scene dialog and Exit Workbench.\n"
+                                        " * Start Workbench.\n"
+                                        " * A dialog containing recently opened files should appear containing the name of your Scene File.\n"
+                                        " * Click the name of your scene file to highlight it and click the Open button.\n"
+                                        " * Workbench will start and Open the Scenes window.\n"
+                                        " * Click the name of your scene and click the Show button in the right column.\n"
+                                        " * Workbench will load files and Workbench should appear the same as when the scene was created.\n"
+                                        " * Additional scenes can be added to your scene file.");
             quitDialog.setInformativeText(infoTextMsg);
             quitDialog.setDetailedText(detailTextMsg);
         }
@@ -1140,6 +1162,11 @@ GuiManager::exitProgram(BrainBrowserWindow* parent)
          */
         get()->getBrain()->resetBrain();
         
+        /*
+         * Confirm application terminating
+         */
+        m_applicationIsTerminating = true;
+        
         std::vector<BrainBrowserWindow*> bws = this->getAllOpenBrainBrowserWindows();
         for (int i = 0; i < static_cast<int>(bws.size()); i++) {
             bws[i]->deleteLater();
@@ -1149,6 +1176,17 @@ GuiManager::exitProgram(BrainBrowserWindow* parent)
     }    
     
     return okToExit;
+}
+
+/**
+ * @return True if the application is terminating and the user has
+ * confirmed this termination.  This status is set on the Exit Workbench
+ * dialog.  This is called by the closeEvent in BrainBrowserWindow.
+ */
+bool
+GuiManager::isApplicationTerminating() const
+{
+    return m_applicationIsTerminating;
 }
 
 /**
@@ -1289,8 +1327,8 @@ void GuiManager::processTileWindows()
         return;
     }
     
-    QDesktopWidget* dw = QApplication::desktop();
-    const int32_t numScreens = dw->screenCount();
+    QList<QScreen*> allScreens = QGuiApplication::screens();
+    const int32_t numScreens = allScreens.size();
     const int32_t windowsPerScreen = std::max(numWindows / numScreens,
                                               1);
     
@@ -1317,7 +1355,7 @@ void GuiManager::processTileWindows()
      */
     int32_t windowIndex = 0;
     for (int32_t iScreen = 0; iScreen < numScreens; iScreen++) {
-        const QRect rect = dw->availableGeometry(iScreen);
+        const QRect rect = allScreens[iScreen]->availableGeometry();
         const int screenX = rect.x();
         const int screenY = rect.y();
         const int screenWidth = rect.width();
@@ -1385,9 +1423,23 @@ GuiManager::receiveEvent(Event* event)
         const AString message = alertUserEvent->getMessage();
         
         BrainBrowserWindow* bbw = getActiveBrowserWindow();
-        CaretAssert(bbw);
-        
-        WuQMessageBox::errorOk(bbw, message);
+        bool useDialog(false);
+        if (bbw != NULL) {
+            if (bbw->isVisible()) {
+                useDialog = true;
+            }
+        }
+        if (useDialog) {
+            CaretAssert(bbw);
+            
+            WuQMessageBox::errorOk(bbw, message);
+        }
+        else {
+            /*
+             * Display independent window with no parent
+             */
+            WuQMessageBox::errorOk(nullptr, message);
+        }
     }
     else if (event->getEventType() == EventTypeEnum::EVENT_ANNOTATION_GET_DRAWN_IN_WINDOW) {
         EventAnnotationGetDrawnInWindow* annGetEvent = dynamic_cast<EventAnnotationGetDrawnInWindow*>(event);
@@ -1397,33 +1449,39 @@ GuiManager::receiveEvent(Event* event)
         
         Brain* brain = getBrain();
         std::vector<AnnotationFile*> allAnnotationFiles;
-        brain->getAllAnnotationFilesIncludingSceneAnnotationFile(allAnnotationFiles);
+        switch (annGetEvent->getDataTypeMode()) {
+            case EventAnnotationGetDrawnInWindow::DataTypeMode::ANNOTATIONS:
+                brain->getAllAnnotationFilesIncludingSceneAnnotationFile(allAnnotationFiles);
+                break;
+            case EventAnnotationGetDrawnInWindow::DataTypeMode::SAMPLES:
+            {
+                std::vector<SamplesFile*> allSamplesFiles(brain->getAllSamplesFiles());
+                allAnnotationFiles.insert(allAnnotationFiles.end(),
+                                          allSamplesFiles.begin(),
+                                          allSamplesFiles.end());
+            }
+                break;
+        }
         
         /*
          * Clear "drawn in window status" for all annotations
          */
-        for (std::vector<AnnotationFile*>::iterator fileIter = allAnnotationFiles.begin();
-             fileIter != allAnnotationFiles.end();
-             fileIter++) {
-            (*fileIter)->clearAllAnnotationsDrawnInWindowStatus();
+        for (auto& af : allAnnotationFiles) {
+            af->clearAllAnnotationsDrawnInWindowStatus();
         }
         
         /*
          * Draw the given window
          */
-        const bool doRepaintFlag(true);
-        EventManager::get()->sendEvent(EventGraphicsUpdateOneWindow(windowIndex,
-                                                                    doRepaintFlag).getPointer());
+        EventManager::get()->sendEvent(EventGraphicsPaintNowOneWindow(windowIndex).getPointer());
         
         /*
          * Find annotations that were drawn in the given window.
          */
-        for (std::vector<AnnotationFile*>::iterator fileIter = allAnnotationFiles.begin();
-             fileIter != allAnnotationFiles.end();
-             fileIter++) {
+        for (auto& af : allAnnotationFiles) {
             std::vector<Annotation*> annotations;
-            (*fileIter)->getAllAnnotationWithDrawnInWindowStatusSet(windowIndex,
-                                                                    annotations);
+            af->getAllAnnotationWithDrawnInWindowStatusSet(windowIndex,
+                                                           annotations);
             annGetEvent->addAnnotations(annotations);
         }
     }
@@ -1458,8 +1516,8 @@ GuiManager::receiveEvent(Event* event)
                                preferredMaxHeight);
         bbw->resize(w, h);
     }
-    else if ((event->getEventType() == EventTypeEnum::EVENT_GRAPHICS_UPDATE_ALL_WINDOWS)
-             || (event->getEventType() == EventTypeEnum::EVENT_GRAPHICS_UPDATE_ONE_WINDOW)) {
+    else if ((event->getEventType() == EventTypeEnum::EVENT_GRAPHICS_PAINT_SOON_ALL_WINDOWS)
+             || (event->getEventType() == EventTypeEnum::EVENT_GRAPHICS_PAINT_SOON_ONE_WINDOW)) {
         for (auto overlayEditor : m_overlaySettingsEditors) {
             overlayEditor->updateChartLinesInDialog();
         }
@@ -2008,8 +2066,6 @@ GuiManager::showHideSceneDialog(const bool status,
         }
         
         this->sceneDialog->showDialog();
-        
-        this->sceneDialog->createDefaultSceneFile();
     }
     else {
         this->sceneDialog->close();
@@ -2692,26 +2748,6 @@ GuiManager::processShowGapsAndMarginsDialog(BrainBrowserWindow* browserWindow)
 }
 
 /**
- * Show the record movie window.
- * @param browserWindow
- *    Window on which dialog was requested.
- */
-void 
-GuiManager::processShowMovieDialog(BrainBrowserWindow* browserWindow)
-{
-    if (this->movieDialog == NULL) {
-        this->movieDialog = new MovieDialog(browserWindow);
-        this->addNonModalDialog(this->movieDialog);
-    }
-    this->movieDialog->setVisible(true);
-    this->movieDialog->show();
-    this->movieDialog->activateWindow();
-    this->movieDialog->raise();
-}
-
-
-
-/**
  * Show the preferences window.
  * @param browserWindow
  *    Window on which dialog was requested.
@@ -2878,19 +2914,7 @@ GuiManager::saveToScene(const SceneAttributes* sceneAttributes,
             }
             break;
     }
-    
-    /*
-     * Save surface properties window
-     */
-    if (m_surfacePropertiesEditorDialog != NULL) {
-        sceneClass->addClass(m_surfacePropertiesEditorDialog->saveToScene(sceneAttributes,
-                                                                          "m_surfacePropertiesEditorDialog"));
-    }
-    if (m_volumePropertiesEditorDialog != NULL) {
-        sceneClass->addClass(m_volumePropertiesEditorDialog->saveToScene(sceneAttributes,
-                                                                         "m_volumePropertiesEditorDialog"));
-    }
-    
+        
     switch (sceneAttributes->getSceneType()) {
         case SceneTypeEnum::SCENE_TYPE_FULL:
             break;
@@ -2972,7 +2996,7 @@ GuiManager::restoreFromScene(const SceneAttributes* sceneAttributes,
      * Update the windows
      */
     EventManager::get()->sendEvent(EventUserInterfaceUpdate().getPointer());
-    EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());    
+    EventManager::get()->sendEvent(EventGraphicsPaintSoonAllWindows().getPointer());    
     
     /*
      * Blocking user-interface and graphics event will speed up
@@ -2983,9 +3007,9 @@ GuiManager::restoreFromScene(const SceneAttributes* sceneAttributes,
         EventManager::get()->blockEvent(EventTypeEnum::EVENT_USER_INTERFACE_UPDATE,
                                         true);
     }
-    EventManager::get()->blockEvent(EventTypeEnum::EVENT_GRAPHICS_UPDATE_ALL_WINDOWS,
+    EventManager::get()->blockEvent(EventTypeEnum::EVENT_GRAPHICS_PAINT_SOON_ALL_WINDOWS,
                                     true);
-    EventManager::get()->blockEvent(EventTypeEnum::EVENT_GRAPHICS_UPDATE_ONE_WINDOW,
+    EventManager::get()->blockEvent(EventTypeEnum::EVENT_GRAPHICS_PAINT_SOON_ONE_WINDOW,
                                     true);
     
     /*
@@ -3140,37 +3164,8 @@ GuiManager::restoreFromScene(const SceneAttributes* sceneAttributes,
          * Restore Information Widgets (newer replacement for information display dialog)
          */
         EventManager::get()->sendEvent(EventUpdateInformationWindows().getPointer());
-        
-        /*
-         * Restore surface properties
-         */
-        progressEvent.setProgressMessage("Restoring Surface Properties Window");
-        EventManager::get()->sendEvent(progressEvent.getPointer());
-        const SceneClass* surfPropClass = sceneClass->getClass("m_surfacePropertiesEditorDialog");
-        if (surfPropClass != NULL) {
-            if (m_surfacePropertiesEditorDialog == NULL) {
-                processShowSurfacePropertiesEditorDialog(firstBrowserWindow);
-            }
-            else if ( ! m_surfacePropertiesEditorDialog->isVisible()) {
-                processShowSurfacePropertiesEditorDialog(firstBrowserWindow);
-            }
-            m_surfacePropertiesEditorDialog->restoreFromScene(sceneAttributes,
-                                                              surfPropClass);
-        }
-        
-        const SceneClass* volPropClass = sceneClass->getClass("m_volumePropertiesEditorDialog");
-        if (volPropClass != NULL) {
-            if (m_volumePropertiesEditorDialog == NULL) {
-                processShowVolumePropertiesEditorDialog(firstBrowserWindow);
-            }
-            else if ( ! m_volumePropertiesEditorDialog->isVisible()) {
-                processShowVolumePropertiesEditorDialog(firstBrowserWindow);
-            }
-            m_volumePropertiesEditorDialog->restoreFromScene(sceneAttributes,
-                                                             volPropClass);
-        }
-        
-        CaretLogFine("Time to restore information/property windows was "
+                
+        CaretLogFine("Time to restore information windows was "
                      + QString::number(timer.getElapsedTimeSeconds(), 'f', 3)
                      + " seconds");
         timer.reset();
@@ -3198,14 +3193,14 @@ GuiManager::restoreFromScene(const SceneAttributes* sceneAttributes,
     /*
      * Unblock graphics updates
      */
-    EventManager::get()->blockEvent(EventTypeEnum::EVENT_GRAPHICS_UPDATE_ALL_WINDOWS, 
+    EventManager::get()->blockEvent(EventTypeEnum::EVENT_GRAPHICS_PAINT_SOON_ALL_WINDOWS, 
                                     false);
-    EventManager::get()->blockEvent(EventTypeEnum::EVENT_GRAPHICS_UPDATE_ONE_WINDOW,
+    EventManager::get()->blockEvent(EventTypeEnum::EVENT_GRAPHICS_PAINT_SOON_ONE_WINDOW,
                                     false);
 
     progressEvent.setProgressMessage("Updating graphics in all windows");
     EventManager::get()->sendEvent(progressEvent.getPointer());
-    EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+    EventManager::get()->sendEvent(EventGraphicsPaintSoonAllWindows().getPointer());
 
     CaretLogFine("Time to update graphics in all windows was "
                  + QString::number(timer.getElapsedTimeSeconds(), 'f', 3)
@@ -3267,31 +3262,14 @@ GuiManager::processIdentification(const int32_t tabIndex,
     ciftiLoadingInfoTableBuilder.setTitlePlain("CIFTI Data Loading");
     
     const QString breakAndIndent("<br>&nbsp;&nbsp;&nbsp;&nbsp;");
-    SelectionItemSurfaceNodeIdentificationSymbol* nodeIdSymbol = selectionManager->getSurfaceNodeIdentificationSymbol();
-    SelectionItemVoxelIdentificationSymbol*  voxelIdSymbol = selectionManager->getVoxelIdentificationSymbol();
-    if ((nodeIdSymbol->getSurface() != NULL)
-        && (nodeIdSymbol->getNodeNumber() >= 0)) {
-        const Surface* surface = nodeIdSymbol->getSurface();
-        const int32_t surfaceNumberOfNodes = surface->getNumberOfNodes();
-        const int32_t nodeIndex = nodeIdSymbol->getNodeNumber();
-        const StructureEnum::Enum structure = surface->getStructure();
-        
-        identificationManager->removeIdentifiedNodeItem(structure,
-                                                        surfaceNumberOfNodes,
-                                                        nodeIndex);
-        updateGraphicsFlag = true;
-        updateInformationFlag = true;
-    }
-    else if (voxelIdSymbol->isValid()) {
-        float voxelXYZ[3];
-        voxelIdSymbol->getVoxelXYZ(voxelXYZ);
-        identificationManager->removeIdentifiedVoxelItem(voxelXYZ);
-
-        updateGraphicsFlag = true;
+    SelectionItemUniversalIdentificationSymbol* universalIdSymbol = selectionManager->getUniversalIdentificationSymbol();
+    if (universalIdSymbol->isValid()) {
+        identificationManager->removeIdentifiedItem(universalIdSymbol);
+        updateGraphicsFlag    = true;
         updateInformationFlag = true;
     }
     else {
-        IdentifiedItem* identifiedItem = NULL;
+        IdentifiedItemUniversal* identifiedItem(NULL);
         
         SelectionItemSurfaceNode* idNode = selectionManager->getSurfaceNodeIdentification();
         SelectionItemVoxel* idVoxel = selectionManager->getVoxelIdentification();
@@ -3390,11 +3368,8 @@ GuiManager::processIdentification(const int32_t tabIndex,
         if (idVoxel->isValid()
             && ( ! triedToLoadSurfaceODemandData)) {
             const VolumeMappableInterface* volumeFile = idVoxel->getVolumeFile();
-            int64_t voxelIJK[3];
-            idVoxel->getVoxelIJK(voxelIJK);
             if (volumeFile != NULL) {
-                float xyz[3];
-                volumeFile->indexToSpace(voxelIJK, xyz);
+                const Vector3D xyz(idVoxel->getVoxelXYZ());
                 
                 updateGraphicsFlag = true;
                 
@@ -3478,10 +3453,16 @@ GuiManager::processIdentification(const int32_t tabIndex,
                         const MapYokingGroupEnum::Enum mapYoking = scalarDataSeriesFile->getMatrixRowColumnMapYokingGroup(tabIndex);
                         
                         if (mapYoking != MapYokingGroupEnum::MAP_YOKING_GROUP_OFF) {
+                            AnnotationTextSubstitutionFile* nullAnnTextFile(NULL);
+                            HistologySlicesFile* nullHistologySlicesFile(NULL);
+                            MediaFile* nullMediaFile(NULL);
                             EventMapYokingSelectMap selectMapEvent(mapYoking,
                                                                    scalarDataSeriesFile,
-                                                                   NULL,
+                                                                   nullAnnTextFile,
+                                                                   nullHistologySlicesFile,
+                                                                   nullMediaFile,
                                                                    rowIndex,
+                                                                   MapYokingGroupEnum::MediaAllFramesStatus::ALL_FRAMES_OFF,
                                                                    true);
                             EventManager::get()->sendEvent(selectMapEvent.getPointer());
                         }
@@ -3561,10 +3542,16 @@ GuiManager::processIdentification(const int32_t tabIndex,
                                                                              rowColumnIndex);
                             const MapYokingGroupEnum::Enum mapYoking = chartOverlayContainingDataFile->getMapYokingGroup();
                             if (mapYoking != MapYokingGroupEnum::MAP_YOKING_GROUP_OFF) {
+                                AnnotationTextSubstitutionFile* nullAnnTextFile(NULL);
+                                HistologySlicesFile* nullHistologySlicesFile(NULL);
+                                MediaFile* nullMediaFile(NULL);
                                     EventMapYokingSelectMap selectMapEvent(mapYoking,
                                                                            cmdf,
-                                                                           NULL,
+                                                                           nullAnnTextFile,
+                                                                           nullHistologySlicesFile,
+                                                                           nullMediaFile,
                                                                            rowColumnIndex,
+                                                                           MapYokingGroupEnum::MediaAllFramesStatus::ALL_FRAMES_OFF,
                                                                            true);
                                     EventManager::get()->sendEvent(selectMapEvent.getPointer());
                             }
@@ -3636,10 +3623,16 @@ GuiManager::processIdentification(const int32_t tabIndex,
                                     const MapYokingGroupEnum::Enum mapYoking = scalarDataSeriesFile->getMatrixRowColumnMapYokingGroup(tabIndex);
                                     
                                     if (mapYoking != MapYokingGroupEnum::MAP_YOKING_GROUP_OFF) {
+                                        AnnotationTextSubstitutionFile* nullAnnTextFile(NULL);
+                                        HistologySlicesFile* nullHistologySlicesFile(NULL);
+                                        MediaFile* nullMediaFile(NULL);
                                         EventMapYokingSelectMap selectMapEvent(mapYoking,
                                                                                scalarDataSeriesFile,
-                                                                               NULL,
+                                                                               nullAnnTextFile,
+                                                                               nullHistologySlicesFile,
+                                                                               nullMediaFile,
                                                                                rowIndex,
+                                                                               MapYokingGroupEnum::MediaAllFramesStatus::ALL_FRAMES_OFF,
                                                                                true);
                                         EventManager::get()->sendEvent(selectMapEvent.getPointer());
                                     }
@@ -3726,11 +3719,15 @@ GuiManager::processIdentification(const int32_t tabIndex,
                 xyz[2] = -10000000.0;
             }
             
-            identifiedItem = new IdentifiedItemNode(identificationMessage,
-                                                    formattedIdentificationMessage,
-                                                    surface->getStructure(),
-                                                    surface->getNumberOfNodes(),
-                                                    nodeIndex);
+            Vector3D stereotaxicXYZ { xyz[0], xyz[1], xyz[2] };
+            identifiedItem = IdentifiedItemUniversal::newInstanceSurfaceIdentification(identificationMessage,
+                                                                                       formattedIdentificationMessage,
+                                                                                       surface->getFileNameNoPath(),
+                                                                                       surface->getStructure(),
+                                                                                       surface->getNumberOfNodes(),
+                                                                                       nodeIndex,
+                                                                                       stereotaxicXYZ);
+
             /*
              * Only issue identification event for node 
              * if it WAS NOT created from the voxel identification
@@ -3739,6 +3736,7 @@ GuiManager::processIdentification(const int32_t tabIndex,
             if ( ! nodeIdentificationCreatedFromVoxelIdentificationFlag) {
                 if ( ! issuedIdentificationLocationEvent) {
                     EventIdentificationHighlightLocation idLocation(tabIndex,
+                                                                    xyz,
                                                                     xyz,
                                                                     EventIdentificationHighlightLocation::LOAD_FIBER_ORIENTATION_SAMPLES_MODE_YES);
                     EventManager::get()->sendEvent(idLocation.getPointer());
@@ -3749,21 +3747,33 @@ GuiManager::processIdentification(const int32_t tabIndex,
         
         if (idVoxel->isValid()) {
             const VolumeMappableInterface* volumeFile = idVoxel->getVolumeFile();
-            int64_t voxelIJK[3];
-            idVoxel->getVoxelIJK(voxelIJK);
+            const VoxelIJK voxelIJK(idVoxel->getVoxelIJK());
             if (volumeFile != NULL) {
-                float xyz[3];
-                volumeFile->indexToSpace(voxelIJK, xyz);
+                const Vector3D xyz(idVoxel->getVoxelXYZ());
                 
                 if (identifiedItem == NULL) {
-                    identifiedItem = new IdentifiedItemVoxel(identificationMessage,
-                                                             formattedIdentificationMessage,
-                                                             xyz);
+                    const CaretDataFile* caretDataFile = dynamic_cast<const CaretDataFile*>(volumeFile);
+                    const AString dataFileName((caretDataFile != NULL)
+                                               ? caretDataFile->getFileNameNoPath()
+                                               : "");
+                    const std::array<int64_t, 3> ijk {
+                        voxelIJK.m_ijk[0],
+                        voxelIJK.m_ijk[1],
+                        voxelIJK.m_ijk[2]
+                    };
+                    identifiedItem = IdentifiedItemUniversal::newInstanceVolumeIdentification(identificationMessage,
+                                                                                              formattedIdentificationMessage,
+                                                                                              dataFileName,
+                                                                                              ijk,
+                                                                                              xyz);
                 }
                 
                 if ( ! issuedIdentificationLocationEvent) {
+                    Vector3D voxelCenterXYZ;
+                    volumeFile->indexToSpace(voxelIJK.m_ijk, voxelCenterXYZ);
                     EventIdentificationHighlightLocation idLocation(tabIndex,
                                                                     xyz,
+                                                                    voxelCenterXYZ,
                                                                     EventIdentificationHighlightLocation::LOAD_FIBER_ORIENTATION_SAMPLES_MODE_YES);
                     EventManager::get()->sendEvent(idLocation.getPointer());
                     issuedIdentificationLocationEvent = true;
@@ -3776,11 +3786,96 @@ GuiManager::processIdentification(const int32_t tabIndex,
             }
         }
         
+        SelectionItemHistologyCoordinate* idHistology = selectionManager->getHistologyPlaneCoordinateIdentification();
+        if (idHistology != NULL) {
+            if (idHistology->isValid()) {
+                if (identifiedItem == NULL) {
+                    const HistologyCoordinate coordinate(idHistology->getCoordinate());
+                    if (coordinate.isPlaneXYValid()) {
+                        Vector3D stereotaxicXYZ = coordinate.getStereotaxicXYZ();
+                        bool stereotaxicXYZValidFlag = coordinate.isStereotaxicXYZValid();
+                        identifiedItem = IdentifiedItemUniversal::newInstanceHistologyCoordinateIdentification(identificationMessage,
+                                                                                                               formattedIdentificationMessage,
+                                                                                                               coordinate);
+                        if (stereotaxicXYZValidFlag) {
+                            if ( ! issuedIdentificationLocationEvent) {
+                                EventIdentificationHighlightLocation idLocation(tabIndex,
+                                                                                stereotaxicXYZ,
+                                                                                stereotaxicXYZ,
+                                                                                EventIdentificationHighlightLocation::LOAD_FIBER_ORIENTATION_SAMPLES_MODE_YES);
+                                EventManager::get()->sendEvent(idLocation.getPointer());
+                                issuedIdentificationLocationEvent = true;
+                            }
+                        }
+                    }
+                    else if (coordinate.isStereotaxicXYZValid()) {
+                        Vector3D stereotaxicXYZ = coordinate.getStereotaxicXYZ();
+                        bool stereotaxicXYZValidFlag = coordinate.isStereotaxicXYZValid();
+                        identifiedItem = IdentifiedItemUniversal::newInstanceHistologyStereotaxicCoordinateIdentification(identificationMessage,
+                                                                                                               formattedIdentificationMessage,
+                                                                                                               coordinate);
+                        if (stereotaxicXYZValidFlag) {
+                            if ( ! issuedIdentificationLocationEvent) {
+                                EventIdentificationHighlightLocation idLocation(tabIndex,
+                                                                                stereotaxicXYZ,
+                                                                                stereotaxicXYZ,
+                                                                                EventIdentificationHighlightLocation::LOAD_FIBER_ORIENTATION_SAMPLES_MODE_YES);
+                                EventManager::get()->sendEvent(idLocation.getPointer());
+                                issuedIdentificationLocationEvent = true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        SelectionItemMediaLogicalCoordinate* idLogicalMedia = selectionManager->getMediaLogicalCoordinateIdentification();
+        if (idLogicalMedia != NULL) {
+            if (idLogicalMedia->isValid()) {
+                if (identifiedItem == NULL) {
+                    AString dataFileName("Data File Name Missing");
+                    if (idLogicalMedia->getMediaFile() != NULL) {
+                        dataFileName = idLogicalMedia->getMediaFile()->getFileNameNoPath();
+                    }
+                    const PixelLogicalIndex pixelLogicalIndex = idLogicalMedia->getPixelLogicalIndex();
+                    Vector3D stereotaxicXYZ;
+                    bool stereotaxicXYZValidFlag = idLogicalMedia->getStereotaxicXYZ(stereotaxicXYZ);
+                    identifiedItem = IdentifiedItemUniversal::newInstanceMediaLogicalCoordinateIdentification(identificationMessage,
+                                                                                                              formattedIdentificationMessage,
+                                                                                                              dataFileName,
+                                                                                                              pixelLogicalIndex,
+                                                                                                              stereotaxicXYZ,
+                                                                                                              stereotaxicXYZValidFlag);
+                }
+            }
+        }
+        
+        SelectionItemMediaPlaneCoordinate* idPlaneMedia = selectionManager->getMediaPlaneCoordinateIdentification();
+        if (idPlaneMedia != NULL) {
+            if (idPlaneMedia->isValid()) {
+                if (identifiedItem == NULL) {
+                    AString dataFileName("Data File Name Missing");
+                    if (idPlaneMedia->getMediaFile() != NULL) {
+                        dataFileName = idPlaneMedia->getMediaFile()->getFileNameNoPath();
+                    }
+                    const Vector3D planeXYZ = idPlaneMedia->getPlaneCoordinate();
+                    Vector3D stereotaxicXYZ;
+                    bool stereotaxicXYZValidFlag = idPlaneMedia->getStereotaxicXYZ(stereotaxicXYZ);
+                    identifiedItem = IdentifiedItemUniversal::newInstanceMediaPlaneCoordinateIdentification(identificationMessage,
+                                                                                                              formattedIdentificationMessage,
+                                                                                                              dataFileName,
+                                                                                                              planeXYZ,
+                                                                                                              stereotaxicXYZ,
+                                                                                                              stereotaxicXYZValidFlag);
+                }
+            }
+        }
+        
         if (identifiedItem == NULL) {
             if ( (! identificationMessage.isEmpty())
                 || ( ! formattedIdentificationMessage.isEmpty())) {
-                identifiedItem = new IdentifiedItem(identificationMessage,
-                                                    formattedIdentificationMessage);
+                identifiedItem = IdentifiedItemUniversal::newInstanceTextNoSymbolIdentification(identificationMessage,
+                                                                                                formattedIdentificationMessage);
             }
         }
         
@@ -3802,14 +3897,15 @@ GuiManager::processIdentification(const int32_t tabIndex,
                                            ciftiLoadingFormattedMessage);
             }
             else {
-                identifiedItem = new IdentifiedItem(ciftiInfo,
-                                                    ciftiLoadingFormattedMessage);
+                identifiedItem = IdentifiedItemUniversal::newInstanceTextNoSymbolIdentification(ciftiInfo,
+                                                                                                ciftiLoadingFormattedMessage);
             }
         }
         
         if (identifiedItem != NULL) {
             identificationManager->addIdentifiedItem(identifiedItem);
             updateInformationFlag = true;
+            updateGraphicsFlag    = true;
         }
     }
     
@@ -3819,7 +3915,7 @@ GuiManager::processIdentification(const int32_t tabIndex,
     
     if (updateGraphicsFlag) {
         EventManager::get()->sendEvent(EventSurfaceColoringInvalidate().getPointer());
-        EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+        EventManager::get()->sendEvent(EventGraphicsPaintSoonAllWindows().getPointer());
         EventManager::get()->sendEvent(EventUserInterfaceUpdate().addToolBar().addToolBox().getPointer());
     }
 }
@@ -3980,4 +4076,129 @@ GuiManager::startNewWbViewInstance(const QStringList& parameters,
     }
     
     return true;
+}
+
+/**
+ * @return screens information with separate names and values.
+ */
+std::vector<std::unique_ptr<InfoItem>>
+GuiManager::getScreensInfo()
+{
+    std::vector<std::unique_ptr<InfoItem>> infoOut;
+    
+    QList<QScreen*> allScreens = QGuiApplication::screens();
+    
+    const int32_t numScreens(allScreens.size());
+    for (int32_t i = 0; i < numScreens; i++) {
+        CaretAssertVectorIndex(allScreens, i);
+        
+        const QScreen* screen(allScreens[i]);
+        
+        if (i == 0) {
+            /*
+             * Desktop
+             */
+            infoOut.push_back(InfoItem::makeItem("Desktop", ""));
+            
+            const AString geomTT("This property holds the pixel geometry of the virtual desktop.");
+            const QRect vg(screen->virtualGeometry());
+            const AString vgString(AString::number(vg.x())
+                                   + ", "
+                                   + AString::number(vg.y())
+                                   + ", "
+                                   + AString::number(vg.width())
+                                   + ", "
+                                   + AString::number(vg.height()));
+            infoOut.push_back(InfoItem::makeItem("   Virtual Geometry: ",
+                                                 vgString,
+                                                 geomTT));
+        }
+        
+        infoOut.push_back(InfoItem::makeItem("Screen " + AString::number(i),
+                                             ""));
+        
+#if QT_VERSION >= QT_VERSION_CHECK(5, 9, 0)
+        infoOut.push_back(InfoItem::makeItem("   Name: ",
+                                             screen->name()));
+        
+        infoOut.push_back(InfoItem::makeItem("   Manufacturer: ",
+                                             screen->manufacturer()));
+        
+        infoOut.push_back(InfoItem::makeItem("   Model: ",
+                                             screen->model()));
+#endif //
+        
+        const AString dprTT("This property holds the screen's ratio between physical pixels and device-independent pixels.  "
+                            "Common values are 1.0 on normal displays and 2.0 on \"retina\" displays. Higher values are also possible.");
+        infoOut.push_back(InfoItem::makeItem("   Device Pixel Ratio: ",
+                                             AString::number(screen->devicePixelRatio()),
+                                             dprTT));
+        
+        const AString physTT("This property holds the screen's physical size (in millimeters). "
+                             "The physical size represents the actual physical dimensions of the screen's display. "
+                             "Depending on what information the underlying system provides the value might not be entirely accurate.");
+        infoOut.push_back(InfoItem::makeItem("   Physical Size w/h: ",
+                                             (AString::number(screen->physicalSize().width())
+                                              + "mm x "
+                                              + AString::number(screen->physicalSize().height())
+                                              + "mm"),
+                                             physTT));
+        
+        
+        const AString logTT("This property holds the number of logical dots or pixels per inch. "
+                            "This value can be used to convert font point sizes to pixel sizes.");
+        infoOut.push_back(InfoItem::makeItem("   Logical DPI: ",
+                                             (AString::number((float)screen->logicalDotsPerInchX(), 'f', 2)
+                                              + " x "
+                                              + AString::number(screen->logicalDotsPerInchY(), 'f', 2)),
+                                             logTT));
+        
+        const AString physDpiTT("This property holds the number of physical dots or pixels per inch. "
+                                "This value represents the pixel density on the screen's display. "
+                                "Depending on what information the underlying system provides the value might not be entirely accurate.");
+        infoOut.push_back(InfoItem::makeItem("   Physical DPI: ",
+                                             (AString::number((float)screen->physicalDotsPerInchX(), 'f', 2)
+                                              + " x "
+                                              + AString::number(screen->physicalDotsPerInchY(), 'f', 2)),
+                                             physDpiTT));
+        
+        const AString geomTT("This property holds the screen's geometry in pixels");
+        const QRect vg(screen->geometry());
+        const AString vgString(AString::number(vg.x())
+                               + ", "
+                               + AString::number(vg.y())
+                               + ", "
+                               + AString::number(vg.width())
+                               + ", "
+                               + AString::number(vg.height()));
+        infoOut.push_back(InfoItem::makeItem("   Geometry: ",
+                                             vgString,
+                                             geomTT));
+    }
+    
+    return infoOut;
+}
+
+/**
+ * Process display of help information from a WuQHyperlinkToolTip.
+ * @param hyperlink
+ *    Text of hyperlink
+ */
+void
+GuiManager::toolTipHyperlinkClicked(const QString& hyperlink)
+{
+    if (hyperlink.startsWith("help://")){
+        const QString helpPage(hyperlink.mid(7));
+        
+        EventHelpViewerDisplay helpViewerEvent(NULL,
+                                               helpPage);
+        EventManager::get()->sendEvent(helpViewerEvent.getPointer());
+    }
+    else if (hyperlink.startsWith("http://")) {
+        QDesktopServices::openUrl(hyperlink);
+    }
+    else {
+        CaretLogSevere("Unrecognized hyperlink from WuQHyperlinkToolTip: "
+                       + hyperlink);
+    }
 }

@@ -22,18 +22,25 @@
 /*LICENSE_END*/
 
 
+#include <QDir>
+
 #include "CaretObject.h"
 
 
 
 namespace caret {
 
+    class AnnotationFile;
+    
     class AnnotationFileXmlFormatBase : public CaretObject {
 
     protected:
         AnnotationFileXmlFormatBase();
         
+        void setAnnotationFileDirectory(const AString& annotationFileName);
         
+        const QDir& getAnnotationFileDirectory() const;
+
     public:
         virtual ~AnnotationFileXmlFormatBase();
         
@@ -46,6 +53,8 @@ namespace caret {
         AnnotationFileXmlFormatBase(const AnnotationFileXmlFormatBase&);
 
         AnnotationFileXmlFormatBase& operator=(const AnnotationFileXmlFormatBase&);
+        
+        QDir m_annotationFileDirectory;
         
     protected:
         static const QString ATTRIBUTE_BACKGROUND_CARET_COLOR;
@@ -91,6 +100,14 @@ namespace caret {
         static const QString ATTRIBUTE_LINE_END_ARROW;
         
         static const QString ATTRIBUTE_LINE_START_ARROW;
+        
+        static const QString ATTRIBUTE_PLANE_ONE;
+        
+        static const QString ATTRIBUTE_PLANE_TWO;
+        
+        static const QString ATTRIBUTE_PLANE_ONE_NAME_XYZ;
+        
+        static const QString ATTRIBUTE_PLANE_TWO_NAME_XYZ;
         
         static const QString ATTRIBUTE_ROTATION_ANGLE;
         
@@ -146,6 +163,12 @@ namespace caret {
         
         static const QString ELEMENT_COORDINATE_TWO;
         
+        static const QString ELEMENT_COORDINATE_HISTOLOGY_SPACE_KEY;
+        
+        static const QString ELEMENT_COORDINATE_MEDIA_FILE_NAME;
+        
+        static const QString ELEMENT_FONT_ATTRIBUTES;
+        
         static const QString ELEMENT_GROUP;
         
         static const QString ELEMENT_IMAGE;
@@ -161,6 +184,12 @@ namespace caret {
         static const QString ELEMENT_PERCENT_WIDTH_SIZE_TEXT;
         
         static const QString ELEMENT_POINT_SIZE_TEXT;
+        
+        static const QString ELEMENT_POLYHEDRON;
+
+        static const QString ELEMENT_POLYHEDRON_DATA;
+        
+        static const QString ELEMENT_POLYGON;
         
         static const QString ELEMENT_POLY_LINE;
         
@@ -224,6 +253,14 @@ namespace caret {
     
     const QString AnnotationFileXmlFormatBase::ATTRIBUTE_LINE_START_ARROW = "startArrow";
     
+    const QString AnnotationFileXmlFormatBase::ATTRIBUTE_PLANE_ONE = "plane";
+    
+    const QString AnnotationFileXmlFormatBase::ATTRIBUTE_PLANE_TWO = "planeTwo";
+    
+    const QString AnnotationFileXmlFormatBase::ATTRIBUTE_PLANE_ONE_NAME_XYZ = "planeOneNameXYZ";
+    
+    const QString AnnotationFileXmlFormatBase::ATTRIBUTE_PLANE_TWO_NAME_XYZ = "planeTwoNameXYZ";
+    
     const QString AnnotationFileXmlFormatBase::ATTRIBUTE_ROTATION_ANGLE = "rotationAngle";
     
     const QString AnnotationFileXmlFormatBase::ATTRIBUTE_SPACER_TAB_INDEX = "spacerTabIndex";
@@ -278,6 +315,12 @@ namespace caret {
     
     const QString AnnotationFileXmlFormatBase::ELEMENT_COORDINATE_TWO = "coordTwo";
     
+    const QString AnnotationFileXmlFormatBase::ELEMENT_COORDINATE_HISTOLOGY_SPACE_KEY = "histologySpaceKey";
+    
+    const QString AnnotationFileXmlFormatBase::ELEMENT_COORDINATE_MEDIA_FILE_NAME = "mediaFileName";
+    
+    const QString AnnotationFileXmlFormatBase::ELEMENT_FONT_ATTRIBUTES = "fontAttributes";
+
     const QString AnnotationFileXmlFormatBase::ELEMENT_GROUP = "group";
     
     const QString AnnotationFileXmlFormatBase::ELEMENT_IMAGE = "image";
@@ -293,6 +336,12 @@ namespace caret {
     const QString AnnotationFileXmlFormatBase::ELEMENT_PERCENT_WIDTH_SIZE_TEXT = "percentWidthSizeText";
     
     const QString AnnotationFileXmlFormatBase::ELEMENT_POINT_SIZE_TEXT = "pointSizeText";
+    
+    const QString AnnotationFileXmlFormatBase::ELEMENT_POLYHEDRON = "polyhedron";
+    
+    const QString AnnotationFileXmlFormatBase::ELEMENT_POLYHEDRON_DATA = "polyhedronData";
+    
+    const QString AnnotationFileXmlFormatBase::ELEMENT_POLYGON = "polygon";
     
     const QString AnnotationFileXmlFormatBase::ELEMENT_POLY_LINE = "polyLine";
     

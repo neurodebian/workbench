@@ -47,15 +47,17 @@
 #include "SelectionItemChartTwoMatrix.h"
 #include "SelectionItemCiftiConnectivityMatrixRowColumn.h"
 #include "SelectionItemFocusSurface.h"
-#include "SelectionItemFocusVolume.h"
-#include "SelectionItemImage.h"
+#include "SelectionItemFocus.h"
+#include "SelectionItemHistologyCoordinate.h"
 #include "SelectionItemImageControlPoint.h"
+#include "SelectionItemMediaLogicalCoordinate.h"
+#include "SelectionItemMediaPlaneCoordinate.h"
 #include "SelectionItemSurfaceNode.h"
-#include "SelectionItemSurfaceNodeIdentificationSymbol.h"
 #include "SelectionItemSurfaceTriangle.h"
+#include "SelectionItemUniversalIdentificationSymbol.h"
+#include "SelectionItemVolumeMprCrosshair.h"
 #include "SelectionItemVoxel.h"
 #include "SelectionItemVoxelEditing.h"
-#include "SelectionItemVoxelIdentificationSymbol.h"
 #include "Surface.h"
 
 using namespace caret;
@@ -89,15 +91,20 @@ SelectionManager::SelectionManager()
     m_ciftiConnectivityMatrixRowColumnIdentfication = new SelectionItemCiftiConnectivityMatrixRowColumn();
     m_chartTimeSeriesIdentification = new SelectionItemChartTimeSeries();
     m_surfaceFocusIdentification = new SelectionItemFocusSurface();
-    m_volumeFocusIdentification = new SelectionItemFocusVolume();
-    m_imageIdentification = new SelectionItemImage();
+    m_focusIdentification = new SelectionItemFocus();
+    m_histologyPlaneCoordinateIdentification.reset(new SelectionItemHistologyCoordinate());
     m_imageControlPointIdentification = new SelectionItemImageControlPoint();
+    m_mediaLogicalCoordinateIdentification.reset(new SelectionItemMediaLogicalCoordinate());
+    m_mediaPlaneCoordinateIdentification.reset(new SelectionItemMediaPlaneCoordinate());
+    
+    m_samplesIdentification.reset(new SelectionItemAnnotation());
     m_surfaceNodeIdentification = new SelectionItemSurfaceNode();
-    m_surfaceNodeIdentificationSymbol = new SelectionItemSurfaceNodeIdentificationSymbol();
+    m_universalIdentificationSymbol.reset(new SelectionItemUniversalIdentificationSymbol());
     m_surfaceTriangleIdentification = new SelectionItemSurfaceTriangle();
     m_voxelIdentification = new SelectionItemVoxel();
-    m_voxelIdentificationSymbol = new SelectionItemVoxelIdentificationSymbol();
     m_voxelEditingIdentification = new SelectionItemVoxelEditing();
+    
+    m_volumeMprCrosshairIdentification.reset(new SelectionItemVolumeMprCrosshair());
     
     m_allSelectionItems.push_back(m_annotationIdentification);
     m_allSelectionItems.push_back(m_surfaceBorderIdentification);
@@ -112,26 +119,29 @@ SelectionManager::SelectionManager()
     m_allSelectionItems.push_back(m_chartTwoLineSeriesIdentification.get());
     m_allSelectionItems.push_back(m_chartTwoMatrixIdentification.get());
     m_allSelectionItems.push_back(m_ciftiConnectivityMatrixRowColumnIdentfication);
+    m_allSelectionItems.push_back(m_samplesIdentification.get());
     m_allSelectionItems.push_back(m_surfaceFocusIdentification);
     m_allSelectionItems.push_back(m_surfaceNodeIdentification);
-    m_allSelectionItems.push_back(m_surfaceNodeIdentificationSymbol);
     m_allSelectionItems.push_back(m_surfaceTriangleIdentification);
-    m_allSelectionItems.push_back(m_imageIdentification);
+    m_allSelectionItems.push_back(m_histologyPlaneCoordinateIdentification.get());
     m_allSelectionItems.push_back(m_imageControlPointIdentification);
+    m_allSelectionItems.push_back(m_mediaLogicalCoordinateIdentification.get());
+    m_allSelectionItems.push_back(m_mediaPlaneCoordinateIdentification.get());
+    m_allSelectionItems.push_back(m_universalIdentificationSymbol.get());
+    m_allSelectionItems.push_back(m_volumeMprCrosshairIdentification.get());
     m_allSelectionItems.push_back(m_voxelIdentification);
-    m_allSelectionItems.push_back(m_voxelIdentificationSymbol);
     m_allSelectionItems.push_back(m_voxelEditingIdentification);
-    m_allSelectionItems.push_back(m_volumeFocusIdentification);
+    m_allSelectionItems.push_back(m_focusIdentification);
     
     m_surfaceSelectedItems.push_back(m_surfaceNodeIdentification);
     m_surfaceSelectedItems.push_back(m_surfaceTriangleIdentification);
     
     m_layeredSelectedItems.push_back(m_surfaceBorderIdentification);
     m_layeredSelectedItems.push_back(m_surfaceFocusIdentification);
-    
+    m_layeredSelectedItems.push_back(m_focusIdentification);
+
     m_volumeSelectedItems.push_back(m_voxelIdentification);
     m_volumeSelectedItems.push_back(m_voxelEditingIdentification);
-    m_volumeSelectedItems.push_back(m_volumeFocusIdentification);
     
     m_idTextGenerator = new IdentificationSimpleTextGenerator();
     m_idFormattedTextGenerator.reset(new IdentificationFormattedTextGenerator());
@@ -166,24 +176,18 @@ SelectionManager::~SelectionManager()
     m_ciftiConnectivityMatrixRowColumnIdentfication = NULL;
     delete m_surfaceFocusIdentification;
     m_surfaceFocusIdentification = NULL;
-    delete m_imageIdentification;
-    m_imageIdentification = NULL;
     delete m_imageControlPointIdentification;
     m_imageControlPointIdentification = NULL;
     delete m_surfaceNodeIdentification;
     m_surfaceNodeIdentification = NULL;
-    delete m_surfaceNodeIdentificationSymbol;
-    m_surfaceNodeIdentificationSymbol = NULL;
     delete m_surfaceTriangleIdentification;
     m_surfaceTriangleIdentification = NULL;
     delete m_voxelIdentification;
     m_voxelIdentification = NULL;
     delete m_voxelEditingIdentification;
     m_voxelEditingIdentification = NULL;
-    delete m_voxelIdentificationSymbol;
-    m_voxelIdentificationSymbol = NULL;
-    delete m_volumeFocusIdentification;
-    m_volumeFocusIdentification = NULL;
+    delete m_focusIdentification;
+    m_focusIdentification = NULL;
     delete m_idTextGenerator;
     m_idTextGenerator = NULL;
     
@@ -281,34 +285,45 @@ SelectionManager::filterSelections(const bool applySelectionBackgroundFiltering)
         }
     }
     
-    /*
-     * See if node identification symbol is too far from selected node.
-     * This may occur if the symbol is on the other side of the surface.
-     */
-    if ((m_surfaceNodeIdentificationSymbol->getNodeNumber() >= 0)
-        && (m_surfaceNodeIdentification->getNodeNumber() >= 0)) {
-        const double depthDiff = (m_surfaceNodeIdentificationSymbol->getScreenDepth()
-                                  - m_surfaceNodeIdentification->getScreenDepth());
-        if (depthDiff > 0.01) {
-            m_surfaceNodeIdentificationSymbol->reset();
+    if (m_universalIdentificationSymbol->isValid()) {
+        if (m_surfaceNodeIdentification->isValid()) {
+            /*
+             * identification symbol may be on side of surface
+             * facing away from user (backside)
+             */
+            const double depthDiff = (m_universalIdentificationSymbol->getScreenDepth()
+                                      - m_surfaceNodeIdentification->getScreenDepth());
+            if (depthDiff > 0.01) {
+                m_universalIdentificationSymbol->reset();
+            }
+            else {
+                m_surfaceNodeIdentification->reset();
+            }
         }
-        else {
-            m_surfaceNodeIdentification->reset();
+        if (m_voxelIdentification->isValid()) {
+            const double depthDiff = (m_universalIdentificationSymbol->getScreenDepth()
+                                      - m_voxelIdentification->getScreenDepth());
+            if (depthDiff > 0.01) {
+                m_universalIdentificationSymbol->reset();
+            }
+            else {
+                m_voxelIdentification->reset();
+            }
+        }
+        if (m_histologyPlaneCoordinateIdentification->isValid()) {
+            m_histologyPlaneCoordinateIdentification->reset();
+        }
+        if (m_mediaLogicalCoordinateIdentification->isValid()) {
+            /*
+             * Media is "flat" so always give priority to identification symbol
+             */
+            m_mediaLogicalCoordinateIdentification->reset();
+        }
+        if (m_mediaPlaneCoordinateIdentification->isValid()) {
+            m_mediaPlaneCoordinateIdentification->reset();
         }
     }
     
-    if (m_voxelIdentificationSymbol->isValid()
-         && m_voxelIdentification->isValid()) {
-        const double depthDiff = (m_voxelIdentificationSymbol->getScreenDepth()
-                                  - m_voxelIdentification->getScreenDepth());
-        if (depthDiff > 0.01) {
-            m_voxelIdentificationSymbol->reset();
-        }
-        else {
-            m_voxelIdentification->reset();
-        }
-    }
-        
     if (applySelectionBackgroundFiltering) {
          clearDistantSelections();
     }
@@ -323,7 +338,7 @@ SelectionManager::filterSelections(const bool applySelectionBackgroundFiltering)
                 logText += ("\n" + item->toString() + "\n");
             }
         }
-        std::cout << "Selected Items BEFORE filtering: " << logText << std::endl;
+        std::cout << "Selected Items AFTER filtering: " << logText << std::endl;
     }
 }
 
@@ -515,21 +530,21 @@ SelectionManager::getAnnotationIdentification() const
 }
 
 /**
- * @return Identification for image.
+ * @return Identification for histology
  */
-SelectionItemImage*
-SelectionManager::getImageIdentification()
+SelectionItemHistologyCoordinate*
+SelectionManager::getHistologyPlaneCoordinateIdentification()
 {
-    return m_imageIdentification;
+    return m_histologyPlaneCoordinateIdentification.get();
 }
 
 /**
- * @return Identification for image.
+ * @return Identification for histology
  */
-const SelectionItemImage*
-SelectionManager::getImageIdentification() const
+const SelectionItemHistologyCoordinate*
+SelectionManager::getHistologyPlaneCoordinateIdentification() const
 {
-    return m_imageIdentification;
+    return m_histologyPlaneCoordinateIdentification.get();
 }
 
 /**
@@ -551,6 +566,60 @@ SelectionManager::getImageControlPointIdentification() const
 }
 
 /**
+ * @return Identification for media
+ */
+SelectionItemMediaLogicalCoordinate*
+SelectionManager::getMediaLogicalCoordinateIdentification()
+{
+    return m_mediaLogicalCoordinateIdentification.get();
+}
+
+/**
+ * @return Identification for media
+ */
+const SelectionItemMediaLogicalCoordinate*
+SelectionManager::getMediaLogicalCoordinateIdentification() const
+{
+    return m_mediaLogicalCoordinateIdentification.get();
+}
+
+/**
+ * @return Identification for media
+ */
+SelectionItemMediaPlaneCoordinate*
+SelectionManager::getMediaPlaneCoordinateIdentification()
+{
+    return m_mediaPlaneCoordinateIdentification.get();
+}
+
+/**
+ * @return Identification for media
+ */
+const SelectionItemMediaPlaneCoordinate*
+SelectionManager::getMediaPlaneCoordinateIdentification() const
+{
+    return m_mediaPlaneCoordinateIdentification.get();
+}
+
+/**
+ * @return Identification for samples.
+ */
+SelectionItemAnnotation*
+SelectionManager::getSamplesIdentification()
+{
+    return m_samplesIdentification.get();
+}
+
+/**
+ * @return Identification for samples.
+ */
+const SelectionItemAnnotation*
+SelectionManager::getSamplesIdentification() const
+{
+    return m_samplesIdentification.get();
+}
+
+/**
  * @return Identification for surface node.
  */
 SelectionItemSurfaceNode* 
@@ -566,24 +635,6 @@ const SelectionItemSurfaceNode*
 SelectionManager::getSurfaceNodeIdentification() const
 {
     return m_surfaceNodeIdentification;
-}
-
-/**
- * @return Identification for surface node.
- */
-const SelectionItemSurfaceNodeIdentificationSymbol* 
-SelectionManager::getSurfaceNodeIdentificationSymbol() const
-{
-    return m_surfaceNodeIdentificationSymbol;
-}
-
-/**
- * @return Identification for surface node.
- */
-SelectionItemSurfaceNodeIdentificationSymbol* 
-SelectionManager::getSurfaceNodeIdentificationSymbol()
-{
-    return m_surfaceNodeIdentificationSymbol;
 }
 
 /**
@@ -605,6 +656,24 @@ SelectionManager::getSurfaceTriangleIdentification() const
 }
 
 /**
+ * @return Identification for volume MPR crosshair.
+ */
+const SelectionItemVolumeMprCrosshair*
+SelectionManager::getVolumeMprCrosshairIdentification() const
+{
+    return m_volumeMprCrosshairIdentification.get();
+}
+
+/**
+ * @return Identification for volume MPR crosshair.
+ */
+SelectionItemVolumeMprCrosshair*
+SelectionManager::getVolumeMprCrosshairIdentification()
+{
+    return m_volumeMprCrosshairIdentification.get();
+}
+
+/**
  * @return Identification for voxels.
  */
 const SelectionItemVoxel* 
@@ -623,24 +692,6 @@ SelectionManager::getVoxelIdentification()
 }
 
 /**
- * @return Identification for voxel identification system.
- */
-const SelectionItemVoxelIdentificationSymbol*
-SelectionManager::getVoxelIdentificationSymbol() const
-{
-    return m_voxelIdentificationSymbol;
-}
-
-/**
- * @return Identification for voxels.
- */
-SelectionItemVoxelIdentificationSymbol*
-SelectionManager::getVoxelIdentificationSymbol()
-{
-    return m_voxelIdentificationSymbol;
-}
-
-/**
  * @return Identification for voxel editing.
  */
 const SelectionItemVoxelEditing*
@@ -656,6 +707,24 @@ SelectionItemVoxelEditing*
 SelectionManager::getVoxelEditingIdentification()
 {
     return m_voxelEditingIdentification;
+}
+
+/**
+ * @return Universal identification system selection
+ */
+SelectionItemUniversalIdentificationSymbol*
+SelectionManager::getUniversalIdentificationSymbol()
+{
+    return m_universalIdentificationSymbol.get();
+}
+
+/**
+ * @return Universal identification system selection (const method)
+ */
+const SelectionItemUniversalIdentificationSymbol*
+SelectionManager::getUniversalIdentificationSymbol() const
+{
+    return m_universalIdentificationSymbol.get();
 }
 
 /**
@@ -697,19 +766,19 @@ SelectionManager::getSurfaceFocusIdentification() const
 /**
  * @return Identification for foci.
  */
-SelectionItemFocusVolume*
-SelectionManager::getVolumeFocusIdentification()
+SelectionItemFocus*
+SelectionManager::getFocusIdentification()
 {
-    return m_volumeFocusIdentification;
+    return m_focusIdentification;
 }
 
 /**
  * @return Identification for foci.
  */
-const SelectionItemFocusVolume*
-SelectionManager::getVolumeFocusIdentification() const
+const SelectionItemFocus*
+SelectionManager::getFocusIdentification() const
 {
-    return m_volumeFocusIdentification;
+    return m_focusIdentification;
 }
 
 /**

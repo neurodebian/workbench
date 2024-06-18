@@ -122,8 +122,8 @@ AnnotationRedoUndoCommandModeEnum::initialize()
                                                          "BOUNDS_2D_SINGLE",
                                                          "Bounds 2D Single"));
     
-    enumData.push_back(AnnotationRedoUndoCommandModeEnum(COLOR_BACKGROUND,
-                                                     "COLOR_BACKGROUND",
+    enumData.push_back(AnnotationRedoUndoCommandModeEnum(COLOR_OF_BACKGROUND,
+                                                     "COLOR_OF_BACKGROUND",
                                                      "Color - Background"));
     
     enumData.push_back(AnnotationRedoUndoCommandModeEnum(COLOR_FOREGROUND,
@@ -189,6 +189,26 @@ AnnotationRedoUndoCommandModeEnum::initialize()
     enumData.push_back(AnnotationRedoUndoCommandModeEnum(PASTE_ANNOTATION,
                                                          "PASTE_ANNOTATION",
                                                          "Paste Annotation"));
+
+    enumData.push_back(AnnotationRedoUndoCommandModeEnum(MULTI_COORD_ADD_COORDINATE,
+                                                         "MULTI_COORD_ADD_COORDINATE",
+                                                         "Add Poly Coordinate"));
+    
+    enumData.push_back(AnnotationRedoUndoCommandModeEnum(MULTI_COORD_INSERT_COORDINATE,
+                                                         "MULTI_COORD_INSERT_COORDINATE",
+                                                         "Insert Poly Coordinate"));
+    
+    enumData.push_back(AnnotationRedoUndoCommandModeEnum(MULTI_COORD_REMOVE_COORDINATE,
+                                                         "MULTI_COORD_REMOVE_COORDINATE",
+                                                         "Remove Poly Coordinate"));
+    
+    enumData.push_back(AnnotationRedoUndoCommandModeEnum(MULTI_COORD_REMOVE_LAST_COORDINATE,
+                                                         "MULTI_COORD_REMOVE_LAST_COORDINATE",
+                                                         "Remove Last Poly Coordinate"));
+    
+    enumData.push_back(AnnotationRedoUndoCommandModeEnum(POLYHEDRON_RESET_RANGE_TO_PLANES,
+                                                         "POLYHEDRON_RESET_RANGE_TO_PLANES",
+                                                         "Reset Polyhedron Range to Planes"));
     
     enumData.push_back(AnnotationRedoUndoCommandModeEnum(ROTATION_ANGLE,
                                                          "ROTATION_ANGLE",

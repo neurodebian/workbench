@@ -45,8 +45,9 @@ namespace caret {
     class SelectionItemCiftiConnectivityMatrixRowColumn;
     class SelectionItemChartTimeSeries;
     class SelectionItemFocusSurface;
-    class SelectionItemFocusVolume;
-    class SelectionItemImage;
+    class SelectionItemFocus;
+    class SelectionItemMediaLogicalCoordinate;
+    class SelectionItemMediaPlaneCoordinate;
     class SelectionItemSurfaceNode;
     class SelectionItemVoxel;
     class SelectionManager;
@@ -99,15 +100,18 @@ namespace caret {
                                                   const SelectionItemFocusSurface* idSurfaceFocus,
                                                   const bool toolTipFlag) const;
         
-        void generateVolumeFociIdentifcationText(IdentificationStringBuilder& idText,
-                                                  const SelectionItemFocusVolume* idVolumeFocus) const;
+        void generateFociIdentifcationText(IdentificationStringBuilder& idText,
+                                                  const SelectionItemFocus* idFocus) const;
         
         void generateSurfaceIdentificationText(IdentificationStringBuilder& idText,
                                                const Brain* brain,
                                                const SelectionItemSurfaceNode* idSurfaceNode) const;
         
-        void generateImageIdentificationText(IdentificationStringBuilder& idText,
-                                             const SelectionItemImage* idImage) const;
+        void generateMediaLogicalCoordinateIdentificationText(IdentificationStringBuilder& idText,
+                                             const SelectionItemMediaLogicalCoordinate* idImage) const;
+        
+        void generateMediaPlaneCoordinateIdentificationText(IdentificationStringBuilder& idText,
+                                             const SelectionItemMediaPlaneCoordinate* idImage) const;
         
         void generateVolumeIdentificationText(IdentificationStringBuilder& idText,
                                                const Brain* brain,

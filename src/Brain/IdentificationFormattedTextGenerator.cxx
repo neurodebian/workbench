@@ -28,6 +28,7 @@
 #include "BrainStructure.h"
 #include "BrowserTabContent.h"
 #include "CaretAssert.h"
+#include "CaretLogger.h"
 #include "CaretMappableDataFile.h"
 #include "ChartDataCartesian.h"
 #include "ChartDataSource.h"
@@ -45,6 +46,7 @@
 #include "DataToolTipsManager.h"
 #include "EventBrowserTabGetAll.h"
 #include "EventBrowserTabIndicesGetAllViewed.h"
+#include "EventCaretDataFilesGet.h"
 #include "EventCaretMappableDataFilesAndMapsInDisplayedOverlays.h"
 #include "EventCaretMappableDataFilesGet.h"
 #include "EventManager.h"
@@ -56,11 +58,13 @@
 #include "GraphicsPrimitive.h"
 #include "GraphicsPrimitiveV3f.h"
 #include "Histogram.h"
+#include "HistologySlicesFile.h"
 #include "HtmlTableBuilder.h"
 #include "IdentificationFilter.h"
 #include "IdentificationManager.h"
-#include "ImageFile.h"
+#include "IdentifiedItemUniversal.h"
 #include "MapFileDataSelector.h"
+#include "MediaFile.h"
 #include "MetricDynamicConnectivityFile.h"
 #include "OverlaySet.h"
 #include "SelectionItemBorderSurface.h"
@@ -75,9 +79,12 @@
 #include "SelectionItemChartTwoLineSeries.h"
 #include "SelectionItemChartTwoMatrix.h"
 #include "SelectionItemFocusSurface.h"
-#include "SelectionItemFocusVolume.h"
-#include "SelectionItemImage.h"
+#include "SelectionItemFocus.h"
+#include "SelectionItemHistologyCoordinate.h"
+#include "SelectionItemMediaLogicalCoordinate.h"
+#include "SelectionItemMediaPlaneCoordinate.h"
 #include "SelectionItemSurfaceNode.h"
+#include "SelectionItemUniversalIdentificationSymbol.h"
 #include "SelectionItemVoxel.h"
 #include "SelectionManager.h"
 #include "IdentificationStringBuilder.h"
@@ -144,8 +151,10 @@ IdentificationFormattedTextGenerator::createIdentificationText(const SelectionMa
     chartHtmlTableBuilder->setTitleBold("Charts");
     std::unique_ptr<HtmlTableBuilder> geometryHtmlTableBuilder = createHtmlTableBuilder(3);
     geometryHtmlTableBuilder->setTitleBold("Geometry");
-    std::unique_ptr<HtmlTableBuilder> imageHtmlTableBuilder = createHtmlTableBuilder(2);
-    imageHtmlTableBuilder->setTitlePlain("Image");
+    std::unique_ptr<HtmlTableBuilder> histologyHtmlTableBuilder = createHtmlTableBuilder(2);
+    histologyHtmlTableBuilder->setTitlePlain("Histology");
+    std::unique_ptr<HtmlTableBuilder> mediaHtmlTableBuilder = createHtmlTableBuilder(2);
+    mediaHtmlTableBuilder->setTitlePlain("Media Image");
     std::unique_ptr<HtmlTableBuilder> labelHtmlTableBuilder = createHtmlTableBuilder(2);
     labelHtmlTableBuilder->setTitlePlain("Labels");
     std::unique_ptr<HtmlTableBuilder> layersHtmlTableBuilder = createHtmlTableBuilder(3);
@@ -155,89 +164,117 @@ IdentificationFormattedTextGenerator::createIdentificationText(const SelectionMa
 
     const SelectionItemSurfaceNode* surfaceID = selectionManager->getSurfaceNodeIdentification();
     
-    this->generateSurfaceVertexIdentificationText(*geometryHtmlTableBuilder,
-                                                  brain,
-                                                  surfaceID);
-    this->generateVolumeVoxelIdentificationText(*geometryHtmlTableBuilder,
-                                                brain,
-                                                selectionManager->getVoxelIdentification());
-
-    const std::vector<EventCaretMappableDataFilesAndMapsInDisplayedOverlays::MapFileInfo> displayedFiles = getFilesForIdentification(filter,
-                                                                                                                                  tabIndex);
-
-    for (auto fileInfo : displayedFiles) {
-        switch (fileInfo.m_overlayType) {
-            case EventCaretMappableDataFilesAndMapsInDisplayedOverlays::MapOverlayType::BRAINORDINATE:
-                if (surfaceID->isValid()) {
-                    if (fileInfo.m_mapFile->isSurfaceMappable()) {
-                        this->generateSurfaceDataIdentificationText(*labelHtmlTableBuilder,
-                                                                    *scalarHtmlTableBuilder,
-                                                                    fileInfo.m_mapFile,
-                                                                    fileInfo.m_mapIndices,
-                                                                    brain,
-                                                                    surfaceID);
-                    }
-                }
-                if (selectionManager->getVoxelIdentification()->isValid()) {
-                    if (fileInfo.m_mapFile->isVolumeMappable()) {
-                        this->generateVolumeDataIdentificationText(*labelHtmlTableBuilder,
-                                                                   *scalarHtmlTableBuilder,
-                                                                   fileInfo.m_mapFile,
-                                                                   fileInfo.m_mapIndices,
-                                                                   brain,
-                                                                   selectionManager->getVoxelIdentification());
-                    }
-                }
-                break;
-            case EventCaretMappableDataFilesAndMapsInDisplayedOverlays::MapOverlayType::CHART_ONE:
-                break;
-            case EventCaretMappableDataFilesAndMapsInDisplayedOverlays::MapOverlayType::CHART_TWO:
-                this->generateChartTwoHistogramIdentificationText(*chartHtmlTableBuilder,
-                                                                  idText,
-                                                                  selectionManager->getChartTwoHistogramIdentification(),
-                                                                  fileInfo.m_mapFile,
-                                                                  fileInfo.m_mapIndices,
-                                                                  false);
-                
-                this->generateChartTwoLineLayerNearestIdentificationText(*chartHtmlTableBuilder,
-                                                                         idText,
-                                                                         selectionManager->getChartTwoLineLayerVerticalNearestIdentification(),
-                                                                         fileInfo.m_mapFile,
-                                                                         fileInfo.m_mapIndices,
-                                                                         false);
-                
-                this->generateChartTwoLineLayerIdentificationText(*chartHtmlTableBuilder,
-                                                                  idText,
-                                                                  selectionManager->getChartTwoLineLayerIdentification(),
-                                                                  fileInfo.m_mapFile,
-                                                                  fileInfo.m_mapIndices,
-                                                                  false);
-
-                this->generateChartTwoLineSeriesIdentificationText(*chartHtmlTableBuilder,
-                                                                   idText,
-                                                                   selectionManager->getChartTwoLineSeriesIdentification(),
-                                                                   fileInfo.m_mapFile,
-                                                                   fileInfo.m_mapIndices,
-                                                                   false);
-                
-                this->generateChartTwoMatrixIdentificationText(*chartHtmlTableBuilder,
-                                                               idText,
-                                                               selectionManager->getChartTwoMatrixIdentification(),
-                                                               fileInfo.m_mapFile,
-                                                               fileInfo.m_mapIndices,
-                                                               false);
-                
-                break;
+    if (filter->isShowVertexVoxelEnabled()) {
+        this->generateSurfaceVertexIdentificationText(*geometryHtmlTableBuilder,
+                                                      brain,
+                                                      surfaceID);
+        this->generateVolumeVoxelIdentificationText(*geometryHtmlTableBuilder,
+                                                    brain,
+                                                    selectionManager->getVoxelIdentification());
+    }
+    
+    std::vector<MapFileAndMapIndices> mapFilesAndIndices;
+    std::vector<MapFileAndMapIndices> chartFilesAndIndices;
+    std::vector<MapFileAndMapIndices> histologyFilesAndIndices;
+    std::vector<MapFileAndMapIndices> mediaFilesAndIndices;
+    getFilesForIdentification(filter,
+                              tabIndex,
+                              mapFilesAndIndices,
+                              chartFilesAndIndices,
+                              histologyFilesAndIndices,
+                              mediaFilesAndIndices);
+    
+    for (auto& mfi : mapFilesAndIndices) {
+        CaretMappableDataFile* cmdf(mfi.m_mapFile->castToCaretMappableDataFile());
+        CaretAssert(cmdf);
+        
+        if (cmdf->isSurfaceMappable()) {
+            this->generateSurfaceDataIdentificationText(*labelHtmlTableBuilder,
+                                                        *scalarHtmlTableBuilder,
+                                                        cmdf,
+                                                        mfi.m_mapIndices,
+                                                        brain,
+                                                        surfaceID);
+        }
+        if (selectionManager->getVoxelIdentification()->isValid()) {
+            if (cmdf->isVolumeMappable()) {
+                this->generateVolumeDataIdentificationText(*labelHtmlTableBuilder,
+                                                           *scalarHtmlTableBuilder,
+                                                           cmdf,
+                                                           mfi.m_mapIndices,
+                                                           brain,
+                                                           selectionManager->getVoxelIdentification());
+            }
         }
     }
     
+    for (auto& cfi : chartFilesAndIndices) {
+        CaretMappableDataFile* mapFile(cfi.m_mapFile->castToCaretMappableDataFile());
+        CaretAssert(mapFile);
+        this->generateChartTwoHistogramIdentificationText(*chartHtmlTableBuilder,
+                                                          idText,
+                                                          selectionManager->getChartTwoHistogramIdentification(),
+                                                          mapFile,
+                                                          cfi.m_mapIndices,
+                                                          false);
+        
+        this->generateChartTwoLineLayerNearestIdentificationText(*chartHtmlTableBuilder,
+                                                                 idText,
+                                                                 selectionManager->getChartTwoLineLayerVerticalNearestIdentification(),
+                                                                 mapFile,
+                                                                 cfi.m_mapIndices,
+                                                                 false);
+        
+        this->generateChartTwoLineLayerIdentificationText(*chartHtmlTableBuilder,
+                                                          idText,
+                                                          selectionManager->getChartTwoLineLayerIdentification(),
+                                                          mapFile,
+                                                          cfi.m_mapIndices,
+                                                          false);
+        
+        this->generateChartTwoLineSeriesIdentificationText(*chartHtmlTableBuilder,
+                                                           idText,
+                                                           selectionManager->getChartTwoLineSeriesIdentification(),
+                                                           mapFile,
+                                                           cfi.m_mapIndices,
+                                                           false);
+        
+        this->generateChartTwoMatrixIdentificationText(*chartHtmlTableBuilder,
+                                                       idText,
+                                                       selectionManager->getChartTwoMatrixIdentification(),
+                                                       mapFile,
+                                                       cfi.m_mapIndices,
+                                                       false);
+    }
+    
+    generateHistologyPlaneCoordinateIdentificationText(idManager,
+                                                       *histologyHtmlTableBuilder,
+                                                       idText,
+                                                       selectionManager->getHistologyPlaneCoordinateIdentification());
+
+    for (auto& mfi : mediaFilesAndIndices) {
+        MediaFile* mediaFile(mfi.m_mapFile->castToMediaFile());
+        CaretAssert(mediaFile);
+        this->generateMediaLogicalCoordinateIdentificationText(*mediaHtmlTableBuilder,
+                                              idText,
+                                              mediaFile,
+                                              mfi.m_mapIndices,
+                                              selectionManager->getMediaLogicalCoordinateIdentification());
+        this->generateMediaPlaneCoordinateIdentificationText(*mediaHtmlTableBuilder,
+                                                               idText,
+                                                               mediaFile,
+                                                               mfi.m_mapIndices,
+                                                               selectionManager->getMediaPlaneCoordinateIdentification());
+    }
 
     if (filter->isShowFociEnabled()) {
         this->generateSurfaceFocusIdentifcationText(*layersHtmlTableBuilder,
                                                     selectionManager->getSurfaceFocusIdentification(),
                                                     false);
-        this->generateVolumeFocusIdentifcationText(*layersHtmlTableBuilder,
-                                                   selectionManager->getVolumeFocusIdentification());
+        this->generateFocusIdentifcationText(*layersHtmlTableBuilder,
+                                             idText,
+                                             selectionManager->getFocusIdentification(),
+                                             false);
     }
 
     if (filter->isShowBorderEnabled()) {
@@ -263,30 +300,43 @@ IdentificationFormattedTextGenerator::createIdentificationText(const SelectionMa
     this->generateCiftiConnectivityMatrixIdentificationText(*chartHtmlTableBuilder,
                                                             selectionManager->getCiftiConnectivityMatrixRowColumnIdentification());
     
-    this->generateImageIdentificationText(*imageHtmlTableBuilder,
-                                          selectionManager->getImageIdentification());
-    
     AString textOut;
     textOut.append(geometryHtmlTableBuilder->getAsHtmlTable());
     textOut.append(labelHtmlTableBuilder->getAsHtmlTable());
     textOut.append(scalarHtmlTableBuilder->getAsHtmlTable());
     textOut.append(layersHtmlTableBuilder->getAsHtmlTable());
     textOut.append(chartHtmlTableBuilder->getAsHtmlTable());
-    textOut.append(imageHtmlTableBuilder->getAsHtmlTable());
+    textOut.append(histologyHtmlTableBuilder->getAsHtmlTable());
+    textOut.append(mediaHtmlTableBuilder->getAsHtmlTable());
     return textOut;
 }
 
 /**
- * @return Files for identification
+ * Get files for information
  * @param filter
  * Identification filter
  * @param tabIndex
  * Index of tab where ID took place
+ * @param mapFileInfoOut
+ * Map files for ID
+ * @param histologyFilesAndIndicesOut,
+ *  Histology files for ID
+ * @param mediaFileInfoOut
+ * Media files for ID
  */
-std::vector<EventCaretMappableDataFilesAndMapsInDisplayedOverlays::MapFileInfo>
+void
 IdentificationFormattedTextGenerator::getFilesForIdentification(const IdentificationFilter* filter,
-                                                                const int32_t tabIndex) const
+                                                                const int32_t tabIndex,
+                                                                std::vector<MapFileAndMapIndices>& mapFilesAndIndicesOut,
+                                                                std::vector<MapFileAndMapIndices>& chartFilesAndIndicesOut,
+                                                                std::vector<MapFileAndMapIndices>& histologyFilesAndIndicesOut,
+                                                                std::vector<MapFileAndMapIndices>& mediaFilesAndIndicesOut) const
 {
+    mapFilesAndIndicesOut.clear();
+    chartFilesAndIndicesOut.clear();
+    histologyFilesAndIndicesOut.clear();
+    mediaFilesAndIndicesOut.clear();
+    
     /**
      * Event gets files from enabled overlays in the viewed tab(s)
      */
@@ -311,49 +361,180 @@ IdentificationFormattedTextGenerator::getFilesForIdentification(const Identifica
     }
     EventManager::get()->sendEvent(overlayFilesEvent.getPointer());
 
-    /*
-     * Event gets all files
+    /**
+     * Get chart files in overlays.  Chart data is NOT filtered at this time
      */
-    EventCaretMappableDataFilesGet mapFilesEvent;
-    EventManager::get()->sendEvent(mapFilesEvent.getPointer());
-    std::vector<CaretMappableDataFile*> allMapFiles;
-    mapFilesEvent.getAllFiles(allMapFiles);
-    
-    /*
-     * Test all files for any that the users has enabled for identification
-     * on the Identification Dialog's Filtering tab and add them to the
-     * overlay files event
-     */
-    for (auto mapFile : allMapFiles) {
-        CaretAssert(mapFile);
-        const FileIdentificationAttributes* fileAtts = mapFile->getFileIdentificationAttributes();
-        CaretAssert(fileAtts);
-        if (fileAtts->isEnabled()) {
-            switch (fileAtts->getMapSelectionMode()) {
-                case FileIdentificationMapSelectionEnum::ALL:
-                {
-                    const int32_t numMaps = mapFile->getNumberOfMaps();
-                    for (int32_t iMap = 0; iMap < numMaps; iMap++) {
-                        overlayFilesEvent.addBrainordinateFileAndMap(mapFile,
-                                                                     iMap,
-                                                                     tabIndex);
-                    }
-                }
-                    break;
-                case FileIdentificationMapSelectionEnum::SELECTED:
-                    overlayFilesEvent.addBrainordinateFileAndMap(mapFile,
-                                                                 fileAtts->getMapIndex(),
-                                                                 tabIndex);
-                    break;
-            }
-        }
+    std::vector<EventCaretMappableDataFilesAndMapsInDisplayedOverlays::MapFileInfo> chartTwoFilesInOverlays(overlayFilesEvent.getChartTwoFilesAndMaps());
+    for (EventCaretMappableDataFilesAndMapsInDisplayedOverlays::MapFileInfo chartInfo : chartTwoFilesInOverlays) {
+        MapFileAndMapIndices fileInfo(chartInfo.m_mapFile);
+        fileInfo.addMapIndices(chartInfo.m_mapIndices);
+        chartFilesAndIndicesOut.push_back(fileInfo);
     }
     
     /*
-     * Get the displayed and user selected file and return them
+     * Get files in brainordinate overlays
      */
-    std::vector<EventCaretMappableDataFilesAndMapsInDisplayedOverlays::MapFileInfo> displayedFiles = overlayFilesEvent.getFilesAndMaps();
-    return displayedFiles;
+    std::vector<EventCaretMappableDataFilesAndMapsInDisplayedOverlays::MapFileInfo> brainordinateFilesInOverlays(overlayFilesEvent.getBrainordinateFilesAndMaps());
+    const int32_t numBrainordinateFilesInOverlays(brainordinateFilesInOverlays.size());
+
+    /*
+     * Get files in media overlays
+     */
+    std::vector<EventCaretMappableDataFilesAndMapsInDisplayedOverlays::MediaFileInfo> mediaFilesInOverlays(overlayFilesEvent.getMediaFilesAndMaps());
+    const int32_t numMediaFilesInOverlays(static_cast<int32_t>(mediaFilesInOverlays.size()));
+    
+    /*
+     * Get files in histology overlays
+     */
+    std::vector<EventCaretMappableDataFilesAndMapsInDisplayedOverlays::HistologySlicesFileInfo> histologyFilesInOverlays(overlayFilesEvent.getHistologySlicesFilesAndMaps());
+    const int32_t numHistologyFilesInOverlays(static_cast<int32_t>(histologyFilesInOverlays.size()));
+
+    
+    /*
+     * Get all identifiable data files
+     */
+    std::vector<CaretDataFile*> idCaretDataFiles(EventCaretDataFilesGet::getIdentifiableFilesSortedByName());
+    
+    /*
+     * Get all files that should have identification info displayed
+     */
+    for (CaretDataFile* caretDataFile : idCaretDataFiles) {
+        CaretAssert(caretDataFile);
+        CaretMappableDataFile* mapFile(caretDataFile->castToCaretMappableDataFile());
+        HistologySlicesFile* histologyFile(caretDataFile->castToHistologySlicesFile());
+        MediaFile* mediaFile(caretDataFile->castToMediaFile());
+        if ((mapFile == NULL)
+            && (histologyFile == NULL)
+            && (mediaFile == NULL)) {
+            const AString msg(caretDataFile->getFileName()
+                              + " is neither brainordinate mappable nor a media file.");
+            CaretAssertMessage(0, msg);
+            CaretLogSevere(msg);
+            continue;
+        }
+        
+        bool allMapsFlag(false);
+        switch (caretDataFile->getFileIdentificationAttributes()->getMapSelectionMode()) {
+            case FileIdentificationMapSelectionEnum::ALL:
+                allMapsFlag = true;
+                break;
+            case FileIdentificationMapSelectionEnum::SELECTED:
+                allMapsFlag = false;
+                break;
+        }
+
+        switch (caretDataFile->getFileIdentificationAttributes()->getDisplayMode()) {
+            case FileIdentificationDisplayModeEnum::ALWAYS:
+            {
+                if (mapFile != NULL) {
+                    MapFileAndMapIndices mapFileAndIndices(mapFile);
+                    if (allMapsFlag) {
+                        for (int32_t i = 0; i < mapFile->getNumberOfMaps(); i++) {
+                            mapFileAndIndices.addMapIndex(i);
+                        }
+                    }
+                    else {
+                        mapFileAndIndices.addMapIndex(mapFile->getFileIdentificationAttributes()->getMapIndex());
+                    }
+                    mapFilesAndIndicesOut.push_back(mapFileAndIndices);
+                }
+                else if (histologyFile != NULL) {
+                    MapFileAndMapIndices mapFileAndIndices(histologyFile);
+                    if (allMapsFlag) {
+                        for (int32_t i = 0; i < histologyFile->getNumberOfHistologySlices(); i++) {
+                            mapFileAndIndices.addMapIndex(i);
+                        }
+                    }
+                    else {
+                        mapFileAndIndices.addMapIndex(histologyFile->getFileIdentificationAttributes()->getMapIndex());
+                    }
+                    histologyFilesAndIndicesOut.push_back(mapFileAndIndices);
+                }
+                else if (mediaFile != NULL) {
+                    MapFileAndMapIndices mapFileAndIndices(mediaFile);
+                    if (allMapsFlag) {
+                        for (int32_t i = 0; i < mediaFile->getNumberOfFrames(); i++) {
+                            mapFileAndIndices.addMapIndex(i);
+                        }
+                    }
+                    else {
+                        mapFileAndIndices.addMapIndex(mediaFile->getFileIdentificationAttributes()->getMapIndex());
+                    }
+                    mediaFilesAndIndicesOut.push_back(mapFileAndIndices);
+                }
+                else {
+                    CaretAssert(0);
+                }
+            }
+                break;
+            case FileIdentificationDisplayModeEnum::NEVER:
+                break;
+            case FileIdentificationDisplayModeEnum::OVERLAY:
+            {
+                if (mapFile != NULL) {
+                    for (int32_t i = 0; i < numBrainordinateFilesInOverlays; i++) {
+                        CaretAssertVectorIndex(brainordinateFilesInOverlays, i);
+                        if (brainordinateFilesInOverlays[i].m_mapFile == mapFile) {
+                            MapFileAndMapIndices mapFileAndIndices(mapFile);
+                            if (allMapsFlag) {
+                                for (int32_t i = 0; i < mapFile->getNumberOfMaps(); i++) {
+                                    mapFileAndIndices.addMapIndex(i);
+                                }
+                            }
+                            else {
+                                mapFileAndIndices.addMapIndices(brainordinateFilesInOverlays[i].m_mapIndices);
+                            }
+                            mapFilesAndIndicesOut.push_back(mapFileAndIndices);
+                            break;
+                        }
+                    }
+                }
+                else if (mediaFile != NULL) {
+                    for (int32_t i = 0; i < numMediaFilesInOverlays; i++) {
+                        CaretAssertVectorIndex(mediaFilesInOverlays, i);
+                        if (mediaFilesInOverlays[i].m_mediaFile == mediaFile) {
+                            MapFileAndMapIndices mapFileAndIndices(mediaFile);
+                            if (allMapsFlag) {
+                                for (int32_t i = 0; i < mediaFile->getNumberOfFrames(); i++) {
+                                    mapFileAndIndices.addMapIndex(i);
+                                }
+                            }
+                            else {
+                                mapFileAndIndices.addMapIndices(mediaFilesInOverlays[i].m_frameIndices);
+                            }
+                            mediaFilesAndIndicesOut.push_back(mapFileAndIndices);
+                            break;
+                        }
+                    }
+                }
+                else if (histologyFile != NULL) {
+                    for (int32_t i = 0; i < numHistologyFilesInOverlays; i++) {
+                        CaretAssertVectorIndex(histologyFilesInOverlays, i);
+                        if (histologyFilesInOverlays[i].m_histologySlicesFile == histologyFile) {
+                            MapFileAndMapIndices mapFileAndIndices(histologyFile);
+                            if (allMapsFlag) {
+                                for (int32_t i = 0; i < histologyFile->getNumberOfHistologySlices(); i++) {
+                                    mapFileAndIndices.addMapIndex(i);
+                                }
+                            }
+                            else {
+                                mapFileAndIndices.addMapIndices(histologyFilesInOverlays[i].m_sliceIndices);
+                            }
+                            histologyFilesAndIndicesOut.push_back(mapFileAndIndices);
+                        }
+                    }
+                }
+                else {
+                    const AString msg(caretDataFile->getFileName()
+                                      + " is neither brainordinate mappable nor a media file.");
+                    CaretAssertMessage(0, msg);
+                    CaretLogSevere(msg);
+                }
+                break;
+            }
+        }
+        
+    }
 }
 
 /**
@@ -380,24 +561,63 @@ IdentificationFormattedTextGenerator::createToolTipText(const Brain* brain,
     CaretAssert(browserTab);
     CaretAssert(selectionManager);
     CaretAssert(dataToolTipsManager);
-    
+ 
+    const IdentificationManager* idManager = brain->getIdentificationManager();
+
     const SelectionItemSurfaceNode* selectedNode = selectionManager->getSurfaceNodeIdentification();
     const SelectionItemVoxel* selectedVoxel = selectionManager->getVoxelIdentification();
+    const SelectionItemHistologyCoordinate* selectionHistologyCoordinate(selectionManager->getHistologyPlaneCoordinateIdentification());
+    const SelectionItemMediaLogicalCoordinate* selectionMediaLogicalCoordinate = selectionManager->getMediaLogicalCoordinateIdentification();
+    const SelectionItemMediaPlaneCoordinate* selectionMediaPlaneCoordinate(selectionManager->getMediaPlaneCoordinateIdentification());
+    const SelectionItemUniversalIdentificationSymbol* selectionSymbol = selectionManager->getUniversalIdentificationSymbol();
+    AString selectionToolTip;
+    if (selectionSymbol->isValid()) {
+        const IdentifiedItemUniversal* idItem(idManager->getIdentifiedItemWithIdentifier(selectionSymbol->getIdentifiedItemUniqueIdentifier()));
+        if (idItem != NULL) {
+            selectionToolTip = idItem->getToolTip();
+        }
+    }
     
     IdentificationStringBuilder idText;
     
-    if (selectedNode->isValid()) {
+    if ( ! selectionToolTip.isEmpty()) {
+        idText.append(selectionToolTip);
+    }
+    else if (selectedNode->isValid()) {
         generateSurfaceToolTip(brain,
+                               idManager,
                                browserTab,
                                selectionManager,
                                dataToolTipsManager,
                                idText);
     }
     else if (selectedVoxel->isValid()) {
-        generateVolumeToolTip(browserTab,
+        generateVolumeToolTip(idManager,
+                              browserTab,
                               selectionManager,
                               dataToolTipsManager,
                               idText);
+    }
+    else if (selectionHistologyCoordinate->isValid()) {
+        generateHistologyPlaneCoordinateToolTip(idManager,
+                                                selectionManager,
+                                                dataToolTipsManager,
+                                                idText);
+    }
+    else if (selectionMediaLogicalCoordinate->isValid()) {
+        generateMediaLogicalCoordinateToolTip(selectionManager,
+                             dataToolTipsManager,
+                             idText);
+    }
+    else if (selectionMediaPlaneCoordinate->isValid()) {
+        generateMediaPlaneCoordinateToolTip(selectionManager,
+                                              dataToolTipsManager,
+                                              idText);
+    }
+    else if (selectionMediaPlaneCoordinate->isValid()) {
+        generateMediaPlaneCoordinateToolTip(selectionManager,
+                                            dataToolTipsManager,
+                                            idText);
     }
     else {
         generateChartToolTip(selectionManager,
@@ -433,20 +653,14 @@ IdentificationFormattedTextGenerator::generateVolumeVoxelIdentificationText(Html
         return;
     }
     
-    int64_t ijk[3];
     const VolumeMappableInterface* idVolumeFile = idVolumeVoxel->getVolumeFile();
-    idVolumeVoxel->getVoxelIJK(ijk);
-    float x, y, z;
-    idVolumeFile->indexToSpace(ijk[0], ijk[1], ijk[2], x, y, z);
-    
-    const QString xyzText(AString::number(x, 'f', 2)
-                          + ", "
-                          + AString::number(y, 'f', 2)
-                          + ", "
-                          + AString::number(z, 'f', 2));
+    const VoxelIJK ijk(idVolumeVoxel->getVoxelIJK());
+    const Vector3D xyz(idVolumeVoxel->getVoxelXYZ());
+
+    const QString xyzText(xyzToText(xyz));
     
     const QString ijkText("Voxel IJK ("
-                          + AString::fromNumbers(ijk, 3, ", ")
+                          + AString::fromNumbers(ijk.m_ijk, 3, ", ")
                           + ")");
 
     QString filename;
@@ -488,12 +702,10 @@ IdentificationFormattedTextGenerator::generateVolumeDataIdentificationText(HtmlT
         return;
     }
     
-    int64_t ijk[3];
-    const VolumeMappableInterface* idVolumeFile = idVolumeVoxel->getVolumeFile();
-    idVolumeVoxel->getVoxelIJK(ijk);
-    float x, y, z;
-    idVolumeFile->indexToSpace(ijk[0], ijk[1], ijk[2], x, y, z);
-    const float xyz[3] = { x, y, z };
+    const Vector3D xyz(idVolumeVoxel->getVoxelXYZ());
+    const float x(xyz[0]);
+    const float y(xyz[1]);
+    const float z(xyz[2]);
 
     /*
      * Get all volume files
@@ -604,7 +816,7 @@ IdentificationFormattedTextGenerator::generateVolumeDataIdentificationText(HtmlT
                                 }
                             }
                             else {
-                                text += AString::number(volumeFile->getValue(vfI, vfJ, vfK, mapIndex));
+                                text += dataValueToText(volumeFile->getValue(vfI, vfJ, vfK, mapIndex));
                             }
                         }
                         else if (ciftiFile != NULL) {
@@ -640,6 +852,7 @@ IdentificationFormattedTextGenerator::generateVolumeDataIdentificationText(HtmlT
                         if (ciftiFile->getVolumeVoxelIdentificationForMaps(mapIndices,
                                                                            xyz,
                                                                            separator,
+                                                                           s_dataValueDigitsRightOfDecimal,
                                                                            voxelIJK,
                                                                            textValue)) {
                             AString typeIJKText = (DataFileTypeEnum::toOverlayTypeName(ciftiFile->getDataFileType())
@@ -754,11 +967,7 @@ IdentificationFormattedTextGenerator::generateSurfaceVertexIdentificationText(Ht
     if ((surface != NULL) 
         && (nodeNumber >= 0)) {
         const float* xyz = surface->getCoordinate(nodeNumber);
-        const QString xyzText(AString::number(xyz[0])
-                              + ", "
-                              + AString::number(xyz[1])
-                              + ", "
-                              + AString::number(xyz[2]));
+        const QString xyzText(xyzToText(xyz));
         htmlTableBuilder.addHeaderRow(("VERTEX " + QString::number(nodeNumber)),
                                       xyzText,
                                       StructureEnum::toGuiName(surface->getStructure()));
@@ -804,6 +1013,9 @@ IdentificationFormattedTextGenerator::isParcelAndScalarTypeFile(const DataFileTy
             break;
         case DataFileTypeEnum::CONNECTIVITY_PARCEL_DENSE:
             break;
+        case DataFileTypeEnum::CONNECTIVITY_PARCEL_DYNAMIC:
+            parcelDataFlag = true;
+            break;
         case DataFileTypeEnum::CONNECTIVITY_PARCEL_LABEL:
             break;
         case DataFileTypeEnum::CONNECTIVITY_PARCEL_SCALAR:
@@ -814,7 +1026,11 @@ IdentificationFormattedTextGenerator::isParcelAndScalarTypeFile(const DataFileTy
             break;
         case DataFileTypeEnum::CONNECTIVITY_SCALAR_DATA_SERIES:
             break;
+        case DataFileTypeEnum::CZI_IMAGE_FILE:
+            break;
         case DataFileTypeEnum::FOCI:
+            break;
+        case DataFileTypeEnum::HISTOLOGY_SLICES:
             break;
         case DataFileTypeEnum::IMAGE:
             break;
@@ -827,6 +1043,8 @@ IdentificationFormattedTextGenerator::isParcelAndScalarTypeFile(const DataFileTy
         case DataFileTypeEnum::PALETTE:
             break;
         case DataFileTypeEnum::RGBA:
+            break;
+        case DataFileTypeEnum::SAMPLES:
             break;
         case DataFileTypeEnum::SCENE:
             break;
@@ -911,6 +1129,7 @@ IdentificationFormattedTextGenerator::generateSurfaceDataIdentificationText(Html
                                                                          nodeNumber,
                                                                          surface->getNumberOfNodes(),
                                                                          separator,
+                                                                         s_dataValueDigitsRightOfDecimal,
                                                                          textValue);
             if (valid) {
                 AString labelText;
@@ -1007,7 +1226,7 @@ IdentificationFormattedTextGenerator::generateSurfaceDataIdentificationText(Html
                 if (k >= 1) {
                     text.append("<br>");
                 }
-                text.append(AString::number(metricFile->getValue(nodeNumber, mapIndex)));
+                text.append(dataValueToText(metricFile->getValue(nodeNumber, mapIndex)));
             }
             scalarHtmlTableBuilder.addRow(text,
                                           metricFile->getFileNameNoPath(),
@@ -1024,7 +1243,7 @@ IdentificationFormattedTextGenerator::generateSurfaceDataIdentificationText(Html
                         if (k >= 1) {
                             text.append("<br>");
                         }
-                        text += (" " + AString::number(metricDynConnFile->getValue(nodeNumber, mapIndex)));
+                        text += (" " + dataValueToText(metricDynConnFile->getValue(nodeNumber, mapIndex)));
                     }
                     scalarHtmlTableBuilder.addRow(text,
                                                   metricDynConnFile->getFileNameNoPath(),
@@ -1032,52 +1251,6 @@ IdentificationFormattedTextGenerator::generateSurfaceDataIdentificationText(Html
                 }
             }
         }
-    }
-}
-
-/**
- * Find the usage of the file's maps in all overlays.
- *
- * @param caretMappableDataFile
- *    The file whose usage is desired.
- * @param mapIndicesOut
- *    Indices of maps of the file that are used in overlays.
- */
-void
-IdentificationFormattedTextGenerator::getMapIndicesOfFileUsedInOverlays(const CaretMappableDataFile* caretMappableDataFile,
-                                                               std::vector<int32_t>& mapIndicesOut) const
-{
-    mapIndicesOut.clear();
-    
-    EventBrowserTabGetAll allTabsEvent;
-    EventManager::get()->sendEvent(allTabsEvent.getPointer());
-    const std::vector<BrowserTabContent*> allTabs = allTabsEvent.getAllBrowserTabs();
-    for (std::vector<BrowserTabContent*>::const_iterator tabIter = allTabs.begin();
-         tabIter != allTabs.end();
-         tabIter++) {
-        BrowserTabContent* tabContent = *tabIter;
-        OverlaySet* overlaySet = tabContent->getOverlaySet();
-        if (overlaySet != NULL) {
-            std::vector<int32_t> mapIndices;
-            overlaySet->getSelectedMapIndicesForFile(caretMappableDataFile,
-                                                     false,  // true => enabled overlays
-                                                     mapIndices);
-            mapIndicesOut.insert(mapIndicesOut.end(),
-                                 mapIndices.begin(),
-                                 mapIndices.end());
-        }
-    }
-    
-    /*
-     * Sort and remove all duplicates
-     */
-    if (mapIndicesOut.empty() == false) {
-        std::sort(mapIndicesOut.begin(),
-                  mapIndicesOut.end());
-        std::vector<int32_t>::iterator uniqueIter = std::unique(mapIndicesOut.begin(),
-                                                                mapIndicesOut.end());
-        mapIndicesOut.resize(std::distance(mapIndicesOut.begin(),
-                                        uniqueIter));
     }
 }
 
@@ -1315,17 +1488,19 @@ IdentificationFormattedTextGenerator::generateChartTwoLineLayerNearestIdentifica
             if (toolTipFlag) {
                 idText.addLine(true,
                                "XY Start",
-                               AString::fromNumbers(xyz1, 2, ", "));
+                               xyToText(xyz1));
                 if (nextIndex >= 0) {
                     idText.addLine(true,
                                    "XY End ",
-                                   AString::fromNumbers(xyz2, 2, ", "));
+                                   xyToText(xyz2));
                 }
             }
             else {
-                AString text("XY Start:" + AString::fromNumbers(xyz1, 2, ", "));
+                AString text("XY Start:" +
+                             xyToText(xyz1));
                 if (nextIndex >= 0) {
-                    text.append(" XY End:" + AString::fromNumbers(xyz2, 2, ", "));
+                    text.append(" XY End:"
+                                + xyToText(xyz2));
                 }
                 htmlTableBuilder.addRow(text,
                                         boldText,
@@ -1402,17 +1577,19 @@ IdentificationFormattedTextGenerator::generateChartTwoLineLayerIdentificationTex
             if (toolTipFlag) {
                 idText.addLine(true,
                                "XY Start",
-                               AString::fromNumbers(xyz1, 2, ", "));
+                               xyToText(xyz1));
                 if (nextIndex >= 0) {
                     idText.addLine(true,
                                    "XY End ",
-                                   AString::fromNumbers(xyz2, 2, ", "));
+                                   xyToText(xyz2));
                 }
             }
             else {
-                AString text("XY Start:" + AString::fromNumbers(xyz1, 2, ", "));
+                AString text("XY Start:"
+                             + xyToText(xyz1));
                 if (nextIndex >= 0) {
-                    text.append(" XY End:" + AString::fromNumbers(xyz2, 2, ", "));
+                    text.append(" XY End:"
+                                + xyToText(xyz2));
                 }
                 htmlTableBuilder.addRow(text,
                                         boldText,
@@ -1482,14 +1659,16 @@ IdentificationFormattedTextGenerator::generateChartTwoLineSeriesIdentificationTe
             if (toolTipFlag) {
                 idText.addLine(true,
                                "XY Start",
-                               AString::fromNumbers(xyz1, 2, ", "));
+                               xyToText(xyz1));
                 idText.addLine(true,
                                "XY End ",
-                               AString::fromNumbers(xyz2, 2, ", "));
+                               xyToText(xyz2));
             }
             else {
-                htmlTableBuilder.addRow(("XY Start:" + AString::fromNumbers(xyz1, 2, ", "))
-                                        + ("XY End:" + AString::fromNumbers(xyz2, 2, ", ")),
+                htmlTableBuilder.addRow(("XY Start:"
+                                         + xyToText(xyz1))
+                                        + ("XY End:"
+                                           + xyToText(xyz2)),
                                         boldText,
                                         chartMapFile->getFileNameNoPath());
             }
@@ -1501,10 +1680,11 @@ IdentificationFormattedTextGenerator::generateChartTwoLineSeriesIdentificationTe
             if (toolTipFlag) {
                 idText.addLine(true,
                                "XY",
-                               AString::fromNumbers(xyz, 2, ", "));
+                               xyToText(xyz));
             }
             else {
-                htmlTableBuilder.addRow(("XY:" + AString::fromNumbers(xyz, 2, ", ")),
+                htmlTableBuilder.addRow(("XY:"
+                                         + xyToText(xyz)),
                                         boldText,
                                         chartMapFile->getFileNameNoPath());
             }
@@ -1593,7 +1773,7 @@ IdentificationFormattedTextGenerator::generateChartTwoMatrixIdentificationText(H
                 if ( ! rowData.empty()) {
                     if (colIndex < static_cast<int32_t>(rowData.size())) {
                         CaretAssertVectorIndex(rowData, colIndex);
-                        dataValueText = AString::number(rowData[colIndex], 'f', 3);
+                        dataValueText = dataValueToText(rowData[colIndex]);
                     }
                 }
             }
@@ -1722,7 +1902,8 @@ IdentificationFormattedTextGenerator::generateChartDataSourceText(HtmlTableBuild
         {
             float voxelXYZ[3];
             chartDataSource->getVolumeVoxel(voxelXYZ);
-            columnOne = ("Voxel XYZ " + AString::fromNumbers(voxelXYZ, 3, ","));
+            columnOne = ("Voxel XYZ " +
+                         xyzToText(voxelXYZ));
         }
             break;
     }
@@ -1814,7 +1995,8 @@ IdentificationFormattedTextGenerator::generateMapFileSelectorText(HtmlTableBuild
         {
             float voxelXYZ[3];
             mapFileDataSelector->getVolumeVoxelXYZ(voxelXYZ);
-            htmlTableBuilder.addRow("Voxel XYZ: " + AString::fromNumbers(voxelXYZ, 3, ","));
+            htmlTableBuilder.addRow("Voxel XYZ: " +
+                                    xyzToText(voxelXYZ));
         }
             break;
     }
@@ -1873,7 +2055,7 @@ IdentificationFormattedTextGenerator::generateSurfaceBorderIdentifcationText(Htm
             indentFlag = true;
             idText.addLine(indentFlag,
                            "XYZ",
-                           AString::fromNumbers(xyz, 3, ","));
+                           xyzToText(xyz));
         }
         else {
             const AString numberIndexText = ("("
@@ -1881,7 +2063,7 @@ IdentificationFormattedTextGenerator::generateSurfaceBorderIdentifcationText(Htm
                                              + ","
                                              + AString::number(idSurfaceBorder->getBorderPointIndex()));
 
-            htmlTableBuilder.addRow(AString::fromNumbers(xyz, 3, ","),
+            htmlTableBuilder.addRow(xyzToText(xyz),
                                           ("BORDER " + numberIndexText),
                                           ("Name: " + border->getName()
                                            + "<br>Class: " + border->getClassName()));
@@ -1914,7 +2096,6 @@ IdentificationFormattedTextGenerator::generateSurfaceFocusIdentifcationText(Html
                                        focus,
                                        idSurfaceFocus->getFocusIndex(),
                                        projectionIndex,
-                                       idSurfaceFocus->getSurface(),
                                        toolTipFlag);
     }
 }
@@ -1931,8 +2112,6 @@ IdentificationFormattedTextGenerator::generateSurfaceFocusIdentifcationText(Html
  *     Index of focus
  * @param projectionIndex
  *     Index of projection
- * @param surface
- *     Surface for focus (may be NULL)
  * @param toolTipFlag
  *     True if this is for tooltip.
  */
@@ -1942,14 +2121,13 @@ IdentificationFormattedTextGenerator::generateFocusIdentifcationText(HtmlTableBu
                                                                      const Focus* focus,
                                                                      const int32_t focusIndex,
                                                                      const int32_t projectionIndex,
-                                                                     const Surface* surface,
                                                                      const bool toolTipFlag) const
 {
     const SurfaceProjectedItem* spi = focus->getProjection(projectionIndex);
     float xyzStereo[3];
     spi->getStereotaxicXYZ(xyzStereo);
     const AString stereoXYZText((spi->isStereotaxicXYZValid()
-                                 ? AString::fromNumbers(xyzStereo, 3, ",")
+                                 ? xyzToText(xyzStereo)
                                  : "Invalid"));
     if (toolTipFlag) {
         bool indentFlag = false;
@@ -1965,97 +2143,324 @@ IdentificationFormattedTextGenerator::generateFocusIdentifcationText(HtmlTableBu
         htmlTableBuilder.addRow(stereoXYZText,
                                       ("FOCUS " + AString::number(focusIndex)),
                                       ("Name: " + focus->getName() + "<br>Class: " + focus->getClassName()));
-        if (surface != NULL) {
-            float xyzProj[3];
-            if (spi->getProjectedPosition(*surface, xyzProj, false)) {
-                bool projValid = false;
-                AString xyzProjName = "XYZ (Projected)";
-                if (spi->getBarycentricProjection()->isValid()) {
-                    xyzProjName = "(Projected to Triangle)";
-                    projValid = true;
+    }
+}
+
+/**
+ * Generate identification text for a focus identification.
+ * @param htmlTableBuilder
+ *     HTML table builder for identification text.
+ * @param idText
+ *     Text for tooltip
+ * @param idFocus
+ *     Information for surface focus ID.
+ * @param toolTipFlag
+ *     True when generating text for tooltip
+ */
+void
+IdentificationFormattedTextGenerator::generateFocusIdentifcationText(HtmlTableBuilder& htmlTableBuilder,
+                                                                     IdentificationStringBuilder& idText,
+                                                                     const SelectionItemFocus* idFocus,
+                                                                     const bool toolTipFlag) const
+{
+    if ( ! idFocus->isValid()) {
+        return;
+    }
+    const Focus* focus = idFocus->getFocus();
+    CaretAssert(focus);
+    const SurfaceProjectedItem* spi = focus->getProjection(idFocus->getFocusProjectionIndex());
+    CaretAssert(spi);
+    float xyzVolume[3];
+    spi->getVolumeXYZ(xyzVolume);
+    float xyzStereo[3];
+    spi->getStereotaxicXYZ(xyzStereo);
+    
+    const AString stereoXYZText((spi->isStereotaxicXYZValid()
+                                 ? xyzToText(xyzStereo)
+                                 : "Invalid"));
+    
+    if (toolTipFlag) {
+        bool indentFlag = false;
+        idText.addLine(indentFlag,
+                       "Focus",
+                       focus->getName());
+        indentFlag = true;
+        idText.addLine(indentFlag,
+                       "XYZ",
+                       stereoXYZText);
+        return;
+    }
+    
+    AString projectedXYZText;
+    switch (idFocus->getIdType()) {
+        case SelectionItemFocus::IdType::INVALID:
+            break;
+        case SelectionItemFocus::IdType::HISTOLOGY:
+            break;
+        case SelectionItemFocus::IdType::SURFACE:
+        {
+            const Surface* surface(idFocus->getSurface());
+            if (surface != NULL) {
+                float xyzProj[3];
+                if (spi->getProjectedPosition(*surface, xyzProj, false)) {
+                    AString xyzProjName;
+                    if (spi->getBarycentricProjection()->isValid()) {
+                        xyzProjName = "XYZ (Projected to Triangle): ";
+                    }
+                    else if (spi->getVanEssenProjection()->isValid()) {
+                        xyzProjName = "XYZ (Projected to Edge): ";
+                    }
+                    if ( ! xyzProjName.isEmpty()) {
+                        projectedXYZText = (xyzProjName +
+                                            xyzToText(xyzProj));
+                    }
+                    
                 }
-                else if (spi->getVanEssenProjection()->isValid()) {
-                    xyzProjName = "(Projected to Edge)";
-                    projValid = true;
-                }
-                if (projValid) {
-                    idText.addLine(true,
-                                   xyzProjName,
-                                   xyzProj,
-                                   3,
-                                   true);
-                    htmlTableBuilder.addRow((AString::fromNumbers(xyzProj, 3, ", ") + xyzProjName),
-                                            StructureEnum::toGuiName(spi->getStructure()),
-                                            "");
-                }
+            }
+        }
+            break;
+        case SelectionItemFocus::IdType::VOLUME:
+            break;
+    }
+    
+    htmlTableBuilder.addRow(("Focus Name: " + focus->getName()),
+                            ("Class: " + focus->getClassName()));
+    htmlTableBuilder.addRow(("Stereotaxic XYZ: " + stereoXYZText),
+                            projectedXYZText);
+    addIfColumnTwoNotEmpty(htmlTableBuilder,
+                           "Area: ",
+                           focus->getArea());
+    if (focus->getExtent() != 0.0) {
+        addIfColumnTwoNotEmpty(htmlTableBuilder,
+                               "Extent: ",
+                               AString::number(focus->getExtent(), 'f', 3));
+    }
+    addIfColumnTwoNotEmpty(htmlTableBuilder,
+                           "Geography: ",
+                           focus->getGeography());
+    addIfColumnTwoNotEmpty(htmlTableBuilder,
+                           "Region of Interest: ",
+                           focus->getRegionOfInterest());
+    addIfColumnTwoNotEmpty(htmlTableBuilder,
+                           "Statistic: ",
+                           focus->getStatistic());
+    addIfColumnTwoNotEmpty(htmlTableBuilder,
+                           "Comment : ",
+                           focus->getComment());
+}
+
+/**
+ * Add if second column is not empty
+ * @param htmlTableBuilder
+ *     HTML table builder for identification text.
+ * @param columnOne
+ *    Text for column one
+ * @param columnTwo
+ *    Text for column two
+ */
+void
+IdentificationFormattedTextGenerator::addIfColumnTwoNotEmpty(HtmlTableBuilder& htmlTableBuilder,
+                                                             const AString& columnOne,
+                                                             const AString& columnTwo) const
+{
+    if ( ! columnTwo.trimmed().isEmpty()) {
+        htmlTableBuilder.addRow(columnOne,
+                                columnTwo);
+    }
+}
+
+/**
+ * Generate identification text for histology identification.
+ * @param htmlTableBuilder
+ *     HTML table builder for identification text.
+ * @param idText
+ *     string builder for id text
+ * @param idHistology
+ *    Histology identification
+ */
+void
+IdentificationFormattedTextGenerator::generateHistologyPlaneCoordinateIdentificationText(const IdentificationManager* idManager,
+                                                                                         HtmlTableBuilder& htmlTableBuilder,
+                                                                                         IdentificationStringBuilder& idText,
+                                                                                         const SelectionItemHistologyCoordinate* idHistology) const
+{
+    if (idHistology->isValid()) {
+        std::vector<AString> columnOneText, columnTwoText, toolTipText;
+        
+        const HistologyCoordinate histologyCoordinate(idHistology->getCoordinate());
+        const HistologySlicesFile* histologySlicesFile(idHistology->getHistologySlicesFile());
+        CaretAssert(histologySlicesFile);
+        histologySlicesFile->getIdentificationText(idHistology->getTabIndex(),
+                                                   histologyCoordinate,
+                                                   columnOneText,
+                                                   columnTwoText,
+                                                   toolTipText);
+        
+        const int32_t numColOne(columnOneText.size());
+        const int32_t numColTwo(columnTwoText.size());
+        const int32_t maxNum(std::max(numColOne, numColTwo));
+        for (int32_t i = 0; i < maxNum; i++) {
+            AString colOne;
+            AString colTwo;
+            if (i < numColOne) {
+                CaretAssertVectorIndex(columnOneText, i);
+                colOne = columnOneText[i];
+            }
+            if (i < numColTwo) {
+                CaretAssertVectorIndex(columnTwoText, i);
+                colTwo = columnTwoText[i];
+            }
+            htmlTableBuilder.addRow(colOne, colTwo);
+        }
+        
+        /*
+         * For tooltip
+         */
+        const bool indentFlag(false);
+        for (const auto& text : toolTipText) {
+            idText.addLine(indentFlag,
+                           text);
+        }
+        if (histologyCoordinate.isStereotaxicXYZValid()) {
+            const AString distanceText = getTextDistanceToMostRecentIdentificationSymbol(idManager,
+                                                                                         histologyCoordinate.getStereotaxicXYZ());
+            if ( ! distanceText.isEmpty()) {
+                idText.addLine(indentFlag,
+                               distanceText);
             }
         }
     }
 }
 
 /**
- * Generate identification text for a volume focus identification.
+ * Generate identification text for media identification.
  * @param htmlTableBuilder
  *     HTML table builder for identification text.
- * @param idVolumeFocus
- *     Information for surface focus ID.
+ * @param idText
+ *     string builder for id text
+ * @param mediaFile
+ *    The media file
+ * @param frameIndices
+ *    The frame indices
+ * @param idMedia
+ *     Information for media ID.
  */
 void
-IdentificationFormattedTextGenerator::generateVolumeFocusIdentifcationText(HtmlTableBuilder& htmlTableBuilder,
-                                                                  const SelectionItemFocusVolume* idVolumeFocus) const
+IdentificationFormattedTextGenerator::generateMediaLogicalCoordinateIdentificationText(HtmlTableBuilder& htmlTableBuilder,
+                                                                      IdentificationStringBuilder& idText,
+                                                                      const MediaFile* mediaFile,
+                                                                      const std::set<int32_t>& frameIndices,
+                                                                      const SelectionItemMediaLogicalCoordinate* idMedia) const
 {
-    if (idVolumeFocus->isValid()) {
-        const Focus* focus = idVolumeFocus->getFocus();
-        const SurfaceProjectedItem* spi = focus->getProjection(idVolumeFocus->getFocusProjectionIndex());
-        float xyzVolume[3];
-        spi->getVolumeXYZ(xyzVolume);
-        float xyzStereo[3];
-        spi->getStereotaxicXYZ(xyzStereo);
+    if (idMedia->isValid()) {
+        std::array<float, 3> modelXYZ;
+        idMedia->getModelXYZ(modelXYZ.data());
+        std::vector<AString> columnOneText, columnTwoText, toolTipText;
+        std::vector<int32_t> frameIndicesVector(frameIndices.begin(),
+                                                frameIndices.end());
+        mediaFile->getPixelLogicalIdentificationTextForFrames(idMedia->getTabIndex(),
+                                                       frameIndicesVector,
+                                                       idMedia->getPixelLogicalIndex(),
+                                                       columnOneText,
+                                                       columnTwoText,
+                                                       toolTipText);
+        const int32_t numColOne(columnOneText.size());
+        const int32_t numColTwo(columnTwoText.size());
+        const int32_t maxNum(std::max(numColOne, numColTwo));
+        for (int32_t i = 0; i < maxNum; i++) {
+            AString colOne;
+            AString colTwo;
+            if (i < numColOne) {
+                CaretAssertVectorIndex(columnOneText, i);
+                colOne = columnOneText[i];
+            }
+            if (i < numColTwo) {
+                CaretAssertVectorIndex(columnTwoText, i);
+                colTwo = columnTwoText[i];
+            }
+            htmlTableBuilder.addRow(colOne, colTwo);
+        }
         
-        IdentificationStringBuilder idText;
-        generateFocusIdentifcationText(htmlTableBuilder,
-                                       idText,
-                                       focus,
-                                       idVolumeFocus->getFocusIndex(),
-                                       idVolumeFocus->getFocusProjectionIndex(),
-                                       NULL,
-                                       false);
+        /*
+         * For tooltip
+         */
+        for (const auto& text : toolTipText) {
+            bool indentFlag(false);
+            idText.addLine(indentFlag,
+                           text);
+        }
     }
+
 }
 
 /**
- * Generate identification text for image identification.
+ * Generate identification text for media identification.
  * @param htmlTableBuilder
  *     HTML table builder for identification text.
- * @param idImage
- *     Information for image ID.
+ * @param idText
+ *     string builder for id text
+ * @param mediaFile
+ *    The media file
+ * @param frameIndices
+ *    The frame indices
+ * @param idMedia
+ *     Information for media ID.
  */
 void
-IdentificationFormattedTextGenerator::generateImageIdentificationText(HtmlTableBuilder& htmlTableBuilder,
-                                                             const SelectionItemImage* idImage) const
+IdentificationFormattedTextGenerator::generateMediaPlaneCoordinateIdentificationText(HtmlTableBuilder& htmlTableBuilder,
+                                                                                       IdentificationStringBuilder& idText,
+                                                                                       const MediaFile* mediaFile,
+                                                                                       const std::set<int32_t>& frameIndices,
+                                                                                       const SelectionItemMediaPlaneCoordinate* idMedia) const
 {
-    if (idImage->isValid()) {
-        uint8_t pixelRGBA[4] = { 0, 0, 0, 0 };
-        idImage->getPixelRGBA(pixelRGBA);
-        const ImageFile* imageFile = idImage->getImageFile();
-        if (imageFile != NULL) {
-            htmlTableBuilder.addRow("Filename",
-                                    imageFile->getFileNameNoPath());
+    if (idMedia->isValid()) {
+        std::array<float, 3> modelXYZ;
+        idMedia->getModelXYZ(modelXYZ.data());
+        std::vector<AString> columnOneText, columnTwoText, toolTipText;
+        std::vector<int32_t> frameIndicesVector(frameIndices.begin(),
+                                                frameIndices.end());
+        const bool histologyIdFlag(false);
+        mediaFile->getPixelPlaneIdentificationTextForFrames(idMedia->getTabIndex(),
+                                                            frameIndicesVector,
+                                                            idMedia->getPlaneCoordinate(),
+                                                            histologyIdFlag,
+                                                            columnOneText,
+                                                            columnTwoText,
+                                                            toolTipText);
+        const int32_t numColOne(columnOneText.size());
+        const int32_t numColTwo(columnTwoText.size());
+        const int32_t maxNum(std::max(numColOne, numColTwo));
+        for (int32_t i = 0; i < maxNum; i++) {
+            AString colOne;
+            AString colTwo;
+            if (i < numColOne) {
+                CaretAssertVectorIndex(columnOneText, i);
+                colOne = columnOneText[i];
+            }
+            if (i < numColTwo) {
+                CaretAssertVectorIndex(columnTwoText, i);
+                colTwo = columnTwoText[i];
+            }
+            htmlTableBuilder.addRow(colOne, colTwo);
         }
-        htmlTableBuilder.addRow(("RGBA (" + AString::fromNumbers(pixelRGBA, 4, ",") + ")"),
-                                ("Pixel IJ ("
-                                 + AString::number(idImage->getPixelI())
-                                 + ","
-                                 + AString::number(idImage->getPixelJ())
-                                 + ")"),
-                                idImage->getImageFile()->getFileNameNoPath());
-                                
+        
+        /*
+         * For tooltip
+         */
+        for (const auto& text : toolTipText) {
+            bool indentFlag(false);
+            idText.addLine(indentFlag,
+                           text);
+        }
     }
+    
 }
 
 /**
  * Get text for the tooltip for a selected node.
  *
+ * @param idManager
+ *    The identification manager
  * @param brain
  *     The Brain.
  * @param browserTab
@@ -2069,6 +2474,7 @@ IdentificationFormattedTextGenerator::generateImageIdentificationText(HtmlTableB
  */
 void
 IdentificationFormattedTextGenerator::generateSurfaceToolTip(const Brain* brain,
+                                                             const IdentificationManager* idManager,
                                                           const BrowserTabContent* browserTab,
                                                           const SelectionManager* selectionManager,
                                                           const DataToolTipsManager* dataToolTipsManager,
@@ -2078,6 +2484,8 @@ IdentificationFormattedTextGenerator::generateSurfaceToolTip(const Brain* brain,
     
     const SelectionItemSurfaceNode* nodeSelection = selectionManager->getSurfaceNodeIdentification();
     CaretAssert(nodeSelection);
+    Vector3D vertexXYZ;
+    bool vertexXYZValidFlag(false);
     if (nodeSelection->isValid()) {
         const Surface* surface = nodeSelection->getSurface();
         CaretAssert(surface);
@@ -2096,9 +2504,9 @@ IdentificationFormattedTextGenerator::generateSurfaceToolTip(const Brain* brain,
                 const Surface* anatSurface = brain->getPrimaryAnatomicalSurfaceForStructure(surfaceStructure);
                 if (anatSurface != NULL) {
                     if (anatSurface->getNumberOfNodes() == surfaceNumberOfNodes) {
-                        float xyz[3];
                         anatSurface->getCoordinate(surfaceNodeIndex,
-                                                   xyz);
+                                                   vertexXYZ);
+                        vertexXYZValidFlag = true;
                         idText.addLine(indentFlag,
                                        "Vertex",
                                        AString::number(surfaceNodeIndex));
@@ -2107,7 +2515,7 @@ IdentificationFormattedTextGenerator::generateSurfaceToolTip(const Brain* brain,
                         
                         idText.addLine(indentFlag,
                                        "Anatomy Surface",
-                                       AString::fromNumbers(xyz, 3, ", ", 'f', 2));
+                                       xyzToText(vertexXYZ));
                         if (surface == anatSurface) {
                             showSurfaceFlag = false;
                         }
@@ -2129,7 +2537,7 @@ IdentificationFormattedTextGenerator::generateSurfaceToolTip(const Brain* brain,
                 idText.addLine(indentFlag,
                                (SurfaceTypeEnum::toGuiName(surface->getSurfaceType())
                                 + " Surface"),
-                               AString::fromNumbers(xyz, 3, ", "));
+                               xyzToText(xyz));
             }
             
             if (dataToolTipsManager->isShowTopEnabledLayer()) {
@@ -2150,6 +2558,7 @@ IdentificationFormattedTextGenerator::generateSurfaceToolTip(const Brain* brain,
                                                                      surfaceNodeIndex,
                                                                      surfaceNumberOfNodes,
                                                                      " ",
+                                                                     s_dataValueDigitsRightOfDecimal,
                                                                      textValue);
                         if ( ! textValue.isEmpty()) {
                             idText.addLine(indentFlag,
@@ -2188,10 +2597,22 @@ IdentificationFormattedTextGenerator::generateSurfaceToolTip(const Brain* brain,
                                                    focus,
                                                    focusIndex,
                                                    focusSelection->getFocusProjectionIndex(),
-                                                   focusSelection->getSurface(),
                                                    true);
                 }
             }
+        }
+        
+        generateFocusIdentifcationText(*htmlTableBuilder,
+                                       idText,
+                                       selectionManager->getFocusIdentification(),
+                                       true);
+    }
+    
+    if (vertexXYZValidFlag) {
+        const AString distText = getTextDistanceToMostRecentIdentificationSymbol(idManager,
+                                                                                 vertexXYZ);
+        if ( ! distText.isEmpty()) {
+            idText.append(distText);
         }
     }
 }
@@ -2199,6 +2620,8 @@ IdentificationFormattedTextGenerator::generateSurfaceToolTip(const Brain* brain,
 /**
  * Get text for the tooltip for a selected node.
  *
+ * @param idManager
+ *    The identification manager
  * @param browserTab
  *     Browser tab in which tooltip is displayed
  * @param selectionManager
@@ -2209,7 +2632,8 @@ IdentificationFormattedTextGenerator::generateSurfaceToolTip(const Brain* brain,
  *     String builder for identification text.
  */
 void
-IdentificationFormattedTextGenerator::generateVolumeToolTip(const BrowserTabContent* browserTab,
+IdentificationFormattedTextGenerator::generateVolumeToolTip(const IdentificationManager* idManager,
+                                                            const BrowserTabContent* browserTab,
                                                    const SelectionManager* selectionManager,
                                                    const DataToolTipsManager* dataToolTipsManager,
                                                    IdentificationStringBuilder& idText) const
@@ -2226,6 +2650,9 @@ IdentificationFormattedTextGenerator::generateVolumeToolTip(const BrowserTabCont
         static_cast<float>(selectionXYZ[1]),
         static_cast<float>(selectionXYZ[2])
     };
+    
+    Vector3D voxelXYZ;
+    bool voxelXYZValidFlag(false);
     
     bool indentFlag = false;
     if (dataToolTipsManager->isShowVolumeUnderlay()) {
@@ -2247,29 +2674,26 @@ IdentificationFormattedTextGenerator::generateVolumeToolTip(const BrowserTabCont
                  * Update IJK and XYZ since selection XYZ may be
                  * a different volume file.
                  */
-                int64_t selectionIJK[3];
-                voxelSelection->getVoxelIJK(selectionIJK);
-                int64_t ijk[3] { selectionIJK[0], selectionIJK[1], selectionIJK[2] };
-                
+                const VoxelIJK ijk(voxelSelection->getVoxelIJK());
                 
                 bool validFlag(false);
                 const float value = underlayVolumeInterface->getVoxelValue(xyz[0], xyz[1], xyz[2],
                                                                            &validFlag,
                                                                            mapIndex);
                 if (validFlag) {
-                    underlayVolumeInterface->enclosingVoxel(xyz[0], xyz[1], xyz[2],
-                                                            ijk[0], ijk[1], ijk[2]);
-                    underlayVolumeInterface->indexToSpace(ijk, xyz);
+                    const Vector3D xyz(voxelSelection->getVoxelXYZ());
                     idText.addLine(indentFlag,
                                    "Underlay Value",
-                                   AString::number(value, 'f'));
+                                   dataValueToText(value));
                     indentFlag = true;
                     idText.addLine(indentFlag,
                                    "IJK: ",
-                                   AString::fromNumbers(ijk, 3, ", "));
+                                   AString::fromNumbers(ijk.m_ijk, 3, ", "));
                     idText.addLine(indentFlag,
                                    "XYZ",
-                                   AString::fromNumbers(xyz, 3, ", ", 'f', 1));
+                                   xyzToText(xyz));
+                    voxelXYZ.set(xyz[0], xyz[1], xyz[2]);
+                    voxelXYZValidFlag = true;
                 }
             }
         }
@@ -2290,6 +2714,7 @@ IdentificationFormattedTextGenerator::generateVolumeToolTip(const BrowserTabCont
                 mapFile->getVolumeVoxelIdentificationForMaps(mapIndices,
                                                              xyz,
                                                              " ",
+                                                             s_dataValueDigitsRightOfDecimal,
                                                              ijk,
                                                              textValue);
                 if ( ! textValue.isEmpty()) {
@@ -2298,6 +2723,14 @@ IdentificationFormattedTextGenerator::generateVolumeToolTip(const BrowserTabCont
                                     + textValue));
                 }
             }
+        }
+    }
+    
+    if (voxelXYZValidFlag) {
+        const AString distText = getTextDistanceToMostRecentIdentificationSymbol(idManager,
+                                                                                 voxelXYZ);
+        if ( ! distText.isEmpty()) {
+            idText.append(distText);
         }
     }
 }
@@ -2366,6 +2799,135 @@ IdentificationFormattedTextGenerator::generateChartToolTip(const SelectionManage
     }
 }
 
+/**
+ * Get text for the tooltip for media
+ *
+ * @param idManager
+ *    The identification manager
+ * @param selectionManager
+ *     The selection manager.
+ * @param dataToolTipsManager
+ *     The data tooltips manager
+ * @param idText
+ *     String builder for identification text.
+ */
+void
+IdentificationFormattedTextGenerator::generateHistologyPlaneCoordinateToolTip(const IdentificationManager* idManager,
+                                                                              const SelectionManager* selectionManager,
+                                                                              const DataToolTipsManager* dataToolTipsManager,
+                                                                              IdentificationStringBuilder& idText) const
+{
+    if (dataToolTipsManager->isShowHistology()) {
+        std::unique_ptr<HtmlTableBuilder> htmlTableBuilder = createHtmlTableBuilder(3);
+        
+        const SelectionItemHistologyCoordinate* histologySelection(selectionManager->getHistologyPlaneCoordinateIdentification());
+        if (histologySelection->isValid()) {
+            generateHistologyPlaneCoordinateIdentificationText(idManager,
+                                                               *htmlTableBuilder,
+                                                               idText,
+                                                               histologySelection);
+        }
+    }
+}
+
+/**
+ * Append distance from item to most recent identification symbol
+ * @param idManager
+ *    The identification manager
+ * @param selectionXYZ
+ *    Stereotaxic coordinate of selection
+ */
+AString
+IdentificationFormattedTextGenerator::getTextDistanceToMostRecentIdentificationSymbol(const IdentificationManager* idManager,
+                                                                                      const float selectionXYZ[3]) const
+{
+    CaretAssert(idManager);
+    
+    const IdentifiedItemUniversal* lastIdItem(idManager->getMostRecentIdentifiedItem());
+    if (lastIdItem != NULL) {
+        if (lastIdItem->isStereotaxicXYZValid()) {
+            const Vector3D xyz(lastIdItem->getStereotaxicXYZ());
+            const float distance((xyz - Vector3D(selectionXYZ)).length());
+            const AString text("Distance to Most Recent ID Symbol: "
+                               + dataValueToText(distance));
+            return text;
+        }
+    }
+    
+    return "";
+}
+
+/**
+ * Get text for the tooltip for media
+ *
+ * @param selectionManager
+ *     The selection manager.
+ * @param dataToolTipsManager
+ *     The data tooltips manager
+ * @param idText
+ *     String builder for identification text.
+ */
+void
+IdentificationFormattedTextGenerator::generateMediaLogicalCoordinateToolTip(const SelectionManager* selectionManager,
+                                                           const DataToolTipsManager* dataToolTipsManager,
+                                                           IdentificationStringBuilder& idText) const
+{
+    if (dataToolTipsManager->isShowMedia()) {
+        std::unique_ptr<HtmlTableBuilder> htmlTableBuilder = createHtmlTableBuilder(3);
+        
+        const SelectionItemMediaLogicalCoordinate* mediaSelection = selectionManager->getMediaLogicalCoordinateIdentification();
+        if (mediaSelection->isValid()) {
+            const MediaFile* mediaFile(mediaSelection->getMediaFile());
+            if (mediaFile != NULL) {
+                std::set<int32_t> frameIndices;
+                for (int32_t i = 0; i < mediaFile->getNumberOfFrames(); i++) {
+                    frameIndices.insert(i);
+                }
+                generateMediaLogicalCoordinateIdentificationText(*htmlTableBuilder,
+                                                idText,
+                                                mediaFile,
+                                                frameIndices,
+                                                mediaSelection);
+            }
+        }
+    }
+}
+
+/**
+ * Get text for the tooltip for media
+ *
+ * @param selectionManager
+ *     The selection manager.
+ * @param dataToolTipsManager
+ *     The data tooltips manager
+ * @param idText
+ *     String builder for identification text.
+ */
+void
+IdentificationFormattedTextGenerator::generateMediaPlaneCoordinateToolTip(const SelectionManager* selectionManager,
+                                                                            const DataToolTipsManager* dataToolTipsManager,
+                                                                            IdentificationStringBuilder& idText) const
+{
+    if (dataToolTipsManager->isShowMedia()) {
+        std::unique_ptr<HtmlTableBuilder> htmlTableBuilder = createHtmlTableBuilder(3);
+        
+        const SelectionItemMediaPlaneCoordinate* mediaSelection = selectionManager->getMediaPlaneCoordinateIdentification();
+        if (mediaSelection->isValid()) {
+            const MediaFile* mediaFile(mediaSelection->getMediaFile());
+            if (mediaFile != NULL) {
+                std::set<int32_t> frameIndices;
+                for (int32_t i = 0; i < mediaFile->getNumberOfFrames(); i++) {
+                    frameIndices.insert(i);
+                }
+                generateMediaPlaneCoordinateIdentificationText(*htmlTableBuilder,
+                                                                 idText,
+                                                                 mediaFile,
+                                                                 frameIndices,
+                                                                 mediaSelection);
+            }
+        }
+    }
+}
 
 
 /**
@@ -2391,3 +2953,93 @@ IdentificationFormattedTextGenerator::createHtmlTableBuilder(const int32_t numbe
     return htb;
 }
 
+/**
+ * Convert XY coordinates to text
+ * @param xy
+ *    The XY coordinates
+ * @param precisionDigits
+ *    Optional number of digits right of decimal.  When zero or greater, it specifies the number of digits
+ *    right of the decimal.  If negative, the default number of digits right of decimal are used.
+ * @return
+ *    Text representation of the coordinates
+ */
+AString
+IdentificationFormattedTextGenerator::xyToText(const float xy[2],
+                                               const int32_t precisionDigits) const
+{
+    const int32_t defaultDigitsRightOfDecimal(2);
+    const int32_t digits((precisionDigits >= 0)
+                         ? precisionDigits
+                         : defaultDigitsRightOfDecimal);
+    
+    return AString::fromNumbers(xy,
+                                2,       /* number of elements */
+                                ", ",    /* separator between elements */
+                                'f',     /* floating point format */
+                                digits); /* digits right of decimal */
+}
+
+/**
+ * Convert XYZ coordinates to text
+ * @param xyx
+ *    The XYZ coordinates
+ * @param precisionDigits
+ *    Optional number of digits right of decimal.  When zero or greater, it specifies the number of digits
+ *    right of the decimal.  If negative, the default number of digits right of decimal are used.
+ * @return
+ *    Text representation of the coordinates
+ */
+AString
+IdentificationFormattedTextGenerator::xyzToText(const float xyz[3],
+                                                const int32_t precisionDigits) const
+{
+    const int32_t defaultDigitsRightOfDecimal(2);
+    const int32_t digits((precisionDigits >= 0)
+                         ? precisionDigits
+                         : defaultDigitsRightOfDecimal);
+    
+    return AString::fromNumbers(xyz,
+                                3,       /* number of elements */
+                                ", ",    /* separator between elements */
+                                'f',     /* floating point format */
+                                digits); /* digits right of decimal */
+}
+
+AString
+IdentificationFormattedTextGenerator::dataValueToText(const float value,
+                                                      const int32_t precisionDigits) const
+{
+    const int32_t digits((precisionDigits >= 0)
+                         ? precisionDigits
+                         : s_dataValueDigitsRightOfDecimal);
+    
+    return AString::number(value,
+                           'f',     /* floating point format */
+                           digits); /* digits right of decimal */
+}
+
+
+
+/* =============================================================================================*/
+
+IdentificationFormattedTextGenerator::MapFileAndMapIndices::MapFileAndMapIndices(CaretDataFile* mapFile)
+: m_mapFile(mapFile) {
+    CaretAssert(mapFile);
+}
+
+void
+IdentificationFormattedTextGenerator::MapFileAndMapIndices::addMapIndex(const int32_t mapIndex) {
+    m_mapIndices.insert(mapIndex);
+}
+
+void
+IdentificationFormattedTextGenerator::MapFileAndMapIndices::addMapIndices(const std::vector<int32_t> mapIndices) {
+    m_mapIndices.insert(mapIndices.begin(),
+                        mapIndices.end());
+}
+
+void
+IdentificationFormattedTextGenerator::MapFileAndMapIndices::addMapIndices(const std::set<int32_t> mapIndices) {
+    m_mapIndices.insert(mapIndices.begin(),
+                        mapIndices.end());
+}

@@ -82,7 +82,7 @@
 using namespace caret;
 
 /* The QSlider uses integer for min/max so use max-int / 4  (approximately) */
-static const int32_t BIG_NUMBER = 500000000;
+static const int32_t BIG_NUMBER = (std::numeric_limits<int32_t>::max() - 1);
 
     
 /**
@@ -298,8 +298,15 @@ MapSettingsPaletteColorMappingWidget::updateThresholdControlsMinimumMaximumRange
                             minValue = -absMax * 2.0;
                             maxValue =  absMax * 2.0;
                         }
+                        
+                        /*
+                         * Use file data for step size
+                         * Use larger of double file value or a BIG number
+                         */
                         stepMin = minValue;
                         stepMax = maxValue;
+                        minValue = std::min(minValue, (float)-BIG_NUMBER);
+                        maxValue = std::max(maxValue, (float)BIG_NUMBER);
                     }
                         break;
                 }
@@ -314,6 +321,11 @@ MapSettingsPaletteColorMappingWidget::updateThresholdControlsMinimumMaximumRange
                     stepValue = diff / 100.0;
                 }
                 
+                if (thresholdRangeMode == PaletteThresholdRangeModeEnum::PALETTE_THRESHOLD_RANGE_MODE_UNLIMITED) {
+                    if (stepValue > 1.0) {
+                        stepValue = 1.0;
+                    }
+                }
                 float lowMin = minValue;
                 float lowMax = maxValue;
                 float highMin = minValue;
@@ -697,31 +709,28 @@ MapSettingsPaletteColorMappingWidget::createThresholdSection()
     QObject::connect(this->thresholdHighSlider, SIGNAL(valueChanged(double)),
                      this, SLOT(thresholdHighSliderValueChanged(double)));
     
-    const int spinBoxWidth = 80.0;
     this->thresholdLowSpinBox =
        WuQFactory::newDoubleSpinBoxWithMinMaxStepDecimalsSignalDouble(thresholdMinimum,
                                                                    thresholdMaximum,
                                                                    1.0,
-                                                                   3,
+                                                                   6,
                                                                    this,
                                                                    SLOT(thresholdLowSpinBoxValueChanged(double)));
     this->thresholdLowSpinBox->setAccelerated(true);
     WuQtUtilities::setToolTipAndStatusTip(this->thresholdLowSpinBox,
                                           "Adjust the low threshold value");
     this->thresholdWidgetGroup->add(this->thresholdLowSpinBox);
-    this->thresholdLowSpinBox->setFixedWidth(spinBoxWidth);
 
     this->thresholdHighSpinBox =
     WuQFactory::newDoubleSpinBoxWithMinMaxStepDecimalsSignalDouble(thresholdMinimum,
                                                                    thresholdMaximum,
                                                                    1.0,
-                                                                   3,
+                                                                   6,
                                                                    this,
                                                                    SLOT(thresholdHighSpinBoxValueChanged(double)));
     WuQtUtilities::setToolTipAndStatusTip(this->thresholdHighSpinBox,
                                           "Adjust the high threshold value");
     this->thresholdWidgetGroup->add(this->thresholdHighSpinBox);
-    this->thresholdHighSpinBox->setFixedWidth(spinBoxWidth);
 
     this->thresholdShowInsideRadioButton = new QRadioButton("Show Data Inside Thresholds");
     WuQtUtilities::setWordWrappedToolTip(this->thresholdShowInsideRadioButton,
@@ -739,9 +748,13 @@ MapSettingsPaletteColorMappingWidget::createThresholdSection()
     this->thresholdWidgetGroup->add(thresholdShowButtonGroup);
     thresholdShowButtonGroup->addButton(this->thresholdShowInsideRadioButton);
     thresholdShowButtonGroup->addButton(this->thresholdShowOutsideRadioButton);
+#if QT_VERSION >= 0x060000
+    QObject::connect(thresholdShowButtonGroup, &QButtonGroup::idClicked,
+                     this, &MapSettingsPaletteColorMappingWidget::applyAndUpdate);
+#else
     QObject::connect(thresholdShowButtonGroup, SIGNAL(buttonClicked(int)),
                      this, SLOT(applyAndUpdate()));
-    
+#endif
     QHBoxLayout* rangeLayout = new QHBoxLayout();
     rangeLayout->addWidget(thresholdRangeLabel);
     rangeLayout->addWidget(this->thresholdRangeModeComboBox->getWidget());
@@ -1377,9 +1390,13 @@ MapSettingsPaletteColorMappingWidget::createPaletteSection()
     scaleButtonGroup->addButton(this->scaleAutoAbsolutePercentageRadioButton);
     scaleButtonGroup->addButton(this->scaleAutoPercentageRadioButton);
     scaleButtonGroup->addButton(this->scaleFixedRadioButton);
+#if QT_VERSION >= 0x060000
+    QObject::connect(scaleButtonGroup, &QButtonGroup::idClicked,
+                     this, &MapSettingsPaletteColorMappingWidget::applyAndUpdate);
+#else
     QObject::connect(scaleButtonGroup, SIGNAL(buttonClicked(int)),
                      this, SLOT(applyAndUpdate()));
-    
+#endif
     /*
      * Spin box width (fixed may have much larger data values)
      */

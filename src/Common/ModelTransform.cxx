@@ -25,7 +25,9 @@
 
 #include <QStringList>
 
+#include "CaretAssert.h"
 #include "CaretLogger.h"
+#include "Matrix4x4Interface.h"
 
 using namespace caret;
 
@@ -82,12 +84,35 @@ ModelTransform::setToIdentity()
         }
     }
     
+    this->mprTwoRotationAngles[0] = 0.0;
+    this->mprTwoRotationAngles[1] = 0.0;
+    this->mprTwoRotationAngles[2] = 0.0;
+
+    this->mprThreeRotationAngles[0] = 0.0;
+    this->mprThreeRotationAngles[1] = 0.0;
+    this->mprThreeRotationAngles[2] = 0.0;
+    
     this->rightCortexFlatMapOffsetXY[0] = 0.0;
     this->rightCortexFlatMapOffsetXY[1] = 0.0;
     this->rightCortexFlatMapZoomFactor  = 1.0;
     
     this->scaling = 1.0;    
 }
+
+/**
+ * Load an array with the identity quaternion (scalar, x, y, z)
+ * @param quaternionSXYZ
+ *    Array loaded with identity quaterion (1, 0, 0, 0)
+ */
+void
+ModelTransform::getIdentityQuaternion(float quaternionSXYZ[4])
+{
+    quaternionSXYZ[0] = 1.0;
+    quaternionSXYZ[1] = 0.0;
+    quaternionSXYZ[2] = 0.0;
+    quaternionSXYZ[3] = 0.0;
+}
+
 
 /**
  * Copy constructor.
@@ -211,6 +236,32 @@ ModelTransform::getObliqueRotation(float obliqueRotation[4][4]) const
             obliqueRotation[i][j] = this->obliqueRotation[i][j];
         }
     }
+}
+
+/**
+ * Get the MPR  Two rotation angles
+ * @param mprTwoRotationAngles
+ *   Output mpr two rotatation angles
+ */
+void
+ModelTransform::getMprTwoRotationAngles(float mprTwoRotationAngles[3]) const
+{
+    mprTwoRotationAngles[0] = this->mprTwoRotationAngles[0];
+    mprTwoRotationAngles[1] = this->mprTwoRotationAngles[1];
+    mprTwoRotationAngles[2] = this->mprTwoRotationAngles[2];
+}
+
+/**
+ * Get the MPR Three rotation angles
+ * @param mprThreeRotationAngles
+ *   Output mpr three rotatation angles
+ */
+void
+ModelTransform::getMprThreeRotationAngles(float mprThreeRotationAngles[3]) const
+{
+    mprThreeRotationAngles[0] = this->mprThreeRotationAngles[0];
+    mprThreeRotationAngles[1] = this->mprThreeRotationAngles[1];
+    mprThreeRotationAngles[2] = this->mprThreeRotationAngles[2];
 }
 
 /**
@@ -341,6 +392,32 @@ ModelTransform::setObliqueRotation(const float obliqueRotation[4][4])
 }
 
 /**
+ * Set the MPR Two rotation angles
+ * @param mprTwoRotationAngles
+ *   New MPR two rotation angles
+ */
+void
+ModelTransform::setMprTwoRotationAngles(const float mprTwoRotationAngles[3])
+{
+    this->mprTwoRotationAngles[0] = mprTwoRotationAngles[0];
+    this->mprTwoRotationAngles[1] = mprTwoRotationAngles[1];
+    this->mprTwoRotationAngles[2] = mprTwoRotationAngles[2];
+}
+
+/**
+ * Set the MPR Three rotation angles
+ * @param mprThreeRotationAngles
+ *   New MPR three rotation angles
+ */
+void
+ModelTransform::setMprThreeRotationAngles(const float mprThreeRotationAngles[3])
+{
+    this->mprThreeRotationAngles[0] = mprThreeRotationAngles[0];
+    this->mprThreeRotationAngles[1] = mprThreeRotationAngles[1];
+    this->mprThreeRotationAngles[2] = mprThreeRotationAngles[2];
+}
+
+/**
  * Set the flat rotation
  * @param flatRotation
  *    New value for flat rotation
@@ -396,41 +473,143 @@ ModelTransform::setScaling(const float scaling)
 }
 
 /**
+ * @param Matrix4x4Interface& matrixForCalculations
+ *    A matrix that is used for calculations (matrix to rotation angles).  Calling function
+ *    must provide an instance of Matrix4x4.
+ * @param leftRotationMatrix
+ *    The left rotation matrix
+ * @return String with each transform values notated for human viewing
+ */
+AString
+ModelTransform::getAsPrettyString(Matrix4x4Interface& matrixForCalculations,
+                                  const float leftRotationMatrix[4][4]) const
+{
+    AString s;
+    
+    s.appendWithNewLine("Translation: " + AString::fromNumbers(this->translation, 3));
+    s.appendWithNewLine(" ");
+    
+    matrixForCalculations.setMatrix(this->rotation);
+    double rotXYZ[3];
+    matrixForCalculations.getRotation(rotXYZ[0], rotXYZ[1], rotXYZ[2]);
+    
+    s.appendWithNewLine("Rotation Angles: "
+                        + AString::fromNumbers(rotXYZ, 3));
+    s.appendWithNewLine(" " );
+    
+    s.appendWithNewLine("Right Rotation Matrix:");
+    for (int32_t i = 0; i < 4; i++) {
+        s.appendWithNewLine(AString::fromNumbers(this->rotation[i], 4));
+    }
+    s.appendWithNewLine(" ");
+
+    s.appendWithNewLine("Left Rotation Matrix:");
+    for (int32_t i = 0; i < 4; i++) {
+        s.appendWithNewLine(AString::fromNumbers(leftRotationMatrix[i], 4));
+    }
+    s.appendWithNewLine(" ");
+    
+    s.appendWithNewLine("Scaling: " + AString::number(this->scaling));
+    s.appendWithNewLine(" ");
+
+    matrixForCalculations.setMatrix(this->obliqueRotation);
+    matrixForCalculations.getRotation(rotXYZ[0], rotXYZ[1], rotXYZ[2]);
+    
+    s.appendWithNewLine("Oblique Rotation Angles: "
+                        + AString::fromNumbers(rotXYZ, 3));
+    s.appendWithNewLine(" " );
+    
+    s.appendWithNewLine("Oblique Rotation Matrix:");
+    for (int32_t i = 0; i < 4; i++) {
+        s.appendWithNewLine(AString::fromNumbers(this->obliqueRotation[i], 4));
+    }
+    s.appendWithNewLine(" ");
+
+    s.appendWithNewLine("MPR Two Rotation Angles: "
+                        + AString::fromNumbers(this->mprTwoRotationAngles, 3));
+    s.appendWithNewLine(" ");
+
+    s.appendWithNewLine("MPR Three Rotation Angles: "
+                        + AString::fromNumbers(this->mprThreeRotationAngles, 3));
+    s.appendWithNewLine(" ");
+        
+    matrixForCalculations.setMatrix(this->flatRotation);
+    matrixForCalculations.getRotation(rotXYZ[0], rotXYZ[1], rotXYZ[2]);
+    
+    s.appendWithNewLine("Flat Rotation Angles: "
+                        + AString::fromNumbers(rotXYZ, 3));
+    s.appendWithNewLine(" " );
+
+    s.appendWithNewLine("Flat Rotation:");
+    for (int32_t i = 0; i < 4; i++) {
+        s.appendWithNewLine(AString::fromNumbers(this->flatRotation[i], 4));
+    }
+    s.appendWithNewLine(" ");
+
+    s.appendWithNewLine("Right Cortex Flat Map Offset: "
+                        + AString::fromNumbers(this->rightCortexFlatMapOffsetXY, 2));
+    s.appendWithNewLine(" ");
+
+    s.appendWithNewLine("Right Cortex Flat Map Zoom: "
+                        + AString::number(this->rightCortexFlatMapZoomFactor));
+    s.appendWithNewLine(" ");
+
+    return s;
+}
+
+/**
  * Returns the user view in a string that contains,
  * separated by commas: View Name, comment, translation[3],
  * rotation[4][4], scaling, obliqueRotation[4][4],
+ * mprTwoRotation[3], mprThreeRotation[3]
  * flatRotation,
  * and rightCortexFlatMapOffset[2], rightCortextFlatMapZoom
  */
 AString 
 ModelTransform::getAsString() const
 {
+    /* 5 */
     AString s = (this->name
                  + s_separatorInPreferences + this->comment
                  + s_separatorInPreferences + AString::number(this->translation[0])
                  + s_separatorInPreferences + AString::number(this->translation[1])
                  + s_separatorInPreferences + AString::number(this->translation[2]));
     
+    /* 5 + 16 = 21 */
     for (int32_t i = 0; i < 4; i++) {
         for (int32_t j = 0; j < 4; j++) {
             s += (s_separatorInPreferences + AString::number(this->rotation[i][j]));
         }
     }
     
+    /* 21 + 1 = 22 */
     s += (s_separatorInPreferences + AString::number(this->scaling));
     
+    /* 22 + 16 = 38 */
     for (int32_t i = 0; i < 4; i++) {
         for (int32_t j = 0; j < 4; j++) {
             s += (s_separatorInPreferences + AString::number(this->obliqueRotation[i][j]));
         }
     }
     
+    /* 38 + 3 = 41 */
+    for (int32_t i = 0; i < 3; i++) {
+        s += (s_separatorInPreferences + AString::number(this->mprTwoRotationAngles[i]));
+    }
+    
+    /* 41 + 3 = 44 */
+    for (int32_t i = 0; i < 3; i++) {
+        s += (s_separatorInPreferences + AString::number(this->mprThreeRotationAngles[i]));
+    }
+    
+    /* 44 + 16 = 60 */
     for (int32_t i = 0; i < 4; i++) {
         for (int32_t j = 0; j < 4; j++) {
             s += (s_separatorInPreferences + AString::number(this->flatRotation[i][j]));
         }
     }
 
+    /* 60 + 3 = 63 */
     s += (s_separatorInPreferences + AString::number(this->rightCortexFlatMapOffsetXY[0]));
     s += (s_separatorInPreferences + AString::number(this->rightCortexFlatMapOffsetXY[1]));
     s += (s_separatorInPreferences + AString::number(this->rightCortexFlatMapZoomFactor));
@@ -450,17 +629,41 @@ ModelTransform::setFromString(const AString& s)
 {
     bool hasComment = false;
     bool hasObliqueRotation = false;
+    bool hasMprAngles = false;
+    bool hasMprThreeAngles = false;
     bool hasFlatRotation = false;
     bool hasRightFlatMapOffset = false;
     bool hasRightFlatMapZoomFactor = false;
     
     QStringList sl;
     if (s.contains(s_separatorInPreferences)) {
+#if QT_VERSION >= 0x060000
+        sl = s.split(s_separatorInPreferences,
+                     Qt::KeepEmptyParts);
+#else
         sl = s.split(s_separatorInPreferences,
                                  QString::KeepEmptyParts);
+#endif
         const int numElements = sl.count();
         
-        if (numElements == 57) {
+        if (numElements == 63) {
+            hasComment = true;
+            hasObliqueRotation = true;
+            hasMprAngles = true;
+            hasMprThreeAngles = true;
+            hasFlatRotation = true;
+            hasRightFlatMapOffset = true;
+            hasRightFlatMapZoomFactor = true;
+        }
+        else if (numElements == 60) {
+            hasComment = true;
+            hasObliqueRotation = true;
+            hasMprAngles = true;
+            hasFlatRotation = true;
+            hasRightFlatMapOffset = true;
+            hasRightFlatMapZoomFactor = true;
+        }
+        else if (numElements == 57) {
             hasComment = true;
             hasObliqueRotation = true;
             hasFlatRotation = true;
@@ -486,12 +689,16 @@ ModelTransform::setFromString(const AString& s)
             hasComment = true;
         }
         else {
-            CaretLogSevere("User view string does not contain 22, 38, 40, 41, or 42 elements");
+            CaretLogSevere("User view string does not contain 22, 38, 40, 41, ,57, or 60 elements");
             return false;
         }
     }
     else {
+#if QT_VERSION >= 0x060000
+        sl = s.split(",", Qt::KeepEmptyParts);
+#else
         sl = s.split(",", QString::KeepEmptyParts);
+#endif
         const int numElements = sl.count();
         if (numElements != 21) {
             CaretLogSevere("User view string does not contain 21 elements");
@@ -539,6 +746,32 @@ ModelTransform::setFromString(const AString& s)
         }
     }
     
+    if (hasMprAngles) {
+        for (int32_t j = 0; j < 3; j++) {
+            this->mprTwoRotationAngles[j] = sl.at(ctr++).toFloat();
+        }
+    }
+    else {
+        for (int32_t i = 0; i < 3; i++) {
+            this->mprTwoRotationAngles[i] = 0.0;
+        }
+    }
+    
+    if (hasMprThreeAngles) {
+        for (int32_t j = 0; j < 3; j++) {
+            this->mprThreeRotationAngles[j] = sl.at(ctr++).toFloat();
+        }
+    }
+    else {
+        /*
+         * Before MPR three angles were added, the MPR angles were
+         * used for both MPR Two and MPR Three Angles
+         */
+        for (int32_t j = 0; j < 3; j++) {
+            this->mprThreeRotationAngles[j] = mprTwoRotationAngles[j];
+        }
+    }
+
     if (hasFlatRotation) {
         for (int32_t i = 0; i < 4; i++) {
             for (int32_t j = 0; j < 4; j++) {
@@ -600,6 +833,14 @@ ModelTransform::copyHelper(const ModelTransform& modelTransform)
         }
     }
     
+    this->mprTwoRotationAngles[0] = modelTransform.mprTwoRotationAngles[0];
+    this->mprTwoRotationAngles[1] = modelTransform.mprTwoRotationAngles[1];
+    this->mprTwoRotationAngles[2] = modelTransform.mprTwoRotationAngles[2];
+
+    this->mprThreeRotationAngles[0] = modelTransform.mprThreeRotationAngles[0];
+    this->mprThreeRotationAngles[1] = modelTransform.mprThreeRotationAngles[1];
+    this->mprThreeRotationAngles[2] = modelTransform.mprThreeRotationAngles[2];
+    
     this->scaling = modelTransform.scaling;
     
     this->rightCortexFlatMapOffsetXY[0] = modelTransform.rightCortexFlatMapOffsetXY[0];
@@ -621,6 +862,10 @@ ModelTransform::copyHelper(const ModelTransform& modelTransform)
  *    4x4 rotation matrix.
  * @param obliqueRotationMatrix
  *    4x4 oblique rotation matrix.
+ * @param mprTwoRotationAngles
+ *    The MPR two rotation angles
+ * @param mprThreeRotationAngles
+ *    The MPR three rotation angles
  * @param floatRotationMatrixArray
  *    The flat rotation matrix
  * @param zoom
@@ -638,6 +883,8 @@ ModelTransform::setPanningRotationMatrixAndZoom(const float panX,
                                                 const float panZ,
                                                 const float rotationMatrix[4][4],
                                                 const float obliqueRotationMatrix[4][4],
+                                                const float mprTwoRotationAngles[3],
+                                                const float mprThreeRotationAngles[3],
                                                 const float floatRotationMatrixArray[4][4],
                                                 const float zoom,
                                                 const float rightCortexFlatMapOffsetX,
@@ -649,6 +896,10 @@ ModelTransform::setPanningRotationMatrixAndZoom(const float panX,
     setRotation(rotationMatrix);
     
     setObliqueRotation(obliqueRotationMatrix);
+    
+    setMprTwoRotationAngles(mprTwoRotationAngles);
+    
+    setMprThreeRotationAngles(mprThreeRotationAngles);
     
     this->setFlatRotation(floatRotationMatrixArray);
     
@@ -671,6 +922,10 @@ ModelTransform::setPanningRotationMatrixAndZoom(const float panX,
  *    4x4 rotation matrix.
  * @param obliqueRotationMatrix
  *    4x4 oblique rotation matrix.
+ * @param mprTwoRotationAngles
+ *    The MPR two rotation angles
+ * @param mprThreeRotationAngles
+ *    The MPR three rotation angles
  * @param floatRotationMatrixArray
  *    The flat rotation matrix
  * @param zoom
@@ -688,6 +943,8 @@ ModelTransform::getPanningRotationMatrixAndZoom(float& panX,
                                                 float& panZ,
                                                 float rotationMatrix[4][4],
                                                 float obliqueRotationMatrix[4][4],
+                                                float mprTwoRotationAngles[3],
+                                                float mprThreeRotationAngles[3],
                                                 float floatRotationMatrixArray[4][4],
                                                 float& zoom,
                                                 float& rightCortexFlatMapOffsetX,
@@ -701,6 +958,10 @@ ModelTransform::getPanningRotationMatrixAndZoom(float& panX,
     getRotation(rotationMatrix);
     
     getObliqueRotation(obliqueRotationMatrix);
+    
+    getMprTwoRotationAngles(mprTwoRotationAngles);
+    
+    getMprThreeRotationAngles(mprThreeRotationAngles);
     
     getFlatRotation(floatRotationMatrixArray);
     

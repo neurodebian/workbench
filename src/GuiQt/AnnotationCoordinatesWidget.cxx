@@ -51,11 +51,15 @@
 #include "ChartTwoOverlaySet.h"
 #include "EnumComboBoxTemplate.h"
 #include "EventBrowserWindowContent.h"
-#include "EventGraphicsUpdateAllWindows.h"
+#include "EventGraphicsPaintSoonAllWindows.h"
 #include "EventManager.h"
 #include "EventOverlaySettingsEditorDialogRequest.h"
 #include "GuiManager.h"
+#include "HistologyOverlaySet.h"
+#include "HistologySlicesFile.h"
 #include "MathFunctions.h"
+#include "MediaFile.h"
+#include "MediaOverlaySet.h"
 #include "ModelChartTwo.h"
 #include "StructureEnumComboBox.h"
 #include "WuQFactory.h"
@@ -139,7 +143,9 @@ m_browserWindowIndex(browserWindowIndex)
     coordinateLayout->addWidget(m_zCoordLabel, 0, 4);
     coordinateLayout->addWidget(m_zCoordSpinBox[0], 0, 5);
     coordinateLayout->addWidget(m_zCoordSpinBox[1], 1, 5);
-    coordinateLayout->setColumnStretch(coordinateLayout->columnCount(), 100);
+    if (m_userInputMode == UserInputModeEnum::Enum::ANNOTATIONS) {
+        coordinateLayout->setColumnStretch(coordinateLayout->columnCount(), 100);
+    }
 
     m_stackedLayout = new QStackedLayout(this);
     WuQtUtilities::setLayoutSpacingAndMargins(m_stackedLayout, 2, 2);
@@ -215,10 +221,18 @@ AnnotationCoordinatesWidget::createCoordinateWidgets(const int32_t coordinateInd
     
     m_zCoordSpinBox[coordinateIndex] = createCoordinateSpinBox(coordinateIndex, "Z", 2);
     
-    const float spinBoxMaximumWidth = 80.0f;
-    m_xCoordSpinBox[coordinateIndex]->setMaximumWidth(spinBoxMaximumWidth);
-    m_yCoordSpinBox[coordinateIndex]->setMaximumWidth(spinBoxMaximumWidth);
-    m_zCoordSpinBox[coordinateIndex]->setMaximumWidth(spinBoxMaximumWidth);
+    if (m_userInputMode == UserInputModeEnum::Enum::SAMPLES_EDITING) {
+        const int32_t spinBoxWidth(90);
+        m_xCoordSpinBox[coordinateIndex]->setFixedWidth(spinBoxWidth);
+        m_yCoordSpinBox[coordinateIndex]->setFixedWidth(spinBoxWidth);
+        m_zCoordSpinBox[coordinateIndex]->setFixedWidth(spinBoxWidth);
+    }
+    else {
+        const float spinBoxMaximumWidth = 80.0f;
+        m_xCoordSpinBox[coordinateIndex]->setMaximumWidth(spinBoxMaximumWidth);
+        m_yCoordSpinBox[coordinateIndex]->setMaximumWidth(spinBoxMaximumWidth);
+        m_zCoordSpinBox[coordinateIndex]->setMaximumWidth(spinBoxMaximumWidth);
+    }
     
     if (coordinateIndex == 0) {
         m_surfaceOffsetVectorTypeComboBox = new EnumComboBoxTemplate(this);
@@ -299,6 +313,10 @@ AnnotationCoordinatesWidget::updateContent(Annotation* annotation)
     if (m_annotation != NULL) {
         switch (m_annotation->getCoordinateSpace()) {
             case AnnotationCoordinateSpaceEnum::CHART:
+                break;
+            case AnnotationCoordinateSpaceEnum::HISTOLOGY:
+                break;
+            case AnnotationCoordinateSpaceEnum::MEDIA_FILE_NAME_AND_PIXEL:
                 break;
             case AnnotationCoordinateSpaceEnum::SPACER:
                 break;
@@ -463,6 +481,96 @@ AnnotationCoordinatesWidget::updateCoordinate(const int32_t coordinateIndex,
                                 const float range(yAxisMax - yAxisMin);
                                 int32_t digits = 6 - static_cast<int32_t>(std::round(std::log10(range)));
                                 digitsRightOfDecimalY = MathFunctions::clamp(digits, 3, 6);
+                                yStep = range * 0.001f;
+                            }
+                        }
+                    }
+                }
+            }
+                break;
+            case AnnotationCoordinateSpaceEnum::HISTOLOGY:
+            {
+                xMin = coordinateMinimum;
+                xMax = coordinateMaximum;
+                yMin = coordinateMinimum;
+                yMax = coordinateMaximum;
+                zMin = coordinateMinimum;
+                zMax = coordinateMaximum;
+                digitsRightOfDecimalX = 1;
+                digitsRightOfDecimalY = 1;
+                xStep = 1.0;
+                yStep = 1.0;
+                
+                BrainBrowserWindow* bbw = GuiManager::get()->getBrowserWindowByWindowIndex(m_browserWindowIndex);
+                CaretAssert(bbw);
+                BrowserTabContent* browserTabContent = bbw->getBrowserTabContent();
+                if (browserTabContent != NULL) {
+                    ModelMedia* modelMedia = browserTabContent->getDisplayedMediaModel();
+                    if (modelMedia != NULL) {
+                        HistologyOverlaySet* histologyOverlaySet = browserTabContent->getHistologyOverlaySet();
+                        
+                        if (histologyOverlaySet != NULL) {
+                            const HistologySlicesFile* histologySlicesFile(histologyOverlaySet->getBottomMostHistologySlicesFile());
+                            if (histologySlicesFile != NULL) {
+                                const BoundingBox bb(histologySlicesFile->getPlaneXyzBoundingBox());
+                                xMin = bb.getMinX();
+                                xMax = bb.getMaxX();
+                                yMin = bb.getMinY();
+                                yMax = bb.getMaxY();
+                                zMin = bb.getMinZ();
+                                zMax = bb.getMaxZ();
+                            }
+                            
+                            if (xMax > xMin) {
+                                const float range(xMax - xMin);
+                                xStep = range * 0.001f;
+                            }
+                            if (yMax > yMin) {
+                                const float range(yMax - yMin);
+                                yStep = range * 0.001f;
+                            }
+                        }
+                    }
+                }
+            }
+
+                break;
+            case AnnotationCoordinateSpaceEnum::MEDIA_FILE_NAME_AND_PIXEL:
+            {
+                xMin = coordinateMinimum;
+                xMax = coordinateMaximum;
+                yMin = coordinateMinimum;
+                yMax = coordinateMaximum;
+                zMin = coordinateMinimum;
+                zMax = coordinateMaximum;
+                digitsRightOfDecimalX = 1;
+                digitsRightOfDecimalY = 1;
+                xStep = 1.0;
+                yStep = 1.0;
+                
+                BrainBrowserWindow* bbw = GuiManager::get()->getBrowserWindowByWindowIndex(m_browserWindowIndex);
+                CaretAssert(bbw);
+                BrowserTabContent* browserTabContent = bbw->getBrowserTabContent();
+                if (browserTabContent != NULL) {
+                    ModelMedia* modelMedia = browserTabContent->getDisplayedMediaModel();
+                    if (modelMedia != NULL) {
+                        MediaOverlaySet* mediaOverlaySet = browserTabContent->getMediaOverlaySet();
+                                                
+                        if (mediaOverlaySet != NULL) {
+                            const MediaFile* mediaFile = mediaOverlaySet->getBottomMostMediaFile();
+                            if (mediaFile != NULL) {
+                                xMin = 0;
+                                xMax = mediaFile->getWidth() - 1;
+                                yMin = 0;
+                                yMax = mediaFile->getHeight() - 1;
+                            }
+                            
+                            if (xMax > xMin) {
+                                const float range(xMax - xMin);
+                                xStep = range * 0.001f;
+                            }
+                            if (yMax > yMin) {
+                                const float range(yMax - yMin);
                                 yStep = range * 0.001f;
                             }
                         }
@@ -674,6 +782,10 @@ AnnotationCoordinatesWidget::valueChangedCoordinate(const int32_t coordinateInde
         switch (m_annotation->getCoordinateSpace()) {
             case AnnotationCoordinateSpaceEnum::CHART:
                 break;
+            case AnnotationCoordinateSpaceEnum::HISTOLOGY:
+                break;
+            case AnnotationCoordinateSpaceEnum::MEDIA_FILE_NAME_AND_PIXEL:
+                break;
             case AnnotationCoordinateSpaceEnum::SPACER:
                 break;
             case AnnotationCoordinateSpaceEnum::STEREOTAXIC:
@@ -762,11 +874,10 @@ AnnotationCoordinatesWidget::valueChangedCoordinate(const int32_t coordinateInde
                         break;
                 }
                 
-                AnnotationManager* annMan = GuiManager::get()->getBrain()->getAnnotationManager();
+                AnnotationManager* annMan = GuiManager::get()->getBrain()->getAnnotationManager(m_userInputMode);
 
                 AString errorMessage;
-                if ( ! annMan->applyCommand(m_userInputMode,
-                                            undoCommand,
+                if ( ! annMan->applyCommand(undoCommand,
                                             errorMessage)) {
                     WuQMessageBox::errorOk(this,
                                            errorMessage);
@@ -787,7 +898,7 @@ AnnotationCoordinatesWidget::valueChangedCoordinate(const int32_t coordinateInde
                 break;
         }
         
-        EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+        EventManager::get()->sendEvent(EventGraphicsPaintSoonAllWindows().getPointer());
     }
 }
 

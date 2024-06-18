@@ -35,7 +35,7 @@
 #include "Brain.h"
 #include "CaretAssert.h"
 #include "EnumComboBoxTemplate.h"
-#include "EventGraphicsUpdateAllWindows.h"
+#include "EventGraphicsPaintSoonAllWindows.h"
 #include "EventManager.h"
 #include "GuiManager.h"
 #include "UserInputModeEnum.h"
@@ -59,10 +59,12 @@ using namespace caret;
  * @param parent
  *     The parent widget.
  */
-AnnotationTextEditorWidget::AnnotationTextEditorWidget(const int32_t browserWindowIndex,
+AnnotationTextEditorWidget::AnnotationTextEditorWidget(const UserInputModeEnum::Enum userInputMode,
+                                                       const int32_t browserWindowIndex,
                                                        QWidget* parent)
 :
 QWidget(parent),
+m_userInputMode(userInputMode),
 m_browserWindowIndex(browserWindowIndex)
 {
     m_annotationText = NULL;
@@ -156,7 +158,8 @@ void
 AnnotationTextEditorWidget::displayTextEditor()
 {
     if (m_annotationText != NULL) {
-        AnnotationTextEditorDialog ted(m_annotationText,
+        AnnotationTextEditorDialog ted(m_userInputMode,
+                                       m_annotationText,
                                        this);
         QObject::connect(&ted, SIGNAL(textHasBeenChanged(const QString&)),
                          this, SLOT(textEditorDialogTextChanged(const QString&)));
@@ -201,16 +204,15 @@ AnnotationTextEditorWidget::annotationTextChanged()
     
     AnnotationRedoUndoCommand* undoCommand = new AnnotationRedoUndoCommand();
     undoCommand->setModeTextCharacters(s, selectedAnnotations);
-    AnnotationManager* annMan = GuiManager::get()->getBrain()->getAnnotationManager();
+    AnnotationManager* annMan = GuiManager::get()->getBrain()->getAnnotationManager(m_userInputMode);
     AString errorMessage;
-    if ( ! annMan->applyCommand(UserInputModeEnum::Enum::ANNOTATIONS,
-                                undoCommand,
+    if ( ! annMan->applyCommand(undoCommand,
                                 errorMessage)) {
         WuQMessageBox::errorOk(this,
                                errorMessage);
     }
     EventManager::get()->sendSimpleEvent(EventTypeEnum::EVENT_ANNOTATION_TOOLBAR_UPDATE);
-    EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+    EventManager::get()->sendEvent(EventGraphicsPaintSoonAllWindows().getPointer());
     
     m_textLineEdit->setCursorPosition(cursorPos);
 }
@@ -247,16 +249,15 @@ AnnotationTextEditorWidget::annotationTextConnectTypeEnumComboBoxItemActivated()
     AnnotationRedoUndoCommand* undoCommand = new AnnotationRedoUndoCommand();
     undoCommand->setModeTextConnectToBrainordinate(connectType,
                                                    selectedAnnotations);
-    AnnotationManager* annMan = GuiManager::get()->getBrain()->getAnnotationManager();
+    AnnotationManager* annMan = GuiManager::get()->getBrain()->getAnnotationManager(m_userInputMode);
     AString errorMessage;
-    if ( ! annMan->applyCommand(UserInputModeEnum::Enum::ANNOTATIONS,
-                                undoCommand,
+    if ( ! annMan->applyCommand(undoCommand,
                                 errorMessage)) {
         WuQMessageBox::errorOk(this,
                                errorMessage);
     }
     AnnotationText::setUserDefaultConnectToBrainordinate(connectType);
     EventManager::get()->sendSimpleEvent(EventTypeEnum::EVENT_ANNOTATION_TOOLBAR_UPDATE);
-    EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+    EventManager::get()->sendEvent(EventGraphicsPaintSoonAllWindows().getPointer());
 }
 

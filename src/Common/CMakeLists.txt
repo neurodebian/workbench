@@ -12,15 +12,19 @@ SET(QT_USE_QTXML TRUE)
 SET(QT_DONT_USE_QTGUI TRUE)
 SET(QT_USE_QTNETWORK TRUE)
 
+if(Qt6_FOUND)
+    include_directories(${Qt6Core_INCLUDE_DIRS})
+    include_directories(${Qt6Core5Compat_INCLUDE_DIRS})
+    include_directories(${Qt6Gui_INCLUDE_DIRS})
+    include_directories(${Qt6Network_INCLUDE_DIRS})
+    include_directories(${Qt6Xml_INCLUDE_DIRS})
+endif()
 if(Qt5_FOUND)
     include_directories(${Qt5Core_INCLUDE_DIRS})
     include_directories(${Qt5Gui_INCLUDE_DIRS})
     include_directories(${Qt5Network_INCLUDE_DIRS})
     include_directories(${Qt5Xml_INCLUDE_DIRS})
 endif()
-IF (QT4_FOUND)
-    INCLUDE(${QT_USE_FILE})
-ENDIF ()
 #message("QT VERSION: " ${QT_VERSION_MAJOR} ${QT_VERSION_MINOR} ${QT_VERSION_PATCH})
 
 #
@@ -35,12 +39,12 @@ ELSE()
         CaretHttpManager.h
     )
 
+    IF(Qt6_FOUND)
+        QT6_WRAP_CPP(MOC_SOURCE_FILES ${MOC_INPUT_HEADER_FILES})
+    ENDIF()
     IF(Qt5_FOUND)
         QT5_WRAP_CPP(MOC_SOURCE_FILES ${MOC_INPUT_HEADER_FILES})
     ENDIF()
-    IF (QT4_FOUND)
-        QT4_WRAP_CPP(MOC_SOURCE_FILES ${MOC_INPUT_HEADER_FILES})
-    ENDIF ()
 ENDIF()
 
 #
@@ -52,7 +56,6 @@ ApplicationTypeEnum.h
 AString.h
 AStringNaturalComparison.h
 BackgroundAndForegroundColors.h
-BackgroundAndForegroundColorsModeEnum.h
 Base64.h
 BoundingBox.h
 BrainConstants.h
@@ -65,7 +68,6 @@ CaretBinaryFile.h
 CaretColor.h
 CaretColorEnum.h
 CaretCommandLine.h
-CaretCommandGlobalOptions.h
 CaretCompact3DLookup.h
 CaretCompactLookup.h
 CaretException.h
@@ -81,6 +83,8 @@ CaretOMP.h
 CaretPointer.h
 CaretPointLocator.h
 CaretPreferenceDataValue.h
+CaretPreferenceDataValueList.h
+CaretPreferenceValueSceneOverrideModeEnum.h
 CaretPreferences.h
 CaretResult.h
 CaretRgb.h
@@ -89,7 +93,6 @@ CaretUndoCommand.h
 CaretUndoStack.h
 CaretUnitsTypeEnum.h
 ColorFunctions.h
-ConnectivityCorrelation.h
 CubicSpline.h
 DataCompressZLib.h
 DataFile.h
@@ -103,6 +106,7 @@ DescriptiveStatistics.h
 DeveloperFlagsEnum.h
 DisplayGroupAndTabItemInterface.h 
 DisplayGroupEnum.h
+DisplayHighDpiModeEnum.h
 ElapsedTimer.h
 Event.h
 EventAlertUser.h
@@ -114,6 +118,7 @@ EventBrowserTabNew.h
 EventBrowserTabNewClone.h
 EventBrowserTabReopenClosed.h
 EventBrowserTabSelectInWindow.h
+EventBrowserWindowPixelSizeInfoEvent.h
 EventCaretPreferencesGet.h
 EventGetViewportSize.h
 EventListenerInterface.h
@@ -121,6 +126,7 @@ EventManager.h
 EventPaletteGetByName.h
 EventProgressUpdate.h
 EventRecentFilesSystemAccessMode.h
+EventResetView.h
 EventTileTabsGridConfigurationModification.h
 EventTypeEnum.h
 FastStatistics.h
@@ -128,12 +134,15 @@ FileAdapter.h
 FileInformation.h
 FileOpenFromOpSysTypeEnum.h
 FloatMatrix.h
+HemisphereEnum.h
 Histogram.h
 HtmlStringBuilder.h
 HtmlTableBuilder.h
 IdentificationDisplayModeEnum.h
 ImageCaptureMethodEnum.h
+InfoItem.h
 JsonHelper.h
+LinearEquationTransform.h
 Logger.h
 LogHandler.h
 LogHandlerStandardError.h
@@ -158,6 +167,7 @@ ProgramParameters.h
 ProgramParametersException.h
 ProgressObject.h
 ProgressReportingInterface.h
+QtPluginsPathSetup.h
 RecentFileItem.h
 RecentFileItemSortingKeyEnum.h
 RecentFileItemTypeEnum.h
@@ -165,6 +175,7 @@ RecentFileItemsContainer.h
 RecentFileItemsContainerModeEnum.h
 RecentFileItemsFilter.h
 RecentFilesSystemAccessModeEnum.h
+RecentSceneInfoContainer.h
 ReductionEnum.h
 ReductionOperation.h
 SpacerTabIndex.h
@@ -186,9 +197,12 @@ TileTabsGridRowColumnStretchTypeEnum.h
 ToolBarWidthModeEnum.h
 TracksModificationInterface.h
 TriStateSelectionStatusEnum.h
+UnitsConversion.h
 Vector3D.h
 VectorOperation.h
+VolumeMontageCoordinateDisplayTypeEnum.h
 VolumeSliceViewAllPlanesLayoutEnum.h
+VoxelColorUpdate.h
 VoxelIJK.h
 WorkbenchQtMessageHandler.h
 WorkbenchSpecialVersionEnum.h
@@ -217,7 +231,6 @@ ApplicationTypeEnum.cxx
 AString.cxx
 AStringNaturalComparison.cxx
 BackgroundAndForegroundColors.cxx
-BackgroundAndForegroundColorsModeEnum.cxx
 Base64.cxx
 BoundingBox.cxx
 BrainConstants.cxx
@@ -229,7 +242,6 @@ CaretBinaryFile.cxx
 CaretColor.cxx
 CaretColorEnum.cxx
 CaretCommandLine.cxx
-CaretCommandGlobalOptions.cxx
 CaretException.cxx
 CaretHttpManager.cxx
 CaretLogger.cxx
@@ -238,6 +250,8 @@ CaretObject.cxx
 CaretObjectTracksModification.cxx
 CaretPointLocator.cxx
 CaretPreferenceDataValue.cxx
+CaretPreferenceDataValueList.cxx
+CaretPreferenceValueSceneOverrideModeEnum.cxx
 CaretPreferences.cxx
 CaretResult.cxx
 CaretRgb.cxx
@@ -246,7 +260,6 @@ CaretUndoCommand.cxx
 CaretUndoStack.cxx
 CaretUnitsTypeEnum.cxx
 ColorFunctions.cxx
-ConnectivityCorrelation.cxx
 CubicSpline.cxx
 DataCompressZLib.cxx
 DataFile.cxx
@@ -258,6 +271,7 @@ DescriptiveStatistics.cxx
 DeveloperFlagsEnum.cxx
 DisplayGroupAndTabItemInterface.cxx
 DisplayGroupEnum.cxx
+DisplayHighDpiModeEnum.cxx
 ElapsedTimer.cxx
 Event.cxx
 EventAlertUser.cxx
@@ -269,6 +283,7 @@ EventBrowserTabNew.cxx
 EventBrowserTabNewClone.cxx
 EventBrowserTabReopenClosed.cxx
 EventBrowserTabSelectInWindow.cxx
+EventBrowserWindowPixelSizeInfoEvent.cxx
 EventCaretPreferencesGet.cxx
 EventGetViewportSize.cxx
 EventListenerInterface.cxx
@@ -276,6 +291,7 @@ EventManager.cxx
 EventPaletteGetByName.cxx
 EventProgressUpdate.cxx
 EventRecentFilesSystemAccessMode.cxx
+EventResetView.cxx
 EventTileTabsGridConfigurationModification.cxx
 EventTypeEnum.cxx
 FastStatistics.cxx
@@ -283,12 +299,15 @@ FileAdapter.cxx
 FileInformation.cxx
 FileOpenFromOpSysTypeEnum.cxx
 FloatMatrix.cxx
+HemisphereEnum.cxx
 Histogram.cxx
 HtmlStringBuilder.cxx
 HtmlTableBuilder.cxx
 IdentificationDisplayModeEnum.cxx
 ImageCaptureMethodEnum.cxx
+InfoItem.cxx
 JsonHelper.cxx
+LinearEquationTransform.cxx
 Logger.cxx
 LogHandler.cxx
 LogHandlerStandardError.cxx
@@ -307,6 +326,7 @@ Plane.cxx
 ProgramParameters.cxx
 ProgramParametersException.cxx
 ProgressObject.cxx
+QtPluginsPathSetup.cxx
 RecentFileItem.cxx
 RecentFileItemSortingKeyEnum.cxx
 RecentFileItemTypeEnum.cxx
@@ -314,6 +334,7 @@ RecentFileItemsContainer.cxx
 RecentFileItemsContainerModeEnum.cxx
 RecentFileItemsFilter.cxx
 RecentFilesSystemAccessModeEnum.cxx
+RecentSceneInfoContainer.cxx
 ReductionEnum.cxx
 ReductionOperation.cxx
 SpacerTabIndex.cxx
@@ -334,9 +355,12 @@ TileTabsGridRowColumnElement.cxx
 TileTabsGridRowColumnStretchTypeEnum.cxx
 ToolBarWidthModeEnum.cxx
 TriStateSelectionStatusEnum.cxx
+UnitsConversion.cxx
 Vector3D.cxx
 VectorOperation.cxx
+VolumeMontageCoordinateDisplayTypeEnum.cxx
 VolumeSliceViewAllPlanesLayoutEnum.cxx
+VoxelColorUpdate.cxx
 WorkbenchQtMessageHandler.cxx
 WorkbenchSpecialVersionEnum.cxx
 WuQMacro.cxx

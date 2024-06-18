@@ -47,7 +47,11 @@ public:
     virtual ~BoundingBox();
 
 public:
+    bool isValid() const;
+    
     bool isValid2D() const;
+    
+    bool isValidTwoAxis() const;
     
     void resetZeros();
 
@@ -76,6 +80,8 @@ public:
     void update(const float x,
                 const float y,
                 const float z);
+    
+    void update(const std::array<float, 3>& xyz);
     
     void updateExcludeNanInf(const float xyz[]);
     
@@ -139,6 +145,8 @@ public:
     
     bool intersectsXY(const BoundingBox& bb) const;
     
+    void unionOperation(const BoundingBox& bb);
+    
     AString toString() const;
 
 private:
@@ -147,6 +155,13 @@ private:
     void copyHelper(const BoundingBox& bo);
     
 private:
+    void setPrivate(const float minX,
+                    const float maxX,
+                    const float minY,
+                    const float maxY,
+                    const float minZ,
+                    const float maxZ);
+
     float boundingBox[6];
 
 };

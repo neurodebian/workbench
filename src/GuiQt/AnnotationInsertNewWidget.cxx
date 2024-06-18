@@ -25,13 +25,17 @@
 
 #include <QAction>
 #include <QActionGroup>
+#include <QButtonGroup>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QMenu>
 #include <QPainter>
+#include <QRadioButton>
 #include <QSignalBlocker>
+#include <QSpinBox>
 #include <QToolButton>
 #include <QVBoxLayout>
+#include <QWidgetAction>
 
 #include "Annotation.h"
 #include "AnnotationFile.h"
@@ -45,17 +49,17 @@
 #include "CaretUndoStack.h"
 #include "DisplayPropertiesAnnotation.h"
 #include "EventAnnotationCreateNewType.h"
-#include "EventGraphicsUpdateAllWindows.h"
+#include "EventAnnotationGetSelectedInsertNewFile.h"
+#include "EventGraphicsPaintSoonAllWindows.h"
 #include "EventUserInterfaceUpdate.h"
 #include "EventManager.h"
 #include "GuiManager.h"
 #include "Model.h"
+#include "UserInputModeEnum.h"
 #include "WuQMessageBox.h"
 #include "WuQtUtilities.h"
 
 using namespace caret;
-
-
 
 /**
  * \class caret::AnnotationInsertNewWidget
@@ -65,16 +69,99 @@ using namespace caret;
 
 /**
  * Constructor.
- *
+ * @param userInputMode
+ *    The user input mode
  * @param browserWindowIndex
  *     Index of the browser window.
  * @param parent
  *     Parent of this widget.
  */
-AnnotationInsertNewWidget::AnnotationInsertNewWidget(const int32_t browserWindowIndex,
+AnnotationInsertNewWidget::AnnotationInsertNewWidget(const UserInputModeEnum::Enum userInputMode,
+                                                     const int32_t browserWindowIndex,
                                                      QWidget* parent)
 : QWidget(parent),
+m_userInputMode(userInputMode),
 m_browserWindowIndex(browserWindowIndex)
+{
+    m_widgetMode = WidgetMode::INVALID;
+    switch (m_userInputMode) {
+        case UserInputModeEnum::Enum::ANNOTATIONS:
+            m_widgetMode = WidgetMode::ANNOTATIONS;
+            break;
+        case UserInputModeEnum::Enum::BORDERS:
+            CaretAssert(0);
+            break;
+        case UserInputModeEnum::Enum::FOCI:
+            CaretAssert(0);
+            break;
+        case UserInputModeEnum::Enum::IMAGE:
+            CaretAssert(0);
+            break;
+        case UserInputModeEnum::Enum::INVALID:
+            CaretAssert(0);
+            break;
+        case UserInputModeEnum::Enum::SAMPLES_EDITING:
+            m_widgetMode = WidgetMode::SAMPLES;
+            break;
+        case UserInputModeEnum::Enum::TILE_TABS_LAYOUT_EDITING:
+            CaretAssert(0);
+            break;
+        case UserInputModeEnum::Enum::VIEW:
+            CaretAssert(0);
+            break;
+        case UserInputModeEnum::Enum::VOLUME_EDIT:
+            CaretAssert(0);
+            break;
+    }
+    
+    switch (m_widgetMode) {
+        case WidgetMode::INVALID:
+            CaretAssert(0);
+            break;
+        case WidgetMode::ANNOTATIONS:
+            createAnnotationsWidgets();
+            break;
+        case WidgetMode::SAMPLES:
+            createEditSamplesWidgets();
+            break;
+    }
+    
+    EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_ANNOTATION_NEW_DRAWING_POLYHEDRON_SLICE_DEPTH);
+    EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_ANNOTATION_GET_SELECTED_INSERT_NEW_FILE);
+}
+
+/**
+ * Destructor.
+ */
+AnnotationInsertNewWidget::~AnnotationInsertNewWidget()
+{
+    EventManager::get()->removeAllEventsFromListener(this);
+}
+
+/**
+ * Receive an event.
+ *
+ * @param event
+ *     The event that the receive can respond to.
+ */
+void
+AnnotationInsertNewWidget::receiveEvent(Event* event)
+{
+    if (event->getEventType() == EventTypeEnum::EVENT_ANNOTATION_GET_SELECTED_INSERT_NEW_FILE) {
+        EventAnnotationGetSelectedInsertNewFile* fileEvent(dynamic_cast<EventAnnotationGetSelectedInsertNewFile*>(event));
+        CaretAssert(fileEvent);
+        if (fileEvent->getUserInputMode() == m_userInputMode) {
+            fileEvent->setAnnotationFile(m_fileSelectionMenu->getSelectedAnnotationFile());
+            fileEvent->setEventProcessed();
+        }
+    }
+}
+
+/**
+ * Create widgets for annotations input mode
+ */
+void
+AnnotationInsertNewWidget::createAnnotationsWidgets()
 {
     /*
      * Shape buttons
@@ -86,9 +173,13 @@ m_browserWindowIndex(browserWindowIndex)
                                                                  m_shapeActionGroup);
     QToolButton* shapeLineToolButton     = createShapeToolButton(AnnotationTypeEnum::LINE,
                                                                  m_shapeActionGroup);
-    QToolButton* shapePolyLineToolButton = createShapeToolButton(AnnotationTypeEnum::POLY_LINE,
+    QToolButton* shapePolygonToolButton  = createShapeToolButton(AnnotationTypeEnum::POLYGON,
+                                                                 m_shapeActionGroup);
+    m_polygonToolButton = shapePolygonToolButton;
+    QToolButton* shapePolyLineToolButton = createShapeToolButton(AnnotationTypeEnum::POLYLINE,
                                                                  m_shapeActionGroup);
     m_polyLineToolButton = shapePolyLineToolButton;
+    
     QToolButton* shapeOvalToolButton     = createShapeToolButton(AnnotationTypeEnum::OVAL,
                                                                  m_shapeActionGroup);
     QToolButton* shapeTextToolButton     = createShapeToolButton(AnnotationTypeEnum::TEXT,
@@ -102,13 +193,17 @@ m_browserWindowIndex(browserWindowIndex)
     m_spaceActionGroup = new QActionGroup(this);
     QToolButton* chartSpaceToolButton = createSpaceToolButton(AnnotationCoordinateSpaceEnum::CHART,
                                                               m_spaceActionGroup);
+    QToolButton* histologySpaceToolButton = createSpaceToolButton(AnnotationCoordinateSpaceEnum::HISTOLOGY,
+                                                                  m_spaceActionGroup);
+    QToolButton* mediaSpaceToolButton = createSpaceToolButton(AnnotationCoordinateSpaceEnum::MEDIA_FILE_NAME_AND_PIXEL,
+                                                              m_spaceActionGroup);
     QToolButton* tabSpaceToolButton = createSpaceToolButton(AnnotationCoordinateSpaceEnum::TAB,
                                                             m_spaceActionGroup);
     const bool showSpacerToolButtonFlag(false);
     QToolButton* spacerSpaceToolButton(NULL);
     if (showSpacerToolButtonFlag) {
         spacerSpaceToolButton = createSpaceToolButton(AnnotationCoordinateSpaceEnum::SPACER,
-                                                         m_spaceActionGroup);
+                                                      m_spaceActionGroup);
     }
     QToolButton* stereotaxicSpaceToolButton = createSpaceToolButton(AnnotationCoordinateSpaceEnum::STEREOTAXIC,
                                                                     m_spaceActionGroup);
@@ -128,10 +223,13 @@ m_browserWindowIndex(browserWindowIndex)
         shapeImageToolButton->setMaximumSize(mw, mh);
         shapeLineToolButton->setMaximumSize(mw, mh);
         shapeOvalToolButton->setMaximumSize(mw, mh);
+        shapePolygonToolButton->setMaximumSize(mw, mh);
         shapePolyLineToolButton->setMaximumSize(mw, mh);
         shapeTextToolButton->setMaximumSize(mw, mh);
-
+        
         chartSpaceToolButton->setMaximumSize(mw, mh);
+        histologySpaceToolButton->setMaximumSize(mw, mh);
+        mediaSpaceToolButton->setMaximumSize(mw, mh);
         if (spacerSpaceToolButton != NULL) {
             spacerSpaceToolButton->setMaximumSize(mw, mh);
         }
@@ -178,6 +276,10 @@ m_browserWindowIndex(browserWindowIndex)
                               1, topColumn++, Qt::AlignLeft);
         gridLayout->addWidget(chartSpaceToolButton,
                               1, topColumn++);
+        gridLayout->addWidget(histologySpaceToolButton,
+                              1, topColumn++);
+        gridLayout->addWidget(mediaSpaceToolButton,
+                              1, topColumn++);
         if (spacerSpaceToolButton != NULL) {
             gridLayout->addWidget(spacerSpaceToolButton,
                                   1, topColumn++);
@@ -190,7 +292,7 @@ m_browserWindowIndex(browserWindowIndex)
                               1, topColumn++);
         gridLayout->addWidget(windowSpaceToolButton,
                               1, topColumn++);
-
+        
         gridLayout->setRowMinimumHeight(2, 2);
         
         gridLayout->addWidget(typeLabel,
@@ -201,12 +303,14 @@ m_browserWindowIndex(browserWindowIndex)
                               3, 4);
         gridLayout->addWidget(shapeLineToolButton,
                               3, 5);
-        gridLayout->addWidget(shapePolyLineToolButton,
+        gridLayout->addWidget(shapePolygonToolButton,
                               3, 6);
-        gridLayout->addWidget(shapeOvalToolButton,
+        gridLayout->addWidget(shapePolyLineToolButton,
                               3, 7);
-        gridLayout->addWidget(shapeTextToolButton,
+        gridLayout->addWidget(shapeOvalToolButton,
                               3, 8);
+        gridLayout->addWidget(shapeTextToolButton,
+                              3, 9);
     }
     else {
         QLabel* insertLabel = new QLabel("Insert New");
@@ -230,16 +334,20 @@ m_browserWindowIndex(browserWindowIndex)
                               1, 2, Qt::AlignLeft);
         gridLayout->addWidget(chartSpaceToolButton,
                               1, 3);
-        gridLayout->addWidget(spacerSpaceToolButton,
+        gridLayout->addWidget(histologySpaceToolButton,
                               1, 4);
-        gridLayout->addWidget(stereotaxicSpaceToolButton,
+        gridLayout->addWidget(mediaSpaceToolButton,
                               1, 5);
-        gridLayout->addWidget(surfaceSpaceToolButton,
+        gridLayout->addWidget(spacerSpaceToolButton,
                               1, 6);
-        gridLayout->addWidget(tabSpaceToolButton,
+        gridLayout->addWidget(stereotaxicSpaceToolButton,
                               1, 7);
-        gridLayout->addWidget(windowSpaceToolButton,
+        gridLayout->addWidget(surfaceSpaceToolButton,
                               1, 8);
+        gridLayout->addWidget(tabSpaceToolButton,
+                              1, 9);
+        gridLayout->addWidget(windowSpaceToolButton,
+                              1, 10);
         
         QSpacerItem* rowSpaceItem = new QSpacerItem(5, 5,
                                                     QSizePolicy::Fixed,
@@ -255,12 +363,14 @@ m_browserWindowIndex(browserWindowIndex)
                               3, 4);
         gridLayout->addWidget(shapeLineToolButton,
                               3, 5);
-        gridLayout->addWidget(shapePolyLineToolButton,
+        gridLayout->addWidget(shapePolygonToolButton,
                               3, 6);
-        gridLayout->addWidget(shapeOvalToolButton,
+        gridLayout->addWidget(shapePolyLineToolButton,
                               3, 7);
-        gridLayout->addWidget(shapeTextToolButton,
+        gridLayout->addWidget(shapeOvalToolButton,
                               3, 8);
+        gridLayout->addWidget(shapeTextToolButton,
+                              3, 9);
     }
     
     setSizePolicy(QSizePolicy::Fixed,
@@ -275,17 +385,73 @@ m_browserWindowIndex(browserWindowIndex)
     m_spaceActionGroup->blockSignals(true);
     tabSpaceToolButton->defaultAction()->setChecked(true);
     m_spaceActionGroup->blockSignals(false);
-
+    
     m_shapeActionGroup->blockSignals(true);
     shapeTextToolButton->defaultAction()->setChecked(true);
     m_shapeActionGroup->blockSignals(false);
 }
 
 /**
- * Destructor.
+ * Create widgets for edit samples input mode
  */
-AnnotationInsertNewWidget::~AnnotationInsertNewWidget()
+void
+AnnotationInsertNewWidget::createEditSamplesWidgets()
 {
+    const AString sampleToolTipText("To draw a polyhedron:"
+                                  "Click this button to insert a new polyhedron and then click or drag the mouse to draw "
+                                  "the first face of the polyhedron.  As points are added, points are added on additional "
+                                  "volume slices."
+                                  "<ul>"
+                                  "<li> <i>Click</i> the mouse to insert coordinates and create straight, possibly longer lines"
+                                  "<li> <i>Drag</i> (move with left button down) the mouse to create curved lines "
+                                  "<li> Note that one can intermix clicks and drags while drawing"
+                                  "<li> When finished, <i>shift-click</i> the mouse to finalize the polygon (does NOT add "
+                                  "another coordinate) or click the <i>Finish</i> button"
+                                  "</ul>");
+
+    QLabel* fileLabel(new QLabel("File"));
+    QToolButton* fileSelectionToolButton = createFileSelectionToolButton();
+    
+    m_newSampleAction = new QAction();
+    m_newSampleAction->setText("Insert New Sample");
+    m_newSampleAction->setToolTip(sampleToolTipText);
+    QObject::connect(m_newSampleAction, &QAction::triggered,
+                     this, &AnnotationInsertNewWidget::newSampleActionTriggered);
+    QToolButton* newSampleToolButton(new QToolButton());
+    WuQtUtilities::setToolButtonStyleForQt5Mac(newSampleToolButton);
+    newSampleToolButton->setDefaultAction(m_newSampleAction);
+    
+    m_newSampleDepthSpinBox = NULL;
+    const bool showDepthFlag(true);
+    if (showDepthFlag) {
+        m_newSampleDepthSpinBox = new QSpinBox();
+        m_newSampleDepthSpinBox->setMinimum(-99);
+        m_newSampleDepthSpinBox->setMaximum(99);
+        m_newSampleDepthSpinBox->setSingleStep(1);
+        m_newSampleDepthSpinBox->setValue(m_previousNewSampleDepthSpinBoxValue);
+        QObject::connect(m_newSampleDepthSpinBox, QOverload<int>::of(&QSpinBox::valueChanged),
+                         this, &AnnotationInsertNewWidget::newSampleDepthValueChanged);
+        m_newSampleDepthSpinBox->setToolTip("Polyhedron spans this number of slices");
+    }
+    
+    QGridLayout* layout(new QGridLayout(this));
+    WuQtUtilities::setLayoutSpacingAndMargins(layout, 2, 2);
+    layout->addWidget(fileLabel,
+                      0, 0, Qt::AlignHCenter);
+    layout->addWidget(fileSelectionToolButton,
+                      1, 0, Qt::AlignHCenter);
+    layout->addWidget(newSampleToolButton,
+                      1, 1);
+    if (m_newSampleDepthSpinBox != NULL) {
+        QLabel* slicesLabel(new QLabel("Slices"));
+        layout->addWidget(slicesLabel,
+                      0, 2, Qt::AlignHCenter);
+        layout->addWidget(m_newSampleDepthSpinBox,
+                          1, 2, Qt::AlignHCenter);
+    }
+
+    setSizePolicy(QSizePolicy::Fixed,
+                  QSizePolicy::Fixed);
 }
 
 /**
@@ -294,8 +460,19 @@ AnnotationInsertNewWidget::~AnnotationInsertNewWidget()
 void
 AnnotationInsertNewWidget::updateContent()
 {
-    enableDisableSpaceActions();
-    itemSelectedFromFileSelectionMenu();
+    switch (m_widgetMode) {
+        case WidgetMode::INVALID:
+            CaretAssert(0);
+            break;
+        case WidgetMode::ANNOTATIONS:
+            enableDisableSpaceActions();
+            enableDisableShapeActions();
+            
+            itemSelectedFromFileSelectionMenu();
+            break;
+        case WidgetMode::SAMPLES:
+            break;
+    }
 }
 
 /**
@@ -304,10 +481,24 @@ AnnotationInsertNewWidget::updateContent()
 void
 AnnotationInsertNewWidget::itemSelectedFromFileSelectionMenu()
 {
-    /*
-     * Add a space so that the arrow is not
-     */
     m_fileSelectionToolButtonAction->setText(m_fileSelectionMenu->getSelectedNameForToolButton());
+}
+
+/**
+ * Enable/disable shape action based upon model in window and space
+ */
+void
+AnnotationInsertNewWidget::enableDisableShapeActions()
+{
+    QAction* spaceAction = m_spaceActionGroup->checkedAction();
+    if (spaceAction) {
+        CaretAssert(spaceAction);
+        const int spaceInt = spaceAction->data().toInt();
+        bool spaceValidFlag = false;
+        AnnotationCoordinateSpaceEnum::fromIntegerCode(spaceInt,
+                                                       &spaceValidFlag);
+        CaretAssert(spaceValidFlag);
+    }
 }
 
 /**
@@ -342,6 +533,8 @@ AnnotationInsertNewWidget::enableDisableSpaceActions()
     const bool windowSpaceValidFlag = ( ! allTabContent.empty());
     
     bool chartSpaceValidFlag       = false;
+    bool histologySpaceValidFlag   = false;
+    bool mediaSpaceValidFlag       = false;
     bool surfaceSpaceValidFlag     = false;
     bool stereotaxicSpaceValidFlag = false;
     
@@ -359,7 +552,12 @@ AnnotationInsertNewWidget::enableDisableSpaceActions()
                 break;
             case ModelTypeEnum::MODEL_TYPE_INVALID:
                 break;
+            case ModelTypeEnum::MODEL_TYPE_HISTOLOGY:
+                histologySpaceValidFlag = true;
+                stereotaxicSpaceValidFlag = true;
+                break;
             case  ModelTypeEnum::MODEL_TYPE_MULTI_MEDIA:
+                mediaSpaceValidFlag = true;
                 break;
             case ModelTypeEnum::MODEL_TYPE_SURFACE:
                 stereotaxicSpaceValidFlag = true;
@@ -394,6 +592,12 @@ AnnotationInsertNewWidget::enableDisableSpaceActions()
         switch (annSpace) {
             case AnnotationCoordinateSpaceEnum::CHART:
                 enableSpaceFlag = chartSpaceValidFlag;
+                break;
+            case AnnotationCoordinateSpaceEnum::HISTOLOGY:
+                enableSpaceFlag = histologySpaceValidFlag;
+                break;
+            case AnnotationCoordinateSpaceEnum::MEDIA_FILE_NAME_AND_PIXEL:
+                enableSpaceFlag = mediaSpaceValidFlag;
                 break;
             case AnnotationCoordinateSpaceEnum::SPACER:
                 enableSpaceFlag = spacerSpaceValidFlag;
@@ -437,7 +641,7 @@ AnnotationInsertNewWidget::enableDisableSpaceActions()
 QToolButton*
 AnnotationInsertNewWidget::createFileSelectionToolButton()
 {
-    m_fileSelectionMenu = new AnnotationMenuFileSelection();
+    m_fileSelectionMenu = new AnnotationMenuFileSelection(m_userInputMode);
     QObject::connect(m_fileSelectionMenu, SIGNAL(menuItemSelected()),
                      this, SLOT(itemSelectedFromFileSelectionMenu()));
     
@@ -475,9 +679,20 @@ AnnotationInsertNewWidget::createShapeToolButton(const AnnotationTypeEnum::Enum 
                                   this);
     
     action->setData(AnnotationTypeEnum::toIntegerCode(annotationType));
-    
-//    AString toolTipText(typeGuiName
-//                        + " annotation");
+
+    const AString polyDrawingText("To draw a polygon:"
+                                  "<ul>"
+                                  "<li> <i>Click</i> the mouse to insert coordinates and create straight, possibly longer lines"
+                                  "<li> <i>Drag</i> (move with left button down) the mouse to create curved lines "
+                                  "<li> Note that one can intermix clicks and drags while drawing"
+                                  "<li> To remove the most recently entered coordinate, click the <b>X</b> "
+                                  "button in the <b>Drawing</b> section of the Toolbar"
+                                  "<li> When finished, <i>click</i> the <b>Finish</b> button in the <b>Drawing</b> "
+                                  "section of the Toolbar OR <i>shift-click</i> the mouse to conclude drawing of "
+                                  "the polygon"
+                                  "<li> To cancel drawing of the polygon, <i>click</i> the <b>Cancel</b> button "
+                                  "in the <b>Drawing</b> section of the Toolbar"
+                                  "</ul>");
     AString typeText;
     AString clickText;
     AString dragText;
@@ -526,19 +741,39 @@ AnnotationInsertNewWidget::createShapeToolButton(const AnnotationTypeEnum::Enum 
                         "While continuing to hold the mouse button down, drag the mouse to "
                         "another side of the oval and release the mouse button to create the oval.");
             break;
-        case AnnotationTypeEnum::POLY_LINE:
-            clickText = ("Click the mouse to draw each vertex of the polyline and "
-                         "shift-click the mouse to draw the last vertex and finish the polyline.");
-            dragText = ("Move the mouse to the first vertex of the polyline. While holding "
-                        "down the left mouse button, drag the mouse to draw the polyline and "
-                        "release the left mouse button to finish the polyline.  This method will "
-                        "create a polyline with many vertices and there may be a pause when "
-                        "the mouse button is released to finish the polyline.");
-            typeText = ("Polyline Annotation.  A polyline is a series of line segments connected at their end points. "
-                        "When this button is clicked, a menu will appear for selecting the method used "
-                        "to draw the polyline.");
-            m_polyLineDrawClicksToolTipText = ("<html>" + clickText + "</html>");
-            m_polyLineDrawDragToolTipText   = ("<html>" + dragText + "<html>");
+        case AnnotationTypeEnum::POLYHEDRON:
+            typeText = ("Polyhedron Annotation.<p>"
+                        "A polyhedron consists of two polygons that are connected at corresponding "
+                        "vertices.  User draws first polygon and the second polygon is created to "
+                        "form the polyhedron.  When drawing the first polygon, "
+                        "last coordinate automatically connects to first coordinate. "
+                        "<p>"
+                        "To draw the first polygon:"
+                        "<ul>"
+                        "<li> <i>Click</i> the mouse to insert coordinates and create straight, possibly longer lines"
+                        "<li> <i>Drag</i> (move with left button down) the mouse to create curved lines "
+                        "<li> Note that one can intermix clicks and drags while drawing"
+                        "<li> When finished, <i>shift-click</i> the mouse to finalize the polygon (does NOT add "
+                        "another coordinate)"
+                        "</ul>");
+            break;
+        case AnnotationTypeEnum::POLYGON:
+            typeText = ("Polygon Annotation.<p>"
+                        "A polygon is a series of connected line segments that form a closed shape "
+                        "(last coordinate automatically connects to first coordinate). "
+                        "<p>"
+                        + polyDrawingText);
+            break;
+        case AnnotationTypeEnum::POLYLINE:
+            {
+                AString polyDrawTextCopy(polyDrawingText);
+                polyDrawTextCopy.replace("olygon", "olyline");
+                typeText = ("Polyline Annotation.<p>"
+                            "A polyline is a series of connected line segments"
+                            "(last coordinate DOES NOT connect to first coordinate). "
+                            "<p>"
+                            + polyDrawTextCopy);
+            }
             break;
         case AnnotationTypeEnum::SCALE_BAR:
             CaretAssert(0);
@@ -562,15 +797,21 @@ AnnotationInsertNewWidget::createShapeToolButton(const AnnotationTypeEnum::Enum 
     
     AString toolTip("<html>");
     if ( ! typeText.isEmpty()) {
-        toolTip.appendWithNewLine(typeText + "<p>");
+        toolTip.appendWithNewLine(typeText);
     }
     if ( ( ! clickText.isEmpty())
         && ( ! dragText.isEmpty())) {
+        if ( ! clickText.isEmpty()) {
+            toolTip.appendWithNewLine("<p>");
+        }
         toolTip.appendWithNewLine("There are two methods for creating this type of annotation:<p> ");
         clickText.insert(0, "(1) ");
         dragText.insert(0, "(2) ");
     }
     if ( ! clickText.isEmpty()) {
+        if ( ! clickText.isEmpty()) {
+            toolTip.appendWithNewLine("<p>");
+        }
         toolTip.appendWithNewLine(clickText);
     }
     if ( ! dragText.isEmpty()) {
@@ -599,6 +840,71 @@ AnnotationInsertNewWidget::createShapeToolButton(const AnnotationTypeEnum::Enum 
 }
 
 /**
+ * Called when new sample action triggered
+ */
+void
+AnnotationInsertNewWidget::newSampleActionTriggered()
+{
+    AnnotationFile* annotationFile = m_fileSelectionMenu->getSelectedAnnotationFile();
+    if (annotationFile == NULL) {
+        WuQMessageBox::errorOk(this, "No file is selected.  Click the File Select button to create a new samples file.");
+        return;
+    }
+    
+    const AnnotationCoordinateSpaceEnum::Enum annSpace(AnnotationCoordinateSpaceEnum::STEREOTAXIC);
+    const AnnotationTypeEnum::Enum annShape(AnnotationTypeEnum::POLYHEDRON);
+    EventAnnotationCreateNewType::PolyhedronDrawingMode polyhedronDrawingMode
+    = EventAnnotationCreateNewType::PolyhedronDrawingMode::SAMPLES_DRAWING;
+
+    DisplayPropertiesAnnotation* dpa = GuiManager::get()->getBrain()->getDisplayPropertiesAnnotation();
+    dpa->setDisplayAnnotations(true);
+    EventManager::get()->sendEvent(EventAnnotationCreateNewType(m_browserWindowIndex,
+                                                                m_userInputMode,
+                                                                annotationFile,
+                                                                annSpace,
+                                                                annShape,
+                                                                polyhedronDrawingMode).getPointer());
+
+}
+
+/**
+ * Called when the depth value for the new sample is  changed
+ * @param value
+ *    The new value
+ */
+void
+AnnotationInsertNewWidget::newSampleDepthValueChanged(int value)
+{
+    /*
+     * Do not allow a zero value
+     * If user transitions to zero from positive one, set to negative one
+     * If user transitions to zero from negative one, set to positive one
+     */
+    if (value == 0) {
+        if (m_previousNewSampleDepthSpinBoxValue > 0) {
+            value = -1;
+        }
+        else if (m_previousNewSampleDepthSpinBoxValue < 0) {
+            value = 1;
+        }
+        else {
+            value = 1;
+        }
+        QSignalBlocker blocker(m_newSampleDepthSpinBox);
+        m_newSampleDepthSpinBox->setValue(value);
+    }
+    
+    m_previousNewSampleDepthSpinBoxValue = value;
+
+    /*
+     * Depth value is requested while the annotation is being drawn by graphics
+     * so request a graphics update
+     */
+    EventManager::get()->sendEvent(EventGraphicsPaintSoonAllWindows().getPointer());
+    
+}
+
+/**
  * Called when a space or shape action triggered.
  */
 void
@@ -617,7 +923,10 @@ AnnotationInsertNewWidget::spaceOrShapeActionTriggered()
     }
     
     AnnotationFile* annotationFile = m_fileSelectionMenu->getSelectedAnnotationFile();
-    CaretAssert(annotationFile);
+    if (annotationFile == NULL) {
+        WuQMessageBox::errorOk(this, "No file is selected.  Create a new file or select a file.");
+        return;
+    }
     
     CaretAssert(spaceAction);
     const int spaceInt = spaceAction->data().toInt();
@@ -633,8 +942,8 @@ AnnotationInsertNewWidget::spaceOrShapeActionTriggered()
                                                                             &shapeValidFlag);
     CaretAssert(shapeValidFlag);
     
-    EventAnnotationCreateNewType::PolyLineDrawingMode polyLineDrawingMode
-    = EventAnnotationCreateNewType::PolyLineDrawingMode::DISCRETE;
+    EventAnnotationCreateNewType::PolyhedronDrawingMode polyhedronDrawingMode
+    = EventAnnotationCreateNewType::PolyhedronDrawingMode::ANNOTATION_DRAWING;
     
     switch (annShape) {
         case AnnotationTypeEnum::BOX:
@@ -649,27 +958,40 @@ AnnotationInsertNewWidget::spaceOrShapeActionTriggered()
             break;
         case AnnotationTypeEnum::OVAL:
             break;
-        case AnnotationTypeEnum::POLY_LINE:
-        {
-            CaretAssert(m_polyLineToolButton);
-            QMenu menu;
-            menu.setToolTipsVisible(true);
-            QAction* dragAction = menu.addAction("Drag (Continuous)");
-            dragAction->setToolTip(m_polyLineDrawDragToolTipText);
-            QAction* clicksAction  = menu.addAction("Clicks (Discrete)");
-            clicksAction->setToolTip(m_polyLineDrawClicksToolTipText);
-            
-            QAction* selectedAction = menu.exec(m_polyLineToolButton->mapToGlobal(QPoint(0,0)));
-            if (selectedAction == dragAction) {
-                polyLineDrawingMode = EventAnnotationCreateNewType::PolyLineDrawingMode::CONTINUOUS;
+        case AnnotationTypeEnum::POLYHEDRON:
+            switch (m_userInputMode) {
+                case UserInputModeEnum::Enum::INVALID:
+                    CaretAssert(0);
+                    break;
+                case UserInputModeEnum::Enum::ANNOTATIONS:
+                    polyhedronDrawingMode = EventAnnotationCreateNewType::PolyhedronDrawingMode::ANNOTATION_DRAWING;
+                    break;
+                case UserInputModeEnum::Enum::BORDERS:
+                    CaretAssert(0);
+                    break;
+                case UserInputModeEnum::Enum::FOCI:
+                    CaretAssert(0);
+                    break;
+                case UserInputModeEnum::Enum::IMAGE:
+                    CaretAssert(0);
+                    break;
+                case UserInputModeEnum::Enum::SAMPLES_EDITING:
+                    polyhedronDrawingMode = EventAnnotationCreateNewType::PolyhedronDrawingMode::SAMPLES_DRAWING;
+                    break;
+                case UserInputModeEnum::Enum::TILE_TABS_LAYOUT_EDITING:
+                    CaretAssert(0);
+                    break;
+                case UserInputModeEnum::Enum::VIEW:
+                    CaretAssert(0);
+                    break;
+                case UserInputModeEnum::Enum::VOLUME_EDIT:
+                    CaretAssert(0);
+                    break;
             }
-            else if (selectedAction == clicksAction) {
-                polyLineDrawingMode = EventAnnotationCreateNewType::PolyLineDrawingMode::DISCRETE;
-            }
-            else {
-                return;
-            }
-        }
+            break;
+        case AnnotationTypeEnum::POLYGON:
+            break;
+        case AnnotationTypeEnum::POLYLINE:
             break;
         case AnnotationTypeEnum::SCALE_BAR:
             break;
@@ -679,10 +1001,12 @@ AnnotationInsertNewWidget::spaceOrShapeActionTriggered()
     
     DisplayPropertiesAnnotation* dpa = GuiManager::get()->getBrain()->getDisplayPropertiesAnnotation();
     dpa->setDisplayAnnotations(true);
-    EventManager::get()->sendEvent(EventAnnotationCreateNewType(annotationFile,
+    EventManager::get()->sendEvent(EventAnnotationCreateNewType(m_browserWindowIndex,
+                                                                m_userInputMode,
+                                                                annotationFile,
                                                                 annSpace,
                                                                 annShape,
-                                                                polyLineDrawingMode).getPointer());
+                                                                polyhedronDrawingMode).getPointer());
 }
 
 /**
@@ -776,7 +1100,50 @@ AnnotationInsertNewWidget::createShapePixmap(const QWidget* widget,
         case AnnotationTypeEnum::OVAL:
             painter->drawEllipse(1, 1, width - 1, height - 1);
             break;
-        case AnnotationTypeEnum::POLY_LINE:
+        case AnnotationTypeEnum::POLYHEDRON:
+        {
+            CaretAssert(width  == 24);
+            CaretAssert(height == 24);
+            {
+                QPolygon polygon;
+                polygon.push_back(QPoint(12, 2));
+                polygon.push_back(QPoint(6, 8));
+                polygon.push_back(QPoint(12, 12));
+                polygon.push_back(QPoint(18, 8));
+                painter->drawPolygon(polygon);
+            }
+            {
+                QPolygon polygon;
+                polygon.push_back(QPoint(6, 8));
+                polygon.push_back(QPoint(2, 18));
+                polygon.push_back(QPoint(10, 20));
+                polygon.push_back(QPoint(12, 12));
+                painter->drawPolygon(polygon);
+            }
+            {
+                QPolygon polygon;
+                polygon.push_back(QPoint(12, 12));
+                polygon.push_back(QPoint(10, 20));
+                polygon.push_back(QPoint(16, 20));
+                polygon.push_back(QPoint(18, 8));
+                painter->drawPolygon(polygon);
+            }
+        }
+            break;
+        case AnnotationTypeEnum::POLYGON:
+        {
+            const int hh(height / 2);
+            const int hw(width / 2);
+            QPolygon polygon;
+            polygon.push_back(QPoint(2, 2));
+            polygon.push_back(QPoint(width - 2, 5));
+            polygon.push_back(QPoint(width - 5, height - 2));
+            polygon.push_back(QPoint(hh, hw));
+            polygon.push_back(QPoint(2, height - 4));
+            painter->drawPolygon(polygon);
+        }
+            break;
+        case AnnotationTypeEnum::POLYLINE:
         {
             const int hh(height / 2);
             const int hw(width / 2);
@@ -820,6 +1187,10 @@ AnnotationInsertNewWidget::createSpaceToolButton(const AnnotationCoordinateSpace
 {
     switch (annotationSpace) {
         case AnnotationCoordinateSpaceEnum::CHART:
+            break;
+        case AnnotationCoordinateSpaceEnum::HISTOLOGY:
+            break;
+        case AnnotationCoordinateSpaceEnum::MEDIA_FILE_NAME_AND_PIXEL:
             break;
         case AnnotationCoordinateSpaceEnum::SPACER:
             break;
@@ -900,6 +1271,10 @@ AnnotationInsertNewWidget::createSpacePixmap(const QWidget* widget,
      */
     switch (annotationSpace) {
         case AnnotationCoordinateSpaceEnum::CHART:
+            break;
+        case AnnotationCoordinateSpaceEnum::HISTOLOGY:
+            break;
+        case AnnotationCoordinateSpaceEnum::MEDIA_FILE_NAME_AND_PIXEL:
             break;
         case AnnotationCoordinateSpaceEnum::SPACER:
             break;

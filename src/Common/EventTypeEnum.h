@@ -48,12 +48,20 @@ public:
         EVENT_ANNOTATION_BARS_GET,
         /** Annotation create new of a particular type */
         EVENT_ANNOTATION_CREATE_NEW_TYPE,
+        /** Annotation finish cancel annotation being drawn */
+        EVENT_ANNOTATION_DRAWING_FINISH_CANCEL,
+        /** Get the annotation that is being drawn in the given window */
+        EVENT_ANNOTATION_GET_BEING_DRAWN_IN_WINDOW,
         /** Get the annotations drawn in a window */
         EVENT_ANNOTATION_GET_DRAWN_IN_WINDOW,
+        /** Get the file selected in the "insert new" section of toolbar */
+        EVENT_ANNOTATION_GET_SELECTED_INSERT_NEW_FILE,
         /** Get an annotation group */
         EVENT_ANNOTATION_GROUP_GET_WITH_KEY,
         /** Annotation grouping (group, regroup, ungroup) operation */
         EVENT_ANNOTATION_GROUPING,
+        /** Annotation get slice depth while drawing a new polyhedron */
+        EVENT_ANNOTATION_NEW_DRAWING_POLYHEDRON_SLICE_DEPTH,
         /** Get the bounds of annotation text */
         EVENT_ANNOTATION_TEXT_GET_BOUNDS,
         /** Get annotation text substitutions */
@@ -86,6 +94,10 @@ public:
         EVENT_BROWSER_TAB_GET_ALL,
         /** Get ALL VIEWED browser tabs (tabs that are viewed in windows) */
         EVENT_BROWSER_TAB_GET_ALL_VIEWED,
+        /** Get the browser tab at the window's XY */
+        EVENT_BROWSER_TAB_GET_AT_WINDOW_XY,
+        /** Get the window index for the given tab index*/
+        EVENT_BROWSER_TAB_INDEX_GET_WINDOW_INDEX,
         /** Create a new browser tab */
         EVENT_BROWSER_TAB_NEW,
         /** Create a new browser tab from code within the GUI so toolbar is updated */
@@ -98,6 +110,8 @@ public:
         EVENT_BROWSER_TAB_REOPEN_CLOSED,
         /** Select  a  tab in a window */
         EVENT_BROWSER_TAB_SELECT_IN_WINDOW,
+        /** Event to test validity of a browser tab */
+        EVENT_BROWSER_TAB_VALIDATE,
         /** Event for browser window content */
         EVENT_BROWSER_WINDOW_CONTENT,
         /** Get the content of a browser window */
@@ -112,6 +126,8 @@ public:
         EVENT_BROWSER_WINDOW_MENUS_UPDATE,
         /** Create a new browser window */
         EVENT_BROWSER_WINDOW_NEW,
+        /** Pixel info (sizes) in a browser window */
+        EVENT_BROWSER_WINDOW_PIXEL_SIZE_INFO,
         /** Browser tile tab operations */
         EVENT_BROWSER_WINDOW_TILE_TAB_OPERATION,
         /** Get caret data files */
@@ -144,6 +160,12 @@ public:
         EVENT_DATA_FILE_RELOAD,
         /** Reload (replace) a data file with its saved version in the brain*/
         EVENT_DATA_FILE_RELOAD_ALL,
+        /** Drawing viewport content event, add new while drawing */
+        EVENT_DRAWING_VIEWPORT_CONTENT_ADD,
+        /** Drawing viewport content event, clear before drawing*/
+        EVENT_DRAWING_VIEWPORT_CONTENT_CLEAR,
+        /** Drawing viewport content event, get after drawing */
+        EVENT_DRAWING_VIEWPORT_CONTENT_GET,
         /** Get data files that are display in windows/tabs */
         EVENT_GET_DISPLAYED_DATA_FILES,
         /** Get node data files */
@@ -164,16 +186,22 @@ public:
         EVENT_GRAPHICS_OPENGL_DELETE_BUFFER_OBJECT,
         /** Delete a texture name for an OpenGL context */
         EVENT_GRAPHICS_OPENGL_DELETE_TEXTURE_NAME,
+        /** Paint (draw immediately) graphics in a window */
+        EVENT_GRAPHICS_PAINT_NOW_ALL_WINDOWS,
+        /** Paint  (draw immediately) graphics in a window */
+        EVENT_GRAPHICS_PAINT_NOW_ONE_WINDOW,
+        /** Paint (draw soon but not immediately) all graphics windows */
+        EVENT_GRAPHICS_PAINT_SOON_ALL_WINDOWS,
+        /** Paint (draw soon but not immediately) all graphics windows */
+        EVENT_GRAPHICS_PAINT_SOON_ONE_WINDOW,
         /** Time the OpenGL graphics in a window */
         EVENT_GRAPHICS_TIMING_ONE_WINDOW,
-        /** Update all graphics windows */
-        EVENT_GRAPHICS_UPDATE_ALL_WINDOWS,
-        /** Update graphics in a window */
-        EVENT_GRAPHICS_UPDATE_ONE_WINDOW,
         /** Show tooltip in graphics window */
         EVENT_GRAPHICS_WINDOW_SHOW_TOOL_TIP,
         /** Display the help viewer */
         EVENT_HELP_VIEWER_DISPLAY,
+        /** Get histology slices files */
+        EVENT_HISTOLOGY_SLICES_FILES_GET,
         /** Highlight location when an identification occurs */
         EVENT_IDENTIFICATION_HIGHLIGHT_LOCATION,
         /** Perform an identification operation */
@@ -220,6 +248,8 @@ public:
         EVENT_PALETTE_GROUPS_GET,
         /** Get the file system access mode for recent files */
         EVENT_RECENT_FILES_SYSTEM_ACCESS_MODE,
+        /** Issued when reset view is requested */
+        EVENT_RESET_VIEW,
         /** Get the active scene */
         EVENT_SCENE_ACTIVE,
         /** Show a dialog containing warnings encountered when reading data files */
@@ -230,6 +260,8 @@ public:
         EVENT_SPEC_FILE_READ_DATA_FILES,
         /** Invalidate surface coloring */
         EVENT_SURFACE_COLORING_INVALIDATE,
+        /** Invalidate volume coloring */
+        EVENT_VOLUME_COLORING_INVALIDATE,
         /** Get surfaces */
         EVENT_SURFACES_GET,
         /** Get valid surface strucutures and their number of nodes */

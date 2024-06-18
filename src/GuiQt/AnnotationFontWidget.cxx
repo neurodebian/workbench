@@ -43,7 +43,7 @@
 #include "CaretColorEnumMenu.h"
 #include "EnumComboBoxTemplate.h"
 #include "EventBrowserWindowGraphicsRedrawn.h"
-#include "EventGraphicsUpdateAllWindows.h"
+#include "EventGraphicsPaintSoonAllWindows.h"
 #include "EventManager.h"
 #include "GuiManager.h"
 #include "ModelSurfaceMontage.h"
@@ -64,16 +64,25 @@ using namespace caret;
 /**
  * Constructor.
  *
+ * @param orientation
+ *    Orientation of the widget
+ * @param parentWidgetType
+ *    Type of parent widget
+ * @param userInputMode
+ *     The user input mode
  * @param browserWindowIndex
  *     Index of window in which this instance is displayed
  * @param parent
  *     Parent for this widget.
  */
-AnnotationFontWidget::AnnotationFontWidget(const AnnotationWidgetParentEnum::Enum parentWidgetType,
+AnnotationFontWidget::AnnotationFontWidget(const Qt::Orientation orientation,
+                                           const AnnotationWidgetParentEnum::Enum parentWidgetType,
+                                           const UserInputModeEnum::Enum userInputMode,
                                            const int32_t browserWindowIndex,
                                            QWidget* parent)
 : QWidget(parent),
 m_parentWidgetType(parentWidgetType),
+m_userInputMode(userInputMode),
 m_browserWindowIndex(browserWindowIndex)
 {
     /*
@@ -224,29 +233,61 @@ m_browserWindowIndex(browserWindowIndex)
             QLabel* sizeLabel  = new QLabel("Size");
             QLabel* styleLabel = new QLabel("Style");
             
-            QHBoxLayout* stylesLayout = new QHBoxLayout();
-            WuQtUtilities::setLayoutSpacingAndMargins(stylesLayout, 0, 0);
-            stylesLayout->addWidget(boldFontToolButton);
-            stylesLayout->addWidget(italicFontToolButton);
-            stylesLayout->addWidget(underlineFontToolButton);
-            stylesLayout->addStretch();
-            
-            QGridLayout* fontNameSizeLayout = new QGridLayout(this);
-            WuQtUtilities::setLayoutSpacingAndMargins(fontNameSizeLayout, 2, 0);
-            fontNameSizeLayout->setColumnStretch(0, 0);
-            fontNameSizeLayout->setColumnStretch(1, 0);
-            fontNameSizeLayout->setColumnStretch(2, 0);
-            fontNameSizeLayout->setColumnStretch(3, 100);
-            fontNameSizeLayout->addWidget(fontLabel, 0, 0);
-            fontNameSizeLayout->addWidget(m_fontNameComboBox->getWidget(),
-                                          0, 1, 1, 3);
-            fontNameSizeLayout->addWidget(sizeLabel, 1, 0);
-            fontNameSizeLayout->addWidget(m_fontSizeSpinBox->getWidget(),
-                                          1, 1);
-            fontNameSizeLayout->addWidget(styleLabel, 2, 0);
-            fontNameSizeLayout->addLayout(stylesLayout, 2, 1);
-            fontNameSizeLayout->addWidget(textColorLabel, 1, 2);
-            fontNameSizeLayout->addWidget(m_textColorToolButton, 2, 2);
+            switch (orientation) {
+                case Qt::Horizontal:
+                {
+                    QHBoxLayout* topLayout(new QHBoxLayout());
+                    WuQtUtilities::setLayoutSpacingAndMargins(topLayout, 2, 0);
+                    topLayout->addWidget(fontLabel);
+                    topLayout->addWidget(m_fontNameComboBox->getWidget());
+                    topLayout->addWidget(textColorLabel);
+                    topLayout->addWidget(m_textColorToolButton);
+                    topLayout->addStretch();
+                    
+                    QHBoxLayout* bottomLayout(new QHBoxLayout());
+                    WuQtUtilities::setLayoutSpacingAndMargins(bottomLayout, 2, 0);
+                    bottomLayout->addWidget(sizeLabel);
+                    bottomLayout->addWidget(m_fontSizeSpinBox->getWidget());
+                    bottomLayout->addWidget(styleLabel);
+                    bottomLayout->addWidget(boldFontToolButton);
+                    bottomLayout->addWidget(italicFontToolButton);
+                    bottomLayout->addWidget(underlineFontToolButton);
+                    bottomLayout->addStretch();
+                    
+                    QVBoxLayout* layout(new QVBoxLayout(this));
+                    WuQtUtilities::setLayoutSpacingAndMargins(layout, 0, 0);
+                    layout->addLayout(topLayout);
+                    layout->addLayout(bottomLayout);
+                }
+                    break;
+                case Qt::Vertical:
+                {
+                    QHBoxLayout* stylesLayout = new QHBoxLayout();
+                    WuQtUtilities::setLayoutSpacingAndMargins(stylesLayout, 0, 0);
+                    stylesLayout->addWidget(boldFontToolButton);
+                    stylesLayout->addWidget(italicFontToolButton);
+                    stylesLayout->addWidget(underlineFontToolButton);
+                    stylesLayout->addStretch();
+                    
+                    QGridLayout* fontNameSizeLayout = new QGridLayout(this);
+                    WuQtUtilities::setLayoutSpacingAndMargins(fontNameSizeLayout, 2, 0);
+                    fontNameSizeLayout->setColumnStretch(0, 0);
+                    fontNameSizeLayout->setColumnStretch(1, 0);
+                    fontNameSizeLayout->setColumnStretch(2, 0);
+                    fontNameSizeLayout->setColumnStretch(3, 100);
+                    fontNameSizeLayout->addWidget(fontLabel, 0, 0);
+                    fontNameSizeLayout->addWidget(m_fontNameComboBox->getWidget(),
+                                                  0, 1, 1, 3);
+                    fontNameSizeLayout->addWidget(sizeLabel, 1, 0);
+                    fontNameSizeLayout->addWidget(m_fontSizeSpinBox->getWidget(),
+                                                  1, 1);
+                    fontNameSizeLayout->addWidget(styleLabel, 2, 0);
+                    fontNameSizeLayout->addLayout(stylesLayout, 2, 1);
+                    fontNameSizeLayout->addWidget(textColorLabel, 1, 2);
+                    fontNameSizeLayout->addWidget(m_textColorToolButton, 2, 2);
+                }
+                    break;
+            }
         }
             break;
         case AnnotationWidgetParentEnum::PARENT_ENUM_FOR_LATER_USE:
@@ -284,7 +325,7 @@ AnnotationFontWidget::receiveEvent(Event* event)
         
         if (m_browserWindowIndex == redrawEvent->getBrowserWindowIndex()) {
             if (isVisible()) {
-                AnnotationManager* annotationManager = GuiManager::get()->getBrain()->getAnnotationManager();
+                AnnotationManager* annotationManager = GuiManager::get()->getBrain()->getAnnotationManager(m_userInputMode);
                 std::vector<Annotation*> selectedAnnotations = annotationManager->getAnnotationsSelectedForEditing(m_browserWindowIndex);
                 
                 if (selectedAnnotations.empty()) {
@@ -407,6 +448,10 @@ AnnotationFontWidget::updateFontSizeControls()
             switch (ann->getCoordinateSpace()) {
                 case AnnotationCoordinateSpaceEnum::CHART:
                     break;
+                case AnnotationCoordinateSpaceEnum::HISTOLOGY:
+                    break;
+                case AnnotationCoordinateSpaceEnum::MEDIA_FILE_NAME_AND_PIXEL:
+                    break;
                 case AnnotationCoordinateSpaceEnum::SPACER:
                     break;
                 case AnnotationCoordinateSpaceEnum::STEREOTAXIC:
@@ -437,12 +482,6 @@ AnnotationFontWidget::updateFontSizeControls()
             if (annText->isFontTooSmallWhenLastDrawn()) {
                 tooSmallFlag = true;
             }
-//            const AnnotationText* textAnnotation = dynamic_cast<AnnotationText*>(annText);
-//            if (textAnnotation != NULL) {
-//                if (textAnnotation->isFontTooSmallWhenLastDrawn()) {
-//                    tooSmallFlag = true;
-//                }
-//            }
         }
         
         updateFontSizeSpinBox(fontSizeValue,
@@ -549,14 +588,6 @@ AnnotationFontWidget::updateFontSizeSpinBox(const float value,
     }
     m_fontSizeSpinBox->setValue(value);
     m_fontSizeSpinBox->setSuffix(fontSizeSuffix);
-    
-//    if (tooSmallFontFlag) {
-//        m_fontSizeSpinBox->getWidget()->setPalette(m_fontSizeSpinBoxRedTextPalette);
-//    }
-//    else {
-//        m_fontSizeSpinBox->getWidget()->setPalette(m_fontSizeSpinBoxDefaultPalette);
-//    }
-//    m_fontSizeSpinBox->setValue(value);
 }
 
 /**
@@ -604,10 +635,9 @@ AnnotationFontWidget::textColorSelected(const CaretColorEnum::Enum caretColor)
                 undoCommand->setModeTextColor(caretColor,
                                               rgba,
                                               convertToAnnotations(m_annotationsFontColor));
-                AnnotationManager* annMan = GuiManager::get()->getBrain()->getAnnotationManager();
+                AnnotationManager* annMan = GuiManager::get()->getBrain()->getAnnotationManager(m_userInputMode);
                 AString errorMessage;
-                if ( ! annMan->applyCommand(UserInputModeEnum::Enum::ANNOTATIONS,
-                                            undoCommand,
+                if ( ! annMan->applyCommand(undoCommand,
                                             errorMessage)) {
                     WuQMessageBox::errorOk(this,
                                            errorMessage);
@@ -632,7 +662,7 @@ AnnotationFontWidget::textColorSelected(const CaretColorEnum::Enum caretColor)
             break;
     }
     
-    EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+    EventManager::get()->sendEvent(EventGraphicsPaintSoonAllWindows().getPointer());
 }
 
 /**
@@ -725,16 +755,15 @@ AnnotationFontWidget::fontBoldChanged()
     AnnotationRedoUndoCommand* command = new AnnotationRedoUndoCommand();
     command->setModeTextFontBold(m_boldFontAction->isChecked(),
                                  convertToAnnotations(m_annotationsFontStyle));
-    AnnotationManager* annMan = GuiManager::get()->getBrain()->getAnnotationManager();
+    AnnotationManager* annMan = GuiManager::get()->getBrain()->getAnnotationManager(m_userInputMode);
     AString errorMessage;
-    if ( ! annMan->applyCommand(UserInputModeEnum::Enum::ANNOTATIONS,
-                                command,
+    if ( ! annMan->applyCommand(command,
                                 errorMessage)) {
         WuQMessageBox::errorOk(this,
                                errorMessage);
     }
     EventManager::get()->sendSimpleEvent(EventTypeEnum::EVENT_ANNOTATION_TOOLBAR_UPDATE);
-    EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+    EventManager::get()->sendEvent(EventGraphicsPaintSoonAllWindows().getPointer());
     
     switch (m_parentWidgetType) {
         case AnnotationWidgetParentEnum::ANNOTATION_TOOL_BAR_WIDGET:
@@ -754,16 +783,15 @@ AnnotationFontWidget::fontItalicChanged()
     AnnotationRedoUndoCommand* command = new AnnotationRedoUndoCommand();
     command->setModeTextFontItalic(m_italicFontAction->isChecked(),
                                    convertToAnnotations(m_annotationsFontStyle));
-    AnnotationManager* annMan = GuiManager::get()->getBrain()->getAnnotationManager();
+    AnnotationManager* annMan = GuiManager::get()->getBrain()->getAnnotationManager(m_userInputMode);
     AString errorMessage;
-    if ( ! annMan->applyCommand(UserInputModeEnum::Enum::ANNOTATIONS,
-                                command,
+    if ( ! annMan->applyCommand(command,
                                 errorMessage)) {
         WuQMessageBox::errorOk(this,
                                errorMessage);
     }
     EventManager::get()->sendSimpleEvent(EventTypeEnum::EVENT_ANNOTATION_TOOLBAR_UPDATE);
-    EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+    EventManager::get()->sendEvent(EventGraphicsPaintSoonAllWindows().getPointer());
     
     switch (m_parentWidgetType) {
         case AnnotationWidgetParentEnum::ANNOTATION_TOOL_BAR_WIDGET:
@@ -785,10 +813,9 @@ AnnotationFontWidget::fontNameChanged()
     AnnotationRedoUndoCommand* command = new AnnotationRedoUndoCommand();
     command->setModeTextFontName(fontName,
                                  convertToAnnotations(m_annotationsFontName));
-    AnnotationManager* annMan = GuiManager::get()->getBrain()->getAnnotationManager();
+    AnnotationManager* annMan = GuiManager::get()->getBrain()->getAnnotationManager(m_userInputMode);
     AString errorMessage;
-    if ( ! annMan->applyCommand(UserInputModeEnum::Enum::ANNOTATIONS,
-                                command,
+    if ( ! annMan->applyCommand(command,
                                 errorMessage)) {
         WuQMessageBox::errorOk(this,
                                errorMessage);
@@ -803,7 +830,7 @@ AnnotationFontWidget::fontNameChanged()
             break;
     }
     
-    EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+    EventManager::get()->sendEvent(EventGraphicsPaintSoonAllWindows().getPointer());
     
 }
 
@@ -819,10 +846,9 @@ AnnotationFontWidget::fontSizeChanged()
     command->setModeTextFontPercentSize(fontPercentSize,
                                         convertToAnnotations(m_annotationsFontSize),
                                         getSurfaceMontageRowCount());
-    AnnotationManager* annMan = GuiManager::get()->getBrain()->getAnnotationManager();
+    AnnotationManager* annMan = GuiManager::get()->getBrain()->getAnnotationManager(m_userInputMode);
     AString errorMessage;
-    if ( ! annMan->applyCommand(UserInputModeEnum::Enum::ANNOTATIONS,
-                                command,
+    if ( ! annMan->applyCommand(command,
                                 errorMessage)) {
         WuQMessageBox::errorOk(this,
                                errorMessage);
@@ -838,7 +864,7 @@ AnnotationFontWidget::fontSizeChanged()
             break;
     }
     
-    EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+    EventManager::get()->sendEvent(EventGraphicsPaintSoonAllWindows().getPointer());
     
     /*
      * "Font too small" status is set while drawing so need
@@ -880,16 +906,15 @@ AnnotationFontWidget::fontUnderlineChanged()
     AnnotationRedoUndoCommand* command = new AnnotationRedoUndoCommand();
     command->setModeTextFontUnderline(m_underlineFontAction->isChecked(),
                                       convertToAnnotations(m_annotationsFontStyle));
-    AnnotationManager* annMan = GuiManager::get()->getBrain()->getAnnotationManager();
+    AnnotationManager* annMan = GuiManager::get()->getBrain()->getAnnotationManager(m_userInputMode);
     AString errorMessage;
-    if ( ! annMan->applyCommand(UserInputModeEnum::Enum::ANNOTATIONS,
-                                command,
+    if ( ! annMan->applyCommand(command,
                                 errorMessage)) {
         WuQMessageBox::errorOk(this,
                                errorMessage);
     }
     EventManager::get()->sendSimpleEvent(EventTypeEnum::EVENT_ANNOTATION_TOOLBAR_UPDATE);
-    EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+    EventManager::get()->sendEvent(EventGraphicsPaintSoonAllWindows().getPointer());
     
     switch (m_parentWidgetType) {
         case AnnotationWidgetParentEnum::ANNOTATION_TOOL_BAR_WIDGET:

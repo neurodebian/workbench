@@ -34,6 +34,7 @@
 namespace caret {
     
     class Brain;
+    class BrainOpenGLViewportContent;
     class BrowserTabContent;
     class CiftiMappableDataFile;
     class Matrix4x4;
@@ -41,7 +42,6 @@ namespace caret {
     class ModelWholeBrain;
     class Plane;
     class VolumeMappableInterface;
-    class VolumeSurfaceOutlineSetModel;
     
     class BrainOpenGLVolumeSliceDrawing : public CaretObject {
         
@@ -60,11 +60,19 @@ namespace caret {
         virtual ~BrainOpenGLVolumeSliceDrawing();
         
         void draw(BrainOpenGLFixedPipeline* fixedPipelineDrawing,
+                  BrainOpenGLViewportContent* viewportContent,
                   BrowserTabContent* browserTabContent,
                   std::vector<BrainOpenGLFixedPipeline::VolumeDrawInfo>& volumeDrawInfo,
                   const VolumeSliceDrawingTypeEnum::Enum sliceDrawingType,
                   const VolumeSliceProjectionTypeEnum::Enum sliceProjectionType,
                   const int32_t viewport[4]);
+        
+        static void getOrthographicProjection(const AllSliceViewMode allSliceViewMode,
+                                              const VolumeSliceViewPlaneEnum::Enum sliceViewPlane,
+                                              const BoundingBox& boundingBox,
+                                              const float zoomFactor,
+                                              const int viewport[4],
+                                              double orthographicBoundsOut[6]);
         
         static void setOrthographicProjection(const AllSliceViewMode allSliceViewMode,
                                               const VolumeSliceViewPlaneEnum::Enum sliceViewPlane,
@@ -73,21 +81,19 @@ namespace caret {
                                               const int viewport[4],
                                               double orthographicBoundsOut[6]);
         
-        static void drawSurfaceOutline(const VolumeMappableInterface* underlayVolume,
-                                       const ModelTypeEnum::Enum modelType,
-                                       const VolumeSliceProjectionTypeEnum::Enum sliceProjectionType,
-                                       const VolumeSliceViewPlaneEnum::Enum sliceViewPlane,
-                                       const float sliceXYZ[3],
-                                       const Plane& plane,
-                                       VolumeSurfaceOutlineSetModel* outlineSet,
-                                       BrainOpenGLFixedPipeline* fixedPipelineDrawing,
-                                       const bool useNegativePolygonOffsetFlag);
-        
         static void drawIdentificationSymbols(BrainOpenGLFixedPipeline* fixedPipelineDrawing,
-                                              Brain* brain,
+                                              BrowserTabContent* browserTabContent,
                                               const VolumeMappableInterface* volume,
+                                              const int32_t mapIndex,
                                               const Plane& plane,
                                               const float sliceThickness);
+        
+        static void drawMontageSliceCoordinates(BrainOpenGLFixedPipeline* fixedPipelineDrawing,
+                                                const BrowserTabContent* browserTabContent,
+                                                const VolumeSliceViewPlaneEnum::Enum sliceViewPlane,
+                                                const int32_t viewport[4],
+                                                const Vector3D sliceXYZ,
+                                                const float sliceOffset);
         
         // ADD_NEW_METHODS_HERE
         
@@ -202,6 +208,25 @@ namespace caret {
             std::vector<int64_t> m_sliceOffsets;
         };
         
+        class GridInfo {
+        public:
+            GridInfo() : GridInfo(-1, -1, -1, -1) { }
+            
+            GridInfo(const int32_t numberOfRows,
+                     const int32_t numberOfColumns,
+                     const int32_t rowIndex,
+                     const int32_t columnIndex)
+            : m_numberOfRows(numberOfRows),
+            m_numberOfColumns(numberOfColumns),
+            m_rowIndex(rowIndex),
+            m_columnIndex(columnIndex) { }
+            
+            const int32_t m_numberOfRows;
+            const int32_t m_numberOfColumns;
+            const int32_t m_rowIndex;
+            const int32_t m_columnIndex;
+        };
+
         BrainOpenGLVolumeSliceDrawing(const BrainOpenGLVolumeSliceDrawing&);
         
         BrainOpenGLVolumeSliceDrawing& operator=(const BrainOpenGLVolumeSliceDrawing&);
@@ -232,7 +257,8 @@ namespace caret {
                                            const VolumeSliceProjectionTypeEnum::Enum sliceProjectionType,
                                            const VolumeSliceViewPlaneEnum::Enum sliceViewPlane,
                                            const float sliceCoordinates[3],
-                                           const int32_t viewport[4]);
+                                           const int32_t viewport[4],
+                                           const GridInfo& gridInfo);
         
         void drawOrthogonalSlice(const VolumeSliceViewPlaneEnum::Enum sliceViewPlane,
                                  const float sliceCoordinates[3],
@@ -269,23 +295,8 @@ namespace caret {
                         const Plane& slicePlane,
                         const float sliceCoordinates[3]);
         
-        static void drawSurfaceOutlineCached(const VolumeMappableInterface* underlayVolume,
-                                             const ModelTypeEnum::Enum modelType,
-                                             const VolumeSliceProjectionTypeEnum::Enum sliceProjectionType,
-                                             const VolumeSliceViewPlaneEnum::Enum sliceViewPlane,
-                                             const float sliceXYZ[3],
-                                             const Plane& plane,
-                                             VolumeSurfaceOutlineSetModel* outlineSet,
-                                             BrainOpenGLFixedPipeline* fixedPipelineDrawing,
-                                             const bool useNegativePolygonOffsetFlag);
-
-        static void drawSurfaceOutlineNotCached(const ModelTypeEnum::Enum modelType,
-                                                const Plane& plane,
-                                                VolumeSurfaceOutlineSetModel* outlineSet,
-                                                BrainOpenGLFixedPipeline* fixedPipelineDrawing,
-                                                const bool useNegativePolygonOffsetFlag);
-
-        void drawVolumeSliceFoci(const Plane& plane);
+        void drawVolumeSliceFoci(const Plane& plane,
+                                 const VolumeSliceViewPlaneEnum::Enum sliceViewPlane);
         
         void drawAxesCrosshairs(const VolumeSliceProjectionTypeEnum::Enum sliceProjectionType,
                                 const VolumeSliceDrawingTypeEnum::Enum sliceDrawingType,
@@ -313,8 +324,10 @@ namespace caret {
                                        const VolumeMappableInterface* volumeInterface,
                                        const int32_t volumeIndex,
                                        const int32_t mapIndex,
-                                       const uint8_t sliceOpacity);
-        
+                                       const uint8_t sliceOpacity,
+                                       const VolumeSliceViewPlaneEnum::Enum sliceViewPlane,
+                                       const int32_t sliceIndex);
+       
         void drawOrthogonalSliceVoxelsSingleQuads(const float sliceNormalVector[3],
                                                   const float coordinate[3],
                                                   const float rowStep[3],
@@ -339,10 +352,8 @@ namespace caret {
                                                            const int32_t mapIndex,
                                                            const uint8_t sliceOpacity);
         
-        bool getVoxelCoordinateBoundsAndSpacing(float boundsOut[6],
-                                                float spacingOut[3]);
-        
         void drawIdentificationSymbols(const VolumeMappableInterface* volume,
+                                       const int32_t mapIndex,
                                        const Plane& plane,
                                        const float sliceThickness);
         
@@ -365,7 +376,8 @@ namespace caret {
                                                         const float sliceCoordinates[3],
                                                         const float sliceNormalVector[3]);
         
-        void processIdentification(const bool doNotReplaceUnderlayFlag);
+        void processIdentification(const bool doNotReplaceUnderlayFlag,
+                                   const Plane& plane);
         
         void resetIdentification();
         
@@ -384,6 +396,8 @@ namespace caret {
         BrainOpenGLFixedPipeline* m_fixedPipelineDrawing;
         
         std::vector<BrainOpenGLFixedPipeline::VolumeDrawInfo> m_volumeDrawInfo;
+        
+        BrainOpenGLViewportContent* m_viewportContent = NULL;
         
         BrowserTabContent* m_browserTabContent;
         

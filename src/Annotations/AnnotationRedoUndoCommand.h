@@ -21,6 +21,7 @@
  */
 /*LICENSE_END*/
 
+#include "AnnotationAndFile.h"
 #include "AnnotationCoordinate.h"
 #include "AnnotationStackingOrderTypeEnum.h"
 #include "AnnotationRedoUndoCommandModeEnum.h"
@@ -34,6 +35,7 @@ namespace caret {
 
     class AnnotationFile;
     class Annotation;
+    class Plane;
     
     class AnnotationRedoUndoCommand : public CaretUndoCommand {
         
@@ -70,6 +72,9 @@ namespace caret {
         
         void setBoundsMaxY2D(const float maxY,
                              const std::vector<Annotation*>& annotations);
+        
+        void setModeCoordinateAll(const std::vector<std::vector<std::unique_ptr<const AnnotationCoordinate>>>& coordinates,
+                                  const std::vector<Annotation*>& annotations);
         
         void setModeCoordinateOne(const AnnotationCoordinate& coordinate,
                                   const std::vector<Annotation*>& annotations);
@@ -116,15 +121,37 @@ namespace caret {
         void setModeGroupingRegroupAnnotations(const AnnotationGroupKey& annotationGroupKey);
         
         void setModeLocationAndSize(const std::vector<Annotation*>& annotationsBeforeMoveAndResize,
-                                    const std::vector<Annotation*>& annotationsAfterMoveAndResize);
+                                    const std::vector<Annotation*>& annotationsAfterMoveAndResize,
+                                    const AString& modeDescription);
         
         void setModePasteAnnotation(AnnotationFile* annotationFile,
                                     Annotation* annotation);
         
+        void setModePasteAnnotations(AnnotationFile* annotationFile,
+                                     std::vector<Annotation*> annotations);
+        
         void setModeDuplicateAnnotation(AnnotationFile* annotationFile,
                                         Annotation* annotation);
         
-        void setModeDuplicateAnnotations(std::vector<std::pair<AnnotationFile*, Annotation*>>& fileAndAnnotations);
+        void setModeDuplicateAnnotations(std::vector<AnnotationAndFile>& annotationsAndFile);
+        
+        void setModeMultiCoordAnnAddCoordinate(const AnnotationCoordinate& coordinate,
+                                               Annotation* annotation);
+        
+        void setModeMultiCoordAnnInsertCoordinate(const int32_t insertAfterCoordinateIndex,
+                                                  const float normalizedDistanceToNextCoordinate,
+                                                  const int32_t surfaceSpaceNewVertexIndex,
+                                                  Annotation* annotation);
+        
+        void setModeMultiCoordAnnRemoveCoordinate(const int32_t coordinateIndex,
+                                                  Annotation* annotation);
+        
+        void setModeMultiCoordAnnRemoveLastCoordinate(Annotation* annotation);
+        
+        bool setModePolyhedronResetRangeToPlane(const Plane& planeOne,
+                                                const Plane& planeTwo,
+                                                Annotation* annotation,
+                                                AString& errorMessageOut);
         
         void setModeRotationAngle(const float newRotationAngle,
                                   const std::vector<Annotation*>& annotations);

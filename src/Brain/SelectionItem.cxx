@@ -40,6 +40,7 @@ using namespace caret;
 SelectionItem::SelectionItem(const SelectionItemDataTypeEnum::Enum itemDataType)
 : CaretObject()
 {
+    m_identifiedItemUniqueIdentifier = -1;
     m_itemDataType = itemDataType;
     m_enabledForSelection = true;
     m_brain = NULL;
@@ -58,6 +59,26 @@ SelectionItem::SelectionItem(const SelectionItemDataTypeEnum::Enum itemDataType)
 SelectionItem::~SelectionItem()
 {
     
+}
+
+/**
+ * @return The unique identifier.
+ */
+int64_t
+SelectionItem::getIdentifiedItemUniqueIdentifier() const
+{
+    return m_identifiedItemUniqueIdentifier;
+}
+
+/**
+ * Set the unique identifer
+ * @param uniqueIdentifier
+ *    New value for unique identifier
+ */
+void
+SelectionItem::setIdentifiedItemUniqueIdentifier(const int64_t uniqueIdentifier)
+{
+    m_identifiedItemUniqueIdentifier = uniqueIdentifier;
 }
 
 /**
@@ -124,6 +145,7 @@ SelectionItem::reset()
     m_modelXYZ[0] = 0.0;
     m_modelXYZ[1] = 0.0;
     m_modelXYZ[2] = 0.0;
+    m_identifiedItemUniqueIdentifier = -1;
 }
 
 
@@ -239,6 +261,19 @@ SelectionItem::setScreenXYZ(const double screenXYZ[3])
 }
 
 /**
+ * Set the screen XYZ of the selected item.
+ * @param screenXYZ
+ *    new XYZ.
+ */
+void
+SelectionItem::setScreenXYZ(const float screenXYZ[3])
+{
+    m_screenXYZ[0] = screenXYZ[0];
+    m_screenXYZ[1] = screenXYZ[1];
+    m_screenXYZ[2] = screenXYZ[2];
+}
+
+/**
  * Get the model XYZ of the selected item.
  * @param modelXYZ
  *    XYZ out.
@@ -252,12 +287,38 @@ SelectionItem::getModelXYZ(double modelXYZ[3]) const
 }
 
 /**
+ * Get the model XYZ of the selected item.
+ * @param modelXYZ
+ *    XYZ out.
+ */
+void
+SelectionItem::getModelXYZ(float modelXYZ[3]) const
+{
+    modelXYZ[0] = m_modelXYZ[0];
+    modelXYZ[1] = m_modelXYZ[1];
+    modelXYZ[2] = m_modelXYZ[2];
+}
+
+/**
  * Set the model XYZ of the selected item.
  * @param modelXYZ
  *    new XYZ.
  */
 void 
 SelectionItem::setModelXYZ(const double modelXYZ[3])
+{
+    m_modelXYZ[0] = modelXYZ[0];
+    m_modelXYZ[1] = modelXYZ[1];
+    m_modelXYZ[2] = modelXYZ[2];
+}
+
+/**
+ * Set the model XYZ of the selected item.
+ * @param modelXYZ
+ *    new XYZ.
+ */
+void
+SelectionItem::setModelXYZ(const float modelXYZ[3])
 {
     m_modelXYZ[0] = modelXYZ[0];
     m_modelXYZ[1] = modelXYZ[1];

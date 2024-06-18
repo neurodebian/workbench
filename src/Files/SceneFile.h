@@ -78,13 +78,9 @@ namespace caret {
 
         void readFile(const AString& filename);
         
-        void readFileSaxReader(const AString& filename);
-        
         void readFileStreamReader(const AString& filename);
         
         void writeFile(const AString& filename);
-        
-        void writeFileSaxWriter(const AString& filename);
         
         void writeFileStreamWriter(const AString& filename);
         
@@ -105,6 +101,8 @@ namespace caret {
         Scene* getSceneAtIndex(const int32_t indx) const;
         
         Scene* getSceneWithName(const AString& sceneName);
+        
+        Scene* getSceneWithSceneID(const AString& sceneID);
         
         void moveScene(Scene* scene,
                        const int32_t indexDelta);

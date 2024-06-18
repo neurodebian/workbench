@@ -21,12 +21,14 @@
  */
 /*LICENSE_END*/
 
+#include <memory>
 #include <stdint.h>
 #include "CaretObjectTracksModification.h"
 
 
 
 namespace caret {
+    class GiftiMetaData;
     class XmlWriter;
     
     class SceneInfo : public CaretObjectTracksModification {
@@ -60,18 +62,24 @@ namespace caret {
         
         bool hasImage() const;
         
-        void writeSceneInfo(XmlWriter& xmlWriter,
-                            const int32_t sceneInfoIndex) const;
-
+        GiftiMetaData* getMetaData();
+        
+        const GiftiMetaData* getMetaData() const;
+        
         void setImageFromText(const AString& text,
                                        const AString& encoding,
                                        const AString& imageFormat);
         
-        void writeSceneInfoImage(XmlWriter& xmlWriter,
-                                 const AString& xmlTag,
-                                 const QByteArray& imageBytes,
-                                 const AString& imageFormat) const;
+        void addWorkbenchVersionInfoToSceneMetaData();
         
+        static void addWorkbenchVersionInfoToMetaData(GiftiMetaData* metaData);
+        
+        static const AString METADATA_WORKBENCH_COMMIT_DATE_NAME;
+        static const AString METADATA_WORKBENCH_COMMIT_NAME;
+        static const AString METADATA_WORKBENCH_CURRENT_TIME_NAME;
+        static const AString METADATA_WORKBENCH_SYSTEM_INFO;
+        static const AString METADATA_WORKBENCH_WORKBENCH_VERSION_NAME;
+
     private:
         /*
          * setName() is private as users  should call Scene::setName()
@@ -80,6 +88,8 @@ namespace caret {
         void setName(const AString& sceneName);
         
         SceneInfo& operator=(const SceneInfo&);
+        
+        static AString removeNamePrefix(const AString& text);
         
         /** name of scene*/
         AString m_sceneName;
@@ -96,15 +106,21 @@ namespace caret {
         /** format of thumbnail image (eg: jpg, ppm, etc.) */
         AString m_imageFormat;
         
+        /** Metadata for scene */
+        std::unique_ptr<GiftiMetaData> m_metaData;
+        
         // ADD_NEW_MEMBERS_HERE
 
         friend class Scene;
-        friend class SceneInfoSaxReader;
         friend class SceneInfoXmlStreamReader;
     };
     
 #ifdef __SCENE_INFO_DECLARE__
-    // <PLACE DECLARATIONS OF STATIC MEMBERS HERE>
+    const AString SceneInfo::METADATA_WORKBENCH_COMMIT_DATE_NAME       = "WorkbenchCommitDate";
+    const AString SceneInfo::METADATA_WORKBENCH_COMMIT_NAME            = "WorkbenchCommit";
+    const AString SceneInfo::METADATA_WORKBENCH_CURRENT_TIME_NAME      = "WorkbenchCurrentTime";
+    const AString SceneInfo::METADATA_WORKBENCH_SYSTEM_INFO            = "WorkbenchSystem";
+    const AString SceneInfo::METADATA_WORKBENCH_WORKBENCH_VERSION_NAME = "WorkbenchVersion";
 #endif // __SCENE_INFO_DECLARE__
 
 } // namespace

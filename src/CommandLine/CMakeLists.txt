@@ -10,15 +10,13 @@ PROJECT (CommandLine)
 #
 # Add QT for includes
 #
+if(Qt6_FOUND)
+    include_directories(${Qt6Core_INCLUDE_DIRS})
+endif()
 if(Qt5_FOUND)
     include_directories(${Qt5Core_INCLUDE_DIRS})
 #    include_directories(${Qt5Network_INCLUDE_DIRS})
 endif()
-IF (QT4_FOUND)
-    SET(QT_USE_QTXML TRUE)
-    SET(QT_USE_QTNETWORK TRUE)
-    INCLUDE(${QT_USE_FILE})
-ENDIF ()
 
 #
 # Name of executable
@@ -28,33 +26,45 @@ set (EXE_NAME wb_command)
 #
 # Resources
 #
-SET (RESOURCES_QRC_FILE ../Resources/General/general_resources.qrc)
+SET (RESOURCES_QRC_FILE 
+   ../Resources/Data/data_resources.qrc
+   ../Resources/General/general_resources.qrc)
+
+IF (Qt6_FOUND)
+    QT6_ADD_RESOURCES(IMAGE_RCS_SRCS ${RESOURCES_QRC_FILE})
+ENDIF (Qt6_FOUND)
 IF (Qt5_FOUND)
     QT5_ADD_RESOURCES(IMAGE_RCS_SRCS ${RESOURCES_QRC_FILE})
-ELSE (Qt5_FOUND)
-    IF (QT4_FOUND)
-        QT4_ADD_RESOURCES(IMAGE_RCS_SRCS ${RESOURCES_QRC_FILE})
-    ENDIF()
 ENDIF (Qt5_FOUND)
 
 #
 # Create the executable
 # Apple creates a bundle
 #
-IF (APPLE)
+IF (APPLE AND ${WORKBENCH_APPLE_WB_COMMAND_BUNDLE_FLAG})
    ADD_EXECUTABLE(${EXE_NAME}
       MACOSX_BUNDLE
       wb_command.cxx
       ${IMAGE_RCS_SRCS}
    )
-ELSE (APPLE)
+ELSE ()
    ADD_EXECUTABLE(${EXE_NAME}
       wb_command.cxx
       ${IMAGE_RCS_SRCS}
    )
-ENDIF (APPLE)
+ENDIF ()
 
 
+if(Qt6_FOUND)
+    set(QT6_LINK_LIBS
+        Qt6::Concurrent
+        Qt6::Core
+        Qt6::Core5Compat
+        Qt6::Gui
+        Qt6::Network
+        Qt6::Test
+        Qt6::Xml)
+endif()
 if(Qt5_FOUND)
     set(QT5_LINK_LIBS
         Qt5::Concurrent
@@ -94,10 +104,10 @@ Algorithms
 OperationsBase
 Brain
 Files
-Graphics
 ${FTGL_LIBRARIES}
 Annotations
 Palette
+Graphics
 Gifti
 Cifti
 Nifti
@@ -106,14 +116,19 @@ QxtCore
 FilesBase
 Scenes
 Xml
+CZICmd
+CZI
+CZIJxrDecode
 Common
 ${QUAZIP_LIBRARIES}
 ${FREETYPE_LIBRARIES}
 ${QT_LIBRARIES}
+${QT6_LINK_LIBS}
 ${QT5_LINK_LIBS}
 ${GLEW_LIBRARIES}
 ${MESA_OR_OPENGL_LIBRARIES}
 ${ZLIB_LIBRARIES}
+${OPENMP_LIBRARY}
 ${LIBS})
 
 INCLUDE(GNUInstallDirs)

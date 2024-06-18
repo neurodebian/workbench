@@ -33,7 +33,7 @@ namespace caret {
     class UserInputModeView : public UserInputModeAbstract {
         
     public:
-        UserInputModeView(const int32_t windowIndex);
+        UserInputModeView(const int32_t browserIndexIndex);
         
         virtual ~UserInputModeView();
         
@@ -67,14 +67,24 @@ namespace caret {
         
         virtual void mouseLeftRelease(const MouseEvent& mouseEvent);
         
+        virtual void mouseMove(const MouseEvent& mouseEvent) override;
+        
         virtual void gestureEvent(const GestureEvent& gestureEvent);
         
         virtual void showContextMenu(const MouseEvent& mouseEvent,
                                      const QPoint& menuPosition,
                                      BrainOpenGLWidget* openGLWidget);
         
+        virtual void processEditMenuItemSelection(const BrainBrowserWindowEditMenuItemEnum::Enum editMenuItem) override;
+        
+        virtual void getEnabledEditMenuItems(std::vector<BrainBrowserWindowEditMenuItemEnum::Enum>& enabledEditMenuItemsOut,
+                                             AString& redoMenuItemSuffixTextOut,
+                                             AString& undoMenuItemSuffixTextOut,
+                                             AString& pasteTextOut,
+                                             AString& pasteSpecialTextOut) override;
+        
     protected:
-        UserInputModeView(const int32_t windowIndex,
+        UserInputModeView(const int32_t browserIndexIndex,
                           const UserInputModeEnum::Enum inputMode);
         
     private:
@@ -85,6 +95,14 @@ namespace caret {
             SELECT
         };
         
+        enum class VOLUME_MPR_CURSOR_MODE {
+            INVALID,
+            ROTATE_SLICE,
+            ROTATE_TRANSFORM,
+            SCROLL_SLICE,
+            SELECT_SLICE
+        };
+        
         UserInputModeView(const UserInputModeView&);
 
         UserInputModeView& operator=(const UserInputModeView&);
@@ -92,6 +110,8 @@ namespace caret {
         void updateGraphics(const MouseEvent& mouseEvent);
         
         void updateGraphics(const BrainOpenGLViewportContent* viewportContent);
+        
+        VOLUME_MPR_CURSOR_MODE getVolumeMprMouseMode(const MouseEvent& mouseEvent);
         
         void processModelViewIdentification(BrainOpenGLViewportContent* viewportContent,
                                             BrainOpenGLWidget* openGLWidget,
@@ -102,7 +122,22 @@ namespace caret {
                                            ChartTwoOverlay* chartOverlay,
                                            const int32_t pointIndex);
         
-        const int32_t m_browserWindowIndex;
+        void applyGraphicsRegionSelectionBox(const MouseEvent& mouseEvent);
+        
+        void updateGraphicsRegionSelectionBox(const MouseEvent& mouseEvent);
+        
+        float m_mediaLeftDragWithCtrlModelXYZ[3];
+        
+        bool m_mediaLeftDragWithCtrlModelXYZValidFlag = false;
+        
+        float m_histologyLeftDragWithCtrlModelXYZ[3];
+        
+        bool m_histologyLeftDragWithCtrlModelXYZValidFlag = false;
+        
+        bool m_lastSliceIncrementMouseYValid = false;
+        int32_t m_lastSliceIncrementMouseY = -1;
+        
+        VOLUME_MPR_CURSOR_MODE m_mprCursorMode = VOLUME_MPR_CURSOR_MODE::INVALID;
         
     public:
         virtual AString toString() const;

@@ -23,7 +23,16 @@
 #include "ViewingTransformationsVolume.h"
 #undef __VIEWING_TRANSFORMATIONS_VOLUME_DECLARE__
 
+#include "BrowserTabContent.h"
+#include "BrainOpenGLViewportContent.h"
+#include "BrainOpenGLVolumeSliceDrawing.h"
 #include "CaretAssert.h"
+#include "GraphicsRegionSelectionBox.h"
+#include "MouseEvent.h"
+#include "OverlaySet.h"
+#include "ViewingTransformationToFitRegion.h"
+#include "VolumeMappableInterface.h"
+
 using namespace caret;
 
 /**
@@ -97,5 +106,119 @@ ViewingTransformationsVolume::resetView()
 {
     ViewingTransformations::resetView();
     m_rotationMatrix->identity();
+}
+
+/**
+ * Set the view of the  volume to the given bounds
+ * @param viewportContent
+ *    The viewport content
+ * @param sliceViewPlaneSelectedInTab
+ *    The slice plane selected in the tab. This may be ALL, AXIAL, CORONAL, or PARASAGITTAL
+ * @param sliceViewPlaneForFitToRegion
+ *    The slice plane that is fit to plane (perhaps the slice plane containing mouse).  This may be
+ * AXIAL, CORONAL, or PARASAGITTAL only.  It is NEVER ALL !!!   When ALL is selected for
+ * the tab, this is the particular slice plane in the ALL view.
+ * @param selectionRegion
+ *    The selection bounds
+ * @param browserTabContent
+ *    The content of the browser tab
+ */
+bool
+ViewingTransformationsVolume::setViewToBounds(const BrainOpenGLViewportContent* viewportContent,
+                                              const VolumeSliceViewPlaneEnum::Enum sliceViewPlaneSelectedInTab,
+                                              const VolumeSliceViewPlaneEnum::Enum sliceViewPlaneForFitToRegion,
+                                              const GraphicsRegionSelectionBox* selectionRegion,
+                                              const BrowserTabContent* browserTabContent)
+
+{
+    const bool testFlag(false);
+    if (testFlag) {
+        const float x1=3.9, x2=74.6, y1=-17.5, y2=83.3, z1=0.0999985, z2=0.0999985;
+        const float vpX1=520, vpX2=638, vpY1=352, vpY2=184;
+        GraphicsRegionSelectionBox box;
+        box.initialize(x1, y1, z1, vpX1, vpY1);
+        box.update(x2, y2, z2, vpX2, vpY2);
+        
+        Vector3D translation;
+        float zoom(0.0);
+        ViewingTransformationToFitRegion transformFitToRegion(viewportContent,
+                                                              &box,
+                                                              browserTabContent);
+        switch (browserTabContent->getVolumeSliceProjectionType()) {
+            case VolumeSliceProjectionTypeEnum::VOLUME_SLICE_PROJECTION_MPR:
+            case VolumeSliceProjectionTypeEnum::VOLUME_SLICE_PROJECTION_MPR_THREE:
+                if ( ! transformFitToRegion.applyToMprVolume(m_translation,
+                                                             sliceViewPlaneSelectedInTab,
+                                                             sliceViewPlaneForFitToRegion,
+                                                             translation,
+                                                             zoom)) {
+                    return false;
+                }
+                break;
+            case VolumeSliceProjectionTypeEnum::VOLUME_SLICE_PROJECTION_OBLIQUE:
+                CaretAssert(0);
+                return false;
+                break;
+            case VolumeSliceProjectionTypeEnum::VOLUME_SLICE_PROJECTION_ORTHOGONAL:
+                if ( ! transformFitToRegion.applyToOrthogonalVolume(m_translation,
+                                                                    sliceViewPlaneSelectedInTab,
+                                                                    sliceViewPlaneForFitToRegion,
+                                                                    translation,
+                                                                    zoom)) {
+                    return false;
+                }
+                break;
+        }
+
+        
+        resetView();
+        setTranslation(translation);
+        setScaling(zoom);
+        
+        return true;
+    }
+    
+    
+    Vector3D translation;
+    float zoom(0.0);
+    ViewingTransformationToFitRegion transformFitToRegion(viewportContent,
+                                                          selectionRegion,
+                                                          browserTabContent);
+    
+    switch (browserTabContent->getVolumeSliceProjectionType()) {
+        case VolumeSliceProjectionTypeEnum::VOLUME_SLICE_PROJECTION_MPR:
+        case VolumeSliceProjectionTypeEnum::VOLUME_SLICE_PROJECTION_MPR_THREE:
+            if ( ! transformFitToRegion.applyToMprVolume(m_translation,
+                                                         sliceViewPlaneSelectedInTab,
+                                                         sliceViewPlaneForFitToRegion,
+                                                         translation,
+                                                         zoom)) {
+                return false;
+            }
+            break;
+        case VolumeSliceProjectionTypeEnum::VOLUME_SLICE_PROJECTION_OBLIQUE:
+            if ( ! transformFitToRegion.applyToObliqueVolume(m_translation,
+                                                             sliceViewPlaneSelectedInTab,
+                                                             sliceViewPlaneForFitToRegion,
+                                                             translation,
+                                                             zoom)) {
+                return false;
+            }
+            break;
+        case VolumeSliceProjectionTypeEnum::VOLUME_SLICE_PROJECTION_ORTHOGONAL:
+            if ( ! transformFitToRegion.applyToOrthogonalVolume(m_translation,
+                                                                sliceViewPlaneSelectedInTab,
+                                                                sliceViewPlaneForFitToRegion,
+                                                                translation,
+                                                                zoom)) {
+                return false;
+            }
+            break;
+    }
+    
+    resetView();
+    setTranslation(translation);
+    setScaling(zoom);
+    return true;
 }
 

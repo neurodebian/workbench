@@ -25,26 +25,32 @@
 
 #include <cmath>
 
+#include <QButtonGroup>
 #include <QGroupBox>
 #include <QLabel>
+#include <QRadioButton>
 #include <QVBoxLayout>
 
 #include "Annotation.h"
+#include "AnnotationClipboard.h"
 #include "AnnotationCoordinateInformation.h"
-#include "AnnotationCoordinateSelectionWidget.h"
 #include "AnnotationFile.h"
 #include "AnnotationManager.h"
 #include "AnnotationMultiCoordinateShape.h"
-#include "AnnotationTwoCoordinateShape.h"
+#include "AnnotationOneCoordinateShape.h"
+#include "AnnotationPastingInformation.h"
 #include "AnnotationPercentSizeText.h"
 #include "AnnotationRedoUndoCommand.h"
+#include "AnnotationTwoCoordinateShape.h"
 #include "Brain.h"
 #include "BrainBrowserWindow.h"
 #include "BrainOpenGLViewportContent.h"
 #include "BrainOpenGLWidget.h"
 #include "BrowserTabContent.h"
 #include "CaretAssert.h"
-#include "EventGraphicsUpdateAllWindows.h"
+#include "CaretLogger.h"
+#include "EventAnnotationGetSelectedInsertNewFile.h"
+#include "EventGraphicsPaintSoonAllWindows.h"
 #include "EventUserInterfaceUpdate.h"
 #include "EventManager.h"
 #include "GuiManager.h"
@@ -65,170 +71,249 @@ using namespace caret;
  */
 
 /**
- * Paste the annotation on the clipboard using the mouse information.
+ * Get offset of the first coordinate each annotation on the clipboard from
+ * the first coordinate in the first annotation on the clipboard
+ * @param clipboard
+ *   The annotation clipboard
+ *   @param coordOffsetsOut
+ *   Offsets of first coord in each annotation from first annotation on clipboard.
+ */
+void
+AnnotationPasteDialog::getPastingOffsets(const AnnotationClipboard* clipboard,
+                                         std::vector<Vector3D>& coordOffsetsOut)
+{
+    coordOffsetsOut.clear();
+
+    const int32_t numAnn(clipboard->getNumberOfAnnotations());
+    if (numAnn <= 0) {
+        return;
+    }
+
+    const Vector3D offsetBaseXYZ(clipboard->getAnnotation(0)->getCoordinate(0)->getXYZ());
+    for (int32_t i = 0; i < numAnn; i++) {
+        const Annotation* ann(clipboard->getAnnotation(i));
+        CaretAssert(ann);
+        
+        Vector3D firstCoord(ann->getCoordinate(0)->getXYZ());
+        Vector3D offset = firstCoord - offsetBaseXYZ;
+        coordOffsetsOut.push_back(offset);
+    }
+}
+
+/**
+ * Offset an annotation by the given offset
+ * @param annotation
+ *    The annotation
+ * @param offsetXYZ
+ *    The offset
+ */
+void
+AnnotationPasteDialog::offsetAnnotationsCoordinates(Annotation* annotation,
+                                                    const Vector3D& offsetXYZ)
+{
+    CaretAssert(annotation);
+    AnnotationOneCoordinateShape* annOne(annotation->castToOneCoordinateShape());
+    AnnotationTwoCoordinateShape* annTwo(annotation->castToTwoCoordinateShape());
+    AnnotationMultiCoordinateShape* annMulti(annotation->castToMultiCoordinateShape());
+    
+    std::vector<AnnotationCoordinate*> coordinates;
+    if (annOne != NULL) {
+        coordinates.push_back(annOne->getCoordinate());
+    }
+    else if (annTwo != NULL) {
+        coordinates.push_back(annTwo->getStartCoordinate());
+        coordinates.push_back(annTwo->getEndCoordinate());
+    }
+    else if (annMulti != NULL) {
+        const int32_t numCoords(annMulti->getNumberOfCoordinates());
+        for (int32_t i = 0; i < numCoords; i++) {
+            coordinates.push_back(annMulti->getCoordinate(i));
+        }
+    }
+    else {
+        CaretAssertMessage(0, "Has new annotation class been added?");
+    }
+    
+    for (auto& coord : coordinates) {
+        float xyz[3];
+        coord->getXYZ(xyz);
+        xyz[0] += offsetXYZ[0];
+        xyz[1] += offsetXYZ[1];
+        xyz[2] += offsetXYZ[2];
+        coord->setXYZ(xyz);
+    }
+}
+
+/**
+ * @return The annotation for pasting
+ * @param userInputMode
+ *    The user input mode
+ */
+AnnotationFile*
+AnnotationPasteDialog::getAnnotationFileForPasting(const UserInputModeEnum::Enum userInputMode)
+{
+    EventAnnotationGetSelectedInsertNewFile annFileEvent(userInputMode);
+    EventManager::get()->sendEvent(annFileEvent.getPointer());
+    AnnotationFile* annotationFile = annFileEvent.getAnnotationFile();
+    return annotationFile;
+}
+
+/**
+ * Paste the annotation on the clipboard relative to the mouse event location in
+ * the same space as the annotation on the clipboard.  If the annotation cannot
+ * be pasted in the annotation's current space, the user is allowed to choose
+ * from any other valid spaces containing the annotation
  *
  * @param mouseEvent
  *     Information about where to paste the annotation.
- * @param windowIndex
- *     Window in which annotation is pasted.
  * @return
  *     Pointer to annotation that was pasted or NULL if the annotation
  *     on the clipboard was not pasted.
  */
-Annotation*
-AnnotationPasteDialog::pasteAnnotationOnClipboard(const MouseEvent& mouseEvent,
-                                                  const int32_t windowIndex)
+std::vector<Annotation*>
+AnnotationPasteDialog::pasteAnnotationOnClipboard(const UserInputModeEnum::Enum userInputMode,
+                                                  const MouseEvent& mouseEvent)
 {
-    Annotation* newPastedAnnotation = NULL;
-    
-    AnnotationManager* annotationManager = GuiManager::get()->getBrain()->getAnnotationManager();
-    if (annotationManager->isAnnotationOnClipboardValid()) {
-        AnnotationFile* annotationFile = annotationManager->getAnnotationFileOnClipboard();
-        Annotation* annotation = annotationManager->getAnnotationOnClipboard()->clone();
-        
-        BrainOpenGLViewportContent* viewportContent = mouseEvent.getViewportContent();
-        AnnotationCoordinateInformation coordInfo;
-        
-        AnnotationCoordinateInformation::createCoordinateInformationFromXY(mouseEvent.getOpenGLWidget(),
-                                                                        viewportContent,
-                                                                        mouseEvent.getX(),
-                                                                        mouseEvent.getY(),
-                                                                        coordInfo);
-        
-        bool validCoordsFlag = false;
-        
-        AnnotationTwoCoordinateShape* oneDimShape = dynamic_cast<AnnotationTwoCoordinateShape*>(annotation);
-        if (oneDimShape != NULL) {
-            /*
-             * Pasting line while preserving its orientation only
-             * works for tab and window spaces.
-             */
-            validCoordsFlag = pasteOneDimensionalShape(oneDimShape,
-                                                       coordInfo);
+    std::vector<Annotation*> newPastedAnnotations;
+
+    AnnotationManager* annotationManager = GuiManager::get()->getBrain()->getAnnotationManager(userInputMode);
+    const AnnotationClipboard* clipboard(annotationManager->getClipboard());
+    if ( ! clipboard->isEmpty()) {
+        /*
+         * Create information that finds valid spaces for all
+         * of the annotations coordinates
+         */
+        AnnotationPastingInformation pastingInformation(mouseEvent,
+                                                        clipboard);
+        if ( ! pastingInformation.isValid()) {
+            WuQMessageBox::errorOk(mouseEvent.getOpenGLWidget(),
+                                   pastingInformation.getInvalidDescription());
+            return newPastedAnnotations;
+        }
+
+        AnnotationFile* annotationFile(getAnnotationFileForPasting(userInputMode));
+        if (annotationFile == NULL) {
+            const QString msg("No file selected in toolbar.  Select/create a file and try pasting again");
+            WuQMessageBox::critical(mouseEvent.getOpenGLWidget(),
+                                    "ERROR",
+                                    msg);
+            return newPastedAnnotations;
         }
         
-        AnnotationMultiCoordinateShape* multiCoordShape = annotation->castToMultiCoordinateShape();
-        if (multiCoordShape != NULL) {
-            /*
-             * Pasting poly line while only works for tab and window spaces
-             */
-            validCoordsFlag = pasteMultiCoordinateShape(multiCoordShape,
-                                                        coordInfo);
-        }
-        
-        std::vector<std::unique_ptr<AnnotationCoordinateInformation>> emptyMultiCoordInfo;
-        if (! validCoordsFlag) {
-            validCoordsFlag = AnnotationCoordinateInformation::setAnnotationCoordinatesForSpace(annotation,
-                                                                                                annotation->getCoordinateSpace(),
-                                                                                                &coordInfo,
-                                                                                                NULL,
-                                                                                                emptyMultiCoordInfo);
-        }
-        
-        
-        if (validCoordsFlag) {
-            AnnotationRedoUndoCommand* undoCommand = new AnnotationRedoUndoCommand();
-            undoCommand->setModePasteAnnotation(annotationFile,
-                                                annotation);
-            switch (annotation->getType()) {
-                case AnnotationTypeEnum::BOX:
-                    break;
-                case AnnotationTypeEnum::BROWSER_TAB:
-                    CaretAssert(0);
-                    break;
-                case AnnotationTypeEnum::COLOR_BAR:
-                    break;
-                case AnnotationTypeEnum::IMAGE:
-                    break;
-                case AnnotationTypeEnum::LINE:
-                    break;
-                case AnnotationTypeEnum::OVAL:
-                    break;
-                case AnnotationTypeEnum::POLY_LINE:
-                    break;
-                case AnnotationTypeEnum::SCALE_BAR:
-                    break;
-                case AnnotationTypeEnum::TEXT:
-                    break;
-            }
-            AString errorMessage;
-            if ( ! annotationManager->applyCommand(UserInputModeEnum::Enum::ANNOTATIONS,
-                                                   undoCommand,
-                                        errorMessage)) {
-                WuQMessageBox::errorOk(mouseEvent.getOpenGLWidget(),
-                                       errorMessage);
-            }
-            newPastedAnnotation = annotation;
-            
-            annotationManager->selectAnnotationForEditing(windowIndex,
-                                                AnnotationManager::SELECTION_MODE_SINGLE,
-                                                false,
-                                                annotation);
+        if (clipboard->getNumberOfAnnotations() >= 2) {
+            newPastedAnnotations = pasteAnnotationsInSpace(userInputMode,
+                                                           clipboard,
+                                                           pastingInformation);
+            return newPastedAnnotations;
         }
         else {
-            /*
-             * Pasting annotation in its coordinate failed (user may have tried to paste
-             * an annotation in surface space where there is no surface).
-             */
-            delete annotation;
-            annotation = NULL;
-            
-            const QString message("The location for pasting the annotation is incompatible with the "
-                                  "coordinate space "
-                                  "used by the annotation on the clipboard.  Choose one of the coordinate "
-                                  "spaces below to paste the annotation or press Cancel to cancel pasting "
-                                  "of the annotation.");
+            Annotation* annotation(clipboard->getCopyOfAnnotation(0));
+            CaretAssert(annotation);
             
             /*
-             * The annotation dialog will create a new annotation for pasting
+             * Try pasting the annotation
              */
-            AnnotationPasteDialog pasteDialog(mouseEvent,
-                                              annotationFile,
-                                              annotationManager->getAnnotationOnClipboard(),
-                                              message,
-                                              mouseEvent.getOpenGLWidget());
-            if (pasteDialog.exec() == AnnotationPasteDialog::Accepted) {
-                newPastedAnnotation = pasteDialog.getAnnotationThatWasCreated();
+            const bool pasteSuccessFlag = pasteAnnotationInSpace(userInputMode,
+                                                                 annotationFile,
+                                                                 annotation,
+                                                                 annotation->getCoordinateSpace(),
+                                                                 pastingInformation);
+            
+            if ( ! pasteSuccessFlag) {
+                /*
+                 * Pasting annotation in its coordinate failed (user may have tried to paste
+                 * an annotation in surface space where there is no surface).
+                 */
+                delete annotation;
+                annotation = NULL;
+                
+                const QString message("The location for pasting the annotation is incompatible with the "
+                                      "coordinate space "
+                                      "used by the annotation on the clipboard.  Choose one of the coordinate "
+                                      "spaces below to paste the annotation or press Cancel to cancel pasting "
+                                      "of the annotation.");
+                
+                /*
+                 * Use dialog to allow user to choose a space for pasting
+                 */
+                AnnotationPasteDialog pasteDialog(userInputMode,
+                                                  mouseEvent,
+                                                  pastingInformation,
+                                                  annotationFile,
+                                                  clipboard->getAnnotation(0),
+                                                  message,
+                                                  mouseEvent.getOpenGLWidget());
+                if (pasteDialog.exec() == AnnotationPasteDialog::Accepted) {
+                    newPastedAnnotations = pasteDialog.getAnnotationsThatWereCreated();
+                }
             }
         }
     }
-    
-    return newPastedAnnotation;
+
+    return newPastedAnnotations;
 }
 
 /**
  * Paste the annotation on the clipboard using the mouse information
  * and allow the user to change the coordinate space.
  *
+ * @param userInputMode
+ *     The user input mode
  * @param mouseEvent
  *     Information about where to paste the annotation.
  * @return
  *     Pointer to annotation that was pasted or NULL if the annotation
  *     on the clipboard was not pasted.
  */
-Annotation*
-AnnotationPasteDialog::pasteAnnotationOnClipboardChangeSpace(const MouseEvent& mouseEvent)
+std::vector<Annotation*>
+AnnotationPasteDialog::pasteAnnotationOnClipboardChangeSpace(const UserInputModeEnum::Enum userInputMode,
+                                                             const MouseEvent& mouseEvent)
 {
-    Annotation* newPastedAnnotation = NULL;
+    std::vector<Annotation*> newPastedAnnotations;
     
-    AnnotationManager* annotationManager = GuiManager::get()->getBrain()->getAnnotationManager();
-    if (annotationManager->isAnnotationOnClipboardValid()) {
-        AnnotationFile* annotationFile = annotationManager->getAnnotationFileOnClipboard();
-        
+    AnnotationManager* annotationManager = GuiManager::get()->getBrain()->getAnnotationManager(userInputMode);
+    AnnotationClipboard* clipboard = annotationManager->getClipboard();
+    if ( ! clipboard->isEmpty()) {
+        AnnotationFile* annotationFile(getAnnotationFileForPasting(userInputMode));
+        if (annotationFile == NULL) {
+            const QString msg("No file selected in toolbar.  Select/create a file and try pasting again");
+            WuQMessageBox::critical(mouseEvent.getOpenGLWidget(),
+                                    "ERROR",
+                                    msg);
+            return newPastedAnnotations;
+        }
+
+        /*
+         * Create information that finds valid spaces for all
+         * of the annotations coordinates
+         */
+        AnnotationPastingInformation pastingInformation(mouseEvent,
+                                                        clipboard);
+        if ( ! pastingInformation.isValid()) {
+            WuQMessageBox::errorOk(mouseEvent.getOpenGLWidget(),
+                                   pastingInformation.getInvalidDescription());
+            return newPastedAnnotations;
+        }
         AString message("Choose one of the coordinate "
                         "spaces below to paste the annotation or press Cancel to cancel pasting "
                         "of the annotation.");
-        AnnotationPasteDialog pasteDialog(mouseEvent,
+
+        /*
+         * Use dialog to allow user to choose a space for pasting
+         */
+        AnnotationPasteDialog pasteDialog(userInputMode,
+                                          mouseEvent,
+                                          pastingInformation,
                                           annotationFile,
-                                          annotationManager->getAnnotationOnClipboard(),
+                                          clipboard->getAnnotation(0),
                                           message,
                                           mouseEvent.getOpenGLWidget());
         if (pasteDialog.exec() == AnnotationPasteDialog::Accepted) {
-            newPastedAnnotation = pasteDialog.getAnnotationThatWasCreated();
+            newPastedAnnotations = pasteDialog.getAnnotationsThatWereCreated();
         }
     }
     
-    return newPastedAnnotation;
+    return newPastedAnnotations;
 }
 
 /**
@@ -236,6 +321,8 @@ AnnotationPasteDialog::pasteAnnotationOnClipboardChangeSpace(const MouseEvent& m
  *
  * @param mouseEvent
  *     Information about where mouse was clicked.
+ * @param annCoordPastingCoordInfo,
+ *     Valid spaces and coordinates for annotation that is being pasted
  * @param annotationFile
  *     File that contains the annotation.
  * @param annotation
@@ -245,42 +332,56 @@ AnnotationPasteDialog::pasteAnnotationOnClipboardChangeSpace(const MouseEvent& m
  * @param parent
  *     Parent widget of dialog.
  */
-AnnotationPasteDialog::AnnotationPasteDialog(const MouseEvent& mouseEvent,
+AnnotationPasteDialog::AnnotationPasteDialog(const UserInputModeEnum::Enum userInputMode,
+                                             const MouseEvent& mouseEvent,
+                                             const AnnotationPastingInformation& annotationPastingInformation,
                                              AnnotationFile* annotationFile,
                                              const Annotation* annotation,
                                              const AString& informationMessage,
                                              QWidget* parent)
 : WuQDialogModal("Paste Annotation",
                  parent),
+m_userInputMode(userInputMode),
 m_mouseEvent(mouseEvent),
+m_annotationPastingInformation(annotationPastingInformation),
 m_annotationFile(annotationFile),
-m_annotation(annotation),
-m_annotationThatWasCreated(NULL)
+m_annotation(annotation)
 {
     CaretAssert(m_annotationFile);
     CaretAssert(m_annotation);
     
-    /*
-     * Get coordinates at the mouse location.
-     */
-    AnnotationCoordinateInformation::createCoordinateInformationFromXY(mouseEvent,
-                                                                    m_coordInfo);
-    m_coordinateSelectionWidget = new AnnotationCoordinateSelectionWidget(m_annotation->getType(),
-                                                                          m_coordInfo,
-                                                                          NULL);
-    m_coordinateSelectionWidget->selectCoordinateSpace(m_annotation->getCoordinateSpace());
+    m_spaceRadioButtonsSpaces = m_annotationPastingInformation.getPasteableSpaces();
+    CaretAssert( ! m_spaceRadioButtonsSpaces.empty());
     
+    /*
+     * Radio buttons for selecting coordinate space
+     */
+    QRadioButton* defaultButton(NULL);
+    QButtonGroup* radioButtonGroup = new QButtonGroup(this);
+    QGroupBox* coordGroupBox = new QGroupBox("Coordinate Space");
+    QVBoxLayout* radioButtonLayout = new QVBoxLayout(coordGroupBox);
+    for (const auto& space : m_spaceRadioButtonsSpaces) {
+        QRadioButton* rb = new QRadioButton(AnnotationCoordinateSpaceEnum::toGuiName(space));
+        m_spaceRadioButtons.push_back(rb);
+        radioButtonLayout->addWidget(rb);
+        radioButtonGroup->addButton(rb);
+        if (space == annotation->getCoordinateSpace()) {
+            defaultButton = rb;
+        }
+    }
+    
+    if (defaultButton == NULL) {
+        CaretAssertVectorIndex(m_spaceRadioButtons, 0);
+        defaultButton = m_spaceRadioButtons[0];
+    }
+    defaultButton->setChecked(true);
+        
     QLabel* messageLabel = new QLabel(informationMessage);
     messageLabel->setWordWrap(true);
     
     QLabel* spaceLabel = new QLabel("Space of Annotation on Clipboard: "
                                     + AnnotationCoordinateSpaceEnum::toGuiName(m_annotation->getCoordinateSpace()));
     spaceLabel->setWordWrap(false);
-    
-    QGroupBox* coordGroupBox = new QGroupBox("Coordinate Space");
-    QVBoxLayout* coordGroupLayout = new QVBoxLayout(coordGroupBox);
-    coordGroupLayout->setMargin(0);
-    coordGroupLayout->addWidget(m_coordinateSelectionWidget);
     
     QWidget* dialogWidget = new QWidget();
     QVBoxLayout* layout = new QVBoxLayout(dialogWidget);
@@ -304,248 +405,458 @@ AnnotationPasteDialog::~AnnotationPasteDialog()
 /**
  * @return Get the annotation that was created.
  */
-Annotation*
-AnnotationPasteDialog::getAnnotationThatWasCreated()
+std::vector<Annotation*>
+AnnotationPasteDialog::getAnnotationsThatWereCreated()
 {
-    return m_annotationThatWasCreated;
+    return m_annotationsThatWereCreated;
 }
 
 /**
- * Paste a one-dimensional shape (line) keeping its start to end
- * coordinate orientation.  The start coordinate is pasted at
- * the coordinate in 'coordInfo'.
- *
- * @param oneDimShape
- *     One dimensional shape that will be pasted.
- * @param coordInfo
- *     Coordinate information that will be used for the shape's 'start' coordinate.
+ * Paste an annotation
+ * @param userInputMode
+ *    The input mode
+ * @param clipboard
+ *    The clipboard
+ * @param annotationPastingInformation
+ *    The pasting info
  * @return
- *     True if the shape's coordinate was updated for pasting, else false.
+ *    Annotations that were pasted
  */
-bool
-AnnotationPasteDialog::pasteOneDimensionalShape(AnnotationTwoCoordinateShape* oneDimShape,
-                                                   AnnotationCoordinateInformation& coordInfo)
+std::vector<Annotation*>
+AnnotationPasteDialog::pasteAnnotationsInSpace(const UserInputModeEnum::Enum userInputMode,
+                                               const AnnotationClipboard* clipboard,
+                                               const AnnotationPastingInformation& annotationPastingInformation)
 {
+    std::vector<Annotation*> annotationsPasted;
     
-    bool tabFlag = false;
-    bool windowFlag = false;
-    
-    switch (oneDimShape->getCoordinateSpace()) {
-        case AnnotationCoordinateSpaceEnum::CHART:
-            break;
-        case AnnotationCoordinateSpaceEnum::SPACER:
-            break;
-        case AnnotationCoordinateSpaceEnum::STEREOTAXIC:
-            break;
-        case AnnotationCoordinateSpaceEnum::SURFACE:
-            break;
-        case AnnotationCoordinateSpaceEnum::TAB:
-            tabFlag = true;
-            break;
-        case AnnotationCoordinateSpaceEnum::VIEWPORT:
-            break;
-        case AnnotationCoordinateSpaceEnum::WINDOW:
-            windowFlag = true;
-            break;
+    const int32_t numAnn(clipboard->getNumberOfAnnotations());
+    if (numAnn <= 0) {
+        return annotationsPasted;
+    }
+        
+    if ( ! annotationPastingInformation.isValid()) {
+        return annotationsPasted;
     }
     
-    bool validCoordsFlag = false;
+    const MouseEvent& mouseEvent(annotationPastingInformation.getMouseEvent());
+
+    const Annotation* firstAnnotation(clipboard->getAnnotation(0));
+    CaretAssert(firstAnnotation);
+    const AnnotationCoordinateSpaceEnum::Enum previousSpace(firstAnnotation->getCoordinateSpace());
+    AnnotationFile* firstFile(getAnnotationFileForPasting(userInputMode));
+    if (firstFile == NULL) {
+        const QString msg("No file selected in toolbar.  Select/create a file and try pasting again");
+        WuQMessageBox::critical(mouseEvent.getOpenGLWidget(),
+                                "ERROR",
+                                msg);
+        return annotationsPasted;
+    }
+
+    /*
+     * Can annotation be pasted in the given space?
+     */
+    const AnnotationCoordinateSpaceEnum::Enum annotationSpace(firstAnnotation->getCoordinateSpace());
+    if ( ! annotationPastingInformation.isPasteableInSpace(annotationSpace)) {
+        return annotationsPasted;
+    }
     
-    if (tabFlag
-        || windowFlag) {
-        float startXYZ[3];
-        float endXYZ[3];
-        oneDimShape->getStartCoordinate()->getXYZ(startXYZ);
-        oneDimShape->getEndCoordinate()->getXYZ(endXYZ);
-        const float diffXYZ[3] = {
-            endXYZ[0] - startXYZ[0],
-            endXYZ[1] - startXYZ[1],
-            endXYZ[2] - startXYZ[2]
-        };
-        
-        if (tabFlag
-            && (coordInfo.m_tabSpaceInfo.m_index >= 0)) {
-            startXYZ[0] = coordInfo.m_tabSpaceInfo.m_xyz[0];
-            startXYZ[1] = coordInfo.m_tabSpaceInfo.m_xyz[1];
-            startXYZ[2] = coordInfo.m_tabSpaceInfo.m_xyz[2];
-            oneDimShape->setTabIndex(coordInfo.m_tabSpaceInfo.m_index);
-            validCoordsFlag = true;
-        }
-        else if (windowFlag
-                 && (coordInfo.m_windowSpaceInfo.m_index >= 0)) {
-            startXYZ[0] = coordInfo.m_windowSpaceInfo.m_xyz[0];
-            startXYZ[1] = coordInfo.m_windowSpaceInfo.m_xyz[1];
-            startXYZ[2] = coordInfo.m_windowSpaceInfo.m_xyz[2];
-            oneDimShape->setWindowIndex(coordInfo.m_windowSpaceInfo.m_index);
-            validCoordsFlag = true;
+    SpacerTabIndex pasteToSpacerTabIndex;
+    int32_t pasteToTabIndex(-1);
+    int32_t pasteToWindowIndex(-1);
+    
+    /*
+     * Get offset of first coordinate in each annotation from first annotation
+     * before pasting the first annotation
+     */
+    std::vector<Vector3D> annotationCoordinateOffsets;
+    getPastingOffsets(clipboard, annotationCoordinateOffsets);
+    Vector3D offsetBaseXYZ;
+    
+    CaretAssert(numAnn == static_cast<int32_t>(annotationCoordinateOffsets.size()));
+
+    bool pasteValidFlag(false);
+    {
+        const auto& pasteCoords(annotationPastingInformation.getAllCoordinatesInformation());
+        if (pasteCoords.empty()) {
+            return annotationsPasted;
         }
         
-        if (validCoordsFlag) {
-            endXYZ[0] = startXYZ[0] + diffXYZ[0];
-            endXYZ[1] = startXYZ[1] + diffXYZ[1];
-            endXYZ[2] = startXYZ[2] + diffXYZ[2];
-            
-            /*
-             * Tab/Window coordinates are percentage ranging [0.0, 100.0]
-             * Need to "clip" lines if they exceed the viewport's edges
-             */
-            const float minCoord = 1.0;
-            const float maxCoord = 99.0;
-            
-            if (endXYZ[0] < minCoord) {
-                if (diffXYZ[0] != 0.0) {
-                    const float xDist = minCoord - startXYZ[0];
-                    const float scaledDistance = std::fabs(xDist / diffXYZ[0]);
-                    endXYZ[0] = minCoord;
-                    endXYZ[1] = startXYZ[1] + (scaledDistance * diffXYZ[1]);
-                }
-            }
-            else if (endXYZ[0] >= maxCoord) {
-                if (diffXYZ[0] != 0.0) {
-                    const float xDist = maxCoord - startXYZ[0];
-                    const float scaledDistance = std::fabs(xDist / diffXYZ[0]);
-                    endXYZ[0] = maxCoord;
-                    endXYZ[1] = startXYZ[1] + (scaledDistance * diffXYZ[1]);
-                }
-            }
-            
-            if (endXYZ[1] < minCoord) {
-                if (diffXYZ[1] != 0.0) {
-                    const float yDist = minCoord - startXYZ[1];
-                    const float scaledDistance = std::fabs(yDist / diffXYZ[1]);
-                    endXYZ[1] = minCoord;
-                    endXYZ[0] = startXYZ[0] + (scaledDistance * diffXYZ[0]);
-                }
-            }
-            else if (endXYZ[1] > maxCoord) {
-                if (diffXYZ[1] != 0.0) {
-                    const float yDist = maxCoord - startXYZ[1];
-                    const float scaledDistance = std::fabs(yDist / diffXYZ[1]);
-                    endXYZ[1] = maxCoord;
-                    endXYZ[0] = startXYZ[0] + (scaledDistance * diffXYZ[0]);
-                }
-            }
-            
-            oneDimShape->getStartCoordinate()->setXYZ(startXYZ);
-            oneDimShape->getEndCoordinate()->setXYZ(endXYZ);
+        CaretAssertVectorIndex(pasteCoords, 0);
+        
+        switch (annotationSpace) {
+            case AnnotationCoordinateSpaceEnum::CHART:
+                CaretAssert(0);
+                break;
+            case AnnotationCoordinateSpaceEnum::HISTOLOGY:
+                CaretAssert(0);
+                break;
+            case AnnotationCoordinateSpaceEnum::MEDIA_FILE_NAME_AND_PIXEL:
+                CaretAssert(0);
+                break;
+            case AnnotationCoordinateSpaceEnum::SPACER:
+                pasteToSpacerTabIndex = pasteCoords[0]->m_spacerTabSpaceInfo.m_spacerTabIndex;
+                CaretAssert(0);
+                break;
+            case AnnotationCoordinateSpaceEnum::STEREOTAXIC:
+                CaretAssert(0);
+                break;
+            case AnnotationCoordinateSpaceEnum::SURFACE:
+                CaretAssert(0);
+                break;
+            case AnnotationCoordinateSpaceEnum::TAB:
+                pasteToTabIndex = pasteCoords[0]->m_tabSpaceInfo.m_index;
+                offsetBaseXYZ = Vector3D(pasteCoords[0]->m_tabSpaceInfo.m_xyz);
+                pasteValidFlag = true;
+                break;
+            case AnnotationCoordinateSpaceEnum::VIEWPORT:
+                CaretAssert(0);
+                break;
+            case AnnotationCoordinateSpaceEnum::WINDOW:
+                pasteToWindowIndex = pasteCoords[0]->m_windowSpaceInfo.m_index;
+                offsetBaseXYZ = Vector3D(pasteCoords[0]->m_windowSpaceInfo.m_xyz);
+                pasteValidFlag = true;
+                break;
         }
     }
     
-    return validCoordsFlag;
+    if ( ! pasteValidFlag) {
+        return annotationsPasted;
+    }
+            
+    for (int32_t iAnn = 0; iAnn < numAnn; iAnn++) {
+        Annotation* annotation(clipboard->getAnnotation(iAnn)->clone());
+        CaretAssert(annotation);
+        
+        /*
+         * Update space information for annotation
+         */
+        switch (annotationSpace) {
+            case AnnotationCoordinateSpaceEnum::CHART:
+                    pasteValidFlag = true;
+                    annotation->setCoordinateSpace(AnnotationCoordinateSpaceEnum::CHART);
+                break;
+            case AnnotationCoordinateSpaceEnum::HISTOLOGY:
+                pasteValidFlag = true;
+                annotation->setCoordinateSpace(AnnotationCoordinateSpaceEnum::HISTOLOGY);
+                break;
+            case AnnotationCoordinateSpaceEnum::MEDIA_FILE_NAME_AND_PIXEL:
+                pasteValidFlag = true;
+                annotation->setCoordinateSpace(AnnotationCoordinateSpaceEnum::MEDIA_FILE_NAME_AND_PIXEL);
+                break;
+            case AnnotationCoordinateSpaceEnum::SPACER:
+                    pasteValidFlag = true;
+                    annotation->setCoordinateSpace(AnnotationCoordinateSpaceEnum::SPACER);
+                CaretAssert(pasteToSpacerTabIndex.isValid());
+                    annotation->setSpacerTabIndex(pasteToSpacerTabIndex);
+                break;
+            case AnnotationCoordinateSpaceEnum::STEREOTAXIC:
+                    pasteValidFlag = true;
+                    annotation->setCoordinateSpace(AnnotationCoordinateSpaceEnum::STEREOTAXIC);
+                break;
+            case AnnotationCoordinateSpaceEnum::SURFACE:
+                CaretAssertMessage(0, "Pasting multiple annotations to surface space not supported");
+                break;
+            case AnnotationCoordinateSpaceEnum::TAB:
+                    pasteValidFlag = true;
+                    annotation->setCoordinateSpace(AnnotationCoordinateSpaceEnum::TAB);
+                CaretAssert(pasteToTabIndex >= 0);
+                    annotation->setTabIndex(pasteToTabIndex);
+                break;
+            case AnnotationCoordinateSpaceEnum::VIEWPORT:
+                CaretAssertMessage(0, "Viewport space not supported");
+                break;
+            case AnnotationCoordinateSpaceEnum::WINDOW:
+                    pasteValidFlag = true;
+                    annotation->setCoordinateSpace(AnnotationCoordinateSpaceEnum::WINDOW);
+                    annotation->setWindowIndex(pasteToWindowIndex);
+                break;
+        }
+        CaretAssertVectorIndex(annotationCoordinateOffsets, iAnn);
+        const Vector3D& offsetXYZ(annotationCoordinateOffsets[iAnn]);
+        
+        /*
+         * Make all coordinates offsets from first coordinate
+         */
+        const int32_t numCoords(annotation->getNumberOfCoordinates());
+        CaretAssert(numCoords > 0);
+        const Vector3D firstXYZ(annotation->getCoordinate(0)->getXYZ());
+        for (int32_t i = 0; i < numCoords; i++) {
+            const Vector3D xyz(annotation->getCoordinate(i)->getXYZ());
+            const Vector3D diffXYZ = xyz - firstXYZ;
+            annotation->getCoordinate(i)->setXYZ(diffXYZ);
+        }
+        
+        /*
+         * Offset is from first coordinate in first annotation after
+         * the first annotation has been pasted
+         */
+        Vector3D baseXYZ(offsetBaseXYZ + offsetXYZ);
+        for (int32_t i = 0; i < numCoords; i++) {
+            const Vector3D xyz(annotation->getCoordinate(i)->getXYZ());
+            const Vector3D newXYZ(baseXYZ + xyz);
+            annotation->getCoordinate(i)->setXYZ(newXYZ);
+        }
+        
+        annotationsPasted.push_back(annotation);
+    }
+    
+    if (pasteValidFlag) {
+        
+        /*
+         * Update font sizes
+         */
+        for (auto& ann : annotationsPasted) {
+            switch (ann->getType()) {
+                case AnnotationTypeEnum::BOX:
+                    break;
+                case AnnotationTypeEnum::BROWSER_TAB:
+                    CaretAssert(0);
+                    break;
+                case AnnotationTypeEnum::COLOR_BAR:
+                    CaretAssert(0);
+                    break;
+                case AnnotationTypeEnum::IMAGE:
+                    break;
+                case AnnotationTypeEnum::LINE:
+                    break;
+                case AnnotationTypeEnum::OVAL:
+                    break;
+                case AnnotationTypeEnum::POLYHEDRON:
+                    break;
+                case AnnotationTypeEnum::POLYGON:
+                    break;
+                case AnnotationTypeEnum::POLYLINE:
+                    break;
+                case AnnotationTypeEnum::SCALE_BAR:
+                    break;
+                case AnnotationTypeEnum::TEXT:
+                    adjustTextAnnotationFontHeight(annotationPastingInformation.getMouseEvent(),
+                                                   previousSpace,
+                                                   ann);
+                    break;
+            }
+        }
+        
+        AnnotationRedoUndoCommand* undoCommand = new AnnotationRedoUndoCommand();
+        undoCommand->setModePasteAnnotations(firstFile,
+                                             annotationsPasted);
+        
+        AString errorMessage;
+        AnnotationManager* annotationManager(GuiManager::get()->getBrain()->getAnnotationManager(userInputMode));
+        if ( ! annotationManager->applyCommand(undoCommand,
+                                               errorMessage)) {
+            WuQMessageBox::errorOk(mouseEvent.getOpenGLWidget(),
+                                   errorMessage);
+            pasteValidFlag = false;
+        }
+        
+        if (pasteValidFlag) {
+            bool firstFlag(true);
+            for (auto& ann : annotationsPasted) {
+                if (firstFlag) {
+                    firstFlag = false;
+                    annotationManager->selectAnnotationForEditing(mouseEvent.getBrowserWindowIndex(),
+                                                                  AnnotationManager::SELECTION_MODE_SINGLE,
+                                                                  false,
+                                                                  ann);
+                }
+                else {
+                    annotationManager->selectAnnotationForEditing(mouseEvent.getBrowserWindowIndex(),
+                                                                  AnnotationManager::SELECTION_MODE_EXTENDED,
+                                                                  true, /* SHIFT key down */
+                                                                  ann);
+                }
+            }
+        }
+        
+        EventManager::get()->sendEvent(EventGraphicsPaintSoonAllWindows().getPointer());
+        EventManager::get()->sendEvent(EventUserInterfaceUpdate().getPointer());
+    }
+    
+    if ( ! pasteValidFlag) {
+        annotationsPasted.clear();
+    }
+    
+    return annotationsPasted;
 }
 
 /**
- * Paste a multi-coordinate shape (poly-line) The first coordinate is pasted at
- * the coordinate in 'coordInfo'.
- *
- * @param multiCoordShape
- *     multi-coordinate shape that will be pasted.
- * @param coordInfo
- *     Coordinate information that will be used for the shape's 'start' coordinate.
- * @return
- *     True if the shape's coordinate was updated for pasting, else false.
+ * Paste the given annotation in the given space using the coordinate information for the annotation's coordinates
+ * @param userInputMode
+ *   The user input mode
+ * @param annotationFile
+ *    File for the annotation
+ * @param annotation
+ *    A copy of this annotation will be created
+ * @param annotationSpace
+ *    Space for pasting
+ * @param annotationPastingInformation
+ *    Information for pasting the annotation's coordinates
+ * @return New annotation that was pasted or NULL if failed to paste the annotation
  */
 bool
-AnnotationPasteDialog::pasteMultiCoordinateShape(AnnotationMultiCoordinateShape* multiCoordShape,
-                                                 AnnotationCoordinateInformation& coordInfo)
+AnnotationPasteDialog::pasteAnnotationInSpace(const UserInputModeEnum::Enum userInputMode,
+                                              AnnotationFile* annotationFile,
+                                              Annotation* annotation,
+                                              const AnnotationCoordinateSpaceEnum::Enum annotationSpace,
+                                              const AnnotationPastingInformation& annotationPastingInformation)
 {
-    const int32_t numCoords = multiCoordShape->getNumberOfCoordinates();
-    if (numCoords < 2) {
+    CaretAssert(annotation);
+    
+    if ( ! annotationPastingInformation.isValid()) {
         return false;
     }
     
-    bool tabFlag = false;
-    bool windowFlag = false;
-    
-    switch (multiCoordShape->getCoordinateSpace()) {
-        case AnnotationCoordinateSpaceEnum::CHART:
-            break;
-        case AnnotationCoordinateSpaceEnum::SPACER:
-            break;
-        case AnnotationCoordinateSpaceEnum::STEREOTAXIC:
-            break;
-        case AnnotationCoordinateSpaceEnum::SURFACE:
-            break;
-        case AnnotationCoordinateSpaceEnum::TAB:
-            tabFlag = true;
-            break;
-        case AnnotationCoordinateSpaceEnum::VIEWPORT:
-            break;
-        case AnnotationCoordinateSpaceEnum::WINDOW:
-            windowFlag = true;
-            break;
+    /*
+     * Can annotation be pasted in the given space?
+     */
+    if ( ! annotationPastingInformation.isPasteableInSpace(annotationSpace)) {
+        return false;
     }
     
-    bool validCoordsFlag = false;
+    const AnnotationCoordinateSpaceEnum::Enum previousSpace(annotation->getCoordinateSpace());
+    std::vector<std::unique_ptr<AnnotationCoordinate>> coords(annotation->getCopyOfAllCoordinates());
+    const auto& pasteCoords(annotationPastingInformation.getAllCoordinatesInformation());
+    CaretAssert(coords.size() == pasteCoords.size());
+    bool pasteValidFlag(false);
     
-    if (tabFlag
-        || windowFlag) {
-        float startXYZ[3];
-        multiCoordShape->getCoordinate(0)->getXYZ(startXYZ);
+    /*
+     * Verify new coordinates are valid for the space
+     */
+    const int32_t numCoords(coords.size());
+    for (int32_t i = 0; i < numCoords; i++) {
+        CaretAssertVectorIndex(coords, i);
+        CaretAssertVectorIndex(pasteCoords, i);
+        auto& ac = coords[i];
+        const auto& coordInfo = pasteCoords[i];
         
-        const float originalStartXYZ[3] = {
-            startXYZ[0],
-            startXYZ[1],
-            startXYZ[2]
-        };
-        
-        if (tabFlag
-            && (coordInfo.m_tabSpaceInfo.m_index >= 0)) {
-            startXYZ[0] = coordInfo.m_tabSpaceInfo.m_xyz[0];
-            startXYZ[1] = coordInfo.m_tabSpaceInfo.m_xyz[1];
-            startXYZ[2] = coordInfo.m_tabSpaceInfo.m_xyz[2];
-            multiCoordShape->setTabIndex(coordInfo.m_tabSpaceInfo.m_index);
-            validCoordsFlag = true;
-        }
-        else if (windowFlag
-                 && (coordInfo.m_windowSpaceInfo.m_index >= 0)) {
-            startXYZ[0] = coordInfo.m_windowSpaceInfo.m_xyz[0];
-            startXYZ[1] = coordInfo.m_windowSpaceInfo.m_xyz[1];
-            startXYZ[2] = coordInfo.m_windowSpaceInfo.m_xyz[2];
-            multiCoordShape->setWindowIndex(coordInfo.m_windowSpaceInfo.m_index);
-            validCoordsFlag = true;
-        }
-        
-        if (validCoordsFlag) {
-            /*
-             * Set first coordinate
-             */
-            multiCoordShape->getCoordinate(0)->setXYZ(startXYZ);
-            
-            /*
-             * Set additional coordinates
-             */
-            for (int32_t iCoord = 1; iCoord < numCoords; iCoord++) {
-                float ptXYZ[3];
-                multiCoordShape->getCoordinate(iCoord)->getXYZ(ptXYZ);
-                
-                const float diffXYZ[3] = {
-                    startXYZ[0] - originalStartXYZ[0],
-                    startXYZ[1] - originalStartXYZ[1],
-                    startXYZ[2] - originalStartXYZ[2]
-                };
-                if (validCoordsFlag) {
-                    ptXYZ[0] += diffXYZ[0]; // + originalStartXYZ[0];
-                    ptXYZ[1] += diffXYZ[1]; //+ originalStartXYZ[1];
-                    ptXYZ[2] += diffXYZ[2]; // + originalStartXYZ[2];
-                    
-                    /*
-                     * Tab/Window coordinates are percentage ranging [0.0, 100.0]
-                     * Need to "clip" lines if they exceed the viewport's edges
-                     */
-                    const float minCoord = 1.0;
-                    const float maxCoord = 99.0;
-                    
-                    ptXYZ[0] = MathFunctions::limitRange(ptXYZ[0], minCoord, maxCoord);
-                    ptXYZ[1] = MathFunctions::limitRange(ptXYZ[1], minCoord, maxCoord);
-                    
-                    multiCoordShape->getCoordinate(iCoord)->setXYZ(ptXYZ);
+        switch (annotationSpace) {
+            case AnnotationCoordinateSpaceEnum::CHART:
+                if (i == 0) {
+                    pasteValidFlag = true;
+                    annotation->setCoordinateSpace(AnnotationCoordinateSpaceEnum::CHART);
                 }
+                ac->setXYZ(coordInfo->m_chartSpaceInfo.m_xyz);
+                break;
+            case AnnotationCoordinateSpaceEnum::HISTOLOGY:
+                if (i == 0) {
+                    pasteValidFlag = true;
+                    annotation->setCoordinateSpace(AnnotationCoordinateSpaceEnum::HISTOLOGY);
+                }
+                break;
+            case AnnotationCoordinateSpaceEnum::MEDIA_FILE_NAME_AND_PIXEL:
+                if (i == 0) {
+                    pasteValidFlag = true;
+                    annotation->setCoordinateSpace(AnnotationCoordinateSpaceEnum::MEDIA_FILE_NAME_AND_PIXEL);
+                }
+                break;
+            case AnnotationCoordinateSpaceEnum::SPACER:
+                if (i == 0) {
+                    pasteValidFlag = true;
+                    annotation->setCoordinateSpace(AnnotationCoordinateSpaceEnum::SPACER);
+                    annotation->setSpacerTabIndex(coordInfo->m_spacerTabSpaceInfo.m_spacerTabIndex);
+                }
+                ac->setXYZ(coordInfo->m_spacerTabSpaceInfo.m_xyz);
+                break;
+            case AnnotationCoordinateSpaceEnum::STEREOTAXIC:
+                if (i == 0) {
+                    pasteValidFlag = true;
+                    annotation->setCoordinateSpace(AnnotationCoordinateSpaceEnum::STEREOTAXIC);
+                }
+                ac->setXYZ(coordInfo->m_modelSpaceInfo.m_xyz);
+                break;
+            case AnnotationCoordinateSpaceEnum::SURFACE:
+            {
+                if (i == 0) {
+                    pasteValidFlag = true;
+                    annotation->setCoordinateSpace(AnnotationCoordinateSpaceEnum::SURFACE);
+                }
+                const auto& ssi = coordInfo->m_surfaceSpaceInfo;
+                ac->setSurfaceSpace(ssi.m_structure,
+                                    ssi.m_numberOfNodes,
+                                    ssi.m_nodeIndex);
             }
+                break;
+            case AnnotationCoordinateSpaceEnum::TAB:
+                if (i == 0) {
+                    pasteValidFlag = true;
+                    annotation->setCoordinateSpace(AnnotationCoordinateSpaceEnum::TAB);
+                    annotation->setTabIndex(coordInfo->m_tabSpaceInfo.m_index);
+                }
+                ac->setXYZ(coordInfo->m_tabSpaceInfo.m_xyz);
+                break;
+            case AnnotationCoordinateSpaceEnum::VIEWPORT:
+                CaretAssertMessage(0, "Viewport space not supported");
+                break;
+            case AnnotationCoordinateSpaceEnum::WINDOW:
+                if (i == 0) {
+                    pasteValidFlag = true;
+                    annotation->setCoordinateSpace(AnnotationCoordinateSpaceEnum::WINDOW);
+                    annotation->setWindowIndex(coordInfo->m_windowSpaceInfo.m_index);
+                }
+                ac->setXYZ(coordInfo->m_windowSpaceInfo.m_xyz);
+                break;
         }
     }
+
+    if (pasteValidFlag) {
+        annotation->replaceAllCoordinatesNotConst(coords);
+        
+        AnnotationRedoUndoCommand* undoCommand = new AnnotationRedoUndoCommand();
+        undoCommand->setModePasteAnnotation(annotationFile,
+                                            annotation);
+        switch (annotation->getType()) {
+            case AnnotationTypeEnum::BOX:
+                break;
+            case AnnotationTypeEnum::BROWSER_TAB:
+                CaretAssert(0);
+                break;
+            case AnnotationTypeEnum::COLOR_BAR:
+                CaretAssert(0);
+                break;
+            case AnnotationTypeEnum::IMAGE:
+                break;
+            case AnnotationTypeEnum::LINE:
+                break;
+            case AnnotationTypeEnum::OVAL:
+                break;
+            case AnnotationTypeEnum::POLYHEDRON:
+                break;
+            case AnnotationTypeEnum::POLYGON:
+                break;
+            case AnnotationTypeEnum::POLYLINE:
+                break;
+            case AnnotationTypeEnum::SCALE_BAR:
+                break;
+            case AnnotationTypeEnum::TEXT:
+                adjustTextAnnotationFontHeight(annotationPastingInformation.getMouseEvent(),
+                                               previousSpace,
+                                               annotation);
+                break;
+        }
+        
+        const MouseEvent& mouseEvent(annotationPastingInformation.getMouseEvent());
+        AString errorMessage;
+        AnnotationManager* annotationManager(GuiManager::get()->getBrain()->getAnnotationManager(userInputMode));
+        if ( ! annotationManager->applyCommand(undoCommand,
+                                               errorMessage)) {
+            WuQMessageBox::errorOk(mouseEvent.getOpenGLWidget(),
+                                   errorMessage);
+            pasteValidFlag = false;
+        }
+
+        if (pasteValidFlag) {
+            annotationManager->selectAnnotationForEditing(mouseEvent.getBrowserWindowIndex(),
+                                                          AnnotationManager::SELECTION_MODE_SINGLE,
+                                                          false,
+                                                          annotation);
+        }
+
+        EventManager::get()->sendEvent(EventGraphicsPaintSoonAllWindows().getPointer());
+        EventManager::get()->sendEvent(EventUserInterfaceUpdate().getPointer());
+    }
     
-    return validCoordsFlag;
+    return pasteValidFlag;
 }
 
 /**
@@ -556,74 +867,49 @@ AnnotationPasteDialog::okButtonClicked()
 {
     AString errorMessage;
     
-    bool valid = false;
-    m_coordinateSelectionWidget->getSelectedCoordinateSpace(valid);
-    if ( ! valid) {
+    AnnotationCoordinateSpaceEnum::Enum selectedCoordinateSpace = AnnotationCoordinateSpaceEnum::VIEWPORT;
+    bool validSpaceFlag(false);;
+    const int32_t numSpaceButtons(m_spaceRadioButtons.size());
+    for (int32_t i = 0; i < numSpaceButtons; i++) {
+        CaretAssertVectorIndex(m_spaceRadioButtons, i);
+        if (m_spaceRadioButtons[i]->isChecked()) {
+            CaretAssertVectorIndex(m_spaceRadioButtonsSpaces, i);
+            selectedCoordinateSpace = m_spaceRadioButtonsSpaces[i];
+            validSpaceFlag = true;
+        }
+    }
+    if ( ! validSpaceFlag) {
         const QString msg("A coordinate space has not been selected.");
         WuQMessageBox::errorOk(this,
                                msg);
         return;
     }
     
-    CaretPointer<Annotation> newAnnotation(m_annotation->clone());
-    const AnnotationCoordinateSpaceEnum::Enum previousSpace = m_annotation->getCoordinateSpace();
+    bool pasteValidFlag(false);
+    AnnotationClipboard* clipboard = GuiManager::get()->getBrain()->getAnnotationManager(m_userInputMode)->getClipboard();
+    if (clipboard->getNumberOfAnnotations() >= 2) {
+        m_annotationsThatWereCreated = pasteAnnotationsInSpace(m_userInputMode,
+                                                               clipboard,
+                                                               m_annotationPastingInformation);
+        pasteValidFlag = ( ! m_annotationsThatWereCreated.empty());
+    }
+    else {
+        Annotation* newAnnotation(m_annotation->clone());
+        pasteValidFlag = pasteAnnotationInSpace(m_userInputMode,
+                                                m_annotationFile,
+                                                newAnnotation,
+                                                selectedCoordinateSpace,
+                                                m_annotationPastingInformation);
+        if ( ! pasteValidFlag) {
+            delete newAnnotation;
+        }
+        m_annotationsThatWereCreated.push_back(newAnnotation);
+    }
     
-    if ( ! m_coordinateSelectionWidget->setCoordinateForNewAnnotation(newAnnotation,
-                                                                      errorMessage)) {
-        WuQMessageBox::errorOk(this, errorMessage);
+    if ( ! pasteValidFlag) {
+        WuQMessageBox::errorOk(this, "Failed to paste annotation");
         return;
     }
-    
-    /*
-     * Need to release annotation from its CaretPointer since the
-     * annotation file will take ownership of the annotation.
-     */
-    Annotation* annotationPointer = newAnnotation.releasePointer();
-    
-    adjustTextAnnotationFontHeight(previousSpace,
-                                   annotationPointer);
-    
-    AnnotationManager* annotationManager = GuiManager::get()->getBrain()->getAnnotationManager();
-    
-    AnnotationRedoUndoCommand* undoCommand = new AnnotationRedoUndoCommand();
-    undoCommand->setModePasteAnnotation(m_annotationFile,
-                                        annotationPointer);
-    switch (annotationPointer->getType()) {
-        case AnnotationTypeEnum::BOX:
-            break;
-        case AnnotationTypeEnum::BROWSER_TAB:
-            CaretAssert(0);
-            break;
-        case AnnotationTypeEnum::COLOR_BAR:
-            break;
-        case AnnotationTypeEnum::IMAGE:
-            break;
-        case AnnotationTypeEnum::LINE:
-            break;
-        case AnnotationTypeEnum::OVAL:
-            break;
-        case AnnotationTypeEnum::POLY_LINE:
-            break;
-        case AnnotationTypeEnum::SCALE_BAR:
-            break;
-        case AnnotationTypeEnum::TEXT:
-            break;
-    }
-    if ( ! annotationManager->applyCommand(UserInputModeEnum::Enum::ANNOTATIONS,
-                                           undoCommand,
-                                           errorMessage)) {
-        WuQMessageBox::errorOk(this,
-                               errorMessage);
-    }
-    
-    annotationManager->selectAnnotationForEditing(m_mouseEvent.getBrowserWindowIndex(),
-                                        AnnotationManager::SELECTION_MODE_SINGLE,
-                                        false,
-                                        annotationPointer);
-    EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
-    EventManager::get()->sendEvent(EventUserInterfaceUpdate().getPointer());
-    
-    m_annotationThatWasCreated = annotationPointer;
 
     WuQDialog::okButtonClicked();
 }
@@ -637,29 +923,33 @@ AnnotationPasteDialog::okButtonClicked()
  * Inverse logic is need when converting text annotation from surface
  * space to another space.
  *
+ * @param mouseEvent
+ *   Mouse event for pasting the annotation
  * @param previousSpace
  *      Space of annotation that was on the clipboard.
  * @param annotation
  *      Annotation that is being pasted.
  */
 void
-AnnotationPasteDialog::adjustTextAnnotationFontHeight(const AnnotationCoordinateSpaceEnum::Enum previousSpace,
+AnnotationPasteDialog::adjustTextAnnotationFontHeight(const MouseEvent& mouseEvent,
+                                                      const AnnotationCoordinateSpaceEnum::Enum previousSpace,
                                                       Annotation* annotation)
 {
     CaretAssert(annotation);
     
-    BrainOpenGLViewportContent* vpContent = m_mouseEvent.getViewportContent();
+    BrainOpenGLViewportContent* vpContent = mouseEvent.getViewportContent();
     CaretAssert(vpContent);
-    BrowserTabContent* btc = vpContent->getBrowserTabContent();
-    CaretAssert(btc);
     
     int32_t surfaceMontageRowCount = 1;
-    const ModelSurfaceMontage* msm = btc->getDisplayedSurfaceMontageModel();
-    if (msm != NULL) {
-        int32_t columnCount = 1;
-        msm->getSurfaceMontageNumberOfRowsAndColumns(btc->getTabNumber(),
-                                                     surfaceMontageRowCount,
-                                                     columnCount);
+    BrowserTabContent* btc = vpContent->getBrowserTabContent();
+    if (btc != NULL) {
+        const ModelSurfaceMontage* msm = btc->getDisplayedSurfaceMontageModel();
+        if (msm != NULL) {
+            int32_t columnCount = 1;
+            msm->getSurfaceMontageNumberOfRowsAndColumns(btc->getTabNumber(),
+                                                         surfaceMontageRowCount,
+                                                         columnCount);
+        }
     }
     
     const AnnotationCoordinateSpaceEnum::Enum newSpace = annotation->getCoordinateSpace();

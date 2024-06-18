@@ -21,6 +21,7 @@
 #include "CaretLogger.h"
 #include "DataFile.h"
 #include "FileInformation.h"
+#include "HistologySlicesFile.h"
 #include "OperationZipSpecFile.h"
 #include "OperationException.h"
 #include "SpecFile.h"
@@ -34,6 +35,7 @@
 //to print file sizes as it makes the zip
 #include <iostream>
 #include <vector>
+#include <set>
 
 using namespace caret;
 using namespace std;
@@ -122,12 +124,19 @@ void OperationZipSpecFile::useParameters(OperationParameters* myParams, Progress
     std::vector<AString> allDataFileNames = specFile.getAllDataFileNames();
     allDataFileNames.push_back(specFileName);
     
+    CaretLogFine("Spec Info:"
+                 "\n   myParams->getString(1): " + myParams->getString(1)
+                 + "\n   specFile.getFileName(): " + specFile.getFileName()
+                 + "\n   specFileName: " + specFileName
+                 + "\n   specPath: " + specPath);
+    
     /*
      * Verify that all data files exist
      */
+    std::set<AString> allChildDataFileNames;
     AString missingDataFileNames;
     AString outsideBaseDirFiles;
-    const int32_t numberOfDataFiles = static_cast<int32_t>(allDataFileNames.size());
+    int32_t numberOfDataFiles = static_cast<int32_t>(allDataFileNames.size());
     for (int32_t i = 0; i < numberOfDataFiles; i++) {
         AString dataFileName = allDataFileNames[i];
         if (DataFile::isFileOnNetwork(dataFileName))
@@ -146,12 +155,24 @@ void OperationZipSpecFile::useParameters(OperationParameters* myParams, Progress
         AString absName = QDir::cleanPath(dataFileInfo.getAbsoluteFilePath());
         if (!absName.startsWith(myBaseDir))
         {
+            CaretLogFine("Outside Path: "
+                         "\n   myBaseDir: " + myBaseDir
+                         + "\n   allDataFileNames[i]: " + allDataFileNames[i]
+                         + "\n   dataFileName: " + dataFileName
+                         + "\n   absFilePath: " + dataFileInfo.getAbsoluteFilePath()
+                         + "\n   absName: " + absName);
             outsideBaseDirFiles += absName + "\n";
         }
         if (dataFileInfo.exists() == false) {
             missingDataFileNames += absName + "\n";
         }
         allDataFileNames[i] = absName;//so we don't have to do this again
+        
+        std::vector<AString> childDataFileNames;
+        addChildDataFiles(allDataFileNames[i],
+                          childDataFileNames);
+        allChildDataFileNames.insert(childDataFileNames.begin(),
+                                     childDataFileNames.end());
     }
     if (!missingDataFileNames.isEmpty())
     {
@@ -165,6 +186,16 @@ void OperationZipSpecFile::useParameters(OperationParameters* myParams, Progress
     if (!outsideBaseDirFiles.isEmpty())
     {
         throw OperationException("These data files lie outside the base directiory:\n" + outsideBaseDirFiles + "Try using -base-dir.");
+    }
+    
+    /*
+     * Include names of any child data files so that they get zipped
+     */
+    if ( ! allChildDataFileNames.empty()) {
+        allDataFileNames.insert(allDataFileNames.end(),
+                                allChildDataFileNames.begin(),
+                                allChildDataFileNames.end());
+        numberOfDataFiles = static_cast<int32_t>(allDataFileNames.size());
     }
     
     /*
@@ -268,5 +299,34 @@ void OperationZipSpecFile::useParameters(OperationParameters* myParams, Progress
         QFile::remove(zipFileName);
         
         throw OperationException(errorMessage);
+    }
+}
+
+/**
+ * Get names of any child data files (files not in spec file)
+ * @param dataFileName
+ *    Name of data file.
+ * @param childDataFileNamesOut
+ *    Output containing names of child data files
+ */
+void
+OperationZipSpecFile::addChildDataFiles(const AString& dataFileName,
+                                        std::vector<AString>& childDataFileNamesOut)
+{
+    bool validFlag(false);
+    const DataFileTypeEnum::Enum dataFileType = DataFileTypeEnum::fromFileExtension(dataFileName,
+                                                                                    &validFlag);
+    if (validFlag) {
+        if (dataFileType == DataFileTypeEnum::HISTOLOGY_SLICES) {
+            try {
+                HistologySlicesFile hsf;
+                hsf.readFile(dataFileName);
+                childDataFileNamesOut = hsf.getChildDataFilePathNames();
+            }
+            catch (const DataFileException& dfe) {
+                CaretLogWarning("Error reading Histology Slices File to get child data files: "
+                                + dfe.whatString());
+            }
+        }
     }
 }

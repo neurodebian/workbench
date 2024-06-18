@@ -23,30 +23,44 @@
 
 #include <QBuffer>
 #include <QColor>
+#include <QDir>
 #include <QImage>
 #include <QImageReader>
 #include <QImageWriter>
 #include <QTime>
 
+#define __IMAGE_FILE_DECLARE__
+#include "ImageFile.h"
+#undef __IMAGE_FILE_DECLARE__
+
+#include "ApplicationInformation.h"
+#include "BoundingBox.h"
 #include "CaretAssert.h"
 #include "CaretLogger.h"
+#include "CaretPreferences.h"
 #include "ControlPointFile.h"
 #include "ControlPoint3D.h"
 #include "DataFileException.h"
 #include "DataFileContentInformation.h"
+#include "DeveloperFlagsEnum.h"
+#include "EventCaretPreferencesGet.h"
+#include "EventManager.h"
 #include "FileInformation.h"
 #include "GiftiMetaData.h"
 #include "GraphicsUtilitiesOpenGL.h"
-#include "ImageCaptureSettings.h"
-#include "ImageFile.h"
+#include "GraphicsPrimitiveV3fT2f.h"
+#include "ImageCaptureDialogSettings.h"
 #include "Matrix4x4.h"
 #include "MathFunctions.h"
+#include "RectangleTransform.h"
 #include "SceneClass.h"
+#include "UnitsConversion.h"
 #include "VolumeFile.h"
+#include "VolumeSpace.h"
 
 using namespace caret;
 
-const float ImageFile::s_defaultWindowDepthPercentage = 990;
+static bool imageDebugFlag = false;
 
 /**
  * Constructor.
@@ -54,26 +68,78 @@ const float ImageFile::s_defaultWindowDepthPercentage = 990;
 ImageFile::ImageFile()
 : MediaFile(DataFileTypeEnum::IMAGE)
 {
-    m_controlPointFile.grabNew(new ControlPointFile());
-    
-    m_fileMetaData.grabNew(new GiftiMetaData());
-    
-    m_image   = new QImage();
+    initializeMembersImageFile();
+
+    readFileMetaDataFromQImage();
 }
 
 /**
- * Constructor
+ * Initialize members of media file
+ */
+void
+ImageFile::initializeMembersImageFile()
+{
+    m_controlPointFile.grabNew(new ControlPointFile());
+    m_fileMetaData.grabNew(new GiftiMetaData());
+    m_image = new QImage();
+    m_graphicsPrimitive.reset();
+    m_featuresImageGraphicsPrimitive.reset();
+    m_pixelPrimitiveVertexStartIndex = -1;
+    m_pixelPrimitiveVertexCount      = -1;
+    m_planePrimitiveVertexStartIndex = -1;
+    m_planePrimitiveVertexCount      = -1;
+}
+
+/**
+ * Copy constructor.
+ * @param imageFile
+ *   Image file that is copied.
+ */
+ImageFile::ImageFile(const ImageFile& imageFile)
+: MediaFile(imageFile)
+{
+    initializeMembersImageFile();
+    
+    if (m_image != NULL) {
+        delete m_image;
+    }
+    if (imageFile.m_image != NULL) {
+        m_image = new QImage(*imageFile.m_image);
+    }
+    else {
+        m_image = new QImage();
+    }
+    
+    m_fileMetaData.grabNew(new GiftiMetaData(*imageFile.m_fileMetaData));
+    
+    if (imageFile.m_controlPointFile) {
+        /*CaretAssertMessage(0, "Need to implement copy contructor for ControlPointFile.");*/
+        //m_controlPointFile.grabNew(new ControlPointFile(*imageFile.m_controlPointFile));
+    }
+    m_graphicsPrimitive.reset();
+    m_featuresImageGraphicsPrimitive.reset();
+    
+    m_pixelPrimitiveVertexStartIndex = imageFile.m_pixelPrimitiveVertexStartIndex;;
+    m_pixelPrimitiveVertexCount      = imageFile.m_pixelPrimitiveVertexCount;
+    m_planePrimitiveVertexStartIndex = imageFile.m_planePrimitiveVertexStartIndex;
+    m_planePrimitiveVertexCount      = imageFile.m_planePrimitiveVertexCount;
+}
+
+/**
+ * Constructor that makes copy of QImage instance
  * @param qimage
  *    QImage that is copied to this image file.
  */
 ImageFile::ImageFile(const QImage& qimage)
 : MediaFile(DataFileTypeEnum::IMAGE)
 {
-    m_controlPointFile.grabNew(new ControlPointFile());
-    
-    m_fileMetaData.grabNew(new GiftiMetaData());
-    
+    initializeMembersImageFile();
+    if (m_image != NULL) {
+        delete m_image;
+    }
     m_image = new QImage(qimage);
+
+    readFileMetaDataFromQImage();
 }
 
 /**
@@ -95,13 +161,15 @@ ImageFile::ImageFile(const unsigned char* imageDataRGBA,
                      const IMAGE_DATA_ORIGIN_LOCATION imageOrigin)
 : MediaFile(DataFileTypeEnum::IMAGE)
 {
-    m_controlPointFile.grabNew(new ControlPointFile());
-    
-    m_fileMetaData.grabNew(new GiftiMetaData());
-    
+    initializeMembersImageFile();
+
+    if (m_image != NULL) {
+        delete m_image;
+    }
     m_image = new QImage(imageWidth,
                              imageHeight,
-                             QImage::Format_RGB32);
+                             QImage::Format_ARGB32);
+    readFileMetaDataFromQImage();
     
     bool isOriginAtTop = false;
     switch (imageOrigin) {
@@ -139,6 +207,37 @@ ImageFile::ImageFile(const unsigned char* imageDataRGBA,
             *pixel = color.rgba();
         }
     }
+    readFileMetaDataFromQImage();
+}
+
+/**
+ * Constructs an image file with black and zero alpha pixels
+ *
+ * @param imageWidth
+ *     Width of image.
+ * @param imageHeight
+ *     Height of image.
+ */
+ImageFile::ImageFile(const int imageWidth,
+                     const int imageHeight)
+: MediaFile(DataFileTypeEnum::IMAGE)
+{
+    initializeMembersImageFile();
+    
+    if (m_image != NULL) {
+        delete m_image;
+    }
+    m_image = new QImage(imageWidth,
+                         imageHeight,
+                         QImage::Format_ARGB32);
+    readFileMetaDataFromQImage();
+    
+    /*
+     * fill image with black with zero alpha
+     */
+    m_image->fill(QColor(0, 0, 0, 0));
+
+    readFileMetaDataFromQImage();
 }
 
 /**
@@ -161,8 +260,35 @@ ImageFile::clear()
     if (m_image != NULL) {
         delete m_image;
     }
-    m_image = new QImage();
+    initializeMembersImageFile();
+
+    readFileMetaDataFromQImage();
     this->clearModified();
+}
+
+/**
+ * Clear this file's modified status
+ */
+void
+ImageFile::clearModified()
+{
+    MediaFile::clearModified();
+    m_fileMetaData->clearModified();
+}
+
+/**
+ * @return True if this file is modified, else falsel
+ */
+bool
+ImageFile::isModified() const
+{
+    if (MediaFile::isModified()) {
+        return true;
+    }
+    if (m_fileMetaData->isModified()) {
+        return true;
+    }
+    return false;
 }
 
 /**
@@ -175,6 +301,21 @@ ImageFile::getNumberOfFrames() const
         return 1;
     }
     return 0;
+}
+
+/**
+ * @return Name of frame at given index.
+ * @param frameIndex Index of the frame
+ */
+AString
+ImageFile::getFrameName(const int32_t frameIndex) const
+{
+    AString frameName;
+    if (frameName.isEmpty()) {
+        frameName = MediaFile::getFrameName(frameIndex);
+    }
+    
+    return frameName;
 }
 
 /**
@@ -211,6 +352,7 @@ ImageFile::isEmpty() const
 const QImage*
 ImageFile::getAsQImage() const
 {
+    writeFileMetaDataToQImage();
     return m_image;
 }
 
@@ -226,6 +368,7 @@ ImageFile::setFromQImage(const QImage& qimage)
         delete m_image;
     }
     m_image = new QImage(qimage);
+    readFileMetaDataFromQImage();
     this->setModified();
 }
 
@@ -366,36 +509,6 @@ ImageFile::addMargin(const int marginSize,
                      const uint8_t backgroundColor[3])
 {
     this->addMargin(marginSize, marginSize, backgroundColor);
-    /*
-     if (marginSize <= 0) {
-     return;
-     }
-     
-     //
-     // Add margin
-     //
-     const int width = image.width();
-     const int height = image.height();
-     const int newWidth = width + marginSize * 2;
-     const int newHeight = height + marginSize * 2;
-     QRgb backgroundColorRGB = qRgba(backgroundColor[0],
-     backgroundColor[1],
-     backgroundColor[2],
-     0);
-     
-     //
-     // Insert image
-     //
-     ImageFile imageFile;
-     imageFile.setImage(QImage(newWidth, newHeight, image.format()));
-     imageFile.getImage()->fill(backgroundColorRGB);
-     try {
-     imageFile.insertImage(image, marginSize, marginSize);
-     image = (*imageFile.getImage());
-     }
-     catch (DataFileException&) {
-     }
-     */
 }
 
 /**
@@ -428,7 +541,9 @@ ImageFile::addMargin(const int marginSizeX,
     QRgb backgroundColorRGB = qRgba(backgroundColor[0],
                                     backgroundColor[1],
                                     backgroundColor[2],
-                                    0);
+                                    255);
+    
+    GiftiMetaData fileMetaDataCopy(*m_fileMetaData);
     
     //
     // Insert image
@@ -439,6 +554,11 @@ ImageFile::addMargin(const int marginSizeX,
     try {
         imageFile.insertImage(*m_image, marginSizeX, marginSizeY);
         this->setFromQImage(*imageFile.getAsQImage());
+        
+        /*
+         * Preserve metadata
+         */
+        *m_fileMetaData = fileMetaDataCopy;
     }
     catch (DataFileException& e) {
         CaretLogWarning(e.whatString());
@@ -483,11 +603,12 @@ ImageFile::cropImageRemoveBackground(const int marginSize,
                                                          leftTopRightBottom[1],
                                                          width,
                                                          height);
-            if (copyImage.isNull() == false) {
+            if ( ! copyImage.isNull()) {
                 if ((copyImage.width() > 0)
                     && (copyImage.height() > 0)) {
-                    
+                    GiftiMetaData fileMetaDataCopy(*m_fileMetaData);
                     this->setFromQImage(copyImage);
+                    *m_fileMetaData = fileMetaDataCopy;
                 }
             }
             
@@ -633,58 +754,81 @@ ImageFile::readFile(const AString& filename)
     
     this->setFileName(filename);
     
-    if (m_image->load(filename) == false) {
+    if ( ! m_image->load(filename)) {
         clear();
         throw DataFileException(filename + "Unable to load file.");
     }
+    
+    m_image = limitImageDimensions(m_image,
+                                   filename);
+    
+    /*
+     * Format must be RGB or ARGB for compatibility with OpenGL
+     */
+    verifyFormatCompatibleWithOpenGL();
+
+    readFileMetaDataFromQImage();
     
     this->clearModified();
 }
 
 /**
- * Append an image file to the bottom of this image file.
- * @param img
- *    Image that is appended.
+ * Limit the dimensions of an the image
+ * @param image
+ *    Image that is limited in dimensions
+ * @param filename
+ *    Name of image file
+ * @return
+ *    Original image or new image that is resized version of original image
  */
-void
-ImageFile::appendImageAtBottom(const ImageFile& img)
+QImage*
+ImageFile::limitImageDimensions(QImage* image,
+                                const AString& filename)
 {
-    //
-    // Determine size of new image
-    //
-    const QImage* otherImage = img.getAsQImage();
-    const int newWidth = std::max(m_image->width(), otherImage->width());
-    const int newHeight = m_image->height() + otherImage->height();
-    const int oldHeight = m_image->height();
+    QImage* imageOut(image);
     
-    //
-    // Copy the current image
-    //
-    const QImage currentImage = *m_image;
-    //   std::cout << "cw: " << currentImage.width() << std::endl;
-    //   std::cout << "ch: " << currentImage.height() << std::endl;
+    if ( ! image->isNull()) {
+        switch (ApplicationInformation::getApplicationType()) {
+            case ApplicationTypeEnum::APPLICATION_TYPE_COMMAND_LINE:
+                break;
+            case ApplicationTypeEnum::APPLICATION_TYPE_GRAPHICAL_USER_INTERFACE:
+            {
+                const int32_t width(image->width());
+                const int32_t height(image->height());
+                const int32_t maxDim(GraphicsUtilitiesOpenGL::getTextureWidthHeightMaximumDimension());
+                if ((width > maxDim)
+                    || (height > maxDim)) {
+                    QImage newImage;
+                    if (width > height) {
+                        newImage = image->scaledToWidth(maxDim);
+                    }
+                    else {
+                        newImage = image->scaledToHeight(maxDim);
+                    }
+                    if ( ! newImage.isNull()) {
+                        delete image;
+                        imageOut = new QImage(newImage);
+                        CaretLogWarning("Rescaled image "
+                                        + filename
+                                        + " from size ("
+                                        + AString::number(width)
+                                        + ", "
+                                        + AString::number(height)
+                                        + ") to ("
+                                        + AString::number(imageOut->width())
+                                        + ", "
+                                        + AString::number(imageOut->height())
+                                        + ")");
+                    }
+                }
+            }
+                break;
+            case ApplicationTypeEnum::APPLICATION_TYPE_INVALID:
+                break;
+        }
+    }
     
-    //
-    // Create the new image and make it "this" image
-    //
-    QImage newImage(newWidth, newHeight, QImage::Format_RGB32);
-    //   std::cout << "nw: " << newImage.width() << std::endl;
-    //   std::cout << "nh: " << newImage.height() << std::endl;
-    setFromQImage(newImage);
-    //   std::cout << "iw2: " << image.width() << std::endl;
-    //   std::cout << "ih2: " << image.height() << std::endl;
-    
-    //
-    // Insert current image into new image
-    //
-    insertImage(currentImage, 0, 0);
-    
-    //
-    // Insert other image into new image
-    //
-    insertImage(*otherImage, 0, oldHeight);
-    
-    this->setModified();
+    return imageOut;
 }
 
 /**
@@ -934,6 +1078,12 @@ ImageFile::compareFileForUnitTesting(const DataFile* dataFile,
 void
 ImageFile::writeFile(const AString& filename)
 {
+    if ( ! DataFileTypeEnum::isValidWriteFileExtension(filename,
+                                                       DataFileTypeEnum::IMAGE)) {
+        throw DataFileException(filename,
+                                "Filename's extension does not match a image file type that is writable.");
+    }
+    
     checkFileWritability(filename);
     
     this->setFileName(filename);
@@ -943,10 +1093,10 @@ ImageFile::writeFile(const AString& filename)
         errorMessage = "Image width is zero.";
     }
     if (m_image->height() <= 0) {
-        if (errorMessage.isEmpty() == false) errorMessage += "\n";
+        if ( ! errorMessage.isEmpty()) errorMessage += "\n";
         errorMessage = "Image height is zero.";
     }
-    if (errorMessage.isEmpty() == false) {
+    if ( ! errorMessage.isEmpty()) {
         throw DataFileException(filename + "  " + errorMessage);
     }
     
@@ -968,10 +1118,13 @@ ImageFile::writeFile(const AString& filename)
         }
     }
     
-    if (writer.supportsOption(QImageIOHandler::CompressionRatio)) {
+    if (writer.supportsOption(QImageIOHandler::CompressionRatio) && writer.compression() == 0) {
         writer.setCompression(1);
     }
-    if (writer.write(*m_image) == false) {
+    
+    writeFileMetaDataToQImage();
+    
+    if ( ! writer.write(*m_image)) {
         throw DataFileException(writer.errorString());
     }
     
@@ -1004,9 +1157,13 @@ ImageFile::getSaveQFileDialogImageFilters(std::vector<AString>& imageFileFilters
 void
 ImageFile::resizeToWidth(const int32_t width)
 {
+    GiftiMetaData fileMetaDataCopy(*m_fileMetaData);
+    
     CaretAssert(m_image);
     *m_image = m_image->scaledToWidth(width,
                                       Qt::SmoothTransformation);
+    
+    *m_fileMetaData = fileMetaDataCopy;
 }
 
 /**
@@ -1019,9 +1176,13 @@ ImageFile::resizeToWidth(const int32_t width)
 void
 ImageFile::resizeToHeight(const int32_t height)
 {
+    GiftiMetaData fileMetaDataCopy(*m_fileMetaData);
+    
     CaretAssert(m_image);
     *m_image = m_image->scaledToHeight(height,
                                        Qt::SmoothTransformation);
+    
+    *m_fileMetaData = fileMetaDataCopy;
 }
 
 /**
@@ -1039,8 +1200,10 @@ ImageFile::resizeToMaximumWidth(const int32_t maximumWidth)
     const int32_t width = m_image->width();
     
     if (width > maximumWidth) {
+        GiftiMetaData fileMetaDataCopy(*m_fileMetaData);
         *m_image = m_image->scaledToWidth(maximumWidth,
                                           Qt::SmoothTransformation);
+        *m_fileMetaData = fileMetaDataCopy;
     }
 }
 
@@ -1059,8 +1222,10 @@ ImageFile::resizeToMaximumHeight(const int32_t maximumHeight)
     const int32_t height = m_image->height();
     
     if (height > maximumHeight) {
+        GiftiMetaData fileMetaDataCopy(*m_fileMetaData);
         *m_image = m_image->scaledToHeight(maximumHeight,
                                           Qt::SmoothTransformation);
+        *m_fileMetaData = fileMetaDataCopy;
     }
 }
 
@@ -1139,21 +1304,95 @@ ImageFile::getImageBytesRGBA(const IMAGE_DATA_ORIGIN_LOCATION imageOrigin,
              * Documentation for QImage states that setPixel may be very costly
              * and recommends using the scanLine() method to access pixel data.
              */
-            for (int y = 0; y < heightOut; y++) {
-                const int scanLineIndex = (isOriginAtTop
+            for (int64_t y = 0; y < heightOut; y++) {
+                const int64_t scanLineIndex = (isOriginAtTop
                                            ? y
                                            : heightOut -y - 1);
                 const uchar* scanLine = m_image->scanLine(scanLineIndex);
                 QRgb* rgbScanLine = (QRgb*)scanLine;
                 
-                for (int x = 0; x < widthOut; x++) {
-                    const int32_t contentOffset = (((y * widthOut) * 4)
+                for (int64_t x = 0; x < widthOut; x++) {
+                    const int64_t contentOffset = (((y * widthOut) * 4)
                                                    + (x * 4));
                     QRgb& rgb = rgbScanLine[x];
                     bytesRGBA[contentOffset] = static_cast<uint8_t>(qRed(rgb));
                     bytesRGBA[contentOffset+1] = static_cast<uint8_t>(qGreen(rgb));
                     bytesRGBA[contentOffset+2] = static_cast<uint8_t>(qBlue(rgb));
-                    bytesRGBA[contentOffset+3] = 255;
+                    bytesRGBA[contentOffset+3] = static_cast<uint8_t>(qAlpha(rgb));
+                }
+            }
+            return true;
+        }
+    }
+    
+    return false;
+}
+
+/**
+ * Get the RGBA bytes from the given QImage.
+ *
+ * @parm qImage
+ *    The QImage
+ * @param bytesRGBA
+ *    The RGBA bytes in the image.
+ * @param widthOut
+ *    Width of the image.
+ * @param heightOut
+ *    Height of the image.
+ * @param imageOrigin
+ *     Location of first pixel in the image data.
+ * @return
+ *    True if the bytes, width, and height are valid, else false.
+ */
+bool
+ImageFile::getImageBytesRGBA(const QImage* qImage,
+                              const IMAGE_DATA_ORIGIN_LOCATION imageOrigin,
+                              std::vector<uint8_t>& bytesRGBA,
+                              int32_t& widthOut,
+                              int32_t& heightOut)
+{
+    CaretAssert(qImage);
+    bytesRGBA.clear();
+    widthOut = 0;
+    heightOut = 0;
+    
+    if (qImage != NULL) {
+        widthOut  = qImage->width();
+        heightOut = qImage->height();
+        if ((widthOut > 0)
+            && (heightOut > 0)) {
+            
+            bytesRGBA.resize(widthOut * heightOut * 4);
+            
+            bool isOriginAtTop = false;
+            switch (imageOrigin) {
+                case IMAGE_DATA_ORIGIN_AT_BOTTOM:
+                    isOriginAtTop = false;
+                    break;
+                case IMAGE_DATA_ORIGIN_AT_TOP:
+                    isOriginAtTop = true;
+                    break;
+            }
+            
+            /*
+             * Documentation for QImage states that setPixel may be very costly
+             * and recommends using the scanLine() method to access pixel data.
+             */
+            for (int64_t y = 0; y < heightOut; y++) {
+                const int64_t scanLineIndex = (isOriginAtTop
+                                               ? y
+                                               : heightOut -y - 1);
+                const uchar* scanLine = qImage->scanLine(scanLineIndex);
+                QRgb* rgbScanLine = (QRgb*)scanLine;
+                
+                for (int64_t x = 0; x < widthOut; x++) {
+                    const int64_t contentOffset = (((y * widthOut) * 4)
+                                                   + (x * 4));
+                    QRgb& rgb = rgbScanLine[x];
+                    bytesRGBA[contentOffset] = static_cast<uint8_t>(qRed(rgb));
+                    bytesRGBA[contentOffset+1] = static_cast<uint8_t>(qGreen(rgb));
+                    bytesRGBA[contentOffset+2] = static_cast<uint8_t>(qBlue(rgb));
+                    bytesRGBA[contentOffset+3] = static_cast<uint8_t>(qAlpha(rgb));
                 }
             }
             return true;
@@ -1166,61 +1405,195 @@ ImageFile::getImageBytesRGBA(const IMAGE_DATA_ORIGIN_LOCATION imageOrigin,
 /**
  * Get the pixel RGBA at the given pixel I and J.
  *
- * @param imageOrigin
- *    Location of first pixel in the image data.
- * @param pixelI
- *     Image I index
- * @param pixelJ
- *     Image J index
+ * @param tabIndex
+ *    Index of the tab.
+ * @param overlayIndex
+ *    Index of overlay
+ * @param pixelLogicalIndex
+ *     Logical pixel index that may not have (0, 0) in top left corner
  * @param pixelRGBAOut
  *     RGBA at Pixel I, J
  * @return
  *     True if valid, else false.
  */
 bool
-ImageFile::getImagePixelRGBA(const IMAGE_DATA_ORIGIN_LOCATION imageOrigin,
-                             const int32_t pixelI,
-                             const int32_t pixelJ,
-                             uint8_t pixelRGBAOut[4]) const
+ImageFile::getPixelRGBA(const int32_t /*tabIndex*/,
+                        const int32_t /*overlayIndex*/,
+                        const PixelLogicalIndex& pixelLogicalIndex,
+                        uint8_t pixelRGBAOut[4]) const
 {
     if (m_image != NULL) {
         const int32_t w = m_image->width();
         const int32_t h = m_image->height();
         
+        const int64_t pixelI(pixelLogicalIndex.getI());
+        const int64_t pixelJ(pixelLogicalIndex.getJ());
         if ((pixelI >= 0)
             && (pixelI < w)
             && (pixelJ >= 0)
             && (pixelJ < h)) {
+            const QRgb rgb = m_image->pixel(pixelI,
+                                            pixelJ);
+            pixelRGBAOut[0] = static_cast<uint8_t>(qRed(rgb));
+            pixelRGBAOut[1] = static_cast<uint8_t>(qGreen(rgb));
+            pixelRGBAOut[2] = static_cast<uint8_t>(qBlue(rgb));
+            pixelRGBAOut[3] = static_cast<uint8_t>(qAlpha(rgb));
             
-            int32_t imageJ = pixelJ;
-            switch (imageOrigin) {
-                case IMAGE_DATA_ORIGIN_AT_BOTTOM:
-                    imageJ = h - pixelJ - 1;
-                    break;
-                case IMAGE_DATA_ORIGIN_AT_TOP:
-                    break;
-            }
-            
-            if ((imageJ >= 0)
-                && (imageJ < h)) {
-                const QRgb rgb = m_image->pixel(pixelI,
-                                                imageJ);
-                pixelRGBAOut[0] = static_cast<uint8_t>(qRed(rgb));
-                pixelRGBAOut[1] = static_cast<uint8_t>(qGreen(rgb));
-                pixelRGBAOut[2] = static_cast<uint8_t>(qBlue(rgb));
-                pixelRGBAOut[3] = 255;
-                
-                return true;
-            }
-            else {
-                CaretLogSevere("Invalid image J");
-            }
+            return true;
         }
     }
     
     return false;
+
 }
 
+/**
+ * Set the pixel RGBA at the given pixel I and J.
+ *
+ * @param tabIndex
+ *    Index of the tab.
+ * @param overlayIndex
+ *    Index of overlay
+ * @param pixelLogicalIndex
+ *     Logical pixel index that may not have (0, 0) in top left corner
+ * @param pixelRGBAOut
+ *     RGBA at Pixel I, J
+ */
+void
+ImageFile::setPixelRGBA(const int32_t /*tabIndex*/,
+                        const int32_t /*overlayIndex*/,
+                        const PixelLogicalIndex& pixelLogicalIndex,
+                        const uint8_t pixelRGBA[4])
+{
+    if (m_image != NULL) {
+        const int64_t pixelI(pixelLogicalIndex.getI());
+        const int64_t pixelJ(pixelLogicalIndex.getJ());
+        m_image->setPixelColor(pixelI, pixelJ, QColor(pixelRGBA[0],
+                                                      pixelRGBA[1],
+                                                      pixelRGBA[2],
+                                                      pixelRGBA[3]));
+    }
+}
+
+/**
+ * Set the pixel RGBA at the given pixel I and J.
+ *
+ * @param tabIndex
+ *    Index of the tab.
+ * @param overlayIndex
+ *    Index of overlay
+ * @param pixelIndex
+ *     Pixel index with (0, 0) in top left corner
+ * @param pixelRGBAOut
+ *     RGBA at Pixel I, J
+ */
+void
+ImageFile::setPixelRGBA(const int32_t /*tabIndex*/,
+                        const int32_t /*overlayIndex*/,
+                        const PixelIndex& pixelIndex,
+                        const uint8_t pixelRGBA[4])
+{
+    if (m_image != NULL) {
+        const int64_t pixelI(pixelIndex.getI());
+        const int64_t pixelJ(pixelIndex.getJ());
+        m_image->setPixelColor(pixelI, pixelJ, QColor(pixelRGBA[0],
+                                                      pixelRGBA[1],
+                                                      pixelRGBA[2],
+                                                      pixelRGBA[3]));
+    }
+}
+
+/**
+ * Set the pixel RGBA at the given pixel I and J.
+ *
+ * @param tabIndex
+ *    Index of the tab.
+ * @param overlayIndex
+ *    Index of overlay
+ * @param pixelI
+ *     Pixel I index (origin top left)
+ * @param pixelJ
+ *     Pixel J index (origin top left)
+ * @param pixelRGBAOut
+ *     RGBA at Pixel I, J
+ */
+void
+ImageFile::setPixelRGBA(const int32_t /*tabIndex*/,
+                        const int32_t /*overlayIndex*/,
+                        const int32_t pixelI,
+                        const int32_t pixelJ,
+                        const uint8_t pixelRGBA[4])
+{
+    if (m_image != NULL) {
+        m_image->setPixelColor(pixelI, pixelJ, QColor(pixelRGBA[0],
+                                                      pixelRGBA[1],
+                                                      pixelRGBA[2],
+                                                      pixelRGBA[3]));
+    }
+}
+
+/**
+ * Set a full row of pixels with RGBA colors
+ * @param rowIndex
+ *    Index of the row
+ * @param pixelRowRGBA
+ *    Vector containing RGBA for all pixels in the row
+ */
+void
+ImageFile::setPixelRowRGBA(const int32_t rowIndex,
+                           const std::vector<uint8_t>& pixelRowRGBA)
+{
+    const int32_t rowLength(getWidth());
+    if ((rowLength * 4) != static_cast<int32_t>(pixelRowRGBA.size())) {
+        const AString msg("pixel RGBA vector is incorrect length="
+                          + AString::number(pixelRowRGBA.size())
+                          + ", should be="
+                          + AString::number(rowLength * 4));
+        CaretLogSevere(msg);
+        CaretAssertMessage(0, msg);
+        return;
+    }
+    if ((rowIndex < 0)
+        || (rowIndex >= getHeight())) {
+        const AString msg("Row index="
+                          + AString::number(rowIndex)
+                          + " out of range, height="
+                          + AString::number(getHeight()));
+        CaretLogSevere(msg);
+        CaretAssertMessage(0, msg);
+        return;
+    }
+    
+    uint8_t* rowByteColor(m_image->scanLine(rowIndex));
+    uint32_t* rowIntColor((uint32_t*)rowByteColor);
+    switch (m_image->format()) {
+        case QImage::Format_ARGB32:
+            /*
+             * This format is typically used by image in Workbench
+             */
+            for (int32_t i = 0; i < rowLength; i++) {
+                const int32_t i4(i*4);
+                rowIntColor[i] = QRgba64::fromRgba(pixelRowRGBA[i4],
+                                                   pixelRowRGBA[i4+1],
+                                                   pixelRowRGBA[i4+2],
+                                                   pixelRowRGBA[i4+3]).toArgb32();
+            }
+            break;
+        default:
+        {
+            const int32_t pixelJ(rowIndex);
+            for (int32_t i = 0; i < rowLength; i++) {
+                const int32_t i4(i*4);
+                m_image->setPixelColor(i, pixelJ,
+                                       QColor(pixelRowRGBA[i4],
+                                              pixelRowRGBA[i4+1],
+                                              pixelRowRGBA[i4+2],
+                                              pixelRowRGBA[i4+3]));
+            }
+        }
+            break;
+    }
+}
 
 /**
  * Get the RGBA bytes from the image resized into the given width and height.
@@ -1242,6 +1615,9 @@ ImageFile::getImageResizedBytes(const IMAGE_DATA_ORIGIN_LOCATION imageOrigin,
                                 const int32_t resizeToHeight,
                                 std::vector<uint8_t>& bytesRGBAOut) const
 {
+    CaretAssertMessage(0, "There is a bug in this function, it has not been fixed. "
+                       "Use getGraphicsPrimitiveForFeaturesImageDrawing()");
+    
     bytesRGBAOut.clear();
     
     if (m_image == NULL) {
@@ -1260,7 +1636,9 @@ ImageFile::getImageResizedBytes(const IMAGE_DATA_ORIGIN_LOCATION imageOrigin,
                                    resizeToHeight,
                                    Qt::IgnoreAspectRatio,
                                    Qt::SmoothTransformation);
-
+    CaretAssert(scaledImage.width() == resizeToWidth);
+    CaretAssert(scaledImage.height() == resizeToHeight);
+    
     /*
      * QImage::scaled() failed.
      */
@@ -1289,22 +1667,31 @@ ImageFile::getImageResizedBytes(const IMAGE_DATA_ORIGIN_LOCATION imageOrigin,
         const uchar* scanLine = scaledImage.scanLine(scanLineIndex);
         QRgb* rgbScanLine = (QRgb*)scanLine;
         
+        const int32_t rowLength(resizeToWidth * 4);
+        const int32_t rowOffset(rowLength * y);
         for (int x = 0; x < resizeToWidth; x++) {
-            const int32_t contentOffset = (((y * resizeToWidth) * 4)
-                                           + (x * 4));
+            const int32_t contentOffset(rowOffset + (x * 4));
             QRgb& rgb = rgbScanLine[x];
             CaretAssertVectorIndex(bytesRGBAOut, contentOffset + 3);
             bytesRGBAOut[contentOffset] = static_cast<uint8_t>(qRed(rgb));
             bytesRGBAOut[contentOffset+1] = static_cast<uint8_t>(qGreen(rgb));
             bytesRGBAOut[contentOffset+2] = static_cast<uint8_t>(qBlue(rgb));
-            bytesRGBAOut[contentOffset+3] = 255;
+            bytesRGBAOut[contentOffset+3] = static_cast<uint8_t>(qAlpha(rgb));
         }
+    }
+    
+    {
+        QImage test(bytesRGBAOut.data(),
+                    resizeToWidth,
+                    resizeToHeight,
+                    scaledImage.format());
+        test.save("john.png");
     }
     return true;
 }
 
 /**
- * @return width of image (zero if image is invalid)
+ * @return width of media file
  */
 int32_t
 ImageFile::getWidth() const
@@ -1319,7 +1706,7 @@ ImageFile::getWidth() const
 }
 
 /**
- * @return height of image (zero if image is invalid)
+ * @return height of media file
  */
 int32_t
 ImageFile::getHeight() const
@@ -1438,11 +1825,11 @@ ImageFile::convertToVolumeFile(const CONVERT_TO_VOLUME_COLOR_MODE colorMode,
     
     float firstPixel[3] = { 0, 0, 0 };
     transformationMatrix->multiplyPoint3(firstPixel);
-    std::cout << "First pixel coord: " << AString::fromNumbers(firstPixel, 3, ",") << std::endl;
+    if (imageDebugFlag) std::cout << "First pixel coord: " << AString::fromNumbers(firstPixel, 3, ",") << std::endl;
     
     float lastPixel[3] = { (float)(width - 1), (float)(height - 1), 0.0f };
     transformationMatrix->multiplyPoint3(lastPixel);
-    std::cout << "Last pixel coord: " << AString::fromNumbers(lastPixel, 3, ",") << std::endl;
+    if (imageDebugFlag) std::cout << "Last pixel coord: " << AString::fromNumbers(lastPixel, 3, ",") << std::endl;
     
     {
         float bl[3] = { 0.0, 0.0, 0.0 };
@@ -1598,98 +1985,221 @@ ImageFile::getControlPointFile() const
     return m_controlPointFile;
 }
 
-/**
- * @return The graphics primitive for drawing the image as a texture in media drawing model.
- */
-GraphicsPrimitiveV3fT3f*
-ImageFile::getGraphicsPrimitiveForMediaDrawing() const
+GraphicsPrimitiveV3fT2f*
+ImageFile::getGraphicsPrimitiveForFeaturesImageDrawing() const
 {
     if (m_image == NULL) {
         return NULL;
     }
     
-    if (m_graphicsPrimitiveForMediaDrawing == NULL) {
-        std::vector<uint8_t> bytesRGBA;
-        int32_t width(0);
-        int32_t height(0);
-        
-        /*
-         * If image is too big for OpenGL texture limits, scale image to acceptable size
-         */
-        const int32_t maxTextureWidthHeight = GraphicsUtilitiesOpenGL::getTextureWidthHeightMaximumDimension();
-        if (maxTextureWidthHeight > 0) {
-            const int32_t excessWidth(m_image->width() - maxTextureWidthHeight);
-            const int32_t excessHeight(m_image->height() - maxTextureWidthHeight);
-            if ((excessWidth > 0)
-                || (excessHeight > 0)) {
-                if (excessWidth > excessHeight) {
-                    CaretLogWarning(getFileName()
-                                    + " is too big for texture.  Maximum width/height is: "
-                                    + AString::number(maxTextureWidthHeight)
-                                    + " Image Width: "
-                                    + AString::number(m_image->width())
-                                    + " Image Height: "
-                                    + AString::number(m_image->height()));
-                }
-            }
-        }
+    if (m_featuresImageGraphicsPrimitive == NULL) {
+        GraphicsPrimitiveV3fT2f* primitive(createGraphicsPrimitive());
+        m_featuresImageGraphicsPrimitive.reset(primitive);
+    }
+    
+    const int32_t pixelPrimitiveVertexStartIndex(0);
+    const int32_t pixelPrimitiveVertexCount(4);
+    m_featuresImageGraphicsPrimitive->setDrawArrayIndicesSubset(pixelPrimitiveVertexStartIndex,
+                                                                pixelPrimitiveVertexCount);
+    return m_featuresImageGraphicsPrimitive.get();
+}
 
-        /*
-         * Some images may use a color table so convert images
-         * if there are not in preferred format prior to
-         * getting colors of pixels
-         */
-        bool validRGBA(false);
-        if (m_image->format() != QImage::Format_RGB32) {
-            QImage image = m_image->convertToFormat(QImage::Format_RGB32);
-            if (! image.isNull()) {
-                ImageFile convImageFile;
-                convImageFile.setFromQImage(image);
-                validRGBA = convImageFile.getImageBytesRGBA(IMAGE_DATA_ORIGIN_AT_BOTTOM,
-                                                            bytesRGBA,
-                                                            width,
-                                                            height);
+/**
+ * @return The graphics primitive for drawing the image as a texture in media drawing model.
+ * @param tabIndex
+ *    Index of tab where image is drawn
+ * @param overlayIndex
+ *    Index of overlay
+ */
+GraphicsPrimitiveV3fT2f*
+ImageFile::getGraphicsPrimitiveForMediaDrawing(const int32_t /*tabIndex*/,
+                                               const int32_t /*overlayIndex*/) const
+{
+    if (m_image == NULL) {
+        return NULL;
+    }
+    
+    if (m_graphicsPrimitive == NULL) {
+        GraphicsPrimitiveV3fT2f* primitive(createGraphicsPrimitive());
+        m_graphicsPrimitive.reset(primitive);
+    }
+    CaretAssert(m_pixelPrimitiveVertexStartIndex >= 0);
+    CaretAssert(m_pixelPrimitiveVertexCount > 0);
+    m_graphicsPrimitive->setDrawArrayIndicesSubset(m_pixelPrimitiveVertexStartIndex,
+                                                   m_pixelPrimitiveVertexCount);
+    return m_graphicsPrimitive.get();
+}
+
+/**
+ * @return A new graphics primitive for loaded data for both coordinate types
+ */
+GraphicsPrimitiveV3fT2f*
+ImageFile::createGraphicsPrimitive() const
+{
+    /*
+     * If image is too big for OpenGL texture limits, scale image to acceptable size
+     */
+    const int32_t maxTextureWidthHeight = GraphicsUtilitiesOpenGL::getTextureWidthHeightMaximumDimension();
+    if (maxTextureWidthHeight > 0) {
+        const int32_t excessWidth(m_image->width() - maxTextureWidthHeight);
+        const int32_t excessHeight(m_image->height() - maxTextureWidthHeight);
+        if ((excessWidth > 0)
+            || (excessHeight > 0)) {
+            if (excessWidth > excessHeight) {
+                CaretLogWarning(getFileName()
+                                + " is too big for texture.  Maximum width/height is: "
+                                + AString::number(maxTextureWidthHeight)
+                                + " Image Width: "
+                                + AString::number(m_image->width())
+                                + " Image Height: "
+                                + AString::number(m_image->height()));
             }
-        }
-        else {
-            validRGBA = getImageBytesRGBA(IMAGE_DATA_ORIGIN_AT_BOTTOM,
-                                          bytesRGBA,
-                                          width,
-                                          height);
-        }
-        
-        if (validRGBA) {
-            GraphicsPrimitiveV3fT3f* primitive = GraphicsPrimitive::newPrimitiveV3fT3f(GraphicsPrimitive::PrimitiveType::OPENGL_TRIANGLE_STRIP,
-                                                                                       &bytesRGBA[0],
-                                                                                       width,
-                                                                                       height,
-                                                                                       GraphicsPrimitive::TextureWrappingType::CLAMP,
-                                                                                       GraphicsPrimitive::TextureFilteringType::LINEAR);
-            /*
-             * A Triangle Strip (consisting of two triangles) is used
-             * for drawing the image.  At this time, the XYZ coordinates
-             * do not matter and they will be updated when the annotation
-             * is drawn by a call to ::setVertexBounds().
-             * The order of the vertices in the triangle strip is
-             * Top Left, Bottom Left, Top Right, Bottom Right.  If this
-             * order changes, ::setVertexBounds must be updated.
-             *
-             * Zeros are used for the X- and Y-coordinates.
-             * The third and fourth parameters are the texture
-             * S and T coordinates.
-             */
-            const float halfWidth(width * 0.5);
-            const float halfHeight(height * 0.5);
-            primitive->addVertex(-halfWidth,  halfHeight, 0, 1);  /* Top Left */
-            primitive->addVertex(-halfWidth, -halfHeight, 0, 0);  /* Bottom Left */
-            primitive->addVertex(halfWidth,   halfHeight, 1, 1);  /* Top Right */
-            primitive->addVertex(halfWidth,  -halfHeight, 1, 0);  /* Bottom Right */
-            
-            m_graphicsPrimitiveForMediaDrawing.reset(primitive);
         }
     }
     
-    return m_graphicsPrimitiveForMediaDrawing.get();
+    /*
+     * Format must be RGB or ARGB for compatibility with OpenGL
+     */
+    verifyFormatCompatibleWithOpenGL();
+    
+    const std::array<float, 4> textureBorderColorRGBA { 0.0, 0.0, 0.0, 0.0 };
+    
+    GraphicsTextureSettings::PixelFormatType pixelFormat(GraphicsTextureSettings::PixelFormatType::BGRA);
+    switch (m_image->format()) {
+        case QImage::Format_RGB32:  /* Contains alpha that is always 255 */
+            pixelFormat = GraphicsTextureSettings::PixelFormatType::BGRX;
+            break;
+        case QImage::Format_RGB888:
+            pixelFormat = GraphicsTextureSettings::PixelFormatType::RGB;
+            break;
+        case QImage::Format_ARGB32:
+            pixelFormat = GraphicsTextureSettings::PixelFormatType::BGRA;
+            break;
+        default:
+            CaretAssertMessage(0, "Format not compatible with OpenGL");
+            break;
+    }
+    
+    /*
+     * Filtering for matching image pixel to screen pixel
+     */
+    GraphicsTextureMagnificationFilterEnum::Enum magFilter(GraphicsTextureMagnificationFilterEnum::NEAREST);
+    GraphicsTextureMinificationFilterEnum::Enum minFilter(GraphicsTextureMinificationFilterEnum::NEAREST);
+    const bool smoothFlag(false);
+    if (smoothFlag) {
+        /*
+         * This will break opacity on drawing volume slices over
+         * histology slices that results in white edges appearing
+         * when opacity is less than one.
+         */
+        magFilter = GraphicsTextureMagnificationFilterEnum::LINEAR;
+        minFilter = GraphicsTextureMinificationFilterEnum::LINEAR_MIPMAP_LINEAR;
+    }
+    /*
+     * Compress texture if image is large and compression is enabled
+     */
+    const GraphicsTextureSettings::CompressionType textureCompressionType(isImageTextureCompressed()
+                                                                          ? GraphicsTextureSettings::CompressionType::ENABLED
+                                                                          : GraphicsTextureSettings::CompressionType::DISABLED);
+    GraphicsTextureSettings textureSettings(m_image->constBits(),
+                                            m_image->width(),
+                                            m_image->height(),
+                                            1, /* slices */
+                                            GraphicsTextureSettings::DimensionType::FLOAT_STR_2D,
+                                            pixelFormat,
+                                            GraphicsTextureSettings::PixelOrigin::TOP_LEFT,
+                                            GraphicsTextureSettings::WrappingType::CLAMP,
+                                            GraphicsTextureSettings::MipMappingType::ENABLED,
+                                            textureCompressionType,
+                                            magFilter,
+                                            minFilter,
+                                            textureBorderColorRGBA);
+    GraphicsPrimitiveV3fT2f* primitive = GraphicsPrimitive::newPrimitiveV3fT2f(GraphicsPrimitive::PrimitiveType::OPENGL_TRIANGLE_STRIP,
+                                                                               textureSettings);
+    
+    /*
+     * Create a primitive for PIXEL coordinates
+     *
+     * Coordinates at EDGE of the pixels
+     */
+    const float minX = 0;
+    const float maxX = getWidth();
+    const float minY = 0;
+    const float maxY = getHeight();
+    
+    /*
+     * A Triangle Strip (consisting of two triangles) is used
+     * for drawing the image.
+     * The order of the vertices in the triangle strip is
+     * Top Left, Bottom Left, Top Right, Bottom Right.
+     * ORIGIN IS AT TOP LEFT
+     */
+    const float minTextureST(0.0);
+    const float maxTextureST(1.0);
+    m_pixelPrimitiveVertexStartIndex = primitive->getNumberOfVertices();
+    primitive->addVertex(minX, minY, minTextureST, minTextureST);  /* Top Left */
+    primitive->addVertex(minX, maxY, minTextureST, maxTextureST);  /* Bottom Left */
+    primitive->addVertex(maxX, minY, maxTextureST, minTextureST);  /* Top Right */
+    primitive->addVertex(maxX, maxY, maxTextureST, maxTextureST);  /* Bottom Right */
+    m_pixelPrimitiveVertexCount = (primitive->getNumberOfVertices()
+                                   - m_pixelPrimitiveVertexStartIndex);
+    
+    /*
+     * Create a primitive for plane coordinates if available
+     */
+    if (isPlaneXyzSupported()) {
+        /*
+         * A Triangle Strip (consisting of two triangles) is used
+         * for drawing the image.
+         * The order of the vertices in the triangle strip is
+         * Top Left, Bottom Left, Top Right, Bottom Right.
+         * ORIGIN IS AT TOP LEFT
+         */
+        const float minTextureST(0.0);
+        const float maxTextureST(1.0);
+        const Vector3D coordinateTopLeft(getPlaneXyzTopLeft());
+        const Vector3D coordinateTopRight(getPlaneXyzTopRight());
+        const Vector3D coordinateBottomLeft(getPlaneXyzBottomLeft());
+        const Vector3D coordinateBottomRight(getPlaneXyzBottomRight());
+        m_planePrimitiveVertexStartIndex = primitive->getNumberOfVertices();
+        primitive->addVertex(coordinateTopLeft[0],     coordinateTopLeft[1],     minTextureST, minTextureST);  /* Top Left */
+        primitive->addVertex(coordinateBottomLeft[0],  coordinateBottomLeft[1],  minTextureST, maxTextureST);  /* Bottom Left */
+        primitive->addVertex(coordinateTopRight[0],    coordinateTopRight[1],    maxTextureST, minTextureST);  /* Top Right */
+        primitive->addVertex(coordinateBottomRight[0], coordinateBottomRight[1], maxTextureST, maxTextureST);  /* Bottom Right */
+        m_planePrimitiveVertexCount = (primitive->getNumberOfVertices()
+                                       - m_planePrimitiveVertexStartIndex);
+    }
+    
+    return primitive;
+}
+
+/**
+ * Verify and convert format so compatible with OpenGL
+ */
+void
+ImageFile::verifyFormatCompatibleWithOpenGL() const
+{
+    /*
+     * Using RGB888 (3 bytes per pixel) in place of RGB32 (4 bytes per pixel
+     * with an alpha that is always 0xff) saves 25% in memory usage
+     */
+    if ((m_image->format() != QImage::Format_RGB888)
+        && (m_image->format() != QImage::Format_ARGB32)) {
+        if (m_image->hasAlphaChannel()) {
+#if QT_VERSION >= QT_VERSION_CHECK(5, 13, 0)
+            m_image->convertTo(QImage::Format_ARGB32);
+#else
+            *m_image = m_image->convertToFormat(QImage::Format_ARGB32);
+#endif
+        }
+        else {
+#if QT_VERSION >= QT_VERSION_CHECK(5, 13, 0)
+            m_image->convertTo(QImage::Format_RGB888);
+#else
+            *m_image = m_image->convertToFormat(QImage::Format_RGB888);
+#endif
+        }
+    }
 }
 
 /**
@@ -1716,6 +2226,11 @@ ImageFile::saveFileDataToScene(const SceneAttributes* sceneAttributes,
         sceneClass->addClass(m_controlPointFile->saveToScene(sceneAttributes,
                                                              "m_controlPointFile"));
     }
+    
+    /*
+     * Added 01 June 2021 to assist with scenes created before default scaling
+     */
+    sceneClass->addInteger(ImageFile::SCENE_VERSION_NUMBER, 1);
 }
 
 /**
@@ -1741,6 +2256,13 @@ ImageFile::restoreFileDataFromScene(const SceneAttributes* sceneAttributes,
     
     m_controlPointFile->restoreFromScene(sceneAttributes,
                                          sceneClass->getClass("m_controlPointFile"));
+    
+    
+    /*
+     * If not restored, it will cause a warning
+     *const int32_t sceneVersionNumber =
+     */
+    sceneClass->getIntegerValue(ImageFile::SCENE_VERSION_NUMBER, 0);
 }
 
 /**
@@ -1772,8 +2294,31 @@ ImageFile::addToDataFileContentInformation(DataFileContentInformation& dataFileI
     MediaFile::addToDataFileContentInformation(dataFileInformation);
     
     if (m_image != NULL) {
-        dataFileInformation.addNameAndValue("Width", m_image->width());
-        dataFileInformation.addNameAndValue("Height", m_image->height());
+        dataFileInformation.addNameAndValue("Width (pixels)", m_image->width());
+        dataFileInformation.addNameAndValue("Height (pixels)", m_image->height());
+        
+        const float dotsPerMeter(m_image->dotsPerMeterX());
+        if (dotsPerMeter > 0.0) {
+            dataFileInformation.addNameAndValue("Width (meters)", m_image->width()   / dotsPerMeter);
+            dataFileInformation.addNameAndValue("Height (meters)", m_image->height() / dotsPerMeter);
+            
+            /*
+             * "To" and "From" units are flipped since conversion is on "per unit"
+             */
+            const float dotsPerInch = UnitsConversion::convertLength(UnitsConversion::LengthUnits::INCHES,
+                                                                     UnitsConversion::LengthUnits::METERS,
+                                                                     dotsPerMeter);
+            dataFileInformation.addNameAndValue("Width (inches)", m_image->width()   / dotsPerInch);
+            dataFileInformation.addNameAndValue("Height (inches)", m_image->height() / dotsPerInch);
+            dataFileInformation.addNameAndValue("Pixels Per Meter", dotsPerMeter);
+            dataFileInformation.addNameAndValue("Pixels Per Inch", dotsPerInch);
+        }
+        else {
+            dataFileInformation.addNameAndValue("Pixels Per Meter", "Unavailable");
+        }
+        
+        addPlaneCoordsToDataFileContentInformation(dataFileInformation);
+        
         dataFileInformation.addNameAndValue("Color Table", (m_image->colorTable().empty()
                                                             ? "No"
                                                             : "Yes"));
@@ -1796,6 +2341,60 @@ ImageFile::getQtSupportedImageFileExtensions(std::vector<AString>& readableExten
 }
 
 /**
+ * Get all image file extensions supported by Qt that support the 'clipRect' option
+ * to read a portion of the image file.
+ * @param clipRectReadableExtensionsOut
+ *    Output contains all readable image file extensions that support 'clipRect'
+ * @param scaledClipRectReadableExtensionsOut
+ *    Output contains all readable image file extensions that support 'scaledClipRect'
+ * @param metaDataReadableWritableExtensionsOut
+ * Output contains all image file extensions that support  file metadata (the 'description' option) for reading and writing
+ */
+void
+ImageFile::getImageFileQtSupportedOptionExtensions(std::vector<AString>& clipRectReadableExtensionsOut,
+                                                   std::vector<AString>& scaledClipRectReadableExtensionsOut,
+                                                   std::vector<AString>& metaDataReadableWritableExtensionsOut)
+{
+    clipRectReadableExtensionsOut.clear();
+    scaledClipRectReadableExtensionsOut.clear();
+    metaDataReadableWritableExtensionsOut.clear();
+    
+    std::vector<AString> readableExtensions;
+    std::vector<AString> writableExtensions;
+    DataFileTypeEnum::getQtSupportedImageFileExtensions(readableExtensions,
+                                                        writableExtensions);
+    
+    for (auto& ext : writableExtensions) {
+        if (std::find(readableExtensions.begin(),
+                      readableExtensions.end(),
+                      ext) != readableExtensions.end()) {
+            QString name(QDir::tempPath() + "/file." + ext);
+            
+            /*
+             * Image file must exist for testing supported options
+             */
+            QImage image(2, 2, QImage::Format_RGB32);
+            QImageWriter writer(name);
+            if (writer.canWrite()) {
+                writer.write(image);
+                
+                QImageReader reader(name);
+                if (reader.supportsOption(QImageIOHandler::ClipRect)) {
+                    clipRectReadableExtensionsOut.push_back(ext);
+                }
+                if (reader.supportsOption(QImageIOHandler::ScaledClipRect)) {
+                    scaledClipRectReadableExtensionsOut.push_back(ext);
+                }
+                if (reader.supportsOption(QImageIOHandler::Description)
+                    && writer.supportsOption(QImageIOHandler::Description)) {
+                    metaDataReadableWritableExtensionsOut.push_back(ext);
+                }
+            }
+        }
+    }
+}
+
+/**
  * Get all image file extensions supported by Workbench for reading and writing image files.
  * These are a subset of the extensions supported by Qt.
  * @param readableExtensionsOut
@@ -1814,3 +2413,337 @@ ImageFile::getWorkbenchSupportedImageFileExtensions(std::vector<AString>& readab
                                                                writableExtensionsOut,
                                                                defaultWritableExtension);
 }
+
+/**
+ * Move the QImage metadata to the file metadata
+ */
+void
+ImageFile::readFileMetaDataFromQImage()
+{
+    CaretAssert(m_fileMetaData);
+    m_fileMetaData->clear();
+    
+    if (m_image != NULL) {
+        if ( ! m_image->isNull()) {
+            Matrix4x4 scaledToPlaneMatrix;
+            bool scaledToPlaneMatrixValidFlag(false);
+            Matrix4x4 planeToMillimetersMatrix;
+            bool planeToMillimetersMatrixValidFlag(false);
+            
+            QStringList allKeys = m_image->textKeys();
+            QStringListIterator iter(allKeys);
+            while (iter.hasNext()) {
+                const AString key(iter.next());
+                const AString value(m_image->text(key));
+                m_fileMetaData->set(key, value);
+                
+                if (key == getMetaDataNameScaledToPlaneMatrix()) {
+                    scaledToPlaneMatrix.setMatrixFromRowMajorOrderString(value);
+                    scaledToPlaneMatrixValidFlag = true;
+                }
+                else if (key == getMetaDataNamePlaneToMillimetersMatrix()) {
+                    planeToMillimetersMatrix.setMatrixFromRowMajorOrderString(value);
+                    planeToMillimetersMatrixValidFlag = true;
+                }
+            }
+            
+            if (scaledToPlaneMatrixValidFlag
+                && planeToMillimetersMatrixValidFlag) {
+                std::shared_ptr<CziNonLinearTransform> unusedOne, unusedTwo;
+                setTransformMatrices(scaledToPlaneMatrix,
+                                     scaledToPlaneMatrixValidFlag,
+                                     planeToMillimetersMatrix,
+                                     planeToMillimetersMatrixValidFlag,
+                                     unusedOne,
+                                     unusedTwo);
+            }
+        }
+    }
+    
+    m_fileMetaData->clearModified();
+}
+
+/**
+ * Move the file metadata into the QImage
+ */
+void
+ImageFile::writeFileMetaDataToQImage() const
+{
+    if (m_image != NULL) {
+        /*
+         * May clear metadata, but not sure
+         */
+        m_image->setText("", "");
+        
+        const auto allKeys(m_fileMetaData->getAllMetaDataNames());
+        for (const auto& key : allKeys) {
+            const AString value = m_fileMetaData->get(key);
+            m_image->setText(key, value);
+        }
+    }
+}
+
+/**
+ * @return True if this file supports file metadata, else false.
+ * Support of metadata is dependent upon the file's extension.  Only
+ * some image file types support metadata.
+ */
+bool
+ImageFile::supportsFileMetaData() const
+{
+    std::vector<AString> clipRectReadableExtensions;
+    std::vector<AString> scaledClipRectReadableExtensions;
+    std::vector<AString> metaDataReadableWritableExtensions;
+    ImageFile::getImageFileQtSupportedOptionExtensions(clipRectReadableExtensions,
+                                                       scaledClipRectReadableExtensions,
+                                                       metaDataReadableWritableExtensions);
+
+    FileInformation fileInfo(getFileName());
+    const AString ext(fileInfo.getFileExtension());
+    
+    if (std::find(metaDataReadableWritableExtensions.begin(),
+                  metaDataReadableWritableExtensions.end(),
+                  ext) != metaDataReadableWritableExtensions.end()) {
+        return true;
+    }
+    
+    return false;
+}
+
+/**
+ * @return True if the given pixel index is valid for the CZI image file (may be outside of currently loaded sub-image)
+ * @param frameIndex
+ *    Index of frame
+ * @param pixelIndexOriginAtTopLeft
+ *    Image of pixel with origin (0, 0) at the top left
+ */
+bool
+ImageFile::isPixelIndexInFrameValid(const int32_t /*frameIndex*/,
+                                    const PixelIndex& pixelIndexOriginAtTopLeft) const
+{
+    return isPixelIndexValid(pixelIndexOriginAtTopLeft);
+}
+
+/**
+ * @return True if the given pixel index is valid
+ * @param frameIndex
+ *    Index of frame
+ * @param pixelLogicalIndex
+ *    Pixel logical index
+ */
+bool
+ImageFile::isPixelIndexInFrameValid(const int32_t /*frameIndex*/,
+                                    const PixelLogicalIndex& pixelLogicalIndex) const
+{
+    return isPixelIndexValid(pixelLogicalIndex);
+}
+
+
+/**
+ * @return True if the given pixel index is valid for the image in the given tabf
+ * @param pixelIndexOriginAtTopLeft
+ *    Image of pixel with origin (0, 0) at the top left
+ */
+bool
+ImageFile::isPixelIndexValid(const PixelIndex& pixelIndexOriginAtTopLeft) const
+{
+    if (m_image != NULL) {
+        const int32_t i(pixelIndexOriginAtTopLeft.getI());
+        const int32_t j(pixelIndexOriginAtTopLeft.getJ());
+        if ((i >= 0)
+            && (i < m_image->width())
+            && (j >= 0)
+            && (j < m_image->height())) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
+ * @return True if the given pixel index is valid
+ * @param pixelLogicalIndex
+ *    Pixel logical index
+ */
+bool
+ImageFile::isPixelIndexValid(const PixelLogicalIndex& pixelLogicalIndex) const
+{
+    if (m_image != NULL) {
+        const int32_t i(pixelLogicalIndex.getI());
+        const int32_t j(pixelLogicalIndex.getJ());
+        if ((i >= 0)
+            && (i < m_image->width())
+            && (j >= 0)
+            && (j < m_image->height())) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
+ * Get the identification text for the pixel at the given pixel index with origin at bottom left.
+ * @param tabIndex
+ *    Index of the tab in which identification took place
+ * @param frameIndices
+ *    Indics of the frames
+ * @param pixelLogicalIndex
+ *    Logical pixel index
+ * @param columnOneTextOut
+ *    Text for column one that is displayed to user.
+ * @param columnTwoTextOut
+ *    Text for column two that is displayed to user.
+ * @param toolTipTextOut
+ *    Text for tooltip
+ */
+void
+ImageFile::getPixelLogicalIdentificationTextForFrames(const int32_t tabIndex,
+                                               const std::vector<int32_t>& frameIndices,
+                                                  const PixelLogicalIndex& pixelLogicalIndex,
+                                                  std::vector<AString>& columnOneTextOut,
+                                                  std::vector<AString>& columnTwoTextOut,
+                                                  std::vector<AString>& toolTipTextOut) const
+{
+    columnOneTextOut.clear();
+    columnTwoTextOut.clear();
+    toolTipTextOut.clear();
+    
+    std::vector<int32_t> validFrameIndices;
+    for (int32_t frameIndex : frameIndices) {
+        if (isPixelIndexInFrameValid(frameIndex,
+                                     pixelLogicalIndex)) {
+            validFrameIndices.push_back(frameIndex);
+        }
+    }
+    if (validFrameIndices.empty()) {
+        return;
+    }
+    
+    columnOneTextOut.push_back("Filename");
+    columnTwoTextOut.push_back(getFileNameNoPath());
+    
+    const AString pixelText("Pixel IJ ("
+                            + AString::number(pixelLogicalIndex.getI())
+                            + ","
+                            + AString::number(pixelLogicalIndex.getJ())
+                            + ")");
+    toolTipTextOut.push_back(pixelText);
+    
+    const float dotsPerMeter(m_image->dotsPerMeterX());
+    if (dotsPerMeter > 0.0) {
+        /*
+         * Show coordinates in millimeters
+         */
+        const float metersPerDot(1 / dotsPerMeter);
+        const float xMillimeters(pixelLogicalIndex.getI() * metersPerDot * 100.0);
+        const float yMillimeters(pixelLogicalIndex.getJ() * metersPerDot * 100.0);
+        const AString mmText("("
+                             + AString::number(xMillimeters, 'f', 2)
+                             + "mm, "
+                             + AString::number(yMillimeters, 'f', 2)
+                             + "mm)");
+        columnOneTextOut.push_back(pixelText);
+        columnTwoTextOut.push_back(mmText);
+        
+        toolTipTextOut.push_back(mmText);
+    }
+    else {
+        columnOneTextOut.push_back(pixelText);
+        columnTwoTextOut.push_back("");
+    }
+    
+    for (int32_t frameIndex : validFrameIndices) {
+        uint8_t rgba[4];
+        if (getPixelRGBA(tabIndex,
+                         frameIndex,
+                         pixelLogicalIndex,
+                         rgba)) {
+            const AString leftText("Frame "
+                                   + AString::number(frameIndex + 1));
+            const AString rightText("RGBA ("
+                                    + AString::fromNumbers(rgba, 4, ",")
+                                    + ")");
+            columnOneTextOut.push_back(leftText);
+            columnTwoTextOut.push_back(rightText);
+            toolTipTextOut.push_back(leftText
+                                     + " "
+                                     + rightText);
+        }
+    }
+
+    CaretAssert(columnOneTextOut.size() == columnTwoTextOut.size());
+}
+
+/**
+ * Find the Pixel nearest the given XYZ coordinate
+ * @param xyz
+ *    The coordinate
+ * @param signedDistanceToPixelMillimetersOut
+ *    Output with signed distance to the pixel in millimeters
+ * @param pixelLogicalIndexOut
+ *    Output with logical pixel index
+ * @return
+ *    True if successful, else false.
+ */
+bool
+ImageFile::findPixelNearestStereotaxicXYZ(const Vector3D& xyz,
+                                          float& signedDistanceToPixelMillimetersOut,
+                                          PixelLogicalIndex& pixelLogicalIndexOut) const
+{
+    return MediaFile::findPixelNearestStereotaxicXYZ(xyz,
+                                                     signedDistanceToPixelMillimetersOut,
+                                                     pixelLogicalIndexOut);
+}
+
+/*
+ * @return Primitive for drawing media with coordinates
+ * @param tabIndex
+ *    Index of tab where image is drawn
+ * @param overlayIndex
+ *    Index of overlay
+ */
+GraphicsPrimitiveV3fT2f*
+ImageFile::getGraphicsPrimitiveForPlaneXyzDrawing(const int32_t /*tabIndex*/,
+                                                  const int32_t /*overlayIndex*/) const
+{
+    if (m_image == NULL) {
+        return NULL;
+    }
+    
+    if ( ! isPlaneXyzSupported()) {
+        return NULL;
+    }
+    
+    if (m_graphicsPrimitive == NULL) {
+        GraphicsPrimitiveV3fT2f* primitive(createGraphicsPrimitive());
+        m_graphicsPrimitive.reset(primitive);
+    }
+    CaretAssert(m_planePrimitiveVertexStartIndex >= 0);
+    CaretAssert(m_planePrimitiveVertexCount > 0);
+    m_graphicsPrimitive->setDrawArrayIndicesSubset(m_planePrimitiveVertexStartIndex,
+                                                   m_planePrimitiveVertexCount);
+    return m_graphicsPrimitive.get();
+}
+
+/**
+ * @return True if the texture for the image should be compressed to save memory.
+ */
+bool
+ImageFile::isImageTextureCompressed() const
+{
+    EventCaretPreferencesGet prefsEvent;
+    EventManager::get()->sendEvent(prefsEvent.getPointer());
+    CaretPreferences* prefs = prefsEvent.getCaretPreferences();
+    CaretAssert(prefs);
+    
+    if (prefs->isImageFileTextureCompressionEnabled()) {
+        const int64_t megabyte(1000000);
+        const int64_t byteSize(getTextureCompressionSizeMegabytes() * megabyte);
+        const int64_t imageBytes(getWidth() * getHeight() * 4);
+        if (imageBytes > byteSize) {
+            return true;
+        }
+    }
+    return false;
+}
+

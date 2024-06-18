@@ -19,6 +19,8 @@
  */
 /*LICENSE_END*/
 
+#include <QCoreApplication>
+
 #include "CaretAssert.h"
 #include "CaretLogger.h"
 
@@ -29,6 +31,7 @@
 #include "CiftiMappableDataFile.h"
 #include "CiftiFile.h"
 #include "CiftiXML.h"
+#include "CZIcmd.h"
 #include "DataFileContentInformation.h"
 #include "DataFileException.h"
 #include "GiftiMetaData.h"
@@ -85,10 +88,58 @@ OperationFileInformation::getParameters()
     
     ret->createOptionalParameter(7, "-only-cifti-xml", "suppress normal output, print the cifti xml if the file type has it");
     
+    ret->createOptionalParameter(8, "-czi", "For a CZI file, show information from the libCZI Info Command instead of the Workbench CZI File");
+
+    ret->createOptionalParameter(9, "-czi-all-sub-blocks", "show all sub-blocks in CZI file (may produce long output)");
+    
+    ret->createOptionalParameter(10, "-czi-xml", "show XML from CZI file");
+    
     AString helpText("List information about the content of a data file.  "
                      "Only one -only option may be specified.  "
                      "The information listed when no -only option is present is dependent upon the type of data file.");
     
+    const bool showLibPathsAndFileExtsFlag(true);
+    if (showLibPathsAndFileExtsFlag) {
+        helpText += ("\n\nLibrary paths:\n");
+        QStringList libPaths(QCoreApplication::libraryPaths());
+        QStringListIterator libPathsIter(libPaths);
+        while (libPathsIter.hasNext()) {
+            helpText += ("   " + libPathsIter.next() + "\n");
+        }
+        
+        helpText += ("\n\nFile and extensions for reading and writing:\n");
+        std::vector<DataFileTypeEnum::Enum> allDataFileTypes;
+        uint32_t dataFileTypeOptions(0);
+        DataFileTypeEnum::getAllEnums(allDataFileTypes,
+                                      dataFileTypeOptions);
+        for (const auto dft : allDataFileTypes) {
+            const AString typeName("   " + DataFileTypeEnum::toGuiName(dft));
+            
+            const std::vector<AString> allReadExtensions(DataFileTypeEnum::getAllFileExtensionsForReading(dft));
+            const AString readExts(AString::join(allReadExtensions, ", "));
+            
+            const std::vector<AString> allWriteExtensions(DataFileTypeEnum::getAllFileExtensionsForWriting(dft));
+            const AString writeExts(AString::join(allWriteExtensions, ", "));
+            
+            if (readExts == writeExts) {
+                helpText += (typeName
+                             + ": "
+                             + readExts
+                             + "\n");
+            }
+            else {
+                helpText += (typeName
+                             + " Read: "
+                             + readExts
+                             + "\n");
+                helpText += (QString(typeName.length(), ' ')
+                             + "Write: "
+                             + writeExts
+                             + "\n");
+            }
+        }
+    }
+
     ret->setHelpText(helpText);
     
     return ret;
@@ -137,8 +188,54 @@ OperationFileInformation::useParameters(OperationParameters* myParams,
     bool onlyCiftiXML = myParams->getOptionalParameter(7)->m_present;
     if (onlyCiftiXML) ++countOnlys;
     
+    OptionalParameter* cziParam = myParams->getOptionalParameter(8);
+    const bool cziShow = cziParam->m_present;
+    
+    OptionalParameter* cziShowAllSubBlocksParam = myParams->getOptionalParameter(9);
+    const bool cziShowAllSubBlocks = cziShowAllSubBlocksParam->m_present;
+    
+    OptionalParameter* cziShowXMLParam = myParams->getOptionalParameter(10);
+    const bool cziShowXML = cziShowXMLParam->m_present;
+    
     if (countOnlys > 1) throw OperationException("only one -only-* option may be specified");
     
+    const bool cziFlag(cziShow
+                       || cziShowAllSubBlocks
+                       || cziShowXML);
+    if (cziFlag
+        && dataFileName.endsWith(DataFileTypeEnum::toCziImageFileExtension())) {
+        std::vector<std::string> cziParams;
+        cziParams.push_back(QCoreApplication::applicationFilePath().toStdString());
+        cziParams.push_back("--command");
+        cziParams.push_back("PrintInformation");
+        cziParams.push_back("--info-level");
+        QString infoLevelValues("AllAttachments,DisplaySettings,GeneralInfo,PyramidStatistics,ScalingInfo,Statistics");
+        if (cziShowAllSubBlocks) {
+            infoLevelValues = "AllSubBlocks";
+        }
+        if (cziShowXML) {
+            infoLevelValues = "RawXML";
+        }
+        /* AllSubBlocks produces lots of printing */
+        cziParams.push_back(infoLevelValues.toStdString());
+        cziParams.push_back("--source");
+        cziParams.push_back(dataFileName.toStdString());
+        
+        std::vector<char*> argv;
+        for (auto& p : cziParams) {
+            argv.push_back((char*)p.c_str());
+        }
+        
+        czi_main(argv.size(),
+                 &argv[0]);
+        return;
+    }
+    else {
+        if (cziFlag) {
+            throw OperationException("CZI options must be used with a CZI file");
+        }
+    }
+
     bool preferOnDisk = (!showMapInformationFlag || countOnlys != 0);
 
     CaretPointer<CaretDataFile> caretDataFile;
@@ -148,14 +245,14 @@ OperationFileInformation::useParameters(OperationParameters* myParams,
     try
     {
         caretDataFile.grabNew(CaretDataFileHelper::readAnyCaretDataFile(dataFileName, preferOnDisk));
-    } catch (...) {//still fails if the Cifti XML has a nonstandard mapping combination
+    } catch (CaretException& myexcept) {//still fails if the Cifti XML has a nonstandard mapping combination
         try
         {
             CiftiMappableDataFile::getDataFileContentInformationForGenericCiftiFile(dataFileName, nonstandardInfo);
             nonstandardCifti.openFile(dataFileName);
             nonstandardMD = nonstandardCifti.getCiftiXML().getFileMetaData();
-        } catch (...) {
-            throw OperationException("unable to open file '" + dataFileName + "', check the format and file extension");
+        } catch (CaretException&) {
+            throw myexcept;//if it fails, throw the first exception, as that is probably more informative
         }
     }
     //readAnyCaretDataFile now handles cifti files with the wrong extension

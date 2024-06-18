@@ -51,6 +51,7 @@ namespace caret
             FUNCTIONAL,
             LABEL,
             RGB,
+            RGB_WORKBENCH,
             SEGMENTATION,
             VECTOR
         };//TODO: make this into a caret enum class?
@@ -63,6 +64,7 @@ namespace caret
         VolumeType m_type;
         SubvolumeAttributes() { m_type = UNKNOWN; }
         void writeAsXML(XmlWriter& xmlWriter, int index);
+        static AString getTypeNameFromType(SubvolumeAttributes::VolumeType volumeType);        
     };
     
     struct CaretVolumeExtension

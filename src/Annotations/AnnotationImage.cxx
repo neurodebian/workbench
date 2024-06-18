@@ -25,7 +25,7 @@
 
 #include "CaretAssert.h"
 #include "CaretLogger.h"
-#include "GraphicsPrimitiveV3fT3f.h"
+#include "GraphicsPrimitiveV3fT2f.h"
 #include "SceneClass.h"
 #include "SceneClassAssistant.h"
 
@@ -226,17 +226,28 @@ AnnotationImage::getFixedAspectRatio() const
 /**
  * @return The graphics primitive for drawing the image as a texture.
  */
-GraphicsPrimitiveV3fT3f*
+GraphicsPrimitiveV3fT2f*
 AnnotationImage::getGraphicsPrimitive() const
 {
     if (m_graphicsPrimitive == NULL) {
         if ( ! m_imageBytesRGBA.empty()) {
-            GraphicsPrimitiveV3fT3f* primitive = GraphicsPrimitive::newPrimitiveV3fT3f(GraphicsPrimitive::PrimitiveType::OPENGL_TRIANGLE_STRIP,
-                                                                                       &m_imageBytesRGBA[0],
-                                                                                       m_imageWidth,
-                                                                                       m_imageHeight,
-                                                                                       GraphicsPrimitive::TextureWrappingType::CLAMP,
-                                                                                       GraphicsPrimitive::TextureFilteringType::LINEAR);
+            std::array<float, 4> textureBorderColorRGBA { 0.0, 0.0, 0.0, 0.0 };
+            GraphicsTextureSettings textureSettings(&m_imageBytesRGBA[0],
+                                                    m_imageWidth,
+                                                    m_imageHeight,
+                                                    1, /* number of slices */
+                                                    GraphicsTextureSettings::DimensionType::FLOAT_STR_2D,
+                                                    GraphicsTextureSettings::PixelFormatType::RGBA,
+                                                    GraphicsTextureSettings::PixelOrigin::BOTTOM_LEFT,
+                                                    GraphicsTextureSettings::WrappingType::CLAMP,
+                                                    GraphicsTextureSettings::MipMappingType::ENABLED,
+                                                    GraphicsTextureSettings::CompressionType::DISABLED,
+                                                    GraphicsTextureMagnificationFilterEnum::LINEAR,
+                                                    GraphicsTextureMinificationFilterEnum::LINEAR_MIPMAP_LINEAR,
+                                                    textureBorderColorRGBA);
+
+            GraphicsPrimitiveV3fT2f* primitive = GraphicsPrimitive::newPrimitiveV3fT2f(GraphicsPrimitive::PrimitiveType::OPENGL_TRIANGLE_STRIP,
+                                                                                       textureSettings);
             /*
              * A Triangle Strip (consisting of two triangles) is used
              * for drawing the image.  At this time, the XYZ coordinates
@@ -268,7 +279,7 @@ AnnotationImage::setVertexBounds(const float bottomLeft[3],
                                  const float topRight[3],
                                  const float topLeft[3])
 {
-    GraphicsPrimitiveV3fT3f* primitive = getGraphicsPrimitive();
+    GraphicsPrimitiveV3fT2f* primitive = getGraphicsPrimitive();
     if (primitive == NULL) {
         /*
          * Primitive will be invalid if when user is dragging mouse

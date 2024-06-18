@@ -37,7 +37,6 @@ namespace caret {
     class ChartDataCartesian;
     class ChartableTwoFileDelegate;
     class FastStatistics;
-    class FileIdentificationAttributes;
     class GiftiMetaData;
     class GiftiLabelTable;
     class Histogram;
@@ -510,19 +509,20 @@ namespace caret {
                                                          const int nodeIndex,
                                                          const int32_t numberOfNodes,
                                                          const AString& dataValueSeparator,
+                                                         const int32_t digitsRightOfDecimal,
                                                          AString& textOut) const;
         
         virtual bool getVolumeVoxelIdentificationForMaps(const std::vector<int32_t>& mapIndices,
                                                          const float xyz[3],
                                                          const AString& dataValueSeparator,
+                                                         const int32_t digitsRightOfDecimal,
                                                          int64_t ijkOut[3],
                                                          AString& textOut) const;
         
         void updateAfterFileDataChanges();
         
-        FileIdentificationAttributes* getFileIdentificationAttributes();
-        
-        const FileIdentificationAttributes* getFileIdentificationAttributes() const;
+        virtual CaretMappableDataFile* castToCaretMappableDataFile() override;
+        virtual const CaretMappableDataFile* castToCaretMappableDataFile() const override;
 
     protected:
         CaretMappableDataFile(const CaretMappableDataFile&);
@@ -557,9 +557,7 @@ namespace caret {
         
         std::vector<std::unique_ptr<CaretMappableDataFileAndMapSelectionModel>> m_mapThresholdFileSelectionModels;
         
-        std::unique_ptr<FileIdentificationAttributes> m_fileIdentificationAttributes;
-        
-        /** 
+        /**
          * Added by WB-781 Apply to All Maps for ColorBar.
          * This value is saved to scenes but NOT to the data file.
          */

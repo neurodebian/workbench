@@ -15,14 +15,17 @@ PROJECT (Qwt)
 #
 # QT include files
 #
+if(Qt6_FOUND)
+    include_directories(${Qt6Concurrent_INCLUDE_DIRS})
+    include_directories(${Qt6Core_INCLUDE_DIRS})
+    include_directories(${Qt6Gui_INCLUDE_DIRS})
+    include_directories(${Qt6Widgets_INCLUDE_DIRS})
+endif()
 if(Qt5_FOUND)
     include_directories(${Qt5Concurrent_INCLUDE_DIRS})
     include_directories(${Qt5Core_INCLUDE_DIRS})
     include_directories(${Qt5Widgets_INCLUDE_DIRS})
 endif()
-IF (QT4_FOUND)
-    INCLUDE(${QT_USE_FILE})
-ENDIF ()
 
 add_definitions(-DQWT_NO_SVG -DQWT_NO_OPENGL)
 
@@ -54,12 +57,12 @@ ELSE()
         qwt_text_label.h
     )
 
+    IF(Qt6_FOUND)
+        QT6_WRAP_CPP(MOC_SOURCE_FILES ${MOC_INPUT_HEADER_FILES})
+    ENDIF()
     IF(Qt5_FOUND)
         QT5_WRAP_CPP(MOC_SOURCE_FILES ${MOC_INPUT_HEADER_FILES})
     ENDIF()
-    IF (QT4_FOUND)
-        QT4_WRAP_CPP(MOC_SOURCE_FILES ${MOC_INPUT_HEADER_FILES})
-    ENDIF ()
 ENDIF()
 
 
@@ -236,7 +239,10 @@ qwt_widget_overlay.cpp
 #
 # Process the header files with moc producing moc_*.cpp files
 #
-INCLUDE_DIRECTORIES(${CMAKE_CURRENT_BINARY_DIR})
+INCLUDE_DIRECTORIES(
+${CMAKE_CURRENT_BINARY_DIR}
+${CMAKE_SOURCE_DIR}/Common
+)
 
 #
 # Create the GUI library

@@ -66,6 +66,8 @@ using namespace caret;
  *     Index of browser window.
  * @param toolBarLockWindowAndAllTabAspectRatioButton
  *     Button for locking window and all tab aspect ratio.
+ * @param toolBarUndoUnlockWindowAndAllTabAspectRatioButton
+ *    Button for undo of unlock aspect ratio
  * @param parentToolBar
  *     Parent toolbar.
  * @param objectNamePrefix
@@ -73,12 +75,12 @@ using namespace caret;
  */
 BrainBrowserWindowToolBarTab::BrainBrowserWindowToolBarTab(const int32_t browserWindowIndex,
                                                            QToolButton* toolBarLockWindowAndAllTabAspectRatioButton,
+                                                           QToolButton* toolBarUndoUnlockWindowAndAllTabAspectRatioButton,
                                                            BrainBrowserWindowToolBar* parentToolBar,
                                                            const QString& objectNamePrefix)
 : BrainBrowserWindowToolBarComponent(parentToolBar),
 m_browserWindowIndex(browserWindowIndex),
-m_parentToolBar(parentToolBar),
-m_lockWindowAndAllTabAspectButton(toolBarLockWindowAndAllTabAspectRatioButton)
+m_parentToolBar(parentToolBar)
 {
     m_objectNamePrefix = (objectNamePrefix
                           + ":Tab");
@@ -91,7 +93,6 @@ m_lockWindowAndAllTabAspectButton(toolBarLockWindowAndAllTabAspectRatioButton)
                                                     "Surface Yoking is applied to Surface, Surface Montage\n"
                                                     "and Whole Brain.  Volume Yoking is applied to Volumes."));
     QComboBox* encapComboBox = m_yokingGroupComboBox->getComboBox();
-//    WuQtUtilities::replaceComboBoxItemNames(encapComboBox, "Group", "Yoke");
     encapComboBox->setObjectName(m_objectNamePrefix
                                  + ":YokingGroup");
     WuQMacroManager::instance()->addMacroSupportToObject(encapComboBox,
@@ -184,6 +185,14 @@ m_lockWindowAndAllTabAspectButton(toolBarLockWindowAndAllTabAspectRatioButton)
     yokeLayout->addWidget(m_yokingGroupComboBox->getWidget());
     yokeLayout->addStretch();
     
+    WuQtUtilities::matchWidgetHeights(toolBarLockWindowAndAllTabAspectRatioButton,
+                                      toolBarUndoUnlockWindowAndAllTabAspectRatioButton);
+    QHBoxLayout* aspectLayout(new QHBoxLayout());
+    WuQtUtilities::setLayoutSpacingAndMargins(yokeLayout, 2, 0);
+    aspectLayout->addWidget(toolBarLockWindowAndAllTabAspectRatioButton);
+    aspectLayout->addWidget(toolBarUndoUnlockWindowAndAllTabAspectRatioButton);
+    aspectLayout->addStretch();
+
     QHBoxLayout* buttonsLayout = new QHBoxLayout();
     WuQtUtilities::setLayoutSpacingAndMargins(buttonsLayout, 2, 2);
     buttonsLayout->addWidget(lightingToolButton);
@@ -194,7 +203,7 @@ m_lockWindowAndAllTabAspectButton(toolBarLockWindowAndAllTabAspectRatioButton)
     QVBoxLayout* layout = new QVBoxLayout(this);
     WuQtUtilities::setLayoutSpacingAndMargins(layout, 4, 0);
     layout->addLayout(yokeLayout);
-    layout->addWidget(m_lockWindowAndAllTabAspectButton, 0, Qt::AlignLeft);
+    layout->addLayout(aspectLayout);
     layout->addLayout(buttonsLayout);
     layout->addWidget(m_macroRecordingLabel, 0, Qt::AlignLeft);
     
@@ -239,6 +248,8 @@ BrainBrowserWindowToolBarTab::updateContent(BrowserTabContent* browserTabContent
             break;
         case ModelTypeEnum::MODEL_TYPE_INVALID:
             break;
+        case ModelTypeEnum::MODEL_TYPE_HISTOLOGY:
+            break;
         case  ModelTypeEnum::MODEL_TYPE_MULTI_MEDIA:
             mediaFlag = true;
             break;
@@ -258,8 +269,9 @@ BrainBrowserWindowToolBarTab::updateContent(BrowserTabContent* browserTabContent
         m_yokingGroupComboBox->getWidget()->setEnabled(false);
     }
     else if (mediaFlag) {
-        m_yokeToLabel->setEnabled(false);
-        m_yokingGroupComboBox->getWidget()->setEnabled(false);
+        m_yokingGroupComboBox->setSelectedItem<YokingGroupEnum, YokingGroupEnum::Enum>(browserTabContent->getMediaModelYokingGroup());
+        m_yokeToLabel->setEnabled(true);
+        m_yokingGroupComboBox->getWidget()->setEnabled(true);
     }
     else {
         m_yokeToLabel->setEnabled(true);
@@ -317,6 +329,7 @@ BrainBrowserWindowToolBarTab::yokeToGroupComboBoxIndexChanged()
     }
     
     bool chartFlag = false;
+    bool mediaFlag = false;
     switch (browserTabContent->getSelectedModelType()) {
         case ModelTypeEnum::MODEL_TYPE_CHART:
             chartFlag = true;
@@ -326,8 +339,10 @@ BrainBrowserWindowToolBarTab::yokeToGroupComboBoxIndexChanged()
             break;
         case ModelTypeEnum::MODEL_TYPE_INVALID:
             break;
+        case ModelTypeEnum::MODEL_TYPE_HISTOLOGY:
+            break;
         case  ModelTypeEnum::MODEL_TYPE_MULTI_MEDIA:
-            //CaretAssertToDoWarning();
+            mediaFlag = true;
             break;
         case ModelTypeEnum::MODEL_TYPE_SURFACE:
             break;
@@ -342,6 +357,9 @@ BrainBrowserWindowToolBarTab::yokeToGroupComboBoxIndexChanged()
     YokingGroupEnum::Enum yokingGroup = m_yokingGroupComboBox->getSelectedItem<YokingGroupEnum, YokingGroupEnum::Enum>();
     if (chartFlag) {
         browserTabContent->setChartModelYokingGroup(yokingGroup);
+    }
+    else if (mediaFlag) {
+        browserTabContent->setMediaModelYokingGroup(yokingGroup);
     }
     else {
         browserTabContent->setBrainModelYokingGroup(yokingGroup);
@@ -379,7 +397,7 @@ BrainBrowserWindowToolBarTab::clippingPlanesActionToggled(bool checked)
 {
     BrowserTabContent* browserTabContent = getTabContentFromSelectedTab();
     if (browserTabContent != NULL) {
-        browserTabContent->setClippingPlanesEnabled(checked);
+        browserTabContent->setClippingPlanesEnabledAndEnablePlanes(checked);
         updateContent(browserTabContent);
         updateGraphicsWindow();
     }

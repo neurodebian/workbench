@@ -115,6 +115,8 @@ m_validRowColumnSelectionDimensions(validRowColumnSelectionDimensions)
                 break;
             case DataFileTypeEnum::CONNECTIVITY_PARCEL_DENSE:
                 break;
+            case DataFileTypeEnum::CONNECTIVITY_PARCEL_DYNAMIC:
+                break;
             case DataFileTypeEnum::CONNECTIVITY_PARCEL_LABEL:
                 m_matrixDataFileType = MatrixDataFileType::PARCEL_LABEL;
                 break;
@@ -127,7 +129,11 @@ m_validRowColumnSelectionDimensions(validRowColumnSelectionDimensions)
             case DataFileTypeEnum::CONNECTIVITY_SCALAR_DATA_SERIES:
                 m_matrixDataFileType = MatrixDataFileType::SCALAR_DATA_SERIES;
                 break;
+            case DataFileTypeEnum::CZI_IMAGE_FILE:
+                break;
             case DataFileTypeEnum::FOCI:
+                break;
+            case DataFileTypeEnum::HISTOLOGY_SLICES:
                 break;
             case DataFileTypeEnum::IMAGE:
                 break;
@@ -140,6 +146,8 @@ m_validRowColumnSelectionDimensions(validRowColumnSelectionDimensions)
             case DataFileTypeEnum::PALETTE:
                 break;
             case DataFileTypeEnum::RGBA:
+                break;
+            case DataFileTypeEnum::SAMPLES:
                 break;
             case DataFileTypeEnum::SCENE:
                 break;

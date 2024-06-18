@@ -105,7 +105,7 @@ namespace caret {
         
         void chartLineLayerSymbolChanged();
         
-        void symbolSizeTypeComboBoxActivated();
+        void symbolSizeTypeButtonIdClicked(int id);
         
     private:
         void updateContent(const bool scrollTextToEndFlag);
@@ -156,9 +156,15 @@ namespace caret {
         
         QCheckBox* m_filteringFociCheckBox;
         
+        QCheckBox* m_filteringVertexVoxelCheckBox;
+        
         IdentificationFileFilteringTableWidget* m_fileFilteringTableWidget = NULL;
         
         QWidget* m_symbolsWidget;
+        
+        QCheckBox* m_symbolsShowHistologyCheckBox;
+        
+        QCheckBox* m_symbolsShowMediaCheckbox;
         
         QCheckBox* m_symbolsShowSurfaceIdCheckBox;
         
@@ -168,11 +174,25 @@ namespace caret {
         
         CaretColorEnumComboBox* m_symbolsContralateralIdColorComboBox;
         
-        EnumComboBoxTemplate* m_symbolSizeTypeComboBox;
+        QRadioButton* m_symbolSizeMillimeterRadioButton;
         
-        QDoubleSpinBox* m_symbolsIdDiameterSpinBox;
+        QRadioButton* m_symbolSizePercentageRadioButton;
         
-        QDoubleSpinBox* m_symbolsMostRecentIdDiameterSpinBox;
+        QDoubleSpinBox* m_symbolsMillimetersDiameterSpinBox;
+        
+        QDoubleSpinBox* m_symbolsMillimetersMostRecentDiameterSpinBox;
+        
+        QDoubleSpinBox* m_symbolsPercentageDiameterSpinBox;
+        
+        QDoubleSpinBox* m_symbolsPercentageMostRecentDiameterSpinBox;
+        
+        QDoubleSpinBox* m_symbolsHistologyPercentageDiameterSpinBox;
+        
+        QDoubleSpinBox* m_symbolsHistologyPercentageMostRecentDiameterSpinBox;
+        
+        QDoubleSpinBox* m_symbolsMediaPercentageDiameterSpinBox;
+        
+        QDoubleSpinBox* m_symbolsMediaPercentageMostRecentDiameterSpinBox;
         
         QCheckBox* m_symbolsSurfaceContralateralVertexCheckBox;
         

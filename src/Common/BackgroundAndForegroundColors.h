@@ -21,6 +21,7 @@
  */
 /*LICENSE_END*/
 
+#include <array>
 #include "CaretObject.h"
 
 
@@ -30,6 +31,8 @@ namespace caret {
     class BackgroundAndForegroundColors : public CaretObject {
         
     public:
+        static std::array<float, 3> toFloatRGB(const uint8_t byteRGB[3]);
+        
         BackgroundAndForegroundColors();
         
         virtual ~BackgroundAndForegroundColors();
@@ -96,6 +99,14 @@ namespace caret {
         
         void setColorChartHistogramThreshold(const uint8_t colorChartMatrixGridLines[3]);
         
+        void getColorForegroundHistologyView(uint8_t colorForeground[3]) const;
+        
+        void setColorForegroundHistologyView(const uint8_t colorForeground[3]);
+        
+        void getColorBackgroundHistologyView(uint8_t colorForeground[3]) const;
+        
+        void setColorBackgroundHistologyView(const uint8_t colorForeground[3]);
+        
         void getColorForegroundMediaView(uint8_t colorForeground[3]) const;
         
         void setColorForegroundMediaView(const uint8_t colorForeground[3]);
@@ -135,6 +146,10 @@ namespace caret {
         uint8_t m_colorChartMatrixGridLines[3];
         
         uint8_t m_colorChartHistogramThreshold[3];
+        
+        uint8_t m_colorForegroundHistology[3];
+        
+        uint8_t m_colorBackgroundHistology[3];
         
         uint8_t m_colorForegroundMedia[3];
         

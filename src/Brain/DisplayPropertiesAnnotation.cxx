@@ -89,6 +89,10 @@ DisplayPropertiesAnnotation::updateForNewAnnotation(const Annotation* annotation
     switch (annotation->getCoordinateSpace()) {
         case AnnotationCoordinateSpaceEnum::CHART:
             break;
+        case AnnotationCoordinateSpaceEnum::HISTOLOGY:
+            break;
+        case AnnotationCoordinateSpaceEnum::MEDIA_FILE_NAME_AND_PIXEL:
+            break;
         case AnnotationCoordinateSpaceEnum::SPACER:
             break;
         case AnnotationCoordinateSpaceEnum::STEREOTAXIC:
@@ -107,6 +111,24 @@ DisplayPropertiesAnnotation::updateForNewAnnotation(const Annotation* annotation
     
     setDisplayAnnotations(true);
 }
+
+/**
+ * Update the properties for a new/modified annotation.
+ *
+ * @param annotation
+ *     The new/updated annotation.
+ */
+void
+DisplayPropertiesAnnotation::updateForNewAnnotations(const std::vector<Annotation*>& annotations)
+{
+    for (auto& ann : annotations) {
+        CaretAssert(ann);
+        updateForNewAnnotation(ann);
+    }
+    
+    setDisplayAnnotations(true);
+}
+
 
 /**
  * Copy the border display properties from one tab to another.
@@ -408,7 +430,7 @@ DisplayPropertiesAnnotation::restoreVersionOne(const SceneClass* sceneClass)
     /*
      * Apply version one selections to the annotations.
      */
-    std::vector<Annotation*> allAnnotations = m_parentBrain->getAnnotationManager()->getAllAnnotations();
+    std::vector<Annotation*> allAnnotations = m_parentBrain->getAnnotationManager(UserInputModeEnum::Enum::ANNOTATIONS)->getAllAnnotations();
     for (std::vector<Annotation*>::iterator annIter = allAnnotations.begin();
          annIter != allAnnotations.end();
          annIter++) {
@@ -416,6 +438,12 @@ DisplayPropertiesAnnotation::restoreVersionOne(const SceneClass* sceneClass)
         switch (ann->getCoordinateSpace()) {
             case AnnotationCoordinateSpaceEnum::CHART:
                 CaretAssertMessage(0, "This should never happen as CHART SPACE was never available in a version one scene");
+                break;
+            case AnnotationCoordinateSpaceEnum::HISTOLOGY:
+                CaretAssertMessage(0, "This should never happen as HISTOLOGY SPACE was never available in version one scene");
+                break;
+            case AnnotationCoordinateSpaceEnum::MEDIA_FILE_NAME_AND_PIXEL:
+                CaretAssertMessage(0, "This should never happen as MEDIA SPACE was never available in a version one scene");
                 break;
             case AnnotationCoordinateSpaceEnum::SPACER:
                 CaretAssertMessage(0, "This should never happen as SPACER TAB SPACE was never available in a version one scene");

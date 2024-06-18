@@ -59,7 +59,13 @@ namespace caret {
     class BrainOpenGLViewportContent;
     class BrowserTabContent;
     class EventImageCapture;
+    class GraphicsFramesPerSecond;
     class SelectionItemAnnotation;
+    class SelectionItemHistologyCoordinate;
+    class SelectionItemMediaLogicalCoordinate;
+    class SelectionItemMediaPlaneCoordinate;
+    class SelectionItemVolumeMprCrosshair;
+    class SelectionItemVoxel;
     class SelectionManager;
     class Model;
     class SurfaceProjectedItem;
@@ -82,16 +88,35 @@ namespace caret {
         
         void receiveEvent(Event* event);
         
-        SelectionManager* performIdentification(const int x,
-                                                const int y,
-                                                const bool applySelectionBackgroundFiltering);
+        SelectionManager* performIdentificationAll(const int x,
+                                                   const int y,
+                                                   const bool applySelectionBackgroundFiltering);
         
+        SelectionManager* performIdentificationSome(const int x,
+                                                    const int y,
+                                                    const bool applySelectionBackgroundFiltering = false);
+        
+        SelectionItemHistologyCoordinate*   performIdentificationHistologyPlaneCoordinate(const int x,
+                                                                                               const int y);
+        
+        SelectionItemMediaLogicalCoordinate* performIdentificationMediaLogicalCoordinate(const int x,
+                                                                                         const int y);
+        
+        SelectionItemMediaPlaneCoordinate*   performIdentificationMediaPlaneCoordinate(const int x,
+                                                                                       const int y);
+
         SelectionItemAnnotation* performIdentificationAnnotations(const int x,
                                                            const int y);
+        
+        SelectionItemVolumeMprCrosshair* performIdentificationVolumeMprCrosshairs(const int x,
+                                                                                  const int y);
         
         SelectionManager* performIdentificationVoxelEditing(VolumeFile* editingVolumeFile,
                                                             const int x,
                                                             const int y);
+        
+        SelectionItemVoxel* performIdentificationVoxel(const int x,
+                                                       const int y);
         
         void performProjection(const int x,
                                const int y,
@@ -112,37 +137,55 @@ namespace caret {
         
         virtual void processMouseEventFromMacro(QMouseEvent* me) override;
         
+        bool isHighDpiEnabled() const;
+        
+        int32_t getWidgetWidth() const;
+        
+        int32_t getWidgetHeight() const;
+        
+        int32_t adjustForHighDPI(const int32_t value) const;
+        
     protected:
-        virtual void initializeGL();
+        virtual void initializeGL() override;
         
-        virtual void resizeGL(int w, int h);
+        virtual void resizeGL(int w, int h) override;
         
-        virtual void paintGL();
+        virtual void paintGL() override;
         
-        virtual void contextMenuEvent(QContextMenuEvent* contextMenuEvent);
+        virtual void contextMenuEvent(QContextMenuEvent* contextMenuEvent) override;
         
-        virtual bool event(QEvent* event);
+        virtual bool event(QEvent* event) override;
         
-        virtual void keyPressEvent(QKeyEvent* e);
+        virtual void keyPressEvent(QKeyEvent* e) override;
         
-        virtual void keyReleaseEvent(QKeyEvent* e);
+        virtual void keyReleaseEvent(QKeyEvent* e) override;
         
-        virtual void mouseDoubleClickEvent(QMouseEvent* e);
+        virtual void mouseDoubleClickEvent(QMouseEvent* e) override;
         
-        virtual void mouseMoveEvent(QMouseEvent* e);
+        virtual void mouseMoveEvent(QMouseEvent* e) override;
         
-        virtual void mousePressEvent(QMouseEvent* e);
+        virtual void mousePressEvent(QMouseEvent* e) override;
         
-        virtual void mouseReleaseEvent(QMouseEvent* e);
+        virtual void mouseReleaseEvent(QMouseEvent* e) override;
         
-        virtual void wheelEvent(QWheelEvent* e);
+        virtual void wheelEvent(QWheelEvent* e) override;
         
-        virtual void enterEvent(QEvent* e);
+#if QT_VERSION >= 0x060000
+        virtual void enterEvent(QEnterEvent* e) override;
+#else
+        virtual void enterEvent(QEvent* e) override;
+#endif
         
-        virtual void leaveEvent(QEvent* e);
+        virtual void leaveEvent(QEvent* e) override;
+        
+        virtual void paintEvent(QPaintEvent* e) override;
         
     private slots:
         void showSelectedChartPointToolTip();
+        
+        void startGraphicsTiming();
+        
+        void endGraphicsTiming();
         
     private:
         
@@ -178,8 +221,17 @@ namespace caret {
         
         BrainOpenGLWindowContent m_windowContent;
         
-        int32_t windowWidth[BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_WINDOWS];
-        int32_t windowHeight[BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_WINDOWS];
+        /**
+         * Width sent by Qt to resizeGL - Do not use this directly.
+         * Instead use getWidgetWidth() so that it includes High DPI scaling
+         */
+        int32_t windowWidth = 0;
+        
+        /**
+         * Height sent by Qt to resizeGL - Do not use this directly.
+         * Instead use getWidgetHeight() so that it includes High DPI scaling
+         */
+        int32_t windowHeight = 0;
         
         int32_t mouseMovementMinimumX;
         int32_t mouseMovementMaximumX;
@@ -208,6 +260,8 @@ namespace caret {
         bool m_openGLContextSharingValid = false;
         
         void* m_contextShareGroupPointer = NULL;
+        
+        std::unique_ptr<GraphicsFramesPerSecond> m_graphicsFramesPerSecond;
         
         struct SelectedChartPointToolTipInfo {
             QPoint m_position;

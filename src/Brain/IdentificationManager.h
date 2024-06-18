@@ -26,6 +26,7 @@
 
 #include "CaretColorEnum.h"
 #include "IdentificationSymbolSizeTypeEnum.h"
+#include "IdentifiedItemUniversalTypeEnum.h"
 #include "SceneableInterface.h"
 #include "StructureEnum.h"
 
@@ -34,19 +35,23 @@ namespace caret {
     class CaretPreferences;
     class IdentificationFilter;
     class IdentificationHistoryManager;
-    class IdentifiedItem;
-    class IdentifiedItemNode;
-    class IdentifiedItemVoxel;
+    class IdentifiedItemUniversal;
     class SceneClassAssistant;
-    
+    class SelectionItem;
+    class SelectionItemUniversalIdentificationSymbol;
+
     class IdentificationManager : public SceneableInterface {
         
     public:
+        static AString getShowSymbolOnTypeLabel(const IdentifiedItemUniversalTypeEnum::Enum type);
+        
+        static AString getShowSymbolOnTypeToolTip(const IdentifiedItemUniversalTypeEnum::Enum type);
+        
         IdentificationManager(const CaretPreferences* caretPreferences);
         
         virtual ~IdentificationManager();
         
-        void addIdentifiedItem(IdentifiedItem* item);
+        void addIdentifiedItem(IdentifiedItemUniversal* item);
         
         AString getIdentificationText() const;
         
@@ -58,16 +63,20 @@ namespace caret {
         
         IdentificationHistoryManager* getIdentificationHistoryManager();
         
-        std::vector<IdentifiedItemNode> getNodeIdentifiedItemsForSurface(const StructureEnum::Enum structure,
-                                                                         const int32_t surfaceNumberOfNodes) const;
+        std::vector<const IdentifiedItemUniversal*> getIdentifiedItems() const;
         
-        std::vector<IdentifiedItemVoxel> getIdentifiedItemsForVolume() const;
+        const IdentifiedItemUniversal* getIdentifiedItemWithIdentifier(const int64_t uniqueIdentifier) const;
         
-        void removeIdentifiedNodeItem(const StructureEnum::Enum structure,
-                                      const int32_t surfaceNumberOfNodes,
-                                      const int32_t nodeIndex);
+        void getIdentifiedItemColorAndSize(const IdentifiedItemUniversal* item,
+                                           const IdentifiedItemUniversalTypeEnum::Enum drawingOnType,
+                                           const float referenceHeight,
+                                           const bool contralateralSurfaceFlag,
+                                           std::array<uint8_t, 4>& rgbaOut,
+                                           float& symbolDiameterOut) const;
         
-        void removeIdentifiedVoxelItem(const float xyz[3]);
+        const IdentifiedItemUniversal* getMostRecentIdentifiedItem() const;
+        
+        bool removeIdentifiedItem(const SelectionItem* selectedItem);
         
         void removeIdentificationText();
         
@@ -107,6 +116,14 @@ namespace caret {
         
         void setIdentificationContralateralSymbolColor(const CaretColorEnum::Enum color);
         
+        bool isShowHistologyIdentificationSymbols() const;
+        
+        void setShowHistologyIdentificationSymbols(const bool showHistologyIdenficationSymbols);
+        
+        bool isShowMediaIdentificationSymbols() const;
+        
+        void setShowMediaIdentificationSymbols(const bool showMediaIdenficationSymbols);
+        
         bool isShowSurfaceIdentificationSymbols() const;
         
         void setShowSurfaceIdentificationSymbols(const bool showSurfaceIdentificationSymbols);
@@ -115,6 +132,22 @@ namespace caret {
         
         void setShowVolumeIdentificationSymbols(const bool showVolumeIdentificationSymbols);
         
+        float getHistologyIdentificationPercentageSymbolSize() const;
+        
+        void setHistologyIdentificationPercentageSymbolSize(const float symbolSize);
+        
+        float getHistologyIdentificationMostRecentPercentageSymbolSize() const;
+        
+        void setHistologyIdentificationMostRecentPercentageSymbolSize(const float symbolSize);
+        
+        float getMediaIdentificationPercentageSymbolSize() const;
+        
+        void setMediaIdentificationPercentageSymbolSize(const float symbolSize);
+        
+        float getMediaIdentificationMostRecentPercentageSymbolSize() const;
+        
+        void setMediaIdentificationMostRecentPercentageSymbolSize(const float symbolSize);
+        
         float getChartLineLayerSymbolSize() const;
         
         void setChartLineLayerSymbolSize(const float symbolSize);
@@ -122,6 +155,11 @@ namespace caret {
         float getChartLineLayerToolTipTextSize() const;
         
         void setChartLineLayerToolTipTextSize(const float textSize);
+
+        bool getSurfaceInformationForIdentificationSymbol(const SelectionItemUniversalIdentificationSymbol* symbol,
+                                                          StructureEnum::Enum& structureOut,
+                                                          int32_t& surfaceNumberOfVerticesOut,
+                                                          int32_t& surfaceVertexIndexOut) const;
 
         virtual SceneClass* saveToScene(const SceneAttributes* sceneAttributes,
                                         const AString& instanceName);
@@ -140,18 +178,18 @@ namespace caret {
 
     private:
 
-        void addIdentifiedItemPrivate(IdentifiedItem* item,
+        void addIdentifiedItemPrivate(IdentifiedItemUniversal* item,
                                       const bool restoringSceneFlag);
         
         // ADD_NEW_MEMBERS_HERE
 
         SceneClassAssistant* m_sceneAssistant;
         
-        std::list<IdentifiedItem*> m_identifiedItems;
+        std::list<std::unique_ptr<IdentifiedItemUniversal>> m_identifiedItems;
         
         AString m_previousIdentifiedItemsText;
         
-        IdentifiedItem* m_mostRecentIdentifiedItem;
+        IdentifiedItemUniversal* m_mostRecentIdentifiedItem = NULL;
         
         bool m_contralateralIdentificationEnabled;
         
@@ -165,6 +203,14 @@ namespace caret {
         
         float m_identifcationMostRecentSymbolPercentageSize;
         
+        float m_histologyIdentificationPercentageSymbolSize = 2.0;
+        
+        float m_histologyIdentificationMostRecentPercentageSymbolSize = 2.5;
+        
+        float m_mediaIdentificationPercentageSymbolSize = 3.0;
+        
+        float m_mediaIdentificationMostRecentPercentageSymbolSize = 5.0;
+        
         CaretColorEnum::Enum m_identificationSymbolColor;
         
         CaretColorEnum::Enum m_identificationContralateralSymbolColor;
@@ -177,11 +223,18 @@ namespace caret {
         
         std::unique_ptr<IdentificationHistoryManager> m_identificationHistoryManager;
         
+        /** show histology identification symbols*/
+        bool m_showHistologyIdentificationSymbols;
+        
+        /** show media identification symbols*/
+        bool m_showMediaIdentificationSymbols;
+
         /** show surface identification symbols*/
         bool m_showSurfaceIdentificationSymbols;
         
         /** show volume identification symbols*/
         bool m_showVolumeIdentificationSymbols;
+        
     };
     
 #ifdef __IDENTIFICATION_MANAGER_DECLARE__

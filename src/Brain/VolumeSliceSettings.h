@@ -21,10 +21,12 @@
  */
 /*LICENSE_END*/
 
+#include <memory>
 
 #include "CaretObject.h"
 #include "ModelTypeEnum.h"
 #include "SceneableInterface.h"
+#include "VolumeMontageSliceOrderModeEnum.h"
 #include "VolumeSliceDrawingTypeEnum.h"
 #include "VolumeSliceInterpolationEdgeEffectsMaskingEnum.h"
 #include "VolumeSliceProjectionTypeEnum.h"
@@ -36,7 +38,7 @@ namespace caret {
     class PlainTextStringBuilder;
     class SceneClassAssistant;
     class VolumeMappableInterface;
-    class VolumeSliceCoordinateSelection;
+    class VolumeMprSettings;
     
     class VolumeSliceSettings : public CaretObject, public SceneableInterface {
         
@@ -48,6 +50,8 @@ namespace caret {
         VolumeSliceSettings(const VolumeSliceSettings& obj);
 
         VolumeSliceSettings& operator=(const VolumeSliceSettings& obj);
+        
+        void copyToMeForYoking(const VolumeSliceSettings& volumeSliceSettings);
         
         VolumeSliceViewPlaneEnum::Enum getSliceViewPlane() const;
         
@@ -81,12 +85,10 @@ namespace caret {
         
         void setMontageSliceSpacing(const int32_t montageSliceSpacing);
         
-        VolumeSliceCoordinateSelection* getSelectedVolumeSlices(VolumeMappableInterface* underlayVolumeFile);
+        VolumeMontageSliceOrderModeEnum::Enum getMontageSliceOrderMode() const;
         
-        const VolumeSliceCoordinateSelection* getSelectedVolumeSlices(VolumeMappableInterface* underlayVolumeFile) const;
+        void setMontageSliceOrderMode(const VolumeMontageSliceOrderModeEnum::Enum sliceOrderMode);
         
-        void setSlicesToOrigin();
-
         void getSlicesParasagittalCoronalAxial(const VolumeMappableInterface* volumeInterface,
                                                int64_t& parasagittalIndexOut,
                                                int64_t& coronalIndexOut,
@@ -136,13 +138,13 @@ namespace caret {
         
         void setSliceAxialEnabled(const bool sliceEnabledAxial);
         
-        void updateForVolumeFile(const VolumeMappableInterface* volumeFile);
-        
-        void selectSlicesAtOrigin();
+        void selectSlicesAtOrigin(const VolumeMappableInterface* volumeInterface);
         
         void selectSlicesAtCoordinate(const float xyz[3]);
         
-        void reset();
+        VolumeMprSettings* getMprSettings();
+        
+        const VolumeMprSettings* getMprSettings() const;
         
         virtual SceneClass* saveToScene(const SceneAttributes* sceneAttributes,
                                         const AString& instanceName);
@@ -160,6 +162,8 @@ namespace caret {
     private:
         void copyHelperVolumeSliceSettings(const VolumeSliceSettings& obj);
 
+        void reset();
+        
         // ADD_NEW_MEMBERS_HERE
 
         /** Axis of slice being viewed */
@@ -186,6 +190,8 @@ namespace caret {
         /** Montage slice spacing */
         int32_t m_montageSliceSpacing;
         
+        VolumeMontageSliceOrderModeEnum::Enum m_montageSliceOrderMode = VolumeMontageSliceOrderModeEnum::WORKBENCH;
+
         mutable float m_sliceCoordinateParasagittal;
         
         mutable float m_sliceCoordinateCoronal;
@@ -200,8 +206,8 @@ namespace caret {
         
         bool m_initializedFlag;
         
-        //VolumeFile* m_lastVolumeFile;
-        
+        std::unique_ptr<VolumeMprSettings> m_mprSettings;
+
         SceneClassAssistant* m_sceneAssistant;
     };
     

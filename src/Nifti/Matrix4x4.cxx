@@ -44,10 +44,16 @@
  =========================================================================*/
 
 
-
 #include <cmath>
 #include <iostream>
 #include <limits>
+
+#include <QStringList>
+
+#include <glm/ext/vector_float4.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/type_ptr.hpp>
+#include <glm/gtx/quaternion.hpp>
 
 #include "CaretAssert.h"
 #include "CaretLogger.h"
@@ -87,6 +93,32 @@ Matrix4x4::Matrix4x4()
 Matrix4x4::~Matrix4x4()
 {
 }
+
+/**
+ * Construct matrix from a matrix in vectors
+ * @param matrixRows
+ *    Matrix elements
+ */
+Matrix4x4::Matrix4x4(const std::vector<std::vector<float>>& matrixRows)
+{
+    this->initializeMembersMatrix4x4();
+    
+    int32_t numRows(matrixRows.size());
+    if (numRows > 4) {
+        numRows = 4;
+    }
+    for (int32_t iRow = 0; iRow < numRows; iRow++) {
+        const auto& row(matrixRows[iRow]);
+        int32_t numCols(row.size());
+        if (numCols > 4) {
+            numCols = 4;
+        }
+        for (int32_t jCol = 0; jCol < 4; jCol++) {
+            this->matrix[iRow][jCol] = row[jCol];
+        }
+    }
+}
+
 
 /**
  * Copy Constructor
@@ -232,6 +264,20 @@ Matrix4x4::translate(
     cm.setTranslation(tx, ty, tz);
     postmultiply(cm);
     this->setModified();
+}
+
+/**
+ *
+ * Apply a translation by multiplying the matrix by a matrix
+ * containing the specified translation.  Translates in the
+ * screen' coordinate system.
+ *
+ * @param txyz  The translation along the XYZ-Axis.
+ */
+void
+Matrix4x4::translate(const float txyz[3])
+{
+    translate(txyz[0], txyz[1], txyz[2]);
 }
 
 /**
@@ -1363,6 +1409,62 @@ Matrix4x4::setMatrixFromOpenGL(const float m[16])
     this->setModified();
 }
 
+/**
+ * @return matrix elements in a string in row major order
+ *  For matrix:
+ *  a b c d
+ *  e f g h
+ *  i j k l
+ *  m n o p
+ *   RETURNS a b c d e f g h i j k l m n o p
+ */
+QString
+Matrix4x4::getMatrixInRowMajorOrderString()
+{
+    QString s;
+    const QString separator(" ");
+    bool addSeparatorFlag(false);
+    for (int32_t i = 3; i >= 0; --i) {
+        for (int32_t j = 0; j < 4; ++j) {
+            if (addSeparatorFlag) {
+                s += separator;
+            }
+            addSeparatorFlag = true;
+            s += AString::number(getMatrixElement(i, j));
+        }
+    }
+    return s;
+}
+
+/**
+ * @return matrix elements in a string in row major order
+ * @param s String containing 16 elements
+ * ELEMENTS  a b c d e f g h i j k l m n o p
+ * Form matrix:
+ *  a b c d
+ *  e f g h
+ *  i j k l
+ *  m n o p
+ */
+void
+Matrix4x4::setMatrixFromRowMajorOrderString(const QString& s)
+{
+    const QStringList elements = s.split(QString(" "));
+    if (elements.size() == 16) {
+        int32_t indx(0);
+        for (int32_t i = 3; i >= 0; --i) {
+            for (int32_t j = 0; j < 4; ++j) {
+                setMatrixElement(i, j, elements[indx].toDouble());
+                ++indx;
+            }
+        }
+
+    }
+    else {
+        CaretLogSevere("Matrix elements should contain 16 items but contains "
+                       + AString::number(elements.size()));
+    }
+}
 
 /**
  * Convert the given vector to an OpenGL rotation matrix.
@@ -1642,6 +1744,71 @@ Matrix4x4::setTransformedSpaceName(const AString& name)
 }
 
 /**
+ * Get a column from the matrix.
+ * @param columnIndex
+ *    Index of the column
+ * @param columnOut
+ *    Ouput with column elements.
+ */
+void
+Matrix4x4::getColumn(const int32_t columnIndex,
+                     float columnOut[4]) const
+{
+    for (int iRow = 0; iRow < 4; iRow++) {
+        columnOut[iRow] = this->matrix[iRow][columnIndex];
+    }
+}
+
+/**
+ * Get a column from the matrix.
+ * @param columnIndex
+ *    Index of the column
+ * @param columnOut
+ *    Ouput with column elements.
+ */
+void
+Matrix4x4::getColumn(const int32_t columnIndex,
+                     double columnOut[4]) const
+{
+    for (int iRow = 0; iRow < 4; iRow++) {
+        columnOut[iRow] = this->matrix[iRow][columnIndex];
+    }
+}
+
+/**
+ * Set a column in the matrix.
+ * @param columnIndex
+ *    Index of the column
+ * @param column
+ *    New values for column
+ */
+void
+Matrix4x4::setColumn(const int32_t columnIndex,
+                     const float column[4])
+{
+    for (int iRow = 0; iRow < 4; iRow++) {
+        this->matrix[iRow][columnIndex] = column[iRow];
+    }
+}
+
+/**
+ * Set a column in the matrix.
+ * @param columnIndex
+ *    Index of the column
+ * @param column
+ *    New values for column
+ */
+void
+Matrix4x4::setColumn(const int32_t columnIndex,
+                     const double column[4])
+{
+    for (int iRow = 0; iRow < 4; iRow++) {
+        this->matrix[iRow][columnIndex] = column[iRow];
+    }
+}
+
+
+/**
  * Set a matrix element.
  * @param i   Row
  * @param j   Column
@@ -1671,6 +1838,24 @@ Matrix4x4::setMatrixElement(
 {
     this->matrix[i][j] = e;
     this->setModified();
+}
+
+Vector3D
+Matrix4x4::getBasisVector(const int32_t columnIndex) const
+{
+    if ((columnIndex >= 0)
+        && (columnIndex <= 2)) {
+        Vector3D v(this->matrix[0][columnIndex],
+                   this->matrix[1][columnIndex],
+                   this->matrix[2][columnIndex]);
+        return v;
+    }
+    else {
+        CaretLogSevere("Invalid column index="
+                       + AString::number(columnIndex)
+                       + " for basis vector.  Must be in range [0, 2]");
+    }
+    return Vector3D();
 }
 
 /**
@@ -2628,5 +2813,38 @@ bool
 Matrix4x4::isModified() const
 {
     return this->modifiedFlag;
+}
+
+/**
+ * @return Matrix that rotates 'fromVector' to align with 'toVector'
+ * @param fromVector
+ *    Vector that is aligned with toVector
+ * @param toVector
+ *    The 'align to' vector
+ * Note: Computation is performed using OpenGL Math's quaternion and
+ * the quaternion is copied to the output matrix.
+ */
+Matrix4x4
+Matrix4x4::rotationTo(const Vector3D& fromVector,
+                      const Vector3D& toVector)
+{
+    glm::vec3 fromVec(fromVector[0], fromVector[1], fromVector[2]);
+    glm::vec3 toVec(toVector[0], toVector[1], toVector[2]);
+    
+    /*
+     * Use quaterion for calculation
+     */
+    glm::quat quaternion(glm::rotation(fromVec, toVec));
+    
+    glm::mat4 matrix(glm::mat4_cast(quaternion));
+    
+    Matrix4x4 m44;
+    for (int32_t iRow = 0; iRow < 3; iRow++) {
+        for (int32_t iCol = 0; iCol < 3; iCol++) {
+            m44.setMatrixElement(iRow, iCol, matrix[iRow][iCol]);
+        }
+    }
+    
+    return m44;
 }
 

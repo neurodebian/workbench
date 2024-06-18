@@ -21,6 +21,7 @@
  */
 /*LICENSE_END*/
 
+#include <array>
 #include <memory>
 
 #include "BrainConstants.h"
@@ -31,7 +32,9 @@
 
 namespace caret {
 
+    class BrowserTabContent;
     class CaretDataFileSelectionModel;
+    class GraphicsRegionSelectionBox;
     class MediaOverlaySet;
     class MediaOverlaySetArray;
     class OverlaySetArray;

@@ -24,6 +24,7 @@
 #undef __SPEC_FILE_MANAGEMENT_DIALOG_DECLARE__
 
 #include <QAction>
+#include <QActionGroup>
 #include <QApplication>
 #include <QBrush>
 #include <QCheckBox>
@@ -55,6 +56,8 @@
 #include "CaretResult.h"
 #include "CaretResultDialog.h"
 #include "CursorDisplayScoped.h"
+#include "CziImageExportDialog.h"
+#include "CziImageFile.h"
 #include "DataFileContentCopyMoveDialog.h"
 #include "DataFileContentCopyMoveInterface.h"
 #include "DataFileException.h"
@@ -65,7 +68,7 @@
 #include "EventDataFileReload.h"
 #include "EventDataFileReloadAll.h"
 #include "EventGetDisplayedDataFiles.h"
-#include "EventGraphicsUpdateAllWindows.h"
+#include "EventGraphicsPaintSoonAllWindows.h"
 #include "EventManager.h"
 #include "EventShowDataFileReadWarningsDialog.h"
 #include "EventSpecFileReadDataFiles.h"
@@ -279,16 +282,31 @@ m_specFile(specFile)
      * Signal mappers for buttons
      */
     m_fileReloadOrOpenFileActionSignalMapper = new QSignalMapper(this);
+#if QT_VERSION >= 0x060000
+    QObject::connect(m_fileReloadOrOpenFileActionSignalMapper, &QSignalMapper::mappedInt,
+                     this, &SpecFileManagementDialog::fileReloadOrOpenFileActionSelected);
+#else
     QObject::connect(m_fileReloadOrOpenFileActionSignalMapper, SIGNAL(mapped(int)),
                      this, SLOT(fileReloadOrOpenFileActionSelected(int)));
+#endif
     
     m_fileOptionsActionSignalMapper = new QSignalMapper(this);
+#if QT_VERSION >= 0x060000
+    QObject::connect(m_fileOptionsActionSignalMapper, &QSignalMapper::mappedInt,
+                     this, &SpecFileManagementDialog::fileOptionsActionSelected);
+#else
     QObject::connect(m_fileOptionsActionSignalMapper, SIGNAL(mapped(int)),
                      this, SLOT(fileOptionsActionSelected(int)));
+#endif
     
     m_fileCloseFileActionSignalMapper = new QSignalMapper(this);
+#if QT_VERSION >= 0x060000
+    QObject::connect(m_fileCloseFileActionSignalMapper, &QSignalMapper::mappedInt,
+                     this, &SpecFileManagementDialog::fileRemoveActionSelected);
+#else
     QObject::connect(m_fileCloseFileActionSignalMapper, SIGNAL(mapped(int)),
                      this, SLOT(fileRemoveActionSelected(int)));
+#endif
 
     int tableRowCounter = 0;
     
@@ -2227,7 +2245,7 @@ SpecFileManagementDialog::updateGraphicWindowsAndUserInterface()
 {
     EventManager::get()->sendEvent(EventSurfaceColoringInvalidate().getPointer());
     EventManager::get()->sendEvent(EventUserInterfaceUpdate().getPointer());
-    EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+    EventManager::get()->sendEvent(EventGraphicsPaintSoonAllWindows().getPointer());
 }
 
 
@@ -2306,11 +2324,11 @@ SpecFileManagementDialog::fileOptionsActionSelected(int rowIndex)
         QAction* copyFilePathToClipboardAction = NULL;
         QAction* copyMoveFileContentAction     = NULL;
         QAction* editMetaDataAction            = NULL;
+        QAction* exportCziToImageFileAction    = NULL;
         QAction* setFileNameAction             = NULL;
         QAction* showFileInformationAction     = NULL;
         QAction* setStructureAction            = NULL;
         QAction* unloadFileMapsAction          = NULL;
-        QAction* viewMetaDataAction            = NULL;
         
         QMenu menu;
         switch (m_dialogMode) {
@@ -2325,6 +2343,12 @@ SpecFileManagementDialog::fileOptionsActionSelected(int rowIndex)
                     if ( ! sceneAnnotationFileFlag) {
                         copyFilePathToClipboardAction = menu.addAction(copyPathText);
                         editMetaDataAction = menu.addAction("Edit Metadata...");
+                        if ( ! caretDataFile->supportsFileMetaData()) {
+                            editMetaDataAction->setEnabled(false);
+                        }
+                        if (caretDataFile->getDataFileType() == DataFileTypeEnum::CZI_IMAGE_FILE) {
+                            exportCziToImageFileAction = menu.addAction("Export to Image File...");
+                        }
                         setFileNameAction = menu.addAction("Set File Name...");
                         showFileInformationAction = menu.addAction("Show File Information...");
                     }
@@ -2384,8 +2408,15 @@ SpecFileManagementDialog::fileOptionsActionSelected(int rowIndex)
                     loadSpecFileContentIntoDialog();
                 }
             }
-            else if (selectedAction == viewMetaDataAction) {
+            else if (selectedAction == exportCziToImageFileAction) {
+                CaretAssert(caretDataFile);
+                CziImageFile* cziImageFile = caretDataFile->castToCziImageFile();
+                CaretAssert(cziImageFile);
                 
+                CziImageExportDialog cziImageExportDialog(CziImageExportDialog::ExportType::ANY_IMAGE,
+                                                          cziImageFile,
+                                                          this);
+                cziImageExportDialog.exec();
             }
             else if (selectedAction != NULL) {
                 CaretAssertMessage(0,

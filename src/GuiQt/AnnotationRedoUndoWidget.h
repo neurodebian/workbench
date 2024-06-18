@@ -30,6 +30,7 @@
 
 namespace caret {
     class Annotation;
+    class UserInputModeAnnotations;
 
     class AnnotationRedoUndoWidget : public QWidget {
         
@@ -37,7 +38,7 @@ namespace caret {
 
     public:
         AnnotationRedoUndoWidget(const Qt::Orientation orientation,
-                                 const UserInputModeEnum::Enum userInputMode,
+                                 UserInputModeAnnotations* userInputModeAnnotations,
                                  const int32_t browserWindowIndex,
                                  QWidget* parent = 0);
         
@@ -58,13 +59,17 @@ namespace caret {
 
         AnnotationRedoUndoWidget& operator=(const AnnotationRedoUndoWidget&);
         
+        UserInputModeAnnotations* m_userInputModeAnnotations;
+        
         const UserInputModeEnum::Enum m_userInputMode;
         
         const int32_t m_browserWindowIndex;
         
-        QAction* m_redoAction;
+        QAction* m_redoAction = NULL;
         
-        QAction* m_undoAction;
+        QAction* m_undoAction = NULL;
+        
+        std::vector<Annotation*> m_selectedAnnotations;
         
         // ADD_NEW_MEMBERS_HERE
 

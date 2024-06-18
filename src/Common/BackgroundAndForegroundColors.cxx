@@ -140,6 +140,14 @@ BackgroundAndForegroundColors::operator==(const BackgroundAndForegroundColors& o
             equalFlag = false;
             break;
         }
+        if (m_colorBackgroundHistology[i] != obj.m_colorBackgroundHistology[i]) {
+            equalFlag = false;
+            break;
+        }
+        if (m_colorForegroundHistology[i] != obj.m_colorForegroundHistology[i]) {
+            equalFlag = false;
+            break;
+        }
         if (m_colorBackgroundMedia[i] != obj.m_colorBackgroundMedia[i]) {
             equalFlag = false;
             break;
@@ -174,6 +182,8 @@ BackgroundAndForegroundColors::copyHelperBackgroundAndForegroundColors(const Bac
         m_colorBackgroundVolume[i]        = obj.m_colorBackgroundVolume[i];
         m_colorChartMatrixGridLines[i]    = obj.m_colorChartMatrixGridLines[i];
         m_colorChartHistogramThreshold[i] = obj.m_colorChartHistogramThreshold[i];
+        m_colorForegroundHistology[i]     = obj.m_colorForegroundHistology[i];
+        m_colorBackgroundHistology[i]     = obj.m_colorBackgroundHistology[i];
         m_colorForegroundMedia[i]    = obj.m_colorForegroundMedia[i];
         m_colorBackgroundMedia[i]    = obj.m_colorBackgroundMedia[i];
     }
@@ -222,6 +232,10 @@ BackgroundAndForegroundColors::reset()
     const uint8_t threshGreen = 100;
     const uint8_t threshBlue  = 255;
     setColor(m_colorChartHistogramThreshold, threshRed, threshGreen, threshBlue);
+    
+    setColor(m_colorForegroundHistology, foreRed, foreGreen, foreBlue);
+    
+    setColor(m_colorBackgroundHistology, backRed, backGreen, backBlue);
     
     setColor(m_colorForegroundMedia, foreRed, foreGreen, foreBlue);
     
@@ -569,6 +583,62 @@ BackgroundAndForegroundColors::setColorChartHistogramThreshold(const uint8_t col
 }
 
 /**
+ * Get the foreground color for viewing the histology model.
+ *
+ * @param colorForeground
+ *    RGB color components ranging [0, 255].
+ */
+void
+BackgroundAndForegroundColors::getColorForegroundHistologyView(uint8_t colorForeground[3]) const
+{
+    for (int32_t i = 0; i < 3; i++) {
+        colorForeground[i] = m_colorForegroundHistology[i];
+    }
+}
+
+/**
+ * Set the foreground color for viewing the  histology model.
+ *
+ * @param colorForeground
+ *    RGB color components ranging [0, 255].
+ */
+void
+BackgroundAndForegroundColors::setColorForegroundHistologyView(const uint8_t colorForeground[3])
+{
+    for (int32_t i = 0; i < 3; i++) {
+        m_colorForegroundHistology[i] = colorForeground[i];
+    }
+}
+
+/**
+ * Get the background color for viewing the histology model.
+ *
+ * @param colorBackground
+ *    RGB color components ranging [0, 255].
+ */
+void
+BackgroundAndForegroundColors::getColorBackgroundHistologyView(uint8_t colorBackground[3]) const
+{
+    for (int32_t i = 0; i < 3; i++) {
+        colorBackground[i] = m_colorBackgroundHistology[i];
+    }
+}
+
+/**
+ * Set the background color for viewing the histology model.
+ *
+ * @param colorBackground
+ *    RGB color components ranging [0, 255].
+ */
+void
+BackgroundAndForegroundColors::setColorBackgroundHistologyView(const uint8_t colorBackground[3])
+{
+    for (int32_t i = 0; i < 3; i++) {
+        m_colorBackgroundHistology[i] = colorBackground[i];
+    }
+}
+
+/**
  * Get the foreground color for viewing the Mult-Media model.
  *
  * @param colorForeground
@@ -645,5 +715,24 @@ BackgroundAndForegroundColors::setColor(uint8_t color[3],
     color[0] = red;
     color[1] = green;
     color[2] = blue;
+}
+
+/**
+ * Convert the  byte RGB values (0 to 255)  to float RGB values (0 to 1)
+ * @param byteRGB
+ *    The byte RGB values
+ * @return
+ *    Float RGB values
+ */
+std::array<float, 3>
+BackgroundAndForegroundColors::toFloatRGB(const uint8_t byteRGB[3])
+{
+    std::array<float, 3> rgb {
+        static_cast<float>(byteRGB[0]) / 255.0f,
+        static_cast<float>(byteRGB[1]) / 255.0f,
+        static_cast<float>(byteRGB[2]) / 255.0f
+    };
+    
+    return rgb;
 }
 

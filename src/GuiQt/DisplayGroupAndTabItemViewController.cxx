@@ -38,7 +38,8 @@
 #include "DisplayGroupAndTabItemInterface.h"
 #include "DisplayGroupAndTabItemTreeWidgetItem.h"
 #include "DisplayPropertiesAnnotation.h"
-#include "EventGraphicsUpdateAllWindows.h"
+#include "DisplayPropertiesSamples.h"
+#include "EventGraphicsPaintSoonAllWindows.h"
 #include "EventManager.h"
 #include "GuiManager.h"
 
@@ -160,6 +161,9 @@ DisplayGroupAndTabItemViewController::itemsWereSelected()
             if (m_dataFileType == DataFileTypeEnum::ANNOTATION) {
                 processAnnotationDataSelection(itemInterfacesVector);
             }
+            else if (m_dataFileType == DataFileTypeEnum::SAMPLES) {
+                processAnnotationDataSelection(itemInterfacesVector);
+            }
         }
     }
     
@@ -234,9 +238,16 @@ DisplayGroupAndTabItemViewController::processAnnotationDataSelection(const std::
     if ( ! annotationSet.empty()) {
         std::vector<Annotation*> selectedAnnotations(annotationSet.begin(),
                                                      annotationSet.end());
-        AnnotationManager* annMan = GuiManager::get()->getBrain()->getAnnotationManager();
-        annMan->setAnnotationsForEditing(m_browserWindowIndex,
-                                         selectedAnnotations);
+        if (m_dataFileType == DataFileTypeEnum::ANNOTATION) {
+            AnnotationManager* annMan = GuiManager::get()->getBrain()->getAnnotationManager(UserInputModeEnum::Enum::ANNOTATIONS);
+            annMan->setAnnotationsForEditing(m_browserWindowIndex,
+                                             selectedAnnotations);
+        }
+        else if (m_dataFileType == DataFileTypeEnum::SAMPLES) {
+            AnnotationManager* annMan = GuiManager::get()->getBrain()->getAnnotationManager(UserInputModeEnum::Enum::SAMPLES_EDITING);
+            annMan->setAnnotationsForEditing(m_browserWindowIndex,
+                                             selectedAnnotations);
+        }
     }
 }
 
@@ -354,8 +365,14 @@ DisplayGroupAndTabItemViewController::getDisplayGroupAndTabIndex(DisplayGroupEnu
     tabIndexOut= tabContent->getTabNumber();
     CaretAssert(tabIndexOut >= 0);
     
-    DisplayPropertiesAnnotation* dpa = GuiManager::get()->getBrain()->getDisplayPropertiesAnnotation();
-    displayGroupOut = dpa->getDisplayGroupForTab(tabIndexOut);
+    if (m_dataFileType == DataFileTypeEnum::ANNOTATION) {
+        DisplayPropertiesAnnotation* dpa = GuiManager::get()->getBrain()->getDisplayPropertiesAnnotation();
+        displayGroupOut = dpa->getDisplayGroupForTab(tabIndexOut);
+    }
+    else if (m_dataFileType == DataFileTypeEnum::SAMPLES) {
+        DisplayPropertiesSamples* dps(GuiManager::get()->getBrain()->getDisplayPropertiesSamples());
+        displayGroupOut = dps->getDisplayGroupForTab(tabIndexOut);
+    }
 }
 
 
@@ -454,7 +471,7 @@ void
 DisplayGroupAndTabItemViewController::updateGraphics()
 {
     EventManager::get()->sendSimpleEvent(EventTypeEnum::EVENT_ANNOTATION_TOOLBAR_UPDATE);
-    EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+    EventManager::get()->sendEvent(EventGraphicsPaintSoonAllWindows().getPointer());
 }
 
 /**

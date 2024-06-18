@@ -87,6 +87,8 @@ namespace caret {
         
         void getAllBrainOpenGLViewportContent(std::vector<const BrainOpenGLViewportContent*>& viewportContentOut) const;
         
+        const BrainOpenGLViewportContent* getViewportContentForSelectedTab() const;
+        
         int32_t getBrowserWindowIndex() const;
 
         bool isTileTabsSelected() const;
@@ -115,6 +117,9 @@ namespace caret {
         
         void loadFilesFromCommandLine(const std::vector<AString>& filenames,
                                       const LoadSpecFileMode loadSpecFileMode);
+        
+        void loadRecentScene(const AString& sceneFileName,
+                             const AString& sceneName);
         
         void loadSceneFromCommandLine(const AString& sceneFileName,
                                       const AString& sceneNameOrNumber,
@@ -170,9 +175,12 @@ namespace caret {
         
         void reopenLastClosedTab(EventBrowserTabReopenClosed& reopenTabEvent);
 
+        QAction* getViewTileTabsConfigurationDialogAction();
+
     protected:
-        void closeEvent(QCloseEvent* event);
-        void keyPressEvent(QKeyEvent* event);
+        void changeEvent(QEvent *event) override;
+        void closeEvent(QCloseEvent* event) override;
+        void keyPressEvent(QKeyEvent* event) override;
         
     private slots:        
         void processAboutWorkbench();
@@ -186,13 +194,13 @@ namespace caret {
         void processManageSaveLoadedFiles();
         void processCaptureImage();
         void processMovieRecording();
-        void processRecordMovie();
         void processEditPreferences();
         void processCloseAllFiles();
         void processCloseWindow();
         void processExitProgram();
         void processMoveAllTabsToOneWindow();
         void processViewFullScreenSelected();
+        void processViewMaximizedSelected();
         void processViewTileTabs();
         void processViewTileTabsConfigurationDialog();
         void processShowHelpInformation();
@@ -240,10 +248,11 @@ namespace caret {
         
         void processDevelopGraphicsTiming();
         void processDevelopGraphicsTimingDuration();
+        void processDevelopOpenMPTesting();
 
         void processDevelopExportVtkFile();
+        void processDevelopCziFileTransformTesting();
         void developerMenuAboutToShow();
-        void developerMenuFlagTriggered(QAction*);
         
         void processProjectFoci();
         void processSplitBorderFiles();
@@ -251,6 +260,7 @@ namespace caret {
         void processWindowMenuLockWindowAspectRatioTriggered(bool checked);
         void processWindowMenuLockAllTabAspectRatioTriggered(bool checked);
         void processToolBarLockWindowAndAllTabAspectTriggered(bool checked);
+        void processToolBarUndoUnlockWindowAndAllTabAspectTriggered();
         void processToolBarLockWindowAndAllTabAspectMenu(const QPoint& pos);
 
         void processEditMenuItemTriggered(QAction* action);
@@ -259,14 +269,16 @@ namespace caret {
         void aspectRatioDialogUpdateForTab(const double aspectRatio);
         void aspectRatioDialogUpdateForWindow(const double aspectRatio);
         
+        void processParallelTest();
+        
     private:
         /** Contains status of components such as enter/exit full screen */
         struct WindowComponentStatus {
-            bool isFeaturesToolBoxDisplayed;
-            bool isOverlayToolBoxDisplayed;
-            bool isToolBarDisplayed;
+            QString name;
+            bool isFeaturesToolBoxDisplayed = false;
+            bool isOverlayToolBoxDisplayed = true;
+            bool isToolBarDisplayed = true;
             QByteArray windowState;
-            QByteArray windowGeometry;
             QByteArray featuresGeometry;
         };
         
@@ -284,7 +296,7 @@ namespace caret {
                            BrowserTabContent* browserTabContent,
                            const CreateDefaultTabsMode createDefaultTabsMode,
                            QWidget* parent = 0,
-                           Qt::WindowFlags flags = 0);
+                           Qt::WindowFlags flags = Qt::WindowFlags());
         
         BrainBrowserWindow(const BrainBrowserWindow&);
         BrainBrowserWindow& operator=(const BrainBrowserWindow&);
@@ -316,6 +328,8 @@ namespace caret {
         void moveOverlayToolBox(Qt::DockWidgetArea area);
         void moveFeaturesToolBox(Qt::DockWidgetArea area);
         
+        void printWindowComponentStatus(const QString& modeText,
+                                        const WindowComponentStatus& wcs);
         void restoreWindowComponentStatus(const WindowComponentStatus& wcs);
         void saveWindowComponentStatus(WindowComponentStatus& wcs);
         
@@ -385,8 +399,6 @@ namespace caret {
 
         QAction* m_movieRecordingAction;
         
-        QAction* m_recordMovieAction;
-        
         QAction* m_preferencesAction;
         
         QAction* m_exitProgramAction;
@@ -397,6 +409,7 @@ namespace caret {
         QMenu* m_viewMoveOverlayToolBoxMenu;
         
         QAction* m_viewFullScreenAction;
+        QAction* m_viewMaximizedAction;
         QAction* m_viewTileTabsAction;
         
         QAction* m_viewTileTabsConfigurationDialogAction;
@@ -431,10 +444,11 @@ namespace caret {
         QAction* m_helpWorkbenchBugReportAction;
         
         QAction* m_developMenuAction;
-        QActionGroup* m_developerFlagsActionGroup;
         QAction* m_developerGraphicsTimingAction;
         QAction* m_developerGraphicsTimingDurationAction;
         QAction* m_developerExportVtkFileAction;
+        QAction* m_developerCziFileTransformTestingAction;
+        QAction* m_developerOpenMPTestingAction;
         
         QAction* m_overlayToolBoxAction;
         
@@ -442,7 +456,9 @@ namespace caret {
         QAction* m_windowMenuLockAllTabAspectRatioAction;
         QAction* m_toolBarLockWindowAndAllTabAspectRatioAction;
         QToolButton* m_toolBarLockWindowAndAllTabAspectRatioButton;
-        
+        QAction* m_toolBarUndoUnlockWindowAndAllTabAspectRatioAction;
+        QToolButton* m_toolBarUndoUnlockWindowAndAllTabAspectRatioButton;
+
         QAction* m_featuresToolBoxAction;
         
         QAction* m_dataFociProjectAction;
@@ -485,6 +501,8 @@ namespace caret {
         QString m_objectNamePrefix;
         
         bool m_keyEventProcessingFlag = false;
+        
+        bool m_restoringSceneNoSaveWindowCompontentStatusFlag = false;
         
         const float m_developerTimingDuration = 10.0;
         

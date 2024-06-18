@@ -42,15 +42,15 @@
 #include "SceneFloatArray.h"
 #include "SceneInteger.h"
 #include "SceneIntegerArray.h"
+#include "SceneLongInteger.h"
+#include "SceneLongIntegerArray.h"
 #include "SceneObjectMapIntegerKey.h"
 #include "ScenePathName.h"
 #include "ScenePathNameArray.h"
-#include "SceneSaxReader.h"
 #include "SceneString.h"
 #include "SceneStringArray.h"
 #include "SceneUnsignedByte.h"
 #include "SceneUnsignedByteArray.h"
-#include "SceneXmlElements.h"
 #include "WuQMacroGroup.h"
 #include "WuQMacroGroupXmlStreamReader.h"
 
@@ -309,6 +309,10 @@ SceneXmlStreamReader::readSceneObjectSingle(QXmlStreamReader& xmlReader)
             sceneObject = new SceneInteger(name,
                                            xmlReader.readElementText().toInt());
             break;
+        case SceneObjectDataTypeEnum::SCENE_LONG_INTEGER:
+            sceneObject = new SceneLongInteger(name,
+                                               xmlReader.readElementText().toInt());
+            break;
         case SceneObjectDataTypeEnum::SCENE_INVALID:
             CaretAssert(0);
             break;
@@ -473,6 +477,7 @@ SceneXmlStreamReader::readSceneObjectArray(QXmlStreamReader& xmlReader)
     SceneBooleanArray* booleanArray(NULL);
     SceneFloatArray* floatArray(NULL);
     SceneIntegerArray* integerArray(NULL);
+    SceneLongIntegerArray* longIntegerArray(NULL);
     SceneStringArray* stringArray(NULL);
     SceneUnsignedByteArray* unsignedByteArray(NULL);
     switch (dataType) {
@@ -500,6 +505,11 @@ SceneXmlStreamReader::readSceneObjectArray(QXmlStreamReader& xmlReader)
             integerArray = new SceneIntegerArray(name,
                                                  arrayLength);
             sceneArray = integerArray;
+            break;
+        case SceneObjectDataTypeEnum::SCENE_LONG_INTEGER:
+            longIntegerArray = new SceneLongIntegerArray(name,
+                                                 arrayLength);
+            sceneArray = longIntegerArray;
             break;
         case SceneObjectDataTypeEnum::SCENE_INVALID:
             CaretAssert(0);
@@ -588,6 +598,11 @@ SceneXmlStreamReader::readSceneObjectArray(QXmlStreamReader& xmlReader)
                             CaretAssert(integerArray);
                             integerArray->setValue(elementIndex,
                                                            xmlReader.readElementText().toInt());
+                            break;
+                        case SceneObjectDataTypeEnum::SCENE_LONG_INTEGER:
+                            CaretAssert(longIntegerArray);
+                            longIntegerArray->setValue(elementIndex,
+                                                       xmlReader.readElementText().toLong());
                             break;
                         case SceneObjectDataTypeEnum::SCENE_INVALID:
                             CaretAssert(0);
@@ -734,7 +749,7 @@ SceneXmlStreamReader::readSceneObjectMap(QXmlStreamReader& xmlReader)
                         if (keyIndex < 0) {
                             errorString.appendWithNewLine(ATTRIBUTE_OBJECT_MAP_VALUE_KEY
                                                           + "="
-                                                          + keyIndex
+                                                          + AString::number(keyIndex)
                                                           + " is invalid on "
                                                           + ELEMENT_OBJECT_MAP_VALUE);
                         }
@@ -769,6 +784,10 @@ SceneXmlStreamReader::readSceneObjectMap(QXmlStreamReader& xmlReader)
                         case SceneObjectDataTypeEnum::SCENE_INTEGER:
                             sceneMap->addInteger(keyIndex,
                                                  xmlReader.readElementText().toInt());
+                            break;
+                        case SceneObjectDataTypeEnum::SCENE_LONG_INTEGER:
+                            sceneMap->addLongInteger(keyIndex,
+                                                     xmlReader.readElementText().toInt());
                             break;
                         case SceneObjectDataTypeEnum::SCENE_INVALID:
                             CaretAssert(0);

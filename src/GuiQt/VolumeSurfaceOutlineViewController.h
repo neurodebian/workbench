@@ -25,15 +25,16 @@
 
 #include "VolumeSurfaceOutlineColorOrTabModel.h"
 class QCheckBox;
+class QDoubleSpinBox;
 class QGridLayout;
 
 namespace caret {
 
+    class EnumComboBoxTemplate;
     class Surface;
     class SurfaceSelectionViewController;
     class VolumeSurfaceOutlineModel;
     class VolumeSurfaceOutlineColorOrTabViewController;
-    class WuQDoubleSpinBox;
     class WuQGridLayoutGroup;
     
     class VolumeSurfaceOutlineViewController : public QObject {
@@ -58,9 +59,15 @@ namespace caret {
         
         void thicknessSpinBoxValueChanged(double);
 
+        void slicePlaneDepthSpinBoxValueChanged(double);
+        
+        void opacityValueChanged(double);
+        
         void surfaceSelected(Surface*);
         
         void colorTabSelected(VolumeSurfaceOutlineColorOrTabModel::Item*);
+        
+        void volumeSurfaceOutlineDrawingModeEnumComboBoxItemActivated();
         
     private:
         VolumeSurfaceOutlineViewController(const VolumeSurfaceOutlineViewController&);
@@ -77,9 +84,15 @@ namespace caret {
         
         VolumeSurfaceOutlineColorOrTabViewController* colorOrTabSelectionControl;
         
-        WuQDoubleSpinBox* thicknessSpinBox;
+        QDoubleSpinBox* thicknessSpinBox;
+        
+        QDoubleSpinBox* slicePlaneDepthSpinBox;
+        
+        QDoubleSpinBox* opacitySpinBox;
         
         SurfaceSelectionViewController* surfaceSelectionViewController;
+        
+        EnumComboBoxTemplate* m_volumeSurfaceOutlineDrawingModeEnumComboBox;
     };
     
 #ifdef __VOLUME_SURFACE_OUTLINE_VIEW_CONTROLLER_DECLARE__

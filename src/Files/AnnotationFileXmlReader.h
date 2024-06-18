@@ -21,7 +21,7 @@
  */
 /*LICENSE_END*/
 
-
+#include "AnnotationCoordinateSpaceEnum.h"
 #include "AnnotationFileXmlFormatBase.h"
 #include "CaretPointer.h"
 
@@ -33,9 +33,11 @@ namespace caret {
     class Annotation;
     class AnnotationCoordinate;
     class AnnotationFile;
+    class AnnotationFontAttributesInterface;
     class AnnotationGroup;
     class AnnotationImage;
     class AnnotationMultiCoordinateShape;
+    class AnnotationMultiPairedCoordinateShape;
     class AnnotationTwoCoordinateShape;
     class AnnotationText;
     class AnnotationOneCoordinateShape;
@@ -52,6 +54,7 @@ namespace caret {
                       AnnotationFile* annotationFile);
         
         void readFileFromString(const QString& fileInString,
+                                const AString& fileNameForRelativePaths,
                                 AnnotationFile* annotationFile);
 
         // ADD_NEW_METHODS_HERE
@@ -70,17 +73,26 @@ namespace caret {
         
         void readGroup(AnnotationFile* annotationFile);
         
-        void readTwoCoordinateAnnotation(const QString& annotationElementName,
-                                          AnnotationTwoCoordinateShape* annotation);
+        void readTwoCoordinateAnnotation(AnnotationFile* annotationFile,
+                                         const QString& annotationElementName,
+                                         AnnotationTwoCoordinateShape* annotation);
 
-        void readOneCoordinateAnnotation(const QString& annotationElementName,
+        void readOneCoordinateAnnotation(AnnotationFile* annotationFile,
+                                         const QString& annotationElementName,
                                           AnnotationOneCoordinateShape* annotation);
         
-        void readMultiCoordinateAnnotation(const QString& annotationElementName,
+        void readMultiCoordinateAnnotation(AnnotationFile* annotationFile,
+                                           const QString& annotationElementName,
                                            AnnotationMultiCoordinateShape* annotation);
         
+        void readMultiPairedCoordinateAnnotation(AnnotationFile* annotationFile,
+                                                 const QString& annotationElementName,
+                                                 AnnotationMultiPairedCoordinateShape* annotation);
+        
         void readCoordinate(const QString& coordinateElementName,
-                            AnnotationCoordinate* coordinate);
+                            AnnotationCoordinate* coordinate,
+                            const AnnotationCoordinateSpaceEnum::Enum coordinateSpace,
+                            const bool readStartElementFlag);
         
         void readAnnotationAttributes(Annotation* annotation,
                                       const QString& annotationElementName,
@@ -90,6 +102,10 @@ namespace caret {
         
         void readTextDataElement(AnnotationText* textAnnotation,
                                  const QString& annotationTextElementName);
+        
+        void readFontAttibutes(AnnotationFontAttributesInterface* fontAttributes,
+                               const AString& elementName,
+                               const QXmlStreamAttributes& attributes);
         
         CaretPointer<QXmlStreamReader> m_stream;
         

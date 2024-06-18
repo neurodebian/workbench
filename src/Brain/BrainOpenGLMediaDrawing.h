@@ -26,25 +26,38 @@
 #include <memory>
 
 #include "CaretObject.h"
-
+#include "GraphicsTextureMagnificationFilterEnum.h"
+#include "GraphicsTextureMinificationFilterEnum.h"
 
 
 namespace caret {
 
     class BrainOpenGLFixedPipeline;
+    class BrainOpenGLViewportContent;
     class BrowserTabContent;
-    class GraphicsPrimitiveV3fT3f;
-    class ImageFile;
+    class GraphicsObjectToWindowTransform;
+    class GraphicsPrimitiveV3fT2f;
+    class MediaFile;
+    class MediaOverlaySet;
     class ModelMedia;
     
     class BrainOpenGLMediaDrawing : public CaretObject {
         
     public:
+        static GraphicsTextureMagnificationFilterEnum::Enum getTextureMagnificationFilter();
+        
+        static GraphicsTextureMinificationFilterEnum::Enum  getTextureMinificationFilter();
+        
+        static void setTextureMagnificationFilter(const GraphicsTextureMagnificationFilterEnum::Enum magFilter);
+        
+        static void setTextureMinificationFilter(const GraphicsTextureMinificationFilterEnum::Enum minFilter);
+        
         BrainOpenGLMediaDrawing();
         
         virtual ~BrainOpenGLMediaDrawing();
         
         void draw(BrainOpenGLFixedPipeline* fixedPipelineDrawing,
+                  const BrainOpenGLViewportContent* viewportContent,
                   BrowserTabContent* browserTabContent,
                   ModelMedia* mediaModel,
                   const std::array<int32_t, 4>& viewport);
@@ -59,11 +72,24 @@ namespace caret {
         virtual AString toString() const;
         
     private:
-        void drawModelLayers();
+        void drawModelLayers(const BrainOpenGLViewportContent* viewportContent,
+                             const GraphicsObjectToWindowTransform* transform,
+                             const int32_t tabIndex,
+                             const float viewportHeight);
         
-        void processImageFileSelection(ImageFile* imageFile,
-                                       GraphicsPrimitiveV3fT3f* primitive);
+        void processMediaFileSelection(const int32_t tabIndex,
+                                       const int32_t overlayIndex,
+                                       MediaFile* mediaFile,
+                                       const int32_t selectedFrameIndex,
+                                       const bool allFramesSelectedFlag,
+                                       GraphicsPrimitiveV3fT2f* primitive);
         
+        bool getOrthoBounds(MediaOverlaySet* mediaOverlaySet,
+                            double& orthoLeftOut,
+                            double& orthoRightOut,
+                            double& orthoBottomOut,
+                            double& orthoTopOut);
+
         BrainOpenGLFixedPipeline* m_fixedPipelineDrawing = NULL;
         
         BrowserTabContent* m_browserTabContent = NULL;
@@ -72,12 +98,15 @@ namespace caret {
         
         std::array<int32_t, 4> m_viewport;
         
+        static GraphicsTextureMagnificationFilterEnum::Enum s_textureMagnificationFilter;
+        static GraphicsTextureMinificationFilterEnum::Enum  s_textureMinificationFilter;
         // ADD_NEW_MEMBERS_HERE
 
     };
     
 #ifdef __BRAIN_OPEN_G_L_MEDIA_DRAWING_DECLARE__
-    // <PLACE DECLARATIONS OF STATIC MEMBERS HERE>
+    GraphicsTextureMagnificationFilterEnum::Enum BrainOpenGLMediaDrawing::s_textureMagnificationFilter = GraphicsTextureMagnificationFilterEnum::LINEAR;
+    GraphicsTextureMinificationFilterEnum::Enum  BrainOpenGLMediaDrawing::s_textureMinificationFilter  = GraphicsTextureMinificationFilterEnum::LINEAR_MIPMAP_LINEAR;
 #endif // __BRAIN_OPEN_G_L_MEDIA_DRAWING_DECLARE__
 
 } // namespace

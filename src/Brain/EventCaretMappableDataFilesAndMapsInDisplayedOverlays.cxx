@@ -26,6 +26,9 @@
 #include "CaretAssert.h"
 #include "CaretMappableDataFile.h"
 #include "EventTypeEnum.h"
+#include "FileIdentificationAttributes.h"
+#include "HistologySlicesFile.h"
+#include "MediaFile.h"
 
 using namespace caret;
 
@@ -178,6 +181,37 @@ EventCaretMappableDataFilesAndMapsInDisplayedOverlays::addMediaFileAndFrame(Medi
 }
 
 /**
+ * Add media  file and frame displayed in a media overlay.
+ *
+ * @param mediaFile
+ *     File to add.
+ * @param frameIndex
+ *     Index of selected frame.
+ * @param tabIndex
+ * Index of the tab
+ */
+void
+EventCaretMappableDataFilesAndMapsInDisplayedOverlays::addHistologyFileAndSliceIndex(HistologySlicesFile* histologySlicesFile,
+                                                                                      const int32_t sliceIndex,
+                                                                                      const int32_t tabIndex)
+{
+    if ( ! satisfiesConstraints(tabIndex)) {
+        return;
+    }
+    
+    auto iter = m_histologySlicesFilesAndSliceIndices.find(histologySlicesFile);
+    if (iter != m_histologySlicesFilesAndSliceIndices.end()) {
+        iter->second.insert(sliceIndex);
+    }
+    else {
+        std::set<int32_t> indicesSet;
+        indicesSet.insert(sliceIndex);
+        m_histologySlicesFilesAndSliceIndices.insert(std::make_pair(histologySlicesFile,
+                                                                    indicesSet));
+    }
+}
+
+/**
  * @return Files and maps selected in overlays for both brainordinates
  * (surfaces and volumes) and charts.
  */
@@ -202,6 +236,56 @@ EventCaretMappableDataFilesAndMapsInDisplayedOverlays::getFilesAndMaps() const
                                       iter.second));
     }
 
+    return infoOut;
+}
+
+/**
+ * @return Info for brainordinate mapped files (surface and volume overlays)
+ */
+std::vector<EventCaretMappableDataFilesAndMapsInDisplayedOverlays::MapFileInfo>
+EventCaretMappableDataFilesAndMapsInDisplayedOverlays::getBrainordinateFilesAndMaps() const
+{
+    std::vector<MapFileInfo> infoOut;
+    
+    for (auto iter : m_surfaceVolumeMapFilesAndIndices) {
+        infoOut.push_back(MapFileInfo(MapOverlayType::BRAINORDINATE,
+                                      iter.first,
+                                      iter.second));
+    }
+    
+    return infoOut;
+}
+
+/**
+ * @return Info for files in chart two overlays
+ */
+std::vector<EventCaretMappableDataFilesAndMapsInDisplayedOverlays::MapFileInfo>
+EventCaretMappableDataFilesAndMapsInDisplayedOverlays::getChartTwoFilesAndMaps() const
+{
+    std::vector<MapFileInfo> infoOut;
+    
+    for (auto iter : m_chartTwoMapFilesAndIndices) {
+        infoOut.push_back(MapFileInfo(MapOverlayType::CHART_TWO,
+                                      iter.first,
+                                      iter.second));
+    }
+    
+    return infoOut;
+}
+
+
+/**
+ * @return Media files in media layers
+ */
+std::vector<EventCaretMappableDataFilesAndMapsInDisplayedOverlays::HistologySlicesFileInfo>
+EventCaretMappableDataFilesAndMapsInDisplayedOverlays::getHistologySlicesFilesAndMaps() const
+{
+    std::vector<HistologySlicesFileInfo> infoOut;
+    
+    for (auto iter : m_histologySlicesFilesAndSliceIndices) {
+        infoOut.push_back(HistologySlicesFileInfo(iter.first,
+                                                  iter.second));
+    }
     return infoOut;
 }
 
@@ -267,6 +351,61 @@ EventCaretMappableDataFilesAndMapsInDisplayedOverlays::setTabIndicesConstraint(c
 }
 
 /**
+ * Remove any files with an identification mode of NEVER
+ */
+void
+EventCaretMappableDataFilesAndMapsInDisplayedOverlays::removeFilesWithIdentificationModeOfNever()
+{
+    removeNeverFiles(m_surfaceVolumeMapFilesAndIndices);
+    removeNeverFiles(m_chartOneMapFilesAndIndices);
+    removeNeverFiles(m_chartTwoMapFilesAndIndices);
+    
+    std::vector<MediaFile*> filesToRemove;
+    
+    for (auto& fileAndIndices : m_mediaFilesAndFrameIndices) {
+        switch (fileAndIndices.first->getFileIdentificationAttributes()->getDisplayMode()) {
+            case FileIdentificationDisplayModeEnum::ALWAYS:
+                break;
+            case FileIdentificationDisplayModeEnum::NEVER:
+                filesToRemove.push_back(fileAndIndices.first);
+                break;
+            case FileIdentificationDisplayModeEnum::OVERLAY:
+                break;
+        }
+    }
+    
+    for (auto& mapFile : filesToRemove) {
+        m_mediaFilesAndFrameIndices.erase(mapFile);
+    }
+}
+
+/**
+ * Remove files that the user never wants to see information 
+ */
+void
+EventCaretMappableDataFilesAndMapsInDisplayedOverlays::removeNeverFiles(std::map<CaretMappableDataFile*, std::set<int32_t>>& mapFilesAndIndices) const
+{
+    std::vector<CaretMappableDataFile*> filesToRemove;
+    
+    for (auto& fileAndIndices : mapFilesAndIndices) {
+        switch (fileAndIndices.first->getFileIdentificationAttributes()->getDisplayMode()) {
+            case FileIdentificationDisplayModeEnum::ALWAYS:
+                break;
+            case FileIdentificationDisplayModeEnum::NEVER:
+                filesToRemove.push_back(fileAndIndices.first);
+                break;
+            case FileIdentificationDisplayModeEnum::OVERLAY:
+                break;
+        }
+    }
+    
+    for (auto& mapFile : filesToRemove) {
+        mapFilesAndIndices.erase(mapFile);
+    }
+}
+
+
+/**
  * Constructor.
  * 
  * @param overlayType
@@ -288,15 +427,29 @@ m_mapIndices(mapIndices)
 /**
  * Constructor.
  *
+ * @param histologySlicesFile
+ *     Histology slices  file in the overlay(s)
+ * @param sliceIndices
+ *     Indices of slices selected in overlays
+ */
+EventCaretMappableDataFilesAndMapsInDisplayedOverlays::HistologySlicesFileInfo::HistologySlicesFileInfo(HistologySlicesFile* histologySlicesFile,
+                                                                                                        const std::set<int32_t>& sliceIndices)
+: m_histologySlicesFile(histologySlicesFile),
+m_sliceIndices(sliceIndices)
+{
+}
+
+/**
+ * Constructor.
+ *
  * @param mediaFile
  *     Media file in the overlay(s)
  * @param framesIndices
  *     Indices of frames selected in overlays
  */
 EventCaretMappableDataFilesAndMapsInDisplayedOverlays::MediaFileInfo::MediaFileInfo(MediaFile* mediaFile,
-                                                                                    const std::set<int32_t> frameIndices)
+                                                                                    const std::set<int32_t>& frameIndices)
 : m_mediaFile(mediaFile),
 m_frameIndices(frameIndices)
 {
 }
-

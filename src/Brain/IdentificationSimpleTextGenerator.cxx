@@ -67,8 +67,9 @@
 #include "SelectionItemChartTwoLineSeries.h"
 #include "SelectionItemChartTwoMatrix.h"
 #include "SelectionItemFocusSurface.h"
-#include "SelectionItemFocusVolume.h"
-#include "SelectionItemImage.h"
+#include "SelectionItemFocus.h"
+#include "SelectionItemMediaLogicalCoordinate.h"
+#include "SelectionItemMediaPlaneCoordinate.h"
 #include "SelectionItemSurfaceNode.h"
 #include "SelectionItemVoxel.h"
 #include "SelectionManager.h"
@@ -140,8 +141,8 @@ IdentificationSimpleTextGenerator::createIdentificationText(const SelectionManag
                                                idManager->getSurfaceFocusIdentification(),
                                                false);
     
-    this->generateVolumeFociIdentifcationText(idText,
-                                              idManager->getVolumeFocusIdentification());
+    this->generateFociIdentifcationText(idText,
+                                              idManager->getFocusIdentification());
     
     this->generateVolumeIdentificationText(idText,
                                            brain,
@@ -174,8 +175,11 @@ IdentificationSimpleTextGenerator::createIdentificationText(const SelectionManag
     this->generateChartTwoMatrixIdentificationText(idText,
                                                       idManager->getChartTwoMatrixIdentification());
     
-    this->generateImageIdentificationText(idText,
-                                          idManager->getImageIdentification());
+    this->generateMediaLogicalCoordinateIdentificationText(idText,
+                                                           idManager->getMediaLogicalCoordinateIdentification());
+    
+    this->generateMediaPlaneCoordinateIdentificationText(idText,
+                                                         idManager->getMediaPlaneCoordinateIdentification());
     
     return idText.toString();
 }
@@ -257,12 +261,11 @@ IdentificationSimpleTextGenerator::generateVolumeIdentificationText(Identificati
         return;
     }
     
-    int64_t ijk[3];
     const VolumeMappableInterface* idVolumeFile = idVolumeVoxel->getVolumeFile();
-    idVolumeVoxel->getVoxelIJK(ijk);
-    float x, y, z;
-    idVolumeFile->indexToSpace(ijk[0], ijk[1], ijk[2], x, y, z);
-    
+    const Vector3D xyz(idVolumeVoxel->getVoxelXYZ());
+    const float x(xyz[0]);
+    const float y(xyz[1]);
+    const float z(xyz[2]);
     idText.addLine(false,
                    "Voxel XYZ ("
                    + AString::number(x)
@@ -271,9 +274,6 @@ IdentificationSimpleTextGenerator::generateVolumeIdentificationText(Identificati
                    + ", "
                    + AString::number(z)
                    + ")");
-    
-    const float xyz[3] = { x, y, z };
-
     
     /*
      * Get all volume files
@@ -447,6 +447,8 @@ IdentificationSimpleTextGenerator::generateVolumeIdentificationText(Identificati
                                 break;
                             case DataFileTypeEnum::CONNECTIVITY_PARCEL_DENSE:
                                 break;
+                            case DataFileTypeEnum::CONNECTIVITY_PARCEL_DYNAMIC:
+                                break;
                             case DataFileTypeEnum::CONNECTIVITY_PARCEL_LABEL:
                                 limitMapIndicesFlag = true;
                                 break;
@@ -458,7 +460,11 @@ IdentificationSimpleTextGenerator::generateVolumeIdentificationText(Identificati
                                 break;
                             case DataFileTypeEnum::CONNECTIVITY_SCALAR_DATA_SERIES:
                                 break;
+                            case DataFileTypeEnum::CZI_IMAGE_FILE:
+                                break;
                             case DataFileTypeEnum::FOCI:
+                                break;
+                            case DataFileTypeEnum::HISTOLOGY_SLICES:
                                 break;
                             case DataFileTypeEnum::IMAGE:
                                 break;
@@ -471,6 +477,8 @@ IdentificationSimpleTextGenerator::generateVolumeIdentificationText(Identificati
                             case DataFileTypeEnum::PALETTE:
                                 break;
                             case DataFileTypeEnum::RGBA:
+                                break;
+                            case DataFileTypeEnum::SAMPLES:
                                 break;
                             case DataFileTypeEnum::SCENE:
                                 break;
@@ -496,6 +504,7 @@ IdentificationSimpleTextGenerator::generateVolumeIdentificationText(Identificati
                         if (ciftiFile->getVolumeVoxelIdentificationForMaps(mapIndices,
                                                                       xyz,
                                                                            " ",
+                                                                           4,
                                                                       voxelIJK,
                                                                       textValue)) {
                             AString boldText = (DataFileTypeEnum::toOverlayTypeName(ciftiFile->getDataFileType())
@@ -604,6 +613,8 @@ IdentificationSimpleTextGenerator::generateSurfaceIdentificationText(Identificat
                     break;
                 case DataFileTypeEnum::CONNECTIVITY_PARCEL_DENSE:
                     break;
+                case DataFileTypeEnum::CONNECTIVITY_PARCEL_DYNAMIC:
+                    break;
                 case DataFileTypeEnum::CONNECTIVITY_PARCEL_LABEL:
                     limitMapIndicesFlag = true;
                     break;
@@ -615,7 +626,11 @@ IdentificationSimpleTextGenerator::generateSurfaceIdentificationText(Identificat
                     break;
                 case DataFileTypeEnum::CONNECTIVITY_SCALAR_DATA_SERIES:
                     break;
+                case DataFileTypeEnum::CZI_IMAGE_FILE:
+                    break;
                 case DataFileTypeEnum::FOCI:
+                    break;
+                case DataFileTypeEnum::HISTOLOGY_SLICES:
                     break;
                 case DataFileTypeEnum::IMAGE:
                     break;
@@ -628,6 +643,8 @@ IdentificationSimpleTextGenerator::generateSurfaceIdentificationText(Identificat
                 case DataFileTypeEnum::PALETTE:
                     break;
                 case DataFileTypeEnum::RGBA:
+                    break;
+                case DataFileTypeEnum::SAMPLES:
                     break;
                 case DataFileTypeEnum::SCENE:
                     break;
@@ -654,6 +671,7 @@ IdentificationSimpleTextGenerator::generateSurfaceIdentificationText(Identificat
                                                                             nodeNumber,
                                                                             surface->getNumberOfNodes(),
                                                                          " ",
+                                                                         4,
                                                                             textValue);
             if (valid) {
                 idText.addLine(true,
@@ -1422,9 +1440,6 @@ IdentificationSimpleTextGenerator::generateSurfaceFociIdentifcationText(Identifi
                            "Index",
                            AString::number(idSurfaceFocus->getFocusIndex()));
             
-            float xyzProj[3];
-            spi->getProjectedPosition(*idSurfaceFocus->getSurface(), xyzProj, false);
-            
             idText.addLine(true,
                            "Structure",
                            StructureEnum::toGuiName(spi->getStructure()));
@@ -1439,29 +1454,6 @@ IdentificationSimpleTextGenerator::generateSurfaceFociIdentifcationText(Identifi
             else {
                 idText.addLine(true,
                                "XYZ (Stereotaxic)",
-                               "Invalid");
-            }
-            
-            bool projValid = false;
-            AString xyzProjName = "XYZ (Projected)";
-            if (spi->getBarycentricProjection()->isValid()) {
-                xyzProjName = "XYZ (Projected to Triangle)";
-                projValid = true;
-            }
-            else if (spi->getVanEssenProjection()->isValid()) {
-                xyzProjName = "XYZ (Projected to Edge)";
-                projValid = true;
-            }
-            if (projValid) {
-                idText.addLine(true,
-                               xyzProjName,
-                               xyzProj,
-                               3,
-                               true);
-            }
-            else {
-                idText.addLine(true,
-                               xyzProjName,
                                "Invalid");
             }
             
@@ -1524,19 +1516,19 @@ IdentificationSimpleTextGenerator::generateSurfaceFociIdentifcationText(Identifi
 }
 
 /**
- * Generate identification text for a volume focus identification.
+ * Generate identification text for a focus identification.
  * @param idText
  *     String builder for identification text.
- * @param idVolumeFocus
- *     Information for surface focus ID.
+ * @param idFocus
+ *     Information for focus ID.
  */
 void
-IdentificationSimpleTextGenerator::generateVolumeFociIdentifcationText(IdentificationStringBuilder& idText,
-                                                                  const SelectionItemFocusVolume* idVolumeFocus) const
+IdentificationSimpleTextGenerator::generateFociIdentifcationText(IdentificationStringBuilder& idText,
+                                                                  const SelectionItemFocus* idFocus) const
 {
-    if (idVolumeFocus->isValid()) {
-        const Focus* focus = idVolumeFocus->getFocus();
-        const SurfaceProjectedItem* spi = focus->getProjection(idVolumeFocus->getFocusProjectionIndex());
+    if (idFocus->isValid()) {
+        const Focus* focus = idFocus->getFocus();
+        const SurfaceProjectedItem* spi = focus->getProjection(idFocus->getFocusProjectionIndex());
         float xyzVolume[3];
         spi->getVolumeXYZ(xyzVolume);
         float xyzStereo[3];
@@ -1548,7 +1540,7 @@ IdentificationSimpleTextGenerator::generateVolumeFociIdentifcationText(Identific
         
         idText.addLine(true,
                        "Index",
-                       AString::number(idVolumeFocus->getFocusIndex()));
+                       AString::number(idFocus->getFocusIndex()));
         
         idText.addLine(true,
                        "Structure",
@@ -1607,27 +1599,56 @@ IdentificationSimpleTextGenerator::generateVolumeFociIdentifcationText(Identific
 }
 
 /**
- * Generate identification text for image identification.
+ * Generate identification text for media identification.
  * @param idText
  *     String builder for identification text.
  * @param idImage
  *     Information for image ID.
  */
 void
-IdentificationSimpleTextGenerator::generateImageIdentificationText(IdentificationStringBuilder& idText,
-                                                             const SelectionItemImage* idImage) const
+IdentificationSimpleTextGenerator::generateMediaLogicalCoordinateIdentificationText(IdentificationStringBuilder& idText,
+                                                             const SelectionItemMediaLogicalCoordinate* idMedia) const
 {
-    if (idImage->isValid()) {
+    if (idMedia->isValid()) {
+        const PixelLogicalIndex pixelIndex(idMedia->getPixelLogicalIndex());
         AString text = ("Image "
-                              + idImage->getImageFile()->getFileNameNoPath()
+                              + idMedia->getMediaFile()->getFileNameNoPath()
                               + " Pixel IJ ("
-                              + AString::number(idImage->getPixelI())
+                              + AString::number(pixelIndex.getI())
                               + ","
-                              + AString::number(idImage->getPixelJ())
+                              + AString::number(pixelIndex.getJ())
                               + ")");
         
         uint8_t pixelRGBA[4] = { 0, 0, 0, 0 };
-        idImage->getPixelRGBA(pixelRGBA);
+        idMedia->getPixelRGBA(pixelRGBA);
+        text.append(" RGBA (" + AString::fromNumbers(pixelRGBA, 4, ",") + ")");
+        
+        idText.addLine(false,
+                       text);
+    }
+}
+
+/**
+ * Generate identification text for media identification.
+ * @param idText
+ *     String builder for identification text.
+ * @param idImage
+ *     Information for image ID.
+ */
+void
+IdentificationSimpleTextGenerator::generateMediaPlaneCoordinateIdentificationText(IdentificationStringBuilder& idText,
+                                                                   const SelectionItemMediaPlaneCoordinate* idMedia) const
+{
+    if (idMedia->isValid()) {
+        const Vector3D planeXYZ(idMedia->getPlaneCoordinate());
+        AString text = ("Image "
+                        + idMedia->getMediaFile()->getFileNameNoPath()
+                        + " Plane XYZ ("
+                        + AString::fromNumbers(planeXYZ)
+                        + ")");
+        
+        uint8_t pixelRGBA[4] = { 0, 0, 0, 0 };
+        idMedia->getPixelRGBA(pixelRGBA);
         text.append(" RGBA (" + AString::fromNumbers(pixelRGBA, 4, ",") + ")");
         
         idText.addLine(false,
@@ -1730,6 +1751,7 @@ IdentificationSimpleTextGenerator::generateSurfaceToolTip(const Brain* brain,
                                                                      surfaceNodeIndex,
                                                                      surfaceNumberOfNodes,
                                                                      " ",
+                                                                     4,
                                                                      textValue);
                         if ( ! textValue.isEmpty()) {
                             idText.addLine(indentFlag,
@@ -1814,16 +1836,12 @@ IdentificationSimpleTextGenerator::generateVolumeToolTip(const BrowserTabContent
                  * Update IJK and XYZ since selection XYZ may be
                  * a different volume file.
                  */
-                int64_t selectionIJK[3];
-                voxelSelection->getVoxelIJK(selectionIJK);
-                int64_t ijk[3] { selectionIJK[0], selectionIJK[1], selectionIJK[2] };
-                
-                
                 bool validFlag(false);
                 const float value = underlayVolumeInterface->getVoxelValue(xyz[0], xyz[1], xyz[2],
                                                                            &validFlag,
                                                                            mapIndex);
                 if (validFlag) {
+                    int64_t ijk[3];
                     underlayVolumeInterface->enclosingVoxel(xyz[0], xyz[1], xyz[2],
                                                             ijk[0], ijk[1], ijk[2]);
                     underlayVolumeInterface->indexToSpace(ijk, xyz);
@@ -1857,6 +1875,7 @@ IdentificationSimpleTextGenerator::generateVolumeToolTip(const BrowserTabContent
                 mapFile->getVolumeVoxelIdentificationForMaps(mapIndices,
                                                              xyz,
                                                              " ",
+                                                             4,
                                                              ijk,
                                                              textValue);
                 if ( ! textValue.isEmpty()) {

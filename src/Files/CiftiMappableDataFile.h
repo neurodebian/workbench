@@ -30,6 +30,7 @@
 #include "CiftiXMLElements.h"
 #include "DisplayGroupEnum.h"
 #include "EventListenerInterface.h"
+#include "GroupAndNameHierarchyUserInterface.h"
 #include "VolumeMappableInterface.h"
 
 #include <memory>
@@ -46,15 +47,17 @@ namespace caret {
     class FastStatistics;
     class GraphicsPrimitive;
     class GraphicsPrimitiveV3fC4f;
-    class GraphicsPrimitiveV3fT3f;
+    class GraphicsPrimitiveV3fT2f;
     class GroupAndNameHierarchyModel;
     class Histogram;
     class SparseVolumeIndexer;
+    class VolumeGraphicsPrimitiveManager;
 
     
     class CiftiMappableDataFile :
     public CaretMappableDataFile,
     public EventListenerInterface,
+    public GroupAndNameHierarchyUserInterface,
     public VolumeMappableInterface {
         
     protected:
@@ -167,6 +170,9 @@ namespace caret {
         static void getDataFileContentInformationForGenericCiftiFile(const AString& filename,
                                                                      DataFileContentInformation& dataFileInformation);
         
+        static bool isMatrixTooLargeForOpenGL(const int64_t numberOfRows,
+                                              const int64_t numberOfColumns);
+        
         virtual void clear();
         
         virtual bool isEmpty() const;
@@ -277,6 +283,16 @@ namespace caret {
         
         virtual void getMapDimensions(std::vector<int64_t> &dim) const;
 
+        /**
+         * @return Instance cast to a Volume Mappable CaretMappableDataFile
+         */
+        virtual CaretMappableDataFile* castToVolumeMappableDataFile() override;
+        
+        /**
+         * @return Instance cast to a Volume Mappable CaretMappableDataFile (const method)
+         */
+        virtual const CaretMappableDataFile* castToVolumeMappableDataFile() const override;
+
         virtual const int64_t& getNumberOfComponents() const override;
         
         virtual void indexToSpace(const float& indexIn1,
@@ -301,6 +317,9 @@ namespace caret {
                                     int64_t& indexOut2,
                                     int64_t& indexOut3) const override;
         
+        virtual void enclosingVoxel(const float* coordIn,
+                                    int64_t* indexOut) const override;
+        
         virtual void enclosingVoxelForDataLoading(const float& coordIn1,
                                     const float& coordIn2,
                                     const float& coordIn3,
@@ -314,6 +333,10 @@ namespace caret {
                                 const int64_t brickIndex = 0,
                                 const int64_t component = 0) const override;
         
+        virtual bool indexValid(const int64_t* indexIn,
+                                const int64_t brickIndex = 0,
+                                const int64_t component = 0) const override;
+        
         virtual bool indexValidForDataLoading(const int64_t& indexIn1,
                                 const int64_t& indexIn2,
                                 const int64_t& indexIn3,
@@ -324,6 +347,9 @@ namespace caret {
         
         virtual void getVoxelSpaceBoundingBox(BoundingBox& boundingBoxOut) const override;
         
+        virtual void getNonZeroVoxelCoordinateBoundingBox(const int32_t mapIndex,
+                                                   BoundingBox& boundingBoxOut) const override;
+
         virtual int64_t getVoxelColorsForSliceInMap(const int32_t mapIndex,
                                                  const VolumeSliceViewPlaneEnum::Enum slicePlane,
                                                  const int64_t sliceIndex,
@@ -359,6 +385,12 @@ namespace caret {
                                         const int32_t tabIndex,
                                         uint8_t rgbaOut[4]) const override;
         
+        virtual void getVoxelColorInMap(const int64_t indexIn1,
+                                        const int64_t indexIn2,
+                                        const int64_t indexIn3,
+                                        const int64_t mapIndex,
+                                        uint8_t rgbaOut[4]) const override;
+        
         virtual void getVoxelColorInMapForLabelData(const std::vector<float>& dataForMap,
                                         const int64_t indexIn1,
                                         const int64_t indexIn2,
@@ -368,6 +400,34 @@ namespace caret {
                                         const int32_t tabIndex,
                                         uint8_t rgbaOut[4]) const;
         
+        virtual GraphicsPrimitiveV3fT3f* getVolumeDrawingTriangleStripPrimitive(const int32_t mapIndex,
+                                                                           const DisplayGroupEnum::Enum displayGroup,
+                                                                           const int32_t tabIndex) const override;
+        
+        virtual GraphicsPrimitiveV3fT3f* getVolumeDrawingTriangleFanPrimitive(const int32_t mapIndex,
+                                                                      const DisplayGroupEnum::Enum displayGroup,
+                                                                      const int32_t tabIndex) const override;
+        
+        virtual GraphicsPrimitiveV3fT3f* getVolumeDrawingTrianglesPrimitive(const int32_t mapIndex,
+                                                                            const DisplayGroupEnum::Enum displayGroup,
+                                                                            const int32_t tabIndex) const override;
+
+        virtual GraphicsPrimitive* getHistologyImageIntersectionPrimitive(const int32_t mapIndex,
+                                                                          const DisplayGroupEnum::Enum displayGroup,
+                                                                          const int32_t tabIndex,
+                                                                          const MediaFile* mediaFile,
+                                                                          const VolumeToImageMappingModeEnum::Enum volumeMappingMode,
+                                                                          const float volumeSliceThickness,
+                                                                          AString& errorMessageOut) const override;
+        
+        virtual std::vector<GraphicsPrimitive*> getHistologySliceIntersectionPrimitive(const int32_t mapIndex,
+                                                                                       const DisplayGroupEnum::Enum displayGroup,
+                                                                                       const int32_t tabIndex,
+                                                                                       const HistologySlice* histologySlice,
+                                                                                       const VolumeToImageMappingModeEnum::Enum volumeMappingMode,
+                                                                                       const float volumeSliceThickness,
+                                                                                       AString& errorMessageOut) const override;
+
         virtual bool getMapVolumeVoxelValue(const int32_t mapIndex,
                                             const float xyz[3],
                                             int64_t ijkOut[3],
@@ -378,6 +438,7 @@ namespace caret {
         virtual bool getMapVolumeVoxelValues(const std::vector<int32_t> mapIndices,
                                              const float xyz[3],
                                              const AString& dataValueSeparator,
+                                             const int32_t digitsRightOfDecimal,
                                              int64_t ijkOut[3],
                                              std::vector<float>& numericalValuesOut,
                                              std::vector<bool>& numericalValuesOutValid,
@@ -401,6 +462,7 @@ namespace caret {
         virtual bool getVolumeVoxelIdentificationForMaps(const std::vector<int32_t>& mapIndices,
                                                          const float xyz[3],
                                                          const AString& dataValueSeparator,
+                                                         const int32_t digitsRightOfDecimal,
                                                          int64_t ijkOut[3],
                                                          AString& textOut) const override;
         
@@ -423,17 +485,19 @@ namespace caret {
                                              const int nodeIndex,
                                              const int32_t numberOfNodes,
                                              const AString& dataValueSeparator,
+                                             const int32_t digitsRightOfDecimal,
                                              std::vector<float>& numericalValuesOut,
                                              std::vector<bool>& numericalValuesOutValid,
                                              AString& textValueOut) const;
         
         virtual bool getSurfaceNodeIdentificationForMaps(const std::vector<int32_t>& mapIndices,
-                                                            const StructureEnum::Enum structure,
-                                                            const int nodeIndex,
-                                                            const int32_t numberOfNodes,
-                                                            const AString& dataValueSeparator,
-                                                            AString& textOut) const override;
-        
+                                                         const StructureEnum::Enum structure,
+                                                         const int nodeIndex,
+                                                         const int32_t numberOfNodes,
+                                                         const AString& dataValueSeparator,
+                                                         const int32_t digitsRightOfDecimal,
+                                                         AString& textOut) const override;
+
         int32_t getMappingSurfaceNumberOfNodes(const StructureEnum::Enum structure) const;
         
         bool getSeriesDataForSurfaceNode(const StructureEnum::Enum structure,
@@ -513,6 +577,11 @@ namespace caret {
                                         std::vector<float>& dataOut) const override;
         
         virtual BrainordinateMappingMatch getBrainordinateMappingMatch(const CaretMappableDataFile* mapFile) const override;
+        
+        virtual void groupAndNameHierarchyItemStatusChanged() override;
+
+        void printMappingsForDebugging(const AString& filename,
+                                       const AString& message);
         
     private:
         
@@ -697,6 +766,9 @@ namespace caret {
             float m_histogramLimitedValuesMostNegativeValueInclusive;
             bool m_histogramLimitedValuesIncludeZeroValues;
             
+            /** Have bounding box for  map */
+            mutable std::unique_ptr<BoundingBox> m_nonZeroVoxelCoordinateBoundingBox;
+            
         private:
             /** Name of map */
             AString m_name;
@@ -737,6 +809,14 @@ namespace caret {
 
         const CiftiBrainModelsMap* getBrainordinateMapping() const;
         
+        GraphicsPrimitiveV3fT2f* createMatrixPrimitive(std::vector<uint8_t>& matrixRGBA,
+                                                       const int64_t numberOfColumns,
+                                                       const int64_t numberOfRows,
+                                                       const float xLeft,
+                                                       const float xRight,
+                                                       const float yBottom,
+                                                       const float yTop) const;
+
         /**
          * Point to the CIFTI file object.
          */
@@ -804,11 +884,13 @@ namespace caret {
         /** Histogram used when statistics computed on all data in file */
         CaretPointer<Histogram> m_fileHistogram;
         
+        std::unique_ptr<VolumeGraphicsPrimitiveManager> m_graphicsPrimitiveManager;
+        
         /** Primitive for matrix cells drawn with triangles*/
         mutable std::unique_ptr<GraphicsPrimitiveV3fC4f> m_matrixGraphicsTrianglesPrimitive;
         
         /** Primitive for matrix cells drawn using a texture */
-        mutable std::unique_ptr<GraphicsPrimitiveV3fT3f> m_matrixGraphicsTexturePrimitive;
+        mutable std::unique_ptr<GraphicsPrimitiveV3fT2f> m_matrixGraphicsTexturePrimitive;
         
         /** Primitive for grid outline around matrix cells */
         mutable std::unique_ptr<GraphicsPrimitiveV3fC4f> m_matrixGraphicsOutlinePrimitive;
@@ -857,6 +939,11 @@ namespace caret {
         
         /** Controls lazy initialization of m_brainordinateMapping */
         mutable bool m_brainordinateMappingCachedFlag = false;
+        
+        /** Prevents logging 'too large' message more than once for a file */
+        mutable bool m_matrixDimensionsTooLargeLoggedFlag = false;
+        
+        bool m_blockInvalidateColorsInAllMapsFlag = false;
         
         // ADD_NEW_MEMBERS_HERE
         

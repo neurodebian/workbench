@@ -32,13 +32,9 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
-#if QT_VERSION >= 0x050000
 #include <QtPrintSupport/QPrinter>
 #include <QtPrintSupport/QPrintDialog>
-#else // QT_VERSION
-#include <qprinter.h>
-#include <qprintdialog.h>
-#endif // QT_VERSION
+#include <QRegularExpression>
 #include <QTextBrowser>
 #include <QSplitter>
 #include <QTabWidget>
@@ -389,7 +385,7 @@ HelpViewerDialog::loadWorkbenchHelpInfoFromDirectory(QTreeWidgetItem* parent,
             dirHtmlPageName = htmlFileInfo.absoluteFilePath();
         }
         else {
-            otherHtmlPagesList.append(htmlFileInfo.absoluteFilePath());
+            otherHtmlPagesList.append(QFileInfo(htmlFileInfo.absoluteFilePath()));
         }
     }
     
@@ -767,15 +763,18 @@ HelpViewerDialog::topicSearchLineEditStartSearch()
     const QString searchText = m_topicSearchLineEdit->text().trimmed();
     const bool haveSearchTextFlag = ( ! searchText.isEmpty());
     
-    QRegExp regEx;
+    QRegularExpression regularExpression;
     bool haveWildcardSearchFlag = false;
     if (haveSearchTextFlag) {
         if (searchText.contains('*')
             || searchText.contains('?')) {
-            haveWildcardSearchFlag = true;
-            regEx.setPatternSyntax(QRegExp::Wildcard);
-            regEx.setPattern(searchText);
-            regEx.setCaseSensitivity(Qt::CaseInsensitive);
+            QString regSearchText(searchText);
+            regSearchText.replace("*", ".*");
+            regSearchText.replace("?", ".?");
+            regularExpression.setPattern(regSearchText);
+            regularExpression.setPatternOptions(QRegularExpression::CaseInsensitiveOption);
+            
+            haveWildcardSearchFlag = regularExpression.isValid();
         }
     }
     
@@ -792,7 +791,7 @@ HelpViewerDialog::topicSearchLineEditStartSearch()
             showItemFlag = false;
             
             if (haveWildcardSearchFlag) {
-                if (regEx.exactMatch(helpTreeItem->m_helpText)) {
+                if (regularExpression.match(helpTreeItem->m_helpText).hasMatch()) {
                     showItemFlag = true;
                 }
             }

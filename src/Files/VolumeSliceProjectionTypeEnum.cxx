@@ -79,15 +79,19 @@ using namespace caret;
  *
  * @param guiName
  *    User-friendly name for use in user-interface.
+ * @param toolTip
+ *    Tooltip for GUI
  */
 VolumeSliceProjectionTypeEnum::VolumeSliceProjectionTypeEnum(const Enum enumValue,
-                           const AString& name,
-                           const AString& guiName)
+                                                             const AString& name,
+                                                             const AString& guiName,
+                                                             const AString& toolTip)
 {
     this->enumValue = enumValue;
     this->integerCode = integerCodeCounter++;
     this->name = name;
     this->guiName = guiName;
+    this->toolTip = toolTip;
 }
 
 /**
@@ -108,14 +112,25 @@ VolumeSliceProjectionTypeEnum::initialize()
     }
     initializedFlag = true;
 
-    enumData.push_back(VolumeSliceProjectionTypeEnum(VOLUME_SLICE_PROJECTION_OBLIQUE, 
-                                    "VOLUME_SLICE_PROJECTION_OBLIQUE", 
-                                    "Oblique"));
+    enumData.push_back(VolumeSliceProjectionTypeEnum(VOLUME_SLICE_PROJECTION_ORTHOGONAL,
+                                                     "VOLUME_SLICE_PROJECTION_ORTHOGONAL",
+                                                     "Ortho",
+                                                     "View slices perpendicular to X, Y, an Z axes"));
     
-    enumData.push_back(VolumeSliceProjectionTypeEnum(VOLUME_SLICE_PROJECTION_ORTHOGONAL, 
-                                    "VOLUME_SLICE_PROJECTION_ORTHOGONAL", 
-                                    "Orthogonal"));
+    enumData.push_back(VolumeSliceProjectionTypeEnum(VOLUME_SLICE_PROJECTION_OBLIQUE,
+                                                     "VOLUME_SLICE_PROJECTION_OBLIQUE",
+                                                     "Oblique",
+                                                     "Rotate to view slices along arbitrary axes"));
     
+    enumData.push_back(VolumeSliceProjectionTypeEnum(VOLUME_SLICE_PROJECTION_MPR,
+                                                     "VOLUME_SLICE_PROJECTION_MPR",
+                                                     "MPR (old)",
+                                                     "Multi-Planar Reconstruction"));
+    
+    enumData.push_back(VolumeSliceProjectionTypeEnum(VOLUME_SLICE_PROJECTION_MPR_THREE,
+                                                     "VOLUME_SLICE_PROJECTION_MPR_THREE",
+                                                     "MPR",
+                                                     "Multi-Planar Reconstruction New"));
 }
 
 /**
@@ -158,7 +173,7 @@ VolumeSliceProjectionTypeEnum::toName(Enum enumValue) {
 
 /**
  * Get an enumerated value corresponding to its name.
- * @param name 
+ * @param nameIn
  *     Name of enumerated value.
  * @param isValidOut 
  *     If not NULL, it is set indicating that a
@@ -167,9 +182,20 @@ VolumeSliceProjectionTypeEnum::toName(Enum enumValue) {
  *     Enumerated value.
  */
 VolumeSliceProjectionTypeEnum::Enum 
-VolumeSliceProjectionTypeEnum::fromName(const AString& name, bool* isValidOut)
+VolumeSliceProjectionTypeEnum::fromName(const AString& nameIn, bool* isValidOut)
 {
     if (initializedFlag == false) initialize();
+    
+    AString name(nameIn);
+    if (name == "VOLUME_SLICE_PROJECTION_MPR") {
+        name = "VOLUME_SLICE_PROJECTION_MPR";
+    }
+    else if (name == "VOLUME_SLICE_PROJECTION_MPR_NEUROLOGICAL") {
+        name = "VOLUME_SLICE_PROJECTION_MPR";
+    }
+    else if (name == "VOLUME_SLICE_PROJECTION_MPR_RADIOLOGICAL") {
+        name = "VOLUME_SLICE_PROJECTION_MPR";
+    }
     
     bool validFlag = false;
     Enum enumValue = VolumeSliceProjectionTypeEnum::enumData[0].enumValue;
@@ -207,6 +233,22 @@ VolumeSliceProjectionTypeEnum::toGuiName(Enum enumValue) {
     
     const VolumeSliceProjectionTypeEnum* enumInstance = findData(enumValue);
     return enumInstance->guiName;
+}
+
+/**
+ * Get a tooltip for use in GUI
+ * @param enumValue
+ *     Enumerated value.
+ * @return
+ *     String representing enumerated value.
+ */
+AString
+VolumeSliceProjectionTypeEnum::toToolTip(Enum enumValue)
+{
+    if (initializedFlag == false) initialize();
+    
+    const VolumeSliceProjectionTypeEnum* enumInstance = findData(enumValue);
+    return enumInstance->toolTip;
 }
 
 /**
@@ -371,5 +413,32 @@ VolumeSliceProjectionTypeEnum::getAllGuiNames(std::vector<AString>& allGuiNames,
     if (isSorted) {
         std::sort(allGuiNames.begin(), allGuiNames.end());
     }
+}
+
+/**
+ * @return Tooltip for use in the GUI control for selecting a projection type
+ */
+AString
+VolumeSliceProjectionTypeEnum::getToolTipForGuiInHtml()
+{
+    std::vector<VolumeSliceProjectionTypeEnum::Enum> allEnums;
+    getAllEnums(allEnums);
+    
+    AString txt;
+    txt.append("<html>Select mode for viewing volume slices:");
+    txt.append("<ul>");
+    for (auto e : allEnums) {
+        /* No tooltip for old MPR mode */
+        if (e != VOLUME_SLICE_PROJECTION_MPR) {
+            txt.append("<li> "
+                       + toGuiName(e)
+                       + " - "
+                       + toToolTip(e));
+        }
+    }
+    txt.append("</ul>");
+    txt.append("</html>");
+    
+    return txt;
 }
 

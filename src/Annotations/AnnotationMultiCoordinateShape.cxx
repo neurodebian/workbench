@@ -23,9 +23,12 @@
 #include "AnnotationMultiCoordinateShape.h"
 #undef __ANNOTATION_MULTI_COORDINATE_SHAPE_DECLARE__
 
+#include <algorithm>
 #include <cmath>
 
 #include "AnnotationCoordinate.h"
+#include "AnnotationPolygon.h"
+#include "AnnotationPolyLine.h"
 #include "AnnotationSpatialModification.h"
 #include "CaretAssert.h"
 #include "CaretLogger.h"
@@ -158,6 +161,34 @@ AnnotationMultiCoordinateShape::addCoordinate(AnnotationCoordinate* coord)
 }
 
 /**
+ * Insert a coordinate into this multi coordinate shape
+ * @param index
+ *    Insert at index
+ * @param coord
+ *    Coordinate that is added.
+ */
+void
+AnnotationMultiCoordinateShape::insertCoordinateAtIndex(const int32_t index,
+                                                        AnnotationCoordinate* coord)
+{
+    if ((index >= 0)
+        && (index <= getNumberOfCoordinates())) {
+        CaretAssert(coord);
+        std::unique_ptr<AnnotationCoordinate> ptr(coord);
+        m_coordinates.insert(m_coordinates.begin() + index,
+                             std::move(ptr));
+        setModified();
+    }
+    else {
+        CaretLogSevere("Inserting at invalid index="
+                       + AString::number(index)
+                       + ", num coords="
+                       + AString::number(getNumberOfCoordinates()));
+    }
+}
+
+
+/**
  * @return Number of coordinates in this annotation
  */
 int32_t
@@ -191,33 +222,270 @@ AnnotationMultiCoordinateShape::getCoordinate(const int32_t index) const
 }
 
 /**
- * Get a copy of all coordinates in the annotation
- * @param allCoordsOut
- *    Output containing copy of all coordinates
+ * Replace all coordinates in this annotation with copies of the given coordinates
+ * @param coordinates
+ *    Coordinates that are copied into this annotation
  */
 void
-AnnotationMultiCoordinateShape::getCopyOfAllCoordinates(std::vector<std::unique_ptr<AnnotationCoordinate>>& allCoordsOut) const
+AnnotationMultiCoordinateShape::replaceAllCoordinates(const std::vector<std::unique_ptr<const AnnotationCoordinate>>& coordinates)
 {
-    allCoordsOut.clear();
-    for (auto& ac : m_coordinates) {
-        std::unique_ptr<AnnotationCoordinate> acCopy(new AnnotationCoordinate(*ac));
-        allCoordsOut.push_back(std::move(acCopy));
+    m_coordinates.clear();
+    
+    for (const auto& coord : coordinates) {
+        AnnotationCoordinate* ac = new AnnotationCoordinate(*coord);
+        addCoordinate(ac);
     }
 }
 
 /**
- * Get a copy of all coordinates in the annotation in const 
- * @param allCoordsOut
- *    Output containing copy of all coordinates
+ * Insert a new coordinate after the given index. New coordinate is at midpoint to next coordinate.
+ * @param insertAfterCoordinateIndex
+ *    Insert a coordinate after this coordinate index.
+ * @param normalizedDistanceToNextCoordinate
+ *    Normalized distance to next coordinate for insertion
+ * @param surfaceSpaceVertexIndex
+ *    Vertex index for inserting a vertex in a surface space annotation
  */
 void
-AnnotationMultiCoordinateShape::getCopyOfAllCoordinates(std::vector<std::unique_ptr<const AnnotationCoordinate>>& allCoordsOut) const
+AnnotationMultiCoordinateShape::insertCoordinate(const int32_t insertAfterCoordinateIndex,
+                                                 const int32_t surfaceSpaceVertexIndex,
+                                                 const float normalizedDistanceToNextCoordinate)
 {
-    allCoordsOut.clear();
-    for (auto& ac : m_coordinates) {
-        std::unique_ptr<const AnnotationCoordinate> acCopy(new AnnotationCoordinate(*ac));
-        allCoordsOut.push_back(std::move(acCopy));
+    StructureEnum::Enum surfaceStructure = StructureEnum::INVALID;
+    int32_t surfaceNumberOfVertices(-1);
+
+    bool validFlag(true);
+    bool surfaceSpaceFlag(false);
+    switch (getCoordinateSpace()) {
+        case AnnotationCoordinateSpaceEnum::CHART:
+            break;
+        case AnnotationCoordinateSpaceEnum::HISTOLOGY:
+            break;
+        case AnnotationCoordinateSpaceEnum::MEDIA_FILE_NAME_AND_PIXEL:
+            break;
+        case AnnotationCoordinateSpaceEnum::SPACER:
+            break;
+        case AnnotationCoordinateSpaceEnum::STEREOTAXIC:
+            break;
+        case AnnotationCoordinateSpaceEnum::SURFACE:
+        {
+            if (getNumberOfCoordinates() > 0) {
+                const AnnotationCoordinate* firstCoord(getCoordinate(0));
+                CaretAssert(firstCoord);
+                int32_t vertexIndex(-1);
+                firstCoord->getSurfaceSpace(surfaceStructure,
+                                            surfaceNumberOfVertices,
+                                            vertexIndex);
+                
+                if ((surfaceSpaceVertexIndex >= 0)
+                    && (surfaceSpaceVertexIndex < surfaceNumberOfVertices)) {
+                    surfaceSpaceFlag = true;
+                    validFlag = true;
+                }
+            }
+        }
+            break;
+        case AnnotationCoordinateSpaceEnum::TAB:
+            break;
+        case AnnotationCoordinateSpaceEnum::VIEWPORT:
+            validFlag = false;
+            break;
+        case AnnotationCoordinateSpaceEnum::WINDOW:
+            break;
     }
+    
+    if ( ! validFlag) {
+        return;
+    }
+
+    AnnotationPolyLine* polyline = dynamic_cast<AnnotationPolyLine*>(this);
+    AnnotationPolygon*  polygon  = dynamic_cast<AnnotationPolygon*>(this);
+    if ((polyline == NULL)
+        && (polygon == NULL)) {
+        AString msg("Shape is not polyline or polygon.  Has new multi-coordinate shape been added?");
+        CaretAssertMessage(0, msg);
+        CaretLogSevere(msg);
+        return;
+    }
+    
+    validFlag = false;
+    
+    const int32_t numCoords = static_cast<int32_t>(m_coordinates.size());
+    if (numCoords < 2) {
+        CaretLogSevere("Multicoordinate Shape has invalid number of coordinates="
+                       + AString::number(numCoords)
+                       + "cannot insert new coordinates.");
+        return;
+    }
+    
+    int32_t indexOne(-1);
+    int32_t indexTwo(-1);
+    if (polygon != NULL) {
+        /*
+         * Polygon allows insertion of coordinate after last or before first
+         */
+        if ((insertAfterCoordinateIndex >= 0)
+            && (insertAfterCoordinateIndex < (numCoords - 1))) {
+            indexOne = insertAfterCoordinateIndex;
+            indexTwo = insertAfterCoordinateIndex + 1;
+            validFlag = true;
+        }
+        else if (insertAfterCoordinateIndex == -1) {
+            indexOne = numCoords - 1;
+            indexTwo = 0;
+            validFlag = true;
+        }
+        else if (insertAfterCoordinateIndex == (numCoords - 1)) {
+            indexOne = numCoords - 1;
+            indexTwo = 0;
+            validFlag = true;
+        }
+    }
+    else if (polyline != NULL) {
+        if ((insertAfterCoordinateIndex >= 0)
+            && (insertAfterCoordinateIndex < (numCoords - 1))) {
+            indexOne = insertAfterCoordinateIndex;
+            indexTwo = insertAfterCoordinateIndex + 1;
+            validFlag = true;
+        }
+    }
+    else {
+        CaretAssert(0);
+    }
+
+    if ( ! validFlag) {
+        CaretLogSevere("Attempting to insert coordinate after invalid index="
+                       + AString::number(insertAfterCoordinateIndex)
+                       + " into annotation with coordinate count="
+                       + AString::number(numCoords));
+        return;
+    }
+    
+    CaretAssertVectorIndex(m_coordinates, indexOne);
+    CaretAssertVectorIndex(m_coordinates, indexTwo);
+
+    std::unique_ptr<AnnotationCoordinate> newCoord(new AnnotationCoordinate(m_attributeDefaultType));
+
+    if (surfaceSpaceFlag) {
+        newCoord->setSurfaceSpace(surfaceStructure,
+                                  surfaceNumberOfVertices,
+                                  surfaceSpaceVertexIndex);
+    }
+    else {
+        float xyzOne[3];
+        m_coordinates[indexOne]->getXYZ(xyzOne);
+        float xyzTwo[3];
+        m_coordinates[indexTwo]->getXYZ(xyzTwo);
+        
+        float newCoordXYZ[3] {
+            (xyzOne[0] + xyzTwo[0]) / 2.0f,
+            (xyzOne[1] + xyzTwo[1]) / 2.0f,
+            (xyzOne[2] + xyzTwo[2]) / 2.0f
+        };
+        
+        if ((normalizedDistanceToNextCoordinate >= 0.0)
+            && (normalizedDistanceToNextCoordinate <= 1.0)) {
+            float normalXYZ[3];
+            MathFunctions::subtractVectors(xyzTwo, xyzOne, normalXYZ);
+            newCoordXYZ[0] = xyzOne[0] + (normalXYZ[0] * normalizedDistanceToNextCoordinate);
+            newCoordXYZ[1] = xyzOne[1] + (normalXYZ[1] * normalizedDistanceToNextCoordinate);
+            newCoordXYZ[2] = xyzOne[2] + (normalXYZ[2] * normalizedDistanceToNextCoordinate);
+        }
+        newCoord->setXYZ(newCoordXYZ);
+    }
+    m_coordinates.insert(m_coordinates.begin() + indexOne + 1,
+                         std::move(newCoord));
+}
+
+/**
+ * Get the coordinates indices for coordinates clockwise and counter-clockwise to the given coordinates
+ * @param coordinateIndex
+ *    The coordinate index
+ * @param clockwiseIndexOut
+ *    Output with clockwise index (negative if not valid)
+ * @param counterClockwiseIndexOut
+ *    Output with counter-clockwise index (negative if not valid)
+ * @return True if successful, else false
+ */
+bool
+AnnotationMultiCoordinateShape::getClockwiseAndCounterClockwiseCoordinates(const int32_t coordinateIndex,
+                                                                           int32_t& clockwiseIndexOut,
+                                                                           int32_t& counterClockwiseIndexOut) const
+{
+    clockwiseIndexOut        = -1;
+    counterClockwiseIndexOut = -1;
+    
+    bool validSpaceFlag(true);
+    switch (getCoordinateSpace()) {
+        case AnnotationCoordinateSpaceEnum::CHART:
+            break;
+        case AnnotationCoordinateSpaceEnum::HISTOLOGY:
+            break;
+        case AnnotationCoordinateSpaceEnum::MEDIA_FILE_NAME_AND_PIXEL:
+            break;
+        case AnnotationCoordinateSpaceEnum::SPACER:
+            break;
+        case AnnotationCoordinateSpaceEnum::STEREOTAXIC:
+            break;
+        case AnnotationCoordinateSpaceEnum::SURFACE:
+            validSpaceFlag = false;
+            break;
+        case AnnotationCoordinateSpaceEnum::TAB:
+            break;
+        case AnnotationCoordinateSpaceEnum::VIEWPORT:
+            break;
+        case AnnotationCoordinateSpaceEnum::WINDOW:
+            break;
+    }
+    if ( ! validSpaceFlag) {
+        return false;
+    }
+    const int32_t numCoords(m_coordinates.size());
+    if (numCoords < 3) {
+        return false;
+    }
+    
+    int32_t i1(0);
+    int32_t i2(1);
+    int32_t i3(2);
+    
+    if (numCoords > 3) {
+        int32_t index(coordinateIndex);
+        if (index == 0) {
+            index++;
+        }
+        const int32_t lastIndex(numCoords - 1);
+        if (index >= lastIndex) {
+            index = lastIndex - 1;
+        }
+        i1 = index - 1;
+        i2 = index;
+        i3 = index + 1;
+    }
+    
+    CaretAssertVectorIndex(m_coordinates, i1);
+    CaretAssertVectorIndex(m_coordinates, i2);
+    CaretAssertVectorIndex(m_coordinates, i3);
+
+    float normalVector[3];
+    if (MathFunctions::normalVector(m_coordinates[i1]->getXYZ(),
+                                    m_coordinates[i2]->getXYZ(),
+                                    m_coordinates[i3]->getXYZ(),
+                                    normalVector)) {
+        if (normalVector[2] < 0.0f) {
+            std::swap(i1, i3);
+        }
+        
+        clockwiseIndexOut        = i1;
+        counterClockwiseIndexOut = i3;
+        
+        std::cout << "index=" << coordinateIndex
+        << " clockwise=" << clockwiseIndexOut
+        << " counter-clockwise=" << counterClockwiseIndexOut
+        << std::endl << std::flush;
+    }
+    
+    return false;
 }
 
 /**
@@ -231,21 +499,6 @@ AnnotationMultiCoordinateShape::removeCoordinateAtIndex(const int32_t index)
     CaretAssertVectorIndex(m_coordinates, index);
     m_coordinates.erase(m_coordinates.begin() + index);
     setModified();
-}
-
-/**
- * Replace all coordinates in this annotation with copies of the given coordinates
- * @param coordinates
- *    Coordinates that are copied into this annotation
- */
-void AnnotationMultiCoordinateShape::replaceAllCoordinates(const std::vector<std::unique_ptr<const AnnotationCoordinate>>& coordinates)
-{
-    m_coordinates.clear();
-    
-    for (const auto& coord : coordinates) {
-        AnnotationCoordinate* ac = new AnnotationCoordinate(*coord);
-        addCoordinate(ac);
-    }
 }
 
 
@@ -351,6 +604,12 @@ AnnotationMultiCoordinateShape::isSizeHandleValid(const AnnotationSizingHandleTy
         case AnnotationCoordinateSpaceEnum::CHART:
             xyPlaneFlag = true;
             break;
+        case AnnotationCoordinateSpaceEnum::HISTOLOGY:
+            xyPlaneFlag = true;
+            break;
+        case AnnotationCoordinateSpaceEnum::MEDIA_FILE_NAME_AND_PIXEL:
+            xyPlaneFlag = true;
+            break;
         case AnnotationCoordinateSpaceEnum::SPACER:
             xyPlaneFlag = true;
             break;
@@ -398,8 +657,14 @@ AnnotationMultiCoordinateShape::isSizeHandleValid(const AnnotationSizingHandleTy
             break;
         case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_ROTATION:
             break;
-        case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_POLY_LINE_COORDINATE:
+        case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_EDITABLE_POLY_LINE_COORDINATE:
             validFlag = true;
+            break;
+        case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_NOT_EDITABLE_POLY_LINE_COORDINATE:
+            break;
+        case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_POLYHEDRON_TEXT_COORDINATE_ONE:
+            break;
+        case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_POLYHEDRON_TEXT_COORDINATE_TWO:
             break;
     }
     
@@ -444,7 +709,7 @@ AnnotationMultiCoordinateShape::applySpatialModificationSurfaceSpace(const Annot
             break;
         case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_ROTATION:
             break;
-        case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_POLY_LINE_COORDINATE:
+        case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_EDITABLE_POLY_LINE_COORDINATE:
         {
             StructureEnum::Enum structure = StructureEnum::INVALID;
             int32_t surfaceNumberOfNodes  = -1;
@@ -469,6 +734,12 @@ AnnotationMultiCoordinateShape::applySpatialModificationSurfaceSpace(const Annot
                 }
             }
         }
+            break;
+        case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_NOT_EDITABLE_POLY_LINE_COORDINATE:
+            break;
+        case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_POLYHEDRON_TEXT_COORDINATE_ONE:
+            break;
+        case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_POLYHEDRON_TEXT_COORDINATE_TWO:
             break;
     }
     
@@ -560,7 +831,7 @@ AnnotationMultiCoordinateShape::applySpatialModificationTabOrWindowSpace(const A
                 break;
             case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_ROTATION:
                 break;
-            case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_POLY_LINE_COORDINATE:
+            case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_EDITABLE_POLY_LINE_COORDINATE:
                 /*
                  * Moving one coordinate in the shape
                  */
@@ -570,6 +841,12 @@ AnnotationMultiCoordinateShape::applySpatialModificationTabOrWindowSpace(const A
                     endIndex   = spatialModification.m_polyLineCoordinateIndex;
                     validFlag = true;
                 }
+                break;
+            case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_NOT_EDITABLE_POLY_LINE_COORDINATE:
+                break;
+            case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_POLYHEDRON_TEXT_COORDINATE_ONE:
+                break;
+            case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_POLYHEDRON_TEXT_COORDINATE_TWO:
                 break;
         }
         
@@ -673,7 +950,7 @@ AnnotationMultiCoordinateShape::applySpatialModificationChartSpace(const Annotat
             break;
         case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_ROTATION:
             break;
-        case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_POLY_LINE_COORDINATE:
+        case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_EDITABLE_POLY_LINE_COORDINATE:
             /*
              * Moving one coordinate in the shape
              */
@@ -683,6 +960,12 @@ AnnotationMultiCoordinateShape::applySpatialModificationChartSpace(const Annotat
                 endIndex   = spatialModification.m_polyLineCoordinateIndex;
                 validFlag = true;
             }
+            break;
+        case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_NOT_EDITABLE_POLY_LINE_COORDINATE:
+            break;
+        case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_POLYHEDRON_TEXT_COORDINATE_ONE:
+            break;
+        case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_POLYHEDRON_TEXT_COORDINATE_TWO:
             break;
     }
     if ((validFlag)
@@ -695,6 +978,186 @@ AnnotationMultiCoordinateShape::applySpatialModificationChartSpace(const Annotat
             const float dx = spatialModification.m_chartCoordAtMouseXY.m_chartXYZ[0] - spatialModification.m_chartCoordAtPreviousMouseXY.m_chartXYZ[0];
             const float dy = spatialModification.m_chartCoordAtMouseXY.m_chartXYZ[1] - spatialModification.m_chartCoordAtPreviousMouseXY.m_chartXYZ[1];
             const float dz = spatialModification.m_chartCoordAtMouseXY.m_chartXYZ[2] - spatialModification.m_chartCoordAtPreviousMouseXY.m_chartXYZ[2];
+            
+            for (int32_t i = startIndex; i <= endIndex; i++) {
+                AnnotationCoordinate* ac = getCoordinate(i);
+                ac->addToXYZ(dx, dy, dz);
+            }
+            validFlag = true;
+        }
+    }
+    
+    if (validFlag) {
+        setModified();
+    }
+    
+    return validFlag;
+}
+
+/**
+ * Apply a spatial modification to an annotation in histology space.
+ *
+ * @param spatialModification
+ *     Contains information about the spatial modification.
+ * @return
+ *     True if the annotation was modified, else false.
+ */
+bool
+AnnotationMultiCoordinateShape::applySpatialModificationHistologySpace(const AnnotationSpatialModification& spatialModification)
+{
+    bool validFlag = false;
+    const int32_t numCoords(getNumberOfCoordinates());
+    int32_t startIndex(-1);
+    int32_t endIndex(-1);
+    switch (spatialModification.m_sizingHandleType) {
+        case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_BOX_BOTTOM:
+            break;
+        case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_BOX_BOTTOM_LEFT:
+            break;
+        case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_BOX_BOTTOM_RIGHT:
+            break;
+        case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_BOX_LEFT:
+            break;
+        case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_BOX_RIGHT:
+            break;
+        case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_BOX_TOP:
+            break;
+        case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_BOX_TOP_LEFT:
+            break;
+        case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_BOX_TOP_RIGHT:
+            break;
+        case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_LINE_END:
+            break;
+        case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_LINE_START:
+            break;
+        case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_NONE:
+            /*
+             * Moving entire shape (all coordinates change)
+             */
+            startIndex = 0;
+            endIndex   = numCoords - 1;
+            validFlag = true;
+            break;
+        case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_ROTATION:
+            break;
+        case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_EDITABLE_POLY_LINE_COORDINATE:
+            /*
+             * Moving one coordinate in the shape
+             */
+            if ((spatialModification.m_polyLineCoordinateIndex >= 0)
+                && (spatialModification.m_polyLineCoordinateIndex < numCoords)) {
+                startIndex = spatialModification.m_polyLineCoordinateIndex;
+                endIndex   = spatialModification.m_polyLineCoordinateIndex;
+                validFlag = true;
+            }
+            break;
+        case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_NOT_EDITABLE_POLY_LINE_COORDINATE:
+            break;
+        case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_POLYHEDRON_TEXT_COORDINATE_ONE:
+            break;
+        case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_POLYHEDRON_TEXT_COORDINATE_TWO:
+            break;
+    }
+    if ((validFlag)
+        && (startIndex >= 0)
+        && (endIndex >= 0)) {
+        validFlag = false;
+        
+        if (spatialModification.m_histologyCoordAtMouseXY.m_histologyXYZValid &&
+            spatialModification.m_histologyCoordAtPreviousMouseXY.m_histologyXYZValid) {
+            const float dx = spatialModification.m_histologyCoordAtMouseXY.m_histologyXYZ[0] - spatialModification.m_histologyCoordAtPreviousMouseXY.m_histologyXYZ[0];
+            const float dy = spatialModification.m_histologyCoordAtMouseXY.m_histologyXYZ[1] - spatialModification.m_histologyCoordAtPreviousMouseXY.m_histologyXYZ[1];
+            const float dz = spatialModification.m_histologyCoordAtMouseXY.m_histologyXYZ[2] - spatialModification.m_histologyCoordAtPreviousMouseXY.m_histologyXYZ[2];
+            
+            for (int32_t i = startIndex; i <= endIndex; i++) {
+                AnnotationCoordinate* ac = getCoordinate(i);
+                ac->addToXYZ(dx, dy, dz);
+            }
+            validFlag = true;
+        }
+    }
+    
+    if (validFlag) {
+        setModified();
+    }
+    
+    return validFlag;
+}
+
+/**
+ * Apply a spatial modification to an annotation in media space.
+ *
+ * @param spatialModification
+ *     Contains information about the spatial modification.
+ * @return
+ *     True if the annotation was modified, else false.
+ */
+bool
+AnnotationMultiCoordinateShape::applySpatialModificationMediaSpace(const AnnotationSpatialModification& spatialModification)
+{
+    bool validFlag = false;
+    const int32_t numCoords(getNumberOfCoordinates());
+    int32_t startIndex(-1);
+    int32_t endIndex(-1);
+    switch (spatialModification.m_sizingHandleType) {
+        case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_BOX_BOTTOM:
+            break;
+        case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_BOX_BOTTOM_LEFT:
+            break;
+        case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_BOX_BOTTOM_RIGHT:
+            break;
+        case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_BOX_LEFT:
+            break;
+        case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_BOX_RIGHT:
+            break;
+        case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_BOX_TOP:
+            break;
+        case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_BOX_TOP_LEFT:
+            break;
+        case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_BOX_TOP_RIGHT:
+            break;
+        case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_LINE_END:
+            break;
+        case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_LINE_START:
+            break;
+        case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_NONE:
+            /*
+             * Moving entire shape (all coordinates change)
+             */
+            startIndex = 0;
+            endIndex   = numCoords - 1;
+            validFlag = true;
+            break;
+        case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_ROTATION:
+            break;
+        case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_EDITABLE_POLY_LINE_COORDINATE:
+            /*
+             * Moving one coordinate in the shape
+             */
+            if ((spatialModification.m_polyLineCoordinateIndex >= 0)
+                && (spatialModification.m_polyLineCoordinateIndex < numCoords)) {
+                startIndex = spatialModification.m_polyLineCoordinateIndex;
+                endIndex   = spatialModification.m_polyLineCoordinateIndex;
+                validFlag = true;
+            }
+            break;
+        case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_NOT_EDITABLE_POLY_LINE_COORDINATE:
+            break;
+        case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_POLYHEDRON_TEXT_COORDINATE_ONE:
+            break;
+        case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_POLYHEDRON_TEXT_COORDINATE_TWO:
+            break;
+    }
+    if ((validFlag)
+        && (startIndex >= 0)
+        && (endIndex >= 0)) {
+        validFlag = false;
+        
+        if (spatialModification.m_mediaCoordAtMouseXY.m_mediaXYZValid &&
+            spatialModification.m_mediaCoordAtPreviousMouseXY.m_mediaXYZValid) {
+            const float dx = spatialModification.m_mediaCoordAtMouseXY.m_mediaXYZ[0] - spatialModification.m_mediaCoordAtPreviousMouseXY.m_mediaXYZ[0];
+            const float dy = spatialModification.m_mediaCoordAtMouseXY.m_mediaXYZ[1] - spatialModification.m_mediaCoordAtPreviousMouseXY.m_mediaXYZ[1];
+            const float dz = spatialModification.m_mediaCoordAtMouseXY.m_mediaXYZ[2] - spatialModification.m_mediaCoordAtPreviousMouseXY.m_mediaXYZ[2];
             
             for (int32_t i = startIndex; i <= endIndex; i++) {
                 AnnotationCoordinate* ac = getCoordinate(i);
@@ -753,8 +1216,14 @@ AnnotationMultiCoordinateShape::applySpatialModificationStereotaxicSpace(const A
                 break;
             case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_ROTATION:
                 break;
-            case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_POLY_LINE_COORDINATE:
+            case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_EDITABLE_POLY_LINE_COORDINATE:
                 validFlag = true;
+                break;
+            case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_NOT_EDITABLE_POLY_LINE_COORDINATE:
+                break;
+            case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_POLYHEDRON_TEXT_COORDINATE_ONE:
+                break;
+            case AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_POLYHEDRON_TEXT_COORDINATE_TWO:
                 break;
         }
         if (validFlag) {
@@ -788,6 +1257,12 @@ AnnotationMultiCoordinateShape::applySpatialModification(const AnnotationSpatial
     switch (getCoordinateSpace()) {
         case AnnotationCoordinateSpaceEnum::CHART:
             return applySpatialModificationChartSpace(spatialModification);
+            break;
+        case AnnotationCoordinateSpaceEnum::HISTOLOGY:
+            return applySpatialModificationHistologySpace(spatialModification);
+            break;
+        case AnnotationCoordinateSpaceEnum::MEDIA_FILE_NAME_AND_PIXEL:
+            return applySpatialModificationMediaSpace(spatialModification);
             break;
         case AnnotationCoordinateSpaceEnum::SPACER:
             return applySpatialModificationSpacerTabSpace(spatialModification);
@@ -829,19 +1304,6 @@ AnnotationMultiCoordinateShape::saveSubClassDataToScene(const SceneAttributes* s
 {
     m_sceneAssistant->saveMembers(sceneAttributes,
                                   sceneClass);
-    
-    std::vector<SceneClass*> coordClasses;
-    
-    for (const auto& ptr : m_coordinates) {
-        const AString name("Coord_" + AString::number(m_coordinates.size()));
-        SceneClass* sc = ptr->saveToScene(sceneAttributes, name);
-        coordClasses.push_back(sc);
-    }
-    
-    SceneClassArray* coordArray = new SceneClassArray("m_coordinates",
-                                                      coordClasses);
-    
-    sceneClass->addChild(coordArray);
 }
 
 /**
@@ -860,21 +1322,6 @@ void
 AnnotationMultiCoordinateShape::restoreSubClassDataFromScene(const SceneAttributes* sceneAttributes,
                                                  const SceneClass* sceneClass)
 {
-    m_coordinates.clear();
-    
     m_sceneAssistant->restoreMembers(sceneAttributes,
                                      sceneClass);
-    
-    const SceneClassArray* coordArray = sceneClass->getClassArray("m_coordinates");
-    if (coordArray != NULL) {
-        const int32_t numCoords = coordArray->getNumberOfArrayElements();
-        for (int32_t i = 0; i < numCoords; i++) {
-            const SceneClass* coordClass = coordArray->getClassAtIndex(i);
-            CaretAssert(coordClass);
-            std::unique_ptr<AnnotationCoordinate> ac(new AnnotationCoordinate(m_attributeDefaultType));
-            ac->restoreFromScene(sceneAttributes,
-                                 coordClass);
-            m_coordinates.push_back(std::move(ac));
-        }
-    }
 }

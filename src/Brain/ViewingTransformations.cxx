@@ -23,6 +23,8 @@
 #include "ViewingTransformations.h"
 #undef __VIEWING_TRANSFORMATIONS_DECLARE__
 
+#include "CaretLogger.h"
+#include "CaretUndoStack.h"
 #include "SceneClass.h"
 #include "SceneClassAssistant.h"
 
@@ -43,6 +45,7 @@ ViewingTransformations::ViewingTransformations()
 : CaretObject()
 {
     m_sceneAssistant = new SceneClassAssistant();
+    m_undoStack.reset(new CaretUndoStack());
     
     m_rotationMatrix = new Matrix4x4();
     m_translation[0] = 0.0;
@@ -109,6 +112,18 @@ ViewingTransformations::operator=(const ViewingTransformations& obj)
 }
 
 /**
+ * Copy the viewing transform from another instance
+ * @param viewingTransform
+ *     Viewing transform whose values are copied to this instance
+ */
+void
+ViewingTransformations::copyFromOther(const ViewingTransformations& viewingTransform)
+{
+    copyHelperViewingTransformations(viewingTransform);
+}
+
+
+/**
  * Helps with copying an object of this type.
  * @param obj
  *    Object that is copied.
@@ -116,6 +131,9 @@ ViewingTransformations::operator=(const ViewingTransformations& obj)
 void
 ViewingTransformations::copyHelperViewingTransformations(const ViewingTransformations& obj)
 {
+    /*
+     * DO NOT copy the UNDO stack !!
+     */
     *m_rotationMatrix = *obj.m_rotationMatrix;
     m_translation[0]  = obj.m_translation[0];
     m_translation[1]  = obj.m_translation[1];
@@ -202,6 +220,71 @@ void
 ViewingTransformations::setScaling(const float scaling)
 {
     m_scaling = scaling;
+}
+
+/**
+ * Scale about the position of the mouse (NOT supported for all views)
+ *
+ * @param transform
+ *    Graphics object to window transform
+ * @param mousePressX
+ *    X-Location of where mouse was pressed
+ * @param mousePressX
+ *    Y-Location of where mouse was pressed
+ * @param mouseDY
+ *    Change in mouse Y
+ * @param dataX
+ *    X-coordinate of data where mouse was pressed
+ * @param dataY
+ *    Y-coordinate of data where mouse was pressed
+ * @param dataXYValidFlag
+ *    True if dataX and dataY are valid
+ */
+void
+ViewingTransformations::scaleAboutMouse(const GraphicsObjectToWindowTransform* /*transform*/,
+                                        const int32_t /*mousePressX*/,
+                                        const int32_t /*mousePressY*/,
+                                        const float /*mouseDY*/,
+                                        const float /*dataX*/,
+                                        const float /*dataY*/,
+                                        const bool /*dataXYValidFlag*/)
+{
+    const QString msg("ViewingTransformations::scaleAboutMouse() is not supported for this view");
+    CaretAssertMessage(0, msg);
+    CaretLogSevere(msg);
+}
+
+/**
+ * Set scaling for histology
+ *
+ * @param transform
+ *    Graphics object to window transform
+ * @param scaling
+ *    New value for scaling
+ */
+void
+ViewingTransformations::setHistologyScaling(const GraphicsObjectToWindowTransform* transform,
+                                            const float scaling)
+{
+    setMediaScaling(transform,
+                    scaling);
+}
+
+/**
+ * Set scaling for media
+ *
+ * @param transform
+ *    Graphics object to window transform
+ * @param scaling
+ *    New value for scaling
+ */
+void
+ViewingTransformations::setMediaScaling(const GraphicsObjectToWindowTransform* /*/*transform*/,
+                                        const float /*scaling*/)
+{
+    const QString msg("ViewingTransformations::setMediaScaling() is not supported for this view");
+    CaretAssertMessage(0, msg);
+    CaretLogSevere(msg);
 }
 
 /**
@@ -463,6 +546,15 @@ ViewingTransformations::restoreFromScene(const SceneAttributes* sceneAttributes,
         m_flatRotationMatrix->identity();
     }
     
+}
+
+/**
+ * @return The redo/undo stack
+ */
+CaretUndoStack*
+ViewingTransformations::getRedoUndoStack()
+{
+    return m_undoStack.get();
 }
 
 

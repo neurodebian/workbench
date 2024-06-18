@@ -40,7 +40,7 @@
 #include "Brain.h"
 #include "CaretAssert.h"
 #include "EventBrowserWindowContent.h"
-#include "EventGraphicsUpdateAllWindows.h"
+#include "EventGraphicsPaintSoonAllWindows.h"
 #include "EventUserInterfaceUpdate.h"
 #include "EventManager.h"
 #include "GuiManager.h"
@@ -80,16 +80,17 @@ m_parentWidgetType(parentWidgetType),
 m_browserWindowIndex(browserWindowIndex)
 {
     QString colonString;
+    QLabel* boundsLabel(NULL);
     switch (m_parentWidgetType) {
         case AnnotationWidgetParentEnum::ANNOTATION_TOOL_BAR_WIDGET:
             colonString = ":";
             break;
         case AnnotationWidgetParentEnum::PARENT_ENUM_FOR_LATER_USE:
+            boundsLabel = new QLabel("Bounds");
             CaretAssert(0);
             break;
     }
     
-    QLabel* boundsLabel = new QLabel("Bounds");
     
     QLabel* xMinCoordLabel = new QLabel("Min X" + colonString);
     m_xMinCoordSpinBox = createSpinBox();
@@ -114,8 +115,10 @@ m_browserWindowIndex(browserWindowIndex)
     QGridLayout* coordinateLayout = new QGridLayout(this);
     WuQtUtilities::setLayoutSpacingAndMargins(coordinateLayout, 2, 0);
     int32_t row(0);
-    coordinateLayout->addWidget(boundsLabel, row, 0, 1, 4, Qt::AlignHCenter);
-    row++;
+    if (boundsLabel != NULL) {
+        coordinateLayout->addWidget(boundsLabel, row, 0, 1, 4, Qt::AlignHCenter);
+        row++;
+    }
     coordinateLayout->addWidget(xMinCoordLabel, row, 0);
     coordinateLayout->addWidget(m_xMinCoordSpinBox, row, 1);
     row++;
@@ -343,11 +346,10 @@ AnnotationBoundsWidget::valueChangedHelper(QDoubleSpinBox* spinBox,
             return;
         }
         
-        AnnotationManager* annMan = GuiManager::get()->getBrain()->getAnnotationManager();
+        AnnotationManager* annMan = GuiManager::get()->getBrain()->getAnnotationManager(m_userInputMode);
         
         AString errorMessage;
-        if ( ! annMan->applyCommand(m_userInputMode,
-                                    undoCommand,
+        if ( ! annMan->applyCommand(undoCommand,
                                     errorMessage)) {
             WuQMessageBox::errorOk(this,
                                    errorMessage);
@@ -358,7 +360,7 @@ AnnotationBoundsWidget::valueChangedHelper(QDoubleSpinBox* spinBox,
          */
         updateContent(m_annotationBrowserTabs);
         
-        EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+        EventManager::get()->sendEvent(EventGraphicsPaintSoonAllWindows().getPointer());
         EventManager::get()->sendEvent(EventUserInterfaceUpdate().getPointer());
     }
 }

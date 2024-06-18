@@ -143,19 +143,7 @@ m_parentToolBar(parentToolBar)
     m_volumePlaneActionGroup->setExclusive(true);
     QObject::connect(m_volumePlaneActionGroup, SIGNAL(triggered(QAction*)),
                      this, SLOT(volumePlaneActionGroupTriggered(QAction*)));
-    
-    
-    m_volumePlaneResetToolButtonAction = WuQtUtilities::createAction("Reset",
-                                                                         "Reset to remove panning, zooming, and/or oblique rotation",
-                                                                         this,
-                                                                         this,
-                                                                         SLOT(volumePlaneResetToolButtonTriggered(bool)));
-    m_volumePlaneResetToolButtonAction->setObjectName(objectNamePrefix
-                                                      + "ResetView");
-    macroManager->addMacroSupportToObject(m_volumePlaneResetToolButtonAction,
-                                          "Reset slice view pan/rotate/zoom");
-    
-    
+        
     QToolButton* volumePlaneParasagittalToolButton = new QToolButton();
     volumePlaneParasagittalToolButton->setDefaultAction(m_volumePlaneParasagittalToolButtonAction);
     WuQtUtilities::setToolButtonStyleForQt5Mac(volumePlaneParasagittalToolButton);
@@ -176,10 +164,6 @@ m_parentToolBar(parentToolBar)
     WuQtUtilities::setToolButtonStyleForQt5Mac(volumePlaneAllToolButton);
     m_volumePlaneAllToolButtonAction->setParent(volumePlaneAllToolButton);
     
-    QToolButton* volumePlaneResetToolButton = new QToolButton();
-    volumePlaneResetToolButton->setDefaultAction(m_volumePlaneResetToolButtonAction);
-    WuQtUtilities::setToolButtonStyleForQt5Mac(volumePlaneResetToolButton);
-    
     WuQtUtilities::matchWidgetHeights(volumePlaneParasagittalToolButton,
                                       volumePlaneCoronalToolButton,
                                       volumePlaneAxialToolButton,
@@ -188,12 +172,6 @@ m_parentToolBar(parentToolBar)
                                      volumePlaneCoronalToolButton,
                                      volumePlaneAxialToolButton,
                                      volumePlaneAllToolButton);
-    
-    QToolButton* slicePlaneCustomToolButton = new QToolButton();
-    slicePlaneCustomToolButton->setDefaultAction(m_parentToolBar->customViewAction);
-    slicePlaneCustomToolButton->setSizePolicy(QSizePolicy::Minimum,
-                                              QSizePolicy::Fixed);
-    WuQtUtilities::setToolButtonStyleForQt5Mac(slicePlaneCustomToolButton);
     
     m_volumeAxisCrosshairsToolButtonAction = new QAction("", this);
     m_volumeAxisCrosshairsToolButtonAction->setCheckable(true);
@@ -243,16 +221,11 @@ m_parentToolBar(parentToolBar)
     gridLayout->addWidget(volumePlaneAxialToolButton, rowIndex, 0);
     gridLayout->addWidget(volumePlaneAllToolButton,   rowIndex, 1);
     rowIndex++;
-    gridLayout->addWidget(volumePlaneResetToolButton, rowIndex, 0, 1, 2, Qt::AlignHCenter);
-    rowIndex++;
-    gridLayout->addWidget(slicePlaneCustomToolButton, rowIndex, 0, 1, 2, Qt::AlignHCenter);
-    rowIndex++;
     gridLayout->addWidget(volumeCrosshairsToolButton, rowIndex, 0, Qt::AlignRight);
     gridLayout->addWidget(volumeCrosshairLabelsToolButton, rowIndex, 1, Qt::AlignLeft);
     
     m_volumePlaneWidgetGroup = new WuQWidgetObjectGroup(this);
     m_volumePlaneWidgetGroup->add(m_volumePlaneActionGroup);
-    m_volumePlaneWidgetGroup->add(m_volumePlaneResetToolButtonAction);
 }
 
 /**
@@ -273,7 +246,7 @@ BrainBrowserWindowToolBarSlicePlane::updateContent(BrowserTabContent* browserTab
 {
     m_volumePlaneWidgetGroup->blockAllSignals(true);
     
-    switch (browserTabContent->getSliceViewPlane()) {
+    switch (browserTabContent->getVolumeSliceViewPlane()) {
         case VolumeSliceViewPlaneEnum::ALL:
             m_volumePlaneAllToolButtonAction->setChecked(true);
             break;
@@ -347,7 +320,7 @@ BrainBrowserWindowToolBarSlicePlane::createCrosshairMenu(const QString& objectNa
     m_crosshairGapSpinBox = new QDoubleSpinBox();
     m_crosshairGapSpinBox->setMinimum(0.0);
     m_crosshairGapSpinBox->setMaximum(100);
-    m_crosshairGapSpinBox->setSingleStep(0.1);
+    m_crosshairGapSpinBox->setSingleStep(1.0);
     m_crosshairGapSpinBox->setDecimals(1);
     m_crosshairGapSpinBox->setSuffix("%");
     m_crosshairGapSpinBox->setObjectName(objectNamePrefix
@@ -416,7 +389,7 @@ BrainBrowserWindowToolBarSlicePlane::viewAllSliceLayoutMenuTriggered(QAction* ac
     if (validFlag) {
         BrowserTabContent* btc = getTabContentFromSelectedTab();
         
-        btc->setSlicePlanesAllViewLayout(layout);
+        btc->setVolumeSlicePlanesAllViewLayout(layout);
         
         m_parentToolBar->updateVolumeIndicesWidget(btc);
         updateGraphicsWindowAndYokedWindows();
@@ -433,7 +406,7 @@ BrainBrowserWindowToolBarSlicePlane::viewAllSliceLayoutMenuTriggered(QAction* ac
 void
 BrainBrowserWindowToolBarSlicePlane::updateViewAllSlicesLayoutMenu(BrowserTabContent* browserTabContent)
 {
-    const VolumeSliceViewAllPlanesLayoutEnum::Enum layout = browserTabContent->getSlicePlanesAllViewLayout();
+    const VolumeSliceViewAllPlanesLayoutEnum::Enum layout = browserTabContent->getVolumeSlicePlanesAllViewLayout();
     const int layoutIntValue = VolumeSliceViewAllPlanesLayoutEnum::toIntegerCode(layout);
     
     for (auto action : m_viewAllSliceLayoutMenuActions) {
@@ -472,20 +445,7 @@ BrainBrowserWindowToolBarSlicePlane::volumePlaneActionGroupTriggered(QAction* ac
     
     BrowserTabContent* btc = getTabContentFromSelectedTab();
     
-    btc->setSliceViewPlane(plane);
-    
-    m_parentToolBar->updateVolumeIndicesWidget(btc);
-    updateGraphicsWindowAndYokedWindows();
-}
-
-/**
- * Called when volume reset slice view button is pressed.
- */
-void
-BrainBrowserWindowToolBarSlicePlane::volumePlaneResetToolButtonTriggered(bool /*checked*/)
-{
-    BrowserTabContent* btc = getTabContentFromSelectedTab();
-    btc->resetView();
+    btc->setVolumeSliceViewPlane(plane);
     
     m_parentToolBar->updateVolumeIndicesWidget(btc);
     updateGraphicsWindowAndYokedWindows();

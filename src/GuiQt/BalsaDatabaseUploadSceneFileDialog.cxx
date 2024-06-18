@@ -466,7 +466,11 @@ BalsaDatabaseUploadSceneFileDialog::createBalsaDatabaseSelectionWidget()
         m_databaseComboBox->addItem("http://johnsdev.wustl.edu:8080");
         m_databaseComboBox->addItem("https://johnsdev.wustl.edu:8080");
     }
-    QObject::connect(m_databaseComboBox, static_cast<void(QComboBox::*)(const QString&)>(&QComboBox::activated),
+#if QT_VERSION >= 0x060000
+    QObject::connect(m_databaseComboBox, static_cast<void(QComboBox::*)(const QString&)>(&QComboBox::textActivated),
+#else
+                     QObject::connect(m_databaseComboBox, static_cast<void(QComboBox::*)(const QString&)>(&QComboBox::activated),
+#endif
                      this, [=] { this->loginInformationChanged(); });
     QObject::connect(m_databaseComboBox, &QComboBox::editTextChanged,
                      this, [=] { this->loginInformationChanged(); });
@@ -508,7 +512,11 @@ BalsaDatabaseUploadSceneFileDialog::creatZipFileDirectoryWidget()
     buttGroup->addButton(m_zipFileTemporaryDirectoryRadioButton);
     buttGroup->addButton(m_zipFileCustomDirectoryRadioButton);
     m_zipFileTemporaryDirectoryRadioButton->setChecked(true); // do before signal
-    QObject::connect(buttGroup, static_cast<void(QButtonGroup::*)(int)>(&QButtonGroup::buttonClicked),
+#if QT_VERSION >= 0x060000
+    QObject::connect(buttGroup, static_cast<void(QButtonGroup::*)(int)>(&QButtonGroup::idClicked),
+#else
+                     QObject::connect(buttGroup, static_cast<void(QButtonGroup::*)(int)>(&QButtonGroup::buttonClicked),
+#endif
                      [=](int id){ this->zipFileDirectoryRadioButtonClicked(id); });
     
     m_zipFileAutomaticDirectoryLineEdit = new QLineEdit();
@@ -810,7 +818,7 @@ BalsaDatabaseUploadSceneFileDialog::checkBalsaExtractionDirectoryPrefix()
             else {
                 AString msg("BALSA was unable to provide an updated \"Extraction Directory Prefix\" for Study ID \""
                             + studyID
-                            + "\".  You may continue uploading.");
+                            + "\".  This will occur the first time a scene file is uploaded.  You may continue uploading.");
                 WuQMessageBox::warningOk(this, msg);
             }
         }
@@ -998,7 +1006,9 @@ BalsaDatabaseUploadSceneFileDialog::okButtonClicked()
     progressDialog.setValue(progressDialog.maximum());
     
     if (successFlag) {
-        WuQMessageBox::informationOk(this, "Upload was successful");
+        AString msg("Upload was successful");
+        msg.appendWithNewLine(m_balsaDatabaseManager->getInfoMessages());
+        WuQMessageBox::informationOk(this, msg);
     }
     else {
         WuQMessageBox::errorOk(this,

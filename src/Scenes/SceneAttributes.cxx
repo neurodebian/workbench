@@ -54,6 +54,9 @@ SceneAttributes::SceneAttributes(const SceneTypeEnum::Enum sceneType,
     m_allLoadedFilesSavedToScene = true;
     m_useSceneForgroundAndBackgroundColorsFlag = true;
     m_modifiedPaletteSettingsSavedToScene = true;//TSC: was uninitialized, bad idea
+    m_logFilesWithPaletteSettingsErrorsFlag = false;
+    m_mapFilesWithPaletteSettingsErrors.clear();
+    m_keepAllFilesInSceneFlag = false;
 }
 
 SceneAttributes::SceneAttributes(const SceneAttributes& rhs): CaretObject(), m_sceneType(rhs.m_sceneType)
@@ -66,6 +69,9 @@ SceneAttributes::SceneAttributes(const SceneAttributes& rhs): CaretObject(), m_s
     //leaving sceneFileName empty, as that shouldn't even be stored inside the scene, and we don't know where this scene will be put
     m_indicesOfTabsForSavingToScene = rhs.m_indicesOfTabsForSavingToScene;
     m_indicesOfWindowsForSavingToScene = rhs.m_indicesOfWindowsForSavingToScene;
+    m_logFilesWithPaletteSettingsErrorsFlag = rhs.m_logFilesWithPaletteSettingsErrorsFlag;
+    m_mapFilesWithPaletteSettingsErrors = rhs.m_mapFilesWithPaletteSettingsErrors;
+    m_keepAllFilesInSceneFlag = rhs.m_keepAllFilesInSceneFlag;
     //leaving error message empty, seems to make the most sense
 }
 
@@ -306,6 +312,60 @@ SceneAttributes::setModifiedPaletteSettingsSavedToScene(const bool status)
     m_modifiedPaletteSettingsSavedToScene = status;
 }
 
+/**
+ * @return Logging of files with palette settings errors instead of error messages.
+ *         This is only used by "wb_command -scene-file-update".
+ */
+bool
+SceneAttributes::isLogFilesWithPaletteSettingsErrors() const
+{
+    return m_logFilesWithPaletteSettingsErrorsFlag;
+}
+
+/**
+ * @return Set logging of files with palette settings errors instead of error messages.
+ *         This is only used by "wb_command -scene-file-update".
+ * @param status
+ *     New status
+ */
+void
+SceneAttributes::setLogFilesWithPaletteSettingsErrors(const bool status)
+{
+    m_logFilesWithPaletteSettingsErrorsFlag = status;
+}
+
+/**
+ * Add a map file to the files with palette settings errors
+ * @param mapFile
+ *    Pointer to data file
+ * @param filename
+ *    Name of file
+ */
+void
+SceneAttributes::addToMapFilesWithPaletteSettingsErrors(CaretMappableDataFile* mapFile,
+                                                        const AString& filename) const
+{
+    /*
+     * Do not put file in more than one time
+     */
+    for (auto& p : m_mapFilesWithPaletteSettingsErrors) {
+        if (p.first == mapFile) {
+            return;
+        }
+    }
+    
+    m_mapFilesWithPaletteSettingsErrors.push_back(std::make_pair(mapFile,
+                                                                 filename));
+}
+
+/**
+ * @return All files with palette settings errors
+ */
+std::vector<std::pair<CaretMappableDataFile*, AString>>
+SceneAttributes::getMapFilesWithPaletteSettingsErrors() const
+{
+    return m_mapFilesWithPaletteSettingsErrors;
+}
 
 /**
  * Add a new message to the error message.  Each message is
@@ -405,4 +465,28 @@ SceneAttributes::getSceneLoadWarningMessage() const
     return loadMessage;
 }
 
+/**
+ * Set "keep all files in scene" when saving a scene.  When off (default) and saving a scene,
+ * any data files NOT loaded are removed from the scene.  When on, all files that were
+ * previously in the scene when loaded are kept.  This is used by the scene file update command.
+ * @param status
+ *    New status.
+ */
+void
+SceneAttributes::setKeepAllFilesInScene(const bool status) const
+{
+    m_keepAllFilesInSceneFlag = status;
+}
 
+/**
+ * @return "keep all files in scene" when saving a scene.  When off (default) and saving a scene,
+ * any data files NOT loaded are removed from the scene.  When on, all files that were
+ * previously in the scene when loaded are kept.  This is used by the scene file update command.
+ * @param status
+ *    New status.
+ */
+bool
+SceneAttributes::isKeepAllFilesInScene() const
+{
+    return m_keepAllFilesInSceneFlag;
+}

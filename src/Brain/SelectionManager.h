@@ -45,15 +45,17 @@ namespace caret {
     class SelectionItemChartTwoMatrix;
     class SelectionItemCiftiConnectivityMatrixRowColumn;
     class SelectionItemFocusSurface;
-    class SelectionItemFocusVolume;
-    class SelectionItemImage;
+    class SelectionItemFocus;
+    class SelectionItemHistologyCoordinate;
     class SelectionItemImageControlPoint;
+    class SelectionItemMediaLogicalCoordinate;
+    class SelectionItemMediaPlaneCoordinate;
     class SelectionItemSurfaceNode;
-    class SelectionItemSurfaceNodeIdentificationSymbol;
     class SelectionItemSurfaceTriangle;
+    class SelectionItemUniversalIdentificationSymbol;
+    class SelectionItemVolumeMprCrosshair;
     class SelectionItemVoxel;
     class SelectionItemVoxelEditing;
-    class SelectionItemVoxelIdentificationSymbol;
     class IdentificationFormattedTextGenerator;
     class IdentificationSimpleTextGenerator;
     class Surface;
@@ -72,7 +74,7 @@ namespace caret {
         SelectionItemAnnotation* getAnnotationIdentification();
         
         const SelectionItemAnnotation* getAnnotationIdentification() const;
-        
+                
         SelectionItemBorderSurface* getSurfaceBorderIdentification();
         
         const SelectionItemBorderSurface* getSurfaceBorderIdentification() const;
@@ -81,25 +83,33 @@ namespace caret {
         
         const SelectionItemFocusSurface* getSurfaceFocusIdentification() const;
         
-        SelectionItemFocusVolume* getVolumeFocusIdentification();
+        SelectionItemFocus* getFocusIdentification();
         
-        const SelectionItemFocusVolume* getVolumeFocusIdentification() const;
+        const SelectionItemFocus* getFocusIdentification() const;
         
-        SelectionItemImage* getImageIdentification();
+        SelectionItemHistologyCoordinate* getHistologyPlaneCoordinateIdentification();
         
-        const SelectionItemImage* getImageIdentification() const;
+        const SelectionItemHistologyCoordinate* getHistologyPlaneCoordinateIdentification() const;
         
         SelectionItemImageControlPoint* getImageControlPointIdentification();
         
         const SelectionItemImageControlPoint* getImageControlPointIdentification() const;
         
+        SelectionItemMediaLogicalCoordinate* getMediaLogicalCoordinateIdentification();
+        
+        const SelectionItemMediaLogicalCoordinate* getMediaLogicalCoordinateIdentification() const;
+        
+        SelectionItemMediaPlaneCoordinate* getMediaPlaneCoordinateIdentification();
+        
+        const SelectionItemMediaPlaneCoordinate* getMediaPlaneCoordinateIdentification() const;
+        
+        SelectionItemAnnotation* getSamplesIdentification();
+        
+        const SelectionItemAnnotation* getSamplesIdentification() const;
+
         SelectionItemSurfaceNode* getSurfaceNodeIdentification();
         
         const SelectionItemSurfaceNode* getSurfaceNodeIdentification() const;
-        
-        SelectionItemSurfaceNodeIdentificationSymbol* getSurfaceNodeIdentificationSymbol();
-        
-        const SelectionItemSurfaceNodeIdentificationSymbol* getSurfaceNodeIdentificationSymbol() const;
         
         SelectionItemSurfaceTriangle* getSurfaceTriangleIdentification();
         
@@ -109,9 +119,13 @@ namespace caret {
         
         SelectionItemVoxel* getVoxelIdentification();
         
-        SelectionItemVoxelIdentificationSymbol* getVoxelIdentificationSymbol();
+        SelectionItemUniversalIdentificationSymbol* getUniversalIdentificationSymbol();
+
+        const SelectionItemUniversalIdentificationSymbol* getUniversalIdentificationSymbol() const;
         
-        const SelectionItemVoxelIdentificationSymbol* getVoxelIdentificationSymbol() const;
+        SelectionItemVolumeMprCrosshair* getVolumeMprCrosshairIdentification();
+        
+        const SelectionItemVolumeMprCrosshair* getVolumeMprCrosshairIdentification() const;
         
         SelectionItemVoxelEditing* getVoxelEditingIdentification();
         
@@ -229,15 +243,19 @@ namespace caret {
         
         SelectionItemFocusSurface* m_surfaceFocusIdentification;
         
-        SelectionItemFocusVolume* m_volumeFocusIdentification;
-        
-        SelectionItemImage* m_imageIdentification;
+        SelectionItemFocus* m_focusIdentification;
         
         SelectionItemImageControlPoint* m_imageControlPointIdentification;
         
-        SelectionItemSurfaceNode* m_surfaceNodeIdentification;
+        std::unique_ptr<SelectionItemHistologyCoordinate> m_histologyPlaneCoordinateIdentification;
         
-        SelectionItemSurfaceNodeIdentificationSymbol* m_surfaceNodeIdentificationSymbol;
+        std::unique_ptr<SelectionItemMediaLogicalCoordinate> m_mediaLogicalCoordinateIdentification;
+        
+        std::unique_ptr<SelectionItemMediaPlaneCoordinate> m_mediaPlaneCoordinateIdentification;
+        
+        std::unique_ptr<SelectionItemAnnotation> m_samplesIdentification;
+        
+        SelectionItemSurfaceNode* m_surfaceNodeIdentification;
         
         SelectionItemSurfaceTriangle* m_surfaceTriangleIdentification;
         
@@ -245,11 +263,13 @@ namespace caret {
         
         std::unique_ptr<IdentificationFormattedTextGenerator> m_idFormattedTextGenerator;
         
+        std::unique_ptr<SelectionItemUniversalIdentificationSymbol> m_universalIdentificationSymbol;
+        
         SelectionItemVoxel* m_voxelIdentification;
         
-        SelectionItemVoxelIdentificationSymbol* m_voxelIdentificationSymbol;
-        
         SelectionItemVoxelEditing* m_voxelEditingIdentification;
+        
+        std::unique_ptr<SelectionItemVolumeMprCrosshair> m_volumeMprCrosshairIdentification;
         
         /** Last selected item DOES NOT GET PUT IN m_allSelectionItems */
         SelectionItem* m_lastSelectedItem;

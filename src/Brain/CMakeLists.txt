@@ -11,15 +11,17 @@ SET(QT_DONT_USE_QTGUI)
 #
 # Add QT for includes
 #
+if(Qt6_FOUND)
+    include_directories(${Qt6Core_INCLUDE_DIRS})
+    include_directories(${Qt6Core5Compat_INCLUDE_DIRS})
+    include_directories(${Qt6Network_INCLUDE_DIRS})
+    include_directories(${Qt6Gui_INCLUDE_DIRS})
+endif()
 if(Qt5_FOUND)
     include_directories(${Qt5Core_INCLUDE_DIRS})
     include_directories(${Qt5Network_INCLUDE_DIRS})
     include_directories(${Qt5Gui_INCLUDE_DIRS})
 endif()
-IF (QT4_FOUND)
-    SET(QT_USE_QTNETWORK TRUE)
-    INCLUDE(${QT_USE_FILE})
-ENDIF ()
 
 #
 # Create the brain library
@@ -27,6 +29,7 @@ ENDIF ()
 ADD_LIBRARY(Brain
 AnnotationArrangerExecutor.h
 AnnotationArrangerInputs.h
+AnnotationClipboard.h
 AnnotationManager.h
 BorderDrawingTypeEnum.h
 Brain.h
@@ -37,6 +40,10 @@ BrainOpenGLChartDrawingFixedPipeline.h
 BrainOpenGLChartTwoDrawingFixedPipeline.h
 BrainOpenGLChartTwoDrawingInterface.h
 BrainOpenGLFixedPipeline.h
+BrainOpenGLFociDrawing.h
+BrainOpenGLHistologySliceDrawing.h
+BrainOpenGLIdentificationDrawing.h
+BrainOpenGLMediaCoordinateDrawing.h
 BrainOpenGLMediaDrawing.h
 BrainOpenGLPrimitiveDrawing.h
 BrainOpenGLShape.h
@@ -47,9 +54,12 @@ BrainOpenGLShapeRing.h
 BrainOpenGLShapeSphere.h
 BrainOpenGLTextRenderInterface.h
 BrainOpenGLViewportContent.h
+BrainOpenGLVolumeMprThreeDrawing.h
+BrainOpenGLVolumeMprTwoDrawing.h
 BrainOpenGLVolumeObliqueSliceDrawing.h
 BrainOpenGLVolumeSliceDrawing.h
-BrainOpenGLVolumeTextureSliceDrawing.h
+BrainOpenGLVolumeSurfaceClippedOutlineDrawing.h
+BrainOpenGLVolumeSurfaceOutlineDrawing.h
 BrainOpenGLWindowContent.h
 BrainStructure.h
 BrainStructureNodeAttributes.h
@@ -63,28 +73,40 @@ ChartingDataManager.h
 CiftiConnectivityMatrixDataFileManager.h
 CiftiFiberTrajectoryManager.h
 ClippingPlaneGroup.h
+ClippingPlanePanningModeEnum.h
 DataToolTipsManager.h
 DisplayProperties.h
 DisplayPropertiesAnnotation.h
 DisplayPropertiesAnnotationTextSubstitution.h
 DisplayPropertiesBorders.h
+DisplayPropertiesCziImages.h
 DisplayPropertiesFiberOrientation.h
 DisplayPropertiesFoci.h
 DisplayPropertiesImages.h
 DisplayPropertiesLabels.h
+DisplayPropertiesSamples.h
 DisplayPropertiesSurface.h
 DisplayPropertiesVolume.h
 DisplayPropertyDataBoolean.h
 DisplayPropertyDataEnum.h
 DisplayPropertyDataFloat.h
+DrawingViewportContent.h
+DrawingViewportContentManager.h
+DrawingViewportContentSurface.h
+DrawingViewportContentTypeEnum.h
+DrawingViewportContentVolumeSlice.h
 DummyFontTextRenderer.h
 EventAnnotationBarsGet.h
+EventAnnotationGetBeingDrawnInWindow.h
 EventBrainReset.h
 EventBrainStructureGetAll.h
 EventBrowserTabGet.h
 EventBrowserTabGetAll.h
 EventBrowserTabGetAllViewed.h
+EventBrowserTabGetAtWindowXY.h
+EventBrowserTabIndexGetWindowIndex.h
 EventBrowserTabReopenAvailable.h
+EventBrowserTabValidate.h
 EventBrowserWindowContent.h
 EventBrowserWindowGetTabs.h
 EventCaretMappableDataFilesAndMapsInDisplayedOverlays.h
@@ -94,8 +116,12 @@ EventDataFileDelete.h
 EventDataFileRead.h
 EventDataFileReload.h
 EventDataFileReloadAll.h
+EventDrawingViewportContentAdd.h
+EventDrawingViewportContentClear.h
+EventDrawingViewportContentGet.h
 EventGetBrainOpenGLTextRenderer.h
 EventIdentificationHighlightLocation.h
+EventImageCapture.h
 EventModelAdd.h
 EventModelDelete.h
 EventModelGetAll.h
@@ -117,6 +143,10 @@ FociDrawingProjectionTypeEnum.h
 FociDrawingTypeEnum.h
 FtglFontTextRenderer.h
 GapsAndMargins.h
+HistologyOverlay.h
+HistologyOverlaySet.h
+HistologyOverlaySetArray.h
+HistologySliceSettings.h
 IdentificationFilter.h
 IdentificationFilterTabSelectionEnum.h
 IdentificationFormattedTextGenerator.h
@@ -127,8 +157,10 @@ IdentificationSimpleTextGenerator.h
 IdentificationStringBuilder.h
 IdentificationSymbolSizeTypeEnum.h
 IdentificationWithColor.h
-IdentifiedItem.h
+IdentifiedItemBase.h
 IdentifiedItemNode.h
+IdentifiedItemUniversal.h
+IdentifiedItemUniversalTypeEnum.h
 IdentifiedItemVoxel.h
 ImageDepthPositionEnum.h
 MediaOverlay.h
@@ -137,6 +169,7 @@ MediaOverlaySetArray.h
 Model.h
 ModelChart.h
 ModelChartTwo.h
+ModelHistology.h
 ModelMedia.h
 ModelSurface.h
 ModelSurfaceMontage.h
@@ -144,15 +177,23 @@ ModelSurfaceSelector.h
 ModelTypeEnum.h
 ModelVolume.h
 ModelWholeBrain.h
+MouseEvent.h
+MouseLeftDragModeEnum.h
 MovieRecorder.h
 MovieRecorderCaptureRegionTypeEnum.h
 MovieRecorderModeEnum.h
 MovieRecorderVideoFormatTypeEnum.h
 MovieRecorderVideoResolutionTypeEnum.h
+OffScreenSceneRendererBase.h
+OffScreenSceneRendererOSMesa.h
+OffScreenSceneRendererOpenGLWindow.h
 Overlay.h
 OverlaySet.h
 OverlaySetArray.h
 ProjectionViewTypeEnum.h
+SamplesDrawingModeEnum.h
+SamplesDrawingSettings.h
+SamplesMetaDataManager.h
 SelectionItemDataTypeEnum.h
 SelectionItem.h
 SelectionItemAnnotation.h
@@ -169,15 +210,17 @@ SelectionItemChartTwoLineSeries.h
 SelectionItemChartTwoMatrix.h
 SelectionItemCiftiConnectivityMatrixRowColumn.h
 SelectionItemFocusSurface.h
-SelectionItemFocusVolume.h
-SelectionItemImage.h
+SelectionItemFocus.h
+SelectionItemHistologyCoordinate.h
 SelectionItemImageControlPoint.h
+SelectionItemMediaLogicalCoordinate.h
+SelectionItemMediaPlaneCoordinate.h
 SelectionItemSurfaceNode.h
-SelectionItemSurfaceNodeIdentificationSymbol.h
 SelectionItemSurfaceTriangle.h
+SelectionItemUniversalIdentificationSymbol.h
+SelectionItemVolumeMprCrosshair.h
 SelectionItemVoxel.h
 SelectionItemVoxelEditing.h
-SelectionItemVoxelIdentificationSymbol.h
 SelectionManager.h
 SessionManager.h
 SpacerTabContent.h
@@ -194,23 +237,35 @@ SurfaceNodeColoring.h
 SurfaceSelectionModel.h
 TabContentBase.h
 UserInputModeEnum.h
+ViewingTransformationToFitRegion.h
 ViewingTransformations.h
 ViewingTransformationsCerebellum.h
 ViewingTransformationsMedia.h
+ViewingTransformationsUndoCommand.h
 ViewingTransformationsVolume.h
+VolumeMprOrientationModeEnum.h
+VolumeMprSettings.h
+VolumeMontageSliceOrderModeEnum.h
+VolumeMprViewModeEnum.h
+VolumeMprViewportSlice.h
+VolumeMprVirtualSliceView.h
+VolumeMontageCoordinateTextAlignmentEnum.h
 VolumeSliceDrawingTypeEnum.h
 VolumeSliceInterpolationEdgeEffectsMaskingEnum.h
 VolumeSliceSettings.h
 VolumeSurfaceOutlineColorOrTabModel.h
+VolumeSurfaceOutlineDrawingModeEnum.h
 VolumeSurfaceOutlineModel.h
 VolumeSurfaceOutlineModelCacheKey.h
 VolumeSurfaceOutlineModelCacheValue.h
 VolumeSurfaceOutlineSetModel.h
 WholeBrainSurfaceSettings.h
 WholeBrainVoxelDrawingMode.h
+WindowTabAspectRatios.h
 
 AnnotationArrangerExecutor.cxx
 AnnotationArrangerInputs.cxx
+AnnotationClipboard.cxx
 AnnotationManager.cxx
 BorderDrawingTypeEnum.cxx
 Brain.cxx
@@ -219,6 +274,10 @@ BrainOpenGLAnnotationDrawingFixedPipeline.cxx
 BrainOpenGLChartDrawingFixedPipeline.cxx
 BrainOpenGLChartTwoDrawingFixedPipeline.cxx
 BrainOpenGLFixedPipeline.cxx
+BrainOpenGLFociDrawing.cxx
+BrainOpenGLHistologySliceDrawing.cxx
+BrainOpenGLIdentificationDrawing.cxx
+BrainOpenGLMediaCoordinateDrawing.cxx
 BrainOpenGLMediaDrawing.cxx
 BrainOpenGLPrimitiveDrawing.cxx
 BrainOpenGLShape.cxx
@@ -229,9 +288,12 @@ BrainOpenGLShapeRing.cxx
 BrainOpenGLShapeSphere.cxx
 BrainOpenGLTextRenderInterface.cxx
 BrainOpenGLViewportContent.cxx
+BrainOpenGLVolumeMprThreeDrawing.cxx
+BrainOpenGLVolumeMprTwoDrawing.cxx
 BrainOpenGLVolumeObliqueSliceDrawing.cxx
 BrainOpenGLVolumeSliceDrawing.cxx
-BrainOpenGLVolumeTextureSliceDrawing.cxx
+BrainOpenGLVolumeSurfaceClippedOutlineDrawing.cxx
+BrainOpenGLVolumeSurfaceOutlineDrawing.cxx
 BrainOpenGLWindowContent.cxx
 BrainStructure.cxx
 BrainStructureNodeAttributes.cxx
@@ -245,27 +307,39 @@ ChartingDataManager.cxx
 CiftiConnectivityMatrixDataFileManager.cxx
 CiftiFiberTrajectoryManager.cxx
 ClippingPlaneGroup.cxx
+ClippingPlanePanningModeEnum.cxx
 DataToolTipsManager.cxx
 DisplayProperties.cxx
 DisplayPropertiesAnnotation.cxx
 DisplayPropertiesAnnotationTextSubstitution.cxx
 DisplayPropertiesBorders.cxx
+DisplayPropertiesCziImages.cxx
 DisplayPropertiesFiberOrientation.cxx
 DisplayPropertiesFoci.cxx
 DisplayPropertiesImages.cxx
 DisplayPropertiesLabels.cxx
+DisplayPropertiesSamples.cxx
 DisplayPropertiesSurface.cxx
 DisplayPropertiesVolume.cxx
 DisplayPropertyDataBoolean.cxx
 DisplayPropertyDataFloat.cxx
+DrawingViewportContent.cxx
+DrawingViewportContentManager.cxx
+DrawingViewportContentSurface.cxx
+DrawingViewportContentTypeEnum.cxx
+DrawingViewportContentVolumeSlice.cxx
 DummyFontTextRenderer.cxx
 EventAnnotationBarsGet.cxx
+EventAnnotationGetBeingDrawnInWindow.cxx
 EventBrainReset.cxx
 EventBrainStructureGetAll.cxx
 EventBrowserTabGet.cxx
 EventBrowserTabGetAll.cxx
 EventBrowserTabGetAllViewed.cxx
+EventBrowserTabGetAtWindowXY.cxx
+EventBrowserTabIndexGetWindowIndex.cxx
 EventBrowserTabReopenAvailable.cxx
+EventBrowserTabValidate.cxx
 EventBrowserWindowContent.cxx
 EventBrowserWindowGetTabs.cxx
 EventCaretMappableDataFilesAndMapsInDisplayedOverlays.cxx
@@ -275,8 +349,12 @@ EventDataFileDelete.cxx
 EventDataFileRead.cxx
 EventDataFileReload.cxx
 EventDataFileReloadAll.cxx
+EventDrawingViewportContentAdd.cxx
+EventDrawingViewportContentClear.cxx
+EventDrawingViewportContentGet.cxx
 EventGetBrainOpenGLTextRenderer.cxx
 EventIdentificationHighlightLocation.cxx
+EventImageCapture.cxx
 EventModelAdd.cxx
 EventModelDelete.cxx
 EventModelGetAll.cxx
@@ -297,6 +375,10 @@ FociDrawingProjectionTypeEnum.cxx
 FociDrawingTypeEnum.cxx
 FtglFontTextRenderer.cxx
 GapsAndMargins.cxx
+HistologyOverlay.cxx
+HistologyOverlaySet.cxx
+HistologyOverlaySetArray.cxx
+HistologySliceSettings.cxx
 IdentificationFilter.cxx
 IdentificationFilterTabSelectionEnum.cxx
 IdentificationFormattedTextGenerator.cxx
@@ -307,8 +389,10 @@ IdentificationSimpleTextGenerator.cxx
 IdentificationStringBuilder.cxx
 IdentificationSymbolSizeTypeEnum.cxx
 IdentificationWithColor.cxx
-IdentifiedItem.cxx
+IdentifiedItemBase.cxx
 IdentifiedItemNode.cxx
+IdentifiedItemUniversal.cxx
+IdentifiedItemUniversalTypeEnum.cxx
 IdentifiedItemVoxel.cxx
 ImageDepthPositionEnum.cxx
 MediaOverlay.cxx
@@ -317,6 +401,7 @@ MediaOverlaySetArray.cxx
 Model.cxx
 ModelChart.cxx
 ModelChartTwo.cxx
+ModelHistology.cxx
 ModelMedia.cxx
 ModelSurface.cxx
 ModelSurfaceMontage.cxx
@@ -324,15 +409,23 @@ ModelSurfaceSelector.cxx
 ModelTypeEnum.cxx
 ModelVolume.cxx
 ModelWholeBrain.cxx
+MouseEvent.cxx
+MouseLeftDragModeEnum.cxx
 MovieRecorder.cxx
 MovieRecorderCaptureRegionTypeEnum.cxx
 MovieRecorderModeEnum.cxx
 MovieRecorderVideoFormatTypeEnum.cxx
 MovieRecorderVideoResolutionTypeEnum.cxx
+OffScreenSceneRendererBase.cxx
+OffScreenSceneRendererOSMesa.cxx
+OffScreenSceneRendererOpenGLWindow.cxx
 Overlay.cxx
 OverlaySet.cxx
 OverlaySetArray.cxx
 ProjectionViewTypeEnum.cxx
+SamplesDrawingModeEnum.cxx
+SamplesDrawingSettings.cxx
+SamplesMetaDataManager.cxx
 SelectionItemDataTypeEnum.cxx
 SelectionItem.cxx
 SelectionItemAnnotation.cxx
@@ -349,14 +442,16 @@ SelectionItemChartTwoLineSeries.cxx
 SelectionItemChartTwoMatrix.cxx
 SelectionItemCiftiConnectivityMatrixRowColumn.cxx
 SelectionItemFocusSurface.cxx
-SelectionItemFocusVolume.cxx
-SelectionItemImage.cxx
+SelectionItemFocus.cxx
+SelectionItemHistologyCoordinate.cxx
 SelectionItemImageControlPoint.cxx
+SelectionItemMediaLogicalCoordinate.cxx
+SelectionItemMediaPlaneCoordinate.cxx
 SelectionItemSurfaceNode.cxx
-SelectionItemSurfaceNodeIdentificationSymbol.cxx
 SelectionItemSurfaceTriangle.cxx
+SelectionItemUniversalIdentificationSymbol.cxx
+SelectionItemVolumeMprCrosshair.cxx
 SelectionItemVoxel.cxx
-SelectionItemVoxelIdentificationSymbol.cxx
 SelectionItemVoxelEditing.cxx
 SelectionManager.cxx
 SessionManager.cxx
@@ -374,20 +469,31 @@ SurfaceNodeColoring.cxx
 SurfaceSelectionModel.cxx
 TabContentBase.cxx
 UserInputModeEnum.cxx
+ViewingTransformationToFitRegion.cxx
 ViewingTransformations.cxx
 ViewingTransformationsCerebellum.cxx
 ViewingTransformationsMedia.cxx
+ViewingTransformationsUndoCommand.cxx
 ViewingTransformationsVolume.cxx
+VolumeMprOrientationModeEnum.cxx
+VolumeMprSettings.cxx
+VolumeMontageSliceOrderModeEnum.cxx
+VolumeMprViewModeEnum.cxx
+VolumeMprViewportSlice.cxx
+VolumeMprVirtualSliceView.cxx
+VolumeMontageCoordinateTextAlignmentEnum.cxx
 VolumeSliceDrawingTypeEnum.cxx
 VolumeSliceInterpolationEdgeEffectsMaskingEnum.cxx
 VolumeSliceSettings.cxx
 VolumeSurfaceOutlineColorOrTabModel.cxx
+VolumeSurfaceOutlineDrawingModeEnum.cxx
 VolumeSurfaceOutlineModel.cxx
 VolumeSurfaceOutlineModelCacheKey.cxx
 VolumeSurfaceOutlineModelCacheValue.cxx
 VolumeSurfaceOutlineSetModel.cxx
 WholeBrainSurfaceSettings.cxx
 WholeBrainVoxelDrawingMode.cxx
+WindowTabAspectRatios.cxx
 ) 
 
 TARGET_LINK_LIBRARIES(Brain ${CARET_QT5_LINK})
@@ -400,6 +506,7 @@ ${CMAKE_SOURCE_DIR}/Annotations
 ${CMAKE_SOURCE_DIR}/Brain
 ${CMAKE_SOURCE_DIR}/Charting
 ${CMAKE_SOURCE_DIR}/Cifti
+${CMAKE_SOURCE_DIR}/CZIlib/CZI
 ${CMAKE_SOURCE_DIR}/FilesBase
 ${CMAKE_SOURCE_DIR}/Files
 ${CMAKE_SOURCE_DIR}/Graphics
@@ -419,3 +526,12 @@ INCLUDE_DIRECTORIES(
    ${FREETYPE_INCLUDE_DIR_freetype2}
 )
 ENDIF (FREETYPE_FOUND)
+
+#
+# Mesa Library used by Mesa Offscreen Renderer
+#
+IF (OSMESA_FOUND)
+    ADD_DEFINITIONS(${OSMESA_DEFINITION})
+    INCLUDE_DIRECTORIES(${OSMESA_INCLUDE_DIRECTORY})
+ENDIF (OSMESA_FOUND)
+

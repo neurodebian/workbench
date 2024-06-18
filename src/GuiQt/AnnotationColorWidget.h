@@ -25,7 +25,9 @@
 #include <QWidget>
 
 #include "AnnotationWidgetParentEnum.h"
-#include "CaretColorEnum.h"
+#include "CaretColor.h"
+#include "EventListenerInterface.h"
+#include "UserInputModeEnum.h"
 
 class QAction;
 class QDoubleSpinBox;
@@ -37,17 +39,20 @@ namespace caret {
     class CaretColorEnumMenu;
     class WuQWidgetObjectGroup;
     
-    class AnnotationColorWidget : public QWidget {
+    class AnnotationColorWidget : public QWidget, public EventListenerInterface {
         
         Q_OBJECT
 
     public:
-        AnnotationColorWidget(const AnnotationWidgetParentEnum::Enum parentWidgetType,
+        AnnotationColorWidget(const UserInputModeEnum::Enum userInputMode,
+                              const AnnotationWidgetParentEnum::Enum parentWidgetType,
                               const int32_t browserWindowIndex,
                               QWidget* parent = 0);
         
         virtual ~AnnotationColorWidget();
         
+        virtual void receiveEvent(Event* event) override;
+
         void updateContent(std::vector<Annotation*>& annotations);
         
 
@@ -80,6 +85,8 @@ namespace caret {
                                                  const CaretColorEnum::Enum colorTwo,
                                                  const std::vector<Annotation*>& annotations);
         
+        const UserInputModeEnum::Enum m_userInputMode;
+        
         const AnnotationWidgetParentEnum::Enum m_parentWidgetType;
         
         const int32_t m_browserWindowIndex;
@@ -109,6 +116,12 @@ namespace caret {
         std::vector<Annotation*> m_lineThicknessAnnotations;
         
         std::vector<Annotation*> m_backgroundColorAnnotations;
+        
+        CaretColor m_currentLineColorForDrawingNewAnnotation;
+        
+        CaretColor m_currentBackgroundColorForDrawingNewAnnotation;
+        
+        Annotation* m_annotationBeingDrawn = NULL;
         
         // ADD_NEW_MEMBERS_HERE
 

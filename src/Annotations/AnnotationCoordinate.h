@@ -22,11 +22,13 @@
 /*LICENSE_END*/
 
 #include "AnnotationAttributesDefaultTypeEnum.h"
+#include "AnnotationCoordinateSpaceEnum.h"
 #include "AnnotationSurfaceOffsetVectorTypeEnum.h"
 #include "CaretObjectTracksModification.h"
+#include "HistologySpaceKey.h"
 #include "SceneableInterface.h"
 #include "StructureEnum.h"
-
+#include "Vector3D.h"
 
 namespace caret {
     class SceneClassAssistant;
@@ -42,7 +44,9 @@ namespace caret {
 
         AnnotationCoordinate& operator=(const AnnotationCoordinate& obj);
         
-        const float* getXYZ() const;
+        bool equalXYZ(const Vector3D& xyz) const;
+        
+        const Vector3D getXYZ() const;
         
         void getXYZ(float xyzOut[3]) const;
         
@@ -88,15 +92,34 @@ namespace caret {
                              const float surfaceOffsetLength,
                              const AnnotationSurfaceOffsetVectorTypeEnum::Enum surfaceOffsetVectorType);
         
+        void setMediaFileNameAndPixelSpace(const AString& mediaFileName,
+                                           const float xyz[3]);
+        
+        const HistologySpaceKey& getHistologySpaceKey() const;
+        
+        void setHistologySpaceKey(const HistologySpaceKey& histlogySpaceKey);
+        
+        void getHistologySpace(HistologySpaceKey& histologySpaceKeyOut,
+                               float xyzOut[3]) const;
+        
+        void setHistologySpace(const HistologySpaceKey& histologySpaceKey,
+                               const float xyz[3]);
+        
         float getSurfaceOffsetLength() const;
         
         StructureEnum::Enum getSurfaceStructure() const;
         
         AnnotationSurfaceOffsetVectorTypeEnum::Enum getSurfaceOffsetVectorType() const;
         
+        AString getMediaFileName() const;
+        
+        void setMediaFileName(const AString& mediaFileName);
+        
         // ADD_NEW_METHODS_HERE
 
         virtual AString toString() const;
+        
+        virtual AString toStringForCoordinateSpace(const AnnotationCoordinateSpaceEnum::Enum space) const;
         
         virtual SceneClass* saveToScene(const SceneAttributes* sceneAttributes,
                                         const AString& instanceName);
@@ -110,7 +133,6 @@ namespace caret {
         static void setUserDefautlSurfaceOffsetVectorType(const AnnotationSurfaceOffsetVectorTypeEnum::Enum surfaceOffsetVectorType);
         
         static void setUserDefaultSurfaceOffsetLength(const float surfaceOffsetLength);
-          
           
 // If there will be sub-classes of this class that need to save
 // and restore data from scenes, these pure virtual methods can
@@ -143,7 +165,14 @@ namespace caret {
         
         AnnotationSurfaceOffsetVectorTypeEnum::Enum m_surfaceOffsetVectorType;
         
+        AString m_mediaFileName;
         
+        HistologySpaceKey m_histologySpaceKey;
+        
+//        AString m_histologySlicesFileName;
+//
+//        int32_t m_histologySliceIndex = 0;
+
         static float s_userDefaultSurfaceOffsetLength;
         
         static AnnotationSurfaceOffsetVectorTypeEnum::Enum s_userDefaultSurfaceOffsetVectorType;

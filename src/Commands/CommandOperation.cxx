@@ -74,22 +74,6 @@ void CommandOperation::disableProvenance()
 {
 }
 
-void CommandOperation::setCiftiOutputDTypeAndScale(const int16_t&, const double&, const double&)
-{
-}
-
-void CommandOperation::setCiftiOutputDTypeNoScale(const int16_t&)
-{
-}
-
-void CommandOperation::setVolumeOutputDTypeAndScale(const int16_t&, const double&, const double&)
-{
-}
-
-void CommandOperation::setVolumeOutputDTypeNoScale(const int16_t&)
-{
-}
-
 AString CommandOperation::doCompletion(ProgramParameters&, const bool&)
 {
     return "";
@@ -118,3 +102,7 @@ CommandOperation::getCommandLineSwitch() const
     return this->commandLineSwitch;
 }
 
+std::vector<AString> caret::CommandOperation::getCompatibilitySwitches() const
+{
+    return std::vector<AString>();
+}

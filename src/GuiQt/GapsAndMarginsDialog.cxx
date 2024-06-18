@@ -42,7 +42,7 @@
 #include "EventBrowserTabGet.h"
 #include "EventBrowserTabGetAll.h"
 #include "EventGetViewportSize.h"
-#include "EventGraphicsUpdateAllWindows.h"
+#include "EventGraphicsPaintSoonAllWindows.h"
 #include "EventManager.h"
 #include "EventUserInterfaceUpdate.h"
 #include "GapsAndMargins.h"
@@ -186,12 +186,22 @@ QWidget*
 GapsAndMarginsDialog::createMarginsWidget()
 {
     m_tabIndexSignalMapper = new QSignalMapper(this);
+#if QT_VERSION >= 0x060000
+    QObject::connect(m_tabIndexSignalMapper, &QSignalMapper::mappedInt,
+                     this, &GapsAndMarginsDialog::tabMarginChanged);
+#else
     QObject::connect(m_tabIndexSignalMapper, SIGNAL(mapped(int)),
                      this, SLOT(tabMarginChanged(int)));
+#endif
     
     m_tabMarginMatchPixelsToolButtonSignalMapper = new QSignalMapper(this);
+#if QT_VERSION >= 0x060000
+    QObject::connect(m_tabMarginMatchPixelsToolButtonSignalMapper, &QSignalMapper::mappedInt,
+                     this, &GapsAndMarginsDialog::tabMarginMatchPixelButtonClicked);
+#else
     QObject::connect(m_tabMarginMatchPixelsToolButtonSignalMapper, SIGNAL(mapped(int)),
                      this, SLOT(tabMarginMatchPixelButtonClicked(int)));
+#endif
     
     QLabel* tabLabel    = new QLabel("Tab");
     QLabel* leftLabel   = new QLabel("Left");
@@ -596,7 +606,7 @@ GapsAndMarginsDialog::tabMarginChanged(int rowIndex)
     gapsAndMargins->setMarginTopForTab(tabIndex,
                                        m_topMarginSpinBoxes[rowIndex]->value());
     
-    EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+    EventManager::get()->sendEvent(EventGraphicsPaintSoonAllWindows().getPointer());
 }
 
 /**
@@ -635,7 +645,7 @@ GapsAndMarginsDialog::applyFirstTabToAllButtonClicked()
      * Update dialog since "select all" will change all margins to the first margin value
      */
     updateDialog();
-    EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+    EventManager::get()->sendEvent(EventGraphicsPaintSoonAllWindows().getPointer());
 }
 
 /**
@@ -655,7 +665,7 @@ GapsAndMarginsDialog::surfaceMontageGapChanged()
     gapsAndMargins->setSurfaceMontageVerticalGapForWindow(windowIndex,
                                                           m_surfaceMontageVerticalGapSpinBox->value());
     
-    EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+    EventManager::get()->sendEvent(EventGraphicsPaintSoonAllWindows().getPointer());
 }
 
 /**
@@ -675,7 +685,7 @@ GapsAndMarginsDialog::volumeMontageGapChanged()
     gapsAndMargins->setVolumeMontageVerticalGapForWindow(windowIndex,
                                                          m_volumeMontageVerticalGapSpinBox->value());
     
-    EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+    EventManager::get()->sendEvent(EventGraphicsPaintSoonAllWindows().getPointer());
 }
 
 /**
@@ -707,7 +717,7 @@ GapsAndMarginsDialog::surfaceMontageMatchPixelButtonClicked()
         surfaceMontageGapChanged();
     }
     
-    EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+    EventManager::get()->sendEvent(EventGraphicsPaintSoonAllWindows().getPointer());
 }
 
 /**
@@ -739,7 +749,7 @@ GapsAndMarginsDialog::volumeMontageMatchPixelButtonClicked()
         volumeMontageGapChanged();
     }
     
-    EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+    EventManager::get()->sendEvent(EventGraphicsPaintSoonAllWindows().getPointer());
 }
 
 

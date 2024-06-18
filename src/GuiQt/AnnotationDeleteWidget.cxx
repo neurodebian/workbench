@@ -34,7 +34,7 @@
 #include "AnnotationRedoUndoCommand.h"
 #include "Brain.h"
 #include "CaretAssert.h"
-#include "EventGraphicsUpdateAllWindows.h"
+#include "EventGraphicsPaintSoonAllWindows.h"
 #include "EventManager.h"
 #include "GuiManager.h"
 #include "WuQMessageBox.h"
@@ -52,10 +52,18 @@ using namespace caret;
 
 /**
  * Constructor.
+ * @param userInputMode
+ *    The input mode
+ * @param browserWindowIndex
+ *    Index of browser window
+ * @param parent
+ *    The parent widget
  */
-AnnotationDeleteWidget::AnnotationDeleteWidget(const int32_t browserWindowIndex,
+AnnotationDeleteWidget::AnnotationDeleteWidget(const UserInputModeEnum::Enum userInputMode,
+                                               const int32_t browserWindowIndex,
                                                QWidget* parent)
 : QWidget(parent),
+m_userInputMode(userInputMode),
 m_browserWindowIndex(browserWindowIndex)
 {
     QLabel* deleteLabel = new QLabel("Delete");
@@ -64,7 +72,7 @@ m_browserWindowIndex(browserWindowIndex)
     QVBoxLayout* layout = new QVBoxLayout(this);
     WuQtUtilities::setLayoutSpacingAndMargins(layout, 2, 2);
     layout->addWidget(deleteLabel);
-    layout->addWidget(m_deleteToolButton);
+    layout->addWidget(m_deleteToolButton, 0, Qt::AlignHCenter);
     layout->addStretch();
     
     setSizePolicy(QSizePolicy::Fixed,
@@ -84,8 +92,10 @@ AnnotationDeleteWidget::~AnnotationDeleteWidget()
 void
 AnnotationDeleteWidget::updateContent()
 {
-    AnnotationManager* annotationManager = GuiManager::get()->getBrain()->getAnnotationManager();
+    AnnotationManager* annotationManager = GuiManager::get()->getBrain()->getAnnotationManager(m_userInputMode);
     m_deleteToolButtonAction->setEnabled(annotationManager->isAnnotationSelectedForEditingDeletable(m_browserWindowIndex));
+    
+    setEnabled(m_deleteToolButtonAction->isEnabled());
 }
 
 /**
@@ -147,7 +157,7 @@ AnnotationDeleteWidget::createDeleteToolButton()
 void
 AnnotationDeleteWidget::deleteActionTriggered()
 {
-    AnnotationManager* annotationManager = GuiManager::get()->getBrain()->getAnnotationManager();
+    AnnotationManager* annotationManager = GuiManager::get()->getBrain()->getAnnotationManager(m_userInputMode);
     std::vector<Annotation*> selectedAnnotations = annotationManager->getAnnotationsSelectedForEditing(m_browserWindowIndex);
     std::vector<Annotation*> deleteAnnotations;
     for (auto a : selectedAnnotations) {
@@ -166,7 +176,11 @@ AnnotationDeleteWidget::deleteActionTriggered()
                     break;
                 case AnnotationTypeEnum::OVAL:
                     break;
-                case AnnotationTypeEnum::POLY_LINE:
+                case AnnotationTypeEnum::POLYHEDRON:
+                    break;
+                case AnnotationTypeEnum::POLYGON:
+                    break;
+                case AnnotationTypeEnum::POLYLINE:
                     break;
                 case AnnotationTypeEnum::SCALE_BAR:
                     break;
@@ -183,14 +197,13 @@ AnnotationDeleteWidget::deleteActionTriggered()
         undoCommand->setModeDeleteAnnotations(deleteAnnotations);
 
         AString errorMessage;
-        if ( ! annotationManager->applyCommand(UserInputModeEnum::Enum::ANNOTATIONS,
-                                               undoCommand,
+        if ( ! annotationManager->applyCommand(undoCommand,
                                                errorMessage)) {
             WuQMessageBox::errorOk(this,
                                    errorMessage);
         }
         EventManager::get()->sendSimpleEvent(EventTypeEnum::EVENT_ANNOTATION_TOOLBAR_UPDATE);
-        EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+        EventManager::get()->sendEvent(EventGraphicsPaintSoonAllWindows().getPointer());
     }
 }
 

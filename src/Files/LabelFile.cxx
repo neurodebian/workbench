@@ -34,7 +34,8 @@ using namespace caret;
  * Constructor.
  */
 LabelFile::LabelFile()
-: GiftiTypeFile(DataFileTypeEnum::LABEL)
+: GiftiTypeFile(DataFileTypeEnum::LABEL),
+GroupAndNameHierarchyUserInterface()
 {
     m_classNameHierarchy = NULL;
     this->initializeMembersLabelFile();
@@ -47,7 +48,8 @@ LabelFile::LabelFile()
  *     Surface file that is copied.
  */
 LabelFile::LabelFile(const LabelFile& sf)
-: GiftiTypeFile(sf)
+: GiftiTypeFile(sf),
+GroupAndNameHierarchyUserInterface(sf)
 {
     m_classNameHierarchy = NULL;
     this->copyHelperLabelFile(sf);
@@ -317,7 +319,7 @@ LabelFile::initializeMembersLabelFile()
     if (m_classNameHierarchy != NULL) {
         delete m_classNameHierarchy;
     }
-    m_classNameHierarchy = new GroupAndNameHierarchyModel();
+    m_classNameHierarchy = new GroupAndNameHierarchyModel(this);
     m_forceUpdateOfGroupAndNameHierarchy = true;
 }
 
@@ -333,7 +335,7 @@ LabelFile::copyHelperLabelFile(const LabelFile& /*sf*/)
     if (m_classNameHierarchy != NULL) {
         delete m_classNameHierarchy;
     }
-    m_classNameHierarchy = new GroupAndNameHierarchyModel();
+    m_classNameHierarchy = new GroupAndNameHierarchyModel(this);
     m_forceUpdateOfGroupAndNameHierarchy = true;
     
     this->validateDataArraysAfterReading();
@@ -569,4 +571,11 @@ LabelFile::getUniqueLabelKeysUsedInMap(const int32_t mapIndex) const
     return keyVector;
 }
 
-
+/**
+ * Called when a group and name hierarchy item has attribute/status changed
+ */
+void
+LabelFile::groupAndNameHierarchyItemStatusChanged()
+{
+    
+}

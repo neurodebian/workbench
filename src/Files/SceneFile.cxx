@@ -42,19 +42,15 @@
 #include "SceneAttributes.h"
 #include "SceneClass.h"
 #include "SceneClassArray.h"
-#include "SceneFileSaxReader.h"
 #include "SceneInfo.h"
 #include "ScenePathName.h"
-#include "SceneXmlElements.h"
+#include "ScenePathNameArray.h"
 #include "SceneFileXmlStreamReader.h"
 #include "SceneFileXmlStreamWriter.h"
-#include "SceneWriterXml.h"
 #include "SpecFile.h"
 #include "SystemUtilities.h"
+#include "XmlException.h"
 #include "WuQMacroGroup.h"
-#include "XmlSaxParser.h"
-#include "XmlUtilities.h"
-#include "XmlWriter.h"
 
 using namespace caret;
 
@@ -277,6 +273,28 @@ SceneFile::getSceneWithName(const AString& sceneName)
     }
     return NULL;
 }
+
+/**
+ * Get the scene with the given scene ID.
+ * @param sceneID
+ *    ID of scene.
+ * @return
+ *    Scene with given ID or NULL if no scene with
+ *    the given ID.
+ */
+Scene*
+SceneFile::getSceneWithSceneID(const AString& sceneID)
+{
+    const int32_t numScenes = getNumberOfScenes();
+    for (int32_t i = 0; i < numScenes; i++) {
+        Scene* scene = getSceneAtIndex(i);
+        if (scene->getSceneInfo()->getBalsaSceneID() == sceneID) {
+            return scene;
+        }
+    }
+    return NULL;
+}
+
 
 /**
  * Remove the given scene.
@@ -647,125 +665,28 @@ SceneFile::readFile(const AString& filenameIn)
     clear();
     
     AString filename = filenameIn;
-    if (DataFile::isFileOnNetwork(filename) == false) {
+    if ( ! DataFile::isFileOnNetwork(filename)) {
         FileInformation specInfo(filename);
         filename = specInfo.getAbsoluteFilePath();
     }
     checkFileReadability(filename);
     
     this->setFileName(filename);
-    
-    /*
-     * Stream reader is newer and supports macro in scene file.
-     * Stream reader is also faster than sax reader.
-     */
-    const bool useStreamReaderFlag(true);
-    if (useStreamReaderFlag) {
-        try {
-            SceneFileXmlStreamReader streamReader;
-            streamReader.readFile(filename,
-                                  this);
-        }
-        catch (const DataFileException& e) {
-            DataFileException dfe(filename,
-                                  e.whatString());
-            CaretLogThrowing(dfe);
-            throw dfe;
-        }
 
-    }
-    else {
-        SceneFileSaxReader saxReader(this,
-                                     filename);
-        std::unique_ptr<XmlSaxParser> parser(XmlSaxParser::createXmlParser());
-        try {
-            parser->parseFile(filename, &saxReader);
-        }
-        catch (const XmlSaxParserException& e) {
-            clear();
-            this->setFileName("");
-            
-            int lineNum = e.getLineNumber();
-            int colNum  = e.getColumnNumber();
-            
-            AString msg = "Parse Error while reading:";
-            
-            if ((lineNum >= 0) && (colNum >= 0)) {
-                msg += (" line/col ("
-                        + AString::number(e.getLineNumber())
-                        + "/"
-                        + AString::number(e.getColumnNumber())
-                        + ")");
-            }
-            
-            msg += (": " + e.whatString());
-            
-            DataFileException dfe(filenameIn,
-                                  msg);
-            CaretLogThrowing(dfe);
-            throw dfe;
-        }
-    }
-
-    this->setFileName(filename);
-
-    this->clearModified();
-}
-
-/**
- * Read the scene file use the old SAX parser
- * @param filenameIn
- *    Name of scene file.
- * @throws DataFileException
- *    If there is an error reading the file.
- */
-void
-SceneFile::readFileSaxReader(const AString& filenameIn)
-{
-    clear();
-    
-    AString filename = filenameIn;
-    if (DataFile::isFileOnNetwork(filename) == false) {
-        FileInformation specInfo(filename);
-        filename = specInfo.getAbsoluteFilePath();
-    }
-    checkFileReadability(filename);
-    
-    this->setFileName(filename);
-    
-    SceneFileSaxReader saxReader(this,
-                                 filename);
-    std::unique_ptr<XmlSaxParser> parser(XmlSaxParser::createXmlParser());
     try {
-        parser->parseFile(filename, &saxReader);
+        SceneFileXmlStreamReader streamReader;
+        streamReader.readFile(filename,
+                              this);
     }
-    catch (const XmlSaxParserException& e) {
-        clear();
-        this->setFileName("");
-        
-        int lineNum = e.getLineNumber();
-        int colNum  = e.getColumnNumber();
-        
-        AString msg = "Parse Error while reading:";
-        
-        if ((lineNum >= 0) && (colNum >= 0)) {
-            msg += (" line/col ("
-                    + AString::number(e.getLineNumber())
-                    + "/"
-                    + AString::number(e.getColumnNumber())
-                    + ")");
-        }
-        
-        msg += (": " + e.whatString());
-        
-        DataFileException dfe(filenameIn,
-                              msg);
+    catch (const DataFileException& e) {
+        DataFileException dfe(filename,
+                              e.whatString());
         CaretLogThrowing(dfe);
         throw dfe;
     }
 
     this->setFileName(filename);
-    
+
     this->clearModified();
 }
 
@@ -782,7 +703,7 @@ SceneFile::readFileStreamReader(const AString& filenameIn)
     clear();
     
     AString filename = filenameIn;
-    if (DataFile::isFileOnNetwork(filename) == false) {
+    if ( ! DataFile::isFileOnNetwork(filename)) {
         FileInformation specInfo(filename);
         filename = specInfo.getAbsoluteFilePath();
     }
@@ -810,17 +731,22 @@ SceneFile::readFileStreamReader(const AString& filenameIn)
 
 /**
  * Write the scene file.
- * @param filename
+ * @param filenameIn
  *    Name of scene file.
  * @throws DataFileException
  *    If there is an error writing the file.
  */
 void 
-SceneFile::writeFile(const AString& filename)
+SceneFile::writeFile(const AString& filenameIn)
 {
-    if (!(filename.endsWith(".scene") || filename.endsWith(".wb_scene")))
+    if (!(filenameIn.endsWith(".scene") || filenameIn.endsWith(".wb_scene")))
     {
-        CaretLogWarning("scene file '" + filename + "' should be saved ending in .scene");
+        CaretLogWarning("scene file '" + filenameIn + "' should be saved ending in .scene");
+    }
+    AString filename(filenameIn);
+    if ( ! DataFile::isFileOnNetwork(filename)) {
+        FileInformation specInfo(filename);
+        filename = specInfo.getAbsoluteFilePath();
     }
     checkFileWritability(filename);
     
@@ -829,169 +755,12 @@ SceneFile::writeFile(const AString& filename)
     
     try {
         /*
-         * Stream Writer is newer and supports macros in scene file
+         * Update file's metadata with info about Workbench
          */
-        const bool useStreamWriterFlag(true);
-        if (useStreamWriterFlag) {
-            SceneFileXmlStreamWriter xmlStreamWriter;
-            xmlStreamWriter.writeFile(this);
-        }
-        else {
-            writeFileSaxWriter(filename);
-        }
+        SceneInfo::addWorkbenchVersionInfoToMetaData(m_metadata);
         
-        this->clearModified();
-    }
-    catch (const GiftiException& e) {
-        throw DataFileException(e);
-    }
-    catch (const XmlException& e) {
-        throw DataFileException(e);
-    }
-}
-
-/**
- * Write the scene file using the (not exactly) sax writer
- * @param filename
- *    Name of scene file.
- * @throws DataFileException
- *    If there is an error writing the file.
- */
-void
-SceneFile::writeFileSaxWriter(const AString& filename)
-{
-    if (!(filename.endsWith(".scene") || filename.endsWith(".wb_scene")))
-    {
-        CaretLogWarning("scene file '" + filename + "' should be saved ending in .scene");
-    }
-
-    for (const auto s : m_scenes) {
-        if ( ! s->getMacroGroup()->isEmpty()) {
-            throw DataFileException("OLD scene writer does not support scene files containing macros.  Use stream writer");
-        }
-    }
-    
-    checkFileWritability(filename);
-    
-    this->setFileName(filename);
-    
-    try {
-        /*
-         * This writes an old file format that does not support macros
-         */
-        const AString versionString = AString::number(getSceneFileVersionBeforeMacros());
-        
-        //
-        // Open the file
-        //
-        FileAdapter file;
-        AString errorMessage;
-        QTextStream* textStream = file.openQTextStreamForWritingFile(this->getFileName(),
-                                                                     errorMessage);
-        if (textStream == NULL) {
-            throw DataFileException(filename,
-                                    errorMessage);
-        }
-        
-        //
-        // Create the xml writer
-        //
-        XmlWriter xmlWriter(*textStream);
-        
-        //
-        // Write header info
-        //
-        xmlWriter.writeStartDocument("1.0");
-        
-        //
-        // Write root element
-        //
-        XmlAttributes attributes;
-        
-        //attributes.addAttribute("xmlns:xsi",
-        //                        "http://www.w3.org/2001/XMLSchema-instance");
-        //attributes.addAttribute("xsi:noNamespaceSchemaLocation",
-        //                        "http://brainvis.wustl.edu/caret6/xml_schemas/GIFTI_Caret.xsd");
-        attributes.addAttribute(SceneFile::XML_ATTRIBUTE_VERSION,
-                                versionString);
-        xmlWriter.writeStartElement(SceneFile::XML_TAG_SCENE_FILE,
-                                    attributes);
-        
-        //
-        // Write Metadata
-        //
-        if (m_metadata != NULL) {
-            m_metadata->writeAsXML(xmlWriter);
-        }
-        
-        const int32_t numScenes = this->getNumberOfScenes();
-        
-        /*
-         * Write the scene info directory
-         */
-        xmlWriter.writeStartElement(SceneFile::XML_TAG_SCENE_INFO_DIRECTORY_TAG);
-        xmlWriter.writeElementCData(SceneXmlElements::SCENE_INFO_BALSA_STUDY_ID_TAG,
-                                    getBalsaStudyID());
-        xmlWriter.writeElementCData(SceneXmlElements::SCENE_INFO_BALSA_STUDY_TITLE_TAG,
-                                    getBalsaStudyTitle());
-        switch (getBasePathType()) {
-            case SceneFileBasePathTypeEnum::AUTOMATIC:
-                xmlWriter.writeElementCData(SceneXmlElements::SCENE_INFO_BALSA_BASE_DIRECTORY_TAG,
-                                            "");
-                break;
-            case SceneFileBasePathTypeEnum::CUSTOM:
-            {
-                /*
-                 * Write base path as a path RELATIVE to the scene file
-                 * but only when base path type is CUSTOM
-                 * Note: we do not use FileInformation::getCanonicalFilePath()
-                 * because it returns an empty string if the file DOES NOT exist
-                 * and this may occur since the file may be new and has not
-                 * been closed.
-                 */
-                if ( ! getBalsaCustomBaseDirectory().isEmpty()) {
-                    const AString baseDirAbsPath = FileInformation(getBalsaCustomBaseDirectory()).getAbsoluteFilePath();
-                    const AString sceneFileAbsPath = FileInformation(filename).getAbsoluteFilePath();
-                    ScenePathName basePathName("basePathName",
-                                               baseDirAbsPath);
-                    
-                    const AString relativeBasePath = basePathName.getRelativePathToSceneFile(sceneFileAbsPath);
-                    
-                    //std::cout << "baseDirAbsPath: " << baseDirAbsPath << std::endl;
-                    //std::cout << "sceneFileAbsPath: " << sceneFileAbsPath << std::endl;
-                    //std::cout << "relativeTempFileName: " << relativeBasePath << std::endl;
-                    
-                    xmlWriter.writeElementCData(SceneXmlElements::SCENE_INFO_BALSA_BASE_DIRECTORY_TAG,
-                                                relativeBasePath);
-                }
-            }
-                break;
-        }
-        xmlWriter.writeElementCData(SceneXmlElements::SCENE_INFO_BALSA_EXTRACT_TO_DIRECTORY_TAG,
-                                    getBalsaExtractToDirectoryName());
-        xmlWriter.writeElementCData(SceneXmlElements::SCENE_INFO_BASE_PATH_TYPE,
-                                    SceneFileBasePathTypeEnum::toName(getBasePathType()));
-        
-        for (int32_t i = 0; i < numScenes; i++) {
-            m_scenes[i]->getSceneInfo()->writeSceneInfo(xmlWriter,
-                                                        i);
-        }
-        xmlWriter.writeEndElement();
-        
-        //
-        // Write scenes
-        //
-        SceneWriterXml sceneWriter(xmlWriter,
-                                   this->getFileName());
-        for (int32_t i = 0; i < numScenes; i++) {
-            sceneWriter.writeScene(*m_scenes[i],
-                                   i);
-        }
-        
-        xmlWriter.writeEndElement();
-        xmlWriter.writeEndDocument();
-        
-        file.close();
+        SceneFileXmlStreamWriter xmlStreamWriter;
+        xmlStreamWriter.writeFile(this);
 
         this->clearModified();
     }
@@ -1046,16 +815,32 @@ SceneFile::addToDataFileContentInformation(DataFileContentInformation& dataFileI
 {
     CaretDataFile::addToDataFileContentInformation(dataFileInformation);
     
+    dataFileInformation.addNameAndValue("Base Path Type", SceneFileBasePathTypeEnum::toGuiName(getBasePathType()));
+    dataFileInformation.addNameAndValue("Custom Base Path", getBalsaCustomBaseDirectory());
+    dataFileInformation.addNameAndValue("Extract Directory", getBalsaExtractToDirectoryName());
+    dataFileInformation.addNameAndValue("BALSA Title", getBalsaStudyTitle());
+    dataFileInformation.addNameAndValue("BALSA Study ID", getBalsaStudyID());
+    
     const int32_t numScenes = getNumberOfScenes();
     if (numScenes > 0) {
         AString sceneNamesText = "Scenes:";
         for (int32_t i = 0; i < numScenes; i++) {
             const Scene* scene = getSceneAtIndex(i);
-            sceneNamesText.appendWithNewLine("#" + AString::number(i + 1) + "  " +
+            sceneNamesText.appendWithNewLine("\n#" + AString::number(i + 1) + "  " +
                                              scene->getName());
             if (dataFileInformation.isOptionFlag(DataFileContentInformation::OPTION_SHOW_MAP_INFORMATION))
             {
-                sceneNamesText += ":";
+                const AString indent("        ");
+                const GiftiMetaData* sceneMetaData(scene->getSceneInfo()->getMetaData());
+                const auto namesAndValues(sceneMetaData->getAsMap());
+                if ( ! namesAndValues.empty()) {
+                    sceneNamesText.appendWithNewLine(indent + "Metadata:");
+                    for (const auto& nv : namesAndValues) {
+                        sceneNamesText.appendWithNewLine(indent + "   " + nv.first + ":  " + nv.second);
+                    }
+                }
+
+                //sceneNamesText += ":";
                 const SceneAttributes* myAttrs = scene->getAttributes();
                 const SceneClass* guiMgrClass = scene->getClassWithName("guiManager");
                 if (guiMgrClass == NULL)
@@ -1091,7 +876,11 @@ SceneFile::addToDataFileContentInformation(DataFileContentInformation& dataFileI
                     int numNames = (int)tempNames.size();
                     for (int k = 0; k < numNames; ++k)
                     {
-                        sceneNamesText.appendWithNewLine("        " + tempNames[k]);
+                        AString notFoundText;
+                        if ( ! QFile::exists(tempNames[k])) {
+                            notFoundText = " (NOT FOUND)";
+                        }
+                        sceneNamesText.appendWithNewLine(indent + tempNames[k] + notFoundText);
                     }
                 }
             }
@@ -1338,7 +1127,7 @@ SceneFile::getBaseDirectoryHierarchyForDataFiles(const int32_t maximumAncestorCo
 }
 
 /**
- * @return A vector containing the names of all data files from all scenes.
+ * @return A set containing the names of all data files from all scenes.
  */
 std::set<SceneFile::FileAndSceneIndicesInfo>
 SceneFile::getAllDataFileNamesFromAllScenes() const
@@ -1360,6 +1149,7 @@ SceneFile::getAllDataFileNamesFromAllScenes() const
             CaretAssert(sceneObject);
             if (sceneObject->getDataType() == SceneObjectDataTypeEnum::SCENE_PATH_NAME) {
                 const ScenePathName* scenePathName = dynamic_cast<ScenePathName*>(sceneObject);
+
                 /*
                  * Will be NULL for 'path name arrays' which we ignore
                  */
@@ -1371,6 +1161,9 @@ SceneFile::getAllDataFileNamesFromAllScenes() const
                      */
                     bool useNameFlag = false;
                     if (sceneObject->getName() == "fileName") {
+                        useNameFlag = true;
+                    }
+                    else if (sceneObject->getName() == "brainChildDataFile") {
                         useNameFlag = true;
                     }
                     else if (sceneObject->getName() == "specFileName") {
@@ -1414,6 +1207,9 @@ SceneFile::getAllDataFileNamesFromAllScenes() const
                                         break;
                                     case DataFileTypeEnum::CONNECTIVITY_PARCEL_DENSE:
                                         break;
+                                    case DataFileTypeEnum::CONNECTIVITY_PARCEL_DYNAMIC:
+                                        validDiskFileFlag = false;
+                                        break;
                                     case DataFileTypeEnum::CONNECTIVITY_PARCEL_LABEL:
                                         break;
                                     case DataFileTypeEnum::CONNECTIVITY_PARCEL_SCALAR:
@@ -1422,7 +1218,11 @@ SceneFile::getAllDataFileNamesFromAllScenes() const
                                         break;
                                     case DataFileTypeEnum::CONNECTIVITY_SCALAR_DATA_SERIES:
                                         break;
+                                    case DataFileTypeEnum::CZI_IMAGE_FILE:
+                                        break;
                                     case DataFileTypeEnum::FOCI:
+                                        break;
+                                    case DataFileTypeEnum::HISTOLOGY_SLICES:
                                         break;
                                     case DataFileTypeEnum::IMAGE:
                                         break;
@@ -1436,6 +1236,8 @@ SceneFile::getAllDataFileNamesFromAllScenes() const
                                     case DataFileTypeEnum::PALETTE:
                                         break;
                                     case DataFileTypeEnum::RGBA:
+                                        break;
+                                    case DataFileTypeEnum::SAMPLES:
                                         break;
                                     case DataFileTypeEnum::SCENE:
                                         break;

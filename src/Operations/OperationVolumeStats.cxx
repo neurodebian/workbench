@@ -54,7 +54,7 @@ OperationParameters* OperationVolumeStats::getParameters()
     reduceOpt->addStringParameter(1, "operation", "the reduction operation");
     
     OptionalParameter* percentileOpt = ret->createOptionalParameter(3, "-percentile", "give the value at a percentile");
-    percentileOpt->addDoubleParameter(1, "percent", "the percentile to find");
+    percentileOpt->addDoubleParameter(1, "percent", "the percentile to find, must be between 0 and 100");
     
     OptionalParameter* subvolOpt = ret->createOptionalParameter(4, "-subvolume", "only display output for one subvolume");
     subvolOpt->addStringParameter(1, "subvolume", "the subvolume number or name");
@@ -66,9 +66,9 @@ OperationParameters* OperationVolumeStats::getParameters()
     ret->createOptionalParameter(6, "-show-map-name", "print map index and name before each output");
     
     ret->setHelpText(
-        AString("For each subvolume of the input, a single number is printed, resulting from the specified reduction or percentile operation.  ") +
+        AString("For each subvolume of the input, a line of text is printed, resulting from the specified reduction or percentile operation.  ") +
         "Use -subvolume to only give output for a single subvolume.  " +
-        "Use -roi to consider only the data within a region.  " +
+        "If the -roi option is used without -match-maps, then each line will contain as many numbers as there are maps in the ROI file, separated by tab characters.  " +
         "Exactly one of -reduce or -percentile must be specified.\n\n" +
         "The argument to the -reduce option must be one of the following:\n\n" +
         ReductionOperation::getHelpInfo());

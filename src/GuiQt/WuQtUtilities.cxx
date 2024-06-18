@@ -25,18 +25,22 @@
 #include <QApplication>
 #include <QBoxLayout>
 #include <QComboBox>
+#if QT_VERSION < 0x060000
 #include <QDesktopWidget>
+#endif
 #include <QDialog>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QFontDatabase>
 #include <QFrame>
 #include <QHeaderView>
 #include <QIcon>
 #include <QLabel>
+#include <QMenu>
 #include <QPainter>
 #include <QPushButton>
-//#include <QSound>
+#include <QScreen>
 #include <QTableWidget>
 #include <QTableWidgetItem>
 #include <QTextDocument>
@@ -44,7 +48,9 @@
 
 #include "CaretAssert.h"
 #include "CaretLogger.h"
+#define __WU_QT_UTILITIES_DECLARE__
 #include "WuQtUtilities.h"
+#undef __WU_QT_UTILITIES_DECLARE__
 
 using namespace caret;
 
@@ -306,9 +312,13 @@ WuQtUtilities::moveWindowToOffset(QWidget* parentWindow,
     int x = parentWindow->x() + xOffset;
     int y = parentWindow->y() + yOffset;
     
+#if QT_VERSION >= 0x060000
+    QScreen* screen = parentWindow->screen();
+    const QRect geometry = screen->availableGeometry();
+#else
     QDesktopWidget* dw = QApplication::desktop();
     const QRect geometry = dw->availableGeometry(parentWindow);
-    
+#endif
     const int margin = 20;
     const int maxX = geometry.width()  - margin;
     const int maxY = geometry.height() - margin;
@@ -354,8 +364,14 @@ WuQtUtilities::moveWindowToSideOfParent(QWidget* parent,
    // int y = py;
     const int windowWidth = window->width();
 
+#if QT_VERSION >= 0x060000
+    QScreen* screen = window->screen();
+    CaretAssert(screen);
+    const QRect geometry = screen->availableGeometry();
+#else
     QDesktopWidget* dw = QApplication::desktop();
     const QRect geometry = dw->availableGeometry(parent);
+#endif
     const int screenMinX = geometry.x();
     const int screenWidth = geometry.width();
     const int screenMaxX = screenMinX + screenWidth;
@@ -420,26 +436,20 @@ WuQtUtilities::moveAndSizeWindow(QWidget* window,
                                  const int32_t h,
                                  int32_t* xywhOut)
 {
+#if QT_VERSION >= 0x060000
+    QScreen* screen = window->screen();
+    CaretAssert(screen);
+    const QRect availableRect = screen->availableGeometry();
+#else
     QDesktopWidget* dw = QApplication::desktop();
-    
+    const QRect availableRect = dw->availableGeometry(window);
+#endif
     /*
      * Get available geometry where window is to be placed
      * This geometry is all screens together as one large screen
      */
     QPoint pXY(x,
                y);
-#if QT_VERSION >= 0x050000
-    const QRect availableRect = dw->availableGeometry();
-#else
-    /*
-     * Note 23 September 2016:
-     *    Calling geometry is likely the WRONG method to call
-     *    but since it is not causing a problem in in Qt 4.x
-     *    we will continuing using to avoid the risk of 
-     *    breaking scenes.
-     */
-    const QRect availableRect = dw->screen()->geometry();
-#endif
     const int32_t screenSizeX = availableRect.width();
     const int32_t screenSizeY = availableRect.height();
     
@@ -474,9 +484,15 @@ WuQtUtilities::moveAndSizeWindow(QWidget* window,
      */
     pXY.setX(xPos);
     pXY.setY(yPos);
+#if QT_VERSION >= QT_VERSION_CHECK(5, 10, 0)
+    QScreen* nearestScreen = QGuiApplication::screenAt(pXY);
+    if (nearestScreen != NULL) {
+        const QRect screenRect = nearestScreen->geometry();
+#else
     const int32_t nearestScreen = dw->screenNumber(pXY);
     if (nearestScreen >= 0) {
         const QRect screenRect = dw->availableGeometry(nearestScreen);
+#endif
         if (xPos < screenRect.x()) {
             xPos = screenRect.x();
         }
@@ -507,9 +523,8 @@ WuQtUtilities::moveAndSizeWindow(QWidget* window,
             height = maxHeight;
         }
         
-        const QRect geom = dw->screenGeometry(nearestScreen);
         CaretLogInfo(QString("Window Available width/height: %1, %2 \n      Screen width/height: %3, %4"
-                             ).arg(maxWidth).arg(maxHeight).arg(geom.width()).arg(geom.height()));
+                             ).arg(maxWidth).arg(maxHeight).arg(screenRect.width()).arg(screenRect.height()));
     }
 
     /*
@@ -546,12 +561,18 @@ WuQtUtilities::resizeWindow(QWidget* window,
                             const int32_t width,
                             const int32_t height)
 {
-    QDesktopWidget* dw = QApplication::desktop();
     QPoint pXY(window->x(),
                window->y());
+#if QT_VERSION >= QT_VERSION_CHECK(5, 10, 0)
+    QScreen* nearestScreen = QGuiApplication::screenAt(pXY);
+    if (nearestScreen != NULL) {
+        const QRect screenRect = nearestScreen->geometry();
+#else
+    QDesktopWidget* dw = QApplication::desktop();
     const int32_t nearestScreen = dw->screenNumber(pXY);
     if (nearestScreen >= 0) {
         const QRect screenRect = dw->availableGeometry(nearestScreen);
+#endif
         const int32_t screenWidth  = screenRect.width() - 100;
         const int32_t screenHeight = screenRect.height() - 100;
         
@@ -597,12 +618,18 @@ WuQtUtilities::limitWindowSizePercentageOfMaximum(QWidget* window,
         return;
     }
     
-    QDesktopWidget* dw = QApplication::desktop();
     QPoint pXY(window->x(),
                window->y());
+#if QT_VERSION >= QT_VERSION_CHECK(5, 10, 0)
+    QScreen* nearestScreen = QGuiApplication::screenAt(pXY);
+    if (nearestScreen != NULL) {
+        const QRect screenRect = nearestScreen->geometry();
+#else
+    QDesktopWidget* dw = QApplication::desktop();
     const int32_t nearestScreen = dw->screenNumber(pXY);
     if (nearestScreen >= 0) {
         const QRect screenRect = dw->availableGeometry(nearestScreen);
+#endif
         const int32_t screenWidth  = screenRect.width();
         const int32_t screenHeight = screenRect.height();
     
@@ -690,7 +717,11 @@ WuQtUtilities::estimateTableWidgetSize(QTableWidget* tableWidget)
                     if (text.isEmpty() == false) {
                         QFont font = item->font();
                         QFontMetrics fontMetrics(font);
+#if QT_VERSION >= QT_VERSION_CHECK(5, 11, 0)
+                        const int textWidth =  fontMetrics.horizontalAdvance(text);
+#else
                         const int textWidth =  fontMetrics.width(text);
+#endif
                         const int textHeight = fontMetrics.height();
                         
                         itemWidth += textWidth;
@@ -1121,10 +1152,11 @@ WuQtUtilities::getMinimumScreenSize()
     int minWidth  = std::numeric_limits<int>::max();
     int minHeight = std::numeric_limits<int>::max();
     
-    QDesktopWidget* dw = QApplication::desktop();
-    const int numScreens = dw->screenCount();
+    QList<QScreen*> screens = QGuiApplication::screens();
+    const int numScreens = screens.size();
     for (int i = 0; i < numScreens; i++) {
-        const QRect rect = dw->availableGeometry(i);
+        const QScreen* screen = screens.at(i);
+        const QRect rect = screen->geometry();
         const int w = rect.width();
         const int h = rect.height();
         
@@ -1145,8 +1177,12 @@ WuQtUtilities::getMinimumScreenSize()
 bool 
 WuQtUtilities::isSmallDisplay()
 {
-    QDesktopWidget* dw = QApplication::desktop();
-    QRect screenRect = dw->screenGeometry();
+    QList<QScreen*> screens = QGuiApplication::screens();
+    if (screens.empty()) {
+        return false;
+    }
+    QScreen* screen = screens.at(0);
+    QRect screenRect = screen->geometry();
     const int verticalSize = screenRect.height();
     if (verticalSize <= 800) {
         return true;
@@ -1683,7 +1719,6 @@ WuQtUtilities::createPixmapWidgetPainterPrivate(const QWidget* widget,
  *     toolButton ToolButton that needs style updated.
  */
 #ifdef CARET_OS_MACOSX
-#if QT_VERSION >= 0x050000
 void
 WuQtUtilities::setToolButtonStyleForQt5Mac(QToolButton* toolButton)
 {
@@ -1759,9 +1794,6 @@ WuQtUtilities::setToolButtonStyleForQt5Mac(QToolButton* toolButton)
 #else
     void WuQtUtilities::setToolButtonStyleForQt5Mac(QToolButton*) { }
 #endif
-#else
-    void WuQtUtilities::setToolButtonStyleForQt5Mac(QToolButton*) { }
-#endif
 
 /**
  * Rename items in combox box by replacing 'before' in the names with 'after'
@@ -1785,4 +1817,15 @@ WuQtUtilities::replaceComboBoxItemNames(QComboBox* comboBox,
     }
 }
 
-
+/**
+ * @return A fixed font
+ */
+QFont
+WuQtUtilities::getFixedFont()
+{
+    if ( ! s_fixedFontValid) {
+        s_fixedFont = QFontDatabase::systemFont(QFontDatabase::FixedFont);
+        s_fixedFontValid = true;
+    }
+    return s_fixedFont;
+}

@@ -26,6 +26,7 @@
 #include <memory>
 
 #include "CaretObject.h"
+#include "FileIdentificationDisplayModeEnum.h"
 #include "FileIdentificationMapSelectionEnum.h"
 #include "SceneableInterface.h"
 
@@ -36,7 +37,7 @@ namespace caret {
     class FileIdentificationAttributes : public CaretObject, public SceneableInterface {
         
     public:
-        FileIdentificationAttributes();
+        FileIdentificationAttributes(const bool identificationSupportedFlag);
         
         virtual ~FileIdentificationAttributes();
         
@@ -44,9 +45,11 @@ namespace caret {
 
         FileIdentificationAttributes& operator=(const FileIdentificationAttributes& obj);
         
-        bool isEnabled() const;
+        bool isSupported() const;
         
-        void setEnabled(const bool enabled);
+        FileIdentificationDisplayModeEnum::Enum getDisplayMode() const;
+        
+        void setDisplayMode(const FileIdentificationDisplayModeEnum::Enum displayMode);
         
         FileIdentificationMapSelectionEnum::Enum getMapSelectionMode() const;
         
@@ -86,11 +89,13 @@ namespace caret {
 
         void reset();
         
+        bool m_identificationSupportedFlag = false;
+        
         std::unique_ptr<SceneClassAssistant> m_sceneAssistant;
 
-        /** enabled for identification*/
-        bool m_enabled = false;
-        
+        /* display mode */
+        FileIdentificationDisplayModeEnum::Enum m_displayMode = FileIdentificationDisplayModeEnum::OVERLAY;
+       
         /** identifiy all maps in file*/
         FileIdentificationMapSelectionEnum::Enum m_mapSelectionMode = FileIdentificationMapSelectionEnum::SELECTED;
         

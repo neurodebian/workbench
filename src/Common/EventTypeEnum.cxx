@@ -86,10 +86,22 @@ EventTypeEnum::initialize()
                                      "EVENT_ANNOTATION_CREATE_NEW_TYPE",
                                      "Event to create a new annotation of a particular type"));
     
+    enumData.push_back(EventTypeEnum(EVENT_ANNOTATION_GET_BEING_DRAWN_IN_WINDOW,
+                                     "EVENT_ANNOTATION_GET_BEING_DRAWN_IN_WINDOW",
+                                     "Event for getting annotation being drawn in a window"));
+    
     enumData.push_back(EventTypeEnum(EVENT_ANNOTATION_GET_DRAWN_IN_WINDOW,
                                      "EVENT_ANNOTATION_GET_DRAWN_IN_WINDOW",
                                      "Event for getting annotations drawn in a window"));
     
+    enumData.push_back(EventTypeEnum(EVENT_ANNOTATION_DRAWING_FINISH_CANCEL,
+                                     "EVENT_ANNOTATION_DRAWING_FINISH_CANCEL",
+                                     "Event for finishing or cancel annotation being drawn in window"));
+    
+    enumData.push_back(EventTypeEnum(EVENT_ANNOTATION_GET_SELECTED_INSERT_NEW_FILE,
+                                     "EVENT_ANNOTATION_GET_SELECTED_INSERT_NEW_FILE",
+                                     "Event for getting file selecte in 'insert new' section of toolbar"));
+
     enumData.push_back(EventTypeEnum(EVENT_ANNOTATION_GROUP_GET_WITH_KEY,
                                      "EVENT_ANNOTATION_GROUP_GET_WITH_KEY",
                                      "Event for getting an annotation group using its key"));
@@ -97,6 +109,10 @@ EventTypeEnum::initialize()
     enumData.push_back(EventTypeEnum(EVENT_ANNOTATION_GROUPING,
                                      "EVENT_ANNOTATION_GROUPING",
                                      "Event for annotation grouping"));
+    
+    enumData.push_back(EventTypeEnum(EVENT_ANNOTATION_NEW_DRAWING_POLYHEDRON_SLICE_DEPTH,
+                                     "EVENT_ANNOTATION_NEW_DRAWING_POLYHEDRON_SLICE_DEPTH",
+                                     "Get slice depth while drawing a new polyhedron"));
     
     enumData.push_back(EventTypeEnum(EVENT_ANNOTATION_TEXT_GET_BOUNDS,
                                      "EVENT_ANNOTATION_TEXT_GET_BOUNDS",
@@ -166,6 +182,14 @@ EventTypeEnum::initialize()
                                      "EVENT_BROWSER_TAB_NEW", 
                                      "Create a browser tab"));
     
+    enumData.push_back(EventTypeEnum(EVENT_BROWSER_TAB_GET_AT_WINDOW_XY,
+                                     "EVENT_BROWSER_TAB_GET_AT_WINDOW_XY",
+                                     "Get the browser tab at the window's XY"));
+    
+    enumData.push_back(EventTypeEnum(EVENT_BROWSER_TAB_INDEX_GET_WINDOW_INDEX,
+                                     "EVENT_BROWSER_TAB_INDEX_GET_WINDOW_INDEX",
+                                     "Get index of window containing tab with index"));
+                       
     enumData.push_back(EventTypeEnum(EVENT_BROWSER_TAB_NEW_IN_GUI,
                                      "EVENT_BROWSER_TAB_NEW_IN_GUI",
                                      "Create a browser tab from/in the GUI so toolbar is updated"));
@@ -186,6 +210,10 @@ EventTypeEnum::initialize()
                                      "EVENT_BROWSER_TAB_SELECT_IN_WINDOW",
                                      "Event for selecting a browser tab in a window"));
     
+    enumData.push_back(EventTypeEnum(EVENT_BROWSER_TAB_VALIDATE,
+                                     "EVENT_BROWSER_TAB_VALIDATE",
+                                     "Event for validate a browser tab still exists"));
+
     enumData.push_back(EventTypeEnum(EVENT_BROWSER_WINDOW_CONTENT,
                                      "EVENT_BROWSER_WINDOW_CONTENT",
                                      "Event for browser window content"));
@@ -213,6 +241,10 @@ EventTypeEnum::initialize()
     enumData.push_back(EventTypeEnum(EVENT_BROWSER_WINDOW_NEW,
                                      "EVENT_BROWSER_WINDOW_NEW", 
                                      "Create a new browser window"));
+
+    enumData.push_back(EventTypeEnum(EVENT_BROWSER_WINDOW_PIXEL_SIZE_INFO,
+                                     "EVENT_BROWSER_WINDOW_PIXEL_SIZE_INFO",
+                                     "Info about a window's pixel sizes"));
     
     enumData.push_back(EventTypeEnum(EVENT_BROWSER_WINDOW_TILE_TAB_OPERATION,
                                      "EVENT_BROWSER_WINDOW_TILE_TAB_OPERATION",
@@ -291,6 +323,18 @@ EventTypeEnum::initialize()
                                      "EVENT_DATA_FILE_RELOAD_ALL",
                                      "Reopen all data files (replace it with saved version) in the Brain"));
     
+    enumData.push_back(EventTypeEnum(EVENT_DRAWING_VIEWPORT_CONTENT_ADD,
+                                     "EVENT_DRAWING_VIEWPORT_CONTENT_ADD",
+                                     "Event to add viewport while drawing"));
+    
+    enumData.push_back(EventTypeEnum(EVENT_DRAWING_VIEWPORT_CONTENT_CLEAR,
+                                     "EVENT_DRAWING_VIEWPORT_CONTENT_CLEAR",
+                                     "Event to clear viewports for window before drawing"));
+    
+    enumData.push_back(EventTypeEnum(EVENT_DRAWING_VIEWPORT_CONTENT_GET,
+                                     "EVENT_DRAWING_VIEWPORT_CONTENT_GET",
+                                     "Event get a drawing viewport after drawing"));
+    
     enumData.push_back(EventTypeEnum(EVENT_GET_DISPLAYED_DATA_FILES,
                                      "EVENT_GET_DISPLAYED_DATA_FILES",
                                      "Get data files displayed in windows/tabs"));
@@ -319,13 +363,21 @@ EventTypeEnum::initialize()
                                      "EVENT_GRAPHICS_TIMING_ONE_WINDOW",
                                      "Graphics timing in one window"));
     
-    enumData.push_back(EventTypeEnum(EVENT_GRAPHICS_UPDATE_ALL_WINDOWS,
-                                     "EVENT_GRAPHICS_UPDATE_ALL_WINDOWS", 
-                                     "Update all graphics windows"));
+    enumData.push_back(EventTypeEnum(EVENT_GRAPHICS_PAINT_NOW_ALL_WINDOWS,
+                                     "EVENT_GRAPHICS_PAINT_NOW_ALL_WINDOWS",
+                                     "Paint (draw immediately) graphics in all windows"));
     
-    enumData.push_back(EventTypeEnum(EVENT_GRAPHICS_UPDATE_ONE_WINDOW, 
-                                     "EVENT_GRAPHICS_UPDATE_ONE_WINDOW", 
-                                     "Update graphics in one window"));
+    enumData.push_back(EventTypeEnum(EVENT_GRAPHICS_PAINT_NOW_ONE_WINDOW,
+                                     "EVENT_GRAPHICS_PAINT_NOW_ONE_WINDOW",
+                                     "Paint (draw immediately) graphics in a window"));
+    
+    enumData.push_back(EventTypeEnum(EVENT_GRAPHICS_PAINT_SOON_ALL_WINDOWS,
+                                     "EVENT_GRAPHICS_PAINT_SOON_ALL_WINDOWS", 
+                                     "Update (draw soon but not immediately) all graphics windows"));
+    
+    enumData.push_back(EventTypeEnum(EVENT_GRAPHICS_PAINT_SOON_ONE_WINDOW, 
+                                     "EVENT_GRAPHICS_PAINT_SOON_ONE_WINDOW", 
+                                     "Update (draw soon but not immediately) graphics in one window"));
     
     enumData.push_back(EventTypeEnum(EVENT_GRAPHICS_WINDOW_SHOW_TOOL_TIP,
                                      "EVENT_GRAPHICS_WINDOW_SHOW_TOOL_TIP",
@@ -334,6 +386,10 @@ EventTypeEnum::initialize()
     enumData.push_back(EventTypeEnum(EVENT_HELP_VIEWER_DISPLAY,
                                      "EVENT_HELP_VIEWER_DISPLAY", 
                                      "Display the help viewer"));
+    
+    enumData.push_back(EventTypeEnum(EVENT_HISTOLOGY_SLICES_FILES_GET,
+                                     "EVENT_HISTOLOGY_SLICES_FILES_GET",
+                                     "Get histology slices files"));
     
     enumData.push_back(EventTypeEnum(EVENT_IDENTIFICATION_HIGHLIGHT_LOCATION,
                                      "EVENT_IDENTIFICATION_HIGHLIGHT_LOCATION",
@@ -427,6 +483,10 @@ EventTypeEnum::initialize()
                                      "EVENT_RECENT_FILES_SYSTEM_ACCESS_MODE",
                                      "Get file system access mode for recent files"));
     
+    enumData.push_back(EventTypeEnum(EVENT_RESET_VIEW,
+                                     "EVENT_RESET_VIEW",
+                                     "Reset the View"));
+    
     enumData.push_back(EventTypeEnum(EVENT_SCENE_ACTIVE,
                                      "EVENT_SCENE_ACTIVE",
                                      "Get/Set the active scene"));
@@ -446,6 +506,10 @@ EventTypeEnum::initialize()
     enumData.push_back(EventTypeEnum(EVENT_SURFACE_COLORING_INVALIDATE, 
                                      "EVENT_SURFACE_COLORING_INVALIDATE", 
                                      "Invalidate surface coloring"));
+
+    enumData.push_back(EventTypeEnum(EVENT_VOLUME_COLORING_INVALIDATE,
+                                     "EVENT_VOLUME_COLORING_INVALIDATE",
+                                     "Invalidate volume coloring"));
     
     enumData.push_back(EventTypeEnum(EVENT_SURFACES_GET, 
                                      "EVENT_SURFACES_GET", 

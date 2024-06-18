@@ -27,10 +27,11 @@
 
 #include "CaretAssert.h"
 #include "CaretLogger.h"
-#include "MediaFile.h"
+#include "CziImageFile.h"
 #include "EventManager.h"
 #include "EventMediaFilesGet.h"
 #include "EventOverlayValidate.h"
+#include "MediaFile.h"
 #include "ImageFile.h"
 #include "PlainTextStringBuilder.h"
 #include "SceneClass.h"
@@ -46,19 +47,36 @@ using namespace caret;
 
 /**
  * Constructor
+ * @param tabIndex
+ * Index of the tab
+ * @param overlayIndex
+ * Index of overlasy
  */
-MediaOverlay::MediaOverlay()
+MediaOverlay::MediaOverlay(const int32_t tabIndex,
+                           const int32_t overlayIndex)
+: m_tabIndex(tabIndex),
+m_overlayIndex(overlayIndex)
 {
     m_opacity = 1.0;
-    m_selectedFile  = NULL;
-    m_selectedFrameIndex = -1;
-    m_name = "Overlay ";
     m_enabled = false;
     m_mapYokingGroup = MapYokingGroupEnum::MAP_YOKING_GROUP_OFF;
+    m_selectedFile  = NULL;
+    m_selectedFrameIndex = -1;
+    m_allFramesSelectedFlag = true;
+    m_selectedChannelIndex = s_ALL_CHANNELS_INDEX;
+    m_cziResolutionChangeMode = CziImageResolutionChangeModeEnum::AUTO2;
+    m_cziManualPyramidLayerIndex = 1;
+    m_name = "Overlay ";
     
+    /* Note file and frame index saved in 'saveScene' */
     m_sceneAssistant = new SceneClassAssistant();
     m_sceneAssistant->add("m_opacity", &m_opacity);
     m_sceneAssistant->add("m_enabled", &m_enabled);
+    m_sceneAssistant->add<MapYokingGroupEnum, MapYokingGroupEnum::Enum>("m_mapYokingGroup", &m_mapYokingGroup);
+    m_sceneAssistant->add("m_allFramesSelectedFlag", &m_allFramesSelectedFlag);
+    m_sceneAssistant->add("m_selectedChannelIndex", &m_selectedChannelIndex);
+    m_sceneAssistant->add<CziImageResolutionChangeModeEnum,CziImageResolutionChangeModeEnum::Enum>("m_cziResolutionChangeMode", &m_cziResolutionChangeMode);
+    m_sceneAssistant->add("m_cziManualPyramidLayerIndex", &m_cziManualPyramidLayerIndex);
     
     EventManager::get()->addEventListener(this,
                                           EventTypeEnum::EVENT_OVERLAY_VALIDATE);
@@ -127,6 +145,70 @@ MediaOverlay::getName() const
 }
 
 /**
+ * Set the CZI pyramid layer index
+ * @param pyramidLayerIndex
+ *   New pyramid layer index
+ */
+void
+MediaOverlay::setCziPyramidLayerIndex(const int32_t pyramidLayerIndex)
+{
+    m_cziManualPyramidLayerIndex = pyramidLayerIndex;
+}
+
+/**
+ * Set all CZI scenes selected
+ * @param selectAll
+ *    New status
+ */
+void
+MediaOverlay::setCziAllScenesSelected(const bool selectAll)
+{
+    m_allFramesSelectedFlag = selectAll;
+}
+
+/**
+ * @return Value returned by 'getSelectedChannelIndex()' when ALL channels are selected
+ */
+int32_t
+MediaOverlay::getAllChannelsSelectedIndexValue()
+{
+    return s_ALL_CHANNELS_INDEX;
+}
+
+/**
+ * @return The selected channel index
+ * @see getAllChannelsSelectedIndexValue()
+ */
+int32_t
+MediaOverlay::getSelectedChannelIndex() const
+{
+    return m_selectedChannelIndex;
+}
+
+/**
+ * Set the selected channel index
+ * @param channelIndex
+ *    New  channel index
+ */
+void
+MediaOverlay::setSelectedChannelIndex(const int32_t channelIndex)
+{
+    m_selectedChannelIndex = channelIndex;
+}
+
+/**
+ * Set the CZI resolution change mode
+ * @param resolutionChangeMode
+ *    New change mode
+ */
+void
+MediaOverlay::setCziResolutionChangeMode(const CziImageResolutionChangeModeEnum::Enum resolutionChangeMode)
+{
+    m_cziResolutionChangeMode = resolutionChangeMode;
+}
+
+
+/**
  * Get a description of this object's content.
  * @return String describing this object's content.
  */
@@ -150,15 +232,16 @@ MediaOverlay::getDescriptionOfContent(PlainTextStringBuilder& descriptionOut) co
     MediaOverlay* me = const_cast<MediaOverlay*>(this);
     if (me != NULL) {
         if (me->isEnabled()) {
-            MediaFile* file = NULL;
-            int32_t index = 0;
-            me->getSelectionData(file,
-                                 index);
-            if (file != NULL) {
+            const SelectionData selectionData(getSelectionData());
+            if (selectionData.m_selectedMediaFile != NULL) {
                 descriptionOut.addLine("File: "+
-                                       file->getFileNameNoPath());
+                                       selectionData.m_selectedMediaFile->getFileNameNoPath());
                 descriptionOut.addLine("Frame Index: "
-                                       + AString::number(index + 1));
+                                       + AString::number(selectionData.m_selectedFrameIndex + 1));
+                descriptionOut.addLine("All Frames: "
+                                       + AString::fromBool(selectionData.m_allFramesSelectedFlag));
+                descriptionOut.addLine("Channel Index: "
+                                       + AString::number(selectionData.m_selectedChannelIndex));
             }
         }
     }
@@ -201,12 +284,15 @@ MediaOverlay::copyData(const MediaOverlay* overlay)
      *    overlayIndex
      *
      */
-    m_opacity = overlay->m_opacity;
-    m_enabled = overlay->m_enabled;
-    
-    m_selectedFile = overlay->m_selectedFile;
-    m_selectedFrameIndex = overlay->m_selectedFrameIndex;
-    m_mapYokingGroup = overlay->m_mapYokingGroup;
+    m_opacity                    = overlay->m_opacity;
+    m_enabled                    = overlay->m_enabled;
+    m_mapYokingGroup             = overlay->m_mapYokingGroup;
+    m_selectedFile               = overlay->m_selectedFile;
+    m_selectedFrameIndex         = overlay->m_selectedFrameIndex;
+    m_allFramesSelectedFlag      = overlay->m_allFramesSelectedFlag;
+    m_selectedChannelIndex       = overlay->m_selectedChannelIndex;
+    m_cziResolutionChangeMode    = overlay->m_cziResolutionChangeMode;
+    m_cziManualPyramidLayerIndex = overlay->m_cziManualPyramidLayerIndex;
 }
 
 /**
@@ -217,7 +303,7 @@ MediaOverlay::copyData(const MediaOverlay* overlay)
 void 
 MediaOverlay::swapData(MediaOverlay* overlay)
 {
-    MediaOverlay* swapOverlay = new MediaOverlay();
+    MediaOverlay* swapOverlay = new MediaOverlay(m_tabIndex, m_overlayIndex);
     
     swapOverlay->copyData(overlay);
     
@@ -228,61 +314,39 @@ MediaOverlay::swapData(MediaOverlay* overlay)
 }
 
 /**
- * Return the selection information.  This method is typically
- * called to update the user-interface.
- *
- * @param selectedFileOut
- *    The selected  file.  May be NULL.
- * @param selectedFrameIndexOut
- *    Index  in the selected file.
+ * @return Selection data for this overlay
  */
-void 
-MediaOverlay::getSelectionData(MediaFile* &selectedFileOut,
-                               int32_t& selectedFrameIndexOut)
+MediaOverlay::SelectionData
+MediaOverlay::getSelectionData() const
 {
-    std::vector<MediaFile*> files;
-    
-    getSelectionData(files,
-                     selectedFileOut,
-                     selectedFrameIndexOut);
+    MediaOverlay* nonConstThis(const_cast<MediaOverlay*>(this));
+    CaretAssert(nonConstThis);
+    return nonConstThis->getSelectionData();
 }
 
 /**
- * Return the selection information.  This method is typically
- * called to update the user-interface.
- *
- * @param filesOut
- *    Contains all files that can be selected.
- * @param selectedFileOut
- *    The selected  file.  May be NULL.
- * @param selectedFrameIndexOut
- *    Index  in the selected file.
+ * @return Selection data for this overlay
  */
-void 
-MediaOverlay::getSelectionData(std::vector<MediaFile*>& filesOut,
-                          MediaFile* &selectedFileOut,
-                          int32_t& selectedFrameIndexOut)
+MediaOverlay::SelectionData
+MediaOverlay::getSelectionData()
 {
-    filesOut.clear();
-    selectedFileOut = NULL;
-    selectedFrameIndexOut = -1;
+    std::vector<MediaFile*> allFiles;
     
-//    /**
-//     * Get the data files.
-//     */
+    /**
+     * Get the data files.
+     */
     EventMediaFilesGet mediaFilesEvent;
     EventManager::get()->sendEvent(mediaFilesEvent.getPointer());
-    filesOut = mediaFilesEvent.getMediaFiles();
-    
+    allFiles = mediaFilesEvent.getMediaFiles();
     
     /*
-     * Does selected data file still no longer exist?
+     * Does selected data file no longer exist?
      */
-    if (std::find(filesOut.begin(),
-                  filesOut.end(),
-                  m_selectedFile) == filesOut.end()) {
+    if (std::find(allFiles.begin(),
+                  allFiles.end(),
+                  m_selectedFile) == allFiles.end()) {
         /*
-         * Invalidate seleted file and disable yoking since 
+         * Invalidate seleted file and disable yoking since
          * the selected file will change.
          */
         m_selectedFile = NULL;
@@ -306,8 +370,8 @@ MediaOverlay::getSelectionData(std::vector<MediaFile*>& filesOut,
          * Use in first file
          */
         if (m_selectedFile == NULL) {
-            if ( ! filesOut.empty()) {
-                for (auto& file : filesOut) {
+            if ( ! allFiles.empty()) {
+                for (auto& file : allFiles) {
                     m_selectedFile = file;
                     m_selectedFrameIndex = 0;
                     break;
@@ -316,10 +380,106 @@ MediaOverlay::getSelectionData(std::vector<MediaFile*>& filesOut,
         }
     }
     
-    selectedFileOut = m_selectedFile;
-    if (selectedFileOut != NULL) {
-        selectedFrameIndexOut = m_selectedFrameIndex;
+    CziImageFile* cziImageFile((m_selectedFile != NULL)
+                               ? m_selectedFile->castToCziImageFile()
+                               : NULL);
+    const int32_t numberOfFrames((m_selectedFile != NULL)
+                                 ? m_selectedFile->getNumberOfFrames()
+                                 : 0);
+    const bool fileSupportsAllFramesFlag((cziImageFile != NULL)
+                                         && (numberOfFrames > 1));
+    
+    if (m_selectedFile != NULL) {
+        if (m_selectedFile != m_previousSelectedFile) {
+            /*
+             * Selected file has changed.
+             * Set to first frame.
+             * Enable all frames if supported by file
+             */
+            m_selectedFrameIndex = 0;
+            m_allFramesSelectedFlag = fileSupportsAllFramesFlag;
+        }
     }
+
+    bool supportsYokingFlag(false);
+    AString selectedFrameName;
+    if (m_selectedFile != NULL) {
+        if ((m_selectedFrameIndex >= 0)
+            && (m_selectedFrameIndex < numberOfFrames)) {
+            selectedFrameName = m_selectedFile->getFrameName(m_selectedFrameIndex);
+        }
+        supportsYokingFlag = (numberOfFrames > 1);
+    }
+    
+    int32_t cziManualPyramidLayerMinimumValue(0);
+    int32_t cziManualPyramidLayerMaximumValue(0);
+    if (cziImageFile != NULL) {
+        cziImageFile->getPyramidLayerRangeForFrame(m_selectedFrameIndex,
+                                                   m_allFramesSelectedFlag,
+                                                   cziManualPyramidLayerMinimumValue,
+                                                   cziManualPyramidLayerMaximumValue);
+    }
+    
+    int32_t selectedChannelIndex(s_ALL_CHANNELS_INDEX);
+    if (m_selectedFile != NULL) {
+        const MediaFileChannelInfo* channelInfo(const_cast<const MediaFile*>(m_selectedFile)->getMediaFileChannelInfo());
+        CaretAssert(channelInfo);
+        if (channelInfo->isChannelsSupported()) {
+            
+            selectedChannelIndex = m_selectedChannelIndex;
+            
+            /*
+             * If all channels selected but not supported,
+             * switch to first channel
+             */
+            if (selectedChannelIndex == s_ALL_CHANNELS_INDEX) {
+                if ( ! channelInfo->isAllChannelsSelectionSupported()) {
+                    selectedChannelIndex = 0;
+                }
+            }
+            
+            /*
+             * If an individual channel is selected but individual channels
+             * are not supported, switch to ALL channels
+             */
+            if (selectedChannelIndex >= 0) {
+                if ( ! channelInfo->isSingleChannelSelectionSupported()) {
+                    selectedChannelIndex = s_ALL_CHANNELS_INDEX;
+                }
+            }
+            
+            /*
+             * If single channel selected, ensure it is valid
+             */
+            if (channelInfo->isSingleChannelSelectionSupported()) {
+                if (selectedChannelIndex >= channelInfo->getNumberOfChannels()) {
+                    selectedChannelIndex = channelInfo->getNumberOfChannels() - 1;
+                }
+            }
+        }
+    }
+    SelectionData selectionDataOut(m_tabIndex,
+                                   m_overlayIndex,
+                                   allFiles,
+                                   m_selectedFile,
+                                   cziImageFile,
+                                   m_selectedFrameIndex,
+                                   selectedFrameName,
+                                   fileSupportsAllFramesFlag,
+                                   m_allFramesSelectedFlag,
+                                   supportsYokingFlag,
+                                   selectedChannelIndex,
+                                   m_cziResolutionChangeMode,
+                                   m_cziManualPyramidLayerIndex,
+                                   cziManualPyramidLayerMinimumValue,
+                                   cziManualPyramidLayerMaximumValue);
+   
+    /*
+     * Needed to catch change of selected file in this function
+     */
+    m_previousSelectedFile = m_selectedFile;
+    
+    return selectionDataOut;
 }
 
 /**
@@ -389,23 +549,18 @@ MediaOverlay::saveToScene(const SceneAttributes* sceneAttributes,
     m_sceneAssistant->saveMembers(sceneAttributes, 
                                   sceneClass);
     
-    std::vector<MediaFile*> files;
-    MediaFile* selectedFile = NULL;
-    int32_t selectedFrameIndex;
-    getSelectionData(files,
-                     selectedFile,
-                     selectedFrameIndex);
+    const SelectionData selectionData(getSelectionData());
     
-    if ((selectedFile != NULL)
-        && (selectedFrameIndex >= 0)) {
+    if ((selectionData.m_selectedMediaFile != NULL)
+        && (selectionData.m_selectedFrameIndex >= 0)) {
         sceneClass->addPathName("selectedFileNameWithPath",
-                                selectedFile->getFileName());
+                                selectionData.m_selectedMediaFile->getFileName());
         sceneClass->addString("selectedFile",
-                              selectedFile->getFileNameNoPath());
+                              selectionData.m_selectedMediaFile->getFileNameNoPath());
         sceneClass->addString("selectedName",
-                              AString::number(selectedFrameIndex));
+                              selectionData.m_selectedFrameName);
         sceneClass->addInteger("selectedFrameIndex",
-                               selectedFrameIndex);
+                               selectionData.m_selectedFrameIndex);
     }
     else {
         sceneClass->addPathName("selectedFileNameWithPath",
@@ -441,17 +596,13 @@ MediaOverlay::restoreFromScene(const SceneAttributes* sceneAttributes,
         return;
     }
     
-    /*
-     * Making a call to getSelectionData() to get the availble
-     * files
+    /**
+     * Get the data files.
      */
-    std::vector<MediaFile*> allFiles;
-    MediaFile* unusedSelectedFile = NULL;
-    int32_t unusedselectedFrameIndex;
-    getSelectionData(allFiles,
-                     unusedSelectedFile,
-                     unusedselectedFrameIndex);
-    
+    EventMediaFilesGet mediaFilesEvent;
+    EventManager::get()->sendEvent(mediaFilesEvent.getPointer());
+    std::vector<MediaFile*> mediaFiles(mediaFilesEvent.getMediaFiles());
+
     m_sceneAssistant->restoreMembers(sceneAttributes, 
                                      sceneClass);
 
@@ -471,7 +622,7 @@ MediaOverlay::restoreFromScene(const SceneAttributes* sceneAttributes,
     /*
      * Try to match with full path
      */
-    for (auto& dataFile : allFiles) {
+    for (auto& dataFile : mediaFiles) {
         if (selectedFileNameWithPath == dataFile->getFileName()) {
             matchedFile = dataFile;
             break;
@@ -482,7 +633,7 @@ MediaOverlay::restoreFromScene(const SceneAttributes* sceneAttributes,
      * Match by name only
      */
     if (matchedFile == NULL) {
-        for (auto& dataFile : allFiles) {
+        for (auto& dataFile : mediaFiles) {
             if (selectedFileName == dataFile->getFileName()) {
                 matchedFile = dataFile;
                 break;
@@ -493,15 +644,15 @@ MediaOverlay::restoreFromScene(const SceneAttributes* sceneAttributes,
     if (matchedFile == NULL) {
         CaretLogWarning("Unable to restore image overlay file: "
                         + selectedFileName);
-        if ( ! allFiles.empty()) {
-            CaretAssertVectorIndex(allFiles, 0);
-            matchedFile = allFiles[0];
+        if ( ! mediaFiles.empty()) {
+            CaretAssertVectorIndex(mediaFiles, 0);
+            matchedFile = mediaFiles[0];
         }
     }
     
     setSelectionData(matchedFile,
                      selectedFrameIndex);
+    m_previousSelectedFile = matchedFile;
 }
-
 
 

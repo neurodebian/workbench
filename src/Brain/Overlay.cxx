@@ -30,6 +30,8 @@
 #include "CaretLogger.h"
 #include "CaretMappableDataFile.h"
 #include "CiftiConnectivityMatrixDenseDynamicFile.h"
+#include "CiftiConnectivityMatrixParcelDynamicFile.h"
+#include "DeveloperFlagsEnum.h"
 #include "EventCaretMappableDataFilesGet.h"
 #include "EventManager.h"
 #include "EventOverlayValidate.h"
@@ -77,6 +79,9 @@ m_includeVolumeFiles(includeVolumeFiles)
     m_colorBar = new AnnotationColorBar(AnnotationAttributesDefaultTypeEnum::NORMAL);
     m_colorBar->setCoordinateSpace(AnnotationCoordinateSpaceEnum::TAB);
     
+    m_volumeToImageMappingMode = VolumeToImageMappingModeEnum::NORMAL;
+    m_volumeToImageMappingThickness = 1.0;
+    
     m_sceneAssistant = new SceneClassAssistant();
     m_sceneAssistant->add("m_opacity", &m_opacity);
     m_sceneAssistant->add("m_enabled", &m_enabled);
@@ -85,7 +90,10 @@ m_includeVolumeFiles(includeVolumeFiles)
     m_sceneAssistant->add<MapYokingGroupEnum, MapYokingGroupEnum::Enum>("m_mapYokingGroup",
                                                                         &m_mapYokingGroup);
     m_sceneAssistant->add("m_colorBar", "AnnotationColorBar", m_colorBar);
-    
+    m_sceneAssistant->add<VolumeToImageMappingModeEnum, VolumeToImageMappingModeEnum::Enum>("m_volumeToImageMappingMode",
+                                                                                            &m_volumeToImageMappingMode);
+    m_sceneAssistant->add("m_volumeToImageMappingThickness", &m_volumeToImageMappingThickness);
+
     EventManager::get()->addEventListener(this,
                                           EventTypeEnum::EVENT_OVERLAY_VALIDATE);
 }
@@ -273,6 +281,9 @@ Overlay::copyData(const Overlay* overlay)
     m_wholeBrainVoxelDrawingMode = overlay->m_wholeBrainVoxelDrawingMode;
     
     *m_colorBar = *overlay->m_colorBar;
+    
+    m_volumeToImageMappingMode = overlay->m_volumeToImageMappingMode;
+    m_volumeToImageMappingThickness = overlay->m_volumeToImageMappingThickness;
 }
 
 /**
@@ -311,7 +322,6 @@ Overlay::getSelectionData(CaretMappableDataFile* &selectedMapFileOut,
     
     getSelectionData(mapFiles, 
                            selectedMapFileOut, 
-                           //mapUniqueID,
                            selectedMapIndexOut);
 }
 
@@ -323,15 +333,12 @@ Overlay::getSelectionData(CaretMappableDataFile* &selectedMapFileOut,
  *    Contains all map files that can be selected.
  * @param selectedMapFileOut
  *    The selected map file.  May be NULL.
- * @param selectedMapUniqueIDOut
- *    UniqueID of selected map.
  * @param selectedMapIndexOut
  *    Index of selected map in the selected file.
  */
 void 
 Overlay::getSelectionData(std::vector<CaretMappableDataFile*>& mapFilesOut,
                           CaretMappableDataFile* &selectedMapFileOut,
-                          //AString& selectedMapUniqueIDOut,
                           int32_t& selectedMapIndexOut)
 {
     mapFilesOut.clear();
@@ -347,11 +354,15 @@ Overlay::getSelectionData(std::vector<CaretMappableDataFile*>& mapFilesOut,
     eventGetMapDataFiles.getAllFiles(allDataFiles);
     
     bool showVolumeMapFiles  = false;
+    bool showVolumeMapFilesForHistology = false;
     switch (m_includeVolumeFiles) {
         case INCLUDE_VOLUME_FILES_NO:
             break;
         case INCLUDE_VOLUME_FILES_YES:
             showVolumeMapFiles = true;
+            break;
+        case INCLUDE_VOLUME_FILES_FOR_HISTOLOGY_MODEL:
+            showVolumeMapFilesForHistology = true;
             break;
     }
 
@@ -386,6 +397,12 @@ Overlay::getSelectionData(std::vector<CaretMappableDataFile*>& mapFilesOut,
             if (showVolumeMapFiles) {
                 useIt = true;
             }
+            if (showVolumeMapFilesForHistology) {
+                /*
+                 * Any volume mappable
+                 */
+                useIt = true;
+            }
         }
         
         if (useIt) {
@@ -413,6 +430,13 @@ Overlay::getSelectionData(std::vector<CaretMappableDataFile*>& mapFilesOut,
                     break;
                 case DataFileTypeEnum::CONNECTIVITY_PARCEL_DENSE:
                     break;
+                case DataFileTypeEnum::CONNECTIVITY_PARCEL_DYNAMIC:
+                {
+                    CiftiConnectivityMatrixParcelDynamicFile* parcelDynFile = dynamic_cast<CiftiConnectivityMatrixParcelDynamicFile*>(mapFile);
+                    CaretAssert(parcelDynFile);
+                    useIt = parcelDynFile->isEnabledAsLayer();
+                }
+                    break;
                 case DataFileTypeEnum::CONNECTIVITY_PARCEL_LABEL:
                     break;
                 case DataFileTypeEnum::CONNECTIVITY_PARCEL_SCALAR:
@@ -429,7 +453,11 @@ Overlay::getSelectionData(std::vector<CaretMappableDataFile*>& mapFilesOut,
                     break;
                 case DataFileTypeEnum::CONNECTIVITY_SCALAR_DATA_SERIES:
                     break;
+                case DataFileTypeEnum::CZI_IMAGE_FILE:
+                    break;
                 case DataFileTypeEnum::FOCI:
+                    break;
+                case DataFileTypeEnum::HISTOLOGY_SLICES:
                     break;
                 case DataFileTypeEnum::IMAGE:
                     break;
@@ -447,6 +475,8 @@ Overlay::getSelectionData(std::vector<CaretMappableDataFile*>& mapFilesOut,
                 case DataFileTypeEnum::PALETTE:
                     break;
                 case DataFileTypeEnum::RGBA:
+                    break;
+                case DataFileTypeEnum::SAMPLES:
                     break;
                 case DataFileTypeEnum::SCENE:
                     break;
@@ -520,21 +550,7 @@ Overlay::getSelectionData(std::vector<CaretMappableDataFile*>& mapFilesOut,
     
     selectedMapFileOut = m_selectedMapFile;
     if (selectedMapFileOut != NULL) {
-//        /*
-//         * Update for overlay yoking
-//         */
-//        if (m_mapYokingGroup != MapYokingGroupEnum::MAP_YOKING_GROUP_OFF) {
-//            const int32_t yokeMapIndex = MapYokingGroupEnum::getSelectedMapIndex(m_mapYokingGroup);
-//            if ((yokeMapIndex >= 0)
-//                && (yokeMapIndex < selectedMapFileOut->getNumberOfMaps())) {
-//                m_selectedMapIndex = yokeMapIndex;
-//            }
-//            else if (yokeMapIndex >= selectedMapFileOut->getNumberOfMaps()) {
-//                m_selectedMapIndex = selectedMapFileOut->getNumberOfMaps() - 1;
-//            }
-//        }
-//        
-        selectedMapIndexOut = m_selectedMapIndex;  //m_selectedMapFile->getMapIndexFromUniqueID(selectedMapUniqueIDOut);
+        selectedMapIndexOut = m_selectedMapIndex;
     }
 }
 
@@ -556,13 +572,6 @@ Overlay::setSelectionData(CaretMappableDataFile* selectedMapFile,
         if (m_selectedMapFile == NULL) {
             m_mapYokingGroup = MapYokingGroupEnum::MAP_YOKING_GROUP_OFF;
         }
-//        if (selectedMapFile != NULL) {
-//            MapYokingGroupEnum::setSelectedMapIndex(m_mapYokingGroup,
-//                                                        selectedMapIndex);
-//        }
-//        else {
-//            m_mapYokingGroup = MapYokingGroupEnum::MAP_YOKING_GROUP_OFF;
-//        }
     }
 }
 
@@ -605,6 +614,46 @@ Overlay::getColorBar() const
     return m_colorBar;
 }
 
+/**
+ * @return The volume to image mapping mode
+ */
+VolumeToImageMappingModeEnum::Enum
+Overlay::getVolumeToImageMappingMode() const
+{
+    return m_volumeToImageMappingMode;
+}
+
+/**
+ * @return The volume to image mapping thickness
+ */
+float
+Overlay::getVolumeToImageMappingThickness() const
+{
+    return m_volumeToImageMappingThickness;
+}
+
+/**
+ * Set the volume to image mapping mode
+ * @param mode
+ *    New mode
+ */
+void
+Overlay::setVolumeToImageMappingMode(const VolumeToImageMappingModeEnum::Enum mode)
+{
+    m_volumeToImageMappingMode = mode;
+}
+
+/**
+ * Set the volume to image mapping thickness
+ * @param thickness
+ *    New thickness
+ */
+void
+Overlay::setVolumeToImageMappingThickness(const float thickness)
+{
+    m_volumeToImageMappingThickness = thickness;
+}
+
 
 /**
  * Create a scene for an instance of a class.
@@ -633,11 +682,9 @@ Overlay::saveToScene(const SceneAttributes* sceneAttributes,
     
     std::vector<CaretMappableDataFile*> mapFiles;
     CaretMappableDataFile* selectedMapFile = NULL;
-    //AString selectedMapUniqueID;
     int32_t selectedMapIndex;
     getSelectionData(mapFiles, 
                      selectedMapFile, 
-                     //selectedMapUniqueID,
                      selectedMapIndex);
     
     if ((selectedMapFile != NULL) 
@@ -695,7 +742,6 @@ Overlay::restoreFromScene(const SceneAttributes* sceneAttributes,
     int32_t unusedSelectedMapIndex;
     getSelectionData(mapFiles, 
                      unusedSelectedMapFile, 
-                     //unusedSelectedMapUniqueID,
                      unusedSelectedMapIndex);
     
     m_sceneAssistant->restoreMembers(sceneAttributes, 

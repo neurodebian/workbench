@@ -40,6 +40,11 @@ namespace caret {
     public:
         virtual ~GraphicsShape();
         
+        static GraphicsPrimitiveV3f* newInstanceCircleByteColor(const float radius,
+                                                                const uint8_t rgba[4],
+                                                                const GraphicsPrimitive::LineWidthType lineThicknessType,
+                                                                const double lineThickness);
+
         static void drawBoxOutlineByteColor(const float v1[3],
                                             const float v2[3],
                                             const float v3[3],
@@ -171,10 +176,13 @@ namespace caret {
                                                          const float thickness,
                                                          const uint8_t rgba[4]);
         
+        static void drawYellowCrossAtViewportCenter();
+        
+        static void drawViewportCrossPercentageLineWidth(const uint8_t rgba[4],
+                                                         const float percentageThickness);
+
         // ADD_NEW_METHODS_HERE
 
-        virtual AString toString() const;
-        
     private:
         enum class Shape {
             CIRCLE_FILLED,
@@ -282,6 +290,8 @@ namespace caret {
         
         static std::map<RingKey, GraphicsPrimitive*> s_byteRingPrimitives;
         
+        static std::unique_ptr<GraphicsPrimitiveV3f> s_yellowCrossPrimitive;
+        
         // ADD_NEW_MEMBERS_HERE
 
     };
@@ -291,6 +301,7 @@ namespace caret {
     std::map<int32_t, GraphicsPrimitive*> GraphicsShape::s_byteCirclePrimitives;
     std::map<GraphicsShape::RingKey, GraphicsPrimitive*> GraphicsShape::s_byteRingPrimitives;
     std::unique_ptr<GraphicsPrimitiveV3f> GraphicsShape::s_byteSquarePrimitive;
+    std::unique_ptr<GraphicsPrimitiveV3f> GraphicsShape::s_yellowCrossPrimitive;
 #endif // __GRAPHICS_SHAPE_DECLARE__
 
 } // namespace

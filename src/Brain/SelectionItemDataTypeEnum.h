@@ -71,26 +71,36 @@ public:
         CHART_TWO_MATRIX,
         /** CIFTI Connectivity Matrix Row or Column */
         CIFTI_CONNECTIVITY_MATRIX_ROW_COLUMN,
+        /* CZI Image */
+        CZI_IMAGE,
         /** Focus on Surface */
         FOCUS_SURFACE,
         /** Focus on Volume */
         FOCUS_VOLUME,
+        /** Histology plane coordinate */
+        HISTOLOGY_PLANE_COORDINATE,
+        /** Histology stereotaxic coordinate */
+        HISTOLOGY_STEREOTAXIC_COORDINATE,
         /* Image */
         IMAGE,
         /* Image Control Point */
         IMAGE_CONTROL_POINT,
+        /** Media Logical Index */
+        MEDIA_LOGICAL_COORDINATE,
+        /** Media Plane Coordinate */
+        MEDIA_PLANE_COORDINATE,
         /** Surface Node*/
         SURFACE_NODE,
-        /** Surface Node Identification Symbol */
-        SURFACE_NODE_IDENTIFICATION_SYMBOL,
         /** Surface Triangle */
         SURFACE_TRIANGLE,
+        /** Universal identification symbol */
+        UNIVERSAL_IDENTIFICATION_SYMBOL,
+        /** Volume MPR Crosshair */
+        VOLUME_MPR_CROSSHAIR,
         /** Volume Voxel */
         VOXEL,
         /** Voxel Editing */
-        VOXEL_EDITING,
-        /** Voxel identification symbol */
-        VOXEL_IDENTIFICATION_SYMBOL
+        VOXEL_EDITING
     };
 
 

@@ -54,7 +54,7 @@ OperationParameters* OperationCiftiStats::getParameters()
     reduceOpt->addStringParameter(1, "operation", "the reduction operation");
     
     OptionalParameter* percentileOpt = ret->createOptionalParameter(3, "-percentile", "give the value at a percentile");
-    percentileOpt->addDoubleParameter(1, "percent", "the percentile to find");
+    percentileOpt->addDoubleParameter(1, "percent", "the percentile to find, must be between 0 and 100");
     
     OptionalParameter* columnOpt = ret->createOptionalParameter(4, "-column", "only display output for one column");
     columnOpt->addIntegerParameter(1, "column", "the column index (starting from 1)");
@@ -66,8 +66,8 @@ OperationParameters* OperationCiftiStats::getParameters()
     ret->createOptionalParameter(6, "-show-map-name", "print column index and name before each output");
     
     ret->setHelpText(
-        AString("For each column of the input, a row of text is printed, resulting from the specified reduction or percentile operation.  ") +
-        "If -roi is specified without -match-maps, then each row contains as many numbers as there are maps in the ROI file, separated by tab characters.  " +
+        AString("For each column of the input, a line of text is printed, resulting from the specified reduction or percentile operation.  ") +
+        "If -roi is specified without -match-maps, then each line will contain as many numbers as there are maps in the ROI file, separated by tab characters.  " +
         "Use -column to only give output for a single data column.  " +
         "Exactly one of -reduce or -percentile must be specified.\n\n" +
         "The argument to the -reduce option must be one of the following:\n\n" +

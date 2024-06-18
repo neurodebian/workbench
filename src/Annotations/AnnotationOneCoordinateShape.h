@@ -50,6 +50,14 @@ namespace caret {
         
         const AnnotationCoordinate* getCoordinate() const;
         
+        virtual int32_t getNumberOfCoordinates() const override;
+        
+        virtual AnnotationCoordinate* getCoordinate(const int32_t index) override;
+        
+        virtual const AnnotationCoordinate* getCoordinate(const int32_t index) const override;
+        
+        virtual void replaceAllCoordinates(const std::vector<std::unique_ptr<const AnnotationCoordinate>>& coordinates) override;
+        
         virtual AnnotationSurfaceOffsetVectorTypeEnum::Enum getSurfaceOffsetVectorType() const override;
         
         float getHeight() const;
@@ -130,6 +138,10 @@ namespace caret {
         bool applySpatialModificationTabOrWindowSpace(const AnnotationSpatialModification& spatialModification);
         
         bool applySpatialModificationChartSpace(const AnnotationSpatialModification& spatialModification);
+        
+        bool applySpatialModificationMediaSpace(const AnnotationSpatialModification& spatialModification);
+        
+        bool applySpatialModificationHistologySpace(const AnnotationSpatialModification& spatialModification);
         
         bool rotationAngleTest(const float previousMouseXYZ[3],
                                const float shapeXYZ[3],

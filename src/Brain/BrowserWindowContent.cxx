@@ -35,6 +35,8 @@
 #include "SceneIntegerArray.h"
 #include "ScenePrimitive.h"
 #include "TileTabsLayoutGridConfiguration.h"
+#include "TileTabsLayoutManualConfiguration.h"
+#include "WindowTabAspectRatios.h"
 
 using namespace caret;
 
@@ -56,6 +58,7 @@ m_windowIndex(windowIndex)
     m_automaticGridTileTabsConfiguration.reset(TileTabsLayoutGridConfiguration::newInstanceAutomaticGrid());
     m_customGridTileTabsConfiguration.reset(TileTabsLayoutGridConfiguration::newInstanceCustomGrid());
     m_validFlag = false;
+    m_windowTabAspectRatios.reset(new WindowTabAspectRatios());
     reset();
     
     m_sceneAssistant = std::unique_ptr<SceneClassAssistant>(new SceneClassAssistant());
@@ -121,6 +124,8 @@ BrowserWindowContent::reset()
     m_sceneSelectedTabIndex = 0;
     m_sceneTabIndices.clear();
     m_windowAnnotationsStackingOrder = -1000;  /* way in front */
+    m_windowTabAspectRatios.reset(new WindowTabAspectRatios());
+    m_previousManualTileTabsConfiguration.reset();
 }
 
 /**
@@ -529,6 +534,25 @@ BrowserWindowContent::isManualModeTileTabsConfigurationEnabled() const
     return false;
 }
 
+/**
+ * Set the previous manual tile tabs configuration
+ * @param manualConfiguration
+ *    The previous configuration
+ */
+void
+BrowserWindowContent::setPreviousManualTileTabsConfiguration(TileTabsLayoutManualConfiguration* manualConfiguration)
+{
+    m_previousManualTileTabsConfiguration.reset(manualConfiguration);
+}
+
+/**
+ * @return The previous manual tile tabs configuration (may be NULL)
+ */
+const TileTabsLayoutManualConfiguration*
+BrowserWindowContent::getPreviousManualTileTabsConfiguration() const
+{
+    return m_previousManualTileTabsConfiguration.get();
+}
 
 /**
  * @return Width of the graphics region from scene.
@@ -922,4 +946,22 @@ BrowserWindowContent::restoreFromOldBrainBrowserWindowScene(const SceneAttribute
     }
 }
 
+/**
+ * @return Pointer to window tab aspect ratios.  Will always be valid pointer.
+ */
+const WindowTabAspectRatios
+BrowserWindowContent::getWindowTabAspectRatios() const
+{
+    return *m_windowTabAspectRatios.get();
+}
 
+/**
+ * Set the window and tab aspect ratios
+ * @param windowTabAspectRatios
+ *    The window and tab aspect ratios
+ */
+void
+BrowserWindowContent::setWindowTabAspectRatios(const WindowTabAspectRatios& windowTabAspectRatios)
+{
+    m_windowTabAspectRatios.reset(new WindowTabAspectRatios(windowTabAspectRatios));
+}

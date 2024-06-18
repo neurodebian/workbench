@@ -41,11 +41,11 @@
 #include "EventAnnotationGrouping.h"
 #include "EventBrowserWindowContent.h"
 #include "EventGetBrainOpenGLTextRenderer.h"
-#include "EventGraphicsUpdateAllWindows.h"
+#include "EventGraphicsPaintSoonAllWindows.h"
 #include "EventManager.h"
 #include "EventUserInterfaceUpdate.h"
 #include "GuiManager.h"
-#include "UserInputModeTileTabsManualLayoutContextMenu.h"
+#include "UserInputModeTileTabsLayoutContextMenu.h"
 #include "WuQMessageBox.h"
 #include "WuQtUtilities.h"
 
@@ -80,7 +80,10 @@ m_browserWindowIndex(browserWindowIndex)
         case UserInputModeEnum::Enum::ANNOTATIONS:
             m_menuMode = MenuMode::ANNOTATIONS;
             break;
-        case UserInputModeEnum::Enum::TILE_TABS_MANUAL_LAYOUT_EDITING:
+        case UserInputModeEnum::Enum::SAMPLES_EDITING:
+            CaretAssert(0);
+            break;
+        case UserInputModeEnum::Enum::TILE_TABS_LAYOUT_EDITING:
             m_menuMode = MenuMode::TILE_TABS;
             break;
         case UserInputModeEnum::Enum::BORDERS:
@@ -247,7 +250,7 @@ AnnotationMenuArrange::addTileTabsSelections()
                 addSeparator();
             }
             
-            m_tileTabsShrinkAndExpandToFillAction = addAction(UserInputModeTileTabsManualLayoutContextMenu::getShinkAndExpandTabMenuItemText());
+            m_tileTabsShrinkAndExpandToFillAction = addAction(UserInputModeTileTabsLayoutContextMenu::getShinkAndExpandTabMenuItemText());
         }
             break;
     }
@@ -280,7 +283,7 @@ AnnotationMenuArrange::addOrderingSelections()
 void
 AnnotationMenuArrange::menuAboutToShow()
 {
-    AnnotationManager* annMan = GuiManager::get()->getBrain()->getAnnotationManager();
+    AnnotationManager* annMan = GuiManager::get()->getBrain()->getAnnotationManager(m_userInputMode);
     
     if (m_groupAction != NULL) {
         m_groupAction->setEnabled(annMan->isGroupingModeValid(m_browserWindowIndex,
@@ -306,6 +309,12 @@ AnnotationMenuArrange::menuAboutToShow()
                 CaretAssert(ann);
                 switch (ann->getCoordinateSpace()) {
                     case AnnotationCoordinateSpaceEnum::CHART:
+                        oneAnnWithCorrectSpaceFlag = true;
+                        break;
+                    case AnnotationCoordinateSpaceEnum::HISTOLOGY:
+                        oneAnnWithCorrectSpaceFlag = true;
+                        break;
+                    case AnnotationCoordinateSpaceEnum::MEDIA_FILE_NAME_AND_PIXEL:
                         oneAnnWithCorrectSpaceFlag = true;
                         break;
                     case AnnotationCoordinateSpaceEnum::SPACER:
@@ -413,7 +422,7 @@ AnnotationMenuArrange::menuActionTriggered(QAction* action)
         CaretLogSevere(msg);
     }
 
-    EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+    EventManager::get()->sendEvent(EventGraphicsPaintSoonAllWindows().getPointer());
     EventManager::get()->sendEvent(EventUserInterfaceUpdate().getPointer());
 }
 
@@ -515,7 +524,7 @@ AnnotationMenuArrange::processOrderingMenuItem(QAction* actionSelected)
 void
 AnnotationMenuArrange::processAnnotationOrderOperation(const AnnotationStackingOrderTypeEnum::Enum orderType)
 {
-    AnnotationManager* annMan = GuiManager::get()->getBrain()->getAnnotationManager();
+    AnnotationManager* annMan = GuiManager::get()->getBrain()->getAnnotationManager(m_userInputMode);
     std::vector<Annotation*> selectedAnnotations = annMan->getAnnotationsSelectedForEditing(m_browserWindowIndex);
     if (selectedAnnotations.size() == 1) {
         CaretAssertVectorIndex(selectedAnnotations, 0);
@@ -549,7 +558,7 @@ AnnotationMenuArrange::processWindowTileTabOperation(const EventBrowserWindowTil
 {
     std::vector<BrowserTabContent*> emptyBrowserTabs;
 
-    AnnotationManager* annMan = GuiManager::get()->getBrain()->getAnnotationManager();
+    AnnotationManager* annMan = GuiManager::get()->getBrain()->getAnnotationManager(m_userInputMode);
     BrainBrowserWindow* bbw = GuiManager::get()->getBrowserWindowByWindowIndex(m_browserWindowIndex);
     CaretAssert(bbw);
     BrowserWindowContent* bwc = bbw->getBrowerWindowContent();
@@ -601,11 +610,10 @@ AnnotationMenuArrange::processShrinkAndExpandTabMenuItem()
     std::vector<BrowserTabContent*> allTabContent;
     window->getAllTabContent(allTabContent);
     
-    AnnotationManager* annMan = GuiManager::get()->getBrain()->getAnnotationManager();
+    AnnotationManager* annMan = GuiManager::get()->getBrain()->getAnnotationManager(m_userInputMode);
     AString errorMessage;
     const bool result = annMan->shrinkAndExpandSelectedBrowserTabAnnotation(allTabContent,
                                                                             m_browserWindowIndex,
-                                                                            m_userInputMode,
                                                                             errorMessage);
     if ( ! result) {
         WuQMessageBox::errorOk(this,
@@ -639,10 +647,9 @@ AnnotationMenuArrange::applyAlignment(const AnnotationAlignmentEnum::Enum alignm
                                       drawingFlags,
                                      m_browserWindowIndex);
     
-    AnnotationManager* annMan = GuiManager::get()->getBrain()->getAnnotationManager();
+    AnnotationManager* annMan = GuiManager::get()->getBrain()->getAnnotationManager(m_userInputMode);
     AString errorMessage;
-    if ( ! annMan->alignAnnotations(m_userInputMode,
-                                    alignMod,
+    if ( ! annMan->alignAnnotations(alignMod,
                                     alignment,
                                     errorMessage)) {
         WuQMessageBox::errorOk(this,
@@ -650,7 +657,7 @@ AnnotationMenuArrange::applyAlignment(const AnnotationAlignmentEnum::Enum alignm
     }
 
     EventManager::get()->sendSimpleEvent(EventTypeEnum::EVENT_ANNOTATION_TOOLBAR_UPDATE);
-    EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+    EventManager::get()->sendEvent(EventGraphicsPaintSoonAllWindows().getPointer());
 }
 
 /**
@@ -678,10 +685,9 @@ AnnotationMenuArrange::applyDistribute(const AnnotationDistributeEnum::Enum dist
                                            drawingFlags,
                                            m_browserWindowIndex);
     
-    AnnotationManager* annMan = GuiManager::get()->getBrain()->getAnnotationManager();
+    AnnotationManager* annMan = GuiManager::get()->getBrain()->getAnnotationManager(m_userInputMode);
     AString errorMessage;
-    if ( ! annMan->distributeAnnotations(m_userInputMode,
-                                         distributeMod,
+    if ( ! annMan->distributeAnnotations(distributeMod,
                                          distribute,
                                          errorMessage)) {
         WuQMessageBox::errorOk(this,
@@ -689,7 +695,7 @@ AnnotationMenuArrange::applyDistribute(const AnnotationDistributeEnum::Enum dist
     }
     
     EventManager::get()->sendSimpleEvent(EventTypeEnum::EVENT_ANNOTATION_TOOLBAR_UPDATE);
-    EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+    EventManager::get()->sendEvent(EventGraphicsPaintSoonAllWindows().getPointer());
 }
 
 /**
@@ -701,11 +707,10 @@ AnnotationMenuArrange::applyDistribute(const AnnotationDistributeEnum::Enum dist
 void
 AnnotationMenuArrange::applyGrouping(const AnnotationGroupingModeEnum::Enum grouping)
 {
-    AnnotationManager* annMan = GuiManager::get()->getBrain()->getAnnotationManager();
+    AnnotationManager* annMan = GuiManager::get()->getBrain()->getAnnotationManager(m_userInputMode);
 
     AString errorMessage;
-    if ( ! annMan->applyGroupingMode(m_userInputMode,
-                                     m_browserWindowIndex,
+    if ( ! annMan->applyGroupingMode(m_browserWindowIndex,
                                      grouping,
                                      errorMessage)) {
         WuQMessageBox::errorOk(this,
@@ -713,7 +718,7 @@ AnnotationMenuArrange::applyGrouping(const AnnotationGroupingModeEnum::Enum grou
     }
 
     EventManager::get()->sendSimpleEvent(EventTypeEnum::EVENT_ANNOTATION_TOOLBAR_UPDATE);
-    EventManager::get()->sendEvent(EventGraphicsUpdateAllWindows().getPointer());
+    EventManager::get()->sendEvent(EventGraphicsPaintSoonAllWindows().getPointer());
 }
 
 

@@ -69,6 +69,9 @@ namespace caret {
     class BrainOpenGLTextRenderInterface;
     class BrainOpenGLViewportContent;
     class EventOpenGLObjectToWindowTransform;
+    class GraphicsFramesPerSecond;
+    class GraphicsObjectToWindowTransform;
+    class GraphicsOrthographicProjection;
     class Model;
     class SurfaceProjectedItem;
     
@@ -106,7 +109,8 @@ namespace caret {
                         const UserInputModeEnum::Enum windowUserInputMode,
                         Brain* brain,
                         void* contextSharingGroupPointer,
-                        const std::vector<const BrainOpenGLViewportContent*>& viewportContents);
+                        const std::vector<const BrainOpenGLViewportContent*>& viewportContents,
+                        const GraphicsFramesPerSecond* graphicsFramesPerSecond);
         
         void selectModel(const int32_t windowIndex,
                          const UserInputModeEnum::Enum windowUserInputMode,
@@ -147,7 +151,8 @@ namespace caret {
         
         static void getMinMaxLineWidth(float& minLineWidthOut, float& maxLineWidthOut);
         
-        static bool testForRequiredOpenGLVersion(AString& errorMessageOut);
+        static bool testForRequiredOpenGLVersion(const bool guiFlag,
+                                                 AString& errorMessageOut);
         
         static bool testForVersionOfOpenGLSupported(const AString& versionOfOpenGL);
         
@@ -242,11 +247,14 @@ namespace caret {
          *    The brain (must be valid!)
          * @param viewportContents
          *    Viewport info for drawing.
+         * @param graphicsFramesPerSecond
+         *    Graphics frames per second that may be displayed
          */
         virtual void drawModelsImplementation(const int32_t windowIndex,
                                               const UserInputModeEnum::Enum windowUserInputMode,
                                               Brain* brain,
-                                const std::vector<const BrainOpenGLViewportContent*>& viewportContents) = 0;
+                                              const std::vector<const BrainOpenGLViewportContent*>& viewportContents,
+                                              const GraphicsFramesPerSecond* graphicsFramesPerSecond) = 0;
         
         /**
          * Selection on a model.
@@ -325,6 +333,15 @@ namespace caret {
         
         virtual void loadObjectToWindowTransform(EventOpenGLObjectToWindowTransform* transformEvent) = 0;
         
+        virtual void loadObjectToWindowTransform(GraphicsObjectToWindowTransform* transform,
+                                                 const std::array<float, 4>& orthoLeftRightBottomTop,
+                                                 const double centerToEyeDistance,
+                                                 const bool centerToEyeDistanceValidFlag) = 0;
+
+        virtual void loadObjectToWindowTransform(GraphicsObjectToWindowTransform* transform,
+                                                 const GraphicsOrthographicProjection& orthographicProjection,
+                                                 const double centerToEyeDistance,
+                                                 const bool centerToEyeDistanceValidFlag) = 0;
         Border* borderBeingDrawn;
         
         bool m_drawHighlightedEndPoints;

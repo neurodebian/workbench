@@ -1,13 +1,24 @@
 #
 # Minimum required version of CMAKE
 #
-CMAKE_MINIMUM_REQUIRED (VERSION 2.8)
+CMAKE_MINIMUM_REQUIRED (VERSION 3.0)
 
-SET(WB_VERSION "1.5.0")
+#
+# Project name
+#
+PROJECT(Workbench)
+
+SET(WB_VERSION "2.0.0")
 #
 # Set to true for verbose output when debugging this file
 #
 SET(WB_CMAKE_VERBOSE_OUTPUT_FLAG TRUE)
+
+#
+# if this include is not present you will get
+# Unknown CMake command "CHECK_CXX_COMPILER_FLAG"
+#
+include(CheckCXXCompilerFlag)
 
 ##########################################################################################
 #
@@ -32,12 +43,29 @@ set (WORKBENCH_USE_CMAKE_AUTOMOC FALSE CACHE BOOL
      "If TRUE, use CMAKE_AUTOMOC command for generating 'moc' files")
 set (WORKBENCH_INCLUDE_HELP_HTML_RESOURCES TRUE CACHE BOOL
      "If TRUE, help (html) pages in src/Resources/Help are available in wb_view")
+set (WORKBENCH_USE_QT6 FALSE CACHE BOOL
+     "If TRUE, require Qt6.<NEWLINE>Specify as argument to cmake: -DWORKBENCH_USE_QT6=TRUE")
 set (WORKBENCH_USE_QT5 TRUE CACHE BOOL
-     "If TRUE, require Qt5, else Qt4.<NEWLINE>Specify as argument to cmake: -DWORKBENCH_USE_QT5=TRUE")
+     "If TRUE, require Qt5.<NEWLINE>Specify as argument to cmake: -DWORKBENCH_USE_QT5=TRUE")
 set (WORKBENCH_USE_QT5_QOPENGL_WIDGET FALSE CACHE BOOL 
      "With Qt5, QOpenGLWidget instead of deprecated QGLWidget")
 set (WORKBENCH_MESA_DIR "" CACHE PATH 
      "Directory containing Mesa's 'include' and 'lib' <NEWLINE>directories.  Mesa is optional and used by <NEWLINE>wb_command's -show-scene operation.")
+set (WORKBENCH_APPLE_WB_COMMAND_BUNDLE_FLAG TRUE CACHE BOOL
+     "On Apple Only: 
+           If TRUE, build wb_command as a MacOS Bundle (wb_command.app).
+           If FALSE, build wb_command as a normal UNIX executable."
+)
+
+#
+# Use when FindOpenMP does not work such as on Macs
+#
+set (WORKBENCH_OPENMP_COMPILER_FLAGS "" CACHE STRING
+    "OpenMP compiler flags for when FindOpenMP does not work")
+set (WORKBENCH_OPENMP_INCLUDE_DIR    "" CACHE STRING
+    "OpenMP include directory for when FindOpenMP does not work")
+set (WORKBENCH_OPENMP_LIBRARY        "" CACHE STRING
+    "OpenMP library path (path and lib) for when FindOpenMP does not work")
 
 ##########################################################################################
 #
@@ -91,6 +119,15 @@ IF (${CMAKE_CXX_COMPILER} MATCHES "^.*clang2\\+\\+.*")
 ENDIF (${CMAKE_CXX_COMPILER} MATCHES "^.*clang2\\+\\+.*")
 IF (CLANG_FLAG)
     ADD_DEFINITIONS("-W -Wall -Werror=return-type -Werror=switch -Wunused-parameter -Wno-deprecated-declarations")
+
+    execute_process(COMMAND ${CMAKE_C_COMPILER} -dumpversion
+                        OUTPUT_VARIABLE CLANG_VERSION)
+    message("clang version is: " ${CLANG_VERSION})
+    # clang 14.0.3 on Mac outputs many many
+    # "Implicit conversion loses integer precision warnings"
+    if(${CLANG_VERSION} VERSION_GREATER "14.0.2")
+        ADD_DEFINITIONS(-Wno-shorten-64-to-32)
+    endif()
 ENDIF (CLANG_FLAG)
 
 
@@ -116,6 +153,13 @@ IF (NOT MSVC)
             ADD_DEFINITIONS(-Wno-narrowing -Wno-unused-local-typedefs)
         endif()
     endif()
+
+    CHECK_CXX_COMPILER_FLAG(-Wno-deprecated-copy HAVE_NO_COPY_DEPRECATED_FLAG)
+    IF (${HAVE_NO_COPY_DEPRECATED_FLAG})
+        # Disable warning "definition of implicit copy constructor is deprecated"
+        # that occurs in many parts of Qt with newer compilers
+        ADD_DEFINITIONS("-Wno-deprecated-copy")
+    ENDIF()
 ENDIF (NOT MSVC)
 
 ##########################################################################################
@@ -184,22 +228,46 @@ ENDIF(OPENSSL_FOUND)
 
 ##########################################################################################
 #
-# Must have QT 4.8 or QT 5, recommended 5.6 or later
+# Must have QT 6 or QT 5, recommended 5.6 or later
 # https://cmake.org/cmake/help/v3.5/manual/cmake-packages.7.html#manual:cmake-packages(7)
 # Modules List: http://doc.qt.io/qt-5/qtmodules.html
 #
 SET(WB_WEBKIT_COMPONENTS "")
 SET(WB_WEBKIT_LIBS "")
 SET(HAVE_QT_WEBKIT False)
-IF (HAVE_QT_WEBKIT)
-    ADD_DEFINITIONS(-DHAVE_WEBKIT)
-    SET (WB_WEBKIT_COMPONENTS "WebEngine WebEngineCore WebEngineWidgets")
-    SET (WB_WEBKIT_LIBS "Qt5::WebEngine Qt5::WebEngineCore Qt5::WebEngineWidgets")
-
-ENDIF (HAVE_QT_WEBKIT)
 SET(QT_RESULT "Not Found")
+
 SET(CARET_QT5_LINK "")
-IF (WORKBENCH_USE_QT5) 
+
+IF (WORKBENCH_USE_QT6)
+    IF (WORKBENCH_USE_QT5)
+        MESSAGE(SEND_ERROR "Both QT5 and QT6 are selected.  Choose only one of them.")
+    ENDIF (WORKBENCH_USE_QT5)
+    
+    #
+    # Minimum required version of CMAKE for Qt 6
+    #
+    CMAKE_MINIMUM_REQUIRED (VERSION 3.19.6)
+    
+    #
+    # Qt 6 requires C++17 compiler
+    #
+    SET(CMAKE_CXX_STANDARD 17)
+    SET(CMAKE_CXX_STANDARD_REQUIRED ON)
+    
+    #
+    # Packages for Qt 6
+    #
+    FIND_PACKAGE(Qt6 REQUIRED COMPONENTS Concurrent Core Core5Compat Gui Network OpenGLWidgets PrintSupport Test Widgets Xml)
+    
+    #
+    # Always use OpenGL Widget (GLWidget not available)
+    #
+    add_definitions(-DWORKBENCH_USE_QT5_QOPENGL_WIDGET)
+
+    SET(QT_RESULT "${Qt6_VERSION}")
+    
+ELSEIF (WORKBENCH_USE_QT5)
     #
     # The OpenGL module is deprecated in Qt5 and 
     # is needed only if QGLWidget is used for
@@ -224,23 +292,22 @@ IF (WORKBENCH_USE_QT5)
 
     IF (WORKBENCH_QT5_DISABLE_DEPRECATED)
         # Causes Qt to remove declarations for deprecated functionality
-        add_definitions(-DQT_DISABLE_DEPRECATED_BEFORE=0x050700) 
-        # Enable usage of replacements for Qt deprecated functionality in Workbench source code
-        add_definitions(-DWORKBENCH_REPLACE_QT_DEPRECATED)
+        add_definitions(-DQT_DISABLE_DEPRECATED_BEFORE=0x060000) 
     ENDIF (WORKBENCH_QT5_DISABLE_DEPRECATED)
 
     #small hack to get the qt5 compile flag requirements into libraries
     SET(CARET_QT5_LINK "Qt5::Core")
 
     SET(QT_RESULT "${Qt5_VERSION}")
+    
+    IF (HAVE_QT_WEBKIT)
+        ADD_DEFINITIONS(-DHAVE_WEBKIT)
+        SET (WB_WEBKIT_COMPONENTS "WebEngine WebEngineCore WebEngineWidgets")
+        SET (WB_WEBKIT_LIBS "Qt5::WebEngine Qt5::WebEngineCore Qt5::WebEngineWidgets")
+
+    ENDIF (HAVE_QT_WEBKIT)
 ELSE ()
-    FIND_PACKAGE(Qt4 4.8 REQUIRED)
-    IF(QT4_FOUND)
-        INCLUDE(${QT_USE_FILE})
-        SET(QT_RESULT "${QTVERSION}")
-    ELSE(QT4_FOUND)
-        MESSAGE(SEND_ERROR "QT4 not found")
-    ENDIF(QT4_FOUND)
+    MESSAGE(SEND_ERROR "QT5 or QT6 REQUIRED")
 ENDIF ()
 
 ##########################################################################################
@@ -336,30 +403,34 @@ ENDIF()
 
 ##########################################################################################
 #
-# The Find OpenMP package may not work on all systems and the user may
-# furnish the paths to the OpenMP files by using environment variables.
+# The Find OpenMP package may not work on Macs as OpenMP is not part of 
+# Apple's Developer Tools.  The OpenMP library may be installed but
+# CMake's FindOpenMP may not find it on Apple (it may if Brew is used
+# to install OpenMP according to "Modern CMake").
 #
-# The environment variables are:
-#    OPENMP_COMPILE_OPTION=-fopenmp
-#    OPENMP_HEADER_DIR=/usr/local/clang-openmp-opt/llvm/build/Release/include
-#    OPENMP_LIB_DIR=/usr/local/clang-openmp-opt/llvm/build/Release/lib
+# These variables may be used to define OpenMP:
+#    WORKBENCH_OPENMP_COMPILER_FLAGS="-Xclang -fopenmp"
+#    WORKBENCH_OPENMP_INCLUDE_DIR=<path>/openmp-13.0.0/include
+#    WORKBENCH_OPENMP_LIBRARY=<path>/openmp-13.0.0/lib/libomp.a
 #
+UNSET(OPENMP_LIBRARY)
 UNSET(OPENMP_FOUND)
-IF (EXISTS $ENV{OPENMP_HEADER_DIR})
-    MESSAGE("OpenMP Header File:  $ENV{OPENMP_HEADER_DIR}")
-    IF (EXISTS $ENV{OPENMP_LIB_DIR})
-        MESSAGE("OpenMP Library File: $ENV{OPENMP_LIB_DIR}")
-        SET (STUFF $ENV{OPENMP_COMPILE_OPTION})
-        IF (DEFINED STUFF)
-            MESSAGE("OpenMP Compiler Option: $ENV{OPENMP_COMPILE_OPTION}")
-            SET(OpenMP_CXX_FLAGS "-I$ENV{OPENMP_HEADER_DIR} $ENV{OPENMP_COMPILE_OPTION}")
-            SET(OpenMP_C_FLAGS "-I$ENV{OPENMP_HEADER_DIR} $ENV{OPENMP_COMPILE_OPTION}")
-            SET(CMAKE_EXE_LINKER_FLAGS ${CMAKE_EXE_LINKER_FLAGS} -L$ENV{OPENMP_LIB_DIR})
-            SET(OPENMP_FOUND TRUE)
-        ENDIF (DEFINED STUFF)
-    ENDIF (EXISTS $ENV{OPENMP_LIB_DIR})
-ENDIF (EXISTS $ENV{OPENMP_HEADER_DIR})
-    
+IF (EXISTS ${WORKBENCH_OPENMP_INCLUDE_DIR})
+    MESSAGE("OpenMP Header File:  ${WORKBENCH_OPENMP_INCLUDE_DIR}")
+    IF (EXISTS ${WORKBENCH_OPENMP_LIBRARY})
+        MESSAGE("OpenMP Library File: ${WORKBENCH_OPENMP_LIBRARY}")
+        SET (STUFF ${WORKBENCH_OPENMP_COMPILER_FLAGS})
+         IF (DEFINED STUFF)
+            MESSAGE("OpenMP Compiler Option: ${WORKBENCH_OPENMP_COMPILER_FLAGS}")
+            SET(OpenMP_CXX_FLAGS "-I${WORKBENCH_OPENMP_INCLUDE_DIR} ${WORKBENCH_OPENMP_COMPILER_FLAGS}")
+            SET(OpenMP_C_FLAGS "-I${WORKBENCH_OPENMP_INCLUDE_DIR} ${WORKBENCH_OPENMP_COMPILER_FLAGS}")
+            SET(OPENMP_LIBRARY ${WORKBENCH_OPENMP_LIBRARY})
+#            SET(CMAKE_EXE_LINKER_FLAGS ${CMAKE_EXE_LINKER_FLAGS} -L$ENV{OPENMP_LIB_DIR})
+             SET(OPENMP_FOUND TRUE)
+        ENDIF ()
+    ENDIF ()
+ENDIF ()
+
 #
 # IF OpenMP not found through environment variables,
 # Use CMAKE's Find OpenMP module
@@ -530,6 +601,13 @@ ENDIF (WORKBENCH_INCLUDE_HELP_HTML_RESOURCES)
 
 ##########################################################################################
 #
+# Used in CZI library.  Must be defined here so that it propagates to all modules
+# Indicates static building for windows
+#
+ADD_DEFINITIONS(-D_STATICLIBBUILD)
+
+##########################################################################################
+#
 # All subdirectories that will be configured for building
 #
 IF (NOT QUAZIP_FOUND)
@@ -550,6 +628,7 @@ ADD_SUBDIRECTORY ( FilesBase )
 ADD_SUBDIRECTORY ( Nifti )
 ADD_SUBDIRECTORY ( Gifti )
 ADD_SUBDIRECTORY ( Cifti )
+ADD_SUBDIRECTORY ( CZIlib )
 ADD_SUBDIRECTORY ( Files )
 ADD_SUBDIRECTORY ( OperationsBase )
 ADD_SUBDIRECTORY ( Algorithms )
