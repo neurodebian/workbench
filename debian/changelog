@@ -3,6 +3,8 @@ connectome-workbench (2.0.0-1) unstable; urgency=medium
   * Fresh upstream release
   * debian/patches
     - drop upstream patch
+  * debian/watch
+    - URL adjusted to work (stopped, didn't dig why prior one did not work)
 
  -- Yaroslav Halchenko <debian@onerussian.com>  Tue, 18 Jun 2024 14:02:57 -0400
 
