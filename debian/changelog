@@ -2,7 +2,8 @@ connectome-workbench (2.0.0-1) unstable; urgency=medium
 
   * Fresh upstream release
   * debian/patches
-    - drop upstream patch
+    - drop previous upstream patch and add
+      7ba3345d161d567a4b628ceb02ab4471fc96cb20.patch to resolve FTBFS.
   * debian/watch
     - URL adjusted to work (stopped, didn't dig why prior one did not work)
 

@@ -1,0 +1,21 @@
+From 7ba3345d161d567a4b628ceb02ab4471fc96cb20 Mon Sep 17 00:00:00 2001
+From: Tim Coalson <coalsont@wustl.edu>
+Date: Tue, 18 Jun 2024 15:31:13 -0500
+Subject: [PATCH] fix missing include in CZIlib
+
+---
+ src/CZIlib/CZI/libCZI_exceptions.h | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/src/CZIlib/CZI/libCZI_exceptions.h b/src/CZIlib/CZI/libCZI_exceptions.h
+index 6b18cb482..e19e62cf5 100644
+--- a/src/CZIlib/CZI/libCZI_exceptions.h
++++ b/src/CZIlib/CZI/libCZI_exceptions.h
+@@ -24,6 +24,7 @@
+ 
+ #include <exception>
+ #include <stdexcept>
++#include <cstdint>
+ 
+ namespace libCZI
+ {
