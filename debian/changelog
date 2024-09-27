@@ -1,3 +1,11 @@
+connectome-workbench (2.0.0-2) unstable; urgency=medium
+
+  * Set -DWORKBENCH_USE_QT5_QOPENGL_WIDGET:BOOL=ON to avoid
+    rendered window blinking
+    (see https://github.com/Washington-University/workbench/issues/77)
+
+ -- Yaroslav Halchenko <debian@onerussian.com>  Fri, 27 Sep 2024 17:56:41 -0400
+
 connectome-workbench (2.0.0-1) unstable; urgency=medium
 
   * Fresh upstream release
