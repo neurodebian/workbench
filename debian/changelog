@@ -1,3 +1,9 @@
+connectome-workbench (2.0.1-1) unstable; urgency=medium
+
+  * Fresh upstream bug fix release to address connectivity with BALSA.
+
+ -- Yaroslav Halchenko <debian@onerussian.com>  Thu, 17 Oct 2024 11:58:14 -0400
+
 connectome-workbench (2.0.0-2) unstable; urgency=medium
 
   * Set -DWORKBENCH_USE_QT5_QOPENGL_WIDGET:BOOL=ON to avoid
