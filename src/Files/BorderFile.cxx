@@ -20,6 +20,7 @@
 /*LICENSE_END*/
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdio>
 #include <limits>
@@ -42,6 +43,8 @@
 #include "CaretAssert.h"
 #include "CaretLogger.h"
 #include "DataFileContentInformation.h"
+#include "DataFileEditorItem.h"
+#include "DataFileEditorModel.h"
 #include "DataFileException.h"
 #include "GroupAndNameHierarchyModel.h"
 #include "FileAdapter.h"
@@ -418,14 +421,23 @@ void
 BorderFile::clear()
 {
     CaretDataFile::clear();
-    m_classNameHierarchy->clear();
-    m_classColorTable->clear();
-    m_nameColorTable->clear();
     m_metadata->clear();
+    clearBorders();
+}
+
+/**
+ * Clear the borders
+ */
+void
+BorderFile::clearBorders()
+{
     const int32_t numBorders = getNumberOfBorders();
     for (int32_t i = 0; i < numBorders; i++) {
         delete m_borders[i];
     }
+    m_classNameHierarchy->clear();
+    m_classColorTable->clear();
+    m_nameColorTable->clear();
     m_borders.clear();
     m_structure = StructureEnum::ALL;
     m_numNodes = -1;
@@ -1032,6 +1044,92 @@ BorderFile::addBorder(Border* border)
 }
 
 /**
+ * Add a border.  NOTE: This border file
+ * takes ownership of the 'border' and
+ * will handle deleting it.  After calling
+ * this method, the caller must never
+ * do anything with the border that was passed
+ * to this method.
+ *
+ * @param border
+ *    Border added to this border file and if the border's name or class colors
+ *    are not in the respective color tables, add them to the color tables.
+ */
+void
+BorderFile::addBorderUseColorsFromBorder(Border* border)
+{
+    const AString name = border->getName();
+    if (name.isEmpty() == false) {
+        const int32_t nameColorKey = m_nameColorTable->getLabelKeyFromName(name);
+        if (nameColorKey < 0) {
+            if (border->isNameRgbaValid()) {
+                float rgba[4];
+                border->getNameRgba(rgba);
+                m_nameColorTable->addLabel(name, rgba[0], rgba[1], rgba[2], 1.0f);
+            }
+            else {
+                m_nameColorTable->addLabel(name, 0.0f, 0.0f, 0.0f, 1.0f);
+            }
+        }
+        else if (border->isNameRgbaValid()) {
+            const GiftiLabel* label(m_nameColorTable->getLabel(nameColorKey));
+            if (label != NULL) {
+                std::array<float, 4> borderRGBA;
+                border->getNameRgba(borderRGBA.data());
+                std::array<float, 4> rgba;
+                label->getColor(rgba.data());
+                if (borderRGBA != rgba) {
+                    AString msg("Adding border with name color ("
+                                + AString::fromNumbers(borderRGBA.data(), 4)
+                                + ") different than existing name color ("
+                                + AString::fromNumbers(rgba.data(), 4)
+                                + ") in border file.");
+                    CaretLogWarning(msg);
+                }
+            }
+        }
+    }
+    AString className = border->getClassName();
+    if (className.isEmpty() == false) {
+        const int32_t classColorKey = m_classColorTable->getLabelKeyFromName(className);
+        if (classColorKey < 0) {
+            if (border->isClassRgbaValid()) {
+                float rgba[4];
+                border->getClassRgba(rgba);
+                m_classColorTable->addLabel(className, rgba[0], rgba[1], rgba[2], 1.0f);
+            }
+            else {
+                m_classColorTable->addLabel(className, 0.0f, 0.0f, 0.0f, 1.0f);
+            }
+        }
+        else if (border->isClassRgbaValid()) {
+            const GiftiLabel* label(m_classColorTable->getLabel(classColorKey));
+            if (label != NULL) {
+                std::array<float, 4> borderRGBA;
+                border->getClassRgba(borderRGBA.data());
+                std::array<float, 4> rgba;
+                label->getColor(rgba.data());
+                if (borderRGBA != rgba) {
+                    AString msg("Adding border with class color ("
+                                + AString::fromNumbers(borderRGBA.data(), 4)
+                                + ") different than existing border color ("
+                                + AString::fromNumbers(rgba.data(), 4)
+                                + ") in border file.");
+                    CaretLogWarning(msg);
+                }
+            }
+        }
+    }
+    
+    border->setNameRgbaInvalid();
+    border->setClassRgbaInvalid();
+    addBorder(border);
+    
+    m_forceUpdateOfGroupAndNameHierarchy = true;
+    setModified();
+}
+
+/**
  * Remove the border at the given index.
  * @param indx
  *   Index of border for removal.
@@ -1234,8 +1332,8 @@ void BorderFile::setBorderMetadataValue(const AString& name, const AString& clas
 }
 
 /**
- * Version 1 foci files contained one color table for both names
- * and classes.  Newer versions of the foci file keep them in
+ * Version 1 border files contained one color table for both names
+ * and classes.  Newer versions of the border file keep them in
  * separate tables.
  *
  * @param oldColorTable
@@ -1311,8 +1409,8 @@ BorderFile::getAllBorderNamesSorted() const
 {
     std::set<QString> nameSet;
     
-    const int32_t numFoci = getNumberOfBorders();
-    for (int32_t i = 0;i < numFoci; i++) {
+    const int32_t numBorders = getNumberOfBorders();
+    for (int32_t i = 0;i < numBorders; i++) {
         nameSet.insert(m_borders[i]->getName());
     }
     
@@ -2102,7 +2200,6 @@ void
 BorderFile::clearModified()
 {
     CaretDataFile::clearModified();
-    
     m_metadata->clearModified();
     
     m_classColorTable->clearModified();
@@ -2178,9 +2275,6 @@ BorderFile::exportToCaret5Format(const std::vector<SurfaceFile*>& surfaceFiles,
 {
     AString errorMessage;
     
-    if (getNumberOfBorders() <= 0) {
-        errorMessage.appendWithNewLine("This border file contains zero borders.");
-    }
     if (outputCaret5FilesPrefix.isEmpty()) {
         errorMessage.appendWithNewLine("Caret5 output file prefix is empty.");
     }
@@ -2490,3 +2584,256 @@ BorderFile::groupAndNameHierarchyItemStatusChanged()
 {
     
 }
+
+/**
+ * @return Names (unique) of all borders
+ */
+std::vector<AString>
+BorderFile::getAllBorderNames() const
+{
+    std::set<AString> names;
+    for (const Border* border : m_borders) {
+        if ( ! border->getName().isEmpty()) {
+            names.insert(border->getName());
+        }
+    }
+    
+    std::vector<AString> namesOut(names.begin(), names.end());
+    return namesOut;
+}
+
+/**
+ * Names (unique) of all classes
+ */
+std::vector<AString>
+BorderFile::getAllBorderClasses() const
+{
+    std::set<AString> names;
+    for (const Border* border : m_borders) {
+        if ( ! border->getClassName().isEmpty()) {
+            names.insert(border->getClassName());
+        }
+    }
+    
+    std::vector<AString> namesOut(names.begin(), names.end());
+    return namesOut;
+}
+
+/**
+ * @return Names of all borders that use the given class name
+ * @param className
+ *    Name of class
+ */
+std::vector<AString>
+BorderFile::getAllBorderNamesThatUseClass(const AString& className)
+{
+    std::set<AString> names;
+    for (const Border* border : m_borders) {
+        if (border->getClassName() == className) {
+            names.insert(border->getName());
+        }
+    }
+    
+    std::vector<AString> namesOut(names.begin(), names.end());
+    return namesOut;
+}
+
+/**
+ * @return Classes for all borders with the given name (usually just one)
+ * @param borderName
+ *    Name of the border
+ */
+std::vector<AString>
+BorderFile::getAllClassesForBordersWithName(const AString& borderName) const
+{
+    std::set<AString> names;
+    for (const Border* border : m_borders) {
+        if (borderName == border->getName()) {
+            if ( ! border->getClassName().isEmpty()) {
+                names.insert(border->getClassName());
+            }
+        }
+    }
+
+    std::vector<AString> namesOut(names.begin(), names.end());
+    return namesOut;
+}
+
+/**
+ * Export the content of a border file to a DataFileEditorModel
+ * @return The DataFileEditorModel containing border data.
+ * Caller takes ownership of returned model.
+ * @param modelContent
+ *    Describes content of the model
+ */
+FunctionResultValue<DataFileEditorModel*>
+BorderFile::exportToDataFileEditorModel(const DataFileEditorColumnContent& modelContent) const
+{
+    const int32_t numBorders(getNumberOfBorders());
+    if (numBorders <= 0) {
+        return FunctionResultValue<DataFileEditorModel*>(NULL,
+                                                         ("There are no borders to export from "
+                                                          + getFileNameNoPath()),
+                                                         false);
+    }
+    
+    const int32_t numColumns(modelContent.getNumberOfColumns());
+    if (numColumns <= 0) {
+        return FunctionResultValue<DataFileEditorModel*>(NULL,
+                                                         "Model content is empty",
+                                                         false);
+    }
+    DataFileEditorModel* dataFileEditorModel(new DataFileEditorModel());
+    
+    /*
+     * Setup column titles and default sorting
+     */
+    dataFileEditorModel->setNumberOfColumnsAndColumnTitles(modelContent);
+    
+    const GiftiLabelTable* classColorTable(getClassColorTable());
+    const GiftiLabelTable* nameColorTable(getNameColorTable());
+    
+    for (int32_t i = 0; i < numBorders; i++) {
+        const Border* border(getBorder(i));
+        
+        /*
+         * For Border Name
+         */
+        float nameRGBA[4] { 0.0, 0.0, 0.0, 1.0 };
+        const GiftiLabel* nameLabel(nameColorTable->getLabelBestMatching(border->getName()));
+        if (nameLabel != NULL) {
+            nameLabel->getColor(nameRGBA);
+        }
+        
+        /*
+         * For Border Class
+         */
+        float classRGBA[4] { 0.0, 0.0, 0.0, 1.0 };
+        const GiftiLabel* classLabel(classColorTable->getLabelBestMatching(border->getClassName()));
+        if (classLabel != NULL) {
+            classLabel->getColor(classRGBA);
+        }
+        
+        /*
+         * For Border XYZ
+         */
+        AString xyzText;
+        const int32_t numPoints(border->getNumberOfPoints());
+        for (int32_t i = 0; i < numPoints; i++) {
+            const SurfaceProjectedItem* spi = border->getPoint(i);
+            CaretAssert(spi);
+            Vector3D xyz;
+            spi->getStereotaxicXYZ(xyz);
+            xyzText = xyz.toString();
+            break;
+        }
+        
+        /*
+         * All items in row represent the same focus
+         */
+        std::shared_ptr<Border> borderShared(new Border(*border));
+        
+        /*
+         * Set colors for focus so that they are available
+         * when and if the focus is copied
+         */
+        borderShared->setNameRgba(nameRGBA);
+        borderShared->setClassRgba(classRGBA);
+        
+        /*
+         * Create a row and add it to model
+         */
+        QList<QStandardItem*> rowItems;
+        
+        float emptyRGBA[4] { 0.0, 0.0, 0.0, 0.0 };
+        for (int32_t iCol = 0; iCol < numColumns; iCol++) {
+            switch (modelContent.getColumnDataType(iCol)) {
+                case DataFileEditorItemTypeEnum::CLASS_NAME:
+                    rowItems.push_back(new DataFileEditorItem(DataFileEditorItemTypeEnum::CLASS_NAME,
+                                                              borderShared,
+                                                              border->getClassName(),
+                                                              (border->getClassName() + border->getName()),
+                                                              classRGBA));
+                    break;
+                case DataFileEditorItemTypeEnum::COORDINATES:
+                    rowItems.push_back(new DataFileEditorItem(DataFileEditorItemTypeEnum::COORDINATES,
+                                                              borderShared,
+                                                              xyzText,
+                                                              xyzText,
+                                                              emptyRGBA));
+                    break;
+                case DataFileEditorItemTypeEnum::GROUP_NAMED:
+                    CaretAssert(0);
+                    break;
+                case DataFileEditorItemTypeEnum::IDENTIFIER:
+                    CaretAssert(0);
+                    break;
+                case DataFileEditorItemTypeEnum::NAME:
+                    rowItems.push_back(new DataFileEditorItem(DataFileEditorItemTypeEnum::NAME,
+                                                              borderShared,
+                                                              border->getName(),
+                                                              (border->getName() + border->getClassName()),
+                                                              nameRGBA));
+                    break;
+            }
+        }
+        
+        dataFileEditorModel->appendRow(rowItems);
+    }
+    
+    return  FunctionResultValue<DataFileEditorModel*>(dataFileEditorModel,
+                                                      "",
+                                                      true);
+}
+
+/**
+ * Import border data from the given DataFileEditorModel
+ * Replaces content of this instance.
+ * @param dataFileEditorModel
+ *    Model that contains border data
+ * @return
+ *    Function result indicating success or failure
+ */
+FunctionResult
+BorderFile::importFromDataFileEditorModel(const DataFileEditorModel& dataFileEditorModel)
+{
+    AString errorMessage;
+    std::vector<const Border*> newBorders;
+    
+    const int32_t numRows(dataFileEditorModel.rowCount());
+    for (int32_t iRow = 0; iRow < numRows; iRow++) {
+        const int32_t column(0);
+        const DataFileEditorItem* item(dataFileEditorModel.getDataFileItemAtRowColumn(iRow, column));
+        if (item != NULL) {
+            const Border* border(item->getBorder());
+            if (border != NULL) {
+                newBorders.push_back(border);
+            }
+            else {
+                errorMessage.appendWithNewLine("PROGRAM ERROR: Border missing at row=" + AString::number(iRow));
+            }
+        }
+        else {
+            errorMessage.appendWithNewLine("PROGRAM ERROR: Invalid item at row=" + AString::number(iRow));
+        }
+    }
+    
+    if ( ! errorMessage.isEmpty()) {
+        return FunctionResult::error(errorMessage);
+    }
+    
+    /*
+     * Remove all border
+     */
+    clearBorders();
+    
+    /*
+     * Add border from data file editor model
+     */
+    for (const Border* border : newBorders) {
+        addBorderUseColorsFromBorder(new Border(*border));
+    }
+    
+    return FunctionResult::ok();
+}
+

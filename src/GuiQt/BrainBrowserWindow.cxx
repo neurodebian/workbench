@@ -65,6 +65,7 @@
 #include "CaretPreferences.h"
 #include "CursorDisplayScoped.h"
 #include "CziImageFile.h"
+#include "DataFileEditorDialog.h"
 #include "DataFileException.h"
 #include "DeveloperFlagsEnum.h"
 #include "DisplayPropertiesImages.h"
@@ -98,6 +99,7 @@
 #include "ModelSurface.h"
 #include "ModelSurfaceMontage.h"
 #include "ModelWholeBrain.h"
+#include "OpenFileQuicklyDialog.h"
 #include "PlainTextStringBuilder.h"
 #include "ProgressReportingDialog.h"
 #include "RecentFilesDialog.h"
@@ -122,6 +124,7 @@
 #include "TileTabsLayoutManualConfiguration.h"
 #include "TileTabsGridConfigurationModifier.h"
 #include "WindowTabAspectRatios.h"
+#include "WorkbenchInstallationAssistantDialog.h"
 #include "WuQDataEntryDialog.h"
 #include "WuQDoubleSpinBox.h"
 #include "WuQMacroManager.h"
@@ -132,6 +135,8 @@
 #include "WuQtUtilities.h"
 #include "WuQTextEditorDialog.h"
 #include "VtkFileExporter.h"
+#include "OmeZarrImageFile.h"
+
 
 using namespace caret;
 
@@ -1621,6 +1626,13 @@ BrainBrowserWindow::createActions()
     m_reopenLastClosedTabAction->setObjectName(m_objectNamePrefix
                                                + ":Menu:ReopenLastClosedTabAction"); /* NOTE: No Macro support for this item */
     
+    m_openOmeZarrDirectoryAction =
+    WuQtUtilities::createAction("Open OME-ZARR Directory...",
+                                "Open an OME-ZARR directory",
+                                this,
+                                this,
+                                SLOT(processOmeZarrDirectoryOpen()));
+    
     m_openFileAction =
     WuQtUtilities::createAction("Open File...", 
                                 "Open a data file including a spec file located on the computer",
@@ -1630,7 +1642,16 @@ BrainBrowserWindow::createActions()
                                 SLOT(processDataFileOpen()));
     m_openFileAction->setShortcutContext(Qt::ApplicationShortcut);
     
-    m_openLocationAction = 
+    m_openFileQuicklyAction =
+    WuQtUtilities::createAction("Open File Quickly...",
+                                "Open a file by entering path of the file",
+                                QKeySequence(Qt::CTRL | Qt::META | Qt::Key_O),
+                                this,
+                                this,
+                                SLOT(processDataFileOpenQuickly()));
+    m_openFileQuicklyAction->setShortcutContext(Qt::ApplicationShortcut);
+
+    m_openLocationAction =
     WuQtUtilities::createAction("Open Location...", 
                                 "Open a data file including a spec file located on a web server (http)",
                                 QKeySequence(Qt::CTRL | Qt::Key_L),
@@ -1710,6 +1731,22 @@ BrainBrowserWindow::createActions()
                                 this,
                                 this,
                                 SLOT(processExitProgram()));
+    
+    m_dataAnnotationsEditAction = new QAction("Edit Annotations...");
+    QObject::connect(m_dataAnnotationsEditAction, &QAction::triggered,
+                     this, &BrainBrowserWindow::processEditAnnotations);
+    
+    m_dataBordersEditAction = new QAction("Edit Borders...");
+    QObject::connect(m_dataBordersEditAction, &QAction::triggered,
+                     this, &BrainBrowserWindow::processEditBorders);
+    
+    m_dataFociEditAction = new QAction("Edit Foci...");
+    QObject::connect(m_dataFociEditAction, &QAction::triggered,
+                     this, &BrainBrowserWindow::processEditFoci);
+    
+    m_dataSamplesEditAction = new QAction("Edit Samples...");
+    QObject::connect(m_dataSamplesEditAction, &QAction::triggered,
+                     this, &BrainBrowserWindow::processEditSamples);
     
     m_dataFociProjectAction =
     WuQtUtilities::createAction("Project Foci...",
@@ -1875,6 +1912,13 @@ BrainBrowserWindow::createActions()
                                 this,
                                 SLOT(processHcpUsersGroup()));
 
+    m_helpWorkbenchInstallationAssistantAction =
+    WuQtUtilities::createAction("Installation Assistant (Set Path)...",
+                                "Help with ",
+                                this,
+                                this,
+                                SLOT(processHelpWorkbenchInstallationAssistant()));
+
     m_helpHcpFeatureRequestAction =
     WuQtUtilities::createAction("Submit HCP Software Feature Request...",
                                 "Go to HCP Feature Request Website in your computer's web browser",
@@ -1943,6 +1987,13 @@ BrainBrowserWindow::createActions()
                                 this,
                                 this,
                                 SLOT(processDevelopCziFileTransformTesting()));
+    
+    m_developerOmeZarrOpenAction =
+    WuQtUtilities::createAction("OME-ZARR Open...",
+                                "Test OME-ZARR reading",
+                                this,
+                                this,
+                                SLOT(processDevelopOmeZarrOpenTesting()));
 }
 
 /**
@@ -2030,6 +2081,9 @@ BrainBrowserWindow::createMenuDevelop()
     menu->addAction(m_developerGraphicsTimingAction);
     menu->addAction(m_developerGraphicsTimingDurationAction);
     
+    menu->addSeparator();
+    menu->addAction(m_developerOmeZarrOpenAction);
+    
     return menu;
 }
 
@@ -2084,7 +2138,9 @@ BrainBrowserWindow::createMenuFile()
     menu->addAction(m_duplicateTabAction);
     menu->addAction(m_reopenLastClosedTabAction);
     menu->addSeparator();
+    menu->addAction(m_openOmeZarrDirectoryAction);
     menu->addAction(m_openFileAction);
+    menu->addAction(m_openFileQuicklyAction);
     menu->addAction(m_openRecentAction);
     menu->addMenu(new RecentSceneMenu(RecentSceneMenu::MenuLocation::FILE_MENU,
                                       this));
@@ -2771,8 +2827,15 @@ BrainBrowserWindow::createMenuData()
     QObject::connect(menu, SIGNAL(aboutToShow()),
                      this, SLOT(processDataMenuAboutToShow()));
     
-    menu->addAction(m_dataFociProjectAction);
+    menu->addAction(m_dataAnnotationsEditAction);
+    menu->addSeparator();
+    menu->addAction(m_dataBordersEditAction);
     menu->addAction(m_dataBorderFilesSplitAction);
+    menu->addSeparator();
+    menu->addAction(m_dataFociEditAction);
+    menu->addAction(m_dataFociProjectAction);
+    menu->addSeparator();
+    menu->addAction(m_dataSamplesEditAction);
     
     return menu;
 }
@@ -2784,7 +2847,16 @@ void
 BrainBrowserWindow::processDataMenuAboutToShow()
 {
     Brain* brain = GuiManager::get()->getBrain();
+    
+    std::vector<AnnotationFile*> annotationFiles;
+    brain->getAllAnnotationFilesIncludingSceneAnnotationFile(annotationFiles);
+    m_dataAnnotationsEditAction->setEnabled( ! annotationFiles.empty());
+    
+    bool haveBorderFiles = (GuiManager::get()->getBrain()->getNumberOfBorderFiles() > 0);
+    m_dataBordersEditAction->setEnabled(haveBorderFiles);
+    
     bool haveFociFiles = (GuiManager::get()->getBrain()->getNumberOfFociFiles() > 0);
+    m_dataFociEditAction->setEnabled(haveFociFiles);
     m_dataFociProjectAction->setEnabled(haveFociFiles);
     
     bool haveMultiStructureBorderFiles = false;
@@ -2795,7 +2867,9 @@ BrainBrowserWindow::processDataMenuAboutToShow()
             break;
         }
     }
-    m_dataBorderFilesSplitAction->setEnabled(haveMultiStructureBorderFiles);    
+    m_dataBorderFilesSplitAction->setEnabled(haveMultiStructureBorderFiles);  
+    
+    m_dataSamplesEditAction->setEnabled(brain->getNumberOfSamplesFiles() > 0);
 }
 
 /**
@@ -3007,6 +3081,8 @@ BrainBrowserWindow::createMenuHelp()
     menu->addAction(helpAction->text(),
                     this, SLOT(processShowHelpInformation()));
     menu->addAction(m_helpHcpUsersAction);
+    menu->addSeparator();
+    menu->addAction(m_helpWorkbenchInstallationAssistantAction);
     menu->addSeparator();
     menu->addAction(m_helpHcpWebsiteAction);
     menu->addAction(m_helpWorkbenchBugReportAction);
@@ -3272,6 +3348,91 @@ BrainBrowserWindow::processDevelopCziFileTransformTesting()
 }
 
 /**
+ * Test opening OME-ZARR
+ */
+void
+BrainBrowserWindow::processDevelopOmeZarrOpenTesting()
+{
+    AString filename("/Users/john/caret_data/ome-zarr/QM23.50.001.CX.43.01.ome.zarr");
+    OmeZarrImageFile omeZarrFile;
+    try {
+        omeZarrFile.readFile(filename);
+    }
+    catch (const DataFileException& e) {
+        WuQMessageBox::errorOk(this, e.whatString());
+    }
+}
+
+/**
+ * Edit Annotations.
+ */
+void
+BrainBrowserWindow::processEditAnnotations()
+{
+    Brain* brain(GuiManager::get()->getBrain());
+    CaretAssert(brain);
+    std::vector<AnnotationFile*> annotationFiles;
+    brain->getAllAnnotationFilesIncludingSceneAnnotationFile(annotationFiles);
+    
+    if ( ! annotationFiles.empty()) {
+        DataFileEditorDialog* dialog = new DataFileEditorDialog(DataFileEditorDialog::DataType::ANNOTATIONS,
+                                                                this);
+        dialog->exec();
+    }
+}
+
+/**
+ * Edit borders.
+ */
+void
+BrainBrowserWindow::processEditBorders()
+{
+    Brain* brain(GuiManager::get()->getBrain());
+    CaretAssert(brain);
+    const int32_t numBorderFiles(brain->getNumberOfBorderFiles());
+    
+    if (numBorderFiles > 0) {
+        DataFileEditorDialog* dialog = new DataFileEditorDialog(DataFileEditorDialog::DataType::BORDERS,
+                                                                this);
+        dialog->exec();
+    }
+}
+
+/**
+ * Edit Samples.
+ */
+void
+BrainBrowserWindow::processEditSamples()
+{
+    Brain* brain(GuiManager::get()->getBrain());
+    CaretAssert(brain);
+    
+    if (brain->getNumberOfSamplesFiles() > 0) {
+        DataFileEditorDialog* dialog = new DataFileEditorDialog(DataFileEditorDialog::DataType::SAMPLES,
+                                                                this);
+        dialog->exec();
+    }
+}
+
+/**
+ * Edit foci.
+ */
+void
+BrainBrowserWindow::processEditFoci()
+{
+    Brain* brain(GuiManager::get()->getBrain());
+    CaretAssert(brain);
+    const int32_t numFociFiles(brain->getNumberOfFociFiles());
+    
+    if (numFociFiles > 0) {
+        DataFileEditorDialog* dialog = new DataFileEditorDialog(DataFileEditorDialog::DataType::FOCI,
+                                                                this);
+        dialog->exec();
+    }
+}
+
+
+/**
  * Project foci.
  */
 void
@@ -3408,6 +3569,63 @@ BrainBrowserWindow::processDataFileLocationOpen()
 }
 
 /**
+ * Called to open an OME-ZARR directory
+ */
+void
+BrainBrowserWindow::processOmeZarrDirectoryOpen()
+{
+    /*
+     * Setup file selection dialog.
+     */
+    CaretFileDialog fd(CaretFileDialog::Mode::MODE_OPEN,
+                       this);
+    fd.setAcceptMode(CaretFileDialog::AcceptOpen);
+    AString filterName = DataFileTypeEnum::toQFileDialogFilterForReading(DataFileTypeEnum::OME_ZARR_IMAGE_FILE);
+    QStringList filenameFilterList;
+    filenameFilterList.append(filterName);
+    fd.setNameFilters(filenameFilterList);
+    fd.setFileMode(CaretFileDialog::Directory);
+//    if ( ! s_previousOpenFileDirectory.isEmpty()) {
+//        FileInformation fileInfo(s_previousOpenFileDirectory);
+//        if (fileInfo.exists()) {
+//            fd.setDirectory(s_previousOpenFileDirectory);
+//        }
+//    }
+    
+    if (fd.exec() == CaretFileDialog::Accepted) {
+        QStringList selectedFiles = fd.selectedFiles();
+        if ( ! selectedFiles.empty()) {
+            /*
+             * Load the files.
+             */
+            std::vector<AString> filenamesVector;
+            QStringListIterator nameIter(selectedFiles);
+            while (nameIter.hasNext()) {
+                const QString name = nameIter.next();
+                filenamesVector.push_back(name);
+            }
+            
+            std::vector<DataFileTypeEnum::Enum> dataFileTypesDummyNotUsed;
+            loadFiles(this,
+                      filenamesVector,
+                      dataFileTypesDummyNotUsed,
+                      LOAD_SPEC_FILE_WITH_DIALOG,
+                      "",
+                      "");
+            
+//            for (auto name : filenamesVector) {
+//                CaretPreferences* prefs = SessionManager::get()->getCaretPreferences();
+//                prefs->addToRecentFilesAndOrDirectories(name);
+//            }
+        }
+//        s_previousOpenFileNameFilter = fd.selectedNameFilter();
+//        s_previousOpenFileDirectory  = fd.directory().absolutePath();
+//        s_previousOpenFileGeometry   = fd.saveGeometry();
+    }
+
+}
+
+/**
  * Called when open data file is selected.
  */
 void 
@@ -3429,6 +3647,10 @@ BrainBrowserWindow::processDataFileOpen()
     for (std::vector<DataFileTypeEnum::Enum>::const_iterator iter = dataFileTypes.begin();
          iter != dataFileTypes.end();
          iter++) {
+//        if (*iter == DataFileTypeEnum::OME_ZARR_IMAGE_FILE) {
+//            CaretLogWarning("Skipping OME-ZARR for Open Dialog filters");
+//            continue;
+//        }
         AString filterName = DataFileTypeEnum::toQFileDialogFilterForReading(*iter);
         filenameFilterList.append(filterName);
     }
@@ -3469,33 +3691,94 @@ BrainBrowserWindow::processDataFileOpen()
     
     if (fd.exec() == CaretFileDialog::Accepted) {
         QStringList selectedFiles = fd.selectedFiles();
-        if (selectedFiles.empty() == false) {            
-            /*
-             * Load the files.
-             */
-            std::vector<AString> filenamesVector;
-            QStringListIterator nameIter(selectedFiles);
-            while (nameIter.hasNext()) {
-                const QString name = nameIter.next();
-                filenamesVector.push_back(name);
-            }
-            
-            std::vector<DataFileTypeEnum::Enum> dataFileTypesDummyNotUsed;
-            loadFiles(this,
-                      filenamesVector,
-                      dataFileTypesDummyNotUsed,
-                      LOAD_SPEC_FILE_WITH_DIALOG,
-                      "",
-                      "");
-            
-            for (auto name : filenamesVector) {
-                CaretPreferences* prefs = SessionManager::get()->getCaretPreferences();
-                prefs->addToRecentFilesAndOrDirectories(name);
-            }
+        if ( ! selectedFiles.empty()) {
+            openDataFiles(selectedFiles);
         }
         s_previousOpenFileNameFilter = fd.selectedNameFilter();
         s_previousOpenFileDirectory  = fd.directory().absolutePath();
         s_previousOpenFileGeometry   = fd.saveGeometry();
+    }
+}
+
+/**
+ * Open the given list of data files
+ * @param selectedFiles
+ *    Files to open
+ */
+void
+BrainBrowserWindow::openDataFiles(const QStringList& selectedFiles)
+{
+    /*
+     * Load the files.
+     */
+    std::vector<AString> filenamesVector;
+    QStringListIterator nameIter(selectedFiles);
+    while (nameIter.hasNext()) {
+        const QString name = nameIter.next();
+        filenamesVector.push_back(name);
+    }
+    
+    std::vector<DataFileTypeEnum::Enum> dataFileTypesDummyNotUsed;
+    loadFiles(this,
+              filenamesVector,
+              dataFileTypesDummyNotUsed,
+              LOAD_SPEC_FILE_WITH_DIALOG,
+              "",
+              "");
+    
+    std::vector<AString> sceneFileNames;
+    for (auto name : filenamesVector) {
+        CaretPreferences* prefs = SessionManager::get()->getCaretPreferences();
+        prefs->addToRecentFilesAndOrDirectories(name);
+        
+        bool validFlag(false);
+        const DataFileTypeEnum::Enum dataFileType(DataFileTypeEnum::fromName(name,
+                                                                             &validFlag));
+        if (validFlag) {
+            if (dataFileType == DataFileTypeEnum::SCENE) {
+                sceneFileNames.push_back(name);
+            }
+        }
+    }
+    
+    if ( ! sceneFileNames.empty()) {
+        Brain* brain(GuiManager::get()->getBrain());
+        CaretAssert(brain);
+        const int32_t numSceneFiles(brain->getNumberOfSceneFiles());
+        if (numSceneFiles > 0) {
+            SceneFile* sceneFile(NULL);
+            /*
+             * Find scene file by name
+             */
+            for (int32_t i = 0; i < numSceneFiles; i++) {
+                sceneFile = brain->getSceneFileWithName(sceneFileNames[i]);
+                if (sceneFile != NULL) {
+                    break;
+                }
+            }
+            /*
+             * If scene file not found by name, use last scene file
+             * since it should be the most recently loaded scene file
+             */
+            if (sceneFile == NULL) {
+                sceneFile = brain->getSceneFile(numSceneFiles - 1);
+            }
+            if (sceneFile != NULL) {
+                const int32_t numScenes(sceneFile->getNumberOfScenes());
+                if (numScenes > 0) {
+                    /*
+                     * Select the recently loaded scene file in the scene dialog
+                     */
+                    Scene* scene(sceneFile->getSceneAtIndex(0));
+                    CaretAssert(scene);
+                    const bool showSceneDialogFlag(false);
+                    GuiManager::get()->processShowSceneDialogAndScene(this,
+                                                                      sceneFile,
+                                                                      scene,
+                                                                      showSceneDialogFlag);
+                }
+            }
+        }
     }
 }
 
@@ -3585,6 +3868,19 @@ BrainBrowserWindow::loadFilesFromNetwork(QWidget* parentForDialogs,
     return successFlag;
 }
 
+/**
+ * Open a file by user entering the absolute path of the file
+ */
+void
+BrainBrowserWindow::processDataFileOpenQuickly()
+{
+    OpenFileQuicklyDialog dialog;
+    if (dialog.exec() == OpenFileQuicklyDialog::Accepted) {
+        QStringList filenames;
+        filenames.push_back(dialog.getFilename());
+        openDataFiles(filenames);
+    }
+}
 
 /**
  * Load the files that were specified on the command line.
@@ -3685,9 +3981,15 @@ BrainBrowserWindow::loadRecentScene(const AString& sceneFileName,
         return;
     }
 
+    /*
+     * NO parent for progress dialog.  If a browser window is used
+     * it could be closed if it was not open when the scene was
+     * created.  If browser window is closed its children are closed
+     * and that would include this progress window.
+     */
     ProgressReportingDialog progressDialog("Loading " + sceneName,
                                            "Initializing",
-                                           this);
+                                           NULL);
     
     const bool showSceneDialogFlag(false);
     GuiManager::get()->processShowSceneDialogAndScene(this,
@@ -4837,6 +5139,19 @@ BrainBrowserWindow::processHcpUsersGroup()
 {
     QUrl url("https://groups.google.com/a/humanconnectome.org/g/hcp-users");
     QDesktopServices::openUrl(url);
+}
+
+/**
+ * Display Workbench Installation Assistant (setting path)
+ */
+void
+BrainBrowserWindow::processHelpWorkbenchInstallationAssistant()
+{
+    WorkbenchInstallationAssistantDialog* dialog(new WorkbenchInstallationAssistantDialog(this));
+    dialog->setAttribute(Qt::WA_DeleteOnClose);
+    dialog->show();
+    dialog->raise();
+    dialog->activateWindow();
 }
 
 /**

@@ -112,6 +112,7 @@ Focus::clear()
     m_sumsVersionNumber = "";
     m_sumsMSLID = "";
     m_attributeID = "";
+    m_focusID = "";
 
     m_groupNameSelectionItem = NULL;
     
@@ -163,6 +164,7 @@ Focus::copyHelperFocus(const Focus& focus)
     m_sumsVersionNumber = focus.m_sumsVersionNumber;
     m_sumsMSLID = focus.m_sumsMSLID;
     m_attributeID = focus.m_attributeID;
+    m_focusID = focus.m_focusID;
     
     this->removeAllProjections();
     
@@ -176,6 +178,12 @@ Focus::copyHelperFocus(const Focus& focus)
     }
     
     setNameOrClassModified(); // new name/class so modified
+    if (focus.isNameRgbaValid()) {
+        setNameRgba(focus.m_nameRgbaColor);
+    }
+    if (focus.isClassRgbaValid()) {
+        setClassRgba(focus.m_classRgbaColor);
+    }
 }
 
 /**
@@ -435,7 +443,7 @@ Focus::getClassRgba(float rgba[4]) const
  * @param rgba
  *     Red, green, blue, alpha ranging zero to one.
  */
-void Focus::setClassRgba(const float rgba[3])
+void Focus::setClassRgba(const float rgba[4])
 {
     m_classRgbaColor[0] = rgba[0];
     m_classRgbaColor[1] = rgba[1];
@@ -496,6 +504,27 @@ void Focus::setNameRgba(const float rgba[4])
     m_nameRgbaColor[2] = rgba[2];
     m_nameRgbaColor[3] = rgba[3];
     m_nameRgbaColorValid = true;
+}
+
+/**
+ * @return The fcous ID
+ */
+AString
+Focus::getFocusID() const
+{
+    return m_focusID;
+}
+
+/**
+ * Set the focus id
+ * @param focusID
+ *    New focus id
+ */
+void
+Focus::setFocusID(const AString& focusID)
+{
+    m_focusID = focusID;
+    setModified();
 }
 
 /**
@@ -787,6 +816,7 @@ Focus::writeAsXML(XmlWriter& xmlWriter,
     xmlWriter.writeElementCData(XML_TAG_SUMS_VERSION_NUMBER, m_sumsVersionNumber);
     xmlWriter.writeElementCData(XML_TAG_SUMS_MSLID, m_sumsMSLID);
     xmlWriter.writeElementCData(XML_TAG_SUMS_ATTRIBUTE_ID, m_attributeID);
+    xmlWriter.writeElementCData(XML_TAG_FOCUS_ID, m_focusID);
     
     m_studyMetaDataLinkSet->writeXML(xmlWriter);
     const int32_t numProj = getNumberOfProjections();
@@ -879,6 +909,9 @@ Focus::setElementFromText(const AString& elementName,
     }
     else if (elementName == Focus::XML_TAG_SUMS_ATTRIBUTE_ID) {
         m_attributeID = textValue;
+    }
+    else if (elementName == Focus::XML_TAG_FOCUS_ID) {
+        m_focusID = textValue;
     }
     else {
         return false;

@@ -85,6 +85,9 @@ SceneableInterface()
         case DataFileTypeEnum::CONNECTIVITY_FIBER_TRAJECTORY_TEMPORARY:
             supportsIdentificationAttributesFlag = true;
             break;
+        case DataFileTypeEnum::CONNECTIVITY_FIBER_TRAJECTORY_MAPS:
+            supportsIdentificationAttributesFlag = true;
+            break;
         case DataFileTypeEnum::CONNECTIVITY_PARCEL:
             supportsIdentificationAttributesFlag = true;
             break;
@@ -124,6 +127,9 @@ SceneableInterface()
             supportsIdentificationAttributesFlag = true;
             break;
         case DataFileTypeEnum::METRIC_DYNAMIC:
+            supportsIdentificationAttributesFlag = true;
+            break;
+        case DataFileTypeEnum::OME_ZARR_IMAGE_FILE:
             supportsIdentificationAttributesFlag = true;
             break;
         case DataFileTypeEnum::PALETTE:
@@ -682,6 +688,26 @@ CaretDataFile::castToHistologySlicesFile() const
  */
 HistologySlicesFile*
 CaretDataFile::castToHistologySlicesFile()
+{
+    return NULL;
+}
+
+/**
+ * @return File casted to a OME-ZARR Image File (avoids use of dynamic_cast that can be slow)
+ * Overidden in OmeZarrImageFile
+ */
+const OmeZarrImageFile*
+CaretDataFile::castToOmeZarrImageFile() const
+{
+    return NULL;
+}
+
+/**
+ * @return File casted to a OME-ZARR Image File (avoids use of dynamic_cast that can be slow)
+ * Overidden in OmeZarrImageFile
+ */
+OmeZarrImageFile*
+CaretDataFile::castToOmeZarrImageFile()
 {
     return NULL;
 }

@@ -26,6 +26,7 @@
 #include <cmath>
 #include <tuple>
 
+#include "AnnotationPercentSizeText.h"
 #include "AnnotationPointSizeText.h"
 #include "Brain.h"
 #include "BrainOpenGLFixedPipeline.h"
@@ -66,6 +67,7 @@
 #include "SelectionItemVoxel.h"
 #include "SelectionManager.h"
 #include "SessionManager.h"
+#include "TabDrawingInfo.h"
 #include "VolumeFile.h"
 #include "VolumeMappableInterface.h"
 
@@ -182,9 +184,15 @@ BrainOpenGLHistologySliceDrawing::getOrthoBounds(GraphicsOrthographicProjection&
         CaretAssert(orthoTopOut > orthoBottomOut);
     }
     
-    const double nearValue(-1.0);
-    const double farValue(1.0);
+    /*
+     * Note that too small will clip foci drawn as spheres
+     */
+    const double nearValue(-100.0);
+    const double farValue(100.0);
     
+    if (m_browserTabContent->isHistologyFlipXEnabled()) {
+        std::swap(orthoLeftOut, orthoRightOut);
+    }
     orthographicsProjectionOut.set(orthoLeftOut,
                                    orthoRightOut,
                                    orthoBottomOut,
@@ -314,6 +322,8 @@ BrainOpenGLHistologySliceDrawing::draw(BrainOpenGLFixedPipeline* fixedPipelineDr
         return;
     }
 
+    setupScaleBars(orthographicProjection);
+    
     if (s_debugFlag) {
         std::cout << orthographicProjection.toString() << std::endl;
     }
@@ -366,7 +376,7 @@ BrainOpenGLHistologySliceDrawing::draw(BrainOpenGLFixedPipeline* fixedPipelineDr
     if (SessionManager::get()->getCaretPreferences()->isCrossAtViewportCenterEnabled()) {
         GraphicsShape::drawYellowCrossAtViewportCenter();
     }
-    
+
     m_fixedPipelineDrawing->checkForOpenGLError(NULL, "At end of BrainOpenGLHistologySliceDrawing::draw()");
 }
 
@@ -458,6 +468,7 @@ BrainOpenGLHistologySliceDrawing::drawModelLayers(const GraphicsOrthographicProj
         }
 
 
+        glDisable(GL_CULL_FACE);
         GraphicsPrimitiveV3fT2f* primitive(mediaFile->getGraphicsPrimitiveForPlaneXyzDrawing(drawingData.m_tabIndex,
                                                                                              drawingData.m_overlayIndex));
         if (primitive != NULL) {
@@ -677,10 +688,8 @@ BrainOpenGLHistologySliceDrawing::drawModelLayers(const GraphicsOrthographicProj
      */
     const BrowserTabContent* btc(viewportContent->getBrowserTabContent());
     CaretAssert(btc);
-    if (btc->isHistologyAxesCrosshairsDisplayed()) {
-        drawCrosshairs(orthographicProjection,
-                       btc->getHistologySelectedCoordinate(underlayHistologySlicesFile));
-    }
+    drawCrosshairs(orthographicProjection,
+                   btc->getHistologySelectedCoordinate(underlayHistologySlicesFile));
     
     /*
      * Draw annotation in histology space
@@ -843,7 +852,7 @@ BrainOpenGLHistologySliceDrawing::processSelection(const int32_t tabIndex,
 }
 
 /**
- * Draw the histology coordinate
+ * Draw the histology crosshairs
  * @param orthographicsProjection;
  *    Orthographic projection
  * @param histologyCoordinate
@@ -873,18 +882,128 @@ BrainOpenGLHistologySliceDrawing::drawCrosshairs(const GraphicsOrthographicProje
         std::cout << "             stereotaxic: " << AString::fromNumbers(histologyCoordinate.getStereotaxicXYZ()) << std::endl;
     }
     
-    std::unique_ptr<GraphicsPrimitiveV3fC4f> primitive(GraphicsPrimitive::newPrimitiveV3fC4f(GraphicsPrimitive::PrimitiveType::POLYGONAL_LINES));
-    primitive->addVertex(minX, centerXYZ[1], z, green);
-    primitive->addVertex(maxX, centerXYZ[1], z, green);
-    primitive->addVertex(centerXYZ[0], minY, z, red);
-    primitive->addVertex(centerXYZ[0], maxY, z, red);
+    if (m_browserTabContent->isHistologyAxesCrosshairsDisplayed()) {
+        std::unique_ptr<GraphicsPrimitiveV3fC4f> primitive(GraphicsPrimitive::newPrimitiveV3fC4f(GraphicsPrimitive::PrimitiveType::POLYGONAL_LINES));
+        primitive->addVertex(minX, centerXYZ[1], z, green);
+        primitive->addVertex(maxX, centerXYZ[1], z, green);
+        primitive->addVertex(centerXYZ[0], minY, z, red);
+        primitive->addVertex(centerXYZ[0], maxY, z, red);
+        
+        const float lineWidthPercentage(0.5);
+        primitive->setLineWidth(GraphicsPrimitive::LineWidthType::PERCENTAGE_VIEWPORT_HEIGHT,
+                                lineWidthPercentage);
+        GraphicsEngineDataOpenGL::draw(primitive.get());
+    }
     
-    const float lineWidthPercentage(0.5);
-    primitive->setLineWidth(GraphicsPrimitive::LineWidthType::PERCENTAGE_VIEWPORT_HEIGHT,
-                            lineWidthPercentage);
-    
-    GraphicsEngineDataOpenGL::draw(primitive.get());
-    
+    if (m_browserTabContent->isHistologyAxesCrosshairsLabelsDisplayed()) {
+        if ( ! m_mediaFilesAndDataToDraw.empty()) {
+            const HistologySlice* histologySlice(m_mediaFilesAndDataToDraw[0].m_histologySlice);
+            if (histologySlice != NULL) {
+                AString westText, eastText, northText, southText;
+                histologySlice->getAxisLabels(m_browserTabContent->isHistologyFlipXEnabled(),
+                                              westText, eastText, southText, northText);
+                
+                const std::array<uint8_t, 4> backgroundRGBA = {
+                    m_fixedPipelineDrawing->m_backgroundColorByte[0],
+                    m_fixedPipelineDrawing->m_backgroundColorByte[1],
+                    m_fixedPipelineDrawing->m_backgroundColorByte[2],
+                    m_fixedPipelineDrawing->m_backgroundColorByte[3]
+                };
+
+                const std::array<uint8_t, 4> foregroundRGBA = {
+                    m_fixedPipelineDrawing->m_foregroundColorByte[0],
+                    m_fixedPipelineDrawing->m_foregroundColorByte[1],
+                    m_fixedPipelineDrawing->m_foregroundColorByte[2],
+                    m_fixedPipelineDrawing->m_foregroundColorByte[3]
+                };
+                
+                GraphicsViewport vp(GraphicsViewport::newInstanceCurrentViewport());
+                glPushAttrib(GL_DEPTH_BITS
+                             | GL_TRANSFORM_BIT);
+                glDisable(GL_DEPTH_TEST);
+                glMatrixMode(GL_PROJECTION);
+                glPushMatrix();
+                glLoadIdentity();
+                glOrtho(vp.getLeft(), vp.getRight(), vp.getBottom(), vp.getTop(), -1.0, 1.0);
+                glMatrixMode(GL_MODELVIEW);
+                glPushMatrix();
+                glLoadIdentity();
+
+                /*
+                * Offset text labels be a percentage of viewort width/height
+                */
+                const float textOffsetX = static_cast<int>(vp.getWidth() * 0.01f);
+                const float textOffsetY = static_cast<int>(vp.getHeight() * 0.01f);
+                const float orthoWidth(static_cast<int>(vp.getWidth()));
+                const float orthoHeight(static_cast<int>(vp.getHeight()));
+
+                const float textLeftWindowXY[2] = {
+                    textOffsetX,
+                    (orthoHeight / 2.0f)
+                };
+                const float textRightWindowXY[2] = {
+                    (orthoWidth - textOffsetX),
+                    (orthoHeight / 2.0f)
+                };
+                const float textBottomWindowXY[2] = {
+                    (orthoWidth / 2.0f),
+                    textOffsetY
+                };
+                const float textTopWindowXY[2] = {
+                    (orthoWidth / 2.0f),
+                    (orthoHeight - textOffsetY),
+                };
+
+                AnnotationPercentSizeText annotationText(AnnotationAttributesDefaultTypeEnum::NORMAL);
+                annotationText.setBoldStyleEnabled(true);
+                annotationText.setFontPercentViewportSize(5.0f);
+                annotationText.setBackgroundColor(CaretColorEnum::CUSTOM);
+                annotationText.setTextColor(CaretColorEnum::CUSTOM);
+                annotationText.setCustomTextColor(foregroundRGBA.data());
+                annotationText.setCustomBackgroundColor(backgroundRGBA.data());
+                
+                if ( ! westText.isEmpty()) {
+                    annotationText.setHorizontalAlignment(AnnotationTextAlignHorizontalEnum::LEFT);
+                    annotationText.setVerticalAlignment(AnnotationTextAlignVerticalEnum::MIDDLE);
+                    annotationText.setText(westText);
+                    m_fixedPipelineDrawing->drawTextAtViewportCoords(textLeftWindowXY[0],
+                                                                     textLeftWindowXY[1],
+                                                                     annotationText);
+                }
+                
+                if ( ! eastText.isEmpty()) {
+                    annotationText.setText(eastText);
+                    annotationText.setHorizontalAlignment(AnnotationTextAlignHorizontalEnum::RIGHT);
+                    annotationText.setVerticalAlignment(AnnotationTextAlignVerticalEnum::MIDDLE);
+                    m_fixedPipelineDrawing->drawTextAtViewportCoords(textRightWindowXY[0],
+                                                                     textRightWindowXY[1],
+                                                                     annotationText);
+                }
+                
+                if ( ! southText.isEmpty()) {
+                    annotationText.setHorizontalAlignment(AnnotationTextAlignHorizontalEnum::CENTER);
+                    annotationText.setVerticalAlignment(AnnotationTextAlignVerticalEnum::BOTTOM);
+                    annotationText.setText(southText);
+                    m_fixedPipelineDrawing->drawTextAtViewportCoords(textBottomWindowXY[0],
+                                                                     textBottomWindowXY[1],
+                                                                     annotationText);
+                }
+                
+                if ( ! northText.isEmpty()) {
+                    annotationText.setHorizontalAlignment(AnnotationTextAlignHorizontalEnum::CENTER);
+                    annotationText.setVerticalAlignment(AnnotationTextAlignVerticalEnum::TOP);
+                    annotationText.setText(northText);
+                    m_fixedPipelineDrawing->drawTextAtViewportCoords(textTopWindowXY[0],
+                                                                     textTopWindowXY[1],
+                                                                     annotationText);
+                }
+                glPopMatrix();
+                glMatrixMode(GL_PROJECTION);
+                glPopMatrix(); /* pop attrib below will restore matrix mode */
+                glPopAttrib();
+            }
+        }
+    }
     glPopAttrib();
 }
 
@@ -982,6 +1101,7 @@ BrainOpenGLHistologySliceDrawing::drawVolumeOverlaysOnCziImageFile(std::vector<V
     const DisplayPropertiesLabels* dsl = m_fixedPipelineDrawing->m_brain->getDisplayPropertiesLabels();
     const int32_t tabIndex(m_browserTabContent->getTabNumber());
     const DisplayGroupEnum::Enum displayGroup = dsl->getDisplayGroupForTab(tabIndex);
+    const LabelViewModeEnum::Enum labelViewMode(dsl->getLabelViewModeForTab(tabIndex));
     
     glPushAttrib(GL_DEPTH_BUFFER_BIT
                  | GL_COLOR_BUFFER_BIT);
@@ -1002,9 +1122,13 @@ BrainOpenGLHistologySliceDrawing::drawVolumeOverlaysOnCziImageFile(std::vector<V
         CaretAssert(vmi);
         CaretAssert(mapIndex >= 0);
         AString errorMessage;
+        const TabDrawingInfo tabDrawingInfo(dynamic_cast<CaretMappableDataFile*>(vmi),
+                                            mapIndex,
+                                            displayGroup,
+                                            labelViewMode,
+                                            tabIndex);
         std::vector<GraphicsPrimitive*> primitives(vmi->getHistologySliceIntersectionPrimitive(mapIndex,
-                                                                                               displayGroup,
-                                                                                               tabIndex,
+                                                                                               tabDrawingInfo,
                                                                                                histologySlice,
                                                                                                overlay->getVolumeToImageMappingMode(),
                                                                                                overlay->getVolumeToImageMappingThickness(),
@@ -1068,3 +1192,35 @@ BrainOpenGLHistologySliceDrawing::drawVolumeOverlaysOnCziImageFile(std::vector<V
     glPopAttrib();
 }
 
+/**
+ * Setup the scale bars for histology slice drawing
+ * @param orthographicProjection
+ *    The orthographic projection
+ */
+void
+BrainOpenGLHistologySliceDrawing::setupScaleBars(const GraphicsOrthographicProjection& orthographicProjection)
+{
+    /*
+     * Must have histology slice to set the stereotaxic coordinates at the left and right sides
+     * of the viewport
+     */
+    for (const HistologyOverlay::DrawingData& dd : m_mediaFilesAndDataToDraw) {
+        const HistologySlice* slice(dd.m_histologySlice);
+        if (slice != NULL) {
+            const Vector3D pLeft(orthographicProjection.getLeft(), 0.0, 0.0);
+            const Vector3D pRight(orthographicProjection.getRight(), 0.0, 0.0);
+            Vector3D xyzLeft;
+            Vector3D xyzRight;
+            if (slice->planeXyzToStereotaxicXyz(pLeft, xyzLeft)
+                && slice->planeXyzToStereotaxicXyz(pRight, xyzRight)) {
+                /*
+                 * Needed for scale bar drawing
+                 */
+                m_fixedPipelineDrawing->setupScaleBarDrawingInformation(m_browserTabContent,
+                                                                        xyzLeft[0],
+                                                                        xyzRight[0]);
+                return;
+            }
+        }
+    }
+}

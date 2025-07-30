@@ -44,8 +44,10 @@
 #include "AnnotationPolyLine.h"
 #include "AnnotationPolyhedron.h"
 #include "AnnotationPercentSizeText.h"
+#include "AnnotationSampleMetaData.h"
 #include "AnnotationScaleBar.h"
 #include "AnnotationText.h"
+#include "AnnotationTextSubstitutionLayerSet.h"
 #include "Brain.h"
 #include "BrainOpenGLFixedPipeline.h"
 #include "BrainOpenGLTextRenderInterface.h"
@@ -55,13 +57,13 @@
 #include "CaretLogger.h"
 #include "DeveloperFlagsEnum.h"
 #include "DisplayPropertiesAnnotation.h"
-#include "DisplayPropertiesAnnotationTextSubstitution.h"
 #include "DisplayPropertiesSamples.h"
 #include "DrawingViewportContent.h"
 #include "EventAnnotationGetBeingDrawnInWindow.h"
 #include "EventBrowserTabGet.h"
 #include "EventBrowserWindowPixelSizeInfoEvent.h"
 #include "EventDrawingViewportContentGet.h"
+#include "EventFocusFileGetColor.h"
 #include "EventManager.h"
 #include "EventOpenGLObjectToWindowTransform.h"
 #include "GraphicsEngineDataOpenGL.h"
@@ -552,7 +554,6 @@ BrainOpenGLAnnotationDrawingFixedPipeline::drawModelSpaceSamplesOnVolumeSlice(In
     if ( ! dps->isDisplaySamples()) {
         return;
     }
-    m_displaySampleNamesFlag = dps->isDisplaySampleNames();
     
     if (plane.isValidPlane()) {
         m_volumeSpacePlane = plane;
@@ -571,7 +572,6 @@ BrainOpenGLAnnotationDrawingFixedPipeline::drawModelSpaceSamplesOnVolumeSlice(In
     
     m_volumeSpacePlane = Plane();
     m_inputs = NULL;
-    m_displaySampleNamesFlag = false;
 }
 
 /**
@@ -832,8 +832,9 @@ BrainOpenGLAnnotationDrawingFixedPipeline::drawAnnotationsInternal(const Drawing
 
     bool drawAnnotationsFromFilesFlag = true;
     
-    const DisplayPropertiesAnnotationTextSubstitution* dpats = m_inputs->m_brain->getDisplayPropertiesAnnotationTextSubstitution();
-    m_textDrawingFlags.setDrawSubstitutedText(dpats->isEnableSubstitutions());
+    const AnnotationTextSubstitutionLayerSet* annSubsLayerSet(m_inputs->m_brain->getAnnotationTextSubstitutionLayerSet());
+    CaretAssert(annSubsLayerSet);
+    m_textDrawingFlags.setDrawSubstitutedText(annSubsLayerSet->isSubstitutionsValid());
     
     bool haveDisplayGroupFlag = true;
     switch (drawingCoordinateSpace) {
@@ -1150,7 +1151,7 @@ BrainOpenGLAnnotationDrawingFixedPipeline::drawAnnotationsInternal(const Drawing
         else {
             CaretAssertVectorIndex(allAnnotationFiles, iFile);
             annotationFile = allAnnotationFiles[iFile];
-            annotationFile->getAllAnnotations(annotationsFromFile);
+            annotationsFromFile = annotationFile->getAllAnnotationsForDrawing();
         }
         
         const int32_t annotationCount = static_cast<int32_t>(annotationsFromFile.size());
@@ -1283,6 +1284,7 @@ BrainOpenGLAnnotationDrawingFixedPipeline::drawAnnotationsInternal(const Drawing
     /*
      * Annotation being drawn by the user.
      */
+    Annotation* temporaryBoxAnnotation(NULL);
     m_brainOpenGLFixedPipeline->checkForOpenGLError(NULL,
                                                     "Start of annotation drawn by user model space.");
     if (m_annotationBeingDrawn != NULL) {
@@ -1295,6 +1297,7 @@ BrainOpenGLAnnotationDrawingFixedPipeline::drawAnnotationsInternal(const Drawing
             AnnotationBox box(AnnotationAttributesDefaultTypeEnum::NORMAL);
             box.applyCoordinatesSizeAndRotationFromOther(textAnn);
             box.applyColoringFromOther(textAnn);
+            temporaryBoxAnnotation = &box;
             
             drawAnnotation(m_dummyAnnotationFile,
                            &box,
@@ -1392,6 +1395,20 @@ BrainOpenGLAnnotationDrawingFixedPipeline::drawAnnotationsInternal(const Drawing
                          * Selection of the annotation being drawn may be disabled
                          */
                         if ( ! m_annotationBeingDrawnIsSelectableFlag) {
+                            selectFlag = false;
+                        }
+                    }
+                    
+                    /*
+                     * When drawing a new text annotation by dragging the mouse to
+                     * select a region, a box annotation is drawn (above) to show
+                     * the region for the text.  We DO NOT want to allow selection
+                     * of this box because it will block selection of the text
+                     * annotation and, since the box annotation is drawn on the
+                     * stack (above), selection of the box will cause a crash.
+                     */
+                    if (temporaryBoxAnnotation != NULL) {
+                        if (selectionInfo.m_annotation == temporaryBoxAnnotation) {
                             selectFlag = false;
                         }
                     }
@@ -4308,6 +4325,9 @@ BrainOpenGLAnnotationDrawingFixedPipeline::drawText(AnnotationFile* annotationFi
     
     float backgroundRGBA[4];
     text->getBackgroundColorRGBA(backgroundRGBA);
+    if (text->getBackgroundColor() != CaretColorEnum::NONE) {
+        text->getTextBackgroundColorRGBA(backgroundRGBA);
+    }
     uint8_t foregroundRGBA[4];
     text->getLineColorRGBA(foregroundRGBA);
     uint8_t textColorRGBA[4];
@@ -5242,6 +5262,53 @@ BrainOpenGLAnnotationDrawingFixedPipeline::drawMultiPairedCoordinateShape(Annota
 
     uint8_t foregroundRGBA[4];
     multiPairedCoordShape->getLineColorRGBA(foregroundRGBA);
+    
+    /*
+     * Override with FOCI color
+     */
+    const DisplayPropertiesSamples* dps(m_inputs->m_brain->getDisplayPropertiesSamples());
+    const AnnotationSampleMetaData* smd(polyhedron->getSampleMetaData());
+    AString fociFileName;
+    AString focusOrClassName;
+    switch (dps->getColorMode()) {
+        case SamplesColorModeEnum::SAMPLE:
+            break;
+        case SamplesColorModeEnum::FOCUS_ONE_NAME:
+            CaretAssert(smd->getNumberOfFoci() >= 1);
+            fociFileName     = smd->getFocusFileName(0);
+            focusOrClassName = smd->getFocusName(0);
+            break;
+        case SamplesColorModeEnum::FOCUS_TWO_NAME:
+            CaretAssert(smd->getNumberOfFoci() >= 2);
+            fociFileName     = smd->getFocusFileName(1);
+            focusOrClassName = smd->getFocusName(1);
+            break;
+        case SamplesColorModeEnum::FOCUS_ONE_CLASS:
+            CaretAssert(smd->getNumberOfFoci() >= 1);
+            fociFileName     = smd->getFocusFileName(0);
+            focusOrClassName = smd->getFocusClass(0);
+            break;
+        case SamplesColorModeEnum::FOCUS_TWO_CLASS:
+            CaretAssert(smd->getNumberOfFoci() >= 2);
+            fociFileName     = smd->getFocusFileName(1);
+            focusOrClassName = smd->getFocusClass(1);
+            break;
+    }
+    if (( ! fociFileName.isEmpty())
+        && ( ! focusOrClassName.isEmpty())) {
+        EventFocusFileGetColor colorEvent(fociFileName,
+                                          dps->getColorMode(),
+                                          focusOrClassName);
+        EventManager::get()->sendEvent(colorEvent.getPointer());
+        if (colorEvent.getEventProcessCount() > 0) {
+            const std::array<uint8_t, 4> rgbaArray(colorEvent.getColorRGBA());
+            foregroundRGBA[0] = rgbaArray[0];
+            foregroundRGBA[1] = rgbaArray[1];
+            foregroundRGBA[2] = rgbaArray[2];
+            foregroundRGBA[3] = rgbaArray[3];
+        }
+    }
+    
     const bool drawForegroundFlag = (foregroundRGBA[3] > 0.0f);
     
     float absAngle(-10000.0);
@@ -5585,15 +5652,13 @@ BrainOpenGLAnnotationDrawingFixedPipeline::drawMultiPairedCoordinateShape(Annota
                 }
                 
                 if (polyhedron != NULL) {
-                    if (m_displaySampleNamesFlag) {
-                        const bool selectionFlag(true);
-                        drawPolyhedronName(annotationFile,
-                                           polyhedron,
-                                           windowVertexXYZ,
-                                           polyhedronNameXYZ,
-                                           polyhedronNameSizeHandleType,
-                                           selectionFlag);
-                    }
+                    const bool selectionFlag(true);
+                    drawPolyhedronName(annotationFile,
+                                       polyhedron,
+                                       windowVertexXYZ,
+                                       polyhedronNameXYZ,
+                                       polyhedronNameSizeHandleType,
+                                       selectionFlag);
                 }
             }
         }
@@ -5604,15 +5669,13 @@ BrainOpenGLAnnotationDrawingFixedPipeline::drawMultiPairedCoordinateShape(Annota
             }
             
             if (polyhedron != NULL) {
-                if (m_displaySampleNamesFlag) {
-                    const bool selectionFlag(false);
-                    drawPolyhedronName(annotationFile,
-                                       polyhedron,
-                                       windowVertexXYZ,
-                                       polyhedronNameXYZ,
-                                       polyhedronNameSizeHandleType,
-                                       selectionFlag);
-                }
+                const bool selectionFlag(false);
+                drawPolyhedronName(annotationFile,
+                                   polyhedron,
+                                   windowVertexXYZ,
+                                   polyhedronNameXYZ,
+                                   polyhedronNameSizeHandleType,
+                                   selectionFlag);
             }
         }
                 
@@ -5625,7 +5688,7 @@ BrainOpenGLAnnotationDrawingFixedPipeline::drawMultiPairedCoordinateShape(Annota
                 if (drawEditableSizingHandlesFlag) {
                     sizeHandleType = AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_EDITABLE_POLY_LINE_COORDINATE;
                     if (drawingSelectionModeFlag) {
-                        const float minSelectionPixelSize(8.0);
+                        const float minSelectionPixelSize(12.0);
                         if (sizeHandleWidthInPixels < minSelectionPixelSize) {
                             sizeHandleWidthInPixels = minSelectionPixelSize;
                         }
@@ -5684,7 +5747,7 @@ BrainOpenGLAnnotationDrawingFixedPipeline::drawPolyhedronName(AnnotationFile* an
     if (polyhedron->getNumberOfCoordinates() < 1) {
         return;
     }
-    const AString polyhedronName(polyhedron->getName());
+    const AString polyhedronName(polyhedron->getNameForGraphicsDrawing());
     if (polyhedronName.isEmpty()) {
         return;
     }
@@ -5700,9 +5763,7 @@ BrainOpenGLAnnotationDrawingFixedPipeline::drawPolyhedronName(AnnotationFile* an
                                             viewportXYZ)) {
         const AnnotationFontAttributes* fontAttributes(polyhedron->getFontAttributes());
         CaretAssert(fontAttributes);
-        
         AnnotationPercentSizeText annText(AnnotationAttributesDefaultTypeEnum::NORMAL);
-        annText.setFont(fontAttributes->getFont());
         annText.setText(polyhedronName);
         annText.setHorizontalAlignment(AnnotationTextAlignHorizontalEnum::CENTER);
         annText.setVerticalAlignment(AnnotationTextAlignVerticalEnum::MIDDLE);
@@ -5711,6 +5772,9 @@ BrainOpenGLAnnotationDrawingFixedPipeline::drawPolyhedronName(AnnotationFile* an
         uint8_t rgba[4];
         fontAttributes->getCustomTextColor(rgba);
         annText.setCustomTextColor(rgba);
+        annText.setTextBackgroundColor(fontAttributes->getTextBackgroundColor());
+        fontAttributes->getCustomTextBackgroundColor(rgba);
+        annText.setCustomTextBackgroundColor(rgba);
         annText.setBoldStyleEnabled(fontAttributes->isBoldStyleEnabled());
         annText.setItalicStyleEnabled(fontAttributes->isItalicStyleEnabled());
         annText.setUnderlineStyleEnabled(fontAttributes->isUnderlineStyleEnabled());
@@ -5748,9 +5812,14 @@ BrainOpenGLAnnotationDrawingFixedPipeline::drawPolyhedronName(AnnotationFile* an
             }
         }
         else {
+            /*
+             * Note: Use 2D drawing method since is does not do depth testing.
+             * When drawing on histology slices, the 3D coord might be slightly
+             * 'behind' the histology slice and text would not be displayed if
+             * the 3D text drawing method is used.
+             */
             m_brainOpenGLFixedPipeline->getTextRenderer()->drawTextAtViewportCoords(viewportXYZ[0],
                                                                                     viewportXYZ[1],
-                                                                                    viewportXYZ[2],
                                                                                     annText,
                                                                                     flags);
             
@@ -7317,6 +7386,7 @@ BrainOpenGLAnnotationDrawingFixedPipeline::isDrawnWithDepthTesting(const Annotat
         case AnnotationCoordinateSpaceEnum::CHART:
             break;
         case AnnotationCoordinateSpaceEnum::HISTOLOGY:
+            depthTestFlag = false;
             break;
         case AnnotationCoordinateSpaceEnum::MEDIA_FILE_NAME_AND_PIXEL:
             depthTestFlag = false;

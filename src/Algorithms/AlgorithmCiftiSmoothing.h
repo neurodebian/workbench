@@ -23,8 +23,10 @@
 
 #include "AbstractAlgorithm.h"
 
-namespace caret {
+#include <map>
 
+namespace caret {
+    
     class AlgorithmCiftiSmoothing : public AbstractAlgorithm
     {
         AlgorithmCiftiSmoothing();
@@ -32,8 +34,20 @@ namespace caret {
         static float getSubAlgorithmWeight();
         static float getAlgorithmInternalWeight();
     public:
+        struct SurfParam
+        {
+            const SurfaceFile* surface;
+            const MetricFile* correctedAreas;
+            SurfParam() { surface = NULL; correctedAreas = NULL; }
+            SurfParam(const SurfaceFile* surfIn, const MetricFile* areasIn = NULL) { surface = surfIn; correctedAreas = areasIn; }
+        };
+        
         AlgorithmCiftiSmoothing(ProgressObject* myProgObj, const CiftiFile* myCifti, const float& surfKern, const float& volKern, const int& myDir, CiftiFile* myCiftiOut,
-                                const SurfaceFile* myLeftSurf = NULL, const SurfaceFile* myRightSurf = NULL, const SurfaceFile* myCerebSurf = NULL,
+                                const std::map<StructureEnum::Enum, AlgorithmCiftiSmoothing::SurfParam> surfParams = std::map<StructureEnum::Enum, AlgorithmCiftiSmoothing::SurfParam>(),
+                                const CiftiFile* roiCifti = NULL, bool fixZerosVol = false, bool fixZerosSurf = false,
+                                const bool& mergedVolume = false);
+        AlgorithmCiftiSmoothing(ProgressObject* myProgObj, const CiftiFile* myCifti, const float& surfKern, const float& volKern, const int& myDir, CiftiFile* myCiftiOut,
+                                const SurfaceFile* myLeftSurf, const SurfaceFile* myRightSurf = NULL, const SurfaceFile* myCerebSurf = NULL,
                                 const CiftiFile* roiCifti = NULL, bool fixZerosVol = false, bool fixZerosSurf = false,
                                 const MetricFile* myLeftAreas = NULL, const MetricFile* myRightAreas = NULL, const MetricFile* myCerebAreas = NULL, const bool& mergedVolume = false);
         static OperationParameters* getParameters();

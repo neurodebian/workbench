@@ -910,3 +910,94 @@ HistologySlice::getSliceRotationAngles(Vector3D& rotationsOut) const
     rotationsOut = m_mprVolumeRotationAngles;
     return m_mprVolumeRotationAnglesValidFlag;
 }
+
+/**
+ * Get the orientation labels for the slice..  The rotation of the slice's axis are compared
+ * to the standard orientations to determine the text (or no text) that is displayed.
+ * @param leftScreenLabelTextOut
+ *    Label for left side
+ * @param rightScreenLabelTextOut
+ *    Label for right side
+ * @param bottomScreenLabelTextOut
+ *    Label for bottom side
+ * @param topScreenLabelTextOut
+ *    Label for top side
+ */
+void
+HistologySlice::getAxisLabels(const bool flipLeftRightFlag,
+                              AString& leftScreenLabelTextOut,
+                              AString& rightScreenLabelTextOut,
+                              AString& bottomScreenLabelTextOut,
+                              AString& topScreenLabelTextOut) const
+{
+    leftScreenLabelTextOut   = "";
+    rightScreenLabelTextOut  = "";
+    bottomScreenLabelTextOut = "";
+    topScreenLabelTextOut    = "";
+    
+    const int32_t numImages(getNumberOfHistologySliceImages());
+    if (numImages < 1) {
+        return;
+    }
+    const HistologySliceImage* hsi(getHistologySliceImage(0));
+    CaretAssert(hsi);
+    const MediaFile* mediaFile(hsi->getMediaFile());
+    CaretAssert(mediaFile);
+    
+    /*
+     * Get the basis vector.
+     * May need to flip the first vector if slice is left/right flipped
+     * Flip second vector since plane Y origin is at top
+     */
+    std::array<Vector3D, 2> allBasisVectors {
+        (m_planeToMillimetersMatrix.getBasisVectorNormalized(0)
+         * (flipLeftRightFlag ? -1.0 : 1.0)),
+        (m_planeToMillimetersMatrix.getBasisVectorNormalized(1) * -1.0)
+    };
+    
+    class VectorAndLabel {
+    public:
+        VectorAndLabel(const AString& label,
+                       const AString& oppositeLabel,
+                       const float x,
+                       const float y,
+                       const float z)
+        : m_label(label),
+        m_oppositeLabel(oppositeLabel),
+        m_vector(x, y, z) { }
+        
+        AString m_label;
+        AString m_oppositeLabel;
+        Vector3D m_vector;
+    };
+    
+    std::vector<VectorAndLabel> allVectorsAndLabels;
+    allVectorsAndLabels.emplace_back("L", "R",  1.0,  0.0,  0.0);
+    allVectorsAndLabels.emplace_back("R", "L", -1.0,  0.0,  0.0);
+    allVectorsAndLabels.emplace_back("A", "P",  0.0, -1.0,  0.0);
+    allVectorsAndLabels.emplace_back("P", "A",  0.0,  1.0,  0.0);
+    allVectorsAndLabels.emplace_back("I", "S",  0.0,  0.0,  1.0);
+    allVectorsAndLabels.emplace_back("S", "I",  0.0,  0.0, -1.0);
+    
+    
+    for (int32_t iBasis = 0; iBasis < static_cast<int32_t>(allBasisVectors.size()); iBasis++) {
+        CaretAssertVectorIndex(allBasisVectors, iBasis);
+        const Vector3D& basisVector(allBasisVectors[iBasis]);
+        for (const VectorAndLabel& vectorAndLabel : allVectorsAndLabels) {
+            const float dotValue(vectorAndLabel.m_vector.dot(basisVector));
+            AString labelTemp;
+            if (dotValue >= 0.866) {  /* cosine(30 degrees) = 0.866 */
+                switch (iBasis) {
+                    case 0:
+                        leftScreenLabelTextOut  = vectorAndLabel.m_label;
+                        rightScreenLabelTextOut = vectorAndLabel.m_oppositeLabel;
+                        break;
+                    case 1:
+                        bottomScreenLabelTextOut = vectorAndLabel.m_label;
+                        topScreenLabelTextOut    = vectorAndLabel.m_oppositeLabel;
+                        break;
+                }
+            }
+        }
+    }
+}

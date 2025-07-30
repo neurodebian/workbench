@@ -27,14 +27,19 @@
 
 #include <QWidget>
 
+#include "AnnotationPolyhedronTypeEnum.h"
 #include "EventListenerInterface.h"
 #include "UserInputModeEnum.h"
 
 class QComboBox;
 class QLabel;
+class QMenu;
 class QSpinBox;
+class QToolButton;
 
 namespace caret {
+    class AnnotationPolyhedron;
+    class AnnotationSampleMetaData;
     class SamplesFile;
     class CaretDataFile;
     class CaretDataFileSelectionComboBox;
@@ -68,7 +73,9 @@ namespace caret {
         
         void saveFileActionTriggered();
         
-        void newSampleActionTriggered();
+        void newRetrospectiveSampleActionTriggered();
+        
+        void newProspectiveSampleActionTriggered();
         
         void samplesDrawingModeEnumComboBoxItemActivated();
         
@@ -76,9 +83,22 @@ namespace caret {
         
         void upperSliceOffsetSpinBoxValueChanged(int value);
         
+        void selectActionTriggered();
+        
         // ADD_NEW_METHODS_HERE
 
     private:
+        AString getNewSampleToolTip(const AnnotationPolyhedronTypeEnum::Enum polyhedronType);
+        
+        void createNewSample(const AnnotationPolyhedronTypeEnum::Enum polyhedronType,
+                             AnnotationPolyhedron* linkedPolyhedron);
+        
+        std::vector<AnnotationPolyhedron*> getAllPolyhedrons();
+
+        std::vector<AnnotationPolyhedron*> getSelectedProspectiveSamples();
+        
+        bool isVolumeSliceMontageEnabledInSelectedTab(QWidget* parent) const;
+        
         std::unique_ptr<CaretDataFileSelectionModel> m_fileSelectionModel;
         
         CaretDataFileSelectionComboBox* m_fileSelectionComboBox = NULL;
@@ -89,7 +109,13 @@ namespace caret {
         
         const int32_t m_browserWindowIndex;
         
-        QAction* m_newSampleAction = NULL;
+        QToolButton* m_newRetrospectiveSampleToolButton = NULL;
+        
+        QAction* m_newRetrospectiveSampleAction = NULL;
+        
+        QToolButton* m_newProspectiveSampleToolButton = NULL;
+        
+        QAction* m_newProspectiveSampleAction = NULL;
         
         EnumComboBoxTemplate* m_samplesDrawingModeEnumComboBox = NULL;
         
@@ -99,8 +125,12 @@ namespace caret {
         QLabel* m_upperSliceOffsetLabel = NULL;
         QSpinBox* m_upperSliceOffsetSpinBox = NULL;
         
+        QAction* m_selectAction = NULL;
+        
         QAction* m_saveFileAction = NULL;
 
+        QToolButton* m_selectToolButton;
+        
         // ADD_NEW_MEMBERS_HERE
 
     };

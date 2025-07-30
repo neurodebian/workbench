@@ -109,6 +109,10 @@ namespace caret {
         
         static const QString ATTRIBUTE_PLANE_TWO_NAME_XYZ;
         
+        static const QString ATTRIBUTE_POLYHEDRON_LINKED_IDENTIFIER;
+        
+        static const QString ATTRIBUTE_POLYHEDRON_TYPE;
+        
         static const QString ATTRIBUTE_ROTATION_ANGLE;
         
         static const QString ATTRIBUTE_SPACER_TAB_INDEX;
@@ -120,6 +124,10 @@ namespace caret {
         static const QString ATTRIBUTE_TEXT_CARET_COLOR;
         
         static const QString ATTRIBUTE_TEXT_CUSTOM_RGBA;
+        
+        static const QString ATTRIBUTE_TEXT_BACKGROUND_CARET_COLOR;
+        
+        static const QString ATTRIBUTE_TEXT_BACKGROUND_CUSTOM_RGBA;
         
         static const QString ATTRIBUTE_TEXT_CONNECT_BRAINORDINATE;
         
@@ -261,6 +269,10 @@ namespace caret {
     
     const QString AnnotationFileXmlFormatBase::ATTRIBUTE_PLANE_TWO_NAME_XYZ = "planeTwoNameXYZ";
     
+    const QString AnnotationFileXmlFormatBase::ATTRIBUTE_POLYHEDRON_LINKED_IDENTIFIER = "linkedIdentifier";
+    
+    const QString AnnotationFileXmlFormatBase::ATTRIBUTE_POLYHEDRON_TYPE = "polyhedronType";
+    
     const QString AnnotationFileXmlFormatBase::ATTRIBUTE_ROTATION_ANGLE = "rotationAngle";
     
     const QString AnnotationFileXmlFormatBase::ATTRIBUTE_SPACER_TAB_INDEX = "spacerTabIndex";
@@ -273,8 +285,12 @@ namespace caret {
     
     const QString AnnotationFileXmlFormatBase::ATTRIBUTE_TEXT_CUSTOM_RGBA = "textCustomRGBA";
     
+    const QString AnnotationFileXmlFormatBase::ATTRIBUTE_TEXT_BACKGROUND_CARET_COLOR = "textBackgroundCaretColor";
+    
+    const QString AnnotationFileXmlFormatBase::ATTRIBUTE_TEXT_BACKGROUND_CUSTOM_RGBA = "textBackgroundCustomRGBA";
+    
     const QString AnnotationFileXmlFormatBase::ATTRIBUTE_TEXT_CONNECT_BRAINORDINATE = "connectBrainordinate";
-
+    
     const QString AnnotationFileXmlFormatBase::ATTRIBUTE_TEXT_FONT_BOLD = "fontBold";
     
     const QString AnnotationFileXmlFormatBase::ATTRIBUTE_TEXT_FONT_ITALIC = "fontItalic";

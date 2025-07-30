@@ -443,6 +443,8 @@ IdentificationSimpleTextGenerator::generateVolumeIdentificationText(Identificati
                                 break;
                             case DataFileTypeEnum::CONNECTIVITY_FIBER_TRAJECTORY_TEMPORARY:
                                 break;
+                            case DataFileTypeEnum::CONNECTIVITY_FIBER_TRAJECTORY_MAPS:
+                                break;
                             case DataFileTypeEnum::CONNECTIVITY_PARCEL:
                                 break;
                             case DataFileTypeEnum::CONNECTIVITY_PARCEL_DENSE:
@@ -473,6 +475,8 @@ IdentificationSimpleTextGenerator::generateVolumeIdentificationText(Identificati
                             case DataFileTypeEnum::METRIC:
                                 break;
                             case DataFileTypeEnum::METRIC_DYNAMIC:
+                                break;
+                            case DataFileTypeEnum::OME_ZARR_IMAGE_FILE:
                                 break;
                             case DataFileTypeEnum::PALETTE:
                                 break;
@@ -609,6 +613,8 @@ IdentificationSimpleTextGenerator::generateSurfaceIdentificationText(Identificat
                     break;
                 case DataFileTypeEnum::CONNECTIVITY_FIBER_TRAJECTORY_TEMPORARY:
                     break;
+                case DataFileTypeEnum::CONNECTIVITY_FIBER_TRAJECTORY_MAPS:
+                    break;
                 case DataFileTypeEnum::CONNECTIVITY_PARCEL:
                     break;
                 case DataFileTypeEnum::CONNECTIVITY_PARCEL_DENSE:
@@ -639,6 +645,8 @@ IdentificationSimpleTextGenerator::generateSurfaceIdentificationText(Identificat
                 case DataFileTypeEnum::METRIC:
                     break;
                 case DataFileTypeEnum::METRIC_DYNAMIC:
+                    break;
+                case DataFileTypeEnum::OME_ZARR_IMAGE_FILE:
                     break;
                 case DataFileTypeEnum::PALETTE:
                     break;

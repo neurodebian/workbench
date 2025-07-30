@@ -27,18 +27,23 @@
 
 #include "AnnotationCoordinateSpaceEnum.h"
 #include "AnnotationGroupTypeEnum.h"
+#include "AnnotationPolyhedronTypeEnum.h"
 #include "CaretDataFile.h"
 #include "CaretPointer.h"
 #include "DataFileContentCopyMoveInterface.h"
+#include "DataFileEditorColumnContent.h"
 #include "DisplayGroupAndTabItemInterface.h"
 #include "EventAnnotationGrouping.h"
 #include "EventListenerInterface.h"
 #include "EventTileTabsGridConfigurationModification.h"
+#include "FunctionResult.h"
 
 namespace caret {
 
     class Annotation;
     class AnnotationGroup;
+    class AnnotationPolyhedron;
+    class DataFileEditorModel;
     class DisplayGroupAndTabItemHelper;
     class HistologySpaceKey;
     class SceneClassAssistant;
@@ -112,6 +117,8 @@ namespace caret {
 
         void getAllAnnotations(std::vector<Annotation*>& annotationsOut) const;
         
+        virtual std::vector<Annotation*> getAllAnnotationsForDrawing() const;
+        
         void getAllAnnotationGroups(std::vector<AnnotationGroup*>& annotationGroupsOut) const;
         
         void clearAllAnnotationsDrawnInWindowStatus();
@@ -180,7 +187,13 @@ namespace caret {
         
         virtual bool isItemSelectedForEditingInWindow(const int32_t windowIndex);
         
-    protected: 
+        FunctionResultValue<DataFileEditorModel*> exportToDataFileEditorModel(const DataFileEditorColumnContent& modelContent) const;
+        
+        FunctionResult importFromDataFileEditorModel(const DataFileEditorModel& dataFileEditorModel);
+        
+        void addAnnotationCopiedFromAnotherFile(const Annotation* annotation);
+        
+    protected:
         virtual void saveFileDataToScene(const SceneAttributes* sceneAttributes,
                                              SceneClass* sceneClass);
 
@@ -246,6 +259,13 @@ namespace caret {
         void updateUniqueKeysAfterReadingFile();
         
         AnnotationGroup* getSpaceAnnotationGroup(const Annotation* annotation);
+        
+        AnnotationGroup* createSamplesAnnotationGroup(const AnnotationGroupTypeEnum::Enum groupType);
+        
+        AnnotationGroup* getSamplesAnnotationGroup(const Annotation* annotation);
+        
+        AnnotationPolyhedron* getLinkedSampleAnnotation(const AnnotationPolyhedronTypeEnum::Enum polyhedronType,
+                                                        const AString& linkedIdentifier);
         
         void updateSpacerAnnotationsAfterTileTabsModification(const EventTileTabsGridConfigurationModification* modEvent);
         

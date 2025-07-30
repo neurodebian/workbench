@@ -27,20 +27,27 @@
 #include <QLabel>
 #include <QVBoxLayout>
 
-#include "SamplesFile.h"
+#include "AnnotationPolyhedron.h"
+#include "AnnotationSamplesMetaDataDialog.h"
 #include "Brain.h"
 #include "BrowserTabContent.h"
 #include "CaretAssert.h"
 #include "DisplayGroupAndTabItemViewController.h"
+#include "DisplayGroupAndTabItemTreeWidgetItem.h"
 #include "DisplayGroupEnumComboBox.h"
 #include "DisplayPropertiesSamples.h"
+#include "EnumComboBoxTemplate.h"
 #include "EventGraphicsPaintSoonAllWindows.h"
 #include "EventUserInterfaceUpdate.h"
 #include "EventManager.h"
 #include "GuiManager.h"
+#include "SamplesColorModeEnum.h"
+#include "SamplesFile.h"
 #include "SceneClass.h"
 #include "SceneClassAssistant.h"
 #include "WuQMacroManager.h"
+#include "WuQMessageBoxTwo.h"
+#include "WuQTextEditorDialog.h"
 #include "WuQtUtilities.h"
 
 using namespace caret;
@@ -108,16 +115,41 @@ m_browserWindowIndex(browserWindowIndex)
     macroManager->addMacroSupportToObject(m_displaySampleNamesCheckBox,
                                           "Enable display of sample names");
 
+    m_displaySamplesNumberCheckBox = new QCheckBox("Display Sample Numbers");
+    m_displaySamplesNumberCheckBox->setToolTip("Disables/enables display of sample number in all windows");
+    QObject::connect(m_displaySamplesNumberCheckBox, &QCheckBox::clicked,
+                     this, &SamplesSelectionViewController::checkBoxToggled);
+    m_displaySamplesNumberCheckBox->setObjectName(objectNamePrefix
+                                                  + "Enable display of sample numbers");
+    
+    m_displaySamplesProspectiveRetrospectiveSuffixCheckBox = new QCheckBox("Display Sample Prospective/Retrospective Suffix");
+    m_displaySamplesProspectiveRetrospectiveSuffixCheckBox->setToolTip("Disables/enables display of prospective/retrospective suffix in all windows");
+    QObject::connect(m_displaySamplesProspectiveRetrospectiveSuffixCheckBox, &QCheckBox::clicked,
+                     this, &SamplesSelectionViewController::checkBoxToggled);
+    
+    QLabel* colorModeLabel(new QLabel("Color Source"));
+    m_samplesColorModeEnumComboBox = new EnumComboBoxTemplate(this);
+    m_samplesColorModeEnumComboBox->setup<SamplesColorModeEnum,SamplesColorModeEnum::Enum>();
+    QObject::connect(m_samplesColorModeEnumComboBox, &EnumComboBoxTemplate::itemActivated,
+                     this, &SamplesSelectionViewController::samplesColorModeEnumComboBoxItemActivated);
+    
     m_sceneAssistant = new SceneClassAssistant();
+    
+    QHBoxLayout* colorModeLayout(new QHBoxLayout());
+    colorModeLayout->setContentsMargins(0, 0, 0, 0);
+    colorModeLayout->addWidget(colorModeLabel);
+    colorModeLayout->addWidget(m_samplesColorModeEnumComboBox->getWidget());
+    colorModeLayout->addStretch();
     
     QVBoxLayout* layout = new QVBoxLayout(this);
     layout->addWidget(m_displaySamplesCheckBox);
     layout->addWidget(m_displaySampleNamesCheckBox);
+    layout->addWidget(m_displaySamplesNumberCheckBox);
+    layout->addWidget(m_displaySamplesProspectiveRetrospectiveSuffixCheckBox);
+    layout->addLayout(colorModeLayout);
     layout->addWidget(WuQtUtilities::createHorizontalLineWidget());
     layout->addLayout(groupSelectionLayout);
-    layout->addWidget(createSelectionWidget(), 100);
-    
-    layout->addStretch();
+    layout->addWidget(createSelectionWidget(objectNamePrefix));
     
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_ANNOTATION_TOOLBAR_UPDATE);
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_USER_INTERFACE_UPDATE);
@@ -196,7 +228,10 @@ SamplesSelectionViewController::updateSampleSelections()
     
     m_displaySamplesCheckBox->setChecked(dpa->isDisplaySamples());
     m_displaySampleNamesCheckBox->setChecked(dpa->isDisplaySampleNames());
-    
+    m_displaySamplesNumberCheckBox->setChecked(dpa->isDisplaySampleNumbers());
+    m_displaySamplesProspectiveRetrospectiveSuffixCheckBox->setChecked(dpa->isDisplaySampleProspectiveRetrospectiveSuffix());
+    m_samplesColorModeEnumComboBox->setSelectedItem<SamplesColorModeEnum,SamplesColorModeEnum::Enum>(dpa->getColorMode());
+
     Brain* brain = GuiManager::get()->getBrain();
     std::vector<SamplesFile*> samplesFiles(brain->getAllSamplesFiles());
     
@@ -216,14 +251,109 @@ SamplesSelectionViewController::updateSampleSelections()
                                              allowSampleSelectionFlag);
 }
 
+/**
+ * @return New instance of selection widget
+ * @param objectNamePrefix
+ *    Name of object for macros
+ */
 QWidget*
-SamplesSelectionViewController::createSelectionWidget()
+SamplesSelectionViewController::createSelectionWidget(const AString& objectNamePrefix)
 {
     m_selectionViewController = new DisplayGroupAndTabItemViewController(DataFileTypeEnum::SAMPLES,
-                                                                         m_browserWindowIndex);
+                                                                         m_browserWindowIndex,
+                                                                         (objectNamePrefix + ":SampleSelection"),
+                                                                         "Samples Selection");
+    std::vector<ContextSensitiveMenuItemsEnum::Enum> contextMenuItems;
+    contextMenuItems.push_back(ContextSensitiveMenuItemsEnum::INFORMATION);
+    contextMenuItems.push_back(ContextSensitiveMenuItemsEnum::EDIT_METADATA);
+    
+    m_selectionViewController->enableContextSensitiveMenu(contextMenuItems);
+    
+    QObject::connect(m_selectionViewController, &DisplayGroupAndTabItemViewController::contextMenuItemSelected,
+                     this, &SamplesSelectionViewController::contextMenuItemSelected);
+    
     return m_selectionViewController;
 }
 
+/**
+ * @return Polyhedrons stored in the tree widget items
+ * @param treeWidgetItems
+ *    The tree widget items
+ */
+std::vector<AnnotationPolyhedron*>
+SamplesSelectionViewController::getPolyhedronsFromTreeWidgetItems(QList<QTreeWidgetItem*>& treeWidgetItems) const
+{
+    std::vector<AnnotationPolyhedron*> polyhedronsOut;
+    
+    for (int32_t i = 0; i < treeWidgetItems.count(); i++) {
+        DisplayGroupAndTabItemTreeWidgetItem* dgtw(dynamic_cast<DisplayGroupAndTabItemTreeWidgetItem*>(treeWidgetItems.at(i)));
+        if (dgtw != NULL) {
+            DisplayGroupAndTabItemInterface* dgi(dgtw->getDisplayGroupAndTabItem());
+            if (dgi != NULL) {
+                Annotation* annotation(dynamic_cast<Annotation*>(dgi));
+                if (annotation != NULL) {
+                    AnnotationPolyhedron* polyhedron(annotation->castToPolyhedron());
+                    if (polyhedron != NULL) {
+                        polyhedronsOut.push_back(polyhedron);
+                    }
+                }
+            }
+        }
+    }
+
+    return polyhedronsOut;
+}
+/**
+ * Called when an item is selected from the list of samples viewer
+ * @param itemsSelected
+ *    Items in samples viewer that were selected
+ * @param contextMenuItem
+ *    The context menu item selected from the menu
+ */
+void
+SamplesSelectionViewController::contextMenuItemSelected(QList<QTreeWidgetItem*>& itemsSelected,
+                                                        const ContextSensitiveMenuItemsEnum::Enum contextMenuItem)
+{
+    std::vector<AnnotationPolyhedron*> polyhedrons(getPolyhedronsFromTreeWidgetItems(itemsSelected));
+    
+    switch (contextMenuItem) {
+        case ContextSensitiveMenuItemsEnum::CUT:
+            break;
+        case ContextSensitiveMenuItemsEnum::COPY:
+            break;
+        case ContextSensitiveMenuItemsEnum::PASTE:
+            break;
+        case ContextSensitiveMenuItemsEnum::DELETER:
+            break;
+        case ContextSensitiveMenuItemsEnum::INFORMATION:
+            if (polyhedrons.size() == 1) {
+                const AString html(polyhedrons[0]->getPolyhedronInformationHtml());
+                WuQTextEditorDialog::runNonModal("Sample Information",
+                                                 html,
+                                                 WuQTextEditorDialog::TextMode::HTML,
+                                                 WuQTextEditorDialog::WrapMode::NO,
+                                                 m_selectionViewController);
+            }
+            else {
+                WuQMessageBoxTwo::criticalOk(this,
+                                             "Error",
+                                             "Only one item may be selected for Information");
+            }
+            break;
+        case ContextSensitiveMenuItemsEnum::EDIT_METADATA:
+            if (polyhedrons.size() == 1) {
+                AnnotationSamplesMetaDataDialog dialog(polyhedrons[0],
+                                                       this);
+                dialog.exec();
+            }
+            else {
+                WuQMessageBoxTwo::criticalOk(this,
+                                             "Error",
+                                             "Only one item may be selected for editing metadata");
+            }
+            break;
+    }
+}
 
 /**
  * Called when one of the checkboxes is clicked.
@@ -241,10 +371,26 @@ SamplesSelectionViewController::checkBoxToggled()
 
     dpa->setDisplaySamples(m_displaySamplesCheckBox->isChecked());
     dpa->setDisplaySampleNames(m_displaySampleNamesCheckBox->isChecked());
+    dpa->setDisplaySampleNumbers(m_displaySamplesNumberCheckBox->isChecked());
+    dpa->setDisplaySampleProspectiveRetrospectiveSuffix(m_displaySamplesProspectiveRetrospectiveSuffixCheckBox->isChecked());
     
     updateOtherSampleViewControllers();
     EventManager::get()->sendEvent(EventGraphicsPaintSoonAllWindows().getPointer());
 }
+
+/**
+ * Called when the color mode is changed
+ */
+void
+SamplesSelectionViewController::samplesColorModeEnumComboBoxItemActivated()
+{
+    DisplayPropertiesSamples* dpa = GuiManager::get()->getBrain()->getDisplayPropertiesSamples();
+    const SamplesColorModeEnum::Enum colorMode(m_samplesColorModeEnumComboBox->getSelectedItem<SamplesColorModeEnum,SamplesColorModeEnum::Enum>());
+    dpa->setColorMode(colorMode);
+    updateOtherSampleViewControllers();
+    EventManager::get()->sendEvent(EventGraphicsPaintSoonAllWindows().getPointer());
+}
+
 
 /**
  * Called when the display group combo box is changed.

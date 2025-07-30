@@ -18,12 +18,12 @@
  */
 /*LICENSE_END*/
 
+#include <algorithm>
 #include <cmath>
 
 #include <QStringList>
 
 #include "MathFunctions.h"
-#include "Vector3D.h"
 
 using namespace std;
 using namespace caret;
@@ -222,6 +222,19 @@ Vector3D& Vector3D::operator=(const float* right)
     return *this;
 }
 
+bool Vector3D::operator<(const Vector3D& rhs) const
+{
+    for (int32_t i = 0; i < 3; i++) {
+        if (m_vec[i] < rhs.m_vec[i]) {
+            return true;
+        }
+        else if (m_vec[i] > rhs.m_vec[i]) {
+            return false;
+        }
+    }
+    return false;
+}
+
 void Vector3D::fill(const float value)
 {
     m_vec[0] = value;
@@ -351,4 +364,16 @@ Vector3D::fromString(const AString& s,
     }
 
     return xyz;
+}
+
+/// Average of vectors
+Vector3D
+Vector3D::average(const vector<Vector3D>& xyzs)
+{
+    Vector3D avg(0.0, 0.0, 0.0);
+    if ( ! xyzs.empty()) {
+        avg = std::accumulate(xyzs.begin(), xyzs.end(), Vector3D(0.0, 0.0, 0.0));
+        avg /= static_cast<float>(xyzs.size());
+    }
+    return avg;
 }

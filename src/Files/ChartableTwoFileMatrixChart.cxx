@@ -110,6 +110,8 @@ m_validRowColumnSelectionDimensions(validRowColumnSelectionDimensions)
                 break;
             case DataFileTypeEnum::CONNECTIVITY_FIBER_TRAJECTORY_TEMPORARY:
                 break;
+            case DataFileTypeEnum::CONNECTIVITY_FIBER_TRAJECTORY_MAPS:
+                break;
             case DataFileTypeEnum::CONNECTIVITY_PARCEL:
                 m_matrixDataFileType = MatrixDataFileType::PARCEL;
                 break;
@@ -142,6 +144,8 @@ m_validRowColumnSelectionDimensions(validRowColumnSelectionDimensions)
             case DataFileTypeEnum::METRIC:
                 break;
             case DataFileTypeEnum::METRIC_DYNAMIC:
+                break;
+            case DataFileTypeEnum::OME_ZARR_IMAGE_FILE:
                 break;
             case DataFileTypeEnum::PALETTE:
                 break;

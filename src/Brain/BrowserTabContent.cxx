@@ -54,6 +54,8 @@
 #include "CiftiBrainordinateDataSeriesFile.h"
 #include "CiftiConnectivityMatrixDenseDynamicFile.h"
 #include "CiftiConnectivityMatrixParcelDynamicFile.h"
+#include "CiftiFiberOrientationFile.h"
+#include "CiftiFiberTrajectoryMapFile.h"
 #include "CiftiParcelSeriesFile.h"
 #include "ClippingPlaneGroup.h"
 #include "GroupAndNameHierarchyGroup.h"
@@ -100,7 +102,6 @@
 #include "Overlay.h"
 #include "OverlaySet.h"
 #include "PaletteColorMapping.h"
-#include "SamplesDrawingSettings.h"
 #include "SceneAttributes.h"
 #include "SceneClass.h"
 #include "SceneClassAssistant.h"
@@ -110,6 +111,8 @@
 #include "SurfaceMontageConfigurationCerebellar.h"
 #include "SurfaceMontageConfigurationCerebral.h"
 #include "SurfaceMontageConfigurationFlatMaps.h"
+#include "SurfaceMontageConfigurationHippocampus.h"
+#include "SurfaceMontageConfigurationHippocampusFlatMaps.h"
 #include "SurfaceSelectionModel.h"
 #include "StructureEnum.h"
 #include "TileTabsBrowserTabGeometry.h"
@@ -163,6 +166,8 @@ BrowserTabContent::BrowserTabContent(const int32_t tabNumber)
     m_identificationUpdatesVolumeSlices = prefs->isVolumeIdentificationDefaultedOn();
     m_identificationUpdatesHistologySlices = prefs->isHistologyIdentificationDefaultedOn();
     m_displayHistologyAxesCrosshairs = true;
+    m_displayHistologyAxesCrosshairsLabels = false;
+    m_histologyFlipXAxisFlag = false;
     
     m_displayVolumeAxesCrosshairs = prefs->isVolumeAxesCrosshairsDisplayed();
     m_displayVolumeAxesCrosshairLabels = prefs->isVolumeAxesLabelsDisplayed();
@@ -208,8 +213,6 @@ BrowserTabContent::BrowserTabContent(const int32_t tabNumber)
     m_manualLayoutBrowserTabAnnotation.reset(new AnnotationBrowserTab(AnnotationAttributesDefaultTypeEnum::NORMAL));
     m_manualLayoutBrowserTabAnnotation->setBrowserTabContent(this,
                                                              m_tabNumber);
-    
-    m_samplesDrawingSettings.reset(new SamplesDrawingSettings(this));
     
     m_mouseLeftDragMode = MouseLeftDragModeEnum::INVALID;
     
@@ -266,10 +269,6 @@ BrowserTabContent::BrowserTabContent(const int32_t tabNumber)
                                "VolumeSliceSettings",
                                m_volumeSliceSettings);
 
-    m_sceneClassAssistant->add("m_samplesDrawingSettings",
-                               "SamplesDrawingSettings",
-                               m_samplesDrawingSettings.get());
-    
     m_sceneClassAssistant->add("m_wholeBrainSurfaceSettings",
                                "WholeBrainSurfaceSettings",
                                m_wholeBrainSurfaceSettings);
@@ -280,6 +279,10 @@ BrowserTabContent::BrowserTabContent(const int32_t tabNumber)
                                &m_identificationUpdatesHistologySlices);
     m_sceneClassAssistant->add("m_displayHistologyAxesCrosshairs",
                                &m_displayHistologyAxesCrosshairs);
+    m_sceneClassAssistant->add("m_displayHistologyAxesCrosshairsLabels",
+                               &m_displayHistologyAxesCrosshairsLabels);
+    m_sceneClassAssistant->add("m_histologyFlipXAxisFlag",
+                               &m_histologyFlipXAxisFlag);
     
     m_sceneClassAssistant->add("m_displayVolumeAxesCrosshairs",
                                &m_displayVolumeAxesCrosshairs);
@@ -460,6 +463,8 @@ BrowserTabContent::cloneBrowserTabContent(BrowserTabContent* tabToClone)
     m_identificationUpdatesVolumeSlices = tabToClone->m_identificationUpdatesVolumeSlices;
     m_identificationUpdatesHistologySlices = tabToClone->m_identificationUpdatesHistologySlices;
     m_displayHistologyAxesCrosshairs = tabToClone->m_displayHistologyAxesCrosshairs;
+    m_displayHistologyAxesCrosshairsLabels = tabToClone->m_displayHistologyAxesCrosshairsLabels;
+    m_histologyFlipXAxisFlag = tabToClone->m_histologyFlipXAxisFlag;
     
     m_displayVolumeAxesCrosshairs = tabToClone->m_displayVolumeAxesCrosshairs;
     m_displayVolumeAxesCrosshairLabels = tabToClone->m_displayVolumeAxesCrosshairLabels;
@@ -484,8 +489,6 @@ BrowserTabContent::cloneBrowserTabContent(BrowserTabContent* tabToClone)
     m_mprThreeAxialInverseRotationQuaternion = tabToClone->m_mprThreeAxialInverseRotationQuaternion;
     m_mprThreeCoronalInverseRotationQuaternion = tabToClone->m_mprThreeCoronalInverseRotationQuaternion;
     m_mprThreeParasagittalInverseRotationQuaternion = tabToClone->m_mprThreeParasagittalInverseRotationQuaternion;
-    
-    *m_samplesDrawingSettings = *tabToClone->m_samplesDrawingSettings;
     
     Model* model = getModelForDisplay();
     
@@ -1074,8 +1077,19 @@ BrowserTabContent::isFlatSurfaceDisplayed() const
     
     const ModelSurfaceMontage* montageModel = getDisplayedSurfaceMontageModel();
     if (montageModel != NULL) {
-        if (montageModel->getSelectedConfigurationType(getTabNumber()) == SurfaceMontageConfigurationTypeEnum::FLAT_CONFIGURATION) {
-            return true;
+        switch (montageModel->getSelectedConfigurationType(getTabNumber())) {
+            case SurfaceMontageConfigurationTypeEnum::CEREBRAL_CORTEX_CONFIGURATION:
+                break;
+            case SurfaceMontageConfigurationTypeEnum::CEREBELLAR_CORTEX_CONFIGURATION:
+                break;
+            case SurfaceMontageConfigurationTypeEnum::HIPPOCAMPUS_CONFIGURATION:
+                break;
+            case SurfaceMontageConfigurationTypeEnum::FLAT_CONFIGURATION:
+                return true;
+                break;
+            case SurfaceMontageConfigurationTypeEnum::HIPPOCAMPUS_FLAT_CONFIGURATION:
+                return true;
+                break;
         }
     }
     
@@ -1144,6 +1158,32 @@ BrowserTabContent::isVolumeSlicesDisplayed() const
     
     const bool volumeFlag = (mdcv != NULL);
     return volumeFlag;
+}
+
+/**
+ * @return Function result indicating if a volume slices montage is
+ * displayed and if not what is displayed.
+ */
+FunctionResult
+BrowserTabContent::isVolumeSlicesMontageDisplayed() const
+{
+    AString msg;
+    if (isVolumeSlicesDisplayed()) {
+        switch (m_volumeSliceSettings->getSliceDrawingType()) {
+            case VolumeSliceDrawingTypeEnum::VOLUME_SLICE_DRAW_MONTAGE:
+                break;
+            case VolumeSliceDrawingTypeEnum::VOLUME_SLICE_DRAW_SINGLE:
+                msg = ("Volume is displayed but montage view is not enabled in the selected tab: "
+                       + getTabName());
+                break;
+        }
+    }
+    else {
+        msg = ("Volume montage is not displayed in the selected tab: "
+               + getTabName());
+    }
+    return FunctionResult(msg,
+                          msg.isEmpty());
 }
 
 /**
@@ -1892,24 +1932,11 @@ BrowserTabContent::receiveEvent(Event* event)
                 Vector3D volumeSliceXYZ(idLocationEvent->getStereotaxicXYZ());
                 
                 /*
-                 * If othogonal/montage viewing, do not alter the slice
+                 * If montage viewing, do not alter the slice
                  * coordinate in the axis being viewed
                  */
                 if (getDisplayedVolumeModel() != NULL) {
                     bool keepSliceCoordinateForSelectedAxis = false;
-                    switch (m_volumeSliceSettings->getSliceProjectionType()) {
-                        case VolumeSliceProjectionTypeEnum::VOLUME_SLICE_PROJECTION_ORTHOGONAL:
-                            if (getVolumeSliceViewPlane() != VolumeSliceViewPlaneEnum::ALL) {
-                                keepSliceCoordinateForSelectedAxis = true;
-                            }
-                            break;
-                        case VolumeSliceProjectionTypeEnum::VOLUME_SLICE_PROJECTION_OBLIQUE:
-                            break;
-                        case VolumeSliceProjectionTypeEnum::VOLUME_SLICE_PROJECTION_MPR:
-                            break;
-                        case VolumeSliceProjectionTypeEnum::VOLUME_SLICE_PROJECTION_MPR_THREE:
-                            break;
-                    }
                     switch (m_volumeSliceSettings->getSliceDrawingType()) {
                         case VolumeSliceDrawingTypeEnum::VOLUME_SLICE_DRAW_MONTAGE:
                             keepSliceCoordinateForSelectedAxis = true;
@@ -2677,6 +2704,48 @@ BrowserTabContent::getFilesDisplayedInTab(std::vector<CaretDataFile*>& displayed
                     }
                 }
                     break;
+                case SurfaceMontageConfigurationTypeEnum::HIPPOCAMPUS_CONFIGURATION:
+                {
+                    SurfaceMontageConfigurationHippocampus* smhc = msm->getHippocampusConfiguration(tabIndex);
+                    if (smhc->isFirstSurfaceEnabled()) {
+                        if (smhc->isLeftEnabled()) {
+                            displayedDataFiles.insert(smhc->getLeftFirstSurfaceSelectionModel()->getSurface());
+                        }
+                        if (smhc->isRightEnabled()) {
+                            displayedDataFiles.insert(smhc->getRightFirstSurfaceSelectionModel()->getSurface());
+                        }
+                    }
+                    if (smhc->isSecondSurfaceEnabled()) {
+                        if (smhc->isLeftEnabled()) {
+                            displayedDataFiles.insert(smhc->getLeftSecondSurfaceSelectionModel()->getSurface());
+                        }
+                        if (smhc->isRightEnabled()) {
+                            displayedDataFiles.insert(smhc->getRightSecondSurfaceSelectionModel()->getSurface());
+                        }
+                    }
+                }
+                    break;
+                case SurfaceMontageConfigurationTypeEnum::HIPPOCAMPUS_FLAT_CONFIGURATION:
+                {
+                    SurfaceMontageConfigurationHippocampusFlatMaps* smhfc = msm->getHippocampusFlatMapsConfiguration(tabIndex);
+                    if (smhfc->isFirstSurfaceEnabled()) {
+                        if (smhfc->isLeftEnabled()) {
+                            displayedDataFiles.insert(smhfc->getLeftFirstSurfaceSelectionModel()->getSurface());
+                        }
+                        if (smhfc->isRightEnabled()) {
+                            displayedDataFiles.insert(smhfc->getRightFirstSurfaceSelectionModel()->getSurface());
+                        }
+                    }
+                    if (smhfc->isSecondSurfaceEnabled()) {
+                        if (smhfc->isLeftEnabled()) {
+                            displayedDataFiles.insert(smhfc->getLeftSecondSurfaceSelectionModel()->getSurface());
+                        }
+                        if (smhfc->isRightEnabled()) {
+                            displayedDataFiles.insert(smhfc->getRightSecondSurfaceSelectionModel()->getSurface());
+                        }
+                    }
+                }
+                    break;
             }
         }
             break;
@@ -2791,6 +2860,13 @@ BrowserTabContent::getFilesDisplayedInTab(std::vector<CaretDataFile*>& displayed
                         break;
                     case DataFileTypeEnum::CONNECTIVITY_FIBER_TRAJECTORY_TEMPORARY:
                         break;
+                    case DataFileTypeEnum::CONNECTIVITY_FIBER_TRAJECTORY_MAPS:
+                    {
+                        CiftiFiberTrajectoryMapFile* trajMapFile = dynamic_cast<CiftiFiberTrajectoryMapFile*>(overlayDataFile);
+                        CaretAssert(trajMapFile);
+                        displayedDataFiles.insert(trajMapFile->getMatchingFiberOrientationFile());
+                    }
+                        break;
                     case DataFileTypeEnum::CONNECTIVITY_SCALAR_DATA_SERIES:
                         break;
                     case DataFileTypeEnum::CZI_IMAGE_FILE:
@@ -2811,6 +2887,8 @@ BrowserTabContent::getFilesDisplayedInTab(std::vector<CaretDataFile*>& displayed
                         CaretAssert(metricDynFile);
                         displayedDataFiles.insert(metricDynFile);
                     }
+                        break;
+                    case DataFileTypeEnum::OME_ZARR_IMAGE_FILE:
                         break;
                     case DataFileTypeEnum::PALETTE:
                         break;
@@ -4162,11 +4240,15 @@ BrowserTabContent::applyMouseRotation(BrainOpenGLViewportContent* viewportConten
                             break;
                         case ProjectionViewTypeEnum::PROJECTION_VIEW_LEFT_FLAT_SURFACE:
                             break;
+                        case ProjectionViewTypeEnum::PROJECTION_VIEW_LEFT_FLAT_DENTATE_SURFACE:
+                            break;
                         case ProjectionViewTypeEnum::PROJECTION_VIEW_RIGHT_LATERAL:
                             break;
                         case ProjectionViewTypeEnum::PROJECTION_VIEW_RIGHT_MEDIAL:
                             break;
                         case ProjectionViewTypeEnum::PROJECTION_VIEW_RIGHT_FLAT_SURFACE:
+                            break;
+                        case ProjectionViewTypeEnum::PROJECTION_VIEW_RIGHT_FLAT_DENTATE_SURFACE:
                             break;
                     }
                 }
@@ -4312,6 +4394,7 @@ BrowserTabContent::applyMouseRotation(BrainOpenGLViewportContent* viewportConten
                                 isLateral = false;
                                 break;
                             case ProjectionViewTypeEnum::PROJECTION_VIEW_LEFT_FLAT_SURFACE:
+                            case ProjectionViewTypeEnum::PROJECTION_VIEW_LEFT_FLAT_DENTATE_SURFACE:
                                 isLeft = true;
                                 isFlat = true;
                                 smv->getViewport(flatViewport);
@@ -4326,6 +4409,7 @@ BrowserTabContent::applyMouseRotation(BrainOpenGLViewportContent* viewportConten
                                 isLateral = false;
                                 break;
                             case ProjectionViewTypeEnum::PROJECTION_VIEW_RIGHT_FLAT_SURFACE:
+                            case ProjectionViewTypeEnum::PROJECTION_VIEW_RIGHT_FLAT_DENTATE_SURFACE:
                                 isLeft = false;
                                 isFlat = true;
                                 smv->getViewport(flatViewport);
@@ -5335,7 +5419,12 @@ BrowserTabContent::applyMouseTranslation(BrainOpenGLViewportContent* viewportCon
         const float scaleY((coordHeight / modelViewport[3]) * zoom);
         
         const float accelerate(1.0);
-        txyz[0] += ((mouseDX * scaleX) * accelerate);
+        if (isHistologyFlipXEnabled()) {
+            txyz[0] -= ((mouseDX * scaleX) * accelerate);
+        }
+        else {
+            txyz[0] += ((mouseDX * scaleX) * accelerate);
+        }
         txyz[1] += ((mouseDY * scaleY) * accelerate);
         m_histologyViewingTransformation->setTranslation(txyz);
     }
@@ -5434,11 +5523,15 @@ BrowserTabContent::applyMouseTranslation(BrainOpenGLViewportContent* viewportCon
                             break;
                         case ProjectionViewTypeEnum::PROJECTION_VIEW_LEFT_FLAT_SURFACE:
                             break;
+                        case ProjectionViewTypeEnum::PROJECTION_VIEW_LEFT_FLAT_DENTATE_SURFACE:
+                            break;
                         case ProjectionViewTypeEnum::PROJECTION_VIEW_RIGHT_LATERAL:
                             break;
                         case ProjectionViewTypeEnum::PROJECTION_VIEW_RIGHT_MEDIAL:
                             break;
                         case ProjectionViewTypeEnum::PROJECTION_VIEW_RIGHT_FLAT_SURFACE:
+                            break;
+                        case ProjectionViewTypeEnum::PROJECTION_VIEW_RIGHT_FLAT_DENTATE_SURFACE:
                             break;
                     }
                 }
@@ -5499,6 +5592,7 @@ BrowserTabContent::applyMouseTranslation(BrainOpenGLViewportContent* viewportCon
                             isLateral = false;
                             break;
                         case ProjectionViewTypeEnum::PROJECTION_VIEW_LEFT_FLAT_SURFACE:
+                        case ProjectionViewTypeEnum::PROJECTION_VIEW_LEFT_FLAT_DENTATE_SURFACE:
                             isLeft = true;
                             isLateral = true;
                             break;
@@ -5511,6 +5605,7 @@ BrowserTabContent::applyMouseTranslation(BrainOpenGLViewportContent* viewportCon
                             isLateral = false;
                             break;
                         case ProjectionViewTypeEnum::PROJECTION_VIEW_RIGHT_FLAT_SURFACE:
+                        case ProjectionViewTypeEnum::PROJECTION_VIEW_RIGHT_FLAT_DENTATE_SURFACE:
                             isLeft = false;
                             isLateral = true;
                             break;
@@ -5826,6 +5921,7 @@ BrowserTabContent::getTransformationsForOpenGLDrawing(const ProjectionViewTypeEn
         case ProjectionViewTypeEnum::PROJECTION_VIEW_LEFT_MEDIAL:
             break;
         case ProjectionViewTypeEnum::PROJECTION_VIEW_LEFT_FLAT_SURFACE:
+        case ProjectionViewTypeEnum::PROJECTION_VIEW_LEFT_FLAT_DENTATE_SURFACE:
             getFlatRotationMatrix().getRotation(rotationX,
                                                 rotationY,
                                                 rotationZ);
@@ -5839,6 +5935,7 @@ BrowserTabContent::getTransformationsForOpenGLDrawing(const ProjectionViewTypeEn
             rotationY = rotationFlippedY;
             break;
         case ProjectionViewTypeEnum::PROJECTION_VIEW_RIGHT_FLAT_SURFACE:
+        case ProjectionViewTypeEnum::PROJECTION_VIEW_RIGHT_FLAT_DENTATE_SURFACE:
             translationOut[0] = -translationOut[0];
             getFlatRotationMatrix().getRotation(rotationX,
                                                 rotationY,
@@ -6153,6 +6250,11 @@ BrowserTabContent::restoreFromScene(const SceneAttributes* sceneAttributes,
     m_sceneClassAssistant->restoreMembers(sceneAttributes,
                                           sceneClass);
     
+    /*
+     * Tab number may change when 'm_sceneClassAssistant->restoreMembers' restores the tab number
+     * so need to update the tab number in the scroll bar
+     */
+    m_scaleBar->setTabIndex(m_tabNumber);
     
     /*
      * Need to recreate clipping plane group since tab is passed
@@ -7668,24 +7770,6 @@ BrowserTabContent::setVolumeMontageCoordinateTextAlignment(const VolumeMontageCo
 }
 
 /**
- * @return The samples drawing settings
- */
-SamplesDrawingSettings*
-BrowserTabContent::getSamplesDrawingSettings()
-{
-    return m_samplesDrawingSettings.get();
-}
-
-/**
- * @return The sampels drawing settings (const method)
- */
-const SamplesDrawingSettings*
-BrowserTabContent::getSamplesDrawingSettings() const
-{
-    return m_samplesDrawingSettings.get();
-}
-
-/**
  * If true, selected histology slices in tab move to location
  * of the identification operation.
  */
@@ -7798,19 +7882,28 @@ BrowserTabContent::applyHistologyOrientationYoking()
                             const HistologyCoordinate histologyCoordinate(getHistologySelectedCoordinate(selectionData.m_selectedFile));
                             if (histologyCoordinate.isValid()) {
                                 int32_t selectedSliceIndex(histologyCoordinate.getSliceIndex());
-                                const HistologySlice* histologySlice(selectedFile->getHistologySliceByIndex(selectedSliceIndex));
-                                if (histologySlice != NULL) {
-                                    Vector3D rotationAngles;
-                                    if (histologySlice->getSliceRotationAngles(rotationAngles)) {
-                                        /*
-                                         * Need to invert rotation angles (may have to do with quaternions)
-                                         */
-                                        rotationAngles = -rotationAngles;
-                                        
-                                        setMprThreeRotationAnglesForYokingGroup(getBrainModelYokingGroup(),
-                                                                                rotationAngles);
-                                        return getBrainModelYokingGroup();
+                                if ((selectedSliceIndex >= 0)
+                                    && (selectedSliceIndex < selectedFile->getNumberOfHistologySlices())) {
+                                    const HistologySlice* histologySlice(selectedFile->getHistologySliceByIndex(selectedSliceIndex));
+                                    if (histologySlice != NULL) {
+                                        Vector3D rotationAngles;
+                                        if (histologySlice->getSliceRotationAngles(rotationAngles)) {
+                                            /*
+                                             * Need to invert rotation angles (may have to do with quaternions)
+                                             */
+                                            rotationAngles = -rotationAngles;
+                                            
+                                            setMprThreeRotationAnglesForYokingGroup(getBrainModelYokingGroup(),
+                                                                                    rotationAngles);
+                                            return getBrainModelYokingGroup();
+                                        }
                                     }
+                                }
+                                else {
+                                    CaretLogWarning("Yoking Slice index="
+                                                    + AString::number(selectedSliceIndex)
+                                                    + " out of range for histology file: "
+                                                    + selectedFile->getFileName());
                                 }
                             }
                         }
@@ -7843,6 +7936,50 @@ void
 BrowserTabContent::setHistologyAxesCrosshairsDisplayed(const bool displayed)
 {
     m_displayHistologyAxesCrosshairs = displayed;
+    updateBrainModelYokedBrowserTabs();
+}
+
+/**
+ * @return Is histology axis crosshairs  labels displayed
+ */
+bool
+BrowserTabContent::isHistologyAxesCrosshairsLabelsDisplayed() const
+{
+    return m_displayHistologyAxesCrosshairsLabels;
+}
+
+/**
+ * Set histology axis crosshairs labels displayed
+ *
+ * @param displayed
+ *     New status
+ */
+void
+BrowserTabContent::setHistologyAxesCrosshairsLabelsDisplayed(const bool displayed)
+{
+    m_displayHistologyAxesCrosshairsLabels = displayed;
+    updateBrainModelYokedBrowserTabs();
+}
+
+/**
+ * @return Is flip about X axis enabled for histology
+ */
+bool
+BrowserTabContent::isHistologyFlipXEnabled() const
+{
+    return m_histologyFlipXAxisFlag;
+}
+
+/**
+ * Set  flip about X axis enabled for histology
+ *
+ * @param status
+ *     New status
+ */
+void
+BrowserTabContent::setHistologyFlipXEnabled(const bool status)
+{
+    m_histologyFlipXAxisFlag = status;
     updateBrainModelYokedBrowserTabs();
 }
 
@@ -8153,6 +8290,111 @@ BrowserTabContent::setWholeBrainCerebellumEnabled(const bool enabled)
 }
 
 /**
+ * @return Enabled status for hippocampus.
+ */
+bool
+BrowserTabContent::isWholeBrainHippocampusEnabled() const
+{
+    return m_wholeBrainSurfaceSettings->isHippocampusEnabled();
+}
+
+/**
+ * Set the enabled status for the hippocampus.
+ * @param enabled
+ *    New enabled status.
+ */
+void
+BrowserTabContent::setWholeBrainHippocampusEnabled(const bool enabled)
+{
+    m_wholeBrainSurfaceSettings->setHippocampusEnabled(enabled);
+    updateBrainModelYokedBrowserTabs();
+}
+
+/**
+ * @return Enabled status for hippocampus left
+ */
+bool
+BrowserTabContent::isWholeBrainHippocampusLeftEnabled() const
+{
+    return m_wholeBrainSurfaceSettings->isHippocampusLeftEnabled();
+}
+
+/**
+ * Set the enabled status for the hippocampus left
+ * @param enabled
+ *    New enabled status.
+ */
+void
+BrowserTabContent::setWholeBrainHippocampusLeftEnabled(const bool enabled)
+{
+    m_wholeBrainSurfaceSettings->setHippocampusLeftEnabled(enabled);
+    updateBrainModelYokedBrowserTabs();
+}
+
+/**
+ * @return Enabled status for hippocampus right
+ */
+bool
+BrowserTabContent::isWholeBrainHippocampusRightEnabled() const
+{
+    return m_wholeBrainSurfaceSettings->isHippocampusRightEnabled();
+}
+
+/**
+ * Set the enabled status for the hippocampus right
+ * @param enabled
+ *    New enabled status.
+ */
+void
+BrowserTabContent::setWholeBrainHippocampusRightEnabled(const bool enabled)
+{
+    m_wholeBrainSurfaceSettings->setHippocampusRightEnabled(enabled);
+    updateBrainModelYokedBrowserTabs();
+}
+
+/**
+ * @return Enabled status for dentate hippocampus left
+ */
+bool
+BrowserTabContent::isWholeBrainDentateHippocampusLeftEnabled() const
+{
+    return m_wholeBrainSurfaceSettings->isDentateHippocampusLeftEnabled();
+}
+
+/**
+ * Set the enabled status for the dentate hippocampus left
+ * @param enabled
+ *    New enabled status.
+ */
+void
+BrowserTabContent::setWholeBrainDentateHippocampusLeftEnabled(const bool enabled)
+{
+    m_wholeBrainSurfaceSettings->setDentateHippocampusLeftEnabled(enabled);
+    updateBrainModelYokedBrowserTabs();
+}
+
+/**
+ * @return Enabled status for dentate hippocampus right
+ */
+bool
+BrowserTabContent::isWholeBrainDentateHippocampusRightEnabled() const
+{
+    return m_wholeBrainSurfaceSettings->isDentateHippocampusRightEnabled();
+}
+
+/**
+ * Set the enabled status for the dentate hippocampus right
+ * @param enabled
+ *    New enabled status.
+ */
+void
+BrowserTabContent::setWholeBrainDentateHippocampusRightEnabled(const bool enabled)
+{
+    m_wholeBrainSurfaceSettings->setDentateHippocampusRightEnabled(enabled);
+    updateBrainModelYokedBrowserTabs();
+}
+
+/**
  * @return The separation between the left and right surfaces.
  */
 float
@@ -8331,11 +8573,15 @@ BrowserTabContent::setBrainModelYokingGroup(const YokingGroupEnum::Enum brainMod
                 *m_histologyViewingTransformation = *btc->m_histologyViewingTransformation;
                 *m_mediaViewingTransformation = *btc->m_mediaViewingTransformation;
                 m_volumeSliceSettings->copyToMeForYoking(*btc->m_volumeSliceSettings);
+                *m_wholeBrainSurfaceSettings = *btc->m_wholeBrainSurfaceSettings;
+
                 *m_obliqueVolumeRotationMatrix = *btc->m_obliqueVolumeRotationMatrix;
                 *m_clippingPlaneGroup = *btc->m_clippingPlaneGroup;
                 m_identificationUpdatesVolumeSlices = btc->m_identificationUpdatesVolumeSlices;
                 m_identificationUpdatesHistologySlices = btc->m_identificationUpdatesHistologySlices;
                 m_displayHistologyAxesCrosshairs = btc->m_displayHistologyAxesCrosshairs;
+                m_displayHistologyAxesCrosshairsLabels = btc->m_displayHistologyAxesCrosshairsLabels;
+                m_histologyFlipXAxisFlag = btc->m_histologyFlipXAxisFlag;
                 
                 m_displayVolumeAxesCrosshairs = btc->m_displayVolumeAxesCrosshairs;
                 m_displayVolumeAxesCrosshairLabels = btc->m_displayVolumeAxesCrosshairLabels;
@@ -8356,8 +8602,6 @@ BrowserTabContent::setBrainModelYokingGroup(const YokingGroupEnum::Enum brainMod
                 m_mprThreeAxialInverseRotationQuaternion = btc->m_mprThreeAxialInverseRotationQuaternion;
                 m_mprThreeCoronalInverseRotationQuaternion = btc->m_mprThreeCoronalInverseRotationQuaternion;
                 m_mprThreeParasagittalInverseRotationQuaternion = btc->m_mprThreeParasagittalInverseRotationQuaternion;
-
-                *m_samplesDrawingSettings = *btc->m_samplesDrawingSettings;
 
                 /**
                  * lighting enabled NOT yoked 
@@ -8489,11 +8733,14 @@ BrowserTabContent::updateBrainModelYokedBrowserTabs()
                 *btc->m_cerebellumViewingTransformation = *m_cerebellumViewingTransformation;
                 *btc->m_volumeSliceViewingTransformation = *m_volumeSliceViewingTransformation;
                 btc->m_volumeSliceSettings->copyToMeForYoking(*m_volumeSliceSettings);
+                *btc->m_wholeBrainSurfaceSettings = *m_wholeBrainSurfaceSettings;
                 *btc->m_obliqueVolumeRotationMatrix = *m_obliqueVolumeRotationMatrix;
                 *btc->m_clippingPlaneGroup = *m_clippingPlaneGroup;
                 btc->m_identificationUpdatesVolumeSlices = m_identificationUpdatesVolumeSlices;
                 btc->m_identificationUpdatesHistologySlices = m_identificationUpdatesHistologySlices;
                 btc->m_displayHistologyAxesCrosshairs = m_displayHistologyAxesCrosshairs;
+                btc->m_displayHistologyAxesCrosshairsLabels = m_displayHistologyAxesCrosshairsLabels;
+                btc->m_histologyFlipXAxisFlag = m_histologyFlipXAxisFlag;
                 btc->m_displayVolumeAxesCrosshairs = m_displayVolumeAxesCrosshairs;
                 btc->m_displayVolumeAxesCrosshairLabels = m_displayVolumeAxesCrosshairLabels;
                 btc->m_displayVolumeMontageAxesCoordinates = m_displayVolumeMontageAxesCoordinates;
@@ -8514,7 +8761,6 @@ BrowserTabContent::updateBrainModelYokedBrowserTabs()
                 btc->m_mprThreeCoronalInverseRotationQuaternion = m_mprThreeCoronalInverseRotationQuaternion;
                 btc->m_mprThreeParasagittalInverseRotationQuaternion = m_mprThreeParasagittalInverseRotationQuaternion;
 
-                *btc->m_samplesDrawingSettings = *m_samplesDrawingSettings;
                 /*
                  * DO NOT YOKE MEDIA TRANSFORMATION (but might have its own yoking in the future 
                  * *btc->m_mediaViewingTransformation = *m_mediaViewingTransformation;

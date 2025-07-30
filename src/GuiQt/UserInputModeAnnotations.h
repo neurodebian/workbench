@@ -98,7 +98,11 @@ namespace caret {
             /** Mouse move coordinate and its corrsponding coordinate at other end of polyhedron */
             MOVE_TWO_COORDINATES,
             /** Mouse removes coordinate */
-            REMOVE_COORDINATE
+            REMOVE_COORDINATE,
+            /** Move end of sample polyhedron */
+            MOVE_SAMPLE_POLYHEDRON_END,
+            /** Resize end of sample polyhedron */
+            RESIZE_SAMPLE_POLYHEDRON_END,
         };
         
         UserInputModeAnnotations(const int32_t browserWindowIndex);
@@ -179,6 +183,8 @@ namespace caret {
         void processDeselectAllAnnotations();
         
         void processSelectAllAnnotations();
+        
+        virtual void deleteSelectedAnnotations();
         
     private:
         /**
@@ -422,8 +428,6 @@ namespace caret {
         
         void cutAnnotation();
         
-        virtual void deleteSelectedAnnotations();
-        
         void resetAnnotationUnderMouse();
         
         bool isEditMenuExceptRedoUndoValid() const;
@@ -459,6 +463,8 @@ namespace caret {
         
         bool mouseEventToStereotaxicCoordinate(const MouseEvent& mouseEvent,
                                                Vector3D& xyzOut) const;
+        
+        SelectionItemAnnotation* performIdentificationAnnotations(const MouseEvent& mouseEvent);
         
         UserInputModeAnnotationsWidget* m_annotationToolsWidget;
         
@@ -524,6 +530,7 @@ namespace caret {
         /*
          * Some private methods are accessed by this friend class
          */
+        friend class AnnotationDeleteWidget;
         friend class AnnotationPolyTypeDrawEditWidget;
         friend class UserInputModeAnnotationsContextMenu;
         friend class UserInputModeAnnotationsWidget;

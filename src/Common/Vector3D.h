@@ -22,6 +22,7 @@
 /*LICENSE_END*/
 
 #include "CaretAssert.h"
+#include <vector>
 
 namespace caret {
     
@@ -55,6 +56,8 @@ namespace caret {
         float& operator[](const int32_t& index);
         const float& operator[](const int32_t& index) const;
         Vector3D& operator=(const float* right);
+        // comparison operators
+        bool operator<(const Vector3D& rhs) const;
         //numerical operators
         Vector3D& operator+=(const Vector3D& right);
         Vector3D& operator-=(const Vector3D& right);
@@ -67,6 +70,8 @@ namespace caret {
         Vector3D operator/(const float& right) const;//NOTE: doesn't really make sense to have the other division, unlike multiplication
         inline operator float*() { return m_vec; }
         inline operator const float*() const { return m_vec; }
+        
+        static Vector3D average(const std::vector<Vector3D>& xyzs);
     };
     
     Vector3D operator*(const float& left, const Vector3D& right);

@@ -30,20 +30,23 @@
 #include "AnnotationGroup.h"
 #include "AnnotationImage.h"
 #include "AnnotationLine.h"
-#include "AnnotationMetaData.h"
 #include "AnnotationOval.h"
 #include "AnnotationPercentSizeText.h"
 #include "AnnotationPointSizeText.h"
 #include "AnnotationPolygon.h"
 #include "AnnotationPolyhedron.h"
 #include "AnnotationPolyLine.h"
+#include "AnnotationSampleMetaData.h"
 #include "AnnotationScaleBar.h"
 #include "AnnotationText.h"
 #include "BrainConstants.h"
 #include "CaretAssert.h"
 #include "CaretLogger.h"
+#include "DataFileContentInformation.h"
 #include "DisplayGroupAndTabItemHelper.h"
-#include "AnnotationMetaDataNames.h"
+#include "EventAnnotationPolyhedronNameComponentSettings.h"
+#include "EventManager.h"
+#include "GiftiMetaData.h"
 #include "MathFunctions.h"
 #include "Matrix4x4.h"
 #include "SceneClass.h"
@@ -490,7 +493,7 @@ Annotation::initializeAnnotationMembers()
 
     m_displayGroupAndTabItemHelper = new DisplayGroupAndTabItemHelper();
     
-    m_metaData.reset(new AnnotationMetaData(getType()));
+    m_metaData.reset(new GiftiMetaData());
     
     /*
      * Default the unique identifier.
@@ -729,6 +732,9 @@ Annotation::initializeAnnotationMembers()
         m_sceneAssistant->add<CaretColorEnum, CaretColorEnum::Enum>("m_colorLine",
                                                                     &m_colorLine);
         m_sceneAssistant->addArray("m_customColorLine", m_customColorLine, 4, 0.0);
+        
+        m_sceneAssistant->add("m_lineWidthPercentage",
+                              &m_lineWidthPercentage);
         
         m_sceneAssistant->add("m_stackingOrder",
                               &m_stackingOrder);
@@ -1766,7 +1772,7 @@ Annotation::setCustomBackgroundColor(const uint8_t rgba[4])
 /**
  * @return Pointer to the metadata
  */
-AnnotationMetaData*
+GiftiMetaData*
 Annotation::getMetaData()
 {
     return m_metaData.get();
@@ -1775,7 +1781,7 @@ Annotation::getMetaData()
 /**
  * @return Pointer to the metadata (const method)
  */
-const AnnotationMetaData*
+const GiftiMetaData*
 Annotation::getMetaData() const
 {
     return m_metaData.get();
@@ -1800,6 +1806,7 @@ Annotation::initializeProperties()
     bool scaleBarFlag = false;
     bool textAttributesFlag = false;
     bool textFlag = false;
+    bool textBackgroundFlag = false;
     switch (m_type) {
         case AnnotationTypeEnum::BOX:
             break;
@@ -1822,6 +1829,7 @@ Annotation::initializeProperties()
         case AnnotationTypeEnum::POLYHEDRON:
             fillColorFlag = false;
             textAttributesFlag = true;
+            textBackgroundFlag = true;
             break;
         case AnnotationTypeEnum::POLYGON:
             fillColorFlag = false;
@@ -1833,7 +1841,9 @@ Annotation::initializeProperties()
             scaleBarFlag = true;
             break;
         case AnnotationTypeEnum::TEXT:
+            fillColorFlag = false;
             textFlag = true;
+            textBackgroundFlag = true;
             break;
     }
     
@@ -1842,6 +1852,7 @@ Annotation::initializeProperties()
     setProperty(Property::TEXT_ALIGNMENT, textFlag);
     setProperty(Property::TEXT_EDIT, textFlag);
     setProperty(Property::TEXT_COLOR, colorBarFlag | scaleBarFlag | textFlag | textAttributesFlag);
+    setProperty(Property::TEXT_COLOR_BACKGROUND, textBackgroundFlag);
     setProperty(Property::TEXT_FONT_NAME, colorBarFlag | scaleBarFlag | textFlag | textAttributesFlag);
     setProperty(Property::TEXT_FONT_SIZE, colorBarFlag | scaleBarFlag | textFlag | textAttributesFlag);
     setProperty(Property::TEXT_FONT_STYLE, textFlag | textAttributesFlag);
@@ -2084,6 +2095,12 @@ Annotation::setAnnotationGroupKey(const AnnotationGroupKey& annotationGroupKey)
                                "Do not call this method with invalid key.  "
                                "Instead call invalidateAnnotationGroupKey().");
             break;
+        case AnnotationGroupTypeEnum::SAMPLES_RETROSPECTIVE:
+            CaretAssert(newGroupKeyForAnnotation.getSamplesRetrospectiveUniqueKey() > 0);
+            break;
+        case AnnotationGroupTypeEnum::SAMPLES_PROSPECTIVE:
+            CaretAssert(newGroupKeyForAnnotation.getSamplesProspectiveUniqueKey() > 0);
+            break;
         case AnnotationGroupTypeEnum::SPACE:
             CaretAssert(newGroupKeyForAnnotation.getSpaceGroupUniqueKey() > 0);
             
@@ -2149,6 +2166,24 @@ Annotation::invalidateTextSubstitution()
     /* Nothing, override by AnnotationText */
 }
 
+/**
+ * Add information about the content of this instance.
+ *
+ * @param dataFileInformation
+ *     Will contain information about this instance.
+ */
+void
+Annotation::addToDataFileContentInformation(DataFileContentInformation& dataFileInformation) const
+{
+    dataFileInformation.addNameAndValue("Annotation Name", getName());
+    dataFileInformation.addNameAndValue("Type", AnnotationTypeEnum::toName(m_type));
+    dataFileInformation.addNameAndValue("Space", AnnotationCoordinateSpaceEnum::toGuiName(getCoordinateSpace()));
+    
+    const AnnotationText* textAnn = castToTextAnnotation();
+    if (textAnn != NULL) {
+        dataFileInformation.addNameAndValue("Text", textAnn->getText());
+    }
+}
 
 /**
  * @return Name of annotation.
@@ -2158,7 +2193,6 @@ Annotation::getName() const
 {
     AString nameOut(m_name);
     
-    AString suffixName;
     switch (m_type) {
         case AnnotationTypeEnum::BOX:
             break;
@@ -2178,9 +2212,18 @@ Annotation::getName() const
              * Since it is difficult to detect a change in metadata,
              * we just add the Ding Abbreviation to the annotation name here.
              */
-            CaretAssert(m_metaData);
-            const AString shortHandID(m_metaData->get(AnnotationMetaDataNames::SAMPLES_SAMPLE_NUMBER));
-            nameOut = shortHandID.trimmed();
+            const AnnotationPolyhedron* polyhedron(castToPolyhedron());
+            CaretAssert(polyhedron);
+
+            std::vector<AString> textComponents;
+            if ( ! polyhedron->getSampleMetaData()->getSampleName().isEmpty()) {
+                textComponents.push_back(polyhedron->getSampleMetaData()->getSampleName());
+            }
+            if ( ! polyhedron->getSampleMetaData()->getSampleNumber().isEmpty()) {
+                textComponents.push_back(polyhedron->getSampleMetaData()->getSampleNumber());
+            }
+            textComponents.push_back(AnnotationPolyhedronTypeEnum::toAbbreviation(polyhedron->getPolyhedronType()));
+            nameOut = AString::join(textComponents, ".");
         }
             break;
         case AnnotationTypeEnum::POLYGON:
@@ -2196,6 +2239,72 @@ Annotation::getName() const
     return nameOut;
 }
 
+/**
+ * @return name for drawing in graphics window
+ */
+AString
+Annotation::getNameForGraphicsDrawing() const
+{
+    AString nameOut(m_name);
+    
+    switch (m_type) {
+        case AnnotationTypeEnum::BOX:
+            break;
+        case AnnotationTypeEnum::BROWSER_TAB:
+            break;
+        case AnnotationTypeEnum::COLOR_BAR:
+            break;
+        case AnnotationTypeEnum::IMAGE:
+            break;
+        case AnnotationTypeEnum::LINE:
+            break;
+        case AnnotationTypeEnum::OVAL:
+            break;
+        case AnnotationTypeEnum::POLYHEDRON:
+        {
+            /*
+             * Since it is difficult to detect a change in metadata,
+             * we just add the Ding Abbreviation to the annotation name here.
+             */
+            const AnnotationPolyhedron* polyhedron(castToPolyhedron());
+            CaretAssert(polyhedron);
+            
+            EventAnnotationPolyhedronNameComponentSettings nameCompEvent;
+            EventManager::get()->sendEvent(nameCompEvent.getPointer());
+            
+            std::vector<AString> textComponents;
+            if (nameCompEvent.isShowName()) {
+                if ( ! polyhedron->getSampleMetaData()->getSampleName().isEmpty()) {
+                    textComponents.push_back(polyhedron->getSampleMetaData()->getSampleName());
+                }
+            }
+            if (nameCompEvent.isShowNumber()) {
+                if ( ! polyhedron->getSampleMetaData()->getSampleNumber().isEmpty()) {
+                    textComponents.push_back(polyhedron->getSampleMetaData()->getSampleNumber());
+                }
+            }
+            if (nameCompEvent.isShowProspectiveRetrospectiveSuffix()) {
+                if (polyhedron->getPolyhedronType() != AnnotationPolyhedronTypeEnum::INVALID) {
+                    textComponents.push_back(AnnotationPolyhedronTypeEnum::toAbbreviation(polyhedron->getPolyhedronType()));
+                }
+            }
+            
+            
+            nameOut = AString::join(textComponents, ".");
+        }
+            break;
+        case AnnotationTypeEnum::POLYGON:
+            break;
+        case AnnotationTypeEnum::POLYLINE:
+            break;
+        case AnnotationTypeEnum::SCALE_BAR:
+            break;
+        case AnnotationTypeEnum::TEXT:
+            break;
+    }
+    
+    return nameOut;
+}
 
 /**
  * Called by text annotation to reset the name
@@ -3401,5 +3510,4 @@ Annotation::unlockPolyhedronInWindow(const int32_t windowIndex)
     setSelectionLockedPolyhedronInWindow(windowIndex,
                                          NULL);
 }
-
 

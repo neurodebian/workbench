@@ -31,6 +31,8 @@ AnnotationArrangerExecutor.h
 AnnotationArrangerInputs.h
 AnnotationClipboard.h
 AnnotationManager.h
+AnnotationTextSubstitutionLayer.h
+AnnotationTextSubstitutionLayerSet.h
 BorderDrawingTypeEnum.h
 Brain.h
 BrainOpenGL.h
@@ -190,6 +192,7 @@ OffScreenSceneRendererOpenGLWindow.h
 Overlay.h
 OverlaySet.h
 OverlaySetArray.h
+OverlaySetInitializer.h
 ProjectionViewTypeEnum.h
 SamplesDrawingModeEnum.h
 SamplesDrawingSettings.h
@@ -229,8 +232,10 @@ SurfaceDrawingTypeEnum.h
 SurfaceMontageConfigurationAbstract.h
 SurfaceMontageConfigurationCerebellar.h
 SurfaceMontageConfigurationCerebral.h
-SurfaceMontageConfigurationTypeEnum.h
 SurfaceMontageConfigurationFlatMaps.h
+SurfaceMontageConfigurationHippocampus.h
+SurfaceMontageConfigurationHippocampusFlatMaps.h
+SurfaceMontageConfigurationTypeEnum.h
 SurfaceMontageLayoutOrientationEnum.h
 SurfaceMontageViewport.h
 SurfaceNodeColoring.h
@@ -267,6 +272,8 @@ AnnotationArrangerExecutor.cxx
 AnnotationArrangerInputs.cxx
 AnnotationClipboard.cxx
 AnnotationManager.cxx
+AnnotationTextSubstitutionLayer.cxx
+AnnotationTextSubstitutionLayerSet.cxx
 BorderDrawingTypeEnum.cxx
 Brain.cxx
 BrainOpenGL.cxx
@@ -422,6 +429,7 @@ OffScreenSceneRendererOpenGLWindow.cxx
 Overlay.cxx
 OverlaySet.cxx
 OverlaySetArray.cxx
+OverlaySetInitializer.cxx
 ProjectionViewTypeEnum.cxx
 SamplesDrawingModeEnum.cxx
 SamplesDrawingSettings.cxx
@@ -461,8 +469,10 @@ SurfaceDrawingTypeEnum.cxx
 SurfaceMontageConfigurationAbstract.cxx
 SurfaceMontageConfigurationCerebellar.cxx
 SurfaceMontageConfigurationCerebral.cxx
-SurfaceMontageConfigurationTypeEnum.cxx
 SurfaceMontageConfigurationFlatMaps.cxx
+SurfaceMontageConfigurationHippocampus.cxx
+SurfaceMontageConfigurationHippocampusFlatMaps.cxx
+SurfaceMontageConfigurationTypeEnum.cxx
 SurfaceMontageLayoutOrientationEnum.cxx
 SurfaceMontageViewport.cxx
 SurfaceNodeColoring.cxx
@@ -510,6 +520,7 @@ ${CMAKE_SOURCE_DIR}/CZIlib/CZI
 ${CMAKE_SOURCE_DIR}/FilesBase
 ${CMAKE_SOURCE_DIR}/Files
 ${CMAKE_SOURCE_DIR}/Graphics
+${CMAKE_SOURCE_DIR}/OmeZarr
 ${CMAKE_SOURCE_DIR}/Palette
 ${CMAKE_SOURCE_DIR}/Gifti
 ${CMAKE_SOURCE_DIR}/Nifti

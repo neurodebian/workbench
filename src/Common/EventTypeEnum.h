@@ -62,10 +62,16 @@ public:
         EVENT_ANNOTATION_GROUPING,
         /** Annotation get slice depth while drawing a new polyhedron */
         EVENT_ANNOTATION_NEW_DRAWING_POLYHEDRON_SLICE_DEPTH,
+        /** Get an annotation polyhedron using its linked identifier */
+        EVENT_ANNOTATION_POLYHEDRON_GET_BY_LINKED_IDENTIFIER,
+        /** Annotation polyhedron name  component settings - which components to display */
+        EVENT_ANNOTATION_POLYHEDRON_NAME_COMPONENT_SETTINGS,
         /** Get the bounds of annotation text */
         EVENT_ANNOTATION_TEXT_GET_BOUNDS,
         /** Get annotation text substitutions */
         EVENT_ANNOTATION_TEXT_SUBSTITUTION_GET,
+        /** Get all text substitution group IDs from all text annotations */
+        EVENT_ANNOTATION_TEXT_SUBSTITUTION_GET_ALL_GROUP_IDS,
         /** Invalid annotation text substitutions */
         EVENT_ANNOTATION_TEXT_SUBSTITUTION_INVALIDATE,
         /** Annotation toolbar update */
@@ -166,6 +172,8 @@ public:
         EVENT_DRAWING_VIEWPORT_CONTENT_CLEAR,
         /** Drawing viewport content event, get after drawing */
         EVENT_DRAWING_VIEWPORT_CONTENT_GET,
+        /** Get a focus class or name color from a focus file */
+        EVENT_FOCUS_FILE_GET_COLOR,
         /** Get data files that are display in windows/tabs */
         EVENT_GET_DISPLAYED_DATA_FILES,
         /** Get node data files */
@@ -262,8 +270,10 @@ public:
         EVENT_SURFACE_COLORING_INVALIDATE,
         /** Invalidate volume coloring */
         EVENT_VOLUME_COLORING_INVALIDATE,
-        /** Get surfaces */
+        /** Get surfaces (Surface instance) */
         EVENT_SURFACES_GET,
+        /** Get surface files with structure and number of nodes */
+        EVENT_SURFACE_FILE_GET,
         /** Get valid surface strucutures and their number of nodes */
         EVENT_SURFACE_STRUCTURES_VALID_GET,
         /** Tile tabs modification */

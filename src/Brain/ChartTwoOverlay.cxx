@@ -1374,6 +1374,8 @@ ChartTwoOverlay::isAllMapsSupported() const
                             break;
                         case DataFileTypeEnum::CONNECTIVITY_FIBER_TRAJECTORY_TEMPORARY:
                             break;
+                        case DataFileTypeEnum::CONNECTIVITY_FIBER_TRAJECTORY_MAPS:
+                            break;
                         case DataFileTypeEnum::CONNECTIVITY_PARCEL:
                             supportedFlag = true;
                             break;
@@ -1403,6 +1405,8 @@ ChartTwoOverlay::isAllMapsSupported() const
                         case DataFileTypeEnum::METRIC:
                             break;
                         case DataFileTypeEnum::METRIC_DYNAMIC:
+                            break;
+                        case DataFileTypeEnum::OME_ZARR_IMAGE_FILE:
                             break;
                         case DataFileTypeEnum::PALETTE:
                             break;

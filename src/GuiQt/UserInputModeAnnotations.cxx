@@ -48,7 +48,7 @@
 #include "AnnotationPasteDialog.h"
 #include "AnnotationPolyhedron.h"
 #include "AnnotationRedoUndoCommand.h"
-#include "AnnotationSamplesCreateDialog.h"
+#include "AnnotationSamplesMetaDataDialog.h"
 #include "AnnotationSpatialModification.h"
 #include "AnnotationText.h"
 #include "AnnotationTextEditorDialog.h"
@@ -92,6 +92,7 @@
 #include "MediaOverlaySet.h"
 #include "ModelSurfaceMontage.h"
 #include "MouseEvent.h"
+#include "SamplesDrawingSettings.h"
 #include "SelectionItemAnnotation.h"
 #include "SelectionManager.h"
 #include "SelectionItemSurfaceNode.h"
@@ -379,6 +380,10 @@ UserInputModeAnnotations::receiveEvent(Event* event)
                         case PolyTypeDrawEditOperation::MOVE_TWO_COORDINATES:
                             selectableFlag = true;
                             break;
+                        case PolyTypeDrawEditOperation::MOVE_SAMPLE_POLYHEDRON_END:
+                            break;
+                        case PolyTypeDrawEditOperation::RESIZE_SAMPLE_POLYHEDRON_END:
+                            break;
                     }
                     cancelEnabledFlag = true;
                     break;
@@ -406,6 +411,10 @@ UserInputModeAnnotations::receiveEvent(Event* event)
                             break;
                         case PolyTypeDrawEditOperation::MOVE_TWO_COORDINATES:
                             selectableFlag = true;
+                            break;
+                        case PolyTypeDrawEditOperation::MOVE_SAMPLE_POLYHEDRON_END:
+                            break;
+                        case PolyTypeDrawEditOperation::RESIZE_SAMPLE_POLYHEDRON_END:
                             break;
                     }
                     cancelEnabledFlag = true;
@@ -893,6 +902,10 @@ UserInputModeAnnotations::getEnabledPolyTypeDrawEditOperations(std::vector<PolyT
                         operationsOut.push_back(PolyTypeDrawEditOperation::MOVE_ONE_COORDINATE);
                         operationsOut.push_back(PolyTypeDrawEditOperation::MOVE_TWO_COORDINATES);
                     }
+                    if (numCoords >= 3) {
+                        operationsOut.push_back(PolyTypeDrawEditOperation::MOVE_SAMPLE_POLYHEDRON_END);
+                        operationsOut.push_back(PolyTypeDrawEditOperation::RESIZE_SAMPLE_POLYHEDRON_END);
+                    }
                     
                     selectedAnnotationOut = ann;
                 }
@@ -950,6 +963,10 @@ UserInputModeAnnotations::getCursor() const
                     break;
                 case PolyTypeDrawEditOperation::MOVE_TWO_COORDINATES:
                     break;
+                case PolyTypeDrawEditOperation::MOVE_SAMPLE_POLYHEDRON_END:
+                    break;
+                case PolyTypeDrawEditOperation::RESIZE_SAMPLE_POLYHEDRON_END:
+                    break;
             }
             break;
         case Mode::MODE_DRAWING_NEW_POLY_TYPE_INITIALIZE:
@@ -993,6 +1010,10 @@ UserInputModeAnnotations::getCursor() const
                     if (m_annotationUnderMouseSizeHandleType == AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_EDITABLE_POLY_LINE_COORDINATE) {
                         cursor = CursorEnum::CURSOR_RESIZE_BOTTOM_LEFT_TOP_RIGHT;
                     }
+                    break;
+                case PolyTypeDrawEditOperation::MOVE_SAMPLE_POLYHEDRON_END:
+                    break;
+                case PolyTypeDrawEditOperation::RESIZE_SAMPLE_POLYHEDRON_END:
                     break;
             }
             break;
@@ -1070,6 +1091,10 @@ UserInputModeAnnotations::getCursor() const
                                 break;
                             case PolyTypeDrawEditOperation::MOVE_TWO_COORDINATES:
                                 break;
+                            case PolyTypeDrawEditOperation::MOVE_SAMPLE_POLYHEDRON_END:
+                                break;
+                            case PolyTypeDrawEditOperation::RESIZE_SAMPLE_POLYHEDRON_END:
+                                break;
                         }
                 
                         if (s_allowInsertionIntoPolyTypesFlag) {
@@ -1142,6 +1167,12 @@ UserInputModeAnnotations::getCursor() const
                             case PolyTypeDrawEditOperation::MOVE_ONE_COORDINATE:
                                 break;
                             case PolyTypeDrawEditOperation::MOVE_TWO_COORDINATES:
+                                break;
+                            case PolyTypeDrawEditOperation::MOVE_SAMPLE_POLYHEDRON_END:
+                                cursor = CursorEnum::CURSOR_FOUR_ARROWS;
+                                break;
+                            case PolyTypeDrawEditOperation::RESIZE_SAMPLE_POLYHEDRON_END:
+                                cursor = CursorEnum::CURSOR_FOUR_ARROWS;
                                 break;
                         }
                         break;
@@ -2087,6 +2118,10 @@ UserInputModeAnnotations::mouseLeftDrag(const MouseEvent& mouseEvent)
                     break;
                 case PolyTypeDrawEditOperation::MOVE_TWO_COORDINATES:
                     break;
+                case PolyTypeDrawEditOperation::MOVE_SAMPLE_POLYHEDRON_END:
+                    break;
+                case PolyTypeDrawEditOperation::RESIZE_SAMPLE_POLYHEDRON_END:
+                    break;
             }
             return;
             break;
@@ -2114,6 +2149,10 @@ UserInputModeAnnotations::mouseLeftDrag(const MouseEvent& mouseEvent)
                     break;
                 case PolyTypeDrawEditOperation::MOVE_TWO_COORDINATES:
                     moveTwoCooordinatesInNewPolyTypeStereotaxicAnnotation(mouseEvent);
+                    break;
+                case PolyTypeDrawEditOperation::MOVE_SAMPLE_POLYHEDRON_END:
+                    break;
+                case PolyTypeDrawEditOperation::RESIZE_SAMPLE_POLYHEDRON_END:
                     break;
             }
             return;
@@ -2335,7 +2374,14 @@ UserInputModeAnnotations::mouseLeftDrag(const MouseEvent& mouseEvent)
             const float mousePressViewportX = mouseEvent.getPressedX() - spaceOriginX;
             const float mousePressViewportY = mouseEvent.getPressedY() - spaceOriginY;
             
-            AnnotationSpatialModification annSpatialMod(m_annotationBeingDraggedHandleType,
+            AnnotationSizingHandleTypeEnum::Enum sizingHandleType = m_annotationBeingDraggedHandleType;
+            if (getPolyTypeDrawEditOperation() == PolyTypeDrawEditOperation::MOVE_SAMPLE_POLYHEDRON_END) {
+                if (sizingHandleType == AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_EDITABLE_POLY_LINE_COORDINATE) {
+                    sizingHandleType = AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_NONE;
+                }
+            }
+
+            AnnotationSpatialModification annSpatialMod(sizingHandleType,
                                                         spaceWidth,
                                                         spaceHeight,
                                                         mousePressViewportX,
@@ -2397,6 +2443,11 @@ UserInputModeAnnotations::mouseLeftDrag(const MouseEvent& mouseEvent)
                                                               previousMouseXYCoordInfo.m_mediaSpaceInfo.m_xyz[1],
                                                               previousMouseXYCoordInfo.m_mediaSpaceInfo.m_xyz[2]);
                 }
+                if (previousMouseXYCoordInfo.m_modelSpaceInfo.m_validFlag) {
+                    annSpatialMod.setStereotaxicCoordinateAtPreviousMouseXY(previousMouseXYCoordInfo.m_modelSpaceInfo.m_xyz[0],
+                                                                            previousMouseXYCoordInfo.m_modelSpaceInfo.m_xyz[1],
+                                                                            previousMouseXYCoordInfo.m_modelSpaceInfo.m_xyz[2]);
+                }
             }
             
             bool allowMoveFlag(true);
@@ -2422,6 +2473,16 @@ UserInputModeAnnotations::mouseLeftDrag(const MouseEvent& mouseEvent)
                         allowMoveFlag = true;
                         annSpatialMod.setMultiPairedMove(true); /* Move the paired coord too */
                         break;
+                    case PolyTypeDrawEditOperation::MOVE_SAMPLE_POLYHEDRON_END:
+                        /* Move end of polyhedron */
+                        allowMoveFlag = true;
+                        annSpatialMod.setPolyhedronEndMove(true);
+                        break;
+                    case PolyTypeDrawEditOperation::RESIZE_SAMPLE_POLYHEDRON_END:
+                        /* shrink expand polyhedron */
+                        allowMoveFlag = true;
+                        annSpatialMod.setPolyhedronShrinkExpand(true);
+                        break;
                 }
             }
             
@@ -2432,12 +2493,16 @@ UserInputModeAnnotations::mouseLeftDrag(const MouseEvent& mouseEvent)
                 
                 for (int32_t i = 0; i < numSelectedAnnotations; i++) {
                     Annotation* annotationModified(selectedAnnotations[i]->clone());
+                    CaretAssert(annotationModified);
+                    if (annotationModified->getType() == AnnotationTypeEnum::POLYHEDRON) {
+                        modeDescription = "Move Sample Coordinate";
+                    }
+                    else if (annSpatialMod.isPolyhedronEndMove()) {
+                        modeDescription = "Move Polyhedron End";
+                    }
                     if (annotationModified->applySpatialModification(annSpatialMod)) {
                         annotationsBeforeMoveAndResize.push_back(selectedAnnotations[i]);
                         annotationsAfterMoveAndResize.push_back(annotationModified);
-                        if (annotationModified->getType() == AnnotationTypeEnum::POLYHEDRON) {
-                            modeDescription = "Move Sample Coordinate";
-                        }
                     }
                     else {
                         delete annotationModified;
@@ -2664,6 +2729,10 @@ UserInputModeAnnotations::mouseLeftClick(const MouseEvent& mouseEvent)
                     break;
                 case PolyTypeDrawEditOperation::MOVE_TWO_COORDINATES:
                     break;
+                case PolyTypeDrawEditOperation::MOVE_SAMPLE_POLYHEDRON_END:
+                    break;
+                case PolyTypeDrawEditOperation::RESIZE_SAMPLE_POLYHEDRON_END:
+                    break;
             }
             break;
         case Mode::MODE_DRAWING_NEW_POLY_TYPE_INITIALIZE:
@@ -2693,6 +2762,10 @@ UserInputModeAnnotations::mouseLeftClick(const MouseEvent& mouseEvent)
                 case PolyTypeDrawEditOperation::MOVE_ONE_COORDINATE:
                     break;
                 case PolyTypeDrawEditOperation::MOVE_TWO_COORDINATES:
+                    break;
+                case PolyTypeDrawEditOperation::MOVE_SAMPLE_POLYHEDRON_END:
+                    break;
+                case PolyTypeDrawEditOperation::RESIZE_SAMPLE_POLYHEDRON_END:
                     break;
             }
             break;
@@ -2806,6 +2879,10 @@ UserInputModeAnnotations::mouseLeftClick(const MouseEvent& mouseEvent)
                         case PolyTypeDrawEditOperation::MOVE_ONE_COORDINATE:
                             break;
                         case PolyTypeDrawEditOperation::MOVE_TWO_COORDINATES:
+                            break;
+                        case PolyTypeDrawEditOperation::MOVE_SAMPLE_POLYHEDRON_END:
+                            break;
+                        case PolyTypeDrawEditOperation::RESIZE_SAMPLE_POLYHEDRON_END:
                             break;
                     }
                 }
@@ -3025,6 +3102,10 @@ UserInputModeAnnotations::mouseLeftPress(const MouseEvent& mouseEvent)
                     break;
                 case PolyTypeDrawEditOperation::MOVE_TWO_COORDINATES:
                     break;
+                case PolyTypeDrawEditOperation::MOVE_SAMPLE_POLYHEDRON_END:
+                    break;
+                case PolyTypeDrawEditOperation::RESIZE_SAMPLE_POLYHEDRON_END:
+                    break;
             }
             break;
         case Mode::MODE_DRAWING_NEW_POLY_TYPE_STEREOTAXIC_INITIALIZE:
@@ -3102,14 +3183,10 @@ void
 UserInputModeAnnotations::setAnnotationUnderMouse(const MouseEvent& mouseEvent,
                                                   SelectionItemAnnotation* annotationIDIn)
 {
-    m_annotationUnderMouseSizeHandleType = AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_NONE;
-    
-    
     BrainOpenGLWidget* openGLWidget = mouseEvent.getOpenGLWidget();
     SelectionItemAnnotation* annotationID = annotationIDIn;
     if (annotationID == NULL) {
-        annotationID = openGLWidget->performIdentificationAnnotations(mouseEvent.getX(),
-                                                                      mouseEvent.getY());
+        annotationID = performIdentificationAnnotations(mouseEvent);
     }
 
     if (annotationID->isValid()) {
@@ -3120,6 +3197,7 @@ UserInputModeAnnotations::setAnnotationUnderMouse(const MouseEvent& mouseEvent,
     }
     else {
         m_annotationUnderMouse = NULL; 
+        m_annotationUnderMouseSizeHandleType = AnnotationSizingHandleTypeEnum::ANNOTATION_SIZING_HANDLE_NONE;
     }
     
     openGLWidget->updateCursor();
@@ -3322,8 +3400,7 @@ UserInputModeAnnotations::mouseLeftDoubleClick(const MouseEvent& mouseEvent)
     const int32_t mouseY = mouseEvent.getY();
     
     BrainOpenGLWidget* openGLWidget = mouseEvent.getOpenGLWidget();
-    SelectionItemAnnotation* annotationID = openGLWidget->performIdentificationAnnotations(mouseX,
-                                                                            mouseY);
+    SelectionItemAnnotation* annotationID(performIdentificationAnnotations(mouseEvent));
     if (annotationID->isValid()) {
         Annotation* annotation = annotationID->getAnnotation();
         if (annotation != NULL) {
@@ -3504,6 +3581,21 @@ UserInputModeAnnotations::selectAnnotation(Annotation* annotation)
     m_annotationUnderMouse   = annotation;
 }
 
+/**
+ * Perform annotation identification
+ * @param mouseEvent
+ *    The mouse event (uses mouse x/y)
+ * @return
+ *    Annotation selection information
+ */
+SelectionItemAnnotation* 
+UserInputModeAnnotations::performIdentificationAnnotations(const MouseEvent& mouseEvent)
+{
+    BrainOpenGLWidget* openGLWidget = mouseEvent.getOpenGLWidget();
+    return openGLWidget->performIdentificationAnnotations(mouseEvent.getX(),
+                                                          mouseEvent.getY());
+}
+
 
 /**
  * Process a mouse left click for selection mode.
@@ -3523,10 +3615,6 @@ UserInputModeAnnotations::processMouseSelectAnnotation(const MouseEvent& mouseEv
     AnnotationManager* annotationManager = GuiManager::get()->getBrain()->getAnnotationManager(getUserInputMode());
     const std::vector<Annotation*> previousSelectedAnnotations(annotationManager->getAnnotationsSelectedForEditing(getBrowserWindowIndex()));
 
-    BrainOpenGLWidget* openGLWidget = mouseEvent.getOpenGLWidget();
-    const int mouseX = mouseEvent.getX();
-    const int mouseY = mouseEvent.getY();
-    
     /*
      * NOTE: When selecting annotations:
      *    (A) When the mouse is clicked WITHOUT the SHIFT key down, the user is in
@@ -3536,8 +3624,7 @@ UserInputModeAnnotations::processMouseSelectAnnotation(const MouseEvent& mouseEv
      *        'multi-annotation-selection-mode' and any number of annotation will
      *        be selected when this method completes.
      */
-    SelectionItemAnnotation* annotationID = openGLWidget->performIdentificationAnnotations(mouseX,
-                                                                                           mouseY);
+    SelectionItemAnnotation* annotationID(performIdentificationAnnotations(mouseEvent));
     Annotation* selectedAnnotation = annotationID->getAnnotation();
     
     /*
@@ -5150,15 +5237,28 @@ UserInputModeAnnotations::NewUserSpaceAnnotation::finishSamplesAnnotation()
          */
         CaretAssert(m_annotation);
         Annotation* clonedAnnotation(m_annotation->clone());
-        AnnotationSamplesCreateDialog dialog(m_userInputMode,
+        
+        AnnotationPolyhedron* polyhedron(clonedAnnotation->castToPolyhedron());
+        CaretAssert(polyhedron);
+        switch (polyhedron->getPolyhedronType()) {
+            case AnnotationPolyhedronTypeEnum::INVALID:
+                break;
+            case AnnotationPolyhedronTypeEnum::RETROSPECTIVE_SAMPLE:
+                std::cout << "Polyhedron link: " << polyhedron->getLinkedPolyhedronIdentifier() << std::endl;
+                break;
+            case AnnotationPolyhedronTypeEnum::PROSPECTIVE_SAMPLE:
+                break;
+        }
+        
+        AnnotationSamplesMetaDataDialog dialog(m_userInputMode,
                                              m_browserWindowIndex,
                                              m_browserTabIndex,
                                              m_annotationFile,
-                                             clonedAnnotation, /* Dialog takes ownership of the annotation */
+                                             clonedAnnotation->castToPolyhedron(), /* Dialog takes ownership of the annotation */
                                              m_viewportHeight,
-                                             m_sliceThickness,
-                                             GuiManager::get()->getBrowserWindowByWindowIndex(m_browserWindowIndex));
-        if (dialog.exec() == AnnotationSamplesCreateDialog::Accepted) {
+                                               m_sliceThickness,
+                                               GuiManager::get()->getBrowserWindowByWindowIndex(m_browserWindowIndex));
+        if (dialog.exec() == AnnotationSamplesMetaDataDialog::Accepted) {
             /*
              * Annotation must remain valid until after the dialog closes
              * to prevent it from disappearing from the graphics region.

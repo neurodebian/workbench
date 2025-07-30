@@ -21,10 +21,17 @@
 #include "OperationVolumeLabelImport.h"
 #include "OperationException.h"
 
+#include "CaretHierarchy.h"
 #include "CaretLogger.h"
 #include "FileInformation.h"
 #include "GiftiLabel.h"
 #include "VolumeFile.h"
+
+#include <QFile>
+#include <QIODevice>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 
 #include <cmath>
 #include <cstdlib>
@@ -65,6 +72,9 @@ OperationParameters* OperationVolumeLabelImport::getParameters()
     subvolumeSelect->addStringParameter(1, "subvol", "the subvolume number or name");
     
     ret->createOptionalParameter(7, "-drop-unused-labels", "remove any unused label values from the label table");
+    
+    OptionalParameter* hierOpt = ret->createOptionalParameter(8, "-hierarchy", "read label name hierarchy from a json file");
+    hierOpt->addStringParameter(1, "file", "the input json file");
     
     ret->setHelpText(
         AString("Creates a label volume from an integer-valued volume file.  ") +
@@ -212,12 +222,31 @@ void OperationVolumeLabelImport::useParameters(OperationParameters* myParams, Pr
             translate[value] = newValue;
         }
     }
+    int32_t tableUnlabeledKey = myTable.getUnassignedLabelKey();
+    set<AString> hierNames; //will want this for deciding whether to warn
+    OptionalParameter* hierOpt = myParams->getOptionalParameter(8);
+    if (hierOpt->m_present)
+    {
+        AString hierfileName = hierOpt->getString(1);
+        CaretHierarchy myHier;
+        myHier.readJsonFile(hierfileName);
+        hierNames = myHier.getAllNames();
+        map<int32_t, AString> tableMap; //keys aren't needed, but API only exposes names as a map
+        myTable.getKeysAndNames(tableMap);
+        for (auto iter : tableMap)
+        {
+            if (iter.first != tableUnlabeledKey && hierNames.find(iter.second) == hierNames.end())
+            {
+                CaretLogWarning("label name '" + iter.second + "' not found in specified hierarchy");
+            }
+        }
+        myTable.setHierarchy(myHier);
+    }
     vector<int64_t> myDims;
     myVol->getDimensions(myDims);
     const int64_t FRAMESIZE = myDims[0] * myDims[1] * myDims[2];
     CaretArray<float> frameOut(FRAMESIZE);
-    int32_t unusedLabel = myTable.getUnassignedLabelKey();
-    translate[unlabeledValue] = unusedLabel;
+    translate[unlabeledValue] = tableUnlabeledKey;
     if (subvol == -1)
     {
         outVol->reinitialize(myVol->getOriginalDimensions(), myVol->getSform(), myDims[4], SubvolumeAttributes::LABEL);
@@ -239,7 +268,7 @@ void OperationVolumeLabelImport::useParameters(OperationParameters* myParams, Pr
                     {
                         if (discardOthers)
                         {
-                            frameOut[i] = unusedLabel;
+                            frameOut[i] = tableUnlabeledKey;
                         } else {//use a random color, but fully opaque for the label
                             GiftiLabel myLabel(labelval, AString("LABEL_") + AString::number(labelval), rand() & 255, rand() & 255, rand() & 255, 255);
                             if (myTable.getLabelKeyFromName(myLabel.getName()) != GiftiLabel::getInvalidLabelKey())
@@ -262,6 +291,10 @@ void OperationVolumeLabelImport::useParameters(OperationParameters* myParams, Pr
                                     throw OperationException("giving up on resolving name collision for auto-generated name '" + nameBase + "'");
                                 }
                                 myLabel.setName(newName);
+                            }
+                            if (hierOpt->m_present && hierNames.find(myLabel.getName()) == hierNames.end())
+                            {
+                                CaretLogWarning("creating label " + myLabel.getName() + ", which does not exist in the hierarchy (note, using -discard-others would de-label voxels with that value instead)");
                             }
                             int32_t newValue = myTable.addLabel(&myLabel);//don't overwrite any values in the table
                             translate[labelval] = newValue;
@@ -302,7 +335,7 @@ void OperationVolumeLabelImport::useParameters(OperationParameters* myParams, Pr
                 {
                     if (discardOthers)
                     {
-                        frameOut[i] = unusedLabel;
+                        frameOut[i] = tableUnlabeledKey;
                     } else {//use a random color, but fully opaque for the label
                         GiftiLabel myLabel(labelval, AString("LABEL_") + AString::number(labelval), rand() & 255, rand() & 255, rand() & 255, 255);
                         if (myTable.getLabelKeyFromName(myLabel.getName()) != GiftiLabel::getInvalidLabelKey())

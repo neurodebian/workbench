@@ -41,6 +41,7 @@
 
 #include "ApplicationInformation.h"
 #include "BrainBrowserWindow.h"
+#include "BrainBrowserWindowOrientedToolBox.h"
 #include "BrainOpenGL.h"
 #include "BrainOpenGLWidget.h"
 #include "CaretAssert.h"
@@ -65,6 +66,7 @@
 #include "SceneDialog.h"
 #include "SessionManager.h"
 #include "SystemUtilities.h"
+#include "WorkbenchInstallationAssistant.h"
 #include "WorkbenchQtMessageHandler.h"
 #include "WuQMessageBox.h"
 #include "WuQtUtilities.h"
@@ -176,6 +178,11 @@ main(int argc, char* argv[])
         * Log the command parameters.
         */
         CaretLogFine("Running: " + caret_global_commandLine);
+        
+        /*
+         * Provide the application file path needed by the installation assistant
+         */
+        WorkbenchInstallationAssistant::setApplicationFilePath(argv[0]);
         
         /*
          * Setup OpenGL if using Qt 5's QOpenGLWidget.
@@ -780,6 +787,9 @@ void printHelp(const AString& progName)
     << "    -spec-load-all" << endl
     << "        load all files in the given spec file, don't show spec file dialog" << endl
     << endl
+    << "    -toolbox" << endl
+    << "        Combine Features and Overlay Vertical Toolboxes" << endl
+    << endl
     << "    -window-size  <X Y>" << endl
     << "        Set the size of the browser window" << endl
     << endl
@@ -806,6 +816,8 @@ void parseCommandLine(const AString& progName, ProgramParameters* myParams, Prog
                 } else if (thisParam == "-help") {
                     printHelp(progName);
                     exit(0);
+                } else if (thisParam == "-toolbox") {
+                    BrainBrowserWindowOrientedToolBox::setCombineFeaturesAndOverlayToolBox(true);
                 } else if (thisParam == "-enable-perf") {
                     DeveloperFlagsEnum::setFlag(DeveloperFlagsEnum::DEVELOPER_FLAG_SURFACE_BUFFER, true);
                 } else if (thisParam == "-logging") {

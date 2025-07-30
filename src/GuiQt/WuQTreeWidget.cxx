@@ -155,3 +155,36 @@ int WuQTreeWidget::calculateHeightRec(QTreeWidgetItem * item) const
    
     return h;
 }
+
+/*
+ * In Qt 5 this function is protected, in Qt 6 this function is public
+ * QModelIndex    indexFromItem(const QTreeWidgetItem *item, int column = 0) const;
+ *
+ * @return the QModelIndex associated with the given item in the given column.
+ * @param item
+ *    The widget item
+ * @param column
+ *    The column
+ */
+QModelIndex 
+WuQTreeWidget::getIndexFromItem(const QTreeWidgetItem *item, int column) const
+{
+    return indexFromItem(item,
+                         column);
+}
+
+/*
+ * In Qt 5 this function is protected, in Qt 6 this function is public
+ * QTreeWidgetItem *QTreeWidget::itemFromIndex(const QModelIndex &index) const
+ *
+ * @return a pointer to the QTreeWidgetItem associated with the given index.
+ * @param index
+ *   The item's model index.
+ */
+QTreeWidgetItem*    
+WuQTreeWidget::getItemFromIndex(const QModelIndex &index) const
+{
+    return itemFromIndex(index);
+}
+
+

@@ -119,6 +119,7 @@ DeveloperFlagsEnum::initialize()
                                                 "Developer Flag Unused",
                                                 CheckableEnum::YES,
                                                 false));
+    
     checkableItems.push_back(DeveloperFlagsEnum(DEVELOPER_FLAG_FLIP_PALETTE_NOT_DATA,
                                                 "DEVELOPER_FLAG_FLIP_PALETTE_NOT_DATA",
                                                 "Drawing: Flip Palette Not Data",

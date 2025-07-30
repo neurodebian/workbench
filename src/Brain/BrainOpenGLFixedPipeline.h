@@ -171,6 +171,7 @@ namespace caret {
                            const FastStatistics* statistics,
                            const WholeBrainVoxelDrawingMode::Enum wholeBrainVoxelDrawingMode,
                            const int32_t mapIndex,
+                           const int32_t tabIndex,
                            const float opacity);
             Brain* brain;
             CaretMappableDataFile* mapFile;
@@ -180,6 +181,7 @@ namespace caret {
             WholeBrainVoxelDrawingMode::Enum wholeBrainVoxelDrawingMode;
             const FastStatistics* statistics;
             int32_t mapIndex;
+            int32_t tabIndex;
             float opacity;
         };
 
@@ -234,7 +236,8 @@ namespace caret {
                          const float surfaceScaling,
                          const int32_t viewportHeight,
                          const float* nodeColoringRGBA,
-                         const bool drawAnnotationsInModelSpaceFlag);
+                         const bool drawAnnotationsInModelSpaceFlag,
+                         const bool depthTestingEnabled);
         
         void drawSurfaceNodes(Surface* surface,
                               const float* nodeColoringRGBA);
@@ -371,9 +374,20 @@ namespace caret {
         void setOrthographicProjection(const int32_t viewport[4],
                                        const ProjectionViewTypeEnum::Enum projectionType);
         
+        /**
+         * Fitting model into window with orthographic projection
+         */
+        enum class OrthoFitMode {
+            /** Fit to window with height (used by hippocampus flat maps) */
+            SET_FROM_WIDTH,
+            /** Fit to window with width */
+            SET_FROM_HEIGHT
+        };
+        
         void setOrthographicProjectionForWithBoundingBox(const int32_t viewport[4],
                                                          const ProjectionViewTypeEnum::Enum projectionType,
-                                                          const BoundingBox* boundingBox);
+                                                         const OrthoFitMode orthoFitMode,
+                                                         const BoundingBox* boundingBox);
         
         void setOrthographicProjectionWithHeight(const int32_t viewport[4],
                                                  const ProjectionViewTypeEnum::Enum projectionType,

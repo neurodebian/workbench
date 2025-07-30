@@ -29,7 +29,10 @@
 #include "DataFileTypeEnum.h"
 #include "DisplayGroupEnum.h"
 
+class QAction;
+class QLineEdit;
 class QTreeWidgetItem;
+class QToolButton;
 class QVBoxLayout;
 
 namespace caret {
@@ -67,10 +70,6 @@ namespace caret {
                             const DisplayGroupEnum::Enum displayGroup);
         
     private slots:
-        void allOnPushButtonClicked();
-        
-        void allOffPushButtonClicked();
-        
         void itemWasCollapsed(QTreeWidgetItem* item);
         
         void itemWasExpanded(QTreeWidgetItem* item);
@@ -78,6 +77,32 @@ namespace caret {
         void itemWasChanged(QTreeWidgetItem* item,
                             int column);
 
+        void showTreeViewContextMenu(const QPoint& pos);
+        
+//        void processFileSelectionChanged();
+//        
+//        void processSelectionChanges();
+        
+        void treeItemClicked(QTreeWidgetItem* item, int column);
+        
+        void treeItemDoubleClicked(QTreeWidgetItem* item, int column);
+        
+        void collapseAllActionTriggered();
+        
+        void expandAllActionTriggered();
+        
+        void allOnActionTriggered();
+        
+        void allOffActionTriggered();
+        
+        void infoActionTriggered();
+        
+        void findActionTriggered();
+        
+        void nextActionTriggered();
+        
+        void findTextLineEditTextChanged(const QString& text);
+        
     private:
         GroupAndNameHierarchyViewController(const GroupAndNameHierarchyViewController&);
 
@@ -97,11 +122,20 @@ namespace caret {
         
         void createTreeWidget();
         
-        QWidget* createAllOnOffControls(const QString& objectNameForMacros,
-                                        const QString& descriptiveNameForMacros);
+        QWidget* createButtonsWidget(const QString& objectNameForMacros,
+                                     const QString& descriptiveNameForMacros);
         
         void setAllSelected(bool selected);
         
+        void showSelectedItemMenu(const GroupAndNameHierarchyTreeWidgetItem* item,
+                                  const QPoint& pos,
+                                  const bool infoButtonFlag);
+        
+        void scrollTreeViewToFindItem();
+        
+        void setCheckedStatusOfAllChildren(GroupAndNameHierarchyTreeWidgetItem* item,
+                                           const Qt::CheckState checkState);
+
         DataFileTypeEnum::Enum m_dataFileType;
         
         /** Contains pointers to items managed by Qt, so do not delete content */
@@ -113,6 +147,24 @@ namespace caret {
         
         int32_t m_browserWindowIndex;
         
+        QAction* m_collapseAllAction;
+        
+        QAction* m_expandAllAction;
+        
+        QAction* m_allOnAction;
+        
+        QAction* m_allOffAction;
+        
+        QToolButton* m_infoToolButton;
+        
+        QAction* m_infoAction;
+        
+        QAction* m_findAction;
+        
+        QAction* m_nextAction;
+        
+        QLineEdit* m_findTextLineEdit;
+
         DisplayGroupEnum::Enum m_displayGroup;
         
         DisplayGroupEnum::Enum m_previousDisplayGroup;
@@ -121,6 +173,10 @@ namespace caret {
         
         bool m_selectionInvalidatesSurfaceNodeColoring;
         
+        QList<QTreeWidgetItem*> m_findItems;
+        
+        int32_t m_findItemsCurrentIndex = 0;
+
         static std::set<GroupAndNameHierarchyViewController*> s_allViewControllers;
         
     };

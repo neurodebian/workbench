@@ -217,6 +217,26 @@ m_parentToolBar(parentToolBar)
     WuQtUtilities::setToolButtonStyleForQt5Mac(showCrosshairsToolButton);
 
     /*
+     * Axis labels
+     */
+    m_showAxisCrosshairLabelsAction = new QAction("", this);
+    m_showAxisCrosshairLabelsAction->setCheckable(true);
+    m_showAxisCrosshairLabelsAction->setToolTip("Show axis labels");
+    QObject::connect(m_showAxisCrosshairLabelsAction, &QAction::triggered,
+                     this, &BrainBrowserWindowToolBarHistology::showAxisCrosshairLabelsTriggered);
+    m_showAxisCrosshairLabelsAction->setObjectName(objectNamePrefix
+                                                               + "ShowAxisSliceLabels");
+    macroManager->addMacroSupportToObject(m_showAxisCrosshairLabelsAction,
+                                          "Show axis labels");
+    
+    QToolButton* showCrosshairLabelsToolButton = new QToolButton();
+    showCrosshairLabelsToolButton->setDefaultAction(m_showAxisCrosshairLabelsAction);
+    QPixmap labelsPixmap = BrainBrowserWindowToolBarSlicePlane::createCrosshairLabelsIcon(showCrosshairLabelsToolButton);
+    m_showAxisCrosshairLabelsAction->setIcon(QIcon(labelsPixmap));
+    showCrosshairLabelsToolButton->setIconSize(labelsPixmap.size());
+    WuQtUtilities::setToolButtonStyleForQt5Mac(showCrosshairLabelsToolButton);
+    
+    /*
      * Angles
      */
     QLabel* anglesLabel(new QLabel("Angles"));
@@ -227,6 +247,19 @@ m_parentToolBar(parentToolBar)
     m_rotationAngleZLabel = new QLabel("-000.0");
     m_rotationAngleZLabel->setAlignment(Qt::AlignRight);
 
+    /*
+     * Mirror flip
+     */
+    m_flipXCheckBox = new QCheckBox("Flip");
+    m_flipXCheckBox->setToolTip("Flip about X-Axis (left on right)");
+    m_flipXCheckBox->setObjectName(objectNamePrefix
+                                              + "FlipX");
+    macroManager->addMacroSupportToObject(m_flipXCheckBox,
+                                          "Flip X of Histology Display");
+    
+    QObject::connect(m_flipXCheckBox, &QCheckBox::clicked,
+                     this, &BrainBrowserWindowToolBarHistology::flipXCheckboxClicked);
+    
     /*
      * Layout widgets
      */
@@ -273,10 +306,25 @@ m_parentToolBar(parentToolBar)
     controlsLayout->addWidget(m_rotationAngleZLabel,
                               row, columnAngles);
     ++row;
-    controlsLayout->addWidget(showCrosshairsToolButton,
-                              row, columnSliceLabels, Qt::AlignRight);
-    controlsLayout->addWidget(identificationMovesSlicesToolButton,
-                              row, columnSliceSpinBoxes, Qt::AlignLeft);
+    
+    QHBoxLayout* crosshairsLayout(new QHBoxLayout());
+    crosshairsLayout->setContentsMargins(0, 0, 0, 0);
+    crosshairsLayout->addStretch();
+    crosshairsLayout->addWidget(showCrosshairsToolButton);
+    crosshairsLayout->addWidget(showCrosshairLabelsToolButton);
+    crosshairsLayout->addWidget(identificationMovesSlicesToolButton);
+    crosshairsLayout->addStretch();
+
+    controlsLayout->addLayout(crosshairsLayout,
+                              row, columnSliceLabels, 1, 2);
+//    controlsLayout->addWidget(showCrosshairsToolButton,
+//                              row, columnSliceLabels, Qt::AlignRight);
+//    controlsLayout->addWidget(showCrosshairLabelsToolButton,
+//                              row, columnSlicesLabels, Qt::AlignRight);
+//    controlsLayout->addWidget(identificationMovesSlicesToolButton,
+//                              row, columnSliceSpinBoxes, Qt::AlignLeft);
+    controlsLayout->addWidget(m_flipXCheckBox,
+                              row, columnPlaneSpinBoxes);
     controlsLayout->addWidget(moveToCenterToolButton,
                               row, columnStereotaxicSpinBoxes, Qt::AlignHCenter);
     ++row;
@@ -442,6 +490,8 @@ BrainBrowserWindowToolBarHistology::updateContent(BrowserTabContent* browserTabC
         m_identificationMovesSlicesAction->setChecked(m_browserTabContent->isIdentificationUpdateHistologySlices());
         m_yokeOrientationCheckBox->setChecked(m_browserTabContent->isHistologyOrientationAppliedToYoking());
         m_showAxisCrosshairsAction->setChecked(m_browserTabContent->isHistologyAxesCrosshairsDisplayed());
+        m_showAxisCrosshairLabelsAction->setChecked(m_browserTabContent->isHistologyAxesCrosshairsLabelsDisplayed());
+        m_flipXCheckBox->setChecked(m_browserTabContent->isHistologyFlipXEnabled());
     }
     
     setEnabled(histologySlicesFile != NULL);
@@ -611,59 +661,65 @@ BrainBrowserWindowToolBarHistology::sliceIndexValueChanged(int sliceIndexIn)
                                                                     BrowserTabContent::MoveYokedVolumeSlices::MOVE_YES);
                 
                 /*
-                 * Changing to an adjacent slice
+                 * Attempt to place new slice in alignment with previous slice
+                 * DISABLE 29 April 2025 - It is causing big jumps when slices
+                 * are changed (maybe the data set has bad transforms) and
+                 * it overrides the panning in the Custom View dialog
                  */
-                const bool anyStepFlag(true);
-                const int32_t sliceStep(std::abs(sliceIndex -  previousSliceIndex));
-                if ((sliceStep == 1)
-                    || anyStepFlag) {
-                    if (previousValidFlag) {
-                        /*
-                         * Get the new slice
-                         */
-                        const HistologySlice* histologySlice(histologySlicesFile->getHistologySliceByIndex(sliceIndex));
-                        if (histologySlice != NULL) {
+                const bool keepSlicesAlignedFlag(false);
+                if (keepSlicesAlignedFlag) {
+                    const bool anyStepFlag(true);
+                    const int32_t sliceStep(std::abs(sliceIndex -  previousSliceIndex));
+                    if ((sliceStep == 1)
+                        || anyStepFlag) {
+                        if (previousValidFlag) {
                             /*
-                             * MUST redraw and wait until done
+                             * Get the new slice
                              */
-                            EventGraphicsPaintNowOneWindow graphicsUpdateOneWindow(m_parentToolBar->browserWindowIndex);
-                            EventManager::get()->sendEvent(graphicsUpdateOneWindow.getPointer());
-                            
-                            /*
-                             * Project stereotaxic coord to new slice to get plane coordinate at
-                             * same location as stereotaxic coordinate
-                             */
-                            Vector3D planeXYZ;
-                            Vector3D newCenterStereotaxicXYZ;
-                            float distanceToSlice(0.0);
-                            if (histologySlice->projectStereotaxicXyzToSlice(centerStereotaxicXYZ,
-                                                                             newCenterStereotaxicXYZ,
-                                                                             distanceToSlice,
-                                                                             planeXYZ)) {
-                                if (debugFlag) std::cout << "  New stereotaxic: " << newCenterStereotaxicXYZ.toString(5) << std::endl;
-                                if (debugFlag) std::cout << "   New plane center should be: " << planeXYZ.toString(5) << std::endl;
-
+                            const HistologySlice* histologySlice(histologySlicesFile->getHistologySliceByIndex(sliceIndex));
+                            if (histologySlice != NULL) {
                                 /*
-                                 * Get the plane coordinate at the center of the viewport
+                                 * MUST redraw and wait until done
                                  */
-                                Vector3D centerPlaneXYZ;
-                                if (getPlaneCoordinateAtViewportCenter(centerPlaneXYZ)) {
-                                    if (debugFlag) std::cout << "   Plane at center of screen: " << centerPlaneXYZ.toString(5) << std::endl;
+                                EventGraphicsPaintNowOneWindow graphicsUpdateOneWindow(m_parentToolBar->browserWindowIndex);
+                                EventManager::get()->sendEvent(graphicsUpdateOneWindow.getPointer());
+                                
+                                /*
+                                 * Project stereotaxic coord to new slice to get plane coordinate at
+                                 * same location as stereotaxic coordinate
+                                 */
+                                Vector3D planeXYZ;
+                                Vector3D newCenterStereotaxicXYZ;
+                                float distanceToSlice(0.0);
+                                if (histologySlice->projectStereotaxicXyzToSlice(centerStereotaxicXYZ,
+                                                                                 newCenterStereotaxicXYZ,
+                                                                                 distanceToSlice,
+                                                                                 planeXYZ)) {
+                                    if (debugFlag) std::cout << "  New stereotaxic: " << newCenterStereotaxicXYZ.toString(5) << std::endl;
+                                    if (debugFlag) std::cout << "   New plane center should be: " << planeXYZ.toString(5) << std::endl;
                                     
                                     /*
-                                     * Difference in the plane coordinates is amount to use for translation with zoom.
-                                     * This moves the point in the new slice that corresponds to the
-                                     * point in the previous slice that was at the center of the viewport
+                                     * Get the plane coordinate at the center of the viewport
                                      */
-                                    const Vector3D diffPlaneXYZ(centerPlaneXYZ - planeXYZ);
-                                    if (debugFlag) std::cout << "   Diff Plane XYZ: " << diffPlaneXYZ.toString(5) << std::endl;
-                                    
-                                    const float zoom(m_browserTabContent->getScaling());
-                                    float translation[3];
-                                    m_browserTabContent->getTranslation(translation);
-                                    translation[0] += (diffPlaneXYZ[0] * zoom);
-                                    translation[1] -= (diffPlaneXYZ[1] * zoom);
-                                    m_browserTabContent->setTranslation(translation);
+                                    Vector3D centerPlaneXYZ;
+                                    if (getPlaneCoordinateAtViewportCenter(centerPlaneXYZ)) {
+                                        if (debugFlag) std::cout << "   Plane at center of screen: " << centerPlaneXYZ.toString(5) << std::endl;
+                                        
+                                        /*
+                                         * Difference in the plane coordinates is amount to use for translation with zoom.
+                                         * This moves the point in the new slice that corresponds to the
+                                         * point in the previous slice that was at the center of the viewport
+                                         */
+                                        const Vector3D diffPlaneXYZ(centerPlaneXYZ - planeXYZ);
+                                        if (debugFlag) std::cout << "   Diff Plane XYZ: " << diffPlaneXYZ.toString(5) << std::endl;
+                                        
+                                        const float zoom(m_browserTabContent->getScaling());
+                                        float translation[3];
+                                        m_browserTabContent->getTranslation(translation);
+                                        translation[0] += (diffPlaneXYZ[0] * zoom);
+                                        translation[1] -= (diffPlaneXYZ[1] * zoom);
+                                        m_browserTabContent->setTranslation(translation);
+                                    }
                                 }
                             }
                         }
@@ -832,3 +888,33 @@ BrainBrowserWindowToolBarHistology::axisCrosshairActionTriggered(bool checked)
     }
 }
 
+/**
+ * Called when axis crosshair labels button triggered
+ *
+ * @param checked
+ *     New checked status
+ */
+void
+BrainBrowserWindowToolBarHistology::showAxisCrosshairLabelsTriggered(bool checked)
+{
+    if (m_browserTabContent != NULL) {
+        m_browserTabContent->setHistologyAxesCrosshairsLabelsDisplayed(checked);
+        updateGraphicsWindowAndYokedWindows();
+        updateUserInterface();
+    }
+}
+
+/**
+ * Called when the Flip-X checkbox is clicked
+ * @param checked
+ *    New checked status
+ */
+void
+BrainBrowserWindowToolBarHistology::flipXCheckboxClicked(bool checked)
+{
+    if (m_browserTabContent != NULL) {
+        m_browserTabContent->setHistologyFlipXEnabled(checked);
+        updateGraphicsWindowAndYokedWindows();
+        updateUserInterface();
+    }
+}

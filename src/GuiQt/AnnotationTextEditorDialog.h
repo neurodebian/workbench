@@ -26,10 +26,10 @@
 
 #include "UserInputModeEnum.h"
 
-class QTextEdit;
-
 namespace caret {
 
+    class WuQTextEditWithToolBarWidget;
+    
     class AnnotationText;
     
     class AnnotationTextEditorDialog : public QDialog {
@@ -43,28 +43,25 @@ namespace caret {
         
         virtual ~AnnotationTextEditorDialog();
         
-        virtual void done(int resultCode);
-        
-    signals:
-        void textHasBeenChanged(const QString&);
+        virtual void done(int resultCode) override;
         
     private slots:
         void textWasEdited();
         
         // ADD_NEW_METHODS_HERE
 
-    private:
+    private:        
         AnnotationTextEditorDialog(const AnnotationTextEditorDialog&);
 
         AnnotationTextEditorDialog& operator=(const AnnotationTextEditorDialog&);
-        
+                
         const UserInputModeEnum::Enum m_userInputMode;
         
         AnnotationText* m_textAnnotation;
         
         QString m_uneditedText;
         
-        QTextEdit* m_textEdit;
+        WuQTextEditWithToolBarWidget* m_textEdit;
         
         // ADD_NEW_MEMBERS_HERE
 

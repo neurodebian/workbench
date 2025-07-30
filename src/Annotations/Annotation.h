@@ -43,7 +43,6 @@
 namespace caret {
     class AnnotationCoordinate;
     class AnnotationScaleBar;
-    class AnnotationMetaData;
     class AnnotationMultiCoordinateShape;
     class AnnotationMultiPairedCoordinateShape;
     class AnnotationOneCoordinateShape;
@@ -51,7 +50,9 @@ namespace caret {
     class AnnotationPolygon;
     class AnnotationPolyLine;
     class AnnotationSpatialModification;
+    class AnnotationText;
     class AnnotationTwoCoordinateShape;
+    class DataFileContentInformation;
     class DisplayGroupAndTabItemHelper;
     class GiftiMetaData;
     class SceneClassAssistant;
@@ -103,6 +104,8 @@ namespace caret {
             TEXT_EDIT,
             /** Annotation has text color */
             TEXT_COLOR,
+            /** Annotation has text background color */
+            TEXT_COLOR_BACKGROUND,
             /** Annotation has font name */
             TEXT_FONT_NAME,
             /** Annotation has font size*/
@@ -188,6 +191,11 @@ namespace caret {
         virtual const AnnotationTwoCoordinateShape* castToTwoCoordinateShape() const  { return NULL; }
         
         /**
+         * @return Cast to text annotation (NULL if NOT text annotation)
+         */
+        virtual const AnnotationText* castToTextAnnotation() const { return NULL; }
+        
+        /**
          * @return Cast to polygon (NULL if NOT polygon)
          */
         virtual AnnotationPolygon* castToPolygon() { return NULL; }
@@ -249,11 +257,15 @@ namespace caret {
         
         virtual bool isModified() const override;
 
+        virtual void addToDataFileContentInformation(DataFileContentInformation& dataFileInformation) const;
+        
         AnnotationGroupKey getAnnotationGroupKey() const;
         
         int32_t getUniqueKey() const;
         
         AString getName() const;
+        
+        AString getNameForGraphicsDrawing() const;
         
         void replaceWithCopyOfAnnotation(const Annotation* annotation);
         
@@ -344,9 +356,9 @@ namespace caret {
         
         void setCustomBackgroundColor(const uint8_t rgba[4]);
         
-        AnnotationMetaData* getMetaData();
+        virtual GiftiMetaData* getMetaData();
         
-        const AnnotationMetaData* getMetaData() const;
+        virtual const GiftiMetaData* getMetaData() const;
         
         void convertObsoleteLineWidthPixelsToPercentageWidth(const float viewportHeight) const;
         
@@ -560,7 +572,11 @@ namespace caret {
         
         AString m_name;
         
-        std::unique_ptr<AnnotationMetaData> m_metaData;
+        /*
+         * Shared pointer is used because a related pair of retrospective
+         * and prospective samples share one instance of metadata.
+         */
+        std::shared_ptr<GiftiMetaData> m_metaData;
         
         int32_t m_uniqueKey;
         

@@ -34,10 +34,10 @@
 #include "CiftiBrainordinateLabelFile.h"
 #include "CiftiBrainordinateScalarFile.h"
 #include "CiftiConnectivityMatrixParcelFile.h"
-#include "CiftiFiberTrajectoryFile.h"
 #include "CiftiFile.h"
 #include "CiftiMappableConnectivityMatrixDataFile.h"
 #include "CaretMappableDataFileAndMapSelectionModel.h"
+#include "CaretMappableDataFileClusterFinder.h"
 #include "CiftiParcelLabelFile.h"
 #include "CiftiParcelReordering.h"
 #include "CiftiParcelScalarFile.h"
@@ -45,8 +45,10 @@
 #include "CiftiScalarDataSeriesFile.h"
 #include "CaretTemporaryFile.h"
 #include "CiftiXML.h"
+#include "ClusterContainer.h"
 #include "ConnectivityDataLoaded.h"
 #include "DataFileContentInformation.h"
+#include "DataFileException.h"
 #include "EventManager.h"
 #include "EventCaretPreferencesGet.h"
 #include "EventSurfaceColoringInvalidate.h"
@@ -245,6 +247,7 @@ VolumeMappableInterface()
         case DataFileTypeEnum::BORDER:
         case DataFileTypeEnum::CONNECTIVITY_FIBER_ORIENTATIONS_TEMPORARY:
         case DataFileTypeEnum::CONNECTIVITY_FIBER_TRAJECTORY_TEMPORARY:
+        case DataFileTypeEnum::CONNECTIVITY_FIBER_TRAJECTORY_MAPS:
         case DataFileTypeEnum::CZI_IMAGE_FILE:
         case DataFileTypeEnum::FOCI:
         case DataFileTypeEnum::HISTOLOGY_SLICES:
@@ -252,6 +255,7 @@ VolumeMappableInterface()
         case DataFileTypeEnum::LABEL:
         case DataFileTypeEnum::METRIC:
         case DataFileTypeEnum::METRIC_DYNAMIC:
+        case DataFileTypeEnum::OME_ZARR_IMAGE_FILE:
         case DataFileTypeEnum::PALETTE:
         case DataFileTypeEnum::RGBA:
         case DataFileTypeEnum::SAMPLES:
@@ -503,6 +507,8 @@ CiftiMappableDataFile::clearPrivate()
     m_brainordinateMapping.reset();
     m_brainordinateMappingCachedFlag = false;
     
+    m_mapLabelClusterContainers.clear();
+
     m_graphicsPrimitiveManager->clear();
 }
 
@@ -831,6 +837,7 @@ CiftiMappableDataFile::validateMappingTypes(const AString& filename)
         case DataFileTypeEnum::BORDER:
         case DataFileTypeEnum::CONNECTIVITY_FIBER_ORIENTATIONS_TEMPORARY:
         case DataFileTypeEnum::CONNECTIVITY_FIBER_TRAJECTORY_TEMPORARY:
+        case DataFileTypeEnum::CONNECTIVITY_FIBER_TRAJECTORY_MAPS:
         case DataFileTypeEnum::CZI_IMAGE_FILE:
         case DataFileTypeEnum::FOCI:
         case DataFileTypeEnum::HISTOLOGY_SLICES:
@@ -838,6 +845,7 @@ CiftiMappableDataFile::validateMappingTypes(const AString& filename)
         case DataFileTypeEnum::LABEL:
         case DataFileTypeEnum::METRIC:
         case DataFileTypeEnum::METRIC_DYNAMIC:
+        case DataFileTypeEnum::OME_ZARR_IMAGE_FILE:
         case DataFileTypeEnum::PALETTE:
         case DataFileTypeEnum::RGBA:
         case DataFileTypeEnum::SAMPLES:
@@ -2508,6 +2516,8 @@ CiftiMappableDataFile::getMatrixForChartingRGBA(int32_t& numberOfRowsOut,
             break;
         case DataFileTypeEnum::CONNECTIVITY_FIBER_TRAJECTORY_TEMPORARY:
             break;
+        case DataFileTypeEnum::CONNECTIVITY_FIBER_TRAJECTORY_MAPS:
+            break;
         case DataFileTypeEnum::CZI_IMAGE_FILE:
             break;
         case DataFileTypeEnum::FOCI:
@@ -2521,6 +2531,8 @@ CiftiMappableDataFile::getMatrixForChartingRGBA(int32_t& numberOfRowsOut,
         case DataFileTypeEnum::METRIC:
             break;
         case DataFileTypeEnum::METRIC_DYNAMIC:
+            break;
+        case DataFileTypeEnum::OME_ZARR_IMAGE_FILE:
             break;
         case DataFileTypeEnum::PALETTE:
             break;
@@ -3120,6 +3132,43 @@ CiftiMappableDataFile::getMapLabelTable(const int32_t mapIndex) const
             break;
         case COLOR_MAPPING_METHOD_PALETTE:
             break;
+    }
+    
+    return NULL;
+}
+
+/**
+ * @return The clusters for the given map's label table (may be NULL)
+ * @param mapIndex
+ *    Index of the map
+ */
+const ClusterContainer*
+CiftiMappableDataFile::getMapLabelTableClusters(const int32_t mapIndex) const
+{
+    if (isMappedWithLabelTable()) {
+        /*
+         * If it does not exist, no attempt has been made to create it
+         */
+        if (m_mapLabelClusterContainers.find(mapIndex) == m_mapLabelClusterContainers.end()) {
+            CaretAssert(getDataFileType() == DataFileTypeEnum::CONNECTIVITY_DENSE_LABEL);
+            CaretMappableDataFileClusterFinder finder(CaretMappableDataFileClusterFinder::FindMode::CIFTI_DENSE_LABEL,
+                                                      this,
+                                                      mapIndex);
+            const auto result(finder.findClusters());
+            if (result->isSuccess()) {
+                m_mapLabelClusterContainers[mapIndex] = std::unique_ptr<ClusterContainer>(finder.takeClusterContainer());
+            }
+            else {
+                CaretLogWarning(result->getErrorDescription());
+                ClusterContainer* nullPointer(NULL);
+                /*
+                 * Putting a NULL in here, prevents running find clusters again
+                 */
+                m_mapLabelClusterContainers[mapIndex] = std::unique_ptr<ClusterContainer>(nullPointer);
+            }
+        }
+        
+        return m_mapLabelClusterContainers[mapIndex].get();
     }
     
     return NULL;
@@ -3821,10 +3870,8 @@ CiftiMappableDataFile::getNonZeroVoxelCoordinateBoundingBox(const int32_t /*mapI
  *    The slice plane.
  * @param sliceIndex
  *    Index of the slice.
- * @param displayGroup
- *    The selected display group.
- * @param tabIndex
- *    Index of selected tab.
+ * @param tabDrawingInfo
+ *    Info for drawing the tab
  * @param rgbaOut
  *    Output containing the rgba values (must have been allocated
  *    by caller to sufficient count of elements in the slice).
@@ -3835,8 +3882,7 @@ int64_t
 CiftiMappableDataFile::getVoxelColorsForSliceInMap(const int32_t mapIndex,
                                                       const VolumeSliceViewPlaneEnum::Enum slicePlane,
                                                       const int64_t sliceIndex,
-                                                      const DisplayGroupEnum::Enum displayGroup,
-                                                      const int32_t tabIndex,
+                                                   const TabDrawingInfo& tabDrawingInfo,
                                                       uint8_t* rgbaOut) const
 {
     CaretAssertVectorIndex(m_mapContent,
@@ -3965,7 +4011,7 @@ CiftiMappableDataFile::getVoxelColorsForSliceInMap(const int32_t mapIndex,
                                 if (label != NULL) {
                                     const GroupAndNameHierarchyItem* item = label->getGroupNameSelectionItem();
                                     CaretAssert(item);
-                                    if (item->isSelected(displayGroup, tabIndex) == false) {
+                                    if (item->isSelected(tabDrawingInfo) == false) {
                                         alpha = 0;
                                     }
                                 }
@@ -4011,7 +4057,7 @@ CiftiMappableDataFile::getVoxelColorsForSliceInMap(const int32_t mapIndex,
                                 if (label != NULL) {
                                     const GroupAndNameHierarchyItem* item = label->getGroupNameSelectionItem();
                                     CaretAssert(item);
-                                    if (item->isSelected(displayGroup, tabIndex) == false) {
+                                    if (item->isSelected(tabDrawingInfo) == false) {
                                         alpha = 0;
                                     }
                                 }
@@ -4057,7 +4103,7 @@ CiftiMappableDataFile::getVoxelColorsForSliceInMap(const int32_t mapIndex,
                                 if (label != NULL) {
                                     const GroupAndNameHierarchyItem* item = label->getGroupNameSelectionItem();
                                     CaretAssert(item);
-                                    if (item->isSelected(displayGroup, tabIndex) == false) {
+                                    if (item->isSelected(tabDrawingInfo) == false) {
                                         alpha = 0;
                                     }
                                 }
@@ -4093,10 +4139,8 @@ CiftiMappableDataFile::getVoxelColorsForSliceInMap(const int32_t mapIndex,
  *    Number of rows.
  * @param numberOfColumns
  *    Number of columns.
- * @param displayGroup
- *    The selected display group.
- * @param tabIndex
- *    Index of selected tab.
+ * @param tabDrawingInfo
+ *    Info for drawing the tab
  * @param rgbaOut
  *    RGBA color components out.
  * @return
@@ -4109,8 +4153,7 @@ CiftiMappableDataFile::getVoxelColorsForSliceInMap(const int32_t mapIndex,
                                                       const int64_t columnStepIJK[3],
                                                       const int64_t numberOfRows,
                                                       const int64_t numberOfColumns,
-                                                      const DisplayGroupEnum::Enum displayGroup,
-                                                      const int32_t tabIndex,
+                                                   const TabDrawingInfo& tabDrawingInfo,
                                                       uint8_t* rgbaOut) const
 {
     CaretAssertVectorIndex(m_mapContent,
@@ -4186,7 +4229,7 @@ CiftiMappableDataFile::getVoxelColorsForSliceInMap(const int32_t mapIndex,
                         if (label != NULL) {
                             const GroupAndNameHierarchyItem* item = label->getGroupNameSelectionItem();
                             CaretAssert(item);
-                            if (item->isSelected(displayGroup, tabIndex) == false) {
+                            if (item->isSelected(tabDrawingInfo) == false) {
                                 alpha = 0;
                             }
                         }
@@ -4247,10 +4290,8 @@ CiftiMappableDataFile::getVoxelColorsForSliceInMap(const int32_t mapIndex,
  *    Indices of voxel for last corner of sub-slice (inclusive).
  * @param voxelCountIJK
  *    Voxel counts for each axis.
- * @param displayGroup
- *    The selected display group.
- * @param tabIndex
- *    Index of selected tab.
+ * @param tabDrawingInfo
+ *    Info for drawing the tab
  * @param rgbaOut
  *    Output containing the rgba values (must have been allocated
  *    by caller to sufficient count of elements in the slice).
@@ -4264,8 +4305,7 @@ CiftiMappableDataFile::getVoxelColorsForSubSliceInMap(const int32_t mapIndex,
                                                       const int64_t firstCornerVoxelIndex[3],
                                                       const int64_t lastCornerVoxelIndex[3],
                                                       const int64_t voxelCountIJK[3],
-                                                      const DisplayGroupEnum::Enum displayGroup,
-                                                      const int32_t tabIndex,
+                                                      const TabDrawingInfo& tabDrawingInfo,
                                                       uint8_t* rgbaOut) const
 {
     CaretAssertVectorIndex(m_mapContent,
@@ -4420,7 +4460,7 @@ CiftiMappableDataFile::getVoxelColorsForSubSliceInMap(const int32_t mapIndex,
                                 if (label != NULL) {
                                     const GroupAndNameHierarchyItem* item = label->getGroupNameSelectionItem();
                                     CaretAssert(item);
-                                    if (item->isSelected(displayGroup, tabIndex) == false) {
+                                    if (item->isSelected(tabDrawingInfo) == false) {
                                         alpha = 0;
                                     }
                                 }
@@ -4492,7 +4532,7 @@ CiftiMappableDataFile::getVoxelColorsForSubSliceInMap(const int32_t mapIndex,
                                 if (label != NULL) {
                                     const GroupAndNameHierarchyItem* item = label->getGroupNameSelectionItem();
                                     CaretAssert(item);
-                                    if (item->isSelected(displayGroup, tabIndex) == false) {
+                                    if (item->isSelected(tabDrawingInfo) == false) {
                                         alpha = 0;
                                     }
                                 }
@@ -4565,7 +4605,7 @@ CiftiMappableDataFile::getVoxelColorsForSubSliceInMap(const int32_t mapIndex,
                                 if (label != NULL) {
                                     const GroupAndNameHierarchyItem* item = label->getGroupNameSelectionItem();
                                     CaretAssert(item);
-                                    if (item->isSelected(displayGroup, tabIndex) == false) {
+                                    if (item->isSelected(tabDrawingInfo) == false) {
                                         alpha = 0;
                                     }
                                 }
@@ -4608,25 +4648,18 @@ CiftiMappableDataFile::getVoxelColorsForSubSliceInMap(const int32_t mapIndex,
  *
  * @param mapIndex
  *    Index of the map.
- * @param displayGroup
- *    The selected display group.
- * @param tabIndex
- *    Index of selected tab.
- * @param rgbaOut
- *    Output containing the rgba values (must have been allocated
- *    by caller to sufficient count of elements in the slice).
+ * @param tabDrawingInfo
+ *    Info for drawing the tab
  * @return
  *    Graphics primitive or NULL if unable to draw
  */
 GraphicsPrimitiveV3fT3f*
 CiftiMappableDataFile::getVolumeDrawingTriangleStripPrimitive(const int32_t mapIndex,
-                                                         const DisplayGroupEnum::Enum displayGroup,
-                                                         const int32_t tabIndex) const
+                                                              const TabDrawingInfo& tabDrawingInfo) const
 {
     return m_graphicsPrimitiveManager->getVolumeDrawingPrimitiveForMap(VolumeGraphicsPrimitiveManager::PrimitiveShape::TRIANGLE_STRIP,
                                                                        mapIndex,
-                                                                       displayGroup,
-                                                                       tabIndex);
+                                                                       tabDrawingInfo);
 }
 
 /**
@@ -4634,25 +4667,18 @@ CiftiMappableDataFile::getVolumeDrawingTriangleStripPrimitive(const int32_t mapI
  *
  * @param mapIndex
  *    Index of the map.
- * @param displayGroup
- *    The selected display group.
- * @param tabIndex
- *    Index of selected tab.
- * @param rgbaOut
- *    Output containing the rgba values (must have been allocated
- *    by caller to sufficient count of elements in the slice).
+ * @param tabDrawingInfo
+ *    Info for drawing the tab
  * @return
  *    Graphics primitive or NULL if unable to draw
  */
 GraphicsPrimitiveV3fT3f*
 CiftiMappableDataFile::getVolumeDrawingTriangleFanPrimitive(const int32_t mapIndex,
-                                                 const DisplayGroupEnum::Enum displayGroup,
-                                                 const int32_t tabIndex) const
+                                                            const TabDrawingInfo& tabDrawingInfo) const
 {
     return m_graphicsPrimitiveManager->getVolumeDrawingPrimitiveForMap(VolumeGraphicsPrimitiveManager::PrimitiveShape::TRIANGLE_FAN,
                                                                        mapIndex,
-                                                                       displayGroup,
-                                                                       tabIndex);
+                                                                       tabDrawingInfo);
 }
 
 /**
@@ -4660,35 +4686,26 @@ CiftiMappableDataFile::getVolumeDrawingTriangleFanPrimitive(const int32_t mapInd
  *
  * @param mapIndex
  *    Index of the map.
- * @param displayGroup
- *    The selected display group.
- * @param tabIndex
- *    Index of selected tab.
- * @param rgbaOut
- *    Output containing the rgba values (must have been allocated
- *    by caller to sufficient count of elements in the slice).
+ * @param tabDrawingInfo
+ *    Info for drawing the tab
  * @return
  *    Graphics primitive or NULL if unable to draw
  */
 GraphicsPrimitiveV3fT3f*
 CiftiMappableDataFile::getVolumeDrawingTrianglesPrimitive(const int32_t mapIndex,
-                                                            const DisplayGroupEnum::Enum displayGroup,
-                                                            const int32_t tabIndex) const
+                                                          const TabDrawingInfo& tabDrawingInfo) const
 {
     return m_graphicsPrimitiveManager->getVolumeDrawingPrimitiveForMap(VolumeGraphicsPrimitiveManager::PrimitiveShape::TRIANGLES,
                                                                        mapIndex,
-                                                                       displayGroup,
-                                                                       tabIndex);
+                                                                       tabDrawingInfo);
 }
 
 /**
  * Create a graphics primitive for showing part of volume that intersects with an image from histology
  * @param mapIndex
  *    Index of the map.
- * @param displayGroup
- *    The selected display group.
- * @param tabIndex
- *    Index of selected tab.
+ * @param tabDrawingInfo
+ *    Info for drawing the tab
  * @param mediaFile
  *    The medial file for drawing histology
  * @param volumeMappingMode
@@ -4702,8 +4719,7 @@ CiftiMappableDataFile::getVolumeDrawingTrianglesPrimitive(const int32_t mapIndex
  */
 GraphicsPrimitive*
 CiftiMappableDataFile::getHistologyImageIntersectionPrimitive(const int32_t mapIndex,
-                                                              const DisplayGroupEnum::Enum displayGroup,
-                                                              const int32_t tabIndex,
+                                                              const TabDrawingInfo& tabDrawingInfo,
                                                               const MediaFile* mediaFile,
                                                               const VolumeToImageMappingModeEnum::Enum volumeMappingMode,
                                                               const float volumeSliceThickness,
@@ -4711,8 +4727,7 @@ CiftiMappableDataFile::getHistologyImageIntersectionPrimitive(const int32_t mapI
 {
     return m_graphicsPrimitiveManager->getImageIntersectionDrawingPrimitiveForMap(mediaFile,
                                                                                   mapIndex,
-                                                                                  displayGroup,
-                                                                                  tabIndex,
+                                                                                  tabDrawingInfo,
                                                                                   volumeMappingMode,
                                                                                   volumeSliceThickness,
                                                                                   errorMessageOut);
@@ -4722,10 +4737,8 @@ CiftiMappableDataFile::getHistologyImageIntersectionPrimitive(const int32_t mapI
  * Create a graphics primitive for showing part of volume that intersects with an image from histology
  * @param mapIndex
  *    Index of the map.
- * @param displayGroup
- *    The selected display group.
- * @param tabIndex
- *    Index of selected tab.
+ * @param tabDrawingInfo
+ *    Info for drawing the tab
  * @param histologySlice
  *    The histology slice being drawn
  * @param volumeMappingMode
@@ -4739,8 +4752,7 @@ CiftiMappableDataFile::getHistologyImageIntersectionPrimitive(const int32_t mapI
  */
 std::vector<GraphicsPrimitive*>
 CiftiMappableDataFile::getHistologySliceIntersectionPrimitive(const int32_t mapIndex,
-                                                              const DisplayGroupEnum::Enum displayGroup,
-                                                              const int32_t tabIndex,
+                                                              const TabDrawingInfo& tabDrawingInfo,
                                                               const HistologySlice* histologySlice,
                                                               const VolumeToImageMappingModeEnum::Enum volumeMappingMode,
                                                               const float volumeSliceThickness,
@@ -4748,8 +4760,7 @@ CiftiMappableDataFile::getHistologySliceIntersectionPrimitive(const int32_t mapI
 {
     return m_graphicsPrimitiveManager->getImageIntersectionDrawingPrimitiveForMap(histologySlice,
                                                                                   mapIndex,
-                                                                                  displayGroup,
-                                                                                  tabIndex,
+                                                                                  tabDrawingInfo,
                                                                                   volumeMappingMode,
                                                                                   volumeSliceThickness,
                                                                                   errorMessageOut);
@@ -4775,10 +4786,6 @@ CiftiMappableDataFile::getHistologySliceIntersectionPrimitive(const int32_t mapI
  *     Third dimension (k).
  * @param mapIndex
  *     Time/map index.
- * @param displayGroup
- *    The selected display group.
- * @param tabIndex
- *    Index of selected tab.
  * @param rgbaOut
  *     Output containing RGBA values for voxel at the given indices.
  */
@@ -4788,16 +4795,14 @@ CiftiMappableDataFile::getVoxelColorInMapForLabelData(const std::vector<float>& 
                                                       const int64_t indexIn2,
                                                       const int64_t indexIn3,
                                                       const int64_t mapIndex,
-                                                      const DisplayGroupEnum::Enum displayGroup,
-                                                      const int32_t tabIndex,
+                                                      const TabDrawingInfo& tabDrawingInfo,
                                                       uint8_t rgbaOut[4]) const
 {
     getVoxelColorInMap(indexIn1,
                        indexIn2,
                        indexIn3,
                        mapIndex,
-                       displayGroup,
-                       tabIndex,
+                       tabDrawingInfo,
                        rgbaOut);
     
 
@@ -4821,7 +4826,7 @@ CiftiMappableDataFile::getVoxelColorInMapForLabelData(const std::vector<float>& 
                 if (label != NULL) {
                     const GroupAndNameHierarchyItem* item = label->getGroupNameSelectionItem();
                     if (item != NULL) {
-                        if (item->isSelected(displayGroup, tabIndex) == false) {
+                        if (item->isSelected(tabDrawingInfo) == false) {
                             rgbaOut[3] = 0;
                         }
                     }
@@ -4844,10 +4849,8 @@ CiftiMappableDataFile::getVoxelColorInMapForLabelData(const std::vector<float>& 
  *     Third dimension (k).
  * @param mapIndex
  *     Time/map index.
- * @param displayGroup
- *    The selected display group.
- * @param tabIndex
- *    Index of selected tab.
+ * @param tabDrawingInfo
+ *    Info about drawing in tab
  * @param rgbaOut
  *     Output containing RGBA values for voxel at the given indices.
  */
@@ -4856,8 +4859,7 @@ CiftiMappableDataFile::getVoxelColorInMap(const int64_t indexIn1,
                                           const int64_t indexIn2,
                                           const int64_t indexIn3,
                                           const int64_t mapIndex,
-                                          const DisplayGroupEnum::Enum /*displayGroup*/,
-                                          const int32_t /*tabIndex*/,
+                                          const TabDrawingInfo& /*tabDrawingInfo*/,
                                           uint8_t rgbaOut[4]) const
 {
     rgbaOut[0] = 0;
@@ -6014,6 +6016,9 @@ CiftiMappableDataFile::getSurfaceNodeIdentificationForMaps(const std::vector<int
         case DataFileTypeEnum::CONNECTIVITY_FIBER_TRAJECTORY_TEMPORARY:
             CaretAssert(0);
             break;
+        case DataFileTypeEnum::CONNECTIVITY_FIBER_TRAJECTORY_MAPS:
+            CaretAssert(0);
+            break;
         case DataFileTypeEnum::CONNECTIVITY_PARCEL:
             useMapData = true;
             break;
@@ -6053,6 +6058,9 @@ CiftiMappableDataFile::getSurfaceNodeIdentificationForMaps(const std::vector<int
             CaretAssert(0);
             break;
         case DataFileTypeEnum::METRIC_DYNAMIC:
+            CaretAssert(0);
+            break;
+        case DataFileTypeEnum::OME_ZARR_IMAGE_FILE:
             CaretAssert(0);
             break;
         case DataFileTypeEnum::PALETTE:
@@ -8371,6 +8379,12 @@ CiftiMappableDataFile::helpMatrixFileLoadChartDataMatrixRGBA(int32_t& numberOfRo
     }
     
     /*
+     * Set size of RGBA output
+     */
+    const int32_t numRGBA = numberOfData * 4;
+    rgbaOut.resize(numRGBA);
+
+    /*
      * Get palette for color mapping.
      */
     if (isMappedWithPalette()) {
@@ -8386,18 +8400,73 @@ CiftiMappableDataFile::helpMatrixFileLoadChartDataMatrixRGBA(int32_t& numberOfRo
         CiftiMappableDataFile* nonConstMapFile = const_cast<CiftiMappableDataFile*>(this);
         const FastStatistics* fileFastStats = nonConstMapFile->getFileFastStatistics();
 
-        /*
-         * Color the data.
-         */
-        const int32_t numRGBA = numberOfData * 4;
-        rgbaOut.resize(numRGBA);
-        NodeAndVoxelColoring::colorScalarsWithPalette(fileFastStats,
-                                                      pcm,
-                                                      &data[0],
-                                                      pcm,
-                                                      &data[0],
-                                                      numberOfData,
-                                                      &rgbaOut[0]);
+        
+        
+        
+        bool useThreshMapFileFlag = false;
+        switch (pcm->getThresholdType()) {
+            case PaletteThresholdTypeEnum::THRESHOLD_TYPE_FILE:
+                useThreshMapFileFlag = true;
+                break;
+            case PaletteThresholdTypeEnum::THRESHOLD_TYPE_MAPPED:
+                break;
+            case PaletteThresholdTypeEnum::THRESHOLD_TYPE_MAPPED_AVERAGE_AREA:
+                break;
+            case PaletteThresholdTypeEnum::THRESHOLD_TYPE_NORMAL:
+                break;
+            case PaletteThresholdTypeEnum::THRESHOLD_TYPE_OFF:
+                break;
+        }
+        
+        bool usedThresholdDataFlag(false);
+        if (useThreshMapFileFlag) {
+            const CaretMappableDataFileAndMapSelectionModel* threshFileModel = nonConstMapFile->getMapThresholdFileSelectionModel(0);
+            CaretAssert(threshFileModel);
+            const CaretMappableDataFile* threshMapFile = threshFileModel->getSelectedFile();
+            if (threshMapFile != NULL) {
+                const CiftiMappableDataFile* threshCiftiMapFile(dynamic_cast<const CiftiMappableDataFile*>(threshMapFile));
+                if (threshCiftiMapFile != NULL) {
+                    const int32_t threshNumberOfRows     = threshCiftiMapFile->m_ciftiFile->getNumberOfRows();
+                    const int32_t threshNnumberOfColumns = threshCiftiMapFile->m_ciftiFile->getNumberOfColumns();
+                    const int32_t threshNumberOfData = threshNumberOfRows * threshNnumberOfColumns;
+                    if (threshNumberOfData == numberOfData) {
+                        /*
+                         * Get the data.
+                         */
+                        std::vector<float> threshData(threshNumberOfData);
+                        for (int32_t iRow = 0; iRow < threshNumberOfRows; iRow++) {
+                            CaretAssertVectorIndex(rowIndices, iRow);
+                            const int32_t rowIndex = rowIndices[iRow];
+                            const int32_t rowOffset = rowIndex * numberOfColumnsOut;
+                            CaretAssertVectorIndex(data, rowOffset + numberOfColumnsOut - 1);
+                            threshCiftiMapFile->m_ciftiFile->getRow(&threshData[rowOffset],
+                                                                    iRow);
+                        }
+                        CaretAssert(data.size() == threshData.size());
+                        NodeAndVoxelColoring::colorScalarsWithPalette(fileFastStats,
+                                                                      pcm,
+                                                                      &data[0],
+                                                                      pcm,
+                                                                      &threshData[0],
+                                                                      numberOfData,
+                                                                      &rgbaOut[0]);
+                        usedThresholdDataFlag = true;
+                    }
+                }
+            }
+        }
+        if ( ! usedThresholdDataFlag) {
+            /*
+             * Color the data.
+             */
+            NodeAndVoxelColoring::colorScalarsWithPalette(fileFastStats,
+                                                          pcm,
+                                                          &data[0],
+                                                          pcm,
+                                                          &data[0],
+                                                          numberOfData,
+                                                          &rgbaOut[0]);
+        }
         
         return true;
     }
@@ -8581,6 +8650,39 @@ CiftiMappableDataFile::getDataForSelector(const MapFileDataSelector& mapFileData
 }
 
 /**
+ * @return Pointer to mapping of data to parcels.
+ *         Will be NULL if data does not map to parcels.
+ */const CiftiParcelsMap* 
+CiftiMappableDataFile::getParcelsMapping() const
+{
+    if ( ! m_parcelsMappingCachedFlag) {
+        m_parcelsMappingCachedFlag = true;
+        
+        switch (m_dataMappingAccessMethod) {
+            case DATA_ACCESS_METHOD_INVALID:
+                CaretAssert(0);
+                break;
+            case DATA_ACCESS_NONE:
+                break;
+            case DATA_ACCESS_FILE_ROWS_OR_XML_ALONG_COLUMN:
+            case DATA_ACCESS_FILE_COLUMNS_OR_XML_ALONG_ROW:
+            {
+                const CiftiXML& myXML = m_ciftiFile->getCiftiXML();
+                if (myXML.getMappingType(m_dataMappingDirectionForCiftiXML) == CiftiMappingType::PARCELS) {
+                    /*
+                     * Cache a COPY of the CiftiParcelsMap to avoid calling CiftiFile::getCiftiXML() many times
+                     */
+                    m_parcelsMapping.reset(new CiftiParcelsMap(myXML.getParcelsMap(m_dataMappingDirectionForCiftiXML)));
+                }
+            }
+                break;
+        }
+    }
+    
+    return m_parcelsMapping.get();
+}
+
+/**
  * @return Pointer to mapping of data to brainordinates.
  *         Will be NULL if data does not map to brainordinates.
  */
@@ -8625,7 +8727,7 @@ CiftiMappableDataFile::getBrainordinateMapping() const
  *     Match status.
  */
 CaretMappableDataFile::BrainordinateMappingMatch
-CiftiMappableDataFile::getBrainordinateMappingMatch(const CaretMappableDataFile* mapFile) const
+CiftiMappableDataFile::getBrainordinateMappingMatchImplementation(const CaretMappableDataFile* mapFile) const
 {
     CaretAssert(mapFile);
     if (this == mapFile) {
@@ -8651,6 +8753,19 @@ CiftiMappableDataFile::getBrainordinateMappingMatch(const CaretMappableDataFile*
                 case CiftiBrainModelsMap::MatchResult::SUBSET:
                     return BrainordinateMappingMatch::SUBSET;
                     break;
+            }
+        }
+    }
+    
+    const CiftiParcelsMap* myParcelsMap = getParcelsMapping();
+    if (myParcelsMap != NULL) {
+        const CiftiParcelsMap* otherParcelsMap = otherCiftiFile->getParcelsMapping();
+        if (otherParcelsMap != NULL) {
+            if (*myParcelsMap == *otherParcelsMap) {
+                return BrainordinateMappingMatch::EQUAL;
+            }
+            else {
+                return BrainordinateMappingMatch::NO;
             }
         }
     }
@@ -9131,7 +9246,7 @@ CiftiMappableDataFile::MapContent::updateHistogramLimitedValues(const int32_t nu
 bool
 CiftiMappableDataFile::MapContent::getThresholdData(const CaretMappableDataFile* threshMapFile,
                                                     const int32_t threshMapIndex,
-                                                    std::vector<float>& thresholdDataOut)
+                                                    std::vector<float>& thresholdDataOut) const
 {
     CaretAssert(threshMapFile);
     CaretAssert(threshMapIndex >= 0);

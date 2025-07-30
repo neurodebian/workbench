@@ -128,6 +128,10 @@ void
 VolumeDynamicConnectivityFile::setEnabledAsLayer(const bool enabled)
 {
     m_enabledAsLayer = enabled;
+    
+    if ( ! m_enabledAsLayer) {
+        clearVoxels();
+    }
 }
 
 /**
@@ -331,22 +335,23 @@ bool
 VolumeDynamicConnectivityFile::loadMapAverageDataForVoxelIndices(const int64_t volumeDimensionIJK[3],
                                                                  const std::vector<VoxelIJK>& voxelIndices)
 {
-    /*
-     * Loading of data disabled?
-     */
-    if ( ! isDataValid()) {
-        return false;
+    if (isDataValid()
+        && isEnabledAsLayer()
+        && matchesDimensions(volumeDimensionIJK[0],
+                             volumeDimensionIJK[1],
+                             volumeDimensionIJK[2])) {
+        /* OK */
     }
-    if ( ! isDataLoadingEnabled()) {
+    else {
+        clearVoxels();
         return false;
     }
 
-    if ( ! matchesDimensions(volumeDimensionIJK[0],
-                             volumeDimensionIJK[1],
-                             volumeDimensionIJK[2])) {
+    if ( ! isDataLoadingEnabled()) {
+        /* Keep any loaded data */
         return false;
     }
-    
+
     const ConnectivityCorrelationTwo* connCorrelationTwo(getConnectivityCorrelationTwo());
     if (connCorrelationTwo == NULL) {
         return false;
@@ -453,14 +458,21 @@ VolumeDynamicConnectivityFile::loadConnectivityForVoxelXYZ(const float xyz[3])
 bool
 VolumeDynamicConnectivityFile::loadConnectivityForVoxelIndex(const int64_t ijk[3]) 
 {
-    bool validFlag(false);
-    
-    if ( ! isDataValid()) {
-        return validFlag;
+    if (isDataValid()
+        && isEnabledAsLayer()) {
+        /* OK */
     }
+    else {
+        clearVoxels();
+        return false;
+    }
+
     if ( ! m_dataLoadingEnabledFlag) {
-        return validFlag;
+        /* Keep any loaded data */
+        return false;
     }
+    
+    bool validFlag(false);
     
     clearVoxels();
     
@@ -497,17 +509,13 @@ VolumeDynamicConnectivityFile::getConnectivityForVoxelIndex(const int64_t ijk[3]
 {
     bool validFlag(false);
     
-    const int64_t numVoxelsInSlice(m_dimI * m_dimJ * m_dimK);
-
     const ConnectivityCorrelationTwo* connCorrelationTwo(getConnectivityCorrelationTwo());
     if (connCorrelationTwo != NULL) {
         if (indexValid(ijk)) {
             const int64_t brainordinateIndex(m_parentVolumeFile->getIndex(ijk));
             connCorrelationTwo->computeForDataSetIndex(brainordinateIndex,
                                                        voxelsOut);
-#ifndef NDEBUG
-            CaretAssert(numVoxelsInSlice == static_cast<int64_t>(voxelsOut.size()));
-#endif
+            CaretAssert((m_dimI * m_dimJ * m_dimK) == static_cast<int64_t>(voxelsOut.size()));
             validFlag = true;
         }
     }

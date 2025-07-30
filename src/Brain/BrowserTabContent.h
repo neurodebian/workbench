@@ -33,6 +33,7 @@
 #include "ChartTwoAxisScaleRangeModeEnum.h"
 #include "ClippingPlanePanningModeEnum.h"
 #include "EventListenerInterface.h"
+#include "FunctionResult.h"
 #include "HistologyCoordinate.h"
 #include "HistologySlice.h"
 #include "Matrix4x4.h"
@@ -94,7 +95,6 @@ namespace caret {
     class OverlaySet;
     class Palette;
     class PlainTextStringBuilder;
-    class SamplesDrawingSettings;
     class SceneClassAssistant;
     class Surface;
     class ViewingTransformations;
@@ -234,6 +234,8 @@ namespace caret {
         bool isFlatSurfaceDisplayed() const;
         
         bool isVolumeSlicesDisplayed() const;
+        
+        FunctionResult isVolumeSlicesMontageDisplayed() const;
         
         bool isVolumeMprOldDisplayed() const;
         
@@ -614,6 +616,14 @@ namespace caret {
         
         void setHistologyAxesCrosshairsDisplayed(const bool displayed);
         
+        bool isHistologyAxesCrosshairsLabelsDisplayed() const;
+        
+        void setHistologyAxesCrosshairsLabelsDisplayed(const bool displayed);
+        
+        bool isHistologyFlipXEnabled() const;
+        
+        void setHistologyFlipXEnabled(const bool status);
+        
         bool isIdentificationUpdatesVolumeSlices() const;
         
         void setIdentificationUpdatesVolumeSlices(const bool status);
@@ -645,10 +655,6 @@ namespace caret {
         VolumeMontageCoordinateTextAlignmentEnum::Enum getVolumeMontageCoordinateTextAlignment() const;
         
         void setVolumeMontageCoordinateTextAlignment(const VolumeMontageCoordinateTextAlignmentEnum::Enum alignment);
-        
-        SamplesDrawingSettings* getSamplesDrawingSettings();
-        
-        const SamplesDrawingSettings* getSamplesDrawingSettings() const;
         
         HistologyCoordinate getHistologySelectedCoordinate(const HistologySlicesFile* histologySlicesFile) const;
         
@@ -704,6 +710,26 @@ namespace caret {
         
         void setWholeBrainCerebellumEnabled(const bool enabled);
         
+        bool isWholeBrainHippocampusEnabled() const;
+        
+        void setWholeBrainHippocampusEnabled(const bool enabled);
+        
+        bool isWholeBrainHippocampusLeftEnabled() const;
+        
+        void setWholeBrainHippocampusLeftEnabled(const bool enabled);
+        
+        bool isWholeBrainHippocampusRightEnabled() const;
+        
+        void setWholeBrainHippocampusRightEnabled(const bool enabled);
+        
+        bool isWholeBrainDentateHippocampusLeftEnabled() const;
+        
+        void setWholeBrainDentateHippocampusLeftEnabled(const bool enabled);
+        
+        bool isWholeBrainDentateHippocampusRightEnabled() const;
+        
+        void setWholeBrainDentateHippocampusRightEnabled(const bool enabled);
+
         float getWholeBrainLeftRightSeparation() const;
         
         void setWholeBrainLeftRightSeparation(const float separation);
@@ -964,8 +990,6 @@ namespace caret {
         Vector3D m_mprThreeCoronalRotationVector;
         Vector3D m_mprThreeParasagittalRotationVector;
 
-        std::unique_ptr<SamplesDrawingSettings> m_samplesDrawingSettings;
-        
         /** aspect ratio */
         float m_aspectRatio;
         
@@ -989,6 +1013,12 @@ namespace caret {
         
         /** display crosshairs on histology slices */
         bool m_displayHistologyAxesCrosshairs;
+        
+        /** display crosshairs  labelson histology slices */
+        bool m_displayHistologyAxesCrosshairsLabels;
+        
+        /** flip about X axis enabled for histology */
+        bool m_histologyFlipXAxisFlag;
         
         /** display crosshairs on volume slices */
         bool m_displayVolumeAxesCrosshairs;

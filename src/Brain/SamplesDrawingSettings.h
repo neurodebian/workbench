@@ -25,19 +25,20 @@
 
 #include <memory>
 
+#include "AnnotationPolyhedronTypeEnum.h"
 #include "CaretObject.h"
 #include "SamplesDrawingModeEnum.h"
 #include "SceneableInterface.h"
 
 
 namespace caret {
-    class BrowserTabContent;
+    class AnnotationPolyhedron;
     class SceneClassAssistant;
 
     class SamplesDrawingSettings : public CaretObject, public SceneableInterface {
         
     public:
-        SamplesDrawingSettings(BrowserTabContent* parentBrowserTabContent);
+        SamplesDrawingSettings();
         
         virtual ~SamplesDrawingSettings();
         
@@ -50,16 +51,14 @@ namespace caret {
         
         void setDrawingMode(const SamplesDrawingModeEnum::Enum samplesDrawingMode);
         
-        std::pair<int32_t, int32_t> getSliceRange() const;
+        AnnotationPolyhedronTypeEnum::Enum getPolyhedronDrawingType() const;
         
-        int32_t getLowSliceIndex() const;
+        void setPolyhedronDrawingType(const AnnotationPolyhedronTypeEnum::Enum polyhedronDrawingType);
         
-        int32_t getHighSliceIndex() const;
+        AString getLinkedPolyhedronIdentifier() const;
         
-        void setLowSliceIndex(const int32_t lowSliceIndex);
+        void setLinkedPolyhedronIdentifier(const AString& identifier);
         
-        void setHighSliceIndex(const int32_t highSliceIndex);
-
         int32_t getUpperSliceOffset() const;
         
         void setUpperSliceOffset(const int32_t sliceOffset);
@@ -68,7 +67,8 @@ namespace caret {
         
         void setLowerSliceOffset(const int32_t sliceOffset);
         
-        bool isSliceInLowerUpperOffsetRange(const int32_t sliceRow,
+        bool isSliceInLowerUpperOffsetRange(const int32_t tabIndex,
+                                            const int32_t sliceRow,
                                             const int32_t sliceColumn) const;
         
         // ADD_NEW_METHODS_HERE
@@ -101,13 +101,11 @@ namespace caret {
 
         std::unique_ptr<SceneClassAssistant> m_sceneAssistant;
 
-        const BrowserTabContent* m_parentBrowserTabContent;
-        
         SamplesDrawingModeEnum::Enum m_drawingMode = SamplesDrawingModeEnum::ALL_SLICES;
         
-        mutable int32_t m_lowSliceIndex = 0;
+        AString m_linkedPolyhedronIdentifier;
         
-        mutable int32_t m_highSliceIndex = 0;
+        AnnotationPolyhedronTypeEnum::Enum m_polyhedronDrawingType = AnnotationPolyhedronTypeEnum::INVALID;
         
         int32_t m_upperSliceOffset = 0;
         

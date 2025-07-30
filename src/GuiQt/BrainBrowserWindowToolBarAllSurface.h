@@ -32,8 +32,12 @@ class QCheckBox;
 class QComboBox;
 class QDoubleSpinBox;
 class QMenu;
+class QToolButton;
 
 namespace caret {
+    class Surface;
+    class SurfaceSelectionModel;
+    class SurfaceSelectionViewController;
     class WuQWidgetObjectGroup;
 
     class BrainBrowserWindowToolBarAllSurface : public BrainBrowserWindowToolBarComponent {
@@ -59,6 +63,11 @@ namespace caret {
         void wholeBrainSurfaceLeftCheckBoxStateChanged(int state);
         void wholeBrainSurfaceRightCheckBoxStateChanged(int state);
         void wholeBrainSurfaceCerebellumCheckBoxStateChanged(int state);
+        void wholeBrainSurfaceHippocampusCheckBoxStateChanged(int state);
+        void wholeBrainSurfaceHippocampusLeftCheckBoxClicked(bool checked);
+        void wholeBrainSurfaceHippocampusRightCheckBoxClicked(bool checked);
+        void wholeBrainSurfaceDentateHippocampusLeftCheckBoxClicked(bool checked);
+        void wholeBrainSurfaceDentateHippocampusRightCheckBoxClicked(bool checked);
         void wholeBrainSurfaceSeparationLeftRightSpinBoxValueChanged(double d);
         void wholeBrainSurfaceSeparationCerebellumSpinBoxSelected(double d);
         void wholeBrainSurfaceLeftToolButtonTriggered(bool checked);
@@ -69,7 +78,12 @@ namespace caret {
         void wholeBrainSurfaceLeftMenuTriggered(QAction*);
         void wholeBrainSurfaceRightMenuTriggered(QAction*);
         void wholeBrainSurfaceCerebellumMenuTriggered(QAction*);
-        
+        void wholeBrainHippocampusMenuAboutToShow();
+        void wholeBrainHippocampusToolButtonClicked();
+        void leftHippoSurfaceSelected(Surface*);
+        void rightHippoSurfaceSelected(Surface*);
+        void dentateLeftHippoSurfaceSelected(Surface*);
+        void dentateRightHippoSurfaceSelected(Surface*);
     private:
         BrainBrowserWindowToolBar* m_parentToolBar;
         
@@ -77,15 +91,35 @@ namespace caret {
         QCheckBox*      wholeBrainSurfaceLeftCheckBox;
         QCheckBox*      wholeBrainSurfaceRightCheckBox;
         QCheckBox*      wholeBrainSurfaceCerebellumCheckBox;
+        QCheckBox*      wholeBrainSurfaceHippocampusCheckBox;
+        QCheckBox*      wholeBrainSurfaceHippocampusLeftCheckBox;
+        QCheckBox*      wholeBrainSurfaceHippocampusRightCheckBox;
+        QCheckBox*      wholeBrainSurfaceDentateHippocampusLeftCheckBox;
+        QCheckBox*      wholeBrainSurfaceDentateHippocampusRightCheckBox;
         QMenu*          wholeBrainSurfaceLeftMenu;
         QMenu*          wholeBrainSurfaceRightMenu;
         QMenu*          wholeBrainSurfaceCerebellumMenu;
         QDoubleSpinBox* wholeBrainSurfaceSeparationLeftRightSpinBox;
         QDoubleSpinBox* wholeBrainSurfaceSeparationCerebellumSpinBox;
         QCheckBox*      wholeBrainSurfaceMatchCheckBox;
+        QToolButton*    m_wholeBrainSurfaceHippocampusToolButton;
+        QMenu*          m_wholeBrainHippcampusMenu;
+        
+        QWidget* createHippocampusSufaceSelectionWidget(const AString& parentObjectName);
+        SurfaceSelectionViewController* m_leftHippoSurfaceSelector;
+        SurfaceSelectionViewController* m_rightHippoSurfaceSelector;
+        SurfaceSelectionViewController* m_dentateLeftHippoSurfaceSelector;
+        SurfaceSelectionViewController* m_dentateRightHippoSurfaceSelector;
+        std::unique_ptr<SurfaceSelectionModel> m_leftHippSurfaceSelectionModel;
+        std::unique_ptr<SurfaceSelectionModel> m_rightHippSurfaceSelectionModel;
+        std::unique_ptr<SurfaceSelectionModel> m_leftDentateHippSurfaceSelectionModel;
+        std::unique_ptr<SurfaceSelectionModel> m_rightDentateHippSurfaceSelectionModel;
+
         void updateAllWholeBrainSurfaceMenus();
         void updateWholeBrainSurfaceMenu(QMenu* menu,
                                          const StructureEnum::Enum structure);
+        void selectSurface(const StructureEnum::Enum structure,
+                           Surface* surface);
         // ADD_NEW_MEMBERS_HERE
 
     };

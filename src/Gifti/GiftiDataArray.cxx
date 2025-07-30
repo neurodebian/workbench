@@ -267,7 +267,7 @@ GiftiDataArray::deleteRows(const std::vector<int32_t>& rowsToDeleteIn)
    //
    std::vector<int32_t> rowsToDelete = rowsToDeleteIn;
    std::sort(rowsToDelete.begin(), rowsToDelete.end());
-   std::unique(rowsToDelete.begin(), rowsToDelete.end());
+   (void)std::unique(rowsToDelete.begin(), rowsToDelete.end());
    std::reverse(rowsToDelete.begin(), rowsToDelete.end());
    
    //
@@ -661,7 +661,8 @@ GiftiDataArray::readFromText(const AString text,
                const uint64_t numDecoded =
                      Base64::decode((const unsigned char*)(text.toStdString().c_str()),
                                                 data.size(),
-                                                &data[0]);
+                                                &data[0],
+                                                text.size());
                if (numDecoded != data.size()) {
                   std::ostringstream str;
                   str << "Decoding of Base64 Binary data failed.\n"
@@ -688,7 +689,8 @@ GiftiDataArray::readFromText(const AString text,
                const uint64_t numDecoded =
                      Base64::decode((unsigned char*)text.toStdString().c_str(),
                                                 dataBuffer.size(),
-                                                dataBuffer.data());
+                                                dataBuffer.data(),
+                                                text.size());
                if (numDecoded == 0) {
                    std::ostringstream str;
                    str << "Decoding of GZip Base64 Binary data failed."

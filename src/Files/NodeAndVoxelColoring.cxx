@@ -21,10 +21,7 @@
 
 #include <cmath>
 #include <limits>
-
-//#include <QRunnable>
-//#include <QSemaphore>
-//#include <QThreadPool>
+#include <unordered_map>
 
 #define __NODE_AND_VOXEL_COLORING_DECLARE__
 #include "NodeAndVoxelColoring.h"
@@ -32,13 +29,17 @@
 
 #include "CaretAssert.h"
 #include "CaretLogger.h"
+#include "CaretMappableDataFile.h"
 #include "CaretOMP.h"
 #include "GiftiLabel.h"
 #include "GiftiLabelTable.h"
 #include "GroupAndNameHierarchyItem.h"
+#include "LabelSelectionItem.h"
+#include "LabelSelectionItemModel.h"
 #include "Palette.h"
 #include "PaletteColorMapping.h"
 #include "MathFunctions.h"
+#include "TabDrawingInfo.h"
 
 using namespace caret;
 
@@ -97,7 +98,7 @@ void
 NodeAndVoxelColoring::colorScalarsWithPalettePrivate(const FastStatistics* statistics,
                                                      const PaletteColorMapping* paletteColorMapping,
                                                      const float* scalarValues,
-                                                     const PaletteColorMapping* thresholdPaletteColorMapping,
+                                                     const PaletteColorMapping* /*thresholdPaletteColorMapping*/,
                                                      const float* thresholdValues,
                                                      const int64_t numberOfScalars,
                                                      const ColorDataType colorDataType,
@@ -114,7 +115,6 @@ NodeAndVoxelColoring::colorScalarsWithPalettePrivate(const FastStatistics* stati
     CaretAssert(statistics);
     CaretAssert(paletteColorMapping);
     CaretAssert(scalarValues);
-    CaretAssert(thresholdPaletteColorMapping);
     CaretAssert(thresholdValues);
     CaretAssert(rgbaOutPointer);
     
@@ -136,7 +136,7 @@ NodeAndVoxelColoring::colorScalarsWithPalettePrivate(const FastStatistics* stati
      * Type of threshold testing
      */
     bool showOutsideFlag = false;
-    const PaletteThresholdTestEnum::Enum thresholdTest = thresholdPaletteColorMapping->getThresholdTest();
+    const PaletteThresholdTestEnum::Enum thresholdTest = paletteColorMapping->getThresholdTest();
     switch (thresholdTest) {
         case PaletteThresholdTestEnum::THRESHOLD_TEST_SHOW_OUTSIDE:
             showOutsideFlag = true;
@@ -150,13 +150,13 @@ NodeAndVoxelColoring::colorScalarsWithPalettePrivate(const FastStatistics* stati
      * Range of values allowed by thresholding
      */
     const PaletteThresholdTypeEnum::Enum thresholdType = paletteColorMapping->getThresholdType();
-    const float thresholdMinimum = thresholdPaletteColorMapping->getThresholdMinimum(thresholdType);
-    const float thresholdMaximum = thresholdPaletteColorMapping->getThresholdMaximum(thresholdType);
-    const float thresholdMappedPositive = thresholdPaletteColorMapping->getThresholdMappedMaximum();
-    const float thresholdMappedPositiveAverageArea = thresholdPaletteColorMapping->getThresholdMappedAverageAreaMaximum();
-    const float thresholdMappedNegative = thresholdPaletteColorMapping->getThresholdMappedMinimum();
-    const float thresholdMappedNegativeAverageArea = thresholdPaletteColorMapping->getThresholdMappedAverageAreaMinimum();
-    const bool showMappedThresholdFailuresInGreen = thresholdPaletteColorMapping->isShowThresholdFailureInGreen();
+    const float thresholdMinimum = paletteColorMapping->getThresholdMinimum(thresholdType);
+    const float thresholdMaximum = paletteColorMapping->getThresholdMaximum(thresholdType);
+    const float thresholdMappedPositive = paletteColorMapping->getThresholdMappedMaximum();
+    const float thresholdMappedPositiveAverageArea = paletteColorMapping->getThresholdMappedAverageAreaMaximum();
+    const float thresholdMappedNegative = paletteColorMapping->getThresholdMappedMinimum();
+    const float thresholdMappedNegativeAverageArea = paletteColorMapping->getThresholdMappedAverageAreaMinimum();
+    const bool showMappedThresholdFailuresInGreen = paletteColorMapping->isShowThresholdFailureInGreen();
     
     /*
      * Skip threshold testing?
@@ -230,12 +230,12 @@ NodeAndVoxelColoring::colorScalarsWithPalettePrivate(const FastStatistics* stati
         /*
          * Positive/Zero/Negative Test
          */
-        if (scalar > PaletteColorMapping::SMALL_POSITIVE) {   // JWH 24 April 2015    NodeAndVoxelColoring::SMALL_POSITIVE) {
+        if (scalar > PaletteColorMapping::SMALL_POSITIVE) {
             if (hidePositiveValues) {
                 continue;
             }
         }
-        else if (scalar < PaletteColorMapping::SMALL_NEGATIVE) {  // JWH 24 April 2015  NodeAndVoxelColoring::SMALL_NEGATIVE) {
+        else if (scalar < PaletteColorMapping::SMALL_NEGATIVE) {
             if (hideNegativeValues) {
                 continue;
             }
@@ -539,16 +539,51 @@ NodeAndVoxelColoring::colorScalarsWithRGBAPrivate(const float* redComponents,
             break;
     }
     
+    /*
+     * Examine data to see if it ranges [0,1].
+     * Otherwise, it is [0, 255].
+     */
+    bool rangeOneFlag(false);
+    bool autoRangeDetectFlag(true);
+    if (autoRangeDetectFlag) {
+        rangeOneFlag = true;
+        const float valueOne(1.001);
+        for (int64_t i = 0; i < numberOfComponents; i++) {
+            if ((redComponents[i] > valueOne)
+                || (redComponents[i] < -valueOne)
+                || (greenComponents[i] > valueOne)
+                || (greenComponents[i] < -valueOne)
+                || (blueComponents[i] > valueOne)
+                || (blueComponents[i] < -valueOne)) {
+                rangeOneFlag = false;
+                break;
+            }
+        }
+    }
+    
+    const float scaleValue(rangeOneFlag
+                           ? 255.0
+                           : 1.0);
+    
     for (int64_t i = 0; i < numberOfComponents; i++) {
-        const float red   = redComponents[i];
-        const float green = greenComponents[i];
-        const float blue  = blueComponents[i];
+        float red   = redComponents[i]   * scaleValue;
+        float green = greenComponents[i] * scaleValue;
+        float blue  = blueComponents[i]  * scaleValue;
         float alpha = 0.0;
         
+        if (red < 0.0)   red   = -red;
+        if (green < 0.0) green = -green;
+        if (blue < 0.0)  blue  = -blue;
+        if (red > 255.0)   red   = 255.0;
+        if (green > 255.0) green = 255.0;
+        if (blue > 255.0)  blue  = 255.0;
+
         if ((red      >= thresholdRed)
             && (green >= thresholdGreen)
             && (blue  >= thresholdBlue)) {
-            alpha = ((alphaComponents == NULL) ? 255.0 : alphaComponents[i]);
+            alpha = ((alphaComponents == NULL) ? 255.0 : (alphaComponents[i] * scaleValue));
+            if (alpha < 0.0) alpha = -alpha;
+            if (alpha > 255.0) alpha = 255.0;
         }
         
         const int64_t i4 = i * 4;
@@ -619,61 +654,85 @@ NodeAndVoxelColoring::colorScalarsWithRGBA(const float* redComponents,
  *     The indices are are used to access colors in the label table.
  * @param numberOfIndices
  *     Number of indices.
- * @param displayGroup
- *    The selected display group.
- * @param tabIndex
- *    Index of selected tab.
+ * @param tabDrawingInfo
+ *    Info for drawing the tab
  * @param rgbv
  *     Output with assigned colors.  Number of elements is (numberOfIndices * 4).
  */
 void
-NodeAndVoxelColoring::colorIndicesWithLabelTableForDisplayGroupTab(const GiftiLabelTable* labelTable,
-                                                 const float* labelIndices,
-                                                 const int64_t numberOfIndices,
-                                                 const DisplayGroupEnum::Enum displayGroup,
-                                                 const int32_t tabIndex,
-                                                 float* rgbv)
+NodeAndVoxelColoring::colorIndicesWithLabelTableForObliqueVolume(const GiftiLabelTable* labelTable,
+                                                                 const float* labelIndices,
+                                                                 const int64_t numberOfIndices,
+                                                                 const TabDrawingInfo& tabDrawingInfo,
+                                                                 uint8_t* rgbaOut)
 {
-    NodeAndVoxelColoring::colorIndicesWithLabelTableForDisplayGroupTabPrivate(labelTable,
-                                                            labelIndices,
-                                                            numberOfIndices,
-                                                            displayGroup,
-                                                            tabIndex,
-                                                            COLOR_TYPE_FLOAT,
-                                                            (void*)rgbv);
-}
-
-/**
- * Assign colors to label indices using a GIFTI label table.
- *
- * @param labelTabl
- *     Label table used for coloring and indexing with label indices.
- * @param labelIndices
- *     The indices are are used to access colors in the label table.
- * @param numberOfIndices
- *     Number of indices.
- * @param displayGroup
- *    The selected display group.
- * @param tabIndex
- *    Index of selected tab.
- * @param rgbv
- *     Output with assigned colors.  Number of elements is (numberOfIndices * 4).
- */
-void
-NodeAndVoxelColoring::colorIndicesWithLabelTableForDisplayGroupTab(const GiftiLabelTable* labelTable,
-                                                 const float* labelIndices,
-                                                 const int64_t numberOfIndices,
-                                                 const DisplayGroupEnum::Enum displayGroup,
-                                                 const int32_t tabIndex,
-                                                 uint8_t* rgbv)
-{
-    NodeAndVoxelColoring::colorIndicesWithLabelTableForDisplayGroupTabPrivate(labelTable,
-                                                            labelIndices,
-                                                            numberOfIndices,
-                                                            displayGroup,
-                                                            tabIndex,
-                                                            COLOR_TYPE_UNSIGNED_BTYE,
-                                                            (void*)rgbv);
+    /*
+     * Invalidate all coloring.
+     */
+    for (int64_t i = 0; i < numberOfIndices; i++) {
+        rgbaOut[i*4+3] = 0;
+    }
+    
+    const int32_t tabIndex(tabDrawingInfo.getTabIndex());
+    const DisplayGroupEnum::Enum displayGroup(tabDrawingInfo.getDisplayGroup());
+    const LabelViewModeEnum::Enum labelViewMode(tabDrawingInfo.getLabelViewMode());
+    const LabelSelectionItemModel* labelModel(tabDrawingInfo.getMapFile()->getLabelSelectionHierarchyForMapAndTab(tabDrawingInfo.getMapIndex(),
+                                                                                                                  displayGroup,
+                                                                                                                  tabIndex));
+    /*
+     * Assign colors from labels to nodes
+     */
+    float labelRGBA[4];
+    for (int64_t i = 0; i < numberOfIndices; i++) {
+        const int64_t labelKey = static_cast<int64_t>(labelIndices[i]);
+        const GiftiLabel* gl = labelTable->getLabel(labelKey);
+        if (gl != NULL) {
+            bool colorDataFlag = false;
+            switch (labelViewMode) {
+                case LabelViewModeEnum::HIERARCHY:
+                    if (labelModel != NULL) {
+                        if (labelModel->isLabelChecked(labelKey)) {
+                            colorDataFlag = true;
+                        }
+                    }
+                    break;
+                case LabelViewModeEnum::LIST:
+                {
+                    const GroupAndNameHierarchyItem* item = gl->getGroupNameSelectionItem();
+                    if (item != NULL) {
+                        if (tabIndex == NodeAndVoxelColoring::INVALID_TAB_INDEX) {
+                            colorDataFlag = true;
+                        }
+                        else if (item->isSelected(tabDrawingInfo)) {
+                            colorDataFlag = true;
+                        }
+                    }
+                    else {
+                        colorDataFlag = true;
+                    }
+                }
+                    break;
+            }
+            
+            if (colorDataFlag) {
+                gl->getColor(labelRGBA);
+                if (labelRGBA[3] > 0.0) {
+                    const int64_t i4 = i * 4;
+                    
+                    CaretAssertArrayIndex(rgbaUnsignedByte, numberOfIndices * 4, i*4+3);
+                    rgbaOut[i4]   = labelRGBA[0] * 255.0;
+                    rgbaOut[i4+1] = labelRGBA[1] * 255.0;
+                    rgbaOut[i4+2] = labelRGBA[2] * 255.0;
+                    if (labelRGBA[3] > 0.0) {
+                        rgbaOut[i4+3] = labelRGBA[3] * 255.0;
+                    }
+                    else {
+                        rgbaOut[i4+3] = 0;
+                    }
+                }
+            }
+        }
+    }
 }
 
 /**
@@ -699,12 +758,12 @@ NodeAndVoxelColoring::colorIndicesWithLabelTableForDisplayGroupTab(const GiftiLa
  */
 void
 NodeAndVoxelColoring::colorIndicesWithLabelTableForDisplayGroupTabPrivate(const GiftiLabelTable* labelTable,
-                                                        const float* labelIndices,
-                                                        const int64_t numberOfIndices,
-                                                        const DisplayGroupEnum::Enum displayGroup,
-                                                        const int32_t tabIndex,
-                                                        const ColorDataType colorDataType,
-                                                        void* rgbaOutPointer)
+                                                                          const float* labelIndices,
+                                                                          const int64_t numberOfIndices,
+                                                                          const DisplayGroupEnum::Enum displayGroup,
+                                                                          const int32_t tabIndex,
+                                                                          const ColorDataType colorDataType,
+                                                                          void* rgbaOutPointer)
 {
     /*
      * Cast to data type for rgba coloring
@@ -726,23 +785,34 @@ NodeAndVoxelColoring::colorIndicesWithLabelTableForDisplayGroupTabPrivate(const 
      */
     switch (colorDataType) {
         case COLOR_TYPE_FLOAT:
-            for (int64_t i = 0; i < numberOfIndices; i++) {
-                rgbaFloat[i*4+3] = 0.0;
-            }
+            std::fill(rgbaFloat, rgbaFloat + (numberOfIndices * 4), 0.0);
             break;
         case COLOR_TYPE_UNSIGNED_BTYE:
-            for (int64_t i = 0; i < numberOfIndices; i++) {
-                rgbaUnsignedByte[i*4+3] = 0;
-            }
+            std::fill(rgbaUnsignedByte, rgbaUnsignedByte + (numberOfIndices * 4), 0);
             break;
     }
     
     /*
-     * Assign colors from labels to nodes
+     * Get keys
      */
-    float labelRGBA[4];
-	for (int64_t i = 0; i < numberOfIndices; i++) {
-        const int64_t labelKey = static_cast<int64_t>(labelIndices[i]);
+    const std::set<int32_t> keySet(labelTable->getKeys());
+    if (keySet.empty()) {
+        return;
+    }
+    
+    /*
+     * Map from label key to RGBA colors
+     */
+    std::unordered_map<int32_t, std::array<uint8_t, 4>> labelRgbaByteMap;
+    std::unordered_map<int32_t, std::array<float, 4>> labelRgbaFloatMap;
+
+    /*
+     * Assign colors for each LABEL
+     */
+    for (const int32_t labelKey : keySet) {
+        std::array<float, 4> rgbaFloat { 0.0, 0.0, 0.0, 0.0 };
+        std::array<uint8_t, 4> rgbaByte { 0, 0, 0, 0 };
+        
         const GiftiLabel* gl = labelTable->getLabel(labelKey);
         if (gl != NULL) {
             const GroupAndNameHierarchyItem* item = gl->getGroupNameSelectionItem();
@@ -760,33 +830,63 @@ NodeAndVoxelColoring::colorIndicesWithLabelTableForDisplayGroupTabPrivate(const 
             }
             
             if (colorDataFlag) {
-                gl->getColor(labelRGBA);
-                if (labelRGBA[3] > 0.0) {
-                    const int64_t i4 = i * 4;
-                    
+                gl->getColor(rgbaFloat.data());
+                if (rgbaFloat[3] > 0.0) {
                     switch (colorDataType) {
                         case COLOR_TYPE_FLOAT:
-                            CaretAssertArrayIndex(rgbaFloat, numberOfIndices * 4, i*4+3);
-                            rgbaFloat[i*4] = labelRGBA[0];
-                            rgbaFloat[i*4+1] = labelRGBA[1];
-                            rgbaFloat[i*4+2] = labelRGBA[2];
-                            rgbaFloat[i*4+3] = labelRGBA[3];
                             break;
                         case COLOR_TYPE_UNSIGNED_BTYE:
-                            CaretAssertArrayIndex(rgbaUnsignedByte, numberOfIndices * 4, i*4+3);
-                            rgbaUnsignedByte[i4]   = labelRGBA[0] * 255.0;
-                            rgbaUnsignedByte[i4+1] = labelRGBA[1] * 255.0;
-                            rgbaUnsignedByte[i4+2] = labelRGBA[2] * 255.0;
-                            if (labelRGBA[3] > 0.0) {
-                                rgbaUnsignedByte[i4+3] = labelRGBA[3] * 255.0;
-                            }
-                            else {
-                                rgbaUnsignedByte[i4+3] = 0;
-                            }
+                            rgbaByte[0] = rgbaFloat[0] * 255.0;
+                            rgbaByte[1] = rgbaFloat[1] * 255.0;
+                            rgbaByte[2] = rgbaFloat[2] * 255.0;
+                            rgbaByte[3] = rgbaFloat[3] * 255.0;
                             break;
                     }
                 }
             }
+        }
+
+        switch (colorDataType) {
+            case COLOR_TYPE_FLOAT:
+                labelRgbaFloatMap[labelKey] = rgbaFloat;
+                break;
+            case COLOR_TYPE_UNSIGNED_BTYE:
+                labelRgbaByteMap[labelKey] = rgbaByte;
+                break;
+        }
+    }
+
+    /*
+     * Assign LABEL colors to brainordinates
+     */
+#pragma omp CARET_PARFOR
+    for (int64_t i = 0; i < numberOfIndices; i++) {
+        const int64_t labelKey = static_cast<int64_t>(labelIndices[i]);
+        switch (colorDataType) {
+            case COLOR_TYPE_FLOAT:
+            {
+                const auto iter(labelRgbaFloatMap.find(labelKey));
+                if (iter != labelRgbaFloatMap.end()) {
+                    const auto& labelRGBA(iter->second);
+                    rgbaFloat[i*4]   = labelRGBA[0];
+                    rgbaFloat[i*4+1] = labelRGBA[1];
+                    rgbaFloat[i*4+2] = labelRGBA[2];
+                    rgbaFloat[i*4+3] = labelRGBA[3];
+                }
+            }
+                break;
+            case COLOR_TYPE_UNSIGNED_BTYE:
+            {
+                const auto iter(labelRgbaByteMap.find(labelKey));
+                if (iter != labelRgbaByteMap.end()) {
+                    const auto& labelRGBA(iter->second);
+                    rgbaUnsignedByte[i*4]   = labelRGBA[0];
+                    rgbaUnsignedByte[i*4+1] = labelRGBA[1];
+                    rgbaUnsignedByte[i*4+2] = labelRGBA[2];
+                    rgbaUnsignedByte[i*4+3] = labelRGBA[3];
+                }
+            }
+                break;
         }
     }
 }

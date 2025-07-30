@@ -25,15 +25,19 @@
 
 #include <QWidget>
 
+#include "ContextSensitiveMenuItemsEnum.h"
 #include "DisplayGroupEnum.h"
 #include "EventListenerInterface.h"
 #include "SceneableInterface.h"
 
 class QCheckBox;
+class QTreeWidgetItem;
 
 namespace caret {
+    class AnnotationPolyhedron;
     class DisplayGroupAndTabItemViewController;
     class DisplayGroupEnumComboBox;
+    class EnumComboBoxTemplate;
     class SceneClassAssistant;
 
     class SamplesSelectionViewController : public QWidget, public EventListenerInterface, public SceneableInterface {
@@ -73,20 +77,27 @@ namespace caret {
 //                                                  const SceneClass* sceneClass) = 0;
 
     private slots:
+        void samplesColorModeEnumComboBoxItemActivated();
+        
         void checkBoxToggled();
         
         void displayGroupSelected(const DisplayGroupEnum::Enum);
+        
+        void contextMenuItemSelected(QList<QTreeWidgetItem*>& itemsSelected,
+                                     const ContextSensitiveMenuItemsEnum::Enum contextMenuItem);
         
     private:
         SamplesSelectionViewController(const SamplesSelectionViewController&);
 
         SamplesSelectionViewController& operator=(const SamplesSelectionViewController&);
         
-        QWidget* createSelectionWidget();
+        QWidget* createSelectionWidget(const AString& objectNamePrefix);
         
         void updateSampleSelections();
         
         void updateOtherSampleViewControllers();
+        
+        std::vector<AnnotationPolyhedron*> getPolyhedronsFromTreeWidgetItems(QList<QTreeWidgetItem*>& treeWidgetItems) const;
         
         SceneClassAssistant* m_sceneAssistant;
 
@@ -99,6 +110,12 @@ namespace caret {
         QCheckBox* m_displaySamplesCheckBox;
         
         QCheckBox* m_displaySampleNamesCheckBox;
+        
+        QCheckBox* m_displaySamplesNumberCheckBox;
+        
+        QCheckBox* m_displaySamplesProspectiveRetrospectiveSuffixCheckBox;
+        
+        EnumComboBoxTemplate* m_samplesColorModeEnumComboBox;;
         
         static std::set<SamplesSelectionViewController*> s_allSamplesSelectionViewControllers;
         

@@ -403,8 +403,11 @@ EventManager::sendSimpleEvent(const EventTypeEnum::Enum eventType)
         case EventTypeEnum::EVENT_ANNOTATION_GROUP_GET_WITH_KEY:
         case EventTypeEnum::EVENT_ANNOTATION_GROUPING:
         case EventTypeEnum::EVENT_ANNOTATION_NEW_DRAWING_POLYHEDRON_SLICE_DEPTH:
+        case EventTypeEnum::EVENT_ANNOTATION_POLYHEDRON_GET_BY_LINKED_IDENTIFIER:
+        case EventTypeEnum::EVENT_ANNOTATION_POLYHEDRON_NAME_COMPONENT_SETTINGS:
         case EventTypeEnum::EVENT_ANNOTATION_TEXT_GET_BOUNDS:
         case EventTypeEnum::EVENT_ANNOTATION_TEXT_SUBSTITUTION_GET:
+        case EventTypeEnum::EVENT_ANNOTATION_TEXT_SUBSTITUTION_GET_ALL_GROUP_IDS:
         case EventTypeEnum::EVENT_ANNOTATION_TEXT_SUBSTITUTION_INVALIDATE:
         case EventTypeEnum::EVENT_ANNOTATION_VALIDATE:
         case EventTypeEnum::EVENT_BRAIN_RESET:
@@ -453,6 +456,7 @@ EventManager::sendSimpleEvent(const EventTypeEnum::Enum eventType)
         case EventTypeEnum::EVENT_DRAWING_VIEWPORT_CONTENT_ADD:
         case EventTypeEnum::EVENT_DRAWING_VIEWPORT_CONTENT_CLEAR:
         case EventTypeEnum::EVENT_DRAWING_VIEWPORT_CONTENT_GET:
+        case EventTypeEnum::EVENT_FOCUS_FILE_GET_COLOR:
         case EventTypeEnum::EVENT_GET_DISPLAYED_DATA_FILES:
         case EventTypeEnum::EVENT_GET_NODE_DATA_FILES:
         case EventTypeEnum::EVENT_GET_OR_SET_USER_INPUT_MODE:
@@ -501,6 +505,7 @@ EventManager::sendSimpleEvent(const EventTypeEnum::Enum eventType)
         case EventTypeEnum::EVENT_SURFACE_COLORING_INVALIDATE:
         case EventTypeEnum::EVENT_VOLUME_COLORING_INVALIDATE:
         case EventTypeEnum::EVENT_SURFACES_GET:
+        case EventTypeEnum::EVENT_SURFACE_FILE_GET:
         case EventTypeEnum::EVENT_SURFACE_STRUCTURES_VALID_GET:
         case EventTypeEnum::EVENT_TILE_TABS_MODIFICATION:
         case EventTypeEnum::EVENT_TOOLBOX_SELECTION_DISPLAY:

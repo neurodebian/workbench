@@ -1015,6 +1015,8 @@ OverlayViewController::menuConstructionAboutToShow()
                     break;
                 case DataFileTypeEnum::CONNECTIVITY_FIBER_TRAJECTORY_TEMPORARY:
                     break;
+                case DataFileTypeEnum::CONNECTIVITY_FIBER_TRAJECTORY_MAPS:
+                    break;
                 case DataFileTypeEnum::CONNECTIVITY_SCALAR_DATA_SERIES:
                     break;
                 case DataFileTypeEnum::CZI_IMAGE_FILE:
@@ -1031,6 +1033,8 @@ OverlayViewController::menuConstructionAboutToShow()
                     break;
                 case DataFileTypeEnum::METRIC_DYNAMIC:
                     dynConnFlag = true;
+                    break;
+                case DataFileTypeEnum::OME_ZARR_IMAGE_FILE:
                     break;
                 case DataFileTypeEnum::PALETTE:
                     break;

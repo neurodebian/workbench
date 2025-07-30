@@ -55,6 +55,7 @@ MediaFile::MediaFile(const DataFileTypeEnum::Enum dataFileType)
     switch (dataFileType) {
         case DataFileTypeEnum::CZI_IMAGE_FILE:
         case DataFileTypeEnum::IMAGE:
+        case DataFileTypeEnum::OME_ZARR_IMAGE_FILE:
             break;
         default:
         {
@@ -1704,4 +1705,52 @@ MediaFile::setMediaFileTransforms(const MediaFileTransforms& mediaFileTransforms
     m_mediaFileTransforms = mediaFileTransforms;
 }
 
+/**
+ * Get the range of available pyramid layers.  If range is invalid, layer indices will be -1.
+ * @param frameIndex
+ *    Index of frame
+ * @param allFramesFlag
+ *    If true, image contains all frames (for CZI this is all scenes)
+ * @param lowestPyramidLayerIndexOut
+ *    Output with lowest resolution layer index (
+ * @param highestPyramidLayerIndexOut
+ *    Output with highest resolution layer index
+ */
+void
+MediaFile::getPyramidLayerRangeForFrame(const int32_t /*frameIndex*/,
+                                           const bool /*allFramesFlag*/,
+                                           int32_t& lowestPyramidLayerIndexOut,
+                                           int32_t& highestPyramidLayerIndexOut) const
+{
+    lowestPyramidLayerIndexOut  = 0;
+    highestPyramidLayerIndexOut = 0;
+}
+
+/**
+ * Reload the pyramid layer in the given tab.
+ * @param tabIndex
+ *    Index of the tab.
+ * @param overlayIndex
+ * Index of overlasy
+ */
+void
+MediaFile::reloadPyramidLayerInTabOverlay(const int32_t /*tabIndex*/,
+                                          const int32_t /*overlayIndex*/)
+{
+}
+
+/**
+ * Get the dimensions for the given pyramid level
+ * @param pyramidLevel
+ *    The pyramid level
+ * @param dimensionsOut
+ *    Output with dimensions
+ * @return True if valid, else false.
+ */
+bool
+MediaFile::getPyrimidLevelDimensions(const int32_t /*pyramidLevel*/,
+                                     std::vector<int64_t>& /*dimensionsOut*/) const
+{
+    return false;
+}
 

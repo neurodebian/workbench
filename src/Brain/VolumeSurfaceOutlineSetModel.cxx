@@ -167,6 +167,8 @@ VolumeSurfaceOutlineSetModel::selectSurfacesAfterSpecFileLoaded(Brain* brain,
     EventBrowserTabGetAll getAllTabs;
     EventManager::get()->sendEvent(getAllTabs.getPointer());
     
+    m_numberOfDisplayedVolumeSurfaceOutlines = 6;
+
     /*
      * Find tabs with left/right
      */
@@ -231,6 +233,26 @@ VolumeSurfaceOutlineSetModel::selectSurfacesAfterSpecFileLoaded(Brain* brain,
         rightPialSurface     = rightBrainStructure->getSurfaceContainingTextInName("pial");
     }
     
+    std::pair<Surface*,Surface*> leftHippoSurfaces(getHippoInnerOuterSurfaces(brain,
+                                                                              StructureEnum::HIPPOCAMPUS_LEFT));
+    Surface* leftHippoOuterSurface(leftHippoSurfaces.first);
+    Surface* leftHippoInnerSurface(leftHippoSurfaces.second);
+
+    std::pair<Surface*,Surface*> rightHippoSurfaces(getHippoInnerOuterSurfaces(brain,
+                                                                               StructureEnum::HIPPOCAMPUS_RIGHT));
+    Surface* rightHippoOuterSurface(rightHippoSurfaces.first);
+    Surface* rightHippoInnerSurface(rightHippoSurfaces.second);
+    
+    std::pair<Surface*,Surface*> leftDentateHippoSurfaces(getHippoInnerOuterSurfaces(brain,
+                                                                                     StructureEnum::HIPPOCAMPUS_DENTATE_LEFT));
+    Surface* leftDentateHippoOuterSurface(leftDentateHippoSurfaces.first);
+    Surface* leftDentateHippoInnerSurface(leftDentateHippoSurfaces.second);
+    
+    std::pair<Surface*,Surface*> rightDentateHippoSurfaces(getHippoInnerOuterSurfaces(brain,
+                                                                                      StructureEnum::HIPPOCAMPUS_DENTATE_RIGHT));
+    Surface* rightDentateHippoOuterSurface(rightDentateHippoSurfaces.first);
+    Surface* rightDentateHippoInnerSurface(rightDentateHippoSurfaces.second);
+    
     for (int32_t i = 0; i < BrainConstants::MAXIMUM_NUMBER_OF_VOLUME_SURFACE_OUTLINES; i++) {
         m_outlineModels[i]->getColorOrTabModel()->setColor(CaretColorEnum::BLACK);
         m_outlineModels[i]->setThicknessPixelsObsolete(VolumeSurfaceOutlineModel::DEFAULT_LINE_THICKNESS_PIXELS_OBSOLETE);
@@ -264,6 +286,84 @@ VolumeSurfaceOutlineSetModel::selectSurfacesAfterSpecFileLoaded(Brain* brain,
                       -1,
                       CaretColorEnum::BLUE,
                       nextOutlineIndex);
+    
+    
+    addSurfaceOutline(leftHippoOuterSurface,
+                      -1,
+                      CaretColorEnum::BLUE,
+                      nextOutlineIndex);
+    addSurfaceOutline(rightHippoOuterSurface,
+                      -1,
+                      CaretColorEnum::BLUE,
+                      nextOutlineIndex);
+    
+    addSurfaceOutline(leftHippoInnerSurface,
+                      -1,
+                      CaretColorEnum::LIME,
+                      nextOutlineIndex);
+    addSurfaceOutline(rightHippoInnerSurface,
+                      -1,
+                      CaretColorEnum::LIME,
+                      nextOutlineIndex);
+    
+    
+    addSurfaceOutline(leftDentateHippoOuterSurface,
+                      -1,
+                      CaretColorEnum::BLUE,
+                      nextOutlineIndex);
+    addSurfaceOutline(rightDentateHippoOuterSurface,
+                      -1,
+                      CaretColorEnum::BLUE,
+                      nextOutlineIndex);
+    
+    addSurfaceOutline(leftDentateHippoInnerSurface,
+                      -1,
+                      CaretColorEnum::LIME,
+                      nextOutlineIndex);
+    addSurfaceOutline(rightDentateHippoInnerSurface,
+                      -1,
+                      CaretColorEnum::LIME,
+                      nextOutlineIndex);
+}
+
+/**
+ * @return Pair containing the inner and outer surfaces
+ * Find hippocampus surfaces for volume surface outline
+ * @param brain
+ *    The brain
+ * @param structure
+ *    The structure
+ */
+std::pair<Surface*,Surface*>
+VolumeSurfaceOutlineSetModel::getHippoInnerOuterSurfaces(Brain* brain,
+                                                         const StructureEnum::Enum structure)
+{
+    Surface* innerSurface(NULL);
+    Surface* outerSurface(NULL);
+    
+    BrainStructure* brainStructure(brain->getBrainStructure(structure,
+                                                            false));
+    if (brainStructure != NULL) {
+        outerSurface = brainStructure->getSurfaceOfTypeAndSecondaryType(SurfaceTypeEnum::ANATOMICAL,
+                                                                        SecondarySurfaceTypeEnum::OUTER);
+        innerSurface = brainStructure->getSurfaceOfTypeAndSecondaryType(SurfaceTypeEnum::ANATOMICAL,
+                                                                        SecondarySurfaceTypeEnum::INNER);
+        if (outerSurface == NULL) {
+            outerSurface = brainStructure->getSurfaceContainingTextInName("outer");
+        }
+        if (innerSurface == NULL) {
+            innerSurface = brainStructure->getSurfaceContainingTextInName("inner");
+        }
+        if (outerSurface == NULL) {
+            outerSurface = brainStructure->getPrimaryAnatomicalSurface();
+        }
+        if (innerSurface == NULL) {
+            innerSurface = brainStructure->getPrimaryAnatomicalSurface();
+        }
+    }
+    
+    return std::make_pair(innerSurface,
+                          outerSurface);
 }
 
 /**
@@ -305,6 +405,13 @@ VolumeSurfaceOutlineSetModel::addSurfaceOutline(Surface* surface,
                 }
                 
                 outlineIndex++;
+                
+                /*
+                 * Ensure that outline is displayed
+                 */
+                if (m_numberOfDisplayedVolumeSurfaceOutlines < outlineIndex) {
+                    m_numberOfDisplayedVolumeSurfaceOutlines = outlineIndex;
+                }
             }
         }
     }

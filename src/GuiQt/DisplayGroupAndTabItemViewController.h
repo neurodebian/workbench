@@ -25,16 +25,20 @@
 
 #include <QWidget>
 
+#include "ContextSensitiveMenuItemsEnum.h"
 #include "DataFileTypeEnum.h"
 #include "DisplayGroupEnum.h"
 
 class QAction;
-class QTreeWidget;
+class QLineEdit;
 class QTreeWidgetItem;
+class QToolButton;
+
 namespace caret {
 
     class DisplayGroupAndTabItemInterface;
     class DisplayGroupAndTabItemTreeWidgetItem;
+    class WuQTreeWidget;
     
     class DisplayGroupAndTabItemViewController : public QWidget {
         
@@ -43,10 +47,14 @@ namespace caret {
     public:
         DisplayGroupAndTabItemViewController(const DataFileTypeEnum::Enum dataFileType,
                                              const int32_t browserWindowIndex,
+                                             const QString& objectNameForMacros,
+                                             const QString& descriptiveNameForMacros,
                                              QWidget* parent = 0);
         
         virtual ~DisplayGroupAndTabItemViewController();
 
+        void enableContextSensitiveMenu(const std::vector<ContextSensitiveMenuItemsEnum::Enum>& contextMenuItems);
+        
         void updateContent(std::vector<DisplayGroupAndTabItemInterface*>& contentItemsIn,
                            const DisplayGroupEnum::Enum displayGroup,
                            const int32_t tabIndex,
@@ -54,6 +62,10 @@ namespace caret {
 
         // ADD_NEW_METHODS_HERE
 
+    signals:
+        void contextMenuItemSelected(QList<QTreeWidgetItem*>& itemsSelected,
+                                     const ContextSensitiveMenuItemsEnum::Enum contextMenuItem);
+        
     private slots:
         void itemWasCollapsed(QTreeWidgetItem* item);
         
@@ -70,12 +82,31 @@ namespace caret {
         
         void turnOffSelectedItemsTriggered();
         
+        
+        void collapseAllActionTriggered();
+        
+        void expandAllActionTriggered();
+        
+        void allOnActionTriggered();
+        
+        void allOffActionTriggered();
+        
+        void infoActionTriggered();
+        
+        void findActionTriggered();
+        
+        void nextActionTriggered();
+        
+        void findTextLineEditTextChanged(const QString& text);
+        
+
     private:
         DisplayGroupAndTabItemViewController(const DisplayGroupAndTabItemViewController&);
 
         DisplayGroupAndTabItemViewController& operator=(const DisplayGroupAndTabItemViewController&);
         
-        DisplayGroupAndTabItemInterface *m_displayGroupAndTabItem;
+        QWidget* createButtonsWidget(const QString& objectNameForMacros,
+                                     const QString& descriptiveNameForMacros);
         
         void getDisplayGroupAndTabIndex(DisplayGroupEnum::Enum& displayGroupOut,
                                         int32_t& tabIndexOut) const;
@@ -96,15 +127,37 @@ namespace caret {
         
         void setCheckedStatusOfSelectedItems(const bool checkedFlag);
         
+        void scrollTreeViewToFindItem();
+        
         const DataFileTypeEnum::Enum m_dataFileType;
         
         const int32_t m_browserWindowIndex;
         
-        QTreeWidget* m_treeWidget;
+        WuQTreeWidget* m_treeWidget;
+                
+        QAction* m_collapseAllAction;
         
-        QAction* m_turnOnSelectedItemsAction;
+        QAction* m_expandAllAction;
         
-        QAction* m_turnOffSelectedItemsAction;
+        QAction* m_allOnAction;
+        
+        QAction* m_allOffAction;
+        
+        QToolButton* m_infoToolButton;
+        
+        QAction* m_infoAction;
+        
+        QAction* m_findAction;
+        
+        QAction* m_nextAction;
+        
+        QLineEdit* m_findTextLineEdit;
+        
+        QList<QTreeWidgetItem*> m_findItems;
+        
+        int32_t m_findItemsCurrentIndex = 0;
+
+        std::set<ContextSensitiveMenuItemsEnum::Enum> m_contextMenuItems;
         
         static std::set<DisplayGroupAndTabItemViewController*> s_allViewControllers;
         

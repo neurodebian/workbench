@@ -27,6 +27,8 @@
 
 #include "AnnotationFile.h"
 #include "AnnotationManager.h"
+#include "AnnotationPolyhedron.h"
+#include "AnnotationTextSubstitutionLayerSet.h"
 #include "AnnotationTextSubstitutionFile.h"
 #include "Border.h"
 #include "BorderFile.h"
@@ -55,6 +57,7 @@
 #include "CiftiConnectivityMatrixParcelDynamicFile.h"
 #include "CiftiFiberOrientationFile.h"
 #include "CiftiFiberTrajectoryFile.h"
+#include "CiftiFiberTrajectoryMapFile.h"
 #include "CiftiConnectivityMatrixParcelFile.h"
 #include "CiftiConnectivityMatrixParcelDenseFile.h"
 #include "CiftiParcelLabelFile.h"
@@ -84,6 +87,7 @@
 #include "EventDataFileReload.h"
 #include "EventDataFileReloadAll.h"
 #include "EventCaretDataFilesGet.h"
+#include "EventFocusFileGetColor.h"
 #include "EventGetDisplayedDataFiles.h"
 #include "EventHistologySlicesFilesGet.h"
 #include "EventMediaFilesGet.h"
@@ -118,6 +122,7 @@
 #include "ModelVolume.h"
 #include "ModelWholeBrain.h"
 #include "LabelFile.h"
+#include "OmeZarrImageFile.h"
 #include "Overlay.h"
 #include "OverlaySet.h"
 #include "PaletteFile.h"
@@ -137,6 +142,7 @@
 #include "SpecFile.h"
 #include "SpecFileDataFile.h"
 #include "SpecFileDataFileTypeGroup.h"
+#include "ScenePathName.h"
 #include "ScenePathNameArray.h"
 #include "Surface.h"
 #include "SurfaceProjectedItem.h"
@@ -243,6 +249,8 @@ Brain::Brain(CaretPreferences* caretPreferences)
     m_displayPropertiesVolume = new DisplayPropertiesVolume();
     m_displayProperties.push_back(m_displayPropertiesVolume);
     
+    m_annotationTextSubstitutionLayerSet.reset(new AnnotationTextSubstitutionLayerSet(this));
+    
     m_surfaceMatchingToAnatomicalFlag = false;
     
     EventManager::get()->addEventListener(this,
@@ -261,6 +269,8 @@ Brain::Brain(CaretPreferences* caretPreferences)
                                           EventTypeEnum::EVENT_CARET_MAPPABLE_DATA_FILES_GET);
     EventManager::get()->addEventListener(this,
                                           EventTypeEnum::EVENT_GET_DISPLAYED_DATA_FILES);
+    EventManager::get()->addEventListener(this,
+                                          EventTypeEnum::EVENT_FOCUS_FILE_GET_COLOR);
     EventManager::get()->addEventListener(this,
                                           EventTypeEnum::EVENT_HISTOLOGY_SLICES_FILES_GET);
     EventManager::get()->addEventListener(this,
@@ -289,11 +299,7 @@ Brain::Brain(CaretPreferences* caretPreferences)
     m_sceneAssistant->add("displayPropertiesAnnotation",
                           "DisplayPropertiesAnnotation",
                           m_displayPropertiesAnnotation);
-    
-    m_sceneAssistant->add("displayPropertiesAnnotationTextSubstitution",
-                          "DisplayPropertiesAnnotationTextSubstitution",
-                          m_displayPropertiesAnnotationTextSubstitution);
-    
+        
     m_sceneAssistant->add("displayPropertiesBorders", 
                           "DisplayPropertiesBorders", 
                           m_displayPropertiesBorders);
@@ -337,6 +343,10 @@ Brain::Brain(CaretPreferences* caretPreferences)
     m_sceneAssistant->add("m_chartTwoCartesianAxesYokingManager",
                           "ChartTwoCartesianOrientedAxesYokingManager",
                           m_chartTwoCartesianAxesYokingManager.get());
+    
+    m_sceneAssistant->add("m_annotationTextSubstitutionLayerSet",
+                          "AnnotationTextSubstitutionLayerSet",
+                          m_annotationTextSubstitutionLayerSet.get());
     
     m_selectionManager = new SelectionManager();
 
@@ -641,6 +651,11 @@ Brain::resetBrain(const ResetBrainKeepSceneFiles keepSceneFiles,
     }
     m_cziImageFiles.clear();
     
+    for (auto oz : m_omeZarrImageFiles) {
+        delete oz;
+    }
+    m_omeZarrImageFiles.clear();
+    
     for (auto hsf : m_histologySlicesFiles) {
         delete hsf;
     }
@@ -750,6 +765,10 @@ Brain::resetBrain(const ResetBrainKeepSceneFiles keepSceneFiles,
     }
     m_connectivityFiberTrajectoryFiles.clear();
     
+    for (CiftiFiberTrajectoryMapFile* cftmf : m_connectivityFiberTrajectoryMapFiles) {
+        delete cftmf;
+    }
+    m_connectivityFiberTrajectoryMapFiles.clear();
 
     for (std::vector<CiftiConnectivityMatrixParcelFile*>::iterator clfi = m_connectivityMatrixParcelFiles.begin();
          clfi != m_connectivityMatrixParcelFiles.end();
@@ -811,6 +830,8 @@ Brain::resetBrain(const ResetBrainKeepSceneFiles keepSceneFiles,
          iter++) {
         (*iter)->reset();
     }
+    
+    m_annotationTextSubstitutionLayerSet->reset();
     
     m_identificationManager->removeAllIdentifiedItems();
     m_selectionManager->reset();
@@ -919,6 +940,8 @@ Brain::resetBrainKeepSceneFiles()
                 break;
             case DataFileTypeEnum::CONNECTIVITY_FIBER_TRAJECTORY_TEMPORARY:
                 break;
+            case DataFileTypeEnum::CONNECTIVITY_FIBER_TRAJECTORY_MAPS:
+                break;
             case DataFileTypeEnum::CONNECTIVITY_PARCEL:
                 break;
             case DataFileTypeEnum::CONNECTIVITY_PARCEL_DENSE:
@@ -946,6 +969,8 @@ Brain::resetBrainKeepSceneFiles()
             case DataFileTypeEnum::METRIC:
                 break;
             case DataFileTypeEnum::METRIC_DYNAMIC:
+                break;
+            case DataFileTypeEnum::OME_ZARR_IMAGE_FILE:
                 break;
             case DataFileTypeEnum::PALETTE:
                 keepFileFlag = false;
@@ -1052,6 +1077,24 @@ Brain::copyFilePropertiesToTab(const int32_t sourceTabIndex,
         vf->getGroupAndNameHierarchyModel()->copySelections(sourceTabIndex,
                                                             targetTabIndex);
     }
+}
+
+/**
+ * @return Pointer the annotation subtitution layer set
+ */
+AnnotationTextSubstitutionLayerSet*
+Brain::getAnnotationTextSubstitutionLayerSet()
+{
+    return m_annotationTextSubstitutionLayerSet.get();
+}
+
+/**
+ * @return Pointer the annotation subtitution layer set
+ */
+const AnnotationTextSubstitutionLayerSet*
+Brain::getAnnotationTextSubstitutionLayerSet() const
+{
+    return m_annotationTextSubstitutionLayerSet.get();
 }
 
 /**
@@ -1996,9 +2039,7 @@ Brain::addReadOrReloadAnnotationTextSubstitutionFile(const FileModeAddReadReload
         m_annotationSubstitutionFiles.push_back(af);
     }
     
-    if (fileMode == FILE_MODE_RELOAD) {
-        EventManager::get()->sendEvent(EventAnnotationTextSubstitutionInvalidate().getPointer());
-    }
+    EventManager::get()->sendEvent(EventAnnotationTextSubstitutionInvalidate().getPointer());
     
     return af;
 }
@@ -2174,6 +2215,83 @@ Brain::addReadOrReloadCziImageFile(const FileModeAddReadReload fileMode,
     
     
     return cziImageFile;
+}
+
+/**
+ * Read an OME-ZARR image file.
+ *
+ * @param fileMode
+ *    Mode for file adding, reading, or reloading.
+ * @param caretDataFile
+ *    File that is added or reloaded (MUST NOT BE NULL).  If NULL,
+ *    the mode must be READING.
+ * @param filename
+ *    Name of the file.
+ * @throws DataFileException
+ *    If reading failed.
+ */
+OmeZarrImageFile*
+Brain::addReadOrReloadOmeZarrImageFile(const FileModeAddReadReload fileMode,
+                                       CaretDataFile* caretDataFile,
+                                       const AString& filename)
+{
+    OmeZarrImageFile* omeZarrImageFile = NULL;
+    if (caretDataFile != NULL) {
+        omeZarrImageFile = dynamic_cast<OmeZarrImageFile*>(caretDataFile);
+        CaretAssert(omeZarrImageFile);
+    }
+    else {
+        omeZarrImageFile = new OmeZarrImageFile();
+    }
+    
+    bool addFlag  = false;
+    bool readFlag = false;
+    switch (fileMode) {
+        case FILE_MODE_ADD:
+            addFlag = true;
+            break;
+        case FILE_MODE_READ:
+            addFlag = true;
+            readFlag = true;
+            break;
+        case FILE_MODE_RELOAD:
+            readFlag = true;
+            break;
+    }
+    
+    if (readFlag) {
+        try {
+            try {
+                omeZarrImageFile->readFile(filename);
+            }
+            catch (const std::bad_alloc&) {
+                /*
+                 * This DataFileException will be caught
+                 * in the outer try/catch and it will
+                 * clean up to avoid memory leaks.
+                 */
+                throw DataFileException(filename,
+                                        CaretDataFileHelper::createBadAllocExceptionMessage(filename));
+            }
+        }
+        catch (DataFileException& dfe) {
+            if (caretDataFile != NULL) {
+                removeAndDeleteDataFile(caretDataFile);
+            }
+            else {
+                delete omeZarrImageFile;
+            }
+            throw dfe;
+        }
+    }
+    
+    if (addFlag) {
+        updateDataFileNameIfDuplicate(m_omeZarrImageFiles,
+                                      omeZarrImageFile);
+        m_omeZarrImageFiles.push_back(omeZarrImageFile);
+    }
+
+    return omeZarrImageFile;
 }
 
 /**
@@ -2699,6 +2817,9 @@ Brain::updateFiberTrajectoryMatchingFiberOrientationFiles()
          iter++) {
         CiftiFiberTrajectoryFile* trajFile = *iter;
         trajFile->updateMatchingFiberOrientationFileFromList(m_connectivityFiberOrientationFiles);
+    }
+    for (CiftiFiberTrajectoryMapFile* cftmf : m_connectivityFiberTrajectoryMapFiles) {
+        cftmf->updateMatchingFiberOrientationFileFromList(m_connectivityFiberOrientationFiles);
     }
 }
 
@@ -3406,6 +3527,83 @@ Brain::addReadOrReloadConnectivityFiberTrajectoryFile(const FileModeAddReadReloa
     }
     
     return cftf;
+}
+
+/**
+ * Read a connectivity fiber trajectory map file.
+ *
+ * @param fileMode
+ *    Mode for file adding, reading, or reloading.
+ * @param caretDataFile
+ *    File that is added or reloaded (MUST NOT BE NULL).  If NULL,
+ *    the mode must be READING.
+ * @param filename
+ *    Name of the file.
+ * @throws DataFileException
+ *    If reading failed.
+ */
+CiftiFiberTrajectoryMapFile*
+Brain::addReadOrReloadConnectivityFiberTrajectoryMapFile(const FileModeAddReadReload fileMode,
+                                                         CaretDataFile* caretDataFile,
+                                                         const AString& filename)
+{
+    CiftiFiberTrajectoryMapFile* cftmf = NULL;
+    if (caretDataFile != NULL) {
+        cftmf = dynamic_cast<CiftiFiberTrajectoryMapFile*>(caretDataFile);
+        CaretAssert(cftmf);
+    }
+    else {
+        cftmf = new CiftiFiberTrajectoryMapFile();
+    }
+    
+    bool addFlag  = false;
+    bool readFlag = false;
+    switch (fileMode) {
+        case FILE_MODE_ADD:
+            addFlag = true;
+            break;
+        case FILE_MODE_READ:
+            addFlag = true;
+            readFlag = true;
+            break;
+        case FILE_MODE_RELOAD:
+            readFlag = true;
+            break;
+    }
+    
+    if (readFlag) {
+        try {
+            try {
+                cftmf->readFile(filename);
+            }
+            catch (const std::bad_alloc&) {
+                /*
+                 * This DataFileException will be caught
+                 * in the outer try/catch and it will
+                 * clean up to avoid memory leaks.
+                 */
+                throw DataFileException(filename,
+                                        CaretDataFileHelper::createBadAllocExceptionMessage(filename));
+            }
+        }
+        catch (const DataFileException& dfe) {
+            if (caretDataFile != NULL) {
+                removeAndDeleteDataFile(caretDataFile);
+            }
+            else {
+                delete cftmf;
+            }
+            throw dfe;
+        }
+    }
+    
+    if (addFlag) {
+        updateDataFileNameIfDuplicate(m_connectivityFiberTrajectoryMapFiles,
+                                      cftmf);
+        m_connectivityFiberTrajectoryMapFiles.push_back(cftmf);
+    }
+    
+    return cftmf;
 }
 
 /**
@@ -4514,6 +4712,52 @@ Brain::getConnectivityFiberTrajectoryFiles(std::vector<CiftiFiberTrajectoryFile*
 }
 
 /**
+ * @return Number of connectivity fiber trajectory map files.
+ */
+int32_t
+Brain::getNumberOfConnectivityFiberTrajectoryMapFiles() const
+{
+    return m_connectivityFiberTrajectoryMapFiles.size();
+}
+
+/**
+ * Get the connectivity fiber trajectory map file at the given index.
+ * @param indx
+ *    Index of file.
+ * @return Conectivity fiber trajectory map file at index.
+ */
+CiftiFiberTrajectoryMapFile*
+Brain::getConnectivityFiberTrajectoryMapFile(int32_t indx)
+{
+    CaretAssertVectorIndex(m_connectivityFiberTrajectoryMapFiles, indx);
+    return m_connectivityFiberTrajectoryMapFiles[indx];
+}
+
+/**
+ * Get the connectivity fiber trajectory map file at the given index.
+ * @param indx
+ *    Index of file.
+ * @return Conectivity fiber trajectory map file at index.
+ */
+const CiftiFiberTrajectoryMapFile*
+Brain::getConnectivityFiberTrajectoryMapFile(int32_t indx) const
+{
+    CaretAssertVectorIndex(m_connectivityFiberTrajectoryMapFiles, indx);
+    return m_connectivityFiberTrajectoryMapFiles[indx];
+}
+
+/**
+ * Get ALL connectivity fiber trajectory map files.
+ * @param connectivityFiberTrajectoryMapFilesOut
+ *   Contains all connectivity fiber trajectory map files on exit.
+ */
+void
+Brain::getConnectivityFiberTrajectoryMapFiles(std::vector<CiftiFiberTrajectoryMapFile*>& connectivityFiberTrajectoryMapFilesOut) const
+{
+    connectivityFiberTrajectoryMapFilesOut = m_connectivityFiberTrajectoryMapFiles;
+}
+
+/**
  * @return Number of cifti parcel files.
  */
 int32_t
@@ -4699,269 +4943,283 @@ Brain::addDataFile(CaretDataFile* caretDataFile)
                                                        false);
     
     const DataFileTypeEnum::Enum dataFileType = caretDataFile->getDataFileType();
-            switch (dataFileType) {
-                case DataFileTypeEnum::ANNOTATION:
-                {
-                    AnnotationFile* file = dynamic_cast<AnnotationFile*>(caretDataFile);
-                    CaretAssert(file);
-                    m_annotationFiles.push_back(file);
-                }
-                    break;
-                case DataFileTypeEnum::ANNOTATION_TEXT_SUBSTITUTION:
-                {
-                    AnnotationTextSubstitutionFile* file = dynamic_cast<AnnotationTextSubstitutionFile*>(caretDataFile);
-                    CaretAssert(file);
-                    m_annotationSubstitutionFiles.push_back(file);
-                }
-                    break;
-                case DataFileTypeEnum::BORDER:
-                {
-                    BorderFile* file = dynamic_cast<BorderFile*>(caretDataFile);
-                    CaretAssert(file);
-                    m_borderFiles.push_back(file);
-                }
-                    break;
-                case DataFileTypeEnum::CONNECTIVITY_DENSE:
-                {
-                    CiftiConnectivityMatrixDenseFile* file = dynamic_cast<CiftiConnectivityMatrixDenseFile*>(caretDataFile);
-                    CaretAssert(file);
-                    m_connectivityMatrixDenseFiles.push_back(file);
-                }
-                    break;
-                case DataFileTypeEnum::CONNECTIVITY_DENSE_DYNAMIC:
-                    CaretAssertMessage(0, "Dense Dynamic Files should never be added to Brain.");
-                    break;
-                case DataFileTypeEnum::CONNECTIVITY_DENSE_LABEL:
-                {
-                    CiftiBrainordinateLabelFile* file = dynamic_cast<CiftiBrainordinateLabelFile*>(caretDataFile);
-                    CaretAssert(file);
-                    m_connectivityDenseLabelFiles.push_back(file);
-                }
-                    break;
-                case DataFileTypeEnum::CONNECTIVITY_DENSE_PARCEL:
-                {
-                    CiftiConnectivityMatrixDenseParcelFile* file = dynamic_cast<CiftiConnectivityMatrixDenseParcelFile*>(caretDataFile);
-                    CaretAssert(file);
-                    m_connectivityMatrixDenseParcelFiles.push_back(file);
-                }
-                    break;
-                case DataFileTypeEnum::CONNECTIVITY_DENSE_SCALAR:
-                {
-                    CiftiBrainordinateScalarFile* file = dynamic_cast<CiftiBrainordinateScalarFile*>(caretDataFile);
-                    CaretAssert(file);
-                    m_connectivityDenseScalarFiles.push_back(file);
-                }
-                    break;
-                case DataFileTypeEnum::CONNECTIVITY_DENSE_TIME_SERIES:
-                {
-                    CiftiBrainordinateDataSeriesFile* file = dynamic_cast<CiftiBrainordinateDataSeriesFile*>(caretDataFile);
-                    CaretAssert(file);
-                    initializeDenseDataSeriesFile(file);
-                    m_connectivityDataSeriesFiles.push_back(file);
-                }
-                    break;
-                case DataFileTypeEnum::CONNECTIVITY_FIBER_ORIENTATIONS_TEMPORARY:
-                {
-                    CiftiFiberOrientationFile* file = dynamic_cast<CiftiFiberOrientationFile*>(caretDataFile);
-                    CaretAssert(file);
-                    m_connectivityFiberOrientationFiles.push_back(file);
-                }
-                    break;
-                case DataFileTypeEnum::CONNECTIVITY_FIBER_TRAJECTORY_TEMPORARY:
-                {
-                    CiftiFiberTrajectoryFile* file = dynamic_cast<CiftiFiberTrajectoryFile*>(caretDataFile);
-                    CaretAssert(file);
-                    m_connectivityFiberTrajectoryFiles.push_back(file);
-                }
-                    break;
-                case DataFileTypeEnum::CONNECTIVITY_PARCEL:
-                {
-                    CiftiConnectivityMatrixParcelFile* file = dynamic_cast<CiftiConnectivityMatrixParcelFile*>(caretDataFile);
-                    CaretAssert(file);
-                    m_connectivityMatrixParcelFiles.push_back(file);
-                }
-                    break;
-                case DataFileTypeEnum::CONNECTIVITY_PARCEL_DENSE:
-                {
-                    CiftiConnectivityMatrixParcelDenseFile* file = dynamic_cast<CiftiConnectivityMatrixParcelDenseFile*>(caretDataFile);
-                    CaretAssert(file);
-                    m_connectivityMatrixParcelDenseFiles.push_back(file);
-                }
-                    break;
-                case DataFileTypeEnum::CONNECTIVITY_PARCEL_DYNAMIC:
-                    CaretAssertMessage(0, "Parcel Dynamic Files should never be added to Brain.");
-                    break;
-                case DataFileTypeEnum::CONNECTIVITY_PARCEL_LABEL:
-                {
-                    CiftiParcelLabelFile* file = dynamic_cast<CiftiParcelLabelFile*>(caretDataFile);
-                    CaretAssert(file);
-                    m_connectivityParcelLabelFiles.push_back(file);
-                }
-                    break;
-                case DataFileTypeEnum::CONNECTIVITY_PARCEL_SCALAR:
-                {
-                    CiftiParcelScalarFile* file = dynamic_cast<CiftiParcelScalarFile*>(caretDataFile);
-                    CaretAssert(file);
-                    m_connectivityParcelScalarFiles.push_back(file);
-                }
-                    break;
-                case DataFileTypeEnum::CONNECTIVITY_PARCEL_SERIES:
-                {
-                    CiftiParcelSeriesFile* file = dynamic_cast<CiftiParcelSeriesFile*>(caretDataFile);
-                    CaretAssert(file);
-                    initializeParcelSeriesFile(file);
-                    m_connectivityParcelSeriesFiles.push_back(file);
-                }
-                    break;
-                case DataFileTypeEnum::CONNECTIVITY_SCALAR_DATA_SERIES:
-                {
-                    CiftiScalarDataSeriesFile* file = dynamic_cast<CiftiScalarDataSeriesFile*>(caretDataFile);
-                    CaretAssert(file);
-                    m_connectivityScalarDataSeriesFiles.push_back(file);
-                }
-                    break;
-                case DataFileTypeEnum::CZI_IMAGE_FILE:
-                {
-                    CziImageFile* file = dynamic_cast<CziImageFile*>(caretDataFile);
-                    CaretAssert(file);
-                    m_cziImageFiles.push_back(file);
-                }
-                    break;
-                case DataFileTypeEnum::FOCI:
-                {
-                    FociFile* file = dynamic_cast<FociFile*>(caretDataFile);
-                    CaretAssert(file);
-                    m_fociFiles.push_back(file);
-                }
-                    break;
-                case DataFileTypeEnum::HISTOLOGY_SLICES:
-                {
-                    HistologySlicesFile* file(dynamic_cast<HistologySlicesFile*>(caretDataFile));
-                    CaretAssert(file);
-                    m_histologySlicesFiles.push_back(file);
-                }
-                    break;
-                case DataFileTypeEnum::IMAGE:
-                {
-                    ImageFile* file = dynamic_cast<ImageFile*>(caretDataFile);
-                    CaretAssert(file);
-                    m_imageFiles.push_back(file);
-                }
-                    break;
-                case DataFileTypeEnum::LABEL:
-                {
-                    LabelFile* file = dynamic_cast<LabelFile*>(caretDataFile);
-                    CaretAssert(file);
-                    if (structure == StructureEnum::INVALID) {
-                        throw DataFileException(file->getFileName(),
-                                                "Structure in label file is INVALID.");
-                    }
-                    if (brainStructure == NULL) {
-                        throw DataFileException(file->getFileName(),
-                                                "Must load surface(s) with matching structure prior to label files");
-                    }
-                    brainStructure->addLabelFile(file,
-                                                 true);
-                }
-                    break;
-                case DataFileTypeEnum::METRIC:
-                {
-                    MetricFile* file = dynamic_cast<MetricFile*>(caretDataFile);
-                    CaretAssert(file);
-                    if (structure == StructureEnum::INVALID) {
-                        throw DataFileException(file->getFileName(),
-                                                "Structure in metric file is INVALID.");
-                    }
-                    if (brainStructure == NULL) {
-                        throw DataFileException(file->getFileName(),
-                                                "Must load surface(s) with matching structure prior to metric files");
-                    }
-                    brainStructure->addMetricFile(file,
-                                                 true);
-                }
-                    break;
-                case DataFileTypeEnum::METRIC_DYNAMIC:
-                    CaretAssertMessage(0, "Metric dynamic files should never be added to brain");
-                    break;
-                case DataFileTypeEnum::PALETTE:
-                {
-                    throw DataFileException(caretDataFile->getFileName(),
-                                            "Adding palette files not supported at this time.");
-                }
-                    break;
-                case DataFileTypeEnum::RGBA:
-                {
-                    RgbaFile* file = dynamic_cast<RgbaFile*>(caretDataFile);
-                    CaretAssert(file);
-                    if (structure == StructureEnum::INVALID) {
-                        throw DataFileException(file->getFileName(),
-                                                "Structure in rgba file is INVALID.");
-                    }
-                    if (brainStructure == NULL) {
-                        throw DataFileException(file->getFileName(),
-                                                "Must load surface(s) with matching structure prior to label files");
-                    }
-                    brainStructure->addRgbaFile(file,
-                                                 true);
-                }
-                    break;
-                case DataFileTypeEnum::SAMPLES:
-                {
-                    SamplesFile* file = dynamic_cast<SamplesFile*>(caretDataFile);
-                    CaretAssert(file);
-                    m_samplesFiles.push_back(file);
-                }
-                    break;
-                case DataFileTypeEnum::SCENE:
-                {
-                    SceneFile* file = dynamic_cast<SceneFile*>(caretDataFile);
-                    CaretAssert(file);
-                    m_sceneFiles.push_back(file);
-                }
-                    break;
-                case DataFileTypeEnum::SPECIFICATION:
-                    CaretLogSevere("PROGRAM ERROR: Reading spec file should never call Brain::addReadOrReloadDataFile()");
-                    throw DataFileException(caretDataFile->getFileName(),
-                                            "PROGRAM ERROR: Reading spec file should never call Brain::addReadOrReloadDataFile()");
-                    break;
-                case DataFileTypeEnum::SURFACE:
-                {
-                    Surface* file = dynamic_cast<Surface*>(caretDataFile);
-                    if (structure == StructureEnum::INVALID) {
-                        throw DataFileException(file->getFileName(),
-                                                "Structure in surface file is INVALID.");
-                    }
-                    if (file == NULL) {
-                        throw DataFileException(file->getFileName(),
-                                                "Cannot add SurfaceFile but can add a Surface.");
-                    }
-                    if (brainStructure == NULL) {
-                        brainStructure = getBrainStructure(structure,
-                                                           true);
-                    }
-                    brainStructure->addSurface(file,
-                                               true,
-                                               true);
-                }
-                    break;
-                case DataFileTypeEnum::UNKNOWN:
-                    throw DataFileException(caretDataFile->getFileName(),
-                                            "Unable to read files of type UNKNOWN.  Filename extension may be invalid.");
-                    break;
-                case DataFileTypeEnum::VOLUME:
-                {
-                    VolumeFile* file = dynamic_cast<VolumeFile*>(caretDataFile);
-                    CaretAssert(file);
-                    initializeVolumeFile(file);
-                    m_volumeFiles.push_back(file);
-                }
-                    break;
-                case DataFileTypeEnum::VOLUME_DYNAMIC:
-                    CaretAssertMessage(0, "Volume Dynamic files are never added to the brain");
-                    break;
+    switch (dataFileType) {
+        case DataFileTypeEnum::ANNOTATION:
+        {
+            AnnotationFile* file = dynamic_cast<AnnotationFile*>(caretDataFile);
+            CaretAssert(file);
+            m_annotationFiles.push_back(file);
+        }
+            break;
+        case DataFileTypeEnum::ANNOTATION_TEXT_SUBSTITUTION:
+        {
+            AnnotationTextSubstitutionFile* file = dynamic_cast<AnnotationTextSubstitutionFile*>(caretDataFile);
+            CaretAssert(file);
+            m_annotationSubstitutionFiles.push_back(file);
+        }
+            break;
+        case DataFileTypeEnum::BORDER:
+        {
+            BorderFile* file = dynamic_cast<BorderFile*>(caretDataFile);
+            CaretAssert(file);
+            m_borderFiles.push_back(file);
+        }
+            break;
+        case DataFileTypeEnum::CONNECTIVITY_DENSE:
+        {
+            CiftiConnectivityMatrixDenseFile* file = dynamic_cast<CiftiConnectivityMatrixDenseFile*>(caretDataFile);
+            CaretAssert(file);
+            m_connectivityMatrixDenseFiles.push_back(file);
+        }
+            break;
+        case DataFileTypeEnum::CONNECTIVITY_DENSE_DYNAMIC:
+            CaretAssertMessage(0, "Dense Dynamic Files should never be added to Brain.");
+            break;
+        case DataFileTypeEnum::CONNECTIVITY_DENSE_LABEL:
+        {
+            CiftiBrainordinateLabelFile* file = dynamic_cast<CiftiBrainordinateLabelFile*>(caretDataFile);
+            CaretAssert(file);
+            m_connectivityDenseLabelFiles.push_back(file);
+        }
+            break;
+        case DataFileTypeEnum::CONNECTIVITY_DENSE_PARCEL:
+        {
+            CiftiConnectivityMatrixDenseParcelFile* file = dynamic_cast<CiftiConnectivityMatrixDenseParcelFile*>(caretDataFile);
+            CaretAssert(file);
+            m_connectivityMatrixDenseParcelFiles.push_back(file);
+        }
+            break;
+        case DataFileTypeEnum::CONNECTIVITY_DENSE_SCALAR:
+        {
+            CiftiBrainordinateScalarFile* file = dynamic_cast<CiftiBrainordinateScalarFile*>(caretDataFile);
+            CaretAssert(file);
+            m_connectivityDenseScalarFiles.push_back(file);
+        }
+            break;
+        case DataFileTypeEnum::CONNECTIVITY_DENSE_TIME_SERIES:
+        {
+            CiftiBrainordinateDataSeriesFile* file = dynamic_cast<CiftiBrainordinateDataSeriesFile*>(caretDataFile);
+            CaretAssert(file);
+            initializeDenseDataSeriesFile(file);
+            m_connectivityDataSeriesFiles.push_back(file);
+        }
+            break;
+        case DataFileTypeEnum::CONNECTIVITY_FIBER_ORIENTATIONS_TEMPORARY:
+        {
+            CiftiFiberOrientationFile* file = dynamic_cast<CiftiFiberOrientationFile*>(caretDataFile);
+            CaretAssert(file);
+            m_connectivityFiberOrientationFiles.push_back(file);
+        }
+            break;
+        case DataFileTypeEnum::CONNECTIVITY_FIBER_TRAJECTORY_TEMPORARY:
+        {
+            CiftiFiberTrajectoryFile* file = dynamic_cast<CiftiFiberTrajectoryFile*>(caretDataFile);
+            CaretAssert(file);
+            m_connectivityFiberTrajectoryFiles.push_back(file);
+        }
+            break;
+        case DataFileTypeEnum::CONNECTIVITY_FIBER_TRAJECTORY_MAPS:
+        {
+            CiftiFiberTrajectoryMapFile* file = dynamic_cast<CiftiFiberTrajectoryMapFile*>(caretDataFile);
+            CaretAssert(file);
+            m_connectivityFiberTrajectoryMapFiles.push_back(file);
+        }
+            break;
+        case DataFileTypeEnum::CONNECTIVITY_PARCEL:
+        {
+            CiftiConnectivityMatrixParcelFile* file = dynamic_cast<CiftiConnectivityMatrixParcelFile*>(caretDataFile);
+            CaretAssert(file);
+            m_connectivityMatrixParcelFiles.push_back(file);
+        }
+            break;
+        case DataFileTypeEnum::CONNECTIVITY_PARCEL_DENSE:
+        {
+            CiftiConnectivityMatrixParcelDenseFile* file = dynamic_cast<CiftiConnectivityMatrixParcelDenseFile*>(caretDataFile);
+            CaretAssert(file);
+            m_connectivityMatrixParcelDenseFiles.push_back(file);
+        }
+            break;
+        case DataFileTypeEnum::CONNECTIVITY_PARCEL_DYNAMIC:
+            CaretAssertMessage(0, "Parcel Dynamic Files should never be added to Brain.");
+            break;
+        case DataFileTypeEnum::CONNECTIVITY_PARCEL_LABEL:
+        {
+            CiftiParcelLabelFile* file = dynamic_cast<CiftiParcelLabelFile*>(caretDataFile);
+            CaretAssert(file);
+            m_connectivityParcelLabelFiles.push_back(file);
+        }
+            break;
+        case DataFileTypeEnum::CONNECTIVITY_PARCEL_SCALAR:
+        {
+            CiftiParcelScalarFile* file = dynamic_cast<CiftiParcelScalarFile*>(caretDataFile);
+            CaretAssert(file);
+            m_connectivityParcelScalarFiles.push_back(file);
+        }
+            break;
+        case DataFileTypeEnum::CONNECTIVITY_PARCEL_SERIES:
+        {
+            CiftiParcelSeriesFile* file = dynamic_cast<CiftiParcelSeriesFile*>(caretDataFile);
+            CaretAssert(file);
+            initializeParcelSeriesFile(file);
+            m_connectivityParcelSeriesFiles.push_back(file);
+        }
+            break;
+        case DataFileTypeEnum::CONNECTIVITY_SCALAR_DATA_SERIES:
+        {
+            CiftiScalarDataSeriesFile* file = dynamic_cast<CiftiScalarDataSeriesFile*>(caretDataFile);
+            CaretAssert(file);
+            m_connectivityScalarDataSeriesFiles.push_back(file);
+        }
+            break;
+        case DataFileTypeEnum::CZI_IMAGE_FILE:
+        {
+            CziImageFile* file = dynamic_cast<CziImageFile*>(caretDataFile);
+            CaretAssert(file);
+            m_cziImageFiles.push_back(file);
+        }
+            break;
+        case DataFileTypeEnum::FOCI:
+        {
+            FociFile* file = dynamic_cast<FociFile*>(caretDataFile);
+            CaretAssert(file);
+            m_fociFiles.push_back(file);
+        }
+            break;
+        case DataFileTypeEnum::HISTOLOGY_SLICES:
+        {
+            HistologySlicesFile* file(dynamic_cast<HistologySlicesFile*>(caretDataFile));
+            CaretAssert(file);
+            m_histologySlicesFiles.push_back(file);
+        }
+            break;
+        case DataFileTypeEnum::IMAGE:
+        {
+            ImageFile* file = dynamic_cast<ImageFile*>(caretDataFile);
+            CaretAssert(file);
+            m_imageFiles.push_back(file);
+        }
+            break;
+        case DataFileTypeEnum::LABEL:
+        {
+            LabelFile* file = dynamic_cast<LabelFile*>(caretDataFile);
+            CaretAssert(file);
+            if (structure == StructureEnum::INVALID) {
+                throw DataFileException(file->getFileName(),
+                                        "Structure in label file is INVALID.");
             }
-            
-            m_specFile->addCaretDataFile(caretDataFile);
+            if (brainStructure == NULL) {
+                throw DataFileException(file->getFileName(),
+                                        "Must load surface(s) with matching structure prior to label files");
+            }
+            brainStructure->addLabelFile(file,
+                                         true);
+        }
+            break;
+        case DataFileTypeEnum::METRIC:
+        {
+            MetricFile* file = dynamic_cast<MetricFile*>(caretDataFile);
+            CaretAssert(file);
+            if (structure == StructureEnum::INVALID) {
+                throw DataFileException(file->getFileName(),
+                                        "Structure in metric file is INVALID.");
+            }
+            if (brainStructure == NULL) {
+                throw DataFileException(file->getFileName(),
+                                        "Must load surface(s) with matching structure prior to metric files");
+            }
+            brainStructure->addMetricFile(file,
+                                          true);
+        }
+            break;
+        case DataFileTypeEnum::METRIC_DYNAMIC:
+            CaretAssertMessage(0, "Metric dynamic files should never be added to brain");
+            break;
+        case DataFileTypeEnum::OME_ZARR_IMAGE_FILE:
+        {
+            OmeZarrImageFile* file(dynamic_cast<OmeZarrImageFile*>(caretDataFile));
+            CaretAssert(file);
+            m_omeZarrImageFiles.push_back(file);
+        }
+            break;
+        case DataFileTypeEnum::PALETTE:
+        {
+            throw DataFileException(caretDataFile->getFileName(),
+                                    "Adding palette files not supported at this time.");
+        }
+            break;
+        case DataFileTypeEnum::RGBA:
+        {
+            RgbaFile* file = dynamic_cast<RgbaFile*>(caretDataFile);
+            CaretAssert(file);
+            if (structure == StructureEnum::INVALID) {
+                throw DataFileException(file->getFileName(),
+                                        "Structure in rgba file is INVALID.");
+            }
+            if (brainStructure == NULL) {
+                throw DataFileException(file->getFileName(),
+                                        "Must load surface(s) with matching structure prior to label files");
+            }
+            brainStructure->addRgbaFile(file,
+                                        true);
+        }
+            break;
+        case DataFileTypeEnum::SAMPLES:
+        {
+            SamplesFile* file = dynamic_cast<SamplesFile*>(caretDataFile);
+            CaretAssert(file);
+            m_samplesFiles.push_back(file);
+        }
+            break;
+        case DataFileTypeEnum::SCENE:
+        {
+            SceneFile* file = dynamic_cast<SceneFile*>(caretDataFile);
+            CaretAssert(file);
+            m_sceneFiles.push_back(file);
+        }
+            break;
+        case DataFileTypeEnum::SPECIFICATION:
+            CaretLogSevere("PROGRAM ERROR: Reading spec file should never call Brain::addReadOrReloadDataFile()");
+            throw DataFileException(caretDataFile->getFileName(),
+                                    "PROGRAM ERROR: Reading spec file should never call Brain::addReadOrReloadDataFile()");
+            break;
+        case DataFileTypeEnum::SURFACE:
+        {
+            Surface* file = dynamic_cast<Surface*>(caretDataFile);
+            if (structure == StructureEnum::INVALID) {
+                throw DataFileException(file->getFileName(),
+                                        "Structure in surface file is INVALID.");
+            }
+            if (file == NULL) {
+                throw DataFileException(file->getFileName(),
+                                        "Cannot add SurfaceFile but can add a Surface.");
+            }
+            if (brainStructure == NULL) {
+                brainStructure = getBrainStructure(structure,
+                                                   true);
+            }
+            brainStructure->addSurface(file,
+                                       true,
+                                       true);
+        }
+            break;
+        case DataFileTypeEnum::UNKNOWN:
+            throw DataFileException(caretDataFile->getFileName(),
+                                    "Unable to read files of type UNKNOWN.  Filename extension may be invalid.");
+            break;
+        case DataFileTypeEnum::VOLUME:
+        {
+            VolumeFile* file = dynamic_cast<VolumeFile*>(caretDataFile);
+            CaretAssert(file);
+            initializeVolumeFile(file);
+            m_volumeFiles.push_back(file);
+        }
+            break;
+        case DataFileTypeEnum::VOLUME_DYNAMIC:
+            CaretAssertMessage(0, "Volume Dynamic files are never added to the brain");
+            break;
+    }
+    
+    m_specFile->addCaretDataFile(caretDataFile);
 }
 
 /**
@@ -5053,7 +5311,23 @@ Brain::getBorderFile(const int32_t indx) const
 }
 
 /**
- * @return All image files.
+ * Get border file that best matches the given border file name (right-most match)
+ * @param borderFileName
+ *    Name of border file
+ * @return
+ *    Pointer to best matching file or NULL if not found.
+ */
+const BorderFile*
+Brain::getBorderFileMatchingToName(const AString& borderFileName) const
+{
+    BorderFile* borderFile = findFileWithName(m_borderFiles,
+                                              borderFileName);
+    return borderFile;
+}
+
+
+/**
+ * @return All CZI image files.
  */
 const std::vector<CziImageFile*>
 Brain::getAllCziImageFiles() const
@@ -5062,7 +5336,7 @@ Brain::getAllCziImageFiles() const
 }
 
 /**
- * @return Number of image files.
+ * @return Number of CZI image files.
  */
 int32_t
 Brain::getNumberOfCziImageFiles() const
@@ -5071,7 +5345,7 @@ Brain::getNumberOfCziImageFiles() const
 }
 
 /**
- * @return The image file.
+ * @return The  CZI image file.
  * @param indx Index of the image file.
  */
 CziImageFile*
@@ -5082,7 +5356,7 @@ Brain::getCziImageFile(const int32_t indx)
 }
 
 /**
- * @return The image file.
+ * @return The CZI  image file.
  * @param indx Index of the image file.
  */
 const CziImageFile*
@@ -5090,6 +5364,47 @@ Brain::getCziImageFile(const int32_t indx) const
 {
     CaretAssertVectorIndex(m_cziImageFiles, indx);
     return m_cziImageFiles[indx];
+}
+
+
+/**
+ * @return All OME ZARR  image files.
+ */
+const std::vector<OmeZarrImageFile*>
+Brain::getAllOmeZarrImageFiles() const
+{
+    return m_omeZarrImageFiles;
+}
+
+/**
+ * @return Number of OME ZARR image files.
+ */
+int32_t
+Brain::getNumberOfOmeZarrImageFiles() const
+{
+    return m_omeZarrImageFiles.size();
+}
+
+/**
+ * @return The  OME ZARR image file.
+ * @param indx Index of the image file.
+ */
+OmeZarrImageFile*
+Brain::getOmeZarrImageFile(const int32_t indx)
+{
+    CaretAssertVectorIndex(m_omeZarrImageFiles, indx);
+    return m_omeZarrImageFiles[indx];
+}
+
+/**
+ * @return The OME ZARR  image file.
+ * @param indx Index of the image file.
+ */
+const OmeZarrImageFile*
+Brain::getOmeZarrImageFile(const int32_t indx) const
+{
+    CaretAssertVectorIndex(m_omeZarrImageFiles, indx);
+    return m_omeZarrImageFiles[indx];
 }
 
 /**
@@ -5161,6 +5476,21 @@ Brain::getFociFile(const int32_t indx) const
 {
     CaretAssertVectorIndex(m_fociFiles, indx);
     return m_fociFiles[indx];
+}
+
+/**
+ * Get foci file that best matches the given foci file name (right-most match)
+ * @param fociFileName
+ *    Name of foci file
+ * @return
+ *    Pointer to best matching file or NULL if not found.
+ */
+const FociFile*
+Brain::getFociFileMatchingToName(const AString& fociFileName) const
+{
+    FociFile* fociFile = findFileWithName(m_fociFiles,
+                                          fociFileName);
+    return fociFile;
 }
 
 /**
@@ -5313,6 +5643,35 @@ Brain::addReadOrReloadSamplesFile(const FileModeAddReadReload fileMode,
     
     return sf;
 }
+
+/**
+ * Copy all samples in the given samples file to surfaces
+ * @param samplesFile
+ *    The samples file
+ */
+FunctionResult
+Brain::copySamplesToSurfaces(const SamplesFile* samplesFile)
+{
+    CaretAssert(samplesFile);
+    
+    FunctionResultValue<std::vector<Surface*>> surfacesResult(AnnotationManager::exportAllSamplesToSurfaces(samplesFile));
+    std::vector<Surface*> allSurfaces(surfacesResult.getValue());
+    
+    for (Surface* ss : allSurfaces) {
+        const bool modifiedFlag(true);
+        addReadOrReloadDataFile(FILE_MODE_ADD,
+                                ss,
+                                DataFileTypeEnum::Enum::SURFACE,
+                                ss->getStructure(),
+                                ss->getFileName(),
+                                modifiedFlag);
+        ss->setModified();
+    }
+    
+    return FunctionResult(surfacesResult.getErrorMessage(),
+                          surfacesResult.isOk());
+}
+
 
 /**
  * @return Number of scene files.
@@ -5646,7 +6005,8 @@ Brain::updateMediaModel()
 {
     bool isValid = false;
     const int32_t numMediaFiles(getNumberOfCziImageFiles()
-                                + getNumberOfImageFiles());
+                                + getNumberOfImageFiles()
+                                + getNumberOfOmeZarrImageFiles());
     if (numMediaFiles > 0) {
         isValid = true;
     }
@@ -5867,12 +6227,14 @@ Brain::getReloadableDataFiles() const
                 break;
             case DataFileTypeEnum::CONNECTIVITY_FIBER_TRAJECTORY_TEMPORARY:
                 break;
+            case DataFileTypeEnum::CONNECTIVITY_FIBER_TRAJECTORY_MAPS:
+                break;
             case DataFileTypeEnum::CONNECTIVITY_PARCEL:
                 break;
             case DataFileTypeEnum::CONNECTIVITY_PARCEL_DENSE:
                 break;
             case DataFileTypeEnum::CONNECTIVITY_PARCEL_DYNAMIC:
-                reloadFlag = true;
+                reloadFlag = false;
                 break;
             case DataFileTypeEnum::CONNECTIVITY_PARCEL_LABEL:
                 break;
@@ -5896,6 +6258,8 @@ Brain::getReloadableDataFiles() const
                 break;
             case DataFileTypeEnum::METRIC_DYNAMIC:
                 reloadFlag = false;
+                break;
+            case DataFileTypeEnum::OME_ZARR_IMAGE_FILE:
                 break;
             case DataFileTypeEnum::PALETTE:
                 reloadFlag = false;
@@ -6177,6 +6541,11 @@ Brain::addReadOrReloadDataFile(const FileModeAddReadReload fileMode,
                                                                         caretDataFile,
                                                                         dataFileName);
                 break;
+            case DataFileTypeEnum::CONNECTIVITY_FIBER_TRAJECTORY_MAPS:
+                caretDataFileRead = addReadOrReloadConnectivityFiberTrajectoryMapFile(fileMode,
+                                                                                      caretDataFile,
+                                                                                      dataFileName);
+                break;
             case DataFileTypeEnum::CONNECTIVITY_PARCEL:
                 caretDataFileRead  = addReadOrReloadConnectivityMatrixParcelFile(fileMode,
                                                                      caretDataFile,
@@ -6246,6 +6615,11 @@ Brain::addReadOrReloadDataFile(const FileModeAddReadReload fileMode,
                 break;
             case DataFileTypeEnum::METRIC_DYNAMIC:
                 CaretAssertMessage(0, "Metric dynamic files are never read by Brain");
+                break;
+            case DataFileTypeEnum::OME_ZARR_IMAGE_FILE:
+                caretDataFileRead = addReadOrReloadOmeZarrImageFile(fileMode,
+                                                                    caretDataFile,
+                                                                    dataFileName);
                 break;
             case DataFileTypeEnum::PALETTE:
                 caretDataFileRead  = addReadOrReloadPaletteFile(fileMode,
@@ -6413,6 +6787,8 @@ Brain::updateAfterFilesAddedOrRemoved()
     updateMediaModel();
     
     updateFiberTrajectoryMatchingFiberOrientationFiles();
+    
+    m_annotationTextSubstitutionLayerSet->updateContent();
 }
 
 /**
@@ -6542,16 +6918,6 @@ Brain::loadFilesSelectedInSpecFile(EventSpecFileReadDataFiles* readSpecFileDataF
     m_paletteFile->setFileName(convertFilePathNameToAbsolutePathName(m_paletteFile->getFileNameNoPath()));
     m_paletteFile->clearModified();
     
-
-    
-    
-//    CaretLogSevere("Adding an annotation file for testing to the Brain."
-//                   "NOTE: THIS WILL CAUSE A PRINTOUT OF UNDELETED OBJECTS since this file is "
-//                   "added inside of resetBrain() which does all file deletion.");
-//    AnnotationFile* testingAnnFile = new AnnotationFile();
-//    testingAnnFile->setFileName("Testing." + DataFileTypeEnum::toFileExtension(DataFileTypeEnum::ANNOTATION));
-//    addDataFile(testingAnnFile);
-    
     sortDataFilesByFileNameNoPath();
 
     /*
@@ -6609,6 +6975,7 @@ Brain::sortDataFilesByFileNameNoPath()
 {
     sortDataFileTypeByFileNameNoPath(m_cziImageFiles);
     sortDataFileTypeByFileNameNoPath(m_imageFiles);
+    sortDataFileTypeByFileNameNoPath(m_omeZarrImageFiles);
 }
 
 /**
@@ -7029,6 +7396,10 @@ Brain::receiveEvent(Event* event)
         
         std::vector<CaretDataFile*> caretDataFiles;
         getAllDataFiles(caretDataFiles);
+        if ( ! getSceneAnnotationFile()->isEmpty()) {
+            caretDataFiles.insert(caretDataFiles.begin(),
+                                  getSceneAnnotationFile());
+        }
         filesEvent->addAllCaretDataFiles(caretDataFiles);
         filesEvent->setEventProcessed();
     }
@@ -7048,6 +7419,24 @@ Brain::receiveEvent(Event* event)
         
         dataFilesEvent->setEventProcessed();
     }
+    else if (event->getEventType() == EventTypeEnum::EVENT_FOCUS_FILE_GET_COLOR) {
+        EventFocusFileGetColor* focusEvent(dynamic_cast<EventFocusFileGetColor*>(event));
+        CaretAssert(focusEvent);
+        
+        FociFile* fociFile(findFileWithName(m_fociFiles,
+                                            focusEvent->getFociFileName()));
+        if (fociFile != NULL) {
+            const auto result(fociFile->getNameOrClassColor(focusEvent->getSamplesColorMode(),
+                                                            focusEvent->getFocusOrClassName()));
+            if (result.isOk()) {
+                focusEvent->setColorRGBA(result.getValue());
+            }
+            else {
+                focusEvent->setErrorMessage(result.getErrorMessage());
+            }
+            focusEvent->setEventProcessed();
+        }
+    }
     else if (event->getEventType() == EventTypeEnum::EVENT_HISTOLOGY_SLICES_FILES_GET) {
         EventHistologySlicesFilesGet* histologyEvent(dynamic_cast<EventHistologySlicesFilesGet*>(event));
         CaretAssert(histologyEvent);
@@ -7065,6 +7454,9 @@ Brain::receiveEvent(Event* event)
             mediaEvent->addMediaFile(f);
         }
         for (auto f : m_imageFiles) {
+            mediaEvent->addMediaFile(f);
+        }
+        for (auto f: m_omeZarrImageFiles) {
             mediaEvent->addMediaFile(f);
         }
         
@@ -7620,6 +8012,10 @@ Brain::getAllDataFiles(std::vector<CaretDataFile*>& allDataFilesOut,
                            m_connectivityMatrixDenseFiles.end());
     
     allDataFilesOut.insert(allDataFilesOut.end(),
+                           m_omeZarrImageFiles.begin(),
+                           m_omeZarrImageFiles.end());
+    
+    allDataFilesOut.insert(allDataFilesOut.end(),
                            m_samplesFiles.begin(),
                            m_samplesFiles.end());
     
@@ -7659,6 +8055,10 @@ Brain::getAllDataFiles(std::vector<CaretDataFile*>& allDataFilesOut,
                            m_connectivityFiberTrajectoryFiles.end());
     
     allDataFilesOut.insert(allDataFilesOut.end(),
+                           m_connectivityFiberTrajectoryMapFiles.begin(),
+                           m_connectivityFiberTrajectoryMapFiles.end());
+    
+    allDataFilesOut.insert(allDataFilesOut.end(),
                            m_connectivityMatrixParcelFiles.begin(),
                            m_connectivityMatrixParcelFiles.end());
     
@@ -7692,11 +8092,18 @@ Brain::getAllDataFiles(std::vector<CaretDataFile*>& allDataFilesOut,
                               m_sceneFiles.begin(),
                               m_sceneFiles.end());
     
-    for (auto vf : m_volumeFiles) {
+    for (auto& vf : m_volumeFiles) {
         allDataFilesOut.push_back(vf);
         VolumeDynamicConnectivityFile* volDynConnFile = vf->getVolumeDynamicConnectivityFile();
         if (volDynConnFile != NULL) {
             allDataFilesOut.push_back(volDynConnFile);
+        }
+    }
+    
+    for (auto& ome : m_omeZarrImageFiles) {
+        VolumeFile* vf(ome->getImagesAsRgbaVolumeFile());
+        if (vf != NULL) {
+            allDataFilesOut.push_back(vf);
         }
     }
 }
@@ -7835,6 +8242,8 @@ Brain::writeDataFile(CaretDataFile* caretDataFile)
             break;
         case DataFileTypeEnum::CONNECTIVITY_FIBER_TRAJECTORY_TEMPORARY:
             break;
+        case DataFileTypeEnum::CONNECTIVITY_FIBER_TRAJECTORY_MAPS:
+            break;
         case DataFileTypeEnum::CONNECTIVITY_PARCEL:
             break;
         case DataFileTypeEnum::CONNECTIVITY_PARCEL_DENSE:
@@ -7862,6 +8271,8 @@ Brain::writeDataFile(CaretDataFile* caretDataFile)
         case DataFileTypeEnum::METRIC:
             break;
         case DataFileTypeEnum::METRIC_DYNAMIC:
+            break;
+        case DataFileTypeEnum::OME_ZARR_IMAGE_FILE:
             break;
         case DataFileTypeEnum::PALETTE:
             break;
@@ -7949,6 +8360,8 @@ Brain::removeWithoutDeleteDataFile(const CaretDataFile* caretDataFile)
             break;
         case DataFileTypeEnum::CONNECTIVITY_FIBER_TRAJECTORY_TEMPORARY:
             break;
+        case DataFileTypeEnum::CONNECTIVITY_FIBER_TRAJECTORY_MAPS:
+            break;
         case DataFileTypeEnum::CONNECTIVITY_SCALAR_DATA_SERIES:
             break;
         case DataFileTypeEnum::CZI_IMAGE_FILE:
@@ -7965,6 +8378,8 @@ Brain::removeWithoutDeleteDataFile(const CaretDataFile* caretDataFile)
             break;
         case DataFileTypeEnum::METRIC_DYNAMIC:
             canBeRemovedFlag = false;
+            break;
+        case DataFileTypeEnum::OME_ZARR_IMAGE_FILE:
             break;
         case DataFileTypeEnum::PALETTE:
             break;
@@ -8049,6 +8464,7 @@ Brain::removeWithoutDeleteDataFilePrivate(const CaretDataFile* caretDataFile)
                                 caretDataFile);
     if (annSubIter != m_annotationSubstitutionFiles.end()) {
         m_annotationSubstitutionFiles.erase(annSubIter);
+        EventManager::get()->sendEvent(EventAnnotationTextSubstitutionInvalidate().getPointer());
         return true;
     }
     
@@ -8150,6 +8566,14 @@ Brain::removeWithoutDeleteDataFilePrivate(const CaretDataFile* caretDataFile)
         return true;
     }
     
+    std::vector<CiftiFiberTrajectoryMapFile*>::iterator connFiberTrajectoryMapIterator(std::find(m_connectivityFiberTrajectoryMapFiles.begin(),
+                                                                                                 m_connectivityFiberTrajectoryMapFiles.end(),
+                                                                                                 caretDataFile));
+    if (connFiberTrajectoryMapIterator != m_connectivityFiberTrajectoryMapFiles.end()) {
+        m_connectivityFiberTrajectoryMapFiles.erase(connFiberTrajectoryMapIterator);
+        return true;
+    }
+    
     std::vector<CiftiConnectivityMatrixParcelFile*>::iterator connParcelIterator = std::find(m_connectivityMatrixParcelFiles.begin(),
                                                                                              m_connectivityMatrixParcelFiles.end(),
                                                                                              caretDataFile);
@@ -8187,6 +8611,14 @@ Brain::removeWithoutDeleteDataFilePrivate(const CaretDataFile* caretDataFile)
                                                           caretDataFile));
     if (histologySlicesFileIterator != m_histologySlicesFiles.end()) {
         m_histologySlicesFiles.erase(histologySlicesFileIterator);
+        return true;
+    }
+
+    std::vector<OmeZarrImageFile*>::iterator omeZarrImageFileIterator(std::find(m_omeZarrImageFiles.begin(),
+                                                                                m_omeZarrImageFiles.end(),
+                                                                                caretDataFile));
+    if (omeZarrImageFileIterator != m_omeZarrImageFiles.end()) {
+        m_omeZarrImageFiles.erase(omeZarrImageFileIterator);
         return true;
     }
     
@@ -8278,24 +8710,6 @@ const DisplayPropertiesAnnotation*
 Brain::getDisplayPropertiesAnnotation() const
 {
     return m_displayPropertiesAnnotation;
-}
-
-/**
- * @return The annotation text substitution display properties.
- */
-DisplayPropertiesAnnotationTextSubstitution*
-Brain::getDisplayPropertiesAnnotationTextSubstitution()
-{
-    return m_displayPropertiesAnnotationTextSubstitution;
-}
-
-/**
- * @return The annotation text substitution display properties.
- */
-const DisplayPropertiesAnnotationTextSubstitution*
-Brain::getDisplayPropertiesAnnotationTextSubstitution() const
-{
-    return m_displayPropertiesAnnotationTextSubstitution;
 }
 
 /**
@@ -8612,19 +9026,25 @@ Brain::saveToScene(const SceneAttributes* sceneAttributes,
          borderIter != m_borderFiles.end();
          borderIter++) {
         BorderFile* bf = *borderIter;
+        ScenePathName spn(bf->getFileNameNoPath(),
+                          bf->getFileName());
         sceneClass->addClass(bf->getGroupAndNameHierarchyModel()->saveToScene(sceneAttributes,
-                                                         bf->getFileNameNoPath()));
+                                                                              spn.getRelativePathToSceneFile(sceneAttributes->getSceneFileName())));
     }
     for (std::vector<FociFile*>::iterator fociIter = m_fociFiles.begin();
          fociIter != m_fociFiles.end();
          fociIter++) {
         FociFile* ff = *fociIter;
+        ScenePathName spn(ff->getFileNameNoPath(),
+                          ff->getFileName());
         sceneClass->addClass(ff->getGroupAndNameHierarchyModel()->saveToScene(sceneAttributes,
-                                                         ff->getFileNameNoPath()));
+                                                                              spn.getRelativePathToSceneFile(sceneAttributes->getSceneFileName())));
     }
-    for (auto lf : m_volumeFiles) {
-        sceneClass->addClass(lf->getGroupAndNameHierarchyModel()->saveToScene(sceneAttributes,
-                                                                              lf->getFileNameNoPath()));
+    for (auto vf : m_volumeFiles) {
+        ScenePathName spn(vf->getFileNameNoPath(),
+                          vf->getFileName());
+        sceneClass->addClass(vf->getGroupAndNameHierarchyModel()->saveToScene(sceneAttributes,
+                                                                              spn.getRelativePathToSceneFile(sceneAttributes->getSceneFileName())));
     }
 
     sceneClass->addClass(m_identificationManager->saveToScene(sceneAttributes,
@@ -8802,6 +9222,14 @@ Brain::restoreFromScene(const SceneAttributes* sceneAttributes,
     }
 
     /*
+     * Fiber trajectory map files need special handling after restoring a scene.
+     */
+    updateFiberTrajectoryMatchingFiberOrientationFiles();
+    for (CiftiFiberTrajectoryMapFile* cftmf : m_connectivityFiberTrajectoryMapFiles) {
+        cftmf->finishRestorationOfScene();
+    }
+    
+    /*
      * Some files are sorted by name
      */
     sortDataFilesByFileNameNoPath();
@@ -8890,7 +9318,9 @@ Brain::restoreFromScene(const SceneAttributes* sceneAttributes,
          borderIter != m_borderFiles.end();
          borderIter++) {
         BorderFile* bf = *borderIter;
-        const SceneClass* borderScene = sceneClass->getClass(bf->getFileNameNoPath());
+        const SceneClass* borderScene = sceneClass->getClassNamedWithFileName(bf->getFileName(),
+                                                                              bf->getFileNameNoPath(),
+                                                                              sceneAttributes->getSceneFileName());
         if (borderScene != NULL) {
             /*
              * WB-533 Default State of Borders in Scenes
@@ -8911,11 +9341,15 @@ Brain::restoreFromScene(const SceneAttributes* sceneAttributes,
          fociIter++) {
         FociFile* ff = *fociIter;
         ff->getGroupAndNameHierarchyModel()->restoreFromScene(sceneAttributes,
-                                                              sceneClass->getClass(ff->getFileNameNoPath()));
+                                                              sceneClass->getClassNamedWithFileName(ff->getFileName(),
+                                                                                                    ff->getFileNameNoPath(),
+                                                                                                    sceneAttributes->getSceneFileName()));
     }
     for (auto vf : m_volumeFiles) {
         vf->getGroupAndNameHierarchyModel()->restoreFromScene(sceneAttributes,
-                                                              sceneClass->getClass(vf->getFileNameNoPath()));
+                                                              sceneClass->getClassNamedWithFileName(vf->getFileName(),
+                                                                                                    vf->getFileNameNoPath(),
+                                                                                                    sceneAttributes->getSceneFileName()));
     }
 
     m_identificationManager->restoreFromScene(sceneAttributes,
@@ -8926,7 +9360,17 @@ Brain::restoreFromScene(const SceneAttributes* sceneAttributes,
     
     m_sceneAnnotationFile->clearModified();
 
+    const SceneClass* dispPropsAnnSubsSceneClass(sceneClass->getClass("displayPropertiesAnnotationTextSubstitution"));
+    if (dispPropsAnnSubsSceneClass != NULL) {
+        DisplayPropertiesAnnotationTextSubstitution dispProbsAnnSubs(this);
+        dispProbsAnnSubs.restoreFromScene(sceneAttributes, dispPropsAnnSubsSceneClass);
+        dispProbsAnnSubs.update();
+        
+        m_annotationTextSubstitutionLayerSet->restoreFromOldScene(&dispProbsAnnSubs);
+    }
+    
     EventManager::get()->sendEvent(EventAnnotationTextSubstitutionInvalidate().getPointer());
+    m_annotationTextSubstitutionLayerSet->updateContent();
     
     setSurfaceMatchingToAnatomical(m_surfaceMatchingToAnatomicalFlag);
     

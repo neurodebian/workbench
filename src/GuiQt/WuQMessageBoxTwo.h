@@ -57,17 +57,30 @@ namespace caret {
             No       = 16
         };
         
+        static int32_t createButtonMask(const StandardButton button1,
+                                        const StandardButton button2 = StandardButton::NoButton,
+                                        const StandardButton button3 = StandardButton::NoButton,
+                                        const StandardButton button4 = StandardButton::NoButton);
+
         static StandardButton critical(QWidget *parent,
                                        const QString &title,
                                        const QString &text,
                                        const int32_t buttonMask = static_cast<int32_t>(StandardButton::Ok),
                                        StandardButton defaultButton = StandardButton::NoButton);
         
+        static void criticalOk(QWidget *parent,
+                               const QString &title,
+                               const QString &text);
+        
         static StandardButton information(QWidget *parent,
                                           const QString &title,
                                           const QString &text,
                                           const int32_t buttonMask = static_cast<int32_t>(StandardButton::Ok),
                                           StandardButton defaultButton = StandardButton::NoButton);
+        
+        static void informationOk(QWidget *parent,
+                                  const QString &title,
+                                  const QString &text);
         
         static StandardButton question(QWidget *parent,
                                        const QString &title,
@@ -82,6 +95,10 @@ namespace caret {
                                       const int32_t buttonMask = static_cast<int32_t>(StandardButton::Ok),
                                       StandardButton defaultButton = StandardButton::NoButton);
         
+        static void warningOk(QWidget *parent,
+                              const QString &title,
+                              const QString &text);
+
         WuQMessageBoxTwo(const IconType icon,
                          const QString& title,
                          const QString& text,

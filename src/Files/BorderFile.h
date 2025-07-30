@@ -24,7 +24,9 @@
 
 #include "CaretDataFile.h"
 #include "CaretPointer.h"
+#include "DataFileEditorColumnContent.h"
 #include "DisplayGroupEnum.h"
+#include "FunctionResult.h"
 #include "GroupAndNameHierarchyUserInterface.h"
 
 #include <map>
@@ -37,6 +39,7 @@ namespace caret {
 
     class Border;
     class BorderPointFromSearch;
+    class DataFileEditorModel;
     class GroupAndNameHierarchyModel;
     class GiftiLabel;
     class GiftiLabelTable;
@@ -61,6 +64,14 @@ namespace caret {
         void setStructure(const StructureEnum::Enum structure);
         
         std::vector<StructureEnum::Enum> getAllBorderStructures() const;
+        
+        std::vector<AString> getAllBorderNames() const;
+        
+        std::vector<AString> getAllBorderClasses() const;
+        
+        std::vector<AString> getAllBorderNamesThatUseClass(const AString& className);
+        
+        std::vector<AString> getAllClassesForBordersWithName(const AString& borderName) const;
         
         bool splitIntoSingleStructureFiles(const std::map<StructureEnum::Enum, AString>& singleStructureFileNames,
                                            const std::map<StructureEnum::Enum, int32_t>& structureNumberOfNodes,
@@ -125,6 +136,8 @@ namespace caret {
         
         void addBorder(Border* border);
         
+        void addBorderUseColorsFromBorder(Border* border);
+        
         void removeBorder(const int32_t indx);
         
         void removeBorder(Border* border);
@@ -175,6 +188,11 @@ namespace caret {
         
         AString getObsoleteMultiStructureFormatMessage();
         
+        FunctionResultValue<DataFileEditorModel*> exportToDataFileEditorModel(const DataFileEditorColumnContent& modelContent) const;
+        
+        FunctionResult importFromDataFileEditorModel(const DataFileEditorModel& dataFileEditorModel);
+        
+
         /** XML Tag for BorderFile element */
         static const AString XML_TAG_BORDER_FILE;
         
@@ -200,6 +218,8 @@ namespace caret {
         void copyHelperBorderFile(const BorderFile& obj);
         
         void initializeBorderFile();
+        
+        void clearBorders();
         
         bool canWriteAsVersion(const int& version) const;
         

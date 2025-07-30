@@ -451,6 +451,8 @@ Overlay::getSelectionData(std::vector<CaretMappableDataFile*>& mapFilesOut,
                     break;
                 case DataFileTypeEnum::CONNECTIVITY_FIBER_TRAJECTORY_TEMPORARY:
                     break;
+                case DataFileTypeEnum::CONNECTIVITY_FIBER_TRAJECTORY_MAPS:
+                    break;
                 case DataFileTypeEnum::CONNECTIVITY_SCALAR_DATA_SERIES:
                     break;
                 case DataFileTypeEnum::CZI_IMAGE_FILE:
@@ -471,6 +473,8 @@ Overlay::getSelectionData(std::vector<CaretMappableDataFile*>& mapFilesOut,
                     CaretAssert(metricDynFile);
                     useIt = metricDynFile->isEnabledAsLayer();
                 }
+                    break;
+                case DataFileTypeEnum::OME_ZARR_IMAGE_FILE:
                     break;
                 case DataFileTypeEnum::PALETTE:
                     break;

@@ -591,6 +591,33 @@ GraphicsShape::drawSpheresByteColor(const float xyz[],
 
 
 /**
+ * Draw filled circles at the given XYZ coordinates
+ *
+ * @param xyz
+ *     XYZ-coordinate of circle
+ * @param numberOfSpheres
+ *     Number of spheres to draw
+ * @param rgba
+ *     Color for drawing.
+ * @param diameter
+ *     Diameter of the circle.
+ */
+void
+GraphicsShape::drawCirclesFilled(const float xyz[3],
+                                 const int32_t numberOfSpheres,
+                                 const uint8_t rgba[4],
+                                 const float diameter)
+{
+    for (int32_t i = 0; i < numberOfSpheres; i++) {
+        const int32_t i3(i * 3);
+        const int32_t i4(i * 4);
+        drawCircleFilled(&xyz[i3],
+                         &rgba[i4],
+                         diameter);
+    }
+}
+
+/**
  * Draw a filled circle at the given XYZ coordinate
  *
  * @param xyz
@@ -605,6 +632,9 @@ GraphicsShape::drawCircleFilled(const float xyz[3],
                              const uint8_t rgba[4],
                              const float diameter)
 {
+    glPushAttrib(GL_ENABLE_BIT);
+    glDisable(GL_LIGHTING);
+    
     const int32_t numberOfDivisions = 20;
     
     GraphicsPrimitive* circlePrimitive = NULL;
@@ -636,6 +666,8 @@ GraphicsShape::drawCircleFilled(const float xyz[3],
     glScalef(diameter, diameter, 1.0f);
     GraphicsEngineDataOpenGL::draw(circlePrimitive);
     glPopMatrix();
+    
+    glPopAttrib();
 }
 
 /**

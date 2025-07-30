@@ -23,9 +23,11 @@
 #include "DisplayGroupAndTabItemViewController.h"
 #undef __DISPLAY_GROUP_AND_TAB_ITEM_VIEW_CONTROLLER_DECLARE__
 
+#include <map>
+
 #include <QLabel>
+#include <QLineEdit>
 #include <QMenu>
-#include <QTreeWidget>
 #include <QToolButton>
 #include <QVBoxLayout>
 
@@ -42,6 +44,8 @@
 #include "EventGraphicsPaintSoonAllWindows.h"
 #include "EventManager.h"
 #include "GuiManager.h"
+#include "WuQMacroManager.h"
+#include "WuQTreeWidget.h"
 
 using namespace caret;
 
@@ -58,6 +62,10 @@ using namespace caret;
  * 
  * @param dataFileType
  *     Type of data file using this view controller.
+ * @param objectNameForMacros
+ *     Name of this object for macros
+ * @param descriptiveNameForMacros
+ *     Descriptive name for macros
  * @param browserWindowIndex
  *     The browser window containing this instance.
  * @param parent
@@ -65,36 +73,14 @@ using namespace caret;
  */
 DisplayGroupAndTabItemViewController::DisplayGroupAndTabItemViewController(const DataFileTypeEnum::Enum dataFileType,
                                                                            const int32_t browserWindowIndex,
+                                                                           const QString& objectNameForMacros,
+                                                                           const QString& descriptiveNameForMacros,
                                                                            QWidget* parent)
 : QWidget(parent),
 m_dataFileType(dataFileType),
 m_browserWindowIndex(browserWindowIndex)
 {
-    const QString onOffToolTip("<html>"
-                               "To select more than one item:<br>"
-                               "* For a contiguous selection, click an item "
-                               "and then click another item while holding down "
-                               "the SHIFT key.  <br>"
-                               "* For non-contiguous selection, select items while "
-                               "holding down the CTRL key (Command key on Apple)"
-                               "</html>");
-    m_turnOnSelectedItemsAction = new QAction("On");
-    m_turnOnSelectedItemsAction->setToolTip(onOffToolTip);
-    m_turnOnSelectedItemsAction->setCheckable(false);
-    QObject::connect(m_turnOnSelectedItemsAction, &QAction::triggered,
-                     this, &DisplayGroupAndTabItemViewController::turnOnSelectedItemsTriggered);
-    QToolButton* turnOnToolButton = new QToolButton();
-    turnOnToolButton->setDefaultAction(m_turnOnSelectedItemsAction);
-    
-    m_turnOffSelectedItemsAction = new QAction("Off");
-    m_turnOffSelectedItemsAction->setToolTip(onOffToolTip);
-    m_turnOffSelectedItemsAction->setCheckable(false);
-    QObject::connect(m_turnOffSelectedItemsAction, &QAction::triggered,
-                     this, &DisplayGroupAndTabItemViewController::turnOffSelectedItemsTriggered);
-    QToolButton* turnOffToolButton = new QToolButton();
-    turnOffToolButton->setDefaultAction(m_turnOffSelectedItemsAction);
-    
-    m_treeWidget = new QTreeWidget();
+    m_treeWidget = new WuQTreeWidget();
     m_treeWidget->setHeaderHidden(true);
     m_treeWidget->setSelectionMode(QTreeWidget::NoSelection);
     
@@ -110,17 +96,11 @@ m_browserWindowIndex(browserWindowIndex)
     QObject::connect(m_treeWidget, &QTreeWidget::customContextMenuRequested,
                      this, &DisplayGroupAndTabItemViewController::displayContextMenu);
     
-    QHBoxLayout* buttonLayout = new QHBoxLayout();
-    buttonLayout->setContentsMargins(0, 0, 0, 0);
-    buttonLayout->addWidget(new QLabel("Selected Items: "));
-    buttonLayout->addWidget(turnOnToolButton);
-    buttonLayout->addSpacing(5);
-    buttonLayout->addWidget(turnOffToolButton);
-    buttonLayout->addStretch();
-    
     QVBoxLayout* layout = new QVBoxLayout(this);
-    layout->addLayout(buttonLayout);
-    layout->addWidget(m_treeWidget, 100);
+    layout->addWidget(createButtonsWidget(objectNameForMacros,
+                                          descriptiveNameForMacros));
+    layout->addWidget(m_treeWidget);
+    layout->addStretch();
     
     s_allViewControllers.insert(this);
 }
@@ -131,6 +111,117 @@ m_browserWindowIndex(browserWindowIndex)
 DisplayGroupAndTabItemViewController::~DisplayGroupAndTabItemViewController()
 {
     s_allViewControllers.erase(this);
+}
+
+/**
+ * @return New instance of the buttons for collapse, expand, find, etc.
+ * @param objectNameForMacros
+ *    Name of this object for macros
+ * @param descriptiveNameForMacros
+ *    Descriptive name for macros
+ */
+QWidget*
+DisplayGroupAndTabItemViewController::createButtonsWidget(const QString& objectNameForMacros,
+                                                          const QString& descriptiveNameForMacros)
+{
+    WuQMacroManager* macroManager = WuQMacroManager::instance();
+    
+    m_collapseAllAction = new QAction("Collapse");
+    m_collapseAllAction->setToolTip("Collapse all items");
+    m_collapseAllAction->setObjectName(objectNameForMacros + ":Collapse");
+    QObject::connect(m_collapseAllAction, &QAction::triggered,
+                     this, &DisplayGroupAndTabItemViewController::collapseAllActionTriggered);
+    QToolButton* collapseAllToolButton(new QToolButton());
+    collapseAllToolButton->setDefaultAction(m_collapseAllAction);
+    macroManager->addMacroSupportToObject(m_collapseAllAction,
+                                          "Collapse all in " + descriptiveNameForMacros);
+    
+    
+    m_expandAllAction = new QAction("Expand");
+    m_expandAllAction->setObjectName(objectNameForMacros + ":Expand");
+    m_expandAllAction->setToolTip("Expand all items");
+    QObject::connect(m_expandAllAction, &QAction::triggered,
+                     this, &DisplayGroupAndTabItemViewController::expandAllActionTriggered);
+    QToolButton* expandAllToolButton(new QToolButton());
+    expandAllToolButton->setDefaultAction(m_expandAllAction);
+    macroManager->addMacroSupportToObject(m_expandAllAction,
+                                          "Expand all in " + descriptiveNameForMacros);
+    
+    m_allOnAction = new QAction("On");
+    m_allOnAction->setToolTip("Turn all SELECTED items on");
+    m_allOnAction->setObjectName(objectNameForMacros + ":AllOn");
+    QObject::connect(m_allOnAction, &QAction::triggered,
+                     this, &DisplayGroupAndTabItemViewController::allOnActionTriggered);
+    QToolButton* allOnToolButton(new QToolButton());
+    allOnToolButton->setDefaultAction(m_allOnAction);
+    macroManager->addMacroSupportToObject(m_allOnAction,
+                                          "Turn all on in " + descriptiveNameForMacros);
+    
+    m_allOffAction = new QAction("Off");
+    m_allOffAction->setObjectName(objectNameForMacros + ":AllOff");
+    m_allOffAction->setToolTip("Turn all SELECTED items off");
+    QObject::connect(m_allOffAction, &QAction::triggered,
+                     this, &DisplayGroupAndTabItemViewController::allOffActionTriggered);
+    QToolButton* allOffToolButton(new QToolButton());
+    allOffToolButton->setDefaultAction(m_allOffAction);
+    macroManager->addMacroSupportToObject(m_allOffAction,
+                                          "Turn all off in " + descriptiveNameForMacros);
+    
+    m_infoAction = new QAction("Info");
+    m_infoAction->setObjectName(objectNameForMacros + ":InfoMenu");
+    m_infoAction->setToolTip("Show information about selected label");
+    m_infoAction->setEnabled(false);
+    QObject::connect(m_infoAction, &QAction::triggered,
+                     this, &DisplayGroupAndTabItemViewController::infoActionTriggered);
+    m_infoToolButton = new QToolButton;
+    m_infoToolButton->setDefaultAction(m_infoAction);
+    
+    m_findAction = new QAction("Find");
+    m_findAction->setObjectName(objectNameForMacros + ":Find");
+    m_findAction->setToolTip("Find the first item containing the text");
+    m_findAction->setEnabled(false);
+    QObject::connect(m_findAction, &QAction::triggered,
+                     this, &DisplayGroupAndTabItemViewController::findActionTriggered);
+    QToolButton* findToolButton(new QToolButton);
+    findToolButton->setDefaultAction(m_findAction);
+    macroManager->addMacroSupportToObject(m_findAction,
+                                          "Find in " + descriptiveNameForMacros);
+    
+    m_nextAction = new QAction("Next");
+    m_nextAction->setObjectName(objectNameForMacros + ":Next");
+    m_nextAction->setToolTip("Move to the next item containing the text (will wrap)");
+    m_nextAction->setEnabled(false);
+    QObject::connect(m_nextAction, &QAction::triggered,
+                     this, &DisplayGroupAndTabItemViewController::nextActionTriggered);
+    QToolButton* nextToolButton(new QToolButton);
+    nextToolButton->setDefaultAction(m_nextAction);
+    macroManager->addMacroSupportToObject(m_nextAction,
+                                          "Find next in " + descriptiveNameForMacros);
+    
+    m_findTextLineEdit = new QLineEdit();
+    m_findTextLineEdit->setObjectName(objectNameForMacros + ":FindText");
+    m_findTextLineEdit->setToolTip("Enter find text here");
+    QObject::connect(m_findTextLineEdit, &QLineEdit::returnPressed,
+                     this, &DisplayGroupAndTabItemViewController::findActionTriggered);
+    QObject::connect(m_findTextLineEdit, &QLineEdit::textChanged,
+                     this, &DisplayGroupAndTabItemViewController::findTextLineEditTextChanged);
+    
+    QWidget* widget(new QWidget());
+    QHBoxLayout* buttonsLayout(new QHBoxLayout(widget));
+    buttonsLayout->setSpacing(buttonsLayout->spacing() / 2);
+    buttonsLayout->setContentsMargins(2, 2, 2, 2);
+    buttonsLayout->addWidget(allOnToolButton);
+    buttonsLayout->addWidget(allOffToolButton);
+    buttonsLayout->addWidget(collapseAllToolButton);
+    buttonsLayout->addWidget(expandAllToolButton);
+    buttonsLayout->addSpacing(4);
+    buttonsLayout->addWidget(m_infoToolButton);
+    buttonsLayout->addSpacing(4);
+    buttonsLayout->addWidget(findToolButton);
+    buttonsLayout->addWidget(nextToolButton);
+    buttonsLayout->addWidget(m_findTextLineEdit,
+                             100); /* stretch factor */
+    return widget;
 }
 
 /**
@@ -177,6 +268,20 @@ DisplayGroupAndTabItemViewController::itemsWereSelected()
 }
 
 /**
+ * Set the items displayed in the context-sensitive (right-click) menu
+ * @param contextMenuItems
+ *    Items for display in the menu
+ */
+void
+DisplayGroupAndTabItemViewController::enableContextSensitiveMenu(const std::vector<ContextSensitiveMenuItemsEnum::Enum>& contextMenuItems)
+{
+    m_contextMenuItems.clear();
+    m_contextMenuItems.insert(contextMenuItems.begin(),
+                              contextMenuItems.end());
+}
+
+
+/**
  * Display a context sensitive (right-click) menu.
  *
  * @param pos
@@ -192,17 +297,39 @@ DisplayGroupAndTabItemViewController::displayContextMenu(const QPoint& pos)
     }
     
     QMenu menu(this);
-    QAction* onAction = menu.addAction("Turn all selected items ON");
-    menu.addAction("Turn all selected items OFF");
+    QAction* onAction(menu.addAction("Turn all selected items ON"));
+    QAction* offAction(menu.addAction("Turn all selected items OFF"));
+    
+    std::map<QAction*, ContextSensitiveMenuItemsEnum::Enum> menuActionEnumMap;
+    std::vector<ContextSensitiveMenuItemsEnum::Enum> allContextMenuEnums;
+    ContextSensitiveMenuItemsEnum::getAllEnums(allContextMenuEnums);
+    for (ContextSensitiveMenuItemsEnum::Enum menuEnum : allContextMenuEnums) {
+        if (m_contextMenuItems.find(menuEnum) != m_contextMenuItems.end()) {
+            QAction* action = menu.addAction(ContextSensitiveMenuItemsEnum::toGuiName(menuEnum));
+            menuActionEnumMap.insert(std::make_pair(action, menuEnum));
+        }
+    }
     
     QSignalBlocker blocker(m_treeWidget);
     QAction* selectedAction = menu.exec(m_treeWidget->mapToGlobal(pos));
-    if (selectedAction == NULL) {
-        return;
+    if (selectedAction == onAction) {
+        const bool newStatus(true);
+        setCheckedStatusOfSelectedItems(newStatus);
     }
-
-    const bool newStatus = (selectedAction == onAction);
-    setCheckedStatusOfSelectedItems(newStatus);
+    else if (selectedAction == offAction) {
+        const bool newStatus(false);
+        setCheckedStatusOfSelectedItems(newStatus);
+    }
+    else if (selectedAction != NULL) {
+        for (auto& actionEnum : menuActionEnumMap) {
+            if (actionEnum.first == selectedAction) {
+                const ContextSensitiveMenuItemsEnum::Enum itemEnum(actionEnum.second);
+                emit contextMenuItemSelected(itemsSelected,
+                                             itemEnum);
+                break;
+            }
+        }
+    }
 }
 
 /**
@@ -498,10 +625,6 @@ DisplayGroupAndTabItemViewController::updateSelectedAndExpandedCheckboxes(const 
         }
     }
     
-    const bool itemsSelectedFlag = ( ! m_treeWidget->selectedItems().isEmpty());
-    m_turnOnSelectedItemsAction->setEnabled(itemsSelectedFlag);
-    m_turnOffSelectedItemsAction->setEnabled(itemsSelectedFlag);
-    
     m_treeWidget->blockSignals(false);
 }
 
@@ -549,7 +672,7 @@ DisplayGroupAndTabItemViewController::turnOffSelectedItemsTriggered()
 }
 
 /**
- * Set the checked status of all selected itemsj
+ * Set the checked status of all selected items.  If none are selected select all
  *
  * @param checkedStatus
  *     Checked status
@@ -559,9 +682,14 @@ DisplayGroupAndTabItemViewController::setCheckedStatusOfSelectedItems(const bool
 {
     QList<QTreeWidgetItem*> itemsSelected = m_treeWidget->selectedItems();
     
-    if (itemsSelected.isEmpty()) {
-        return;
-    }
+//    bool allFlag(false);
+//    if (itemsSelected.isEmpty()) {
+//        if (m_treeWidget != NULL) {
+//            m_treeWidget->selectAll();
+//            itemsSelected = m_treeWidget->selectedItems();
+//            allFlag = true;
+//        }
+//    }
     
     DisplayGroupEnum::Enum displayGroup = DisplayGroupEnum::DISPLAY_GROUP_TAB;
     int32_t tabIndex = -1;
@@ -586,5 +714,155 @@ DisplayGroupAndTabItemViewController::setCheckedStatusOfSelectedItems(const bool
                                         tabIndex);
     updateSelectedAndExpandedCheckboxesInOtherViewControllers();
     
-    updateGraphics();}
+//    if (allFlag) {
+//        m_treeWidget->clearSelection();
+//    }
+
+    updateGraphics();
+}
+
+
+
+
+/**
+ * Called when collapse all action is triggered
+ */
+void
+DisplayGroupAndTabItemViewController::collapseAllActionTriggered()
+{
+    m_treeWidget->collapseAll();
+}
+
+/**
+ * Called when expand all action is triggered
+ */
+void
+DisplayGroupAndTabItemViewController::expandAllActionTriggered()
+{
+    m_treeWidget->expandAll();
+}
+
+/**
+ * Called when expand all action is triggered
+ */
+void
+DisplayGroupAndTabItemViewController::allOnActionTriggered()
+{
+    if (m_treeWidget != NULL) {
+        setCheckedStatusOfSelectedItems(true);
+    }
+}
+
+/**
+ * Called when expand all action is triggered
+ */
+void
+DisplayGroupAndTabItemViewController::allOffActionTriggered()
+{
+    if (m_treeWidget != NULL) {
+        setCheckedStatusOfSelectedItems(false);
+    }
+}
+
+/**
+ * Called when Info button is clicked
+ */
+void
+DisplayGroupAndTabItemViewController::infoActionTriggered()
+{
+    //    const QModelIndex selectedIndex(m_treeView->currentIndex());
+    //    if (selectedIndex.isValid()) {
+    //        if (m_labelHierarchyModel != NULL) {
+    //            QStandardItem* item(m_labelHierarchyModel->itemFromIndex(selectedIndex));
+    //            if (item != NULL) {
+    //                const LabelSelectionItem* labelItem(dynamic_cast<LabelSelectionItem*>(item));
+    //                if (labelItem != NULL) {
+    //                    const bool infoButtonFlag(true);
+    //                    showSelectedItemMenu(labelItem,
+    //                                         mapToGlobal(m_infoToolButton->pos()),
+    //                                         infoButtonFlag);
+    //                }
+    //            }
+    //        }
+    //    }
+}
+
+/**
+ * Called when find button is clicked or return is pressed in the find line edit
+ */
+void
+DisplayGroupAndTabItemViewController::findActionTriggered()
+{
+    m_findItems.clear();
+    m_findItemsCurrentIndex = 0;
+    
+    if (m_treeWidget != NULL) {
+        const QString findText(m_findTextLineEdit->text().trimmed());
+        
+        const int modelColumn(0);
+        m_findItems = m_treeWidget->findItems(findText,
+                                                   (Qt::MatchContains
+                                                    | Qt::MatchRecursive),
+                                                   modelColumn);
+        if (m_findItems.isEmpty()) {
+            GuiManager::get()->beep();
+        }
+        scrollTreeViewToFindItem();
+    }
+}
+
+/**
+ * Called when next button is clicked
+ */
+void
+DisplayGroupAndTabItemViewController::nextActionTriggered()
+{
+    scrollTreeViewToFindItem();
+}
+
+/**
+ * Scroll the tree view to the next find item
+ */
+void
+DisplayGroupAndTabItemViewController::scrollTreeViewToFindItem()
+{
+    const int32_t numFindItems(m_findItems.size());
+    if (numFindItems > 0) {
+        if ((m_findItemsCurrentIndex < 0)
+            || (m_findItemsCurrentIndex >= numFindItems)) {
+            m_findItemsCurrentIndex = 0;
+        }
+        CaretAssertVectorIndex(m_findItems, m_findItemsCurrentIndex);
+        const QTreeWidgetItem* item(m_findItems[m_findItemsCurrentIndex]);
+        CaretAssert(item);
+        const QModelIndex modelIndex(m_treeWidget->getIndexFromItem(item));
+        if (modelIndex.isValid()) {
+            m_treeWidget->setCurrentIndex(modelIndex);
+            m_treeWidget->scrollTo(modelIndex,
+                                        QTreeView::PositionAtCenter);
+        }
+        
+        /*
+         * For 'next'
+         */
+        ++m_findItemsCurrentIndex;
+    }
+    
+    m_nextAction->setEnabled(numFindItems > 1);
+}
+
+
+/**
+ * Called when next button is clicked
+ * @param text
+ *    Text in the line edit
+ */
+void
+DisplayGroupAndTabItemViewController::findTextLineEditTextChanged(const QString& text)
+{
+    m_findAction->setEnabled( ! text.trimmed().isEmpty());
+    m_nextAction->setEnabled(false);
+    m_findItems.clear();
+    m_findItemsCurrentIndex = 0;
+}
 

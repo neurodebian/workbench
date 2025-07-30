@@ -29,6 +29,20 @@ if(Qt5_FOUND)
     endif(HAVE_QT_WEBKIT)
 endif()
 
+SET (MESA_OR_OPENGL_LIBRARIES "")
+IF (OSMESA_FOUND)
+    SET(MESA_OR_OPENGL_LIBRARIES
+        ${OSMESA_OFFSCREEN_LIBRARY}
+        ${OSMESA_GL_LIBRARY}
+        ${OSMESA_GLU_LIBRARY})
+ELSE()
+    IF (OPENGL_FOUND)
+        SET(MESA_OR_OPENGL_LIBRARIES ${OPENGL_LIBRARIES})
+    ELSE()
+        MESSAGE(SEND_ERROR "Must have either OpenGL or Mesa3D for command line")
+    ENDIF()
+ENDIF()
+
 #
 # Let CMake find files for moc and uic.
 #
@@ -63,15 +77,16 @@ ELSE()
 	AnnotationPolyTypeDrawEditWidget.h
         AnnotationRedoUndoWidget.h
         AnnotationRotationWidget.h
-	AnnotationSamplesCreateDialog.h
 	AnnotationSamplesInsertNewWidget.h
+	AnnotationSamplesMetaDataDialog.h
 	AnnotationSamplesModifyWidget.h
         AnnotationSelectionViewController.h
         AnnotationTextAlignmentWidget.h
         AnnotationTextEditorDialog.h
         AnnotationTextEditorWidget.h
         AnnotationTextOrientationWidget.h
-        AnnotationTextSubstitutionViewController.h
+	AnnotationTextSubstitutionLayerViewController.h
+        AnnotationTextSubstitutionLayerSetViewController.h
         AnnotationWidthHeightWidget.h
         BalsaDatabaseUploadSceneFileDialog.h
         BalsaStudySelectionDialog.h
@@ -129,6 +144,7 @@ ELSE()
 	ChartTwoTitleEditorWidget.h
         ChartSelectionViewController.h
         ChartToolBoxViewController.h
+	ChooseBorderFocusFromFileDialog.h
         CiftiConnectivityMatrixViewController.h
         CiftiParcelSelectionComboBox.h
 	ClippingPlanesWidget.h
@@ -138,6 +154,7 @@ ELSE()
         CustomViewDialog.h
 	CziImageExportDialog.h
         DataFileContentCopyMoveDialog.h
+	DataFileEditorDialog.h
 	DingOntologyTermsDialog.h
         DisplayGroupAndTabItemViewController.h
         DisplayGroupEnumComboBox.h
@@ -171,6 +188,8 @@ ELSE()
 	LabelSelectionDialog.h
 	LabelSelectionWidget.h
         LabelSelectionViewController.h
+	LabelSelectionViewHierarchyController.h
+	LabelSelectionViewWidget.h
     	LockAspectWarningDialog.h
         MacApplication.h
         MacDockMenu.h
@@ -180,18 +199,18 @@ ELSE()
         MapSettingsFiberTrajectoryWidget.h
         MapSettingsLabelsWidget.h
         MapSettingsLayerWidget.h
+	MapSettingsModulateWidget.h
         MapSettingsPaletteColorMappingWidget.h
         MapSettingsParcelsWidget.h
         MapYokingGroupComboBox.h
 	MediaOverlaySettingsMenu.h
 	MediaOverlayViewController.h
 	MediaOverlaySetViewController.h
-	MetaDataCustomEditorDialog.h
-	MetaDataCustomEditorWidget.h
         MetaDataEditorDialog.h
         MetaDataEditorWidget.h
 	MovieRecordingDialog.h
         OffScreenOpenGLRenderer.h
+	OpenFileQuicklyDialog.h
         OverlaySetViewController.h
         OverlaySettingsEditorDialog.h
         OverlayViewController.h
@@ -237,6 +256,7 @@ ELSE()
         TileTabsConfigurationDialog.h
 	TileTabsLayoutConfigurationTypeWidget.h
 	TileTabsManualTabGeometryWidget.h
+	UnicodeCharacterEntryDialog.h
         UserInputModeAnnotationsContextMenu.h
         UserInputModeAnnotationsWidget.h
         UserInputModeBordersWidget.h
@@ -257,6 +277,7 @@ ELSE()
         VolumeSurfaceOutlineViewController.h
 	WbMacroHelper.h
 	WbMacroWidgetActionsManager.h
+	WorkbenchInstallationAssistantDialog.h
         WuQCollapsibleWidget.h
 	WuQColorEditorWidget.h
         WuQDataEntryDialog.h
@@ -296,6 +317,7 @@ ELSE()
         WuQTabBar.h
         WuQTabWidget.h
         WuQTabWidgetWithSizeHint.h
+	WuQTextEditWithToolBarWidget.h
         WuQTextEditorDialog.h
         WuQTimedMessageDisplay.h
 	WuQToolTipHelper.h
@@ -342,15 +364,16 @@ AnnotationPastingInformation.h
 AnnotationPolyTypeDrawEditWidget.h
 AnnotationRedoUndoWidget.h
 AnnotationRotationWidget.h
-AnnotationSamplesCreateDialog.h
 AnnotationSamplesInsertNewWidget.h
+AnnotationSamplesMetaDataDialog.h
 AnnotationSamplesModifyWidget.h
 AnnotationSelectionViewController.h
 AnnotationTextAlignmentWidget.h
 AnnotationTextEditorDialog.h
 AnnotationTextEditorWidget.h
 AnnotationTextOrientationWidget.h
-AnnotationTextSubstitutionViewController.h
+AnnotationTextSubstitutionLayerViewController.h
+AnnotationTextSubstitutionLayerSetViewController.h
 AnnotationWidgetParentEnum.h
 AnnotationWidthHeightWidget.h
 BalsaDatabaseManager.h
@@ -416,11 +439,13 @@ ChartTwoOverlayViewController.h
 ChartTwoTitleEditorWidget.h
 ChartSelectionViewController.h
 ChartToolBoxViewController.h
+ChooseBorderFocusFromFileDialog.h
 CiftiConnectivityMatrixViewController.h
 CiftiParcelSelectionComboBox.h
 ClippingPlanesWidget.h
 ColorEditorWidget.h
 ConnectivityCorrelationSettingsMenu.h
+ContextSensitiveMenuItemsEnum.h
 CopyPaletteColorMappingToFilesDialog.h
 CursorDisplayScoped.h
 CursorEnum.h
@@ -428,6 +453,7 @@ CursorManager.h
 CustomViewDialog.h
 CziImageExportDialog.h
 DataFileContentCopyMoveDialog.h
+DataFileEditorDialog.h
 DingOntologyTermsDialog.h
 DisplayGroupAndTabItemTreeWidgetItem.h
 DisplayGroupAndTabItemViewController.h
@@ -495,6 +521,8 @@ KeyEvent.h
 LabelSelectionDialog.h
 LabelSelectionWidget.h
 LabelSelectionViewController.h
+LabelSelectionViewHierarchyController.h
+LabelSelectionViewWidget.h
 LockAspectWarningDialog.h
 MacApplication.h
 MacDockMenu.h
@@ -504,18 +532,18 @@ MapSettingsColorBarWidget.h
 MapSettingsFiberTrajectoryWidget.h
 MapSettingsLabelsWidget.h
 MapSettingsLayerWidget.h
+MapSettingsModulateWidget.h
 MapSettingsPaletteColorMappingWidget.h
 MapSettingsParcelsWidget.h
 MapYokingGroupComboBox.h
 MediaOverlaySettingsMenu.h
 MediaOverlayViewController.h
 MediaOverlaySetViewController.h
-MetaDataCustomEditorDialog.h
-MetaDataCustomEditorWidget.h
 MetaDataEditorDialog.h
 MetaDataEditorWidget.h
 MovieRecordingDialog.h
 OffScreenOpenGLRenderer.h
+OpenFileQuicklyDialog.h
 OverlaySetViewController.h
 OverlaySettingsEditorDialog.h
 OverlayViewController.h
@@ -566,6 +594,7 @@ TileTabsConfigurationDialog.h
 TileTabsGridConfigurationModifier.h
 TileTabsLayoutConfigurationTypeWidget.h
 TileTabsManualTabGeometryWidget.h
+UnicodeCharacterEntryDialog.h
 UserInputModeAbstract.h
 UserInputModeAnnotations.h
 UserInputModeAnnotationsContextMenu.h
@@ -611,6 +640,7 @@ WbMacroCustomOperationTypeEnum.h
 WbMacroHelper.h
 WbMacroWidgetActionNames.h
 WbMacroWidgetActionsManager.h
+WorkbenchInstallationAssistantDialog.h
 WuQCollapsibleWidget.h
 WuQColorEditorWidget.h
 WuQDataEntryDialog.h
@@ -654,6 +684,7 @@ WuQSpinBoxOddValue.h
 WuQTabBar.h
 WuQTabWidget.h
 WuQTabWidgetWithSizeHint.h
+WuQTextEditWithToolBarWidget.h
 WuQTextEditorDialog.h
 WuQTimedMessageDisplay.h
 WuQToolTipHelper.h
@@ -689,15 +720,16 @@ AnnotationPastingInformation.cxx
 AnnotationPolyTypeDrawEditWidget.cxx
 AnnotationRedoUndoWidget.cxx
 AnnotationRotationWidget.cxx
-AnnotationSamplesCreateDialog.cxx
 AnnotationSamplesInsertNewWidget.cxx
+AnnotationSamplesMetaDataDialog.cxx
 AnnotationSamplesModifyWidget.cxx
 AnnotationSelectionViewController.cxx
 AnnotationTextAlignmentWidget.cxx
 AnnotationTextEditorDialog.cxx
 AnnotationTextEditorWidget.cxx
 AnnotationTextOrientationWidget.cxx
-AnnotationTextSubstitutionViewController.cxx
+AnnotationTextSubstitutionLayerSetViewController.cxx
+AnnotationTextSubstitutionLayerViewController.cxx
 AnnotationWidgetParentEnum.cxx
 AnnotationWidthHeightWidget.cxx
 BalsaDatabaseManager.cxx
@@ -763,11 +795,13 @@ ChartTwoOverlayViewController.cxx
 ChartTwoTitleEditorWidget.cxx
 ChartSelectionViewController.cxx
 ChartToolBoxViewController.cxx
+ChooseBorderFocusFromFileDialog.cxx
 CiftiConnectivityMatrixViewController.cxx
 CiftiParcelSelectionComboBox.cxx
 ClippingPlanesWidget.cxx
 ColorEditorWidget.cxx
 ConnectivityCorrelationSettingsMenu.cxx
+ContextSensitiveMenuItemsEnum.cxx
 CopyPaletteColorMappingToFilesDialog.cxx
 CursorDisplayScoped.cxx
 CursorEnum.cxx
@@ -775,6 +809,7 @@ CursorManager.cxx
 CustomViewDialog.cxx
 CziImageExportDialog.cxx
 DataFileContentCopyMoveDialog.cxx
+DataFileEditorDialog.cxx
 DingOntologyTermsDialog.cxx
 DisplayGroupAndTabItemTreeWidgetItem.cxx
 DisplayGroupAndTabItemViewController.cxx
@@ -841,6 +876,8 @@ KeyEvent.cxx
 LabelSelectionDialog.cxx
 LabelSelectionWidget.cxx
 LabelSelectionViewController.cxx
+LabelSelectionViewHierarchyController.cxx
+LabelSelectionViewWidget.cxx
 LockAspectWarningDialog.cxx
 MacApplication.cxx
 MacDockMenu.cxx
@@ -850,18 +887,18 @@ MapSettingsColorBarWidget.cxx
 MapSettingsFiberTrajectoryWidget.cxx
 MapSettingsLabelsWidget.cxx
 MapSettingsLayerWidget.cxx
+MapSettingsModulateWidget.cxx
 MapSettingsPaletteColorMappingWidget.cxx
 MapSettingsParcelsWidget.cxx
 MapYokingGroupComboBox.cxx
 MediaOverlaySettingsMenu.cxx
 MediaOverlayViewController.cxx
 MediaOverlaySetViewController.cxx
-MetaDataCustomEditorDialog.cxx
-MetaDataCustomEditorWidget.cxx
 MetaDataEditorDialog.cxx
 MetaDataEditorWidget.cxx
 MovieRecordingDialog.cxx
 OffScreenOpenGLRenderer.cxx
+OpenFileQuicklyDialog.cxx
 OverlaySetViewController.cxx
 OverlayViewController.cxx
 OverlaySettingsEditorDialog.cxx
@@ -912,6 +949,7 @@ TileTabsConfigurationDialog.cxx
 TileTabsGridConfigurationModifier.cxx
 TileTabsLayoutConfigurationTypeWidget.cxx
 TileTabsManualTabGeometryWidget.cxx
+UnicodeCharacterEntryDialog.cxx
 UserInputModeAbstract.cxx
 UserInputModeAnnotations.cxx
 UserInputModeAnnotationsContextMenu.cxx
@@ -956,6 +994,7 @@ WbMacroCustomOperationSurfaceDefaultColor.cxx
 WbMacroCustomOperationTypeEnum.cxx
 WbMacroHelper.cxx
 WbMacroWidgetActionsManager.cxx
+WorkbenchInstallationAssistantDialog.cxx
 WuQCollapsibleWidget.cxx
 WuQColorEditorWidget.cxx
 WuQDataEntryDialog.cxx
@@ -996,6 +1035,7 @@ WuQSpinBoxOddValue.cxx
 WuQTabBar.cxx
 WuQTabWidget.cxx
 WuQTabWidgetWithSizeHint.cxx
+WuQTextEditWithToolBarWidget.cxx
 WuQTextEditorDialog.cxx
 WuQTimedMessageDisplay.cxx
 WuQToolTipHelper.cxx
@@ -1034,7 +1074,11 @@ ADD_LIBRARY(GuiQt
     ${SOURCE_FILES}
 )
 
-TARGET_LINK_LIBRARIES(GuiQt ${CARET_QT5_LINK})
+TARGET_LINK_LIBRARIES(
+    GuiQt
+    ${CARET_QT5_LINK}
+    ${MESA_OR_OPENGL_LIBRARIES}
+)
 
 INCLUDE_DIRECTORIES(
 ${CMAKE_SOURCE_DIR}/GuiQt
@@ -1057,5 +1101,6 @@ ${CMAKE_SOURCE_DIR}/OperationsBase
 ${CMAKE_SOURCE_DIR}/Palette
 ${CMAKE_SOURCE_DIR}/Scenes
 ${CMAKE_SOURCE_DIR}/Xml
+${CMAKE_SOURCE_DIR}/OmeZarr
 ${CMAKE_SOURCE_DIR}/Common
 )

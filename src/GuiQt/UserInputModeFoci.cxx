@@ -29,6 +29,7 @@
 #include "BrainStructure.h"
 #include "BrowserTabContent.h"
 #include "CaretAssert.h"
+#include "CaretLogger.h"
 #include "EventGraphicsPaintSoonAllWindows.h"
 #include "EventGraphicsPaintSoonOneWindow.h"
 #include "EventManager.h"
@@ -41,13 +42,17 @@
 #include "SelectionItemFocus.h"
 #include "SelectionItemHistologyCoordinate.h"
 #include "SelectionItemSurfaceNode.h"
+#include "SelectionItemSurfaceTriangle.h"
 #include "SelectionItemVoxel.h"
 #include "SelectionManager.h"
 #include "MouseEvent.h"
 #include "Surface.h"
+#include "SurfaceProjectionBarycentric.h"
+#include "SurfaceProjector.h"
 #include "UserInputModeFociWidget.h"
 #include "UserInputModeView.h"
 #include "VolumeFile.h"
+#include "WuQMessageBox.h"
 
 using namespace caret;
 
@@ -112,6 +117,7 @@ UserInputModeFoci::setMode(const Mode mode)
 void
 UserInputModeFoci::initialize()
 {
+    m_focusBeingMovedWithMouse = NULL;
     m_inputModeFociWidget->updateWidget();
 }
 
@@ -122,6 +128,7 @@ UserInputModeFoci::initialize()
 void 
 UserInputModeFoci::finish()
 {
+    m_focusBeingMovedWithMouse = NULL;
 }
 
 /**
@@ -150,6 +157,14 @@ UserInputModeFoci::getCursor() const
             break;
         case MODE_EDIT:
             cursor = CursorEnum::CURSOR_WHATS_THIS;
+            break;
+        case MODE_MOVE:
+            if (m_focusBeingMovedWithMouse != NULL) {
+                cursor = CursorEnum::CURSOR_CROSS;
+            }
+            else if (m_focusInMoveModeUnderMouse != NULL) {
+                cursor = CursorEnum::CURSOR_CROSS;
+            }
             break;
     }
     
@@ -201,21 +216,60 @@ UserInputModeFoci::mouseLeftClick(const MouseEvent& mouseEvent)
     
     BrainOpenGLWidget* openGLWidget = mouseEvent.getOpenGLWidget();
     BrowserTabContent* browserTabContent = viewportContent->getBrowserTabContent();
-    SelectionManager* idManager =
-    openGLWidget->performIdentificationAll(mouseEvent.getX(),
-                                           mouseEvent.getY(),
-                                           true);
     
     switch (m_mode) {
         case MODE_CREATE_AT_ID:
         {
+            SelectionManager* idManager = GuiManager::get()->getBrain()->getSelectionManager();
+            SelectionItemSurfaceTriangle* idTriangle = idManager->getSurfaceTriangleIdentification();
             SelectionItemSurfaceNode* idNode = idManager->getSurfaceNodeIdentification();
             SelectionItemVoxel* idVoxel = idManager->getVoxelIdentification();
             SelectionItemHistologyCoordinate* idHistology(idManager->getHistologyPlaneCoordinateIdentification());
-            if (idNode->isValid()) {
+            idManager->setAllSelectionsEnabled(false);
+            idNode->setEnabledForSelection(true);
+            idTriangle->setEnabledForSelection(true);
+            idVoxel->setEnabledForSelection(true);
+            idHistology->setEnabledForSelection(true);
+            openGLWidget->performIdentificationSome(mouseEvent.getX(), mouseEvent.getY());
+            
+            if (idTriangle->isValid()
+                && (idTriangle->isBarycentricProjectionValid())) {
+                Surface* surfaceViewed = idTriangle->getSurface();
+                CaretAssert(surfaceViewed);
+                const Surface* anatSurface = getAnatomicalSurfaceForSurface(surfaceViewed);
+                noAnatomicalSurfaceWarningDialog(anatSurface);
+                int32_t vertices[3];
+                idTriangle->getBarycentricVertices(vertices);
+                float areas[3];
+                idTriangle->getBarycentricAreas(areas);
+                float xyz[3];
+                if (SurfaceProjectionBarycentric::unprojectToSurface(anatSurface, areas, vertices, xyz)) {
+                    const StructureEnum::Enum anatStructure = anatSurface->getStructure();
+                    
+                    const AString focusName = (StructureEnum::toGuiName(anatStructure)
+                                               + " Triangle "
+                                               + AString::number(idTriangle->getTriangleNumber()));
+                    
+                    const AString comment = ("Created from "
+                                             + focusName);
+                    
+                    Focus* focus = new Focus();
+                    focus->setName(focusName);
+                    focus->getProjection(0)->setStereotaxicXYZ(xyz);
+                    focus->setComment(comment);
+                    FociPropertiesEditorDialog::createFocus(focus,
+                                                            browserTabContent,
+                                                            m_inputModeFociWidget);
+                }
+                else {
+                    WuQMessageBox::errorOk(m_inputModeFociWidget, "Failed to unproject focus to anatomial surface");
+                }
+            }
+            else if (idNode->isValid()) {
                 Surface* surfaceViewed = idNode->getSurface();
                 CaretAssert(surfaceViewed);
                 const Surface* anatSurface = getAnatomicalSurfaceForSurface(surfaceViewed);
+                noAnatomicalSurfaceWarningDialog(anatSurface);
                 const StructureEnum::Enum anatStructure = anatSurface->getStructure();
                 const int32_t nodeIndex = idNode->getNodeNumber();
                 
@@ -276,21 +330,28 @@ UserInputModeFoci::mouseLeftClick(const MouseEvent& mouseEvent)
                                                             m_inputModeFociWidget);
                 }
             }
-        }            break;
+        }            
+            break;
         case MODE_DELETE:
         case MODE_EDIT:
         {
+            SelectionManager* idManager = GuiManager::get()->getBrain()->getSelectionManager();
+            SelectionItemFocus* idVolFocus = idManager->getFocusIdentification();
+            SelectionItemFocusSurface* idFocusSurface = idManager->getSurfaceFocusIdentification();
+            idManager->setAllSelectionsEnabled(false);
+            idVolFocus->setEnabledForSelection(true);
+            idFocusSurface->setEnabledForSelection(true);
+            openGLWidget->performIdentificationSome(mouseEvent.getX(), mouseEvent.getY());
+
             FociFile* fociFile = NULL;
             Focus*    focus = NULL;
             
-            SelectionItemFocus* idVolFocus = idManager->getFocusIdentification();
             if (idVolFocus->isValid()) {
                 fociFile = idVolFocus->getFociFile();
                 CaretAssert(fociFile);
                 focus    = idVolFocus->getFocus();
                 CaretAssert(focus);
             }
-            SelectionItemFocusSurface* idFocusSurface = idManager->getSurfaceFocusIdentification();
             if (idFocusSurface->isValid()) {
                 fociFile = idFocusSurface->getFociFile();
                 CaretAssert(fociFile);
@@ -317,11 +378,271 @@ UserInputModeFoci::mouseLeftClick(const MouseEvent& mouseEvent)
                                                               openGLWidget);
                     }
                         break;
+                    case MODE_MOVE:
+                        break;
                 }
             }
         }
             break;
+        case MODE_MOVE:
+            CaretAssertToDoWarning();
+            break;
     }
+}
+
+/**
+ *  Warn the user if there is no anatomical surface for projecting the focus.
+ *  @param surface
+ *     Surface that should be an anatomical surface.
+ *  @return True if we should continue creating the focus.
+ */
+void
+UserInputModeFoci::noAnatomicalSurfaceWarningDialog(const Surface* surface) const
+{
+    if ((surface->getSurfaceType() != SurfaceTypeEnum::RECONSTRUCTION)
+        && (surface->getSurfaceType() != SurfaceTypeEnum::ANATOMICAL)) {
+        if ((surface->getStructure() == StructureEnum::CORTEX_LEFT)
+            || (surface->getStructure() == StructureEnum::CORTEX_RIGHT)) {
+            const AString msg("No Anatomical surface was found for this hemisphere.  "
+                              "Focus will be created but it may be at an incorrect stereotaxic coordinate.");
+            WuQMessageBox::warningOkWithDoNotShowAgain(m_inputModeFociWidget,
+                                                       "FocusProjectDialogAnatomicalWarning",
+                                                       msg);
+        }
+    }
+}
+
+/**
+ * Process a mouse move event
+ *
+ * @param mouseEvent
+ *     Mouse event information.
+ */
+void
+UserInputModeFoci::mouseMove(const MouseEvent& mouseEvent)
+{
+    m_focusInMoveModeUnderMouse = NULL;
+    
+    bool moveFlag(false);
+    switch (m_mode) {
+        case MODE_CREATE_AT_ID:
+            break;
+        case MODE_DELETE:
+            break;
+        case MODE_EDIT:
+            break;
+        case MODE_MOVE:
+            moveFlag = true;
+            break;
+    }
+    if ( ! moveFlag) {
+        UserInputModeView::mouseMove(mouseEvent);
+        return;
+    }
+    if (m_focusBeingMovedWithMouse == NULL) {
+        BrainOpenGLViewportContent* viewportContent = mouseEvent.getViewportContent();
+        if (viewportContent == NULL) {
+            return;
+        }
+        
+        BrainOpenGLWidget* openGLWidget = mouseEvent.getOpenGLWidget();
+        SelectionManager* idManager =
+        openGLWidget->performIdentificationAll(mouseEvent.getX(),
+                                               mouseEvent.getY(),
+                                               true);
+        
+        m_focusBeingMovedWithMouse = NULL;
+        SelectionItemFocus* idVolFocus = idManager->getFocusIdentification();
+        if (idVolFocus->isValid()) {
+            m_focusInMoveModeUnderMouse = idVolFocus->getFocus();
+        }
+        SelectionItemFocusSurface* idFocusSurface = idManager->getSurfaceFocusIdentification();
+        if (idFocusSurface->isValid()) {
+            m_focusInMoveModeUnderMouse = idFocusSurface->getFocus();
+        }
+    }
+}
+
+/**
+ * Process a mouse left drag with no keys down event.
+ *
+ * @param mouseEvent
+ *     Mouse event information.
+ */
+void
+UserInputModeFoci::mouseLeftDrag(const MouseEvent& mouseEvent)
+{
+    bool moveFlag(false);
+    switch (m_mode) {
+        case MODE_CREATE_AT_ID:
+            break;
+        case MODE_DELETE:
+            break;
+        case MODE_EDIT:
+            break;
+        case MODE_MOVE:
+            moveFlag = true;
+            break;
+    }
+    if ( ! moveFlag) {
+        UserInputModeView::mouseLeftDrag(mouseEvent);
+        return;
+    }
+    
+    if (m_focusBeingMovedWithMouse == NULL) {
+        return;
+    }
+    
+    BrainOpenGLViewportContent* viewportContent = mouseEvent.getViewportContent();
+    if (viewportContent == NULL) {
+        return;
+    }
+    
+    BrainOpenGLWidget* openGLWidget = mouseEvent.getOpenGLWidget();
+    SelectionManager* idManager = GuiManager::get()->getBrain()->getSelectionManager();
+    SelectionItemSurfaceNode* idNode = idManager->getSurfaceNodeIdentification();
+    SelectionItemSurfaceTriangle* idTriangle(idManager->getSurfaceTriangleIdentification());
+    SelectionItemVoxel* idVoxel = idManager->getVoxelIdentification();
+    SelectionItemHistologyCoordinate* idHistology(idManager->getHistologyPlaneCoordinateIdentification());
+    idManager->setAllSelectionsEnabled(false);
+    idNode->setEnabledForSelection(true);
+    idTriangle->setEnabledForSelection(true);
+    idVoxel->setEnabledForSelection(true);
+    idHistology->setEnabledForSelection(true);
+    openGLWidget->performIdentificationSome(mouseEvent.getX(), mouseEvent.getY());
+    if (idTriangle->isValid()
+        && idTriangle->isBarycentricProjectionValid()) {
+        int32_t vertices[3];
+        idTriangle->getBarycentricVertices(vertices);
+        float areas[3];
+        idTriangle->getBarycentricAreas(areas);
+        Surface* surfaceViewed(idTriangle->getSurface());
+        CaretAssert(surfaceViewed);
+        const Surface* anatSurface = getAnatomicalSurfaceForSurface(surfaceViewed);
+        float xyz[3];
+        if (SurfaceProjectionBarycentric::unprojectToSurface(anatSurface, areas, vertices, xyz)) {
+            m_focusBeingMovedWithMouse->getProjection(0)->setStereotaxicXYZWhileMovingWithMouse(xyz);
+            try {
+                SurfaceProjector projector(anatSurface);
+                projector.projectFocus(0, m_focusBeingMovedWithMouse);
+            }
+            catch (const SurfaceProjectorException& spe) {
+                CaretLogWarning(spe.whatString());
+            }
+        }
+        else {
+            CaretLogWarning("Failed to unproject barycentric data to "
+                            + anatSurface->getFileName());
+        }
+    }
+    else if (idNode->isValid()) {
+        Surface* surfaceViewed = idNode->getSurface();
+        CaretAssert(surfaceViewed);
+        const Surface* anatSurface = getAnatomicalSurfaceForSurface(surfaceViewed);
+        const int32_t nodeIndex = idNode->getNodeNumber();
+        const float* xyz = anatSurface->getCoordinate(nodeIndex);
+        m_focusBeingMovedWithMouse->getProjection(0)->setStereotaxicXYZWhileMovingWithMouse(xyz);
+        try {
+            SurfaceProjector projector(anatSurface);
+            projector.projectFocus(0, m_focusBeingMovedWithMouse);
+        }
+        catch (const SurfaceProjectorException& spe) {
+            CaretLogWarning(spe.whatString());
+        }
+    }
+    else if (idVoxel->isValid()) {
+        const Vector3D xyz(idVoxel->getVoxelXYZ());
+        m_focusBeingMovedWithMouse->getProjection(0)->setStereotaxicXYZWhileMovingWithMouse(xyz);
+    }
+    else if (idHistology->isValid()) {
+        const HistologyCoordinate histCoord(idHistology->getCoordinate());
+        if (histCoord.isStereotaxicXYZValid()) {
+            const Vector3D xyz(histCoord.getStereotaxicXYZ());
+            m_focusBeingMovedWithMouse->getProjection(0)->setStereotaxicXYZWhileMovingWithMouse(xyz);
+        }
+    }
+    
+    updateAfterFociChanged();
+}
+
+/**
+ * Process a mouse left press event.
+ *
+ * @param mouseEvent
+ *     Mouse event information.
+ */
+void 
+UserInputModeFoci::mouseLeftPress(const MouseEvent& mouseEvent)
+{
+    m_focusInMoveModeUnderMouse = NULL;
+    
+    bool moveFlag(false);
+    switch (m_mode) {
+        case MODE_CREATE_AT_ID:
+            break;
+        case MODE_DELETE:
+            break;
+        case MODE_EDIT:
+            break;
+        case MODE_MOVE:
+            moveFlag = true;
+            break;
+    }
+    if ( ! moveFlag) {
+        UserInputModeView::mouseLeftPress(mouseEvent);
+        return;
+    }
+    
+    BrainOpenGLViewportContent* viewportContent = mouseEvent.getViewportContent();
+    if (viewportContent == NULL) {
+        return;
+    }
+    
+    BrainOpenGLWidget* openGLWidget = mouseEvent.getOpenGLWidget();
+    SelectionManager* idManager =
+    openGLWidget->performIdentificationAll(mouseEvent.getX(),
+                                           mouseEvent.getY(),
+                                           true);
+
+    m_focusBeingMovedWithMouse = NULL;
+    SelectionItemFocus* idVolFocus = idManager->getFocusIdentification();
+    if (idVolFocus->isValid()) {
+        m_focusBeingMovedWithMouse = idVolFocus->getFocus();
+    }
+    SelectionItemFocusSurface* idFocusSurface = idManager->getSurfaceFocusIdentification();
+    if (idFocusSurface->isValid()) {
+        m_focusBeingMovedWithMouse = idFocusSurface->getFocus();
+    }
+}
+
+/**
+ * Process a mouse left release event.
+ *
+ * @param mouseEvent
+ *     Mouse event information.
+ */
+void 
+UserInputModeFoci::mouseLeftRelease(const MouseEvent& mouseEvent)
+{
+    bool moveFlag(false);
+    switch (m_mode) {
+        case MODE_CREATE_AT_ID:
+            break;
+        case MODE_DELETE:
+            break;
+        case MODE_EDIT:
+            break;
+        case MODE_MOVE:
+            moveFlag = true;
+            break;
+    }
+    if ( ! moveFlag) {
+        m_focusBeingMovedWithMouse = NULL;
+        UserInputModeView::mouseLeftRelease(mouseEvent);
+        return;
+    }
+    
+    m_focusBeingMovedWithMouse = NULL;
 }
 
 /**
@@ -335,11 +656,13 @@ UserInputModeFoci::mouseLeftClick(const MouseEvent& mouseEvent)
  *     OpenGL widget in which context menu is requested
  */
 void
-UserInputModeFoci::showContextMenu(const MouseEvent& /*mouseEvent*/,
-                                         const QPoint& /*menuPosition*/,
-                                         BrainOpenGLWidget* /*openGLWidget*/)
+UserInputModeFoci::showContextMenu(const MouseEvent& mouseEvent,
+                                         const QPoint& menuPosition,
+                                         BrainOpenGLWidget* openGLWidget)
 {
-    /* no context menu */
+    UserInputModeView::showContextMenu(mouseEvent,
+                                       menuPosition,
+                                       openGLWidget);
 }
 
 
