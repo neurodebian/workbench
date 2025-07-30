@@ -40,6 +40,7 @@
 #include "ChartableTwoFileLineLayerChart.h"
 #include "ChartableTwoFileLineSeriesChart.h"
 #include "ChartableTwoFileMatrixChart.h"
+#include "CiftiFiberOrientationFile.h"
 #include "CiftiMappableConnectivityMatrixDataFile.h"
 #include "CiftiMappableDataFile.h"
 #include "CaretVolumeExtension.h"
@@ -159,6 +160,8 @@ IdentificationFormattedTextGenerator::createIdentificationText(const SelectionMa
     labelHtmlTableBuilder->setTitlePlain("Labels");
     std::unique_ptr<HtmlTableBuilder> layersHtmlTableBuilder = createHtmlTableBuilder(3);
     layersHtmlTableBuilder->setTitlePlain("Layers");
+    std::unique_ptr<HtmlTableBuilder> rgbaHtmlTableBuilder = createHtmlTableBuilder(3);
+    rgbaHtmlTableBuilder->setTitlePlain("RGBA");
     std::unique_ptr<HtmlTableBuilder> scalarHtmlTableBuilder = createHtmlTableBuilder(3);
     scalarHtmlTableBuilder->setTitlePlain("Scalars");
 
@@ -199,6 +202,7 @@ IdentificationFormattedTextGenerator::createIdentificationText(const SelectionMa
         if (selectionManager->getVoxelIdentification()->isValid()) {
             if (cmdf->isVolumeMappable()) {
                 this->generateVolumeDataIdentificationText(*labelHtmlTableBuilder,
+                                                           *rgbaHtmlTableBuilder,
                                                            *scalarHtmlTableBuilder,
                                                            cmdf,
                                                            mfi.m_mapIndices,
@@ -303,6 +307,7 @@ IdentificationFormattedTextGenerator::createIdentificationText(const SelectionMa
     AString textOut;
     textOut.append(geometryHtmlTableBuilder->getAsHtmlTable());
     textOut.append(labelHtmlTableBuilder->getAsHtmlTable());
+    textOut.append(rgbaHtmlTableBuilder->getAsHtmlTable());
     textOut.append(scalarHtmlTableBuilder->getAsHtmlTable());
     textOut.append(layersHtmlTableBuilder->getAsHtmlTable());
     textOut.append(chartHtmlTableBuilder->getAsHtmlTable());
@@ -403,6 +408,11 @@ IdentificationFormattedTextGenerator::getFilesForIdentification(const Identifica
         CaretMappableDataFile* mapFile(caretDataFile->castToCaretMappableDataFile());
         HistologySlicesFile* histologyFile(caretDataFile->castToHistologySlicesFile());
         MediaFile* mediaFile(caretDataFile->castToMediaFile());
+        const CiftiFiberOrientationFile* fibersFile(dynamic_cast<CiftiFiberOrientationFile*>(caretDataFile));
+        if (fibersFile != NULL) {
+            /* Ignore fiber orientations file, no maps */
+            continue;
+        }
         if ((mapFile == NULL)
             && (histologyFile == NULL)
             && (mediaFile == NULL)) {
@@ -679,6 +689,8 @@ IdentificationFormattedTextGenerator::generateVolumeVoxelIdentificationText(Html
  *
  * @param labelHtmlTableBuilder
  *     HTML table builder for label identification text.
+ * @param rgbaHtmlTableBuilder
+ *     HTML table builder for RGBA identification text.
  * @param scalarHtmlTableBuilder
  *     HTML table builder for scalar identification text.
  * @param mapFile
@@ -692,6 +704,7 @@ IdentificationFormattedTextGenerator::generateVolumeVoxelIdentificationText(Html
  */
 void
 IdentificationFormattedTextGenerator::generateVolumeDataIdentificationText(HtmlTableBuilder& labelHtmlTableBuilder,
+                                                                           HtmlTableBuilder& rgbaHtmlTableBuilder,
                                                                            HtmlTableBuilder& scalarHtmlTableBuilder,
                                                                            CaretMappableDataFile* mapFile,
                                                                            const std::set<int32_t>& mapIndicesSet,
@@ -796,22 +809,22 @@ IdentificationFormattedTextGenerator::generateVolumeDataIdentificationText(HtmlT
                             else if (volumeFile->getType() == SubvolumeAttributes::RGB) {
                                 if (volumeFile->getNumberOfComponents() == 4) {
                                     text += ("RGBA("
-                                             + AString::number(volumeFile->getValue(vfI, vfJ, vfK, mapIndex, 0))
+                                             + AString::number(volumeFile->getValue(vfI, vfJ, vfK, mapIndex, 0) * 255.0, 'f', 0)
                                              + ","
-                                             + AString::number(volumeFile->getValue(vfI, vfJ, vfK, mapIndex, 1))
+                                             + AString::number(volumeFile->getValue(vfI, vfJ, vfK, mapIndex, 1) * 255.0, 'f', 0)
                                              + ","
-                                             + AString::number(volumeFile->getValue(vfI, vfJ, vfK, mapIndex, 2))
+                                             + AString::number(volumeFile->getValue(vfI, vfJ, vfK, mapIndex, 2) * 255.0, 'f', 0)
                                              + ","
-                                             + AString::number(volumeFile->getValue(vfI, vfJ, vfK, mapIndex, 3))
+                                             + AString::number(volumeFile->getValue(vfI, vfJ, vfK, mapIndex, 3) * 255.0, 'f', 0)
                                              + ")");
                                 }
                                 else if (volumeFile->getNumberOfComponents() == 3) {
                                     text += ("RGB("
-                                             + AString::number(volumeFile->getValue(vfI, vfJ, vfK, mapIndex, 0))
+                                             + AString::number(volumeFile->getValue(vfI, vfJ, vfK, mapIndex, 0) * 255.0, 'f', 0)
                                              + ","
-                                             + AString::number(volumeFile->getValue(vfI, vfJ, vfK, mapIndex, 1))
+                                             + AString::number(volumeFile->getValue(vfI, vfJ, vfK, mapIndex, 1) * 255.0, 'f', 0)
                                              + ","
-                                             + AString::number(volumeFile->getValue(vfI, vfJ, vfK, mapIndex, 2))
+                                             + AString::number(volumeFile->getValue(vfI, vfJ, vfK, mapIndex, 2) * 255.0, 'f', 0)
                                              + ")");
                                 }
                             }
@@ -837,6 +850,11 @@ IdentificationFormattedTextGenerator::generateVolumeDataIdentificationText(HtmlT
                         scalarHtmlTableBuilder.addRow(text,
                                                       filename,
                                                       "");
+                    }
+                    else if (volumeFile->isMappedWithRGBA()) {
+                        rgbaHtmlTableBuilder.addRow(text,
+                                                    filename,
+                                                    "");
                     }
                 }
                 else if (ciftiFile != NULL) {
@@ -937,6 +955,10 @@ IdentificationFormattedTextGenerator::generateVolumeDataIdentificationText(HtmlT
                     labelHtmlTableBuilder.addRow(m_noDataText,
                                                  mapFile->getFileNameNoPath());
                 }
+                if (mapFile->isMappedWithRGBA()) {
+                    rgbaHtmlTableBuilder.addRow(m_noDataText,
+                                                mapFile->getFileNameNoPath());
+                }
                 if (mapFile->isMappedWithPalette()) {
                     scalarHtmlTableBuilder.addRow(m_noDataText,
                                                   mapFile->getFileNameNoPath());
@@ -1008,6 +1030,8 @@ IdentificationFormattedTextGenerator::isParcelAndScalarTypeFile(const DataFileTy
             break;
         case DataFileTypeEnum::CONNECTIVITY_FIBER_TRAJECTORY_TEMPORARY:
             break;
+        case DataFileTypeEnum::CONNECTIVITY_FIBER_TRAJECTORY_MAPS:
+            break;
         case DataFileTypeEnum::CONNECTIVITY_PARCEL:
             parcelDataFlag = true;
             break;
@@ -1039,6 +1063,8 @@ IdentificationFormattedTextGenerator::isParcelAndScalarTypeFile(const DataFileTy
         case DataFileTypeEnum::METRIC:
             break;
         case DataFileTypeEnum::METRIC_DYNAMIC:
+            break;
+        case DataFileTypeEnum::OME_ZARR_IMAGE_FILE:
             break;
         case DataFileTypeEnum::PALETTE:
             break;
@@ -2140,9 +2166,15 @@ IdentificationFormattedTextGenerator::generateFocusIdentifcationText(HtmlTableBu
                        stereoXYZText);
     }
     else {
+        AString focusIdText;
+        if ( ! focus->getFocusID().isEmpty()) {
+            focusIdText = ("<br>ID: " + focus->getFocusID());
+        }
         htmlTableBuilder.addRow(stereoXYZText,
                                       ("FOCUS " + AString::number(focusIndex)),
-                                      ("Name: " + focus->getName() + "<br>Class: " + focus->getClassName()));
+                                      ("Name: " + focus->getName()
+                                       + "<br>Class: " + focus->getClassName()
+                                       + focusIdText));
     }
 }
 

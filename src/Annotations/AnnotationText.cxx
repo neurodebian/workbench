@@ -25,6 +25,7 @@
 
 #include "AnnotationPercentSizeText.h"
 #include "AnnotationSpatialModification.h"
+#include "AnnotationTextSubstitution.h"
 #include "CaretAssert.h"
 #include "CaretLogger.h"
 #include "EventAnnotationTextSubstitutionGet.h"
@@ -34,8 +35,6 @@
 #include "SceneClassAssistant.h"
 
 using namespace caret;
-
-
     
 /**
  * \class caret::AnnotationText 
@@ -138,6 +137,11 @@ AnnotationText::initializeAnnotationTextMembers()
             m_customColorText[1]      = 1.0;
             m_customColorText[2]      = 1.0;
             m_customColorText[3]      = 1.0;
+            m_colorTextBackground     = CaretColorEnum::NONE;
+            m_customColorTextBackground[0]      = 0.0;
+            m_customColorTextBackground[1]      = 0.0;
+            m_customColorTextBackground[2]      = 0.0;
+            m_customColorTextBackground[3]      = 1.0;
             m_boldEnabled             = false;
             m_italicEnabled           = false;
             m_underlineEnabled        = false;
@@ -155,6 +159,11 @@ AnnotationText::initializeAnnotationTextMembers()
             m_customColorText[1]      = s_userDefaultCustomColorText[1];
             m_customColorText[2]      = s_userDefaultCustomColorText[2];
             m_customColorText[3]      = s_userDefaultCustomColorText[3];
+            m_colorTextBackground     = s_userDefaultColorTextBackground;
+            m_customColorTextBackground[0]      = s_userDefaultCustomColorTextBackground[0];
+            m_customColorTextBackground[1]      = s_userDefaultCustomColorTextBackground[1];
+            m_customColorTextBackground[2]      = s_userDefaultCustomColorTextBackground[2];
+            m_customColorTextBackground[3]      = s_userDefaultCustomColorTextBackground[3];
             m_boldEnabled             = s_userDefaultBoldEnabled;
             m_italicEnabled           = s_userDefaultItalicEnabled;
             m_underlineEnabled        = s_userDefaultUnderlineEnabled;
@@ -183,6 +192,9 @@ AnnotationText::initializeAnnotationTextMembers()
     m_attributesAssistant->add<CaretColorEnum, CaretColorEnum::Enum>("m_colorText",
                                                                      &m_colorText);
     m_attributesAssistant->addArray("m_customColorText", m_customColorText, 4, 1.0);
+    m_attributesAssistant->add<CaretColorEnum, CaretColorEnum::Enum>("m_colorTextBackground",
+                                                                     &m_colorTextBackground);
+    m_attributesAssistant->addArray("m_customColorTextBackground", m_customColorTextBackground, 4, 1.0);
     m_attributesAssistant->add("m_boldEnabled",
                                &m_boldEnabled);
     m_attributesAssistant->add("m_italicEnabled",
@@ -195,6 +207,25 @@ AnnotationText::initializeAnnotationTextMembers()
                                &m_fontPercentViewportSize);
     m_attributesAssistant->add("m_text",
                                &m_text);
+}
+
+/**
+ * @return Cast to text annotation (NULL if NOT text annotation)
+ */
+const AnnotationText*
+AnnotationText::castToTextAnnotation() const 
+{
+    return this;
+}
+
+/**
+ * @return This text annotation subtitution's group identifer (empty if none)
+ */
+std::set<AString>
+AnnotationText::getTextSubstitutionGroupIDs() const
+{
+    getTextWithSubstitutionsApplied(); /* generates group IDs */
+    return m_textSubstitutionGroupIDs;
 }
 
 /**
@@ -291,6 +322,7 @@ void
 AnnotationText::invalidateTextSubstitution()
 {
     m_textWithSubstitutions.clear();
+    m_textSubstitutionGroupIDs.clear();
 }
 
 /**
@@ -301,74 +333,156 @@ AnnotationText::getTextWithSubstitutionsApplied() const
 {
     if (m_textWithSubstitutions.isEmpty()) {
         if ( ! m_text.isEmpty()) {
-            std::vector<int32_t> indices;
-            const QChar substituteChar('$');
-            int32_t index = m_text.indexOf(substituteChar);
-            while (index >= 0) {
-                indices.push_back(index);
-                index = m_text.indexOf(substituteChar, index + 1);
-            }
+            const std::vector<std::unique_ptr<AnnotationTextSubstitution>> subs(findSubstitutions());
             
-            if (indices.size() < 2) {
-                if (indices.size() == 1) {
-                    CaretLogWarning("Text annotation \""
-                                    + m_text
-                                    + "\" is missing substitution delimeters");
+            const bool testFlag(false);
+            if (testFlag) {
+                if ( ! subs.empty()) {
+                    std::cout << m_text << std::endl;
+                    for (const auto& s : subs) {
+                        std::cout << s->toString() << std::endl;
+                    }
                 }
+                return m_text;
+            }
+
+            m_textWithSubstitutions = m_text;
+            
+            const int32_t numSubs(subs.size());
+            for (int32_t i = (numSubs - 1); i >= 0; --i) {
+                CaretAssertVectorIndex(subs, i);
+                const AnnotationTextSubstitution* s = subs[i].get();
+                CaretAssert(s);
                 
-                m_textWithSubstitutions = m_text;
-            }
-            else {
-                int32_t lastPos = 0;
-                const int32_t numSubsitutions = static_cast<int32_t>(indices.size() / 2);
-                for (int32_t i = 0; i < numSubsitutions; i++) {
-                    const int32_t i2 = i * 2;
-                    CaretAssertVectorIndex(indices, i2+1);
-                    const int32_t indexOne = indices[i2];
-                    const int32_t indexTwo = indices[i2+1];
-                    if (indexTwo > (indexOne + 1)) {
-                        const int32_t nameLen  = indexTwo - indexOne - 1;
-                        AString name = m_text.mid(indexOne + 1, nameLen);
-                        
-                        EventAnnotationTextSubstitutionGet subEvent;
-                        subEvent.addSubstitutionName(name);
-                        EventManager::get()->sendEvent(subEvent.getPointer());
-                        const AString subValue = subEvent.getSubstitutionValueForName(name);
-                        
-                        if (subValue.isEmpty()) {
-                            CaretLogWarning("Unable to find substitution value for name \""
-                                            + name
-                                            + "\"");
-                        }
-                        
-                        const AString txt = m_text.mid(lastPos, indexOne - lastPos);
-                        m_textWithSubstitutions.append(txt);
-                        if (subValue.isEmpty()) {
-                            m_textWithSubstitutions.append("$" + name + "$");
-                        }
-                        else {
-                            m_textWithSubstitutions.append(subValue);
-                        }
-                    }
-                    else {
-                        const AString txt = m_text.mid(lastPos, indexOne - lastPos);
-                        m_textWithSubstitutions.append(txt + "$$");
-                        CaretLogWarning("Text annotation \""
-                                        + m_text
-                                        + "\" contains empty text substitution delimeters ("
-                                        + substituteChar
-                                        + ")");
-                    }
-                    lastPos = indexTwo + 1;
+                EventAnnotationTextSubstitutionGet subEvent;
+                subEvent.addSubstitutionID(*s);
+                EventManager::get()->sendEvent(subEvent.getPointer());
+                const int32_t subsIndex(0);
+                if (subEvent.getNumberOfSubstitutionIDs() > subsIndex) {
+                    const AString subTextValue(subEvent.getSubstitutionTextValue(subsIndex));
+                    
+                    m_textWithSubstitutions.remove(s->getStartIndex(),
+                                                   s->getLength());
+                    m_textWithSubstitutions.insert(s->getStartIndex(),
+                                                   subEvent.getSubstitutionTextValue(subsIndex));
                 }
-                const AString lastTxt = m_text.mid(lastPos);
-                m_textWithSubstitutions.append(lastTxt);
             }
-            
         }
     }
     
     return m_textWithSubstitutions;
+}
+
+/**
+ * @return All substitutions in this text annotation
+ */
+std::vector<std::unique_ptr<AnnotationTextSubstitution>>
+AnnotationText::findSubstitutions() const
+{
+    m_textSubstitutionGroupIDs.clear();
+
+    std::vector<std::unique_ptr<AnnotationTextSubstitution>> subs;
+    
+    /*
+     * A text with substitution is contained within a pair of "$" characters.
+     * The substitution starts with an optional "file ID" that is separated
+     * by a "@" characters from the required "column ID".
+     *     "text$face@A$string"    - "face" is the "file ID" and "A" is the "column ID"
+     *     "text$C$string"         - "C" is the "column ID" and the "file ID" is optional and not in this example
+     *     "text$face@A$str$nose@C$ing" - Contains two
+     */
+    if ( ! m_text.isEmpty()) {
+        std::set<AString> groupIDs;
+
+        /*
+         * Find all of the substitution characters in the text string.
+         * They should be in pairs with one substitution character
+         * starting the substitution text and one ending it.
+         */
+        const QChar substituteChar('$'); /* starts and ends a substitution */
+        std::vector<int32_t> indicesOfAllSubsChars;
+        int32_t index = m_text.indexOf(substituteChar);
+        while (index >= 0) {
+            indicesOfAllSubsChars.push_back(index);
+            index = m_text.indexOf(substituteChar, index + 1);
+        }
+        
+        if (indicesOfAllSubsChars.size() < 2) {
+            if (indicesOfAllSubsChars.size() == 1) {
+                CaretLogWarning("Text annotation \""
+                                + m_text
+                                + "\" is missing substitution delimeters");
+            }
+        }
+        else {
+            /* separates group ID and column number in the substitution */
+            const QChar groupIdChar('@');
+            
+            const int32_t numSubsitutionCharPairs = static_cast<int32_t>(indicesOfAllSubsChars.size() / 2);
+            for (int32_t i = 0; i < numSubsitutionCharPairs; i++) {
+                AString errorMessage;
+                const int32_t i2 = i * 2;
+                CaretAssertVectorIndex(indicesOfAllSubsChars, i2+1);
+                const int32_t indexOfFirstSubsChar(indicesOfAllSubsChars[i2]);
+                const int32_t indexOfSecondSubsChar(indicesOfAllSubsChars[i2+1]);
+                if (indexOfSecondSubsChar > (indexOfFirstSubsChar + 1)) {
+                    /*
+                     * Strip "$" characters from the ends
+                     */
+                    const int32_t nameLen  = indexOfSecondSubsChar - indexOfFirstSubsChar - 1;
+                    AString subsText(m_text.mid(indexOfFirstSubsChar + 1, nameLen));
+                    
+                    /*
+                     * Group ID is optional
+                     */
+                    AString groupID;
+                    AString columnID;
+                    const int32_t groupIdSplitIndex(subsText.indexOf(groupIdChar));
+                    if (groupIdSplitIndex >= 0) {
+                        groupID = subsText.left(groupIdSplitIndex);
+                        if (groupID.isEmpty()) {
+                            errorMessage.appendWithNewLine("   has empty group ID before "
+                                                           + AString(groupIdChar)
+                                                           + " character");
+                        }
+                        else {
+                            m_textSubstitutionGroupIDs.insert(groupID);
+                        }
+                        columnID = subsText.mid(groupIdSplitIndex + 1);
+                    }
+                    else {
+                        columnID = subsText;
+                    }
+
+                    if (columnID.isEmpty()) {
+                        errorMessage.appendWithNewLine("   has empty column ID");
+                    }
+                    
+                    if (errorMessage.isEmpty()) {
+                        const int32_t nameAndSubsCharLength(nameLen + 2); /* Name and 2 "$" chars */
+                        subs.emplace_back(new AnnotationTextSubstitution(groupID,
+                                                                         columnID,
+                                                                         indexOfFirstSubsChar,
+                                                                         nameAndSubsCharLength));
+                    }
+                }
+                else {
+                    errorMessage.appendWithNewLine("   contains empty text substitution delimeters ("
+                                                   + AString(substituteChar)
+                                                   + ")");
+                }
+                
+                if ( ! errorMessage.isEmpty()) {
+                    CaretLogWarning("Text annotation \""
+                                    + m_text
+                                    + "\" has substitution errors:\n"
+                                    + errorMessage);
+                }
+            }
+        }
+    }
+    
+    return subs;
 }
 
 /**
@@ -802,6 +916,157 @@ AnnotationText::setCustomTextColor(const uint8_t rgba[4])
 }
 
 /**
+ * @return The background color.
+ */
+CaretColorEnum::Enum
+AnnotationText::getTextBackgroundColor() const
+{
+    return m_colorTextBackground;
+}
+
+/**
+ * Set the background color.
+ *
+ * @param color
+ *     New value for foreground color.
+ */
+void
+AnnotationText::setTextBackgroundColor(const CaretColorEnum::Enum color)
+{
+    if (m_colorTextBackground != color) {
+        m_colorTextBackground = color;
+        setModified();
+    }
+}
+
+/**
+ * Get the background's color's RGBA components regardless of
+ * coloring (custom color or a CaretColorEnum) selected by the user.
+ *
+ * @param rgbaOut
+ *     RGBA components ranging 0.0 to 1.0.
+ */
+void
+AnnotationText::getTextBackgroundColorRGBA(float rgbaOut[4]) const
+{
+    switch (m_colorTextBackground) {
+        case CaretColorEnum::NONE:
+            rgbaOut[0] = 0.0;
+            rgbaOut[1] = 0.0;
+            rgbaOut[2] = 0.0;
+            rgbaOut[3] = 0.0;
+            break;
+        case CaretColorEnum::CUSTOM:
+            getCustomTextBackgroundColor(rgbaOut);
+            break;
+        case CaretColorEnum::AQUA:
+        case CaretColorEnum::BLACK:
+        case CaretColorEnum::BLUE:
+        case CaretColorEnum::FUCHSIA:
+        case CaretColorEnum::GRAY:
+        case CaretColorEnum::GREEN:
+        case CaretColorEnum::LIME:
+        case CaretColorEnum::MAROON:
+        case CaretColorEnum::NAVY:
+        case CaretColorEnum::OLIVE:
+        case CaretColorEnum::PURPLE:
+        case CaretColorEnum::RED:
+        case CaretColorEnum::SILVER:
+        case CaretColorEnum::TEAL:
+        case CaretColorEnum::WHITE:
+        case CaretColorEnum::YELLOW:
+            CaretColorEnum::toRGBAFloat(m_colorTextBackground,
+                                        rgbaOut);
+            rgbaOut[3] = 1.0;
+            break;
+    }
+}
+
+/**
+ * Get the background color's RGBA components regardless of
+ * coloring (custom color or a CaretColorEnum) selected by the user.
+ *
+ * @param rgbaOut
+ *     RGBA components ranging 0 to 255.
+ */
+void
+AnnotationText::getTextBackgroundColorRGBA(uint8_t rgbaOut[4]) const
+{
+    float rgbaFloat[4] = { 0.0, 0.0, 0.0, 0.0 };
+    getTextBackgroundColorRGBA(rgbaFloat);
+    
+    rgbaOut[0] = static_cast<uint8_t>(rgbaFloat[0] * 255.0);
+    rgbaOut[1] = static_cast<uint8_t>(rgbaFloat[1] * 255.0);
+    rgbaOut[2] = static_cast<uint8_t>(rgbaFloat[2] * 255.0);
+    rgbaOut[3] = static_cast<uint8_t>(rgbaFloat[3] * 255.0);
+}
+
+/**
+ * Get the foreground color.
+ *
+ * @param rgbaOut
+ *    RGBA components (red, green, blue, alpha) each of which ranges [0.0, 1.0].
+ */
+void
+AnnotationText::getCustomTextBackgroundColor(float rgbaOut[4]) const
+{
+    rgbaOut[0] = m_customColorTextBackground[0];
+    rgbaOut[1] = m_customColorTextBackground[1];
+    rgbaOut[2] = m_customColorTextBackground[2];
+    rgbaOut[3] = m_customColorTextBackground[3];
+}
+
+/**
+ * Get the foreground color.
+ *
+ * @param rgbaOut
+ *    RGBA components (red, green, blue, alpha) each of which ranges [0, 255].
+ */
+void
+AnnotationText::getCustomTextBackgroundColor(uint8_t rgbaOut[4]) const
+{
+    rgbaOut[0] = static_cast<uint8_t>(m_customColorTextBackground[0] * 255.0);
+    rgbaOut[1] = static_cast<uint8_t>(m_customColorTextBackground[1] * 255.0);
+    rgbaOut[2] = static_cast<uint8_t>(m_customColorTextBackground[2] * 255.0);
+    rgbaOut[3] = static_cast<uint8_t>(m_customColorTextBackground[3] * 255.0);
+}
+
+/**
+ * Set the foreground color with floats.
+ *
+ * @param rgba
+ *    RGBA components (red, green, blue, alpha) each of which ranges [0.0, 1.0].
+ */
+void
+AnnotationText::setCustomTextBackgroundColor(const float rgba[4])
+{
+    for (int32_t i = 0; i < 4; i++) {
+        if (rgba[i] != m_customColorTextBackground[i]) {
+            m_customColorTextBackground[i] = rgba[i];
+            setModified();
+        }
+    }
+}
+
+/**
+ * Set the foreground color with unsigned bytes.
+ *
+ * @param rgba
+ *    RGBA components (red, green, blue, alpha) each of which ranges [0, 255].
+ */
+void
+AnnotationText::setCustomTextBackgroundColor(const uint8_t rgba[4])
+{
+    for (int32_t i = 0; i < 4; i++) {
+        const float component = rgba[i] / 255.0;
+        if (component != m_customColorTextBackground[i]) {
+            m_customColorTextBackground[i] = component;
+            setModified();
+        }
+    }
+}
+
+/**
  * @return
  *    Is bold enabled ?
  */
@@ -896,6 +1161,11 @@ AnnotationText::copyHelperAnnotationText(const AnnotationText& obj)
     m_customColorText[1]  = obj.m_customColorText[1];
     m_customColorText[2]  = obj.m_customColorText[2];
     m_customColorText[3]  = obj.m_customColorText[3];
+    m_colorTextBackground = obj.m_colorTextBackground;
+    m_customColorTextBackground[0]  = obj.m_customColorTextBackground[0];
+    m_customColorTextBackground[1]  = obj.m_customColorTextBackground[1];
+    m_customColorTextBackground[2]  = obj.m_customColorTextBackground[2];
+    m_customColorTextBackground[3]  = obj.m_customColorTextBackground[3];
     m_boldEnabled         = obj.m_boldEnabled;
     m_italicEnabled       = obj.m_italicEnabled;
     m_underlineEnabled    = obj.m_underlineEnabled;
@@ -1195,6 +1465,33 @@ AnnotationText::setUserDefaultTextColor(const CaretColorEnum::Enum color)
  */
 void
 AnnotationText::setUserDefaultCustomTextColor(const float rgba[4])
+{
+    s_userDefaultCustomColorText[0] = rgba[0];
+    s_userDefaultCustomColorText[1] = rgba[1];
+    s_userDefaultCustomColorText[2] = rgba[2];
+    s_userDefaultCustomColorText[3] = rgba[3];
+}
+
+/**
+ * Set the default value for text background color
+ *
+ * @param color
+ *     Default for newly created annotations.
+ */
+void
+AnnotationText::setUserDefaultTextBackgroundColor(const CaretColorEnum::Enum color)
+{
+    s_userDefaultColorTextBackground = color;
+}
+
+/**
+ * Set the default value for custom text color
+ *
+ * @param rgba
+ *     Default for newly created annotations.
+ */
+void
+AnnotationText::setUserDefaultCustomTextBackgroundColor(const float rgba[4])
 {
     s_userDefaultCustomColorText[0] = rgba[0];
     s_userDefaultCustomColorText[1] = rgba[1];

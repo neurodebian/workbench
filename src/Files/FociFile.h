@@ -21,11 +21,17 @@
  */
 /*LICENSE_END*/
 
+#include <array>
+
 #include "CaretDataFile.h"
+#include "DataFileEditorColumnContent.h"
+#include "FunctionResult.h"
 #include "GroupAndNameHierarchyUserInterface.h"
+#include "SamplesColorModeEnum.h"
 
 namespace caret {
 
+    class DataFileEditorModel;
     class GroupAndNameHierarchyModel;
     class Focus;
     class GiftiLabelTable;
@@ -62,7 +68,17 @@ namespace caret {
         
         int32_t getNumberOfFoci() const;
         
+        std::vector<AString> getAllFociNames() const;
+        
+        std::vector<AString> getAllFociClasses() const;
+        
+        std::vector<AString> getAllFociNamesThatUseClass(const AString& className);
+        
+        std::vector<AString> getAllClassesForFociWithName(const AString& focusName) const;
+        
         void addFocus(Focus* focus);
+        
+        void addFocusUseColorsFromFocus(Focus* focus);
         
         Focus* getFocus(const int32_t indx);
         
@@ -98,6 +114,13 @@ namespace caret {
         
         static AString getFileVersionAsString();
         
+        FunctionResultValue<std::array<uint8_t, 4>> getNameOrClassColor(const SamplesColorModeEnum::Enum samplesColorMode,
+                                                                        const AString& focusNameOrClassName) const;
+
+        FunctionResultValue<DataFileEditorModel*> exportToDataFileEditorModel(const DataFileEditorColumnContent& modelContent) const;
+        
+        FunctionResult importFromDataFileEditorModel(const DataFileEditorModel& dataFileEditorModel);
+        
         /** XML Tag for foci file */
         static const AString XML_TAG_FOCI_FILE;
         
@@ -114,6 +137,8 @@ namespace caret {
         void copyHelperFociFile(const FociFile& obj);
         
         void initializeFociFile();
+        
+        void clearFoci();
         
         GiftiMetaData* m_metadata;
         

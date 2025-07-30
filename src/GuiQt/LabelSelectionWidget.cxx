@@ -115,6 +115,8 @@ m_saveRestoreStateName(saveRestoreStateName)
                 break;
             case DataFileTypeEnum::CONNECTIVITY_FIBER_TRAJECTORY_TEMPORARY:
                 break;
+            case DataFileTypeEnum::CONNECTIVITY_FIBER_TRAJECTORY_MAPS:
+                break;
             case DataFileTypeEnum::CONNECTIVITY_SCALAR_DATA_SERIES:
                 break;
             case DataFileTypeEnum::CZI_IMAGE_FILE:
@@ -131,6 +133,8 @@ m_saveRestoreStateName(saveRestoreStateName)
             case DataFileTypeEnum::METRIC:
                 break;
             case DataFileTypeEnum::METRIC_DYNAMIC:
+                break;
+            case DataFileTypeEnum::OME_ZARR_IMAGE_FILE:
                 break;
             case DataFileTypeEnum::PALETTE:
                 break;

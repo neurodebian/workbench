@@ -27,6 +27,8 @@
 #include "AnnotationManager.h"
 #include "Brain.h"
 #include "CaretLogger.h"
+#include "EventAnnotationPolyhedronNameComponentSettings.h"
+#include "EventManager.h"
 #include "SceneAttributes.h"
 #include "SceneClass.h"
 #include "SceneClassArray.h"
@@ -58,9 +60,16 @@ m_parentBrain(parentBrain)
                           &m_displaySamples);
     m_sceneAssistant->add("m_displaySampleNames",
                           &m_displaySampleNames);
-
+    m_sceneAssistant->add("m_displaySampleNumbers",
+                          &m_displaySampleNumbers);
+    m_sceneAssistant->add("m_displaySampleActualDesiredSuffix", /* keep using old name so older scenes will work */
+                          &m_displaySampleProspectiveRetrospectiveSuffix);
+    m_sceneAssistant->add<SamplesColorModeEnum, SamplesColorModeEnum::Enum>("m_colorMode",
+                                                                            &m_colorMode);
     m_sceneAssistant->addTabIndexedEnumeratedTypeArray<DisplayGroupEnum,DisplayGroupEnum::Enum>("m_displayGroup",
                                                                                                 m_displayGroup);
+    
+    EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_ANNOTATION_POLYHEDRON_NAME_COMPONENT_SETTINGS);
 }
 
 /**
@@ -68,6 +77,26 @@ m_parentBrain(parentBrain)
  */
 DisplayPropertiesSamples::~DisplayPropertiesSamples()
 {
+    EventManager::get()->removeAllEventsFromListener(this);
+}
+
+/**
+ * Receive an event.
+ *
+ * @param event
+ *     The event that the receive can respond to.
+ */
+void
+DisplayPropertiesSamples::receiveEvent(Event* event)
+{
+    if (event->getEventType() == EventTypeEnum::EVENT_ANNOTATION_POLYHEDRON_NAME_COMPONENT_SETTINGS) {
+        EventAnnotationPolyhedronNameComponentSettings* settingsEvent(dynamic_cast<EventAnnotationPolyhedronNameComponentSettings*>(event));
+        CaretAssert(settingsEvent);
+        settingsEvent->setShowName(isDisplaySampleNames());
+        settingsEvent->setShowNumber(isDisplaySampleNumbers());
+        settingsEvent->setShowProspectiveRetrospectiveSuffix(isDisplaySampleProspectiveRetrospectiveSuffix());
+        settingsEvent->setEventProcessed();
+    }
 }
 
 /**
@@ -77,10 +106,8 @@ DisplayPropertiesSamples::~DisplayPropertiesSamples()
  *     The new/updated sample.
  */
 void
-DisplayPropertiesSamples::updateForNewSample(const Annotation* sample)
+DisplayPropertiesSamples::updateForNewSample(const Annotation* /*sample*/)
 {
-    CaretAssert(sample);
-    
     setDisplaySamples(true);
 }
 
@@ -126,6 +153,9 @@ DisplayPropertiesSamples::resetPrivate()
 {
     m_displaySamples = true;
     m_displaySampleNames = true;
+    m_displaySampleNumbers = true;
+    m_displaySampleProspectiveRetrospectiveSuffix = true;
+    m_colorMode = SamplesColorModeEnum::SAMPLE;
     
     for (int32_t i = 0; i < BrainConstants::MAXIMUM_NUMBER_OF_BROWSER_TABS; i++) {
         m_displayGroup[i] = DisplayGroupEnum::DISPLAY_GROUP_TAB;
@@ -191,6 +221,68 @@ void
 DisplayPropertiesSamples::setDisplaySampleNames(const bool status)
 {
     m_displaySampleNames = status;
+}
+
+/**
+ * @return Status for displaying sample number
+ */
+bool
+DisplayPropertiesSamples::isDisplaySampleNumbers() const
+{
+    return m_displaySampleNumbers;
+}
+
+/**
+ * Set the display status for samples number
+ *
+ * @param status
+ *     New display status.
+ */
+void
+DisplayPropertiesSamples::setDisplaySampleNumbers(const bool status)
+{
+    m_displaySampleNumbers = status;
+}
+
+/**
+ * @return Status for displaying sample prospective retrospective suffix
+ */
+bool
+DisplayPropertiesSamples::isDisplaySampleProspectiveRetrospectiveSuffix() const
+{
+    return m_displaySampleProspectiveRetrospectiveSuffix;
+}
+
+/**
+ * Set the display status for samples prospective retrospective suffix
+ *
+ * @param status
+ *     New display status.
+ */
+void
+DisplayPropertiesSamples::setDisplaySampleProspectiveRetrospectiveSuffix(const bool status)
+{
+    m_displaySampleProspectiveRetrospectiveSuffix = status;
+}
+
+/**
+ * @return The color mode
+ */
+SamplesColorModeEnum::Enum
+DisplayPropertiesSamples::getColorMode() const
+{
+    return m_colorMode;
+}
+
+/**
+ * Set the color mode
+ * @param colorMode
+ *    The new color mode
+ */
+void
+DisplayPropertiesSamples::setColorMode(const SamplesColorModeEnum::Enum colorMode)
+{
+    m_colorMode = colorMode;
 }
 
 /**

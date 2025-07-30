@@ -23,9 +23,13 @@
 #include "GroupAndNameHierarchyViewController.h"
 #undef __CLASS_AND_NAME_HIERARCHY_VIEW_CONTROLLER_DECLARE__
 
+#include <QAction>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QLineEdit>
+#include <QMenu>
 #include <QPushButton>
+#include <QToolButton>
 #include <QTreeWidget>
 #include <QTreeWidgetItem>
 #include <QVBoxLayout>
@@ -50,6 +54,7 @@
 #include "LabelFile.h"
 #include "VolumeFile.h"
 #include "WuQMacroManager.h"
+#include "WuQMessageBoxTwo.h"
 #include "WuQTreeWidget.h"
 #include "WuQtUtilities.h"
 
@@ -88,9 +93,6 @@ GroupAndNameHierarchyViewController::GroupAndNameHierarchyViewController(const i
     m_previousBrowserTabIndex = -1;
     m_browserWindowIndex = browserWindowIndex;
     
-    QWidget* allOnOffWidget = createAllOnOffControls(objectNameForMacros,
-                                                     descriptiveNameForMacros);
-
     m_modelTreeWidgetLayout = new QVBoxLayout();
     WuQtUtilities::setLayoutSpacingAndMargins(m_modelTreeWidgetLayout, 0, 0);
     m_modelTreeWidget = NULL;
@@ -98,7 +100,8 @@ GroupAndNameHierarchyViewController::GroupAndNameHierarchyViewController(const i
     
     QVBoxLayout* layout = new QVBoxLayout(this);
     WuQtUtilities::setLayoutSpacingAndMargins(layout, 0, 0);
-    layout->addWidget(allOnOffWidget);
+    layout->addWidget(createButtonsWidget(objectNameForMacros,
+                                          descriptiveNameForMacros));
     layout->addSpacing(5);
     layout->addLayout(m_modelTreeWidgetLayout, 100);
     layout->addStretch();
@@ -184,66 +187,115 @@ GroupAndNameHierarchyViewController::updateGraphics()
     EventManager::get()->sendEvent(EventGraphicsPaintSoonAllWindows().getPointer());
 }
 
-
 /**
- * Create buttons for all on and off
- *
+ * @return New instance of the buttons for collapse, expand, find, etc.
  * @param objectNameForMacros
  *    Name of this object for macros
  * @param descriptiveNameForMacros
  *    Descriptive name for macros
  */
 QWidget*
-GroupAndNameHierarchyViewController::createAllOnOffControls(const QString& objectNameForMacros,
-                                                            const QString& descriptiveNameForMacros)
+GroupAndNameHierarchyViewController::createButtonsWidget(const QString& objectNameForMacros,
+                                                         const QString& descriptiveNameForMacros)
 {
     WuQMacroManager* macroManager = WuQMacroManager::instance();
-    
-    QLabel* allLabel = new QLabel("All: ");
-    
-    QPushButton* onPushButton = new QPushButton("On");
-    onPushButton->setToolTip("Turn all on");
-    onPushButton->setObjectName(objectNameForMacros
-                                + ":AllOn");
-    QObject::connect(onPushButton, SIGNAL(clicked()),
-                     this, SLOT(allOnPushButtonClicked()));
-    macroManager->addMacroSupportToObject(onPushButton,
-                                          "Turn on all in " + descriptiveNameForMacros + " selection");
-    
-    QPushButton* offPushButton = new QPushButton("Off");
-    offPushButton->setToolTip("Turn all of");
-    offPushButton->setObjectName(objectNameForMacros
-                                + ":AllOff");
-    QObject::connect(offPushButton, SIGNAL(clicked()),
-                     this, SLOT(allOffPushButtonClicked()));
-    macroManager->addMacroSupportToObject(offPushButton,
-                                          "Turn off all in " + descriptiveNameForMacros + " selection");
-    
-    QWidget* w = new QWidget();
-    QHBoxLayout* layout = new QHBoxLayout(w);
-    layout->addWidget(allLabel);
-    layout->addWidget(onPushButton);
-    layout->addWidget(offPushButton);
-    layout->addStretch();
-    return w;
-}
 
-/**
- * Called when all on push button clicked.
- */
-void 
-GroupAndNameHierarchyViewController::allOnPushButtonClicked()
-{
-    setAllSelected(true);
-}
+    m_collapseAllAction = new QAction("Collapse");
+    m_collapseAllAction->setToolTip("Collapse all items");
+    m_collapseAllAction->setObjectName(objectNameForMacros + ":Collapse");
+    QObject::connect(m_collapseAllAction, &QAction::triggered,
+                     this, &GroupAndNameHierarchyViewController::collapseAllActionTriggered);
+    QToolButton* collapseAllToolButton(new QToolButton());
+    collapseAllToolButton->setDefaultAction(m_collapseAllAction);
+    macroManager->addMacroSupportToObject(m_collapseAllAction,
+                                          "Collapse all in " + descriptiveNameForMacros);
 
-/**
- * Called when all off push button clicked.
- */
-void 
-GroupAndNameHierarchyViewController::allOffPushButtonClicked()
-{
-    setAllSelected(false);
+    
+    m_expandAllAction = new QAction("Expand");
+    m_expandAllAction->setObjectName(objectNameForMacros + ":Expand");
+    m_expandAllAction->setToolTip("Expand all items");
+    QObject::connect(m_expandAllAction, &QAction::triggered,
+                     this, &GroupAndNameHierarchyViewController::expandAllActionTriggered);
+    QToolButton* expandAllToolButton(new QToolButton());
+    expandAllToolButton->setDefaultAction(m_expandAllAction);
+    macroManager->addMacroSupportToObject(m_expandAllAction,
+                                          "Expand all in " + descriptiveNameForMacros);
+
+    m_allOnAction = new QAction("On");
+    m_allOnAction->setToolTip("Turn all items on (check all)");
+    m_allOnAction->setObjectName(objectNameForMacros + ":AllOn");
+    QObject::connect(m_allOnAction, &QAction::triggered,
+                     this, &GroupAndNameHierarchyViewController::allOnActionTriggered);
+    QToolButton* allOnToolButton(new QToolButton());
+    allOnToolButton->setDefaultAction(m_allOnAction);
+    macroManager->addMacroSupportToObject(m_allOnAction,
+                                          "Turn all on in " + descriptiveNameForMacros);
+
+    m_allOffAction = new QAction("Off");
+    m_allOffAction->setObjectName(objectNameForMacros + ":AllOff");
+    m_allOffAction->setToolTip("Turn all items off (uncheck all)");
+    QObject::connect(m_allOffAction, &QAction::triggered,
+                     this, &GroupAndNameHierarchyViewController::allOffActionTriggered);
+    QToolButton* allOffToolButton(new QToolButton());
+    allOffToolButton->setDefaultAction(m_allOffAction);
+    macroManager->addMacroSupportToObject(m_allOffAction,
+                                          "Turn all off in " + descriptiveNameForMacros);
+
+    m_infoAction = new QAction("Info");
+    m_infoAction->setObjectName(objectNameForMacros + ":InfoMenu");
+    m_infoAction->setToolTip("Show information about selected label");
+    m_infoAction->setEnabled(false);
+    QObject::connect(m_infoAction, &QAction::triggered,
+                     this, &GroupAndNameHierarchyViewController::infoActionTriggered);
+    m_infoToolButton = new QToolButton;
+    m_infoToolButton->setDefaultAction(m_infoAction);
+    
+    m_findAction = new QAction("Find");
+    m_findAction->setObjectName(objectNameForMacros + ":Find");
+    m_findAction->setToolTip("Find the first item containing the text");
+    m_findAction->setEnabled(false);
+    QObject::connect(m_findAction, &QAction::triggered,
+                     this, &GroupAndNameHierarchyViewController::findActionTriggered);
+    QToolButton* findToolButton(new QToolButton);
+    findToolButton->setDefaultAction(m_findAction);
+    macroManager->addMacroSupportToObject(m_findAction,
+                                          "Find in " + descriptiveNameForMacros);
+
+    m_nextAction = new QAction("Next");
+    m_nextAction->setObjectName(objectNameForMacros + ":Next");
+    m_nextAction->setToolTip("Move to the next item containing the text (will wrap)");
+    m_nextAction->setEnabled(false);
+    QObject::connect(m_nextAction, &QAction::triggered,
+                     this, &GroupAndNameHierarchyViewController::nextActionTriggered);
+    QToolButton* nextToolButton(new QToolButton);
+    nextToolButton->setDefaultAction(m_nextAction);
+    macroManager->addMacroSupportToObject(m_nextAction,
+                                          "Find next in " + descriptiveNameForMacros);
+
+    m_findTextLineEdit = new QLineEdit();
+    m_findTextLineEdit->setObjectName(objectNameForMacros + ":FindText");
+    m_findTextLineEdit->setToolTip("Enter find text here");
+    QObject::connect(m_findTextLineEdit, &QLineEdit::returnPressed,
+                     this, &GroupAndNameHierarchyViewController::findActionTriggered);
+    QObject::connect(m_findTextLineEdit, &QLineEdit::textChanged,
+                     this, &GroupAndNameHierarchyViewController::findTextLineEditTextChanged);
+    
+    QWidget* widget(new QWidget());
+    QHBoxLayout* buttonsLayout(new QHBoxLayout(widget));
+    buttonsLayout->setSpacing(buttonsLayout->spacing() / 2);
+    buttonsLayout->setContentsMargins(2, 2, 2, 2);
+    buttonsLayout->addWidget(allOnToolButton);
+    buttonsLayout->addWidget(allOffToolButton);
+    buttonsLayout->addWidget(collapseAllToolButton);
+    buttonsLayout->addWidget(expandAllToolButton);
+    buttonsLayout->addSpacing(4);
+    buttonsLayout->addWidget(m_infoToolButton);
+    buttonsLayout->addSpacing(4);
+    buttonsLayout->addWidget(findToolButton);
+    buttonsLayout->addWidget(nextToolButton);
+    buttonsLayout->addWidget(m_findTextLineEdit,
+                             100); /* stretch factor */
+    return widget;
 }
 
 /**
@@ -420,16 +472,27 @@ GroupAndNameHierarchyViewController::createTreeWidget()
     }
     
     m_modelTreeWidget = new WuQTreeWidget();
-    QObject::connect(m_modelTreeWidget, SIGNAL(itemCollapsed(QTreeWidgetItem*)),
-                     this, SLOT(itemWasCollapsed(QTreeWidgetItem*)));
-    QObject::connect(m_modelTreeWidget, SIGNAL(itemExpanded(QTreeWidgetItem*)),
-                     this, SLOT(itemWasExpanded(QTreeWidgetItem*)));
-    QObject::connect(m_modelTreeWidget, SIGNAL(itemChanged(QTreeWidgetItem*, int)),
-                     this, SLOT(itemWasChanged(QTreeWidgetItem*, int)));
-    
-    m_modelTreeWidgetLayout->addWidget(m_modelTreeWidget);
+    m_modelTreeWidget->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    m_modelTreeWidget->setContextMenuPolicy(Qt::CustomContextMenu);
+    QObject::connect(m_modelTreeWidget, &WuQTreeWidget::itemCollapsed,
+                     this, &GroupAndNameHierarchyViewController::itemWasCollapsed);
+    QObject::connect(m_modelTreeWidget, &WuQTreeWidget::itemExpanded,
+                     this, &GroupAndNameHierarchyViewController::itemWasExpanded);
+    QObject::connect(m_modelTreeWidget, &WuQTreeWidget::itemChanged,
+                     this, &GroupAndNameHierarchyViewController::itemWasChanged);
+    QObject::connect(m_modelTreeWidget, &WuQTreeWidget::itemClicked,
+                     this, &GroupAndNameHierarchyViewController::treeItemClicked);
+    QObject::connect(m_modelTreeWidget, &WuQTreeWidget::itemDoubleClicked,
+                     this, &GroupAndNameHierarchyViewController::treeItemDoubleClicked);
+    QObject::connect(m_modelTreeWidget, &WuQTreeWidget::customContextMenuRequested,
+                     this, &GroupAndNameHierarchyViewController::showTreeViewContextMenu);
+
+    m_modelTreeWidgetLayout->addWidget(m_modelTreeWidget, 0);
     
     m_modelTreeWidget->blockSignals(false);
+    
+    m_findItems.clear();
+    m_findItemsCurrentIndex = 0;
 }
 
 
@@ -466,12 +529,6 @@ GroupAndNameHierarchyViewController::updateContents(std::vector<GroupAndNameHier
     if (numberOfModels != static_cast<int32_t>(this->m_treeWidgetItems.size())) {
         needUpdate = true;
     }
-//    else if (m_displayGroup != m_previousDisplayGroup) {
-//        needUpdate = true;
-//    }
-//    else if (browserTabIndex != m_previousBrowserTabIndex) {
-//        needUpdate = true;
-//    }
     else {
         /*
          * Have the displayed models changed?
@@ -586,3 +643,244 @@ GroupAndNameHierarchyViewController::updateSelectedAndExpandedCheckboxesInOtherV
 }
 
 
+/**
+ * Show a context menu for the tree view
+ * @param pos
+ *    Position in the tree view
+ */
+void
+GroupAndNameHierarchyViewController::showTreeViewContextMenu(const QPoint& pos)
+{
+    /*
+     * Note: GroupAndNameHierarchyTreeWidgetItem do not correspond to individual
+     * borders and foci but to the aggreggated names and classes of the foci.
+     * Since they are not individual borders or foci, info or editing is not possible.
+     */
+    const bool showMenuFlag(false);
+    if ( ! showMenuFlag) {
+        return;
+    }
+    if (m_modelTreeWidget != NULL) {
+        const QModelIndex selectedIndex(m_modelTreeWidget->indexAt(pos));
+        if (selectedIndex.isValid()) {
+            const QTreeWidgetItem* item(m_modelTreeWidget->getItemFromIndex(selectedIndex));
+            if (item != NULL) {
+                const GroupAndNameHierarchyTreeWidgetItem* gnhItem(dynamic_cast<const GroupAndNameHierarchyTreeWidgetItem*>(item));
+                if (gnhItem != NULL) {
+                    const bool infoButtonFlag(false);
+                    showSelectedItemMenu(gnhItem,
+                                         m_modelTreeWidget->mapToGlobal(pos),
+                                         infoButtonFlag);
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Show a menu for the selected label
+ * @param item
+ *    The  item that is selected
+ * @param pos
+ *    Position for the menu
+ * @param infoButtonFlag
+ *    If true, menu is for the Info button, else right-click menu on label
+ */
+void
+GroupAndNameHierarchyViewController::showSelectedItemMenu(const GroupAndNameHierarchyTreeWidgetItem* item,
+                                                            const QPoint& pos,
+                                                            const bool /*infoButtonFlag*/)
+{
+    QMenu menu(this);
+    
+    QAction* infoAction(menu.addAction("Info..."));
+    menu.addSeparator();
+    if ( ! menu.actions().isEmpty()) {
+        QAction* selectedAction(menu.exec(pos));
+        if (selectedAction != NULL) {
+            if (selectedAction == infoAction) {
+                WuQMessageBoxTwo::information(this,
+                                              "Info",
+                                              item->text(0));
+            }
+            
+            EventManager::get()->sendEvent(EventGraphicsPaintSoonAllWindows().getPointer());
+            EventManager::get()->sendEvent(EventUserInterfaceUpdate().getPointer());
+        }
+    }
+}
+
+/**
+ * Set the checked status of all children
+ * @param item
+ *    The item
+ * @param checkState
+ *    The check state
+ */
+void
+GroupAndNameHierarchyViewController::setCheckedStatusOfAllChildren(GroupAndNameHierarchyTreeWidgetItem* /*item*/,
+                                                                     const Qt::CheckState /*checkState*/)
+{
+}
+
+/**
+ * Called when collapse all action is triggered
+ */
+void
+GroupAndNameHierarchyViewController::collapseAllActionTriggered()
+{
+    m_modelTreeWidget->collapseAll();
+}
+
+/**
+ * Called when expand all action is triggered
+ */
+void
+GroupAndNameHierarchyViewController::expandAllActionTriggered()
+{
+    m_modelTreeWidget->expandAll();
+}
+
+/**
+ * Called when expand all action is triggered
+ */
+void
+GroupAndNameHierarchyViewController::allOnActionTriggered()
+{
+    setAllSelected(true);
+}
+
+/**
+ * Called when expand all action is triggered
+ */
+void
+GroupAndNameHierarchyViewController::allOffActionTriggered()
+{
+    setAllSelected(false);
+}
+
+/**
+ * Called when Info button is clicked
+ */
+void
+GroupAndNameHierarchyViewController::infoActionTriggered()
+{
+    if (m_modelTreeWidget != NULL) {
+        const QModelIndex selectedIndex(m_modelTreeWidget->currentIndex());
+        if (selectedIndex.isValid()) {
+            const QTreeWidgetItem* item(m_modelTreeWidget->currentItem());
+            if (item != NULL) {
+                const GroupAndNameHierarchyTreeWidgetItem* gnhItem(dynamic_cast<const GroupAndNameHierarchyTreeWidgetItem*>(item));
+                if (gnhItem != NULL) {
+                    const bool infoButtonFlag(true);
+                    showSelectedItemMenu(gnhItem,
+                                         mapToGlobal(m_infoToolButton->pos()), 
+                                         infoButtonFlag);
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Called when find button is clicked or return is pressed in the find line edit
+ */
+void
+GroupAndNameHierarchyViewController::findActionTriggered()
+{
+    m_findItems.clear();
+    m_findItemsCurrentIndex = 0;
+    
+    if (m_modelTreeWidget != NULL) {
+        const QString findText(m_findTextLineEdit->text().trimmed());
+        
+        const int modelColumn(0);
+        m_findItems = m_modelTreeWidget->findItems(findText,
+                                                   (Qt::MatchContains
+                                                  | Qt::MatchRecursive),
+                                                   modelColumn);
+        if (m_findItems.isEmpty()) {
+            GuiManager::get()->beep();
+        }
+        scrollTreeViewToFindItem();
+    }
+}
+
+/**
+ * Called when next button is clicked
+ */
+void
+GroupAndNameHierarchyViewController::nextActionTriggered()
+{
+    scrollTreeViewToFindItem();
+}
+
+/**
+ * Scroll the tree view to the next find item
+ */
+void
+GroupAndNameHierarchyViewController::scrollTreeViewToFindItem()
+{
+    const int32_t numFindItems(m_findItems.size());
+    if (numFindItems > 0) {
+        if ((m_findItemsCurrentIndex < 0)
+            || (m_findItemsCurrentIndex >= numFindItems)) {
+            m_findItemsCurrentIndex = 0;
+        }
+        CaretAssertVectorIndex(m_findItems, m_findItemsCurrentIndex);
+        const QTreeWidgetItem* item(m_findItems[m_findItemsCurrentIndex]);
+        CaretAssert(item);
+        const QModelIndex modelIndex(m_modelTreeWidget->getIndexFromItem(item));
+        if (modelIndex.isValid()) {
+            m_modelTreeWidget->setCurrentIndex(modelIndex);
+            m_modelTreeWidget->scrollTo(modelIndex,
+                                        QTreeView::PositionAtCenter);
+        }
+        
+        /*
+         * For 'next'
+         */
+        ++m_findItemsCurrentIndex;
+    }
+    
+    m_nextAction->setEnabled(numFindItems > 1);
+}
+
+
+/**
+ * Called when next button is clicked
+ * @param text
+ *    Text in the line edit
+ */
+void
+GroupAndNameHierarchyViewController::findTextLineEditTextChanged(const QString& text)
+{
+    m_findAction->setEnabled( ! text.trimmed().isEmpty());
+    m_nextAction->setEnabled(false);
+    m_findItems.clear();
+    m_findItemsCurrentIndex = 0;
+}
+
+/**
+ * Called when tree item is double clicked
+ * @param item
+ *     Item that was clicked
+ * @param column
+ *     Column of click
+ */
+void
+GroupAndNameHierarchyViewController::treeItemDoubleClicked(QTreeWidgetItem* item, int column)
+{
+}
+
+/**
+ * Called when tree item is  clicked
+ * @param item
+ *     Item that was clicked
+ * @param column
+ *     Column of click
+ */
+void
+GroupAndNameHierarchyViewController::treeItemClicked(QTreeWidgetItem* item, int column)
+{
+}

@@ -190,6 +190,8 @@ namespace caret {
         void processDuplicateTab();
         void processDataFileLocationOpen();
         void processDataFileOpen();
+        void processDataFileOpenQuickly();
+        void processOmeZarrDirectoryOpen();
         void processOpenRecent();
         void processManageSaveLoadedFiles();
         void processCaptureImage();
@@ -242,6 +244,7 @@ namespace caret {
         void processHcpUsersGroup();
         void processHcpFeatureRequestWebsiteInBrowser();
         void processReportWorkbenchBug();
+        void processHelpWorkbenchInstallationAssistant();
         
         void processShowSurfacePropertiesDialog();
         void processShowVolumePropertiesDialog();
@@ -252,8 +255,13 @@ namespace caret {
 
         void processDevelopExportVtkFile();
         void processDevelopCziFileTransformTesting();
+        void processDevelopOmeZarrOpenTesting();
         void developerMenuAboutToShow();
         
+        void processEditAnnotations();
+        void processEditBorders();
+        void processEditFoci();
+        void processEditSamples();
         void processProjectFoci();
         void processSplitBorderFiles();
         
@@ -335,6 +343,8 @@ namespace caret {
         
         void openSpecFile(const AString& specFileName);
         
+        void openDataFiles(const QStringList& selectedFiles);
+        
         void processViewFullScreen(bool showFullScreenDisplay,
                                    const bool saveRestoreWindowStatus);
         
@@ -378,7 +388,11 @@ namespace caret {
         
         QAction* m_reopenLastClosedTabAction;
         
+        QAction* m_openOmeZarrDirectoryAction;
+        
         QAction* m_openFileAction;
+        
+        QAction* m_openFileQuicklyAction;
         
         QAction* m_openLocationAction;
         
@@ -442,6 +456,7 @@ namespace caret {
         QAction* m_helpHcpUsersAction;
         QAction* m_helpHcpFeatureRequestAction;
         QAction* m_helpWorkbenchBugReportAction;
+        QAction* m_helpWorkbenchInstallationAssistantAction;
         
         QAction* m_developMenuAction;
         QAction* m_developerGraphicsTimingAction;
@@ -449,6 +464,7 @@ namespace caret {
         QAction* m_developerExportVtkFileAction;
         QAction* m_developerCziFileTransformTestingAction;
         QAction* m_developerOpenMPTestingAction;
+        QAction* m_developerOmeZarrOpenAction;
         
         QAction* m_overlayToolBoxAction;
         
@@ -460,10 +476,14 @@ namespace caret {
         QToolButton* m_toolBarUndoUnlockWindowAndAllTabAspectRatioButton;
 
         QAction* m_featuresToolBoxAction;
-        
+
+        QAction* m_dataAnnotationsEditAction;
+        QAction* m_dataBordersEditAction;
+        QAction* m_dataFociEditAction;
         QAction* m_dataFociProjectAction;
         QAction* m_dataBorderFilesSplitAction;
         QAction* m_dataPaletteEditorDialogAction;
+        QAction* m_dataSamplesEditAction;
         
         QMenu* m_moveSelectedTabToWindowMenu;
         

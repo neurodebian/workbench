@@ -100,6 +100,8 @@ namespace caret {
         
         virtual void receiveEvent(Event* event);
 
+        AString getUploadSummaryMessage() const;
+        
     private:
         class SceneFileIdentifiers {
         public:
@@ -124,6 +126,10 @@ namespace caret {
         BalsaDatabaseManager& operator=(const BalsaDatabaseManager&);
         
         AString getJSessionIdCookie() const;
+        
+        AString addToUploadProgressMessage(const AString& message);
+        
+        bool loginToAvoidTimeout(AString& errorMessageOut);
         
         bool uploadFile(const AString& uploadURL,
                         const AString& fileName,
@@ -172,6 +178,8 @@ namespace caret {
         AString m_infoMessages;
         
         bool m_debugFlag;
+        
+        AString m_uploadProgressMessage;
         
         // ADD_NEW_MEMBERS_HERE
 

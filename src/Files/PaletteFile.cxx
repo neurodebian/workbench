@@ -1849,6 +1849,9 @@ PaletteFile::setDefaultPaletteColorMapping(PaletteColorMapping* paletteColorMapp
         case DataFileTypeEnum::CONNECTIVITY_FIBER_TRAJECTORY_TEMPORARY:
             invalid = true;
             break;
+        case DataFileTypeEnum::CONNECTIVITY_FIBER_TRAJECTORY_MAPS:
+            invalid = true;
+            break;
         case DataFileTypeEnum::CONNECTIVITY_SCALAR_DATA_SERIES:
             break;
         case DataFileTypeEnum::CZI_IMAGE_FILE:
@@ -1870,6 +1873,9 @@ PaletteFile::setDefaultPaletteColorMapping(PaletteColorMapping* paletteColorMapp
             checkShapeFile = true;
             break;
         case DataFileTypeEnum::METRIC_DYNAMIC:
+            break;
+        case DataFileTypeEnum::OME_ZARR_IMAGE_FILE:
+            invalid = true;
             break;
         case DataFileTypeEnum::PALETTE:
             invalid = true;

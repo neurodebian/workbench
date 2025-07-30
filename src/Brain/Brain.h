@@ -33,6 +33,7 @@
 #include "FiberOrientationSamplesLoader.h"
 #include "FiberOrientationSamplesVector.h"
 #include "FileInformation.h"
+#include "FunctionResult.h"
 #include "SceneableInterface.h"
 #include "StructureEnum.h"
 #include "UserInputModeEnum.h"
@@ -42,6 +43,7 @@ namespace caret {
     class AnnotationFile;
     class AnnotationTextSubstitutionFile;
     class AnnotationManager;
+    class AnnotationTextSubstitutionLayerSet;
     class Border;
     class BorderFile;
     class BorderPointFromSearch;
@@ -67,6 +69,7 @@ namespace caret {
     class CiftiConnectivityMatrixParcelDynamicFile;
     class CiftiFiberOrientationFile;
     class CiftiFiberTrajectoryFile;
+    class CiftiFiberTrajectoryMapFile;
     class CiftiMappableDataFile;
     class CiftiMappableConnectivityMatrixDataFile;
     class CiftiParcelLabelFile;
@@ -104,6 +107,7 @@ namespace caret {
     class ModelSurfaceMontage;
     class ModelVolume;
     class ModelWholeBrain;
+    class OmeZarrImageFile;
     class PaletteFile;
     class PaletteGroupStandardPalettes;
     class PaletteGroupUserCustomPalettes;
@@ -150,6 +154,8 @@ namespace caret {
         
         const BorderFile* getBorderFile(const int32_t indx) const;
 
+        const BorderFile* getBorderFileMatchingToName(const AString& borderFileName) const;
+        
         void getAllAnnotationFilesIncludingSceneAnnotationFile(std::vector<AnnotationFile*>& annotationFilesOut) const;
         
         void getAllAnnotationFilesExcludingSceneAnnotationFile(std::vector<AnnotationFile*>& annotationFilesOut) const;
@@ -168,6 +174,14 @@ namespace caret {
         
         const CziImageFile* getCziImageFile(const int32_t indx) const;
         
+        const std::vector<OmeZarrImageFile*> getAllOmeZarrImageFiles() const;
+        
+        int32_t getNumberOfOmeZarrImageFiles() const;
+        
+        OmeZarrImageFile* getOmeZarrImageFile(const int32_t indx);
+        
+        const OmeZarrImageFile* getOmeZarrImageFile(const int32_t indx) const;
+
         const std::vector<HistologySlicesFile*> getAllHistologySlicesFiles() const;
         
         int32_t getNumberOfHistologySlicesFiles() const;
@@ -181,6 +195,8 @@ namespace caret {
         FociFile* getFociFile(const int32_t indx);
         
         const FociFile* getFociFile(const int32_t indx) const;
+        
+        const FociFile* getFociFileMatchingToName(const AString& fociFileName) const;
         
         const std::vector<ImageFile*> getAllImagesFiles() const;
         
@@ -358,6 +374,14 @@ namespace caret {
         
         void getConnectivityFiberTrajectoryFiles(std::vector<CiftiFiberTrajectoryFile*>& ciftiFiberTrajectoryFilesOut) const;
         
+        int32_t getNumberOfConnectivityFiberTrajectoryMapFiles() const;
+        
+        CiftiFiberTrajectoryMapFile* getConnectivityFiberTrajectoryMapFile(int32_t indx);
+        
+        const CiftiFiberTrajectoryMapFile* getConnectivityFiberTrajectoryMapFile(int32_t indx) const;
+        
+        void getConnectivityFiberTrajectoryMapFiles(std::vector<CiftiFiberTrajectoryMapFile*>& ciftiFiberTrajectoryMapFilesOut) const;
+        
         int32_t getNumberOfConnectivityMatrixParcelFiles() const;
         
         CiftiConnectivityMatrixParcelFile* getConnectivityMatrixParcelFile(int32_t indx);
@@ -434,10 +458,6 @@ namespace caret {
         
         const DisplayPropertiesAnnotation* getDisplayPropertiesAnnotation() const;
         
-        DisplayPropertiesAnnotationTextSubstitution* getDisplayPropertiesAnnotationTextSubstitution();
-        
-        const DisplayPropertiesAnnotationTextSubstitution* getDisplayPropertiesAnnotationTextSubstitution() const;
-        
         DisplayPropertiesBorders* getDisplayPropertiesBorders();
         
         const DisplayPropertiesBorders* getDisplayPropertiesBorders() const;
@@ -480,6 +500,10 @@ namespace caret {
         void copyFilePropertiesToTab(const int32_t sourceTabIndex,
                                      const int32_t targetTabIndex);
         
+        AnnotationTextSubstitutionLayerSet* getAnnotationTextSubstitutionLayerSet();
+        
+        const AnnotationTextSubstitutionLayerSet* getAnnotationTextSubstitutionLayerSet() const;
+        
         virtual SceneClass* saveToScene(const SceneAttributes* sceneAttributes,
                                         const AString& instanceName);
         
@@ -520,6 +544,8 @@ namespace caret {
         const Scene* getActiveScene() const;
         
         SamplesMetaDataManager* getSamplesMetaDataManager() const;
+        
+        FunctionResult copySamplesToSurfaces(const SamplesFile* samplesFile);
         
     private:
         /**
@@ -684,6 +710,41 @@ namespace caret {
             }
         }
         
+        /**
+         * Find the data file with the given name
+         *
+         * @param dataFiles
+         *     Files of a particular type
+         * @param fileName
+         *     File name for matching, usually absolute
+         * @return
+         *     Pointer to matching file or NULL if no match
+         */
+        template <class DFT>
+        DFT*
+        findFileWithName(const std::vector<DFT*>& loadedDataFiles,
+                         const AString& fileName) const
+        {
+            DFT* longestNameMatchFile = NULL;
+            int32_t longestNameMatchLength = -1;
+            
+            for (DFT* file : loadedDataFiles) {
+                if (file->getFileName() == fileName) {
+                    return file;
+                }
+                
+                if (fileName.endsWith(file->getFileNameNoPath())) {
+                    const int32_t matchLen(fileName.countMatchingCharactersFromEnd(file->getFileName()));
+                    if (matchLen > longestNameMatchLength) {
+                        longestNameMatchFile = file;
+                        longestNameMatchLength = matchLen;
+                    }
+                }
+            }
+            
+            return longestNameMatchFile;
+        }
+
         CaretDataFile* addReadOrReloadDataFile(const FileModeAddReadReload fileMode,
                                             CaretDataFile* caretDataFile,
                                             const DataFileTypeEnum::Enum dataFileType,
@@ -773,6 +834,10 @@ namespace caret {
                                                                       CaretDataFile* caretDataFile,
                                                                       const AString& filename);
         
+        CiftiFiberTrajectoryMapFile* addReadOrReloadConnectivityFiberTrajectoryMapFile(const FileModeAddReadReload fileMode,
+                                                                                       CaretDataFile* caretDataFile,
+                                                                                       const AString& filename);
+        
         CiftiConnectivityMatrixParcelFile* addReadOrReloadConnectivityMatrixParcelFile(const FileModeAddReadReload fileMode,
                                                                             CaretDataFile* caretDataFile,
                                                                             const AString& filename);
@@ -788,6 +853,10 @@ namespace caret {
         CziImageFile* addReadOrReloadCziImageFile(const FileModeAddReadReload fileMode,
                                                   CaretDataFile* caretDataFile,
                                                   const AString& filename);
+
+        OmeZarrImageFile* addReadOrReloadOmeZarrImageFile(const FileModeAddReadReload fileMode,
+                                                          CaretDataFile* caretDataFile,
+                                                          const AString& filename);
 
         HistologySlicesFile* addReadOrReloadHistologySlicesFile(const FileModeAddReadReload fileMode,
                                                                 CaretDataFile* caretDataFile,
@@ -857,6 +926,8 @@ namespace caret {
         
         std::vector<CziImageFile*> m_cziImageFiles;
         
+        std::vector<OmeZarrImageFile*> m_omeZarrImageFiles;
+        
         std::vector<HistologySlicesFile*> m_histologySlicesFiles;
         
         std::vector<FociFile*> m_fociFiles;
@@ -888,6 +959,8 @@ namespace caret {
         std::vector<CiftiFiberOrientationFile*> m_connectivityFiberOrientationFiles;
         
         std::vector<CiftiFiberTrajectoryFile*> m_connectivityFiberTrajectoryFiles;
+        
+        std::vector<CiftiFiberTrajectoryMapFile*> m_connectivityFiberTrajectoryMapFiles;
         
         std::vector<CiftiConnectivityMatrixParcelFile*> m_connectivityMatrixParcelFiles;
         
@@ -992,6 +1065,8 @@ namespace caret {
          * is also in the displayProperties std::vector.
          */
         DisplayPropertiesFoci* m_displayPropertiesFoci;
+        
+        std::unique_ptr<AnnotationTextSubstitutionLayerSet> m_annotationTextSubstitutionLayerSet;
         
         /** true when a spec file is being read */
         bool m_isSpecFileBeingRead;

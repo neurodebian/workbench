@@ -851,6 +851,8 @@ GiftiTypeFile::isMappedWithPalette() const
             break;
         case DataFileTypeEnum::CONNECTIVITY_FIBER_TRAJECTORY_TEMPORARY:
             break;
+        case DataFileTypeEnum::CONNECTIVITY_FIBER_TRAJECTORY_MAPS:
+            break;
         case DataFileTypeEnum::CONNECTIVITY_SCALAR_DATA_SERIES:
             break;
         case DataFileTypeEnum::CZI_IMAGE_FILE:
@@ -868,6 +870,8 @@ GiftiTypeFile::isMappedWithPalette() const
             break;
         case DataFileTypeEnum::METRIC_DYNAMIC:
             paletteFlag = true;
+            break;
+        case DataFileTypeEnum::OME_ZARR_IMAGE_FILE:
             break;
         case DataFileTypeEnum::PALETTE:
             break;
@@ -929,6 +933,8 @@ GiftiTypeFile::getPaletteNormalizationModesSupported(std::vector<PaletteNormaliz
             break;
         case DataFileTypeEnum::CONNECTIVITY_FIBER_TRAJECTORY_TEMPORARY:
             break;
+        case DataFileTypeEnum::CONNECTIVITY_FIBER_TRAJECTORY_MAPS:
+            break;
         case DataFileTypeEnum::CONNECTIVITY_PARCEL:
             break;
         case DataFileTypeEnum::CONNECTIVITY_PARCEL_DENSE:
@@ -959,6 +965,8 @@ GiftiTypeFile::getPaletteNormalizationModesSupported(std::vector<PaletteNormaliz
             break;
         case DataFileTypeEnum::METRIC_DYNAMIC:
             modesSupportedOut.push_back(PaletteNormalizationModeEnum::NORMALIZATION_SELECTED_MAP_DATA);
+            break;
+        case DataFileTypeEnum::OME_ZARR_IMAGE_FILE:
             break;
         case DataFileTypeEnum::PALETTE:
             break;
@@ -1234,7 +1242,7 @@ GiftiTypeFile::getDataForSelector(const MapFileDataSelector& mapFileDataSelector
  *     Match status.
  */
 CaretMappableDataFile::BrainordinateMappingMatch
-GiftiTypeFile::getBrainordinateMappingMatch(const CaretMappableDataFile* mapFile) const
+GiftiTypeFile::getBrainordinateMappingMatchImplementation(const CaretMappableDataFile* mapFile) const
 {
     bool giftiFlag = false;
     CaretAssert(mapFile);
@@ -1260,6 +1268,8 @@ GiftiTypeFile::getBrainordinateMappingMatch(const CaretMappableDataFile* mapFile
         case DataFileTypeEnum::CONNECTIVITY_FIBER_ORIENTATIONS_TEMPORARY:
             break;
         case DataFileTypeEnum::CONNECTIVITY_FIBER_TRAJECTORY_TEMPORARY:
+            break;
+        case DataFileTypeEnum::CONNECTIVITY_FIBER_TRAJECTORY_MAPS:
             break;
         case DataFileTypeEnum::CONNECTIVITY_PARCEL:
             break;
@@ -1291,6 +1301,8 @@ GiftiTypeFile::getBrainordinateMappingMatch(const CaretMappableDataFile* mapFile
             break;
         case DataFileTypeEnum::METRIC_DYNAMIC:
             giftiFlag = true;
+            break;
+        case DataFileTypeEnum::OME_ZARR_IMAGE_FILE:
             break;
         case DataFileTypeEnum::PALETTE:
             break;
@@ -1380,6 +1392,8 @@ GiftiTypeFile::getSurfaceNodeIdentificationForMaps(const std::vector<int32_t>& m
                 break;
             case DataFileTypeEnum::CONNECTIVITY_FIBER_TRAJECTORY_TEMPORARY:
                 break;
+            case DataFileTypeEnum::CONNECTIVITY_FIBER_TRAJECTORY_MAPS:
+                break;
             case DataFileTypeEnum::CONNECTIVITY_PARCEL:
                 break;
             case DataFileTypeEnum::CONNECTIVITY_PARCEL_DENSE:
@@ -1446,6 +1460,8 @@ GiftiTypeFile::getSurfaceNodeIdentificationForMaps(const std::vector<int32_t>& m
                     textOut = valuesText;
                 }
             }
+                break;
+            case DataFileTypeEnum::OME_ZARR_IMAGE_FILE:
                 break;
             case DataFileTypeEnum::PALETTE:
                 break;

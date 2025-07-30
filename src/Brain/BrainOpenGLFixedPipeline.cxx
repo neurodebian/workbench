@@ -80,6 +80,7 @@
 #include "CiftiBrainordinateLabelFile.h"
 #include "CiftiFiberOrientationFile.h"
 #include "CiftiFiberTrajectoryFile.h"
+#include "CiftiFiberTrajectoryMapFile.h"
 #include "ClippingPlaneGroup.h"
 #include "ControlPointFile.h"
 #include "ControlPoint3D.h"
@@ -169,6 +170,7 @@
 #include "SurfaceProjectionBarycentric.h"
 #include "SurfaceProjectionVanEssen.h"
 #include "SurfaceSelectionModel.h"
+#include "TabDrawingInfo.h"
 #include "TopologyHelper.h"
 #include "VolumeFile.h"
 #include "VolumeMappableInterface.h"
@@ -1610,10 +1612,10 @@ BrainOpenGLFixedPipeline::drawTabAnnotations(const BrainOpenGLViewportContent* t
         case ModelTypeEnum::MODEL_TYPE_CHART:
         case ModelTypeEnum::MODEL_TYPE_CHART_TWO:
         case ModelTypeEnum::MODEL_TYPE_INVALID:
-        case ModelTypeEnum::MODEL_TYPE_HISTOLOGY:
         case ModelTypeEnum::MODEL_TYPE_MULTI_MEDIA:
             drawScaleBarsFlag = false;
             break;
+        case ModelTypeEnum::MODEL_TYPE_HISTOLOGY:
         case ModelTypeEnum::MODEL_TYPE_SURFACE:
         case ModelTypeEnum::MODEL_TYPE_SURFACE_MONTAGE:
         case ModelTypeEnum::MODEL_TYPE_VOLUME_SLICES:
@@ -2062,6 +2064,7 @@ BrainOpenGLFixedPipeline::setViewportAndOrthographicProjectionForWholeBrainVolum
     glLoadIdentity();
     setOrthographicProjectionForWithBoundingBox(viewport,
                                                 projectionType,
+                                                OrthoFitMode::SET_FROM_HEIGHT,
                                                 &boundingBox);
     glMatrixMode(GL_MODELVIEW);
 }
@@ -2081,7 +2084,48 @@ BrainOpenGLFixedPipeline::setViewportAndOrthographicProjectionForSurfaceFile(con
                                                                              const  ProjectionViewTypeEnum::Enum projectionType,
                                                                              const SurfaceFile* surfaceFile)
 {
+    OrthoFitMode orthoFitMode = OrthoFitMode::SET_FROM_HEIGHT;
     CaretAssert(surfaceFile);
+    switch (surfaceFile->getStructure()) {
+        case StructureEnum::CORTEX_LEFT:
+        case StructureEnum::CORTEX_RIGHT:
+        case StructureEnum::CEREBELLUM:
+        case StructureEnum::ACCUMBENS_LEFT:
+        case StructureEnum::ACCUMBENS_RIGHT:
+        case StructureEnum::ALL:
+        case StructureEnum::ALL_GREY_MATTER:
+        case StructureEnum::ALL_WHITE_MATTER:
+        case StructureEnum::AMYGDALA_LEFT:
+        case StructureEnum::AMYGDALA_RIGHT:
+        case StructureEnum::BRAIN_STEM:
+        case StructureEnum::CAUDATE_LEFT:
+        case StructureEnum::CAUDATE_RIGHT:
+        case StructureEnum::CEREBELLAR_WHITE_MATTER_LEFT:
+        case StructureEnum::CEREBELLAR_WHITE_MATTER_RIGHT:
+        case StructureEnum::CEREBELLUM_LEFT:
+        case StructureEnum::CEREBELLUM_RIGHT:
+        case StructureEnum::CEREBRAL_WHITE_MATTER_LEFT:
+        case StructureEnum::CEREBRAL_WHITE_MATTER_RIGHT:
+        case StructureEnum::CORTEX:
+        case StructureEnum::DIENCEPHALON_VENTRAL_LEFT:
+        case StructureEnum::DIENCEPHALON_VENTRAL_RIGHT:
+        case StructureEnum::HIPPOCAMPUS_LEFT:
+        case StructureEnum::HIPPOCAMPUS_RIGHT:
+        case StructureEnum::HIPPOCAMPUS_DENTATE_LEFT:
+        case StructureEnum::HIPPOCAMPUS_DENTATE_RIGHT:
+        case StructureEnum::PALLIDUM_LEFT:
+        case StructureEnum::PALLIDUM_RIGHT:
+        case StructureEnum::INVALID:
+        case StructureEnum::OTHER:
+        case StructureEnum::OTHER_GREY_MATTER:
+        case StructureEnum::OTHER_WHITE_MATTER:
+        case StructureEnum::PUTAMEN_LEFT:
+        case StructureEnum::PUTAMEN_RIGHT:
+        case StructureEnum::THALAMUS_LEFT:
+        case StructureEnum::THALAMUS_RIGHT:
+            break;
+    }
+    
     glViewport(viewport[0],
                viewport[1],
                viewport[2],
@@ -2090,8 +2134,9 @@ BrainOpenGLFixedPipeline::setViewportAndOrthographicProjectionForSurfaceFile(con
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
     setOrthographicProjectionForWithBoundingBox(viewport,
-                                            projectionType,
-                                            surfaceFile->getBoundingBox());
+                                                projectionType,
+                                                orthoFitMode,
+                                                surfaceFile->getBoundingBox());
     glMatrixMode(GL_MODELVIEW);
 }
 
@@ -2298,6 +2343,15 @@ BrainOpenGLFixedPipeline::applyViewingTransformations(const Model* model,
     float upY = 0.0;
     float upZ = 0.0;
     
+    /*
+     * Moves dentate flat up to be closer to hippocampus
+     * in flat hippocampus montage
+     * Cannot shrink height of viewport and shift it up
+     * because smaller viewport because surface is
+     * "fit" into viewport based upon width/height
+     */
+    float kludgyDentateFlatTranslationY(0.0);
+    
     bool useGluLookAt = false;
     bool rightCortexFlatFlag = false;
     switch (projectionViewType) {
@@ -2320,19 +2374,37 @@ BrainOpenGLFixedPipeline::applyViewingTransformations(const Model* model,
             break;
         case ProjectionViewTypeEnum::PROJECTION_VIEW_LEFT_FLAT_SURFACE:
             break;
+        case ProjectionViewTypeEnum::PROJECTION_VIEW_LEFT_FLAT_DENTATE_SURFACE:
+            kludgyDentateFlatTranslationY = 5.0;
+            break;
         case ProjectionViewTypeEnum::PROJECTION_VIEW_RIGHT_LATERAL:
             break;
         case ProjectionViewTypeEnum::PROJECTION_VIEW_RIGHT_MEDIAL:
             break;
         case ProjectionViewTypeEnum::PROJECTION_VIEW_RIGHT_FLAT_SURFACE:
+        case ProjectionViewTypeEnum::PROJECTION_VIEW_RIGHT_FLAT_DENTATE_SURFACE:
             if (model->getModelType() == ModelTypeEnum::MODEL_TYPE_SURFACE_MONTAGE) {
                 const ModelSurfaceMontage* surfaceMontageModel = dynamic_cast<const ModelSurfaceMontage*>(model);
                 CaretAssert(surfaceMontageModel);
                 if (surfaceMontageModel != NULL) {
-                    if (surfaceMontageModel->getSelectedConfigurationType(this->windowTabIndex) ==  SurfaceMontageConfigurationTypeEnum::FLAT_CONFIGURATION) {
-                        rightCortexFlatFlag = true;
+                    switch (surfaceMontageModel->getSelectedConfigurationType(this->windowTabIndex)) {
+                        case SurfaceMontageConfigurationTypeEnum::CEREBRAL_CORTEX_CONFIGURATION:
+                            break;
+                        case SurfaceMontageConfigurationTypeEnum::CEREBELLAR_CORTEX_CONFIGURATION:
+                            break;
+                        case SurfaceMontageConfigurationTypeEnum::HIPPOCAMPUS_CONFIGURATION:
+                            break;
+                        case SurfaceMontageConfigurationTypeEnum::FLAT_CONFIGURATION:
+                            rightCortexFlatFlag = true;
+                            break;
+                        case SurfaceMontageConfigurationTypeEnum::HIPPOCAMPUS_FLAT_CONFIGURATION:
+                            rightCortexFlatFlag = true;
+                            break;
                     }
                 }
+            }
+            if (projectionViewType == ProjectionViewTypeEnum::PROJECTION_VIEW_RIGHT_FLAT_DENTATE_SURFACE) {
+                kludgyDentateFlatTranslationY = 5.0;
             }
             break;
     }
@@ -2353,7 +2425,7 @@ BrainOpenGLFixedPipeline::applyViewingTransformations(const Model* model,
                                                           scaling);
     
     glTranslatef(translation[0],
-                 translation[1],
+                 translation[1] + kludgyDentateFlatTranslationY,
                  translation[2]);
     
     glMultMatrixd(rotationMatrixElements);
@@ -2716,12 +2788,39 @@ BrainOpenGLFixedPipeline::drawSurfaceModel(BrowserTabContent* browserTabContent,
     
     setupScaleBarDrawingInformation(browserTabContent);
     
+    const DisplayPropertiesFiberOrientation* dpf(m_brain->getDisplayPropertiesFiberOrientation());
+    const int32_t tabIndex = browserTabContent->getTabNumber();
+    const DisplayGroupEnum::Enum displayGroup = dpf->getDisplayGroupForTab(tabIndex);
+    const bool drawFiberTrajectoriesInFrontFlag(dpf->isDrawFiberTrajectoriesInFront(displayGroup,
+                                                                                 tabIndex));
+    const StructureEnum::Enum structure(surface->getStructure());
+    drawSurfaceFiberOrientations(structure);
+    if ( ! drawFiberTrajectoriesInFrontFlag) {
+        drawSurfaceFiberTrajectories(structure);
+    }
+    
+    const bool depthTestingEnabled(true);
     this->drawSurface(surface,
                       SurfaceTabType::SINGLE_SURFACE,
                       browserTabContent->getScaling(),
                       viewport[3], /* height */
                       nodeColoringRGBA,
-                      true);
+                      true,
+                      depthTestingEnabled);
+
+    if (drawFiberTrajectoriesInFrontFlag) {
+        /*
+         * Clear the depth buffer but use the scissor test to only clear
+         * the depth buffer for this tab.
+         */
+        glPushAttrib(GL_SCISSOR_BIT);
+        glEnable(GL_SCISSOR_TEST);
+        glScissor(m_tabViewport[0], m_tabViewport[1], m_tabViewport[2], m_tabViewport[3]);
+        glClear(GL_DEPTH_BUFFER_BIT);
+        glPopAttrib();
+        
+        drawSurfaceFiberTrajectories(structure);
+    }
 }
 
 /**
@@ -2760,6 +2859,8 @@ BrainOpenGLFixedPipeline::drawSurfaceAxes()
  *    RGBA coloring for the nodes.
  * @param drawAnnotationsInModelSpaceFlag
  *    If true, draw annotations in model space.
+ * @param depthTestingEnabled
+ *    If true, enable depth testing
  */
 void 
 BrainOpenGLFixedPipeline::drawSurface(Surface* surface,
@@ -2767,7 +2868,8 @@ BrainOpenGLFixedPipeline::drawSurface(Surface* surface,
                                       const float surfaceScaling,
                                       const int32_t viewportHeight,
                                       const float* nodeColoringRGBA,
-                                      const bool drawAnnotationsInModelSpaceFlag)
+                                      const bool drawAnnotationsInModelSpaceFlag,
+                                      const bool depthTestingEnabled)
 {
     glPushAttrib(GL_COLOR_BUFFER_BIT);
 
@@ -2775,7 +2877,9 @@ BrainOpenGLFixedPipeline::drawSurface(Surface* surface,
     
     glMatrixMode(GL_MODELVIEW);
     
-    glEnable(GL_DEPTH_TEST);
+    if (depthTestingEnabled) {
+        glEnable(GL_DEPTH_TEST);
+    }
     
     applyClippingPlanes(BrainOpenGLFixedPipeline::CLIPPING_DATA_TYPE_SURFACE,
                         surface->getStructure());
@@ -3144,7 +3248,6 @@ BrainOpenGLFixedPipeline::drawSurfaceTriangles(Surface* surface,
                                          triangleIndex,
                                          depth);
         
-        
         if (triangleIndex >= 0) {
             bool isTriangleIdAccepted = false;
             if (triangleID != NULL) {
@@ -3264,7 +3367,8 @@ BrainOpenGLFixedPipeline::drawSurfaceTriangles(Surface* surface,
                     /*
                      * Getting projected position?
                      */
-                    if (isProjection) {
+                    if (isSelect
+                        || isProjection) {
                         /*
                          * Place window coordinates of triangle's nodes
                          * onto the screen by setting Z-coordinate to zero
@@ -3339,19 +3443,27 @@ BrainOpenGLFixedPipeline::drawSurfaceTriangles(Surface* surface,
                                     n3
                                 };
                             
-                                this->setProjectionModeData(depth, 
-                                                            projectedXYZ, 
-                                                            surface->getStructure(), 
-                                                            barycentricAreas, 
-                                                            barycentricNodes, 
-                                                            surface->getNumberOfNodes());
+                                if (isSelect) {
+                                    if (triangleID != NULL) {
+                                        triangleID->setBarycentricAreas(barycentricAreas);
+                                        triangleID->setBarycentricVertices(barycentricNodes);
+                                        triangleID->setBarycentricProjectionValid(true);
+                                    }
+                                }
+                                if (isProjection) {
+                                    this->setProjectionModeData(depth,
+                                                                projectedXYZ,
+                                                                surface->getStructure(),
+                                                                barycentricAreas,
+                                                                barycentricNodes,
+                                                                surface->getNumberOfNodes());
+                                }
                             }
                         }
                     }
             }
             CaretLogFine("Selected Triangle: " + QString::number(triangleIndex));
         }
-        
     }
 }
 
@@ -4145,6 +4257,11 @@ BrainOpenGLFixedPipeline::drawSurfaceFoci(Surface* surface)
     std::unique_ptr<GraphicsPrimitiveV3fC4ub> fociPrimitive;
     switch (fociDisplayProperties->getDrawingType(displayGroup,
                                                   this->windowTabIndex)) {
+        case FociDrawingTypeEnum::DRAW_AS_DISKS:
+            fociPrimitive.reset(GraphicsPrimitive::newPrimitiveV3fC4ub(GraphicsPrimitive::PrimitiveType::DISKS));
+            fociPrimitive->setSphereDiameter(GraphicsPrimitive::SphereSizeType::MILLIMETERS, focusDiameter);
+            lightingOnFlag = false;
+            break;
         case FociDrawingTypeEnum::DRAW_AS_SPHERES:
             fociPrimitive.reset(GraphicsPrimitive::newPrimitiveV3fC4ub(GraphicsPrimitive::PrimitiveType::SPHERES));
             fociPrimitive->setSphereDiameter(GraphicsPrimitive::SphereSizeType::MILLIMETERS, focusDiameter);
@@ -4170,6 +4287,15 @@ BrainOpenGLFixedPipeline::drawSurfaceFoci(Surface* surface)
     
     const bool isContralateralEnabled = fociDisplayProperties->isContralateralDisplayed(displayGroup,
                                                                                         this->windowTabIndex);
+
+    bool flatBumpUpFlag(false);
+    glPushAttrib(GL_DEPTH_BUFFER_BIT);
+    if (isPasteOntoSurface
+        && (surface->getSurfaceType() == SurfaceTypeEnum::FLAT)) {
+        /* Prevents part of sphere cut off by surface */
+        glDisable(GL_DEPTH_TEST);
+        flatBumpUpFlag = true;
+    }
     const int32_t numFociFiles = m_brain->getNumberOfFociFiles();
     for (int32_t i = 0; i < numFociFiles; i++) {
         FociFile* fociFile = m_brain->getFociFile(i);
@@ -4244,33 +4370,36 @@ BrainOpenGLFixedPipeline::drawSurfaceFoci(Surface* surface)
 
                 switch (drawingProjectionType) {
                     case FociDrawingProjectionTypeEnum::PROJECTED:
-                        if (spi->getProjectedPosition(surface, /* NULL is okay for this method */
-                                                      xyz,
-                                                      isPasteOntoSurface)) {
-                            const StructureEnum::Enum focusStructure = spi->getStructure();
-                            if (focusStructure == surfaceStructure) {
-                                drawIt = true;
-                            }
-                            else if (focusStructure == StructureEnum::INVALID) {
-                                drawIt = true;
-                            }
-                            else if (isContralateralEnabled) {
-                                if (focusStructure == surfaceContralateralStructure) {
+                        if ((surfaceStructure    == StructureEnum::CORTEX_LEFT)
+                            || (surfaceStructure == StructureEnum::CORTEX_RIGHT)) {
+                            if (spi->getProjectedPosition(surface, /* NULL is okay for this method */
+                                                          xyz,
+                                                          isPasteOntoSurface)) {
+                                const StructureEnum::Enum focusStructure = spi->getStructure();
+                                if (focusStructure == surfaceStructure) {
                                     drawIt = true;
                                 }
-                            }
-                            else if (surface == NULL) {
-                                /*
-                                 * This is a special case for ALL view with
-                                 * neither surfaces nor volumes displayed
-                                 */
-                                drawIt = true;
-                            }
-                            
-                            if (doClipping) {
-                                if ( ! isCoordinateInsideClippingPlanesForStructure(surfaceStructure,
-                                                                                    xyz)) {
-                                    drawIt = false;
+                                else if (focusStructure == StructureEnum::INVALID) {
+                                    drawIt = true;
+                                }
+                                else if (isContralateralEnabled) {
+                                    if (focusStructure == surfaceContralateralStructure) {
+                                        drawIt = true;
+                                    }
+                                }
+                                else if (surface == NULL) {
+                                    /*
+                                     * This is a special case for ALL view with
+                                     * neither surfaces nor volumes displayed
+                                     */
+                                    drawIt = true;
+                                }
+                                
+                                if (doClipping) {
+                                    if ( ! isCoordinateInsideClippingPlanesForStructure(surfaceStructure,
+                                                                                        xyz)) {
+                                        drawIt = false;
+                                    }
                                 }
                             }
                         }
@@ -4301,12 +4430,16 @@ BrainOpenGLFixedPipeline::drawSurfaceFoci(Surface* surface)
                             static_cast<uint8_t>(rgbaFloat[2] * 255),
                             static_cast<uint8_t>(rgbaFloat[3] * 255)
                         };
+                        if (flatBumpUpFlag) {
+                            xyz[2] = 1.0;
+                        }
                         fociPrimitive->addVertex(xyz, rgbaByte);
                     }
                 }
             }
         }
     }
+    glPopAttrib();
     
     glPushAttrib(GL_ENABLE_BIT);
     if (lightingOnFlag) {
@@ -4584,6 +4717,7 @@ BrainOpenGLFixedPipeline::setupVolumeDrawInfo(BrowserTabContent* browserTabConte
 {
     volumeDrawInfoOut.clear();
     
+    const int32_t tabIndex(browserTabContent->getTabNumber());
     OverlaySet* overlaySet = browserTabContent->getOverlaySet();
     const int32_t numberOfOverlays = overlaySet->getNumberOfDisplayedOverlays();
     for (int32_t iOver = (numberOfOverlays - 1); iOver >= 0; iOver--) {
@@ -4644,6 +4778,7 @@ BrainOpenGLFixedPipeline::setupVolumeDrawInfo(BrowserTabContent* browserTabConte
                                                            statistics,
                                                            wholeBrainVoxelDrawingMode,
                                                            mapIndex,
+                                                           tabIndex,
                                                            opacity);
                                         volumeDrawInfoOut.push_back(vdi);
                                     }
@@ -4662,6 +4797,7 @@ BrainOpenGLFixedPipeline::setupVolumeDrawInfo(BrowserTabContent* browserTabConte
                                                NULL,
                                                wholeBrainVoxelDrawingMode,
                                                mapIndex,
+                                               tabIndex,
                                                opacity);
                             volumeDrawInfoOut.push_back(vdi);
                         }
@@ -4869,6 +5005,7 @@ BrainOpenGLFixedPipeline::drawVolumeVoxelsAsCubesWholeBrain(std::vector<VolumeDr
     
     const DisplayPropertiesLabels* dsl = m_brain->getDisplayPropertiesLabels();
     const DisplayGroupEnum::Enum displayGroup = dsl->getDisplayGroupForTab(this->windowTabIndex);
+    const LabelViewModeEnum::Enum labelViewMode(dsl->getLabelViewModeForTab(this->windowTabIndex));
     
     /*
      * For identification, five items per voxel
@@ -4939,6 +5076,12 @@ BrainOpenGLFixedPipeline::drawVolumeVoxelsAsCubesWholeBrain(std::vector<VolumeDr
             glDisable(GL_LIGHTING);
         }
         
+        const TabDrawingInfo tabDrawingInfo(volInfo.mapFile,
+                                            volInfo.mapIndex,
+                                            displayGroup,
+                                            labelViewMode,
+                                            this->windowTabIndex);
+
         uint8_t rgba[4];
         for (int64_t iVoxel = 0; iVoxel < dimI; iVoxel++) {
             for (int64_t jVoxel = 0; jVoxel < dimJ; jVoxel++) {
@@ -4949,8 +5092,7 @@ BrainOpenGLFixedPipeline::drawVolumeVoxelsAsCubesWholeBrain(std::vector<VolumeDr
                                                                        jVoxel,
                                                                        kVoxel,
                                                                        volInfo.mapIndex,
-                                                                       displayGroup,
-                                                                       this->windowTabIndex,
+                                                                       tabDrawingInfo,
                                                                        rgba);
                     }
                     else {
@@ -4958,8 +5100,7 @@ BrainOpenGLFixedPipeline::drawVolumeVoxelsAsCubesWholeBrain(std::vector<VolumeDr
                                                        jVoxel,
                                                        kVoxel,
                                                        volInfo.mapIndex,
-                                                       displayGroup,
-                                                       this->windowTabIndex,
+                                                       tabDrawingInfo,
                                                        rgba);
                     }
                     if (rgba[3] > 0) {
@@ -5172,7 +5313,7 @@ BrainOpenGLFixedPipeline::drawVolumeVoxelsAsCubesWholeBrainOutsideFaces(std::vec
     
     const DisplayPropertiesLabels* dsl = m_brain->getDisplayPropertiesLabels();
     const DisplayGroupEnum::Enum displayGroup = dsl->getDisplayGroupForTab(this->windowTabIndex);
-    
+    const LabelViewModeEnum::Enum labelViewMode(dsl->getLabelViewModeForTab(this->windowTabIndex));
     /*
      * For identification, five items per voxel
      * 1) volume index
@@ -5316,6 +5457,12 @@ BrainOpenGLFixedPipeline::drawVolumeVoxelsAsCubesWholeBrainOutsideFaces(std::vec
         std::vector<uint8_t> axialSliceRGBA(numAxialSizeRGBA);
         std::vector<uint8_t> volumeRGBA(numRGBA, 0);
 
+        const TabDrawingInfo tabDrawingInfo(volInfo.mapFile,
+                                            volInfo.mapIndex,
+                                            displayGroup,
+                                            labelViewMode,
+                                            this->windowTabIndex);
+
         /*
          * Get coloring for all voxels in volume
          */
@@ -5326,8 +5473,7 @@ BrainOpenGLFixedPipeline::drawVolumeVoxelsAsCubesWholeBrainOutsideFaces(std::vec
             volumeFile->getVoxelColorsForSliceInMap(volInfo.mapIndex,
                                                     VolumeSliceViewPlaneEnum::AXIAL,
                                                     kVoxel,
-                                                    displayGroup,
-                                                    this->windowTabIndex,
+                                                    tabDrawingInfo,
                                                     axialSliceRGBA.data());
             /*
              * Apply layer opacity
@@ -6289,11 +6435,22 @@ BrainOpenGLFixedPipeline::drawFiberTrajectories(const Plane* plane,
             continue;
         }
         CiftiFiberTrajectoryFile* trajFile = dynamic_cast<CiftiFiberTrajectoryFile*>(caretMappableDataFile);
-        if (trajFile == NULL) {
+        CiftiFiberTrajectoryMapFile* trajMapFile(dynamic_cast<CiftiFiberTrajectoryMapFile*>(caretMappableDataFile));
+        if ((trajFile == NULL)
+            &&(trajMapFile == NULL)) {
             continue;
         }
         
-        FiberTrajectoryMapProperties* ftmp = trajFile->getFiberTrajectoryMapProperties();
+        FiberTrajectoryMapProperties* ftmp(NULL);
+        if (trajFile != NULL) {
+            ftmp = trajFile->getFiberTrajectoryMapProperties();
+        }
+        else if (trajMapFile != NULL) {
+            ftmp = trajMapFile->getFiberTrajectoryMapProperties();
+        }
+        else {
+            CaretAssert(0);
+        }
         
         const float proportionMinimumOpacity = ftmp->getProportionMinimumOpacity();
         const float proportionMaximumOpacity = ftmp->getProportionMaximumOpacity();
@@ -6360,100 +6517,128 @@ BrainOpenGLFixedPipeline::drawFiberTrajectories(const Plane* plane,
         
         
         
-        const std::vector<FiberOrientationTrajectory*>& trajectories = trajFile->getLoadedFiberOrientationTrajectories();
-        const int64_t numTraj = static_cast<int64_t>(trajectories.size());
-        for (int64_t iTraj = 0; iTraj < numTraj; iTraj++) {
-            const FiberOrientationTrajectory* fiberTraj = trajectories[iTraj];
-            const FiberOrientation* orientation = fiberTraj->getFiberOrientation();
-            
-            const float fiberFractionTotalCount = fiberTraj->getFiberFractionTotalCount();
-            
-            const std::vector<float>& fiberFractions = fiberTraj->getFiberFractions();
-            if (fiberFractions.size() != 3) {
-                CaretLogFinest("Fiber Trajectory index="
-                                + AString::number(iTraj)
-                                + " has "
-                                + AString::number(fiberFractions.size())
-                                + " fibers != 3 from file "
-                                + trajFile->getFileNameNoPath());
-                
-                continue;
-            }
-            else if (fiberFractionTotalCount < streamlineThreshold) {
-                continue;
-            }
-            float fiberOpacities[3] = { 0.0, 0.0, 0.0 };
-            const float fiberCounts[3] = {
-                fiberFractions[0] * fiberFractionTotalCount,
-                fiberFractions[1] * fiberFractionTotalCount,
-                fiberFractions[2] * fiberFractionTotalCount
-            };
-            
-            const float fiberFractionDistance = fiberTraj->getFiberFractionDistance();
-            
-            /*
-             * Set opacities for each fiber using mapping of minimum and
-             * maximum opacities
-             */
-            switch (displayMode) {
-                case FiberTrajectoryDisplayModeEnum::FIBER_TRAJECTORY_DISPLAY_ABSOLUTE:
-                    fiberOpacities[0] = (fiberCounts[0]
-                                         - countMinimumOpacity) / countRangeOpacity;
-                    fiberOpacities[1] = (fiberCounts[1]
-                                         - countMinimumOpacity) / countRangeOpacity;
-                    fiberOpacities[2] = (fiberCounts[2]
-                                         - countMinimumOpacity) / countRangeOpacity;
-                    break;
-                case FiberTrajectoryDisplayModeEnum::FIBER_TRAJECTORY_DISPLAY_DISTANCE_WEIGHTED:
-                    fiberOpacities[0] = ((fiberCounts[0] * fiberFractionDistance)
-                                         - distanceMinimumOpacity) / distanceRangeOpacity;
-                    fiberOpacities[1] = ((fiberCounts[1] * fiberFractionDistance)
-                                         - distanceMinimumOpacity) / distanceRangeOpacity;
-                    fiberOpacities[2] = ((fiberCounts[2] * fiberFractionDistance)
-                                         - distanceMinimumOpacity) / distanceRangeOpacity;
-                    break;
-                case FiberTrajectoryDisplayModeEnum::FIBER_TRAJECTORY_DISPLAY_DISTANCE_WEIGHTED_LOG:
-                {
-                    const float distanceLog = std::log(fiberFractionDistance);
-                    fiberOpacities[0] = ((fiberCounts[0] * distanceLog)
-                                         - distanceMinimumOpacity) / distanceRangeOpacity;
-                    fiberOpacities[1] = ((fiberCounts[1] * distanceLog)
-                                         - distanceMinimumOpacity) / distanceRangeOpacity;
-                    fiberOpacities[2] = ((fiberCounts[2] * distanceLog)
-                                         - distanceMinimumOpacity) / distanceRangeOpacity;
-                }
-                    break;
-                case FiberTrajectoryDisplayModeEnum::FIBER_TRAJECTORY_DISPLAY_PROPORTION:
-                    fiberOpacities[0] = (fiberFractions[0]
-                                         - proportionMinimumOpacity) /proportionRangeOpacity;
-                    fiberOpacities[1] = (fiberFractions[1]
-                                         - proportionMinimumOpacity) /proportionRangeOpacity;
-                    fiberOpacities[2] = (fiberFractions[2]
-                                         - proportionMinimumOpacity) /proportionRangeOpacity;
-                    break;
-            }
-            int32_t drawCount = 3;
-            for (int32_t i = 0; i < 3; i++) {
-                if (fiberOpacities[i] > 1.0) {
-                    fiberOpacities[i] = 1.0;
-                }
-                else if (fiberOpacities[i] <= 0.0) {
-                    fiberOpacities[i] = 0.0;
-                    drawCount--;
-                }
-            }
-            if (drawCount > 0) {
-                orientation->m_fibers[0]->m_opacityForDrawing = fiberOpacities[0];
-                orientation->m_fibers[1]->m_opacityForDrawing = fiberOpacities[1];
-                orientation->m_fibers[2]->m_opacityForDrawing = fiberOpacities[2];
-                
-                addFiberOrientationForDrawing(&fiberOrientDispInfo,
-                                              orientation);
-            }
+        const std::vector<FiberOrientationTrajectory*>* trajectories(NULL);
+        AString filenameNoPath;
+        if (trajFile != NULL) {
+            filenameNoPath = trajFile->getFileNameNoPath();
+            trajectories = trajFile->getLoadedFiberOrientationTrajectories();
         }
-        
-        drawAllFiberOrientations(&fiberOrientDispInfo,
-                                 true);
+        else if (trajMapFile != NULL) {
+            filenameNoPath = trajMapFile->getFileNameNoPath();
+            trajectories = trajMapFile->getFiberOrientationTrajectoriesForMap(mapIndex);
+        }
+        else {
+            CaretAssert(0);
+        }
+        if (trajectories != NULL) {
+            const int64_t numTraj = static_cast<int64_t>(trajectories->size());
+            for (int64_t iTraj = 0; iTraj < numTraj; iTraj++) {
+                const FiberOrientationTrajectory* fiberTraj = (*trajectories)[iTraj];
+                const FiberOrientation* orientation = fiberTraj->getFiberOrientation();
+                
+                const float fiberFractionTotalCount = fiberTraj->getFiberFractionTotalCount();
+                
+                const std::vector<float>& fiberFractions = fiberTraj->getFiberFractions();
+                if (fiberFractions.size() != 3) {
+                    CaretLogFinest("Fiber Trajectory index="
+                                   + AString::number(iTraj)
+                                   + " has "
+                                   + AString::number(fiberFractions.size())
+                                   + " fibers != 3 from file "
+                                   + filenameNoPath);
+                    
+                    continue;
+                }
+                else if (fiberFractionTotalCount < streamlineThreshold) {
+                    continue;
+                }
+                float fiberOpacities[3] = { 0.0, 0.0, 0.0 };
+                const float fiberCounts[3] = {
+                    fiberFractions[0] * fiberFractionTotalCount,
+                    fiberFractions[1] * fiberFractionTotalCount,
+                    fiberFractions[2] * fiberFractionTotalCount
+                };
+                
+                const float fiberFractionDistance = fiberTraj->getFiberFractionDistance();
+                
+                /*
+                 * Set opacities for each fiber using mapping of minimum and
+                 * maximum opacities
+                 */
+                switch (displayMode) {
+                    case FiberTrajectoryDisplayModeEnum::FIBER_TRAJECTORY_DISPLAY_ABSOLUTE:
+                        fiberOpacities[0] = (fiberCounts[0]
+                                             - countMinimumOpacity) / countRangeOpacity;
+                        fiberOpacities[1] = (fiberCounts[1]
+                                             - countMinimumOpacity) / countRangeOpacity;
+                        fiberOpacities[2] = (fiberCounts[2]
+                                             - countMinimumOpacity) / countRangeOpacity;
+                        break;
+                    case FiberTrajectoryDisplayModeEnum::FIBER_TRAJECTORY_DISPLAY_DISTANCE_WEIGHTED:
+                        fiberOpacities[0] = ((fiberCounts[0] * fiberFractionDistance)
+                                             - distanceMinimumOpacity) / distanceRangeOpacity;
+                        fiberOpacities[1] = ((fiberCounts[1] * fiberFractionDistance)
+                                             - distanceMinimumOpacity) / distanceRangeOpacity;
+                        fiberOpacities[2] = ((fiberCounts[2] * fiberFractionDistance)
+                                             - distanceMinimumOpacity) / distanceRangeOpacity;
+                        break;
+                    case FiberTrajectoryDisplayModeEnum::FIBER_TRAJECTORY_DISPLAY_DISTANCE_WEIGHTED_LOG:
+                    {
+                        /*
+                         * Note: log(0) is an error and log() for anything
+                         * less than one is negative
+                         */
+                        const float distanceLog = ((fiberFractionDistance >= 1.0)
+                                                   ? std::log(fiberFractionDistance)
+                                                   : 0);
+                        fiberOpacities[0] = ((fiberCounts[0] * distanceLog)
+                                             - distanceMinimumOpacity) / distanceRangeOpacity;
+                        fiberOpacities[1] = ((fiberCounts[1] * distanceLog)
+                                             - distanceMinimumOpacity) / distanceRangeOpacity;
+                        fiberOpacities[2] = ((fiberCounts[2] * distanceLog)
+                                             - distanceMinimumOpacity) / distanceRangeOpacity;
+                        if (MathFunctions::isNaN(fiberOpacities[0])
+                            || MathFunctions::isNaN(fiberOpacities[1])
+                            || MathFunctions::isNaN(fiberOpacities[2])) {
+                            CaretAssertMessage(0, ("Nan for fiberOpacities: "
+                                                   + AString::fromNumbers(fiberOpacities, 3)));
+                        }
+                    }
+                        break;
+                    case FiberTrajectoryDisplayModeEnum::FIBER_TRAJECTORY_DISPLAY_PROPORTION:
+                        fiberOpacities[0] = (fiberFractions[0]
+                                             - proportionMinimumOpacity) /proportionRangeOpacity;
+                        fiberOpacities[1] = (fiberFractions[1]
+                                             - proportionMinimumOpacity) /proportionRangeOpacity;
+                        fiberOpacities[2] = (fiberFractions[2]
+                                             - proportionMinimumOpacity) /proportionRangeOpacity;
+                        break;
+                }
+                int32_t drawCount = 3;
+                for (int32_t i = 0; i < 3; i++) {
+                    if (fiberOpacities[i] > 1.0) {
+                        fiberOpacities[i] = 1.0;
+                    }
+                    else if (fiberOpacities[i] <= 0.0) {
+                        fiberOpacities[i] = 0.0;
+                        drawCount--;
+                    }
+                }
+                if (drawCount > 0) {
+                    if (orientation->m_fibers.size() >= 3) {
+                        orientation->m_fibers[0]->m_opacityForDrawing = fiberOpacities[0];
+                        orientation->m_fibers[1]->m_opacityForDrawing = fiberOpacities[1];
+                        orientation->m_fibers[2]->m_opacityForDrawing = fiberOpacities[2];
+                        
+                        addFiberOrientationForDrawing(&fiberOrientDispInfo,
+                                                      orientation);
+                    }
+                }
+            }
+            
+            drawAllFiberOrientations(&fiberOrientDispInfo,
+                                     true);
+        }
     }
     
     glDisable(GL_BLEND);
@@ -6828,7 +7013,7 @@ BrainOpenGLFixedPipeline::drawSurfaceMontageModel(BrowserTabContent* browserTabC
         const int32_t rowFromBottom = (numberOfRows - rowFromTop - 1);
         const int32_t column = mvp->getColumn();
         
-        const int32_t surfaceViewport[4] = {
+        int32_t surfaceViewport[4] = {
             (viewport[0] + (column * (subViewportWidth + horizontalGap))),
             (viewport[1] + (rowFromBottom * (subViewportHeight + verticalGap))),
             subViewportWidth,
@@ -6836,6 +7021,34 @@ BrainOpenGLFixedPipeline::drawSurfaceMontageModel(BrowserTabContent* browserTabC
         };
         mvp->setViewport(surfaceViewport);
         
+        switch (mvp->getProjectionViewType()) {
+            case ProjectionViewTypeEnum::PROJECTION_VIEW_CEREBELLUM_ANTERIOR:
+                break;
+            case ProjectionViewTypeEnum::PROJECTION_VIEW_CEREBELLUM_DORSAL:
+                break;
+            case ProjectionViewTypeEnum::PROJECTION_VIEW_CEREBELLUM_POSTERIOR:
+                break;
+            case ProjectionViewTypeEnum::PROJECTION_VIEW_CEREBELLUM_VENTRAL:
+                break;
+            case ProjectionViewTypeEnum::PROJECTION_VIEW_CEREBELLUM_FLAT_SURFACE:
+                break;
+            case ProjectionViewTypeEnum::PROJECTION_VIEW_LEFT_LATERAL:
+                break;
+            case ProjectionViewTypeEnum::PROJECTION_VIEW_LEFT_MEDIAL:
+                break;
+            case ProjectionViewTypeEnum::PROJECTION_VIEW_LEFT_FLAT_SURFACE:
+                break;
+            case ProjectionViewTypeEnum::PROJECTION_VIEW_LEFT_FLAT_DENTATE_SURFACE:
+                break;
+            case ProjectionViewTypeEnum::PROJECTION_VIEW_RIGHT_LATERAL:
+                break;
+            case ProjectionViewTypeEnum::PROJECTION_VIEW_RIGHT_MEDIAL:
+                break;
+            case ProjectionViewTypeEnum::PROJECTION_VIEW_RIGHT_FLAT_SURFACE:
+                break;
+            case ProjectionViewTypeEnum::PROJECTION_VIEW_RIGHT_FLAT_DENTATE_SURFACE:
+                break;
+        }
         EventDrawingViewportContentAdd addViewportEvent;
         addViewportEvent.addModelSurfaceGridCell(m_windowIndex,
                                                  this->windowTabIndex,
@@ -6848,7 +7061,7 @@ BrainOpenGLFixedPipeline::drawSurfaceMontageModel(BrowserTabContent* browserTabC
         
         this->setViewportAndOrthographicProjectionForSurfaceFile(surfaceViewport,
                                                                  mvp->getProjectionViewType(),
-                                                                 mvp->getSurface());
+                                                                 mvp->getSurfaceForSettingOrthographicProjection());
         
         this->applyViewingTransformations(surfaceMontageModel,
                                           center,
@@ -6858,12 +7071,39 @@ BrainOpenGLFixedPipeline::drawSurfaceMontageModel(BrowserTabContent* browserTabC
             setupScaleBarDrawingInformation(browserTabContent);
         }
         
+        const DisplayPropertiesFiberOrientation* dpf(m_brain->getDisplayPropertiesFiberOrientation());
+        const int32_t tabIndex = browserTabContent->getTabNumber();
+        const DisplayGroupEnum::Enum displayGroup = dpf->getDisplayGroupForTab(tabIndex);
+        const bool drawFiberTrajectoriesInFrontFlag(dpf->isDrawFiberTrajectoriesInFront(displayGroup,
+                                                                                     tabIndex));
+        const StructureEnum::Enum structure(mvp->getSurface()->getStructure());
+        drawSurfaceFiberOrientations(structure);
+        if ( ! drawFiberTrajectoriesInFrontFlag) {
+            drawSurfaceFiberTrajectories(structure);
+        }
+
+        const bool depthTestingEnabled(true);
         this->drawSurface(mvp->getSurface(),
                           SurfaceTabType::SURFACE_MONTAGE,
                           browserTabContent->getScaling(),
                           subViewportHeight,
                           nodeColoringRGBA,
-                          true);
+                          true,
+                          depthTestingEnabled);
+
+        if (drawFiberTrajectoriesInFrontFlag) {
+            /*
+             * Clear the depth buffer but use the scissor test to only clear
+             * the depth buffer for this tab.
+             */
+            glPushAttrib(GL_SCISSOR_BIT);
+            glEnable(GL_SCISSOR_TEST);
+            glScissor(m_tabViewport[0], m_tabViewport[1], m_tabViewport[2], m_tabViewport[3]);
+            glClear(GL_DEPTH_BUFFER_BIT);
+            glPopAttrib();
+
+            drawSurfaceFiberTrajectories(structure);
+        }
     }
     
     glViewport(savedVP[0],
@@ -7134,12 +7374,21 @@ BrainOpenGLFixedPipeline::drawWholeBrainModel(const BrainOpenGLViewportContent* 
         }
     }
     
+    const DisplayPropertiesFiberOrientation* dpf(m_brain->getDisplayPropertiesFiberOrientation());
+    const int32_t tabIndex = browserTabContent->getTabNumber();
+    const DisplayGroupEnum::Enum displayGroup = dpf->getDisplayGroupForTab(tabIndex);
+
+    const bool drawFiberTrajectoriesInFrontFlag(dpf->isDrawFiberTrajectoriesInFront(displayGroup,
+                                                                      tabIndex));
     drawSurfaceFiberOrientations(StructureEnum::ALL);
-    drawSurfaceFiberTrajectories(StructureEnum::ALL);
+    if ( ! drawFiberTrajectoriesInFrontFlag) {
+        drawSurfaceFiberTrajectories(StructureEnum::ALL);
+    }
 
     /*
      * Draw surfaces last so that opacity works.
      */
+    glPushAttrib(GL_DEPTH_WRITEMASK);
     std::set<StructureEnum::Enum> uniqueStructuresToDraw;
     std::vector<Surface*> surfacesToDraw;
     const int32_t numberOfBrainStructures = m_brain->getNumberOfBrainStructures();
@@ -7160,8 +7409,26 @@ BrainOpenGLFixedPipeline::drawWholeBrainModel(const BrainOpenGLViewportContent* 
                 case StructureEnum::CEREBELLUM:
                     drawIt = browserTabContent->isWholeBrainCerebellumEnabled();
                     break;
+                case StructureEnum::HIPPOCAMPUS_DENTATE_LEFT:
+                    drawIt = (browserTabContent->isWholeBrainHippocampusEnabled()
+                              && browserTabContent->isWholeBrainDentateHippocampusLeftEnabled());
+                    break;
+                case StructureEnum::HIPPOCAMPUS_DENTATE_RIGHT:
+                    drawIt = (browserTabContent->isWholeBrainHippocampusEnabled()
+                              && browserTabContent->isWholeBrainDentateHippocampusRightEnabled());
+                    break;
+                case StructureEnum::HIPPOCAMPUS_LEFT:
+                    drawIt = (browserTabContent->isWholeBrainHippocampusEnabled()
+                              && browserTabContent->isWholeBrainHippocampusLeftEnabled());
+                    break;
+                case StructureEnum::HIPPOCAMPUS_RIGHT:
+                    drawIt = (browserTabContent->isWholeBrainHippocampusEnabled()
+                              && browserTabContent->isWholeBrainHippocampusRightEnabled());
+                    break;
                 default:
-                    CaretLogWarning("programmer-issure: Surface type not left/right/cerebellum");
+                    CaretLogWarning("PROGRAMMER ISSUE: Surface type "
+                                    + StructureEnum::toName(structure)
+                                    + " has not been implemented for ALL view drawing.");
                     break;
             }
             
@@ -7210,6 +7477,11 @@ BrainOpenGLFixedPipeline::drawWholeBrainModel(const BrainOpenGLViewportContent* 
                 case StructureEnum::CEREBELLUM:
                     dz = browserTabContent->getWholeBrainCerebellumSeparation();
                     break;
+                case StructureEnum::HIPPOCAMPUS_DENTATE_LEFT:
+                case StructureEnum::HIPPOCAMPUS_DENTATE_RIGHT:
+                case StructureEnum::HIPPOCAMPUS_LEFT:
+                case StructureEnum::HIPPOCAMPUS_RIGHT:
+                    break;
                 default:
                     CaretLogWarning("programmer-issure: Surface type not left/right/cerebellum");
                     break;
@@ -7228,16 +7500,34 @@ BrainOpenGLFixedPipeline::drawWholeBrainModel(const BrainOpenGLViewportContent* 
             
             glPushMatrix();
             glTranslatef(dx, dy, dz);
+            const bool depthTestingEnabled(true);
             this->drawSurface(surface,
                               SurfaceTabType::WHOLE_BRAIN,
                               browserTabContent->getScaling(),
                               viewport[3], /* height */
                               nodeColoringRGBA,
-                              drawModelSpaceAnnotationsFlag);
+                              drawModelSpaceAnnotationsFlag,
+                              depthTestingEnabled);
             glPopMatrix();
         }
     }
     
+    glPopAttrib();
+    
+    if (drawFiberTrajectoriesInFrontFlag) {
+        /*
+         * Clear the depth buffer but use the scissor test to only clear
+         * the depth buffer for this tab.
+         */
+        glPushAttrib(GL_SCISSOR_BIT);
+        glEnable(GL_SCISSOR_TEST);
+        glScissor(m_tabViewport[0], m_tabViewport[1], m_tabViewport[2], m_tabViewport[3]);
+        glClear(GL_DEPTH_BUFFER_BIT);
+        glPopAttrib();
+        
+        drawSurfaceFiberTrajectories(StructureEnum::ALL);
+    }
+
     /*
      * Special case to draw foci when surfaces are not displayed
      */
@@ -7417,8 +7707,9 @@ BrainOpenGLFixedPipeline::setOrthographicProjection(const int32_t viewport[4],
  */
 void
 BrainOpenGLFixedPipeline::setOrthographicProjectionForWithBoundingBox(const int32_t viewport[4],
-                                                 const ProjectionViewTypeEnum::Enum projectionType,
-                                                 const BoundingBox* boundingBox)
+                                                                      const ProjectionViewTypeEnum::Enum projectionType,
+                                                                      const OrthoFitMode orthoFitMode,
+                                                                      const BoundingBox* boundingBox)
 {
     CaretAssert(boundingBox);
     
@@ -7447,7 +7738,9 @@ BrainOpenGLFixedPipeline::setOrthographicProjectionForWithBoundingBox(const int3
             break;
         case ProjectionViewTypeEnum::PROJECTION_VIEW_CEREBELLUM_FLAT_SURFACE:
         case ProjectionViewTypeEnum::PROJECTION_VIEW_LEFT_FLAT_SURFACE:
+        case ProjectionViewTypeEnum::PROJECTION_VIEW_LEFT_FLAT_DENTATE_SURFACE:
         case ProjectionViewTypeEnum::PROJECTION_VIEW_RIGHT_FLAT_SURFACE:
+        case ProjectionViewTypeEnum::PROJECTION_VIEW_RIGHT_FLAT_DENTATE_SURFACE:
             windowHorizontalSize = boundingBox->getDifferenceX();
             windowVerticalSize   = boundingBox->getDifferenceY();
             break;
@@ -7491,16 +7784,17 @@ BrainOpenGLFixedPipeline::setOrthographicProjectionForWithBoundingBox(const int3
     const float orthoHeight = modelHalfHeight * 1.02;
     const float orthoWidth  = modelHalfWidth  * 1.02;
     
-    const bool setWidthFromHeightFlag = true;
-    if (setWidthFromHeightFlag) {
-        setOrthographicProjectionWithHeight(viewport,
-                                            projectionType,
-                                            orthoHeight);
-    }
-    else {
-        setOrthographicProjectionWithWidth(viewport,
-                                           projectionType,
-                                           orthoWidth);
+    switch (orthoFitMode) {
+        case OrthoFitMode::SET_FROM_WIDTH:
+            setOrthographicProjectionWithWidth(viewport,
+                                               projectionType,
+                                               orthoWidth);
+            break;
+        case OrthoFitMode::SET_FROM_HEIGHT:
+            setOrthographicProjectionWithHeight(viewport,
+                                                projectionType,
+                                                orthoHeight);
+            break;
     }
 }
 
@@ -7545,6 +7839,7 @@ BrainOpenGLFixedPipeline::setOrthographicProjectionWithHeight(const int32_t view
             break;
         case ProjectionViewTypeEnum::PROJECTION_VIEW_LEFT_LATERAL:
         case ProjectionViewTypeEnum::PROJECTION_VIEW_LEFT_FLAT_SURFACE:
+        case ProjectionViewTypeEnum::PROJECTION_VIEW_LEFT_FLAT_DENTATE_SURFACE:
         case ProjectionViewTypeEnum::PROJECTION_VIEW_RIGHT_MEDIAL:
             glOrtho(this->orthographicLeft, this->orthographicRight,
                     this->orthographicBottom, this->orthographicTop,
@@ -7557,6 +7852,7 @@ BrainOpenGLFixedPipeline::setOrthographicProjectionWithHeight(const int32_t view
                     this->orthographicFar, this->orthographicNear);
             break;
         case ProjectionViewTypeEnum::PROJECTION_VIEW_RIGHT_FLAT_SURFACE:
+        case ProjectionViewTypeEnum::PROJECTION_VIEW_RIGHT_FLAT_DENTATE_SURFACE:
             glOrtho(this->orthographicLeft, this->orthographicRight,
                     this->orthographicBottom, this->orthographicTop,
                     this->orthographicNear, this->orthographicFar);
@@ -7586,6 +7882,9 @@ BrainOpenGLFixedPipeline::setOrthographicProjectionWithWidth(const int32_t viewp
     double width = viewport[2];
     double height = viewport[3];
     double aspectRatio = (width / height);
+    if (aspectRatio == 0.0) {
+        aspectRatio = 1.0;
+    }
     this->orthographicRight  =    halfWindowWidth;
     this->orthographicLeft   =   -halfWindowWidth;
     this->orthographicTop    =    halfWindowWidth / aspectRatio;
@@ -7609,6 +7908,7 @@ BrainOpenGLFixedPipeline::setOrthographicProjectionWithWidth(const int32_t viewp
             break;
         case ProjectionViewTypeEnum::PROJECTION_VIEW_LEFT_LATERAL:
         case ProjectionViewTypeEnum::PROJECTION_VIEW_LEFT_FLAT_SURFACE:
+        case ProjectionViewTypeEnum::PROJECTION_VIEW_LEFT_FLAT_DENTATE_SURFACE:
         case ProjectionViewTypeEnum::PROJECTION_VIEW_RIGHT_MEDIAL:
             glOrtho(this->orthographicLeft, this->orthographicRight,
                     this->orthographicBottom, this->orthographicTop,
@@ -7621,6 +7921,7 @@ BrainOpenGLFixedPipeline::setOrthographicProjectionWithWidth(const int32_t viewp
                     this->orthographicFar, this->orthographicNear);
             break;
         case ProjectionViewTypeEnum::PROJECTION_VIEW_RIGHT_FLAT_SURFACE:
+        case ProjectionViewTypeEnum::PROJECTION_VIEW_RIGHT_FLAT_DENTATE_SURFACE:
             glOrtho(this->orthographicLeft, this->orthographicRight,
                     this->orthographicBottom, this->orthographicTop,
                     this->orthographicNear, this->orthographicFar);
@@ -9473,7 +9774,8 @@ BrainOpenGLFixedPipeline::VolumeDrawInfo::VolumeDrawInfo(CaretMappableDataFile* 
                                                          const FastStatistics* statistics,
                                                          const WholeBrainVoxelDrawingMode::Enum wholeBrainVoxelDrawingMode,
                                                          const int32_t mapIndex,
-                                                         const float opacity) 
+                                                         const int32_t tabIndex,
+                                                         const float opacity)
 : statistics(statistics) {
     this->mapFile = mapFile;
     this->volumeFile = volumeFile;
@@ -9481,6 +9783,7 @@ BrainOpenGLFixedPipeline::VolumeDrawInfo::VolumeDrawInfo(CaretMappableDataFile* 
     this->paletteColorMapping = paletteColorMapping;
     this->wholeBrainVoxelDrawingMode = wholeBrainVoxelDrawingMode;
     this->mapIndex = mapIndex;
+    this->tabIndex = tabIndex;
     this->opacity    = opacity;
     this->volumeType = SubvolumeAttributes::UNKNOWN;
     if (this->volumeFile != NULL) {

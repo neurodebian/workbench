@@ -23,15 +23,21 @@
 #include "AnnotationPolyhedron.h"
 #undef __ANNOTATION_POLYHEDRON_DECLARE__
 
+#include <QUuid>
+
 #include <algorithm>
 #include <cmath>
 
 #include "AnnotationCoordinate.h"
 #include "AnnotationFontAttributes.h"
-#include "AnnotationMetaData.h"
+#include "AnnotationSampleMetaData.h"
 #include "BoundingBox.h"
 #include "CaretAssert.h"
 #include "CaretLogger.h"
+#include "DataFileContentInformation.h"
+#include "EventAnnotationPolyhedronGetByLinkedIdentifier.h"
+#include "EventManager.h"
+#include "GraphicsUtilitiesOpenGL.h"
 #include "HtmlStringBuilder.h"
 #include "HtmlTableBuilder.h"
 #include "MathFunctions.h"
@@ -42,8 +48,6 @@
 
 using namespace caret;
 
-static bool debugFlag = false;
-    
 /**
  * \class caret::AnnotationPolyhedron
  * \brief An annotation poly line
@@ -114,6 +118,8 @@ AnnotationPolyhedron::copyHelperAnnotationPolyhedron(const AnnotationPolyhedron&
     m_planeOneNameStereotaxicXYZ = obj.m_planeOneNameStereotaxicXYZ;
     m_planeTwoNameStereotaxicXYZ = obj.m_planeTwoNameStereotaxicXYZ;
     *m_fontAttributes = *obj.m_fontAttributes;
+    m_polyhedronType  = obj.m_polyhedronType;
+    m_linkedPolyhedronIdentifier = obj.m_linkedPolyhedronIdentifier;
 }
 
 /**
@@ -125,10 +131,23 @@ AnnotationPolyhedron::initializeMembersAnnotationPolyhedron()
     /* Do not add font attribute to scene since it is written to file */
     m_fontAttributes.reset(new AnnotationFontAttributes(m_attributeDefaultType));
     
+    /* no background color */
+    m_fontAttributes->setTextBackgroundColor(CaretColorEnum::NONE);
+    
     m_sceneAssistant.reset(new SceneClassAssistant());
     if (testProperty(Property::SCENE_CONTAINS_ATTRIBUTES)) {
     }
     resetProperty(Property::COPY_CUT_PASTE);
+    
+    /*
+     * Initialize metadata with invalid dates
+     */
+    m_sampleMetaData.reset(new AnnotationSampleMetaData(getMetaData()));
+    m_sampleMetaData->setRetrospectiveSampleEditDate(AnnotationSampleMetaData::getInvalidDateInString());
+    m_sampleMetaData->setProspectiveSampleEditDate(AnnotationSampleMetaData::getInvalidDateInString());
+    
+    m_polyhedronType = AnnotationPolyhedronTypeEnum::INVALID;
+    m_linkedPolyhedronIdentifier.clear();
 }
 
 /**
@@ -147,6 +166,125 @@ const AnnotationPolyhedron*
 AnnotationPolyhedron::castToPolyhedron() const
 {
     return this;
+}
+
+/**
+ * @return Pointer to the metadata
+ */
+GiftiMetaData*
+AnnotationPolyhedron::getMetaData()
+{
+    switch (m_polyhedronType) {
+        case AnnotationPolyhedronTypeEnum::INVALID:
+            break;
+        case AnnotationPolyhedronTypeEnum::RETROSPECTIVE_SAMPLE:
+            if ( ! m_linkedPolyhedronIdentifier.isEmpty()) {
+                EventAnnotationPolyhedronGetByLinkedIdentifier linkEvent(NULL,
+                                                                         AnnotationPolyhedronTypeEnum::PROSPECTIVE_SAMPLE,
+                                                                         m_linkedPolyhedronIdentifier);
+                EventManager::get()->sendEvent(linkEvent.getPointer());
+                AnnotationPolyhedron* prospectivePolyhedron(linkEvent.getPolyhedron());
+                if (prospectivePolyhedron != NULL) {
+                    return prospectivePolyhedron->getMetaData();
+                }
+                else {
+                    CaretLogSevere("Failed to find matching polyhedron with link identifier="
+                                   + m_linkedPolyhedronIdentifier);
+                }
+            }
+            break;
+        case AnnotationPolyhedronTypeEnum::PROSPECTIVE_SAMPLE:
+            break;
+    }
+    return Annotation::getMetaData();
+}
+
+/**
+ * @return Pointer to the metadata (const method)
+ */
+const GiftiMetaData*
+AnnotationPolyhedron::getMetaData() const
+{
+    AnnotationPolyhedron* nonConstPolyhedron(const_cast<AnnotationPolyhedron*>(this));
+    CaretAssert(nonConstPolyhedron);
+    return nonConstPolyhedron->getMetaData();
+}
+
+/**
+ * @return The linked polyhedron identifier
+ * A prospective sample is linked to an retrospective sample and vice versa
+ */
+AString
+AnnotationPolyhedron::getLinkedPolyhedronIdentifier() const
+{
+    return m_linkedPolyhedronIdentifier;
+}
+
+/**
+ * Set the linked polyhedron identifier
+ * A prospective sample is linked to an retrospective sample and vice versa
+ * @param linkedPolyhedonIdentifier
+ *    The identifier
+ */
+void
+AnnotationPolyhedron::setLinkedPolyhedronIdentifier(const AString& linkedPolyhedronIdentifier)
+{
+    m_linkedPolyhedronIdentifier = linkedPolyhedronIdentifier;
+}
+
+/**
+ * @return Pointer to the sample metadata
+ */
+AnnotationSampleMetaData*
+AnnotationPolyhedron::getSampleMetaData()
+{
+    m_sampleMetaData->updateMetaData(getMetaData());
+    return m_sampleMetaData.get();
+}
+
+/**
+ * @return Pointer to the sample metadata (const method)
+ */
+const AnnotationSampleMetaData*
+AnnotationPolyhedron::getSampleMetaData() const
+{
+    m_sampleMetaData->updateMetaData(getMetaData());
+    return m_sampleMetaData.get();
+}
+
+/**
+ * @return The polyhedron type
+ */
+AnnotationPolyhedronTypeEnum::Enum
+AnnotationPolyhedron::getPolyhedronType() const
+{
+    return m_polyhedronType;
+}
+
+/**
+ * Set the polyhedron type
+ * @param polyhedronType
+ *    Type of polyhedron
+ */
+void
+AnnotationPolyhedron::setPolyhedronType(const AnnotationPolyhedronTypeEnum::Enum polyhedronType)
+{
+    m_polyhedronType = polyhedronType;
+    
+    switch (m_polyhedronType) {
+        case AnnotationPolyhedronTypeEnum::INVALID:
+            break;
+        case AnnotationPolyhedronTypeEnum::RETROSPECTIVE_SAMPLE:
+            break;
+        case AnnotationPolyhedronTypeEnum::PROSPECTIVE_SAMPLE:
+            /*
+             * Set linked identifier for PROSPECTIVE SAMPLE to date/time
+             */
+            if (m_linkedPolyhedronIdentifier.isEmpty()) {
+                m_linkedPolyhedronIdentifier = QUuid::createUuid().toString();
+            }
+            break;
+    }
 }
 
 /**
@@ -687,6 +825,101 @@ AnnotationPolyhedron::setCustomTextColor(const uint8_t rgba[4])
 }
 
 /**
+ * @return The background color.
+ */
+CaretColorEnum::Enum
+AnnotationPolyhedron::getTextBackgroundColor() const
+{
+    return m_fontAttributes->getTextBackgroundColor();
+}
+
+/**
+ * Set the background color.
+ *
+ * @param color
+ *     New value for foreground color.
+ */
+void
+AnnotationPolyhedron::setTextBackgroundColor(const CaretColorEnum::Enum color)
+{
+    m_fontAttributes->setTextBackgroundColor(color);
+}
+
+/**
+ * Get the background color's RGBA components regardless of
+ * coloring (custom color or a CaretColorEnum) selected by the user.
+ *
+ * @param rgbaOut
+ *     RGBA components ranging 0.0 to 1.0.
+ */
+void
+AnnotationPolyhedron::getTextBackgroundColorRGBA(float rgbaOut[4]) const
+{
+    m_fontAttributes->getTextBackgroundColorRGBA(rgbaOut);
+}
+
+/**
+ * Get the background color's RGBA components regardless of
+ * coloring (custom color or a CaretColorEnum) selected by the user.
+ *
+ * @param rgbaOut
+ *     RGBA components ranging 0 to 255.
+ */
+void
+AnnotationPolyhedron::getTextBackgroundColorRGBA(uint8_t rgbaOut[4]) const
+{
+    m_fontAttributes->getTextBackgroundColorRGBA(rgbaOut);
+}
+
+/**
+ * Get the background color.
+ *
+ * @param rgbaOut
+ *    RGBA components (red, green, blue, alpha) each of which ranges [0.0, 1.0].
+ */
+void
+AnnotationPolyhedron::getCustomTextBackgroundColor(float rgbaOut[4]) const
+{
+    m_fontAttributes->getCustomTextBackgroundColor(rgbaOut);
+}
+
+/**
+ * Get the background color.
+ *
+ * @param rgbaOut
+ *    RGBA components (red, green, blue, alpha) each of which ranges [0, 255].
+ */
+void
+AnnotationPolyhedron::getCustomTextBackgroundColor(uint8_t rgbaOut[4]) const
+{
+    m_fontAttributes->getCustomTextBackgroundColor(rgbaOut);
+}
+
+/**
+ * Set the background color with floats.
+ *
+ * @param rgba
+ *    RGBA components (red, green, blue, alpha) each of which ranges [0.0, 1.0].
+ */
+void
+AnnotationPolyhedron::setCustomTextBackgroundColor(const float rgba[4])
+{
+    m_fontAttributes->setCustomTextBackgroundColor(rgba);
+}
+
+/**
+ * Set the background color with unsigned bytes.
+ *
+ * @param rgba
+ *    RGBA components (red, green, blue, alpha) each of which ranges [0, 255].
+ */
+void
+AnnotationPolyhedron::setCustomTextBackgroundColor(const uint8_t rgba[4])
+{
+    m_fontAttributes->setCustomTextBackgroundColor(rgba);
+}
+
+/**
  * @return
  *    Is bold enabled ?
  */
@@ -774,7 +1007,7 @@ AnnotationPolyhedron::setFontTooSmallWhenLastDrawn(const bool tooSmallFontFlag) 
  *    Contains all edges from the polyhedron.  Edges connect a pair of vertices,
  *    one at each end of the polyhedron (connect the polygons)
  * @param trianglesOut
- *    Contains all triangles that form the ends of the polyhedron (the two polygons)
+ *    Contains all triangles that form the polyhedron
  */
 void
 AnnotationPolyhedron::getEdgesAndTriangles(std::vector<Edge>& edgesOut,
@@ -843,32 +1076,58 @@ AnnotationPolyhedron::getEdgesAndTriangles(std::vector<Edge>& edgesOut,
                                                       getCoordinate(iNext + farOffset)->getXYZ()));
         }
 
+        
         /*
          * Ends of polyhedron
          */
-        std::vector<GraphicsPolygonTessellator::Vertex> verticesEndOne;
-        std::vector<GraphicsPolygonTessellator::Vertex> verticesEndTwo;
+        std::vector<Vector3D> verticesEndOne;
+        std::vector<Vector3D> verticesEndTwo;
         for (int32_t i = 0; i < halfNumCoords; i++) {
-            verticesEndOne.emplace_back(i, getCoordinate(i)->getXYZ());
-            verticesEndTwo.emplace_back((i + halfNumCoords),
-                                   getCoordinate(i + halfNumCoords)->getXYZ());
+            verticesEndOne.push_back(getCoordinate(i)->getXYZ());
+            verticesEndTwo.push_back(getCoordinate(i + halfNumCoords)->getXYZ());
         }
         
+        const Vector3D endOneAvg(Vector3D::average(verticesEndOne));
+        const Vector3D endTwoAvg(Vector3D::average(verticesEndTwo));
+        const Vector3D endOneNormalVector((endOneAvg - endTwoAvg).normal());
+        const Vector3D endTwoNormalVector(-endOneNormalVector);
         
         {
-            std::vector<Triangle> triangles;
-            tessellatePolygon(verticesEndOne, triangles);
-            m_tessellatedTriangles.insert(m_tessellatedTriangles.end(),
-                                triangles.begin(),
-                                triangles.end());
+            std::vector<Vector3D> triangleVertices;
+            const FunctionResult result(GraphicsUtilitiesOpenGL::tesselatePolygon(verticesEndOne,
+                                                                                  endOneNormalVector,
+                                                                                  triangleVertices));
+            if (result.isOk()) {
+                const int32_t numTriangles(triangleVertices.size() / 3);
+                for (int32_t i = 0; i < numTriangles; i++) {
+                    const int32_t i3(i*3);
+                    m_tessellatedTriangles.emplace_back(triangleVertices[i3],
+                                                        triangleVertices[i3+1],
+                                                        triangleVertices[i3+2]);
+                }
+            }
+            else {
+                CaretLogSevere(result.getErrorMessage());
+            }
         }
         
         {
-            std::vector<Triangle> triangles;
-            tessellatePolygon(verticesEndTwo, triangles);
-            m_tessellatedTriangles.insert(m_tessellatedTriangles.end(),
-                                triangles.begin(),
-                                triangles.end());
+            std::vector<Vector3D> triangleVertices;
+            const FunctionResult result(GraphicsUtilitiesOpenGL::tesselatePolygon(verticesEndTwo,
+                                                                                  endTwoNormalVector,
+                                                                                  triangleVertices));
+            if (result.isOk()) {
+                const int32_t numTriangles(triangleVertices.size() / 3);
+                for (int32_t i = 0; i < numTriangles; i++) {
+                    const int32_t i3(i*3);
+                    m_tessellatedTriangles.emplace_back(triangleVertices[i3],
+                                                        triangleVertices[i3+1],
+                                                        triangleVertices[i3+2]);
+                }
+            }
+            else {
+                CaretLogSevere(result.getErrorMessage());
+            }
         }
     }
     
@@ -876,44 +1135,25 @@ AnnotationPolyhedron::getEdgesAndTriangles(std::vector<Edge>& edgesOut,
 }
 
 /**
- * Tessellate vertices in the polygon into triangles
- * @param polygon
- *    The input polygon
+ * Get all coordinates and triangles (could be used to make a surface)
+ * @param coordinatesOut
+ *    Contains all coordinates from polygon
  * @param trianglesOut
- *    Output with triangles
+ *    Contains all triangles that form the polyhedron
  */
 void
-AnnotationPolyhedron::tessellatePolygon(const std::vector<GraphicsPolygonTessellator::Vertex>& polygon,
-                                        std::vector<Triangle>& trianglesOut) const
+AnnotationPolyhedron::getCoordinatesAndTriangles(std::vector<Vector3D>& coordinatesOut,
+                                                 std::vector<Triangle>& trianglesOut) const
 {
+    coordinatesOut.clear();
     trianglesOut.clear();
     
-    AString errorMessage;
-    GraphicsPolygonTessellator tess(polygon,
-                                    m_planeOne.getNormalVector());
-    std::vector<GraphicsPolygonTessellator::Vertex> triangleVertices;
-    if (tess.tessellate(triangleVertices,
-                        errorMessage)) {
-        const int32_t numTriangles(triangleVertices.size() / 3);
-        CaretAssert(static_cast<int32_t>(triangleVertices.size()) == (numTriangles * 3));
-        for (int32_t i = 0; i < numTriangles; i++) {
-            const int32_t i3(i * 3);
-            trianglesOut.push_back(Triangle(triangleVertices[i3].m_xyz,
-                                            triangleVertices[i3+1].m_xyz,
-                                            triangleVertices[i3+2].m_xyz));
-        }
-        
-        if (debugFlag) {
-            std::cout << "Back from tessellator: " << std::endl;
-            for (auto v : triangleVertices) {
-                std::cout << v.m_vertexIndex << " " << v.m_xyz.toString() << std::endl;
-            }
-            std::cout << std::endl;
-        }
-    }
-    else {
-        CaretLogSevere("Tessellator Failed: "
-                       + errorMessage);
+    std::vector<AnnotationPolyhedron::Edge> edges;
+    getEdgesAndTriangles(edges, trianglesOut);
+    
+    const int32_t numCoords(getNumberOfCoordinates());
+    for (int32_t i = 0; i < numCoords; i++) {
+        coordinatesOut.push_back(getCoordinate(i)->getXYZ());
     }
 }
 
@@ -984,56 +1224,58 @@ AnnotationPolyhedron::restoreSubClassDataFromScene(const SceneAttributes* sceneA
 }
 
 /**
- * @return Information about the polyhedron in HTML format
+ * Add information about the content of this instance.
+ *
+ * @param dataFileInformation
+ *     Will contain information about this instance.
  */
-AString
-AnnotationPolyhedron::getPolyhedronInformationHtml() const
+void
+AnnotationPolyhedron::addToDataFileContentInformation(DataFileContentInformation& dataFileInformation) const
 {
-    const int32_t numberOfColumns(3);
-    HtmlTableBuilder tableBuilder(HtmlTableBuilder::V4_01,
-                                  numberOfColumns);
-    
+    Annotation::addToDataFileContentInformation(dataFileInformation);
+
     AString abcdText, pointOnPlaneXyzText;
     if (m_planeOne.toAbcdAndPointXYZ(abcdText,
                                      pointOnPlaneXyzText)) {
-        tableBuilder.addRow("Plane One",
-                            abcdText,
-                            pointOnPlaneXyzText);
+        dataFileInformation.addNameAndValue("Plane One",
+                                    (abcdText +
+                                     + "  "
+                                     + pointOnPlaneXyzText));
     }
     else {
-        tableBuilder.addRow("Plane One",
-                            "Invalid");
+        dataFileInformation.addNameAndValue("Plane One",
+                                            "Invalid");
     }
-
+    
     if (m_planeTwo.toAbcdAndPointXYZ(abcdText,
                                      pointOnPlaneXyzText)) {
-        tableBuilder.addRow("Plane Two",
-                            abcdText,
-                            pointOnPlaneXyzText);
+        dataFileInformation.addNameAndValue("Plane Two",
+                                            (abcdText +
+                                             + "  "
+                                             + pointOnPlaneXyzText));
     }
     else {
-        tableBuilder.addRow("Plane Two",
-                            "Invalid");
+        dataFileInformation.addNameAndValue("Plane Two",
+                                            "Invalid");
     }
-
-    tableBuilder.addRow("Plane One Text",
-                        m_planeOneNameStereotaxicXYZ.toString(6));
-    tableBuilder.addRow("Plane Two Text",
-                        m_planeTwoNameStereotaxicXYZ.toString(6));
-
+    
+    dataFileInformation.addNameAndValue("Plane One Text",
+                                        m_planeOneNameStereotaxicXYZ.toString(6));
+    dataFileInformation.addNameAndValue("Plane Two Text",
+                                        m_planeTwoNameStereotaxicXYZ.toString(6));
+    
     const int32_t numCoords(getNumberOfCoordinates() / 2);
     for (int32_t i = 0; i < numCoords; i++) {
         const AnnotationCoordinate* acOne(getCoordinate(i));
         const AnnotationCoordinate* acTwo(getCoordinate(i + numCoords));
-        tableBuilder.addRow("Coord " + AString::number(i + 1),
-                            acOne->getXYZ().toString(6),
-                            acTwo->getXYZ().toString(6));
+        dataFileInformation.addNameAndValue(("Coord " + AString::number(i + 1)),
+                                            (acOne->getXYZ().toString(6)
+                                             + "   "
+                                             + acTwo->getXYZ().toString(6)));
     }
     
-    HtmlStringBuilder html;
-    
-    html.add(tableBuilder.getAsHtmlTable());
-    html.add(getMetadataInformationHtml());
+    dataFileInformation.addNameAndValue("Sample Type",
+                                        AnnotationPolyhedronTypeEnum::toGuiName(getPolyhedronType()));
     
     float endOnePolygonArea(0.0);
     float endTwoPolygonArea(0.0);
@@ -1042,58 +1284,71 @@ AnnotationPolyhedron::getPolyhedronInformationHtml() const
     AString warningMessage;
     AString errorMessage;
     
+    const FunctionResultFloat curlVolumeResult(computePolyhedronVolumeCurlTheorem());
+    if (curlVolumeResult.isOk()) {
+        dataFileInformation.addNameAndValue("Polyhedron Volume (Curl Theorem)",
+                                            curlVolumeResult.getValue());
+        dataFileInformation.addNameAndValue("Curl Theorem",
+                                            "https://mathworld.wolfram.com/PolyhedronVolume.html");
+    }
+    else {
+        dataFileInformation.addNameAndValue("Polyhedron Volume (Curl Theorem)",
+                                            curlVolumeResult.getErrorMessage());
+    }
+    
+    const FunctionResultFloat divergenceVolumeResult(computePolyhedronVolumeDivergenceTheorem());
+    if (divergenceVolumeResult.isOk()) {
+        dataFileInformation.addNameAndValue("Polyhedron Volume (Divergence Theorem)",
+                                            divergenceVolumeResult.getValue());
+        dataFileInformation.addNameAndValue("Divergence Theorem",
+                                            "https://en.wikipedia.org/wiki/Polyhedron#Volume");
+    }
+    else {
+        dataFileInformation.addNameAndValue("Polyhedron Volume (Divergence Theorem)",
+                                            divergenceVolumeResult.getErrorMessage());
+    }
     if (computePolyhedronVolume(polyhedronVolume,
                                 endOnePolygonArea,
                                 endTwoPolygonArea,
                                 endToEndDistance,
                                 warningMessage,
                                 errorMessage)) {
-        html.addLineBreak();
-        html.addLineBreak();
-        html.add("Polyhedron Volume "
-                 + AString::number(polyhedronVolume));
-        html.addLineBreak();
-        html.addLineBreak();
-        html.add("Polyhedron End One Area "
-                 + AString::number(endOnePolygonArea));
-        html.addLineBreak();
-        html.add("Polyhedron End Two Area "
-                 + AString::number(endTwoPolygonArea));
-        html.addLineBreak();
-        html.add("Distance Between Ends "
-                 + AString::number(endToEndDistance));
-        html.addLineBreak();
+        dataFileInformation.addNameAndValue("Polyhedron Volume",
+                                            AString::number(polyhedronVolume));
+        dataFileInformation.addNameAndValue("Polyhedron End One Area",
+                                            AString::number(endOnePolygonArea));
+        dataFileInformation.addNameAndValue("Polyhedron End Two Area",
+                                            AString::number(endTwoPolygonArea));
+        dataFileInformation.addNameAndValue("Distance Between Ends",
+                                            AString::number(endToEndDistance));
         if ( ! warningMessage.isEmpty()) {
-            html.addLineBreak();
-            html.add("Polyhedron Volume Warnings: "
-                     + warningMessage);
+            dataFileInformation.addNameAndValue("Polyhedron Volume Warnings",
+                                                warningMessage);
         }
     }
     else {
-        html.addLineBreak();
-        html.add("Polyhedron Volume Failed: "
-                 + errorMessage);
+        dataFileInformation.addNameAndValue("Polyhedron Volume Failed"
+                                            ,errorMessage);
     }
     
-    return html.toStringWithHtmlBody();
+    getSampleMetaData()->addToDataFileContentInformation(this,
+                                                         dataFileInformation);
 }
 
 /**
- * @return metadata for polyhedron in HTML format
+ * @return Information about the polyhedron in HTML format
  */
 AString
-AnnotationPolyhedron::getMetadataInformationHtml() const
+AnnotationPolyhedron::getPolyhedronInformationHtml() const
 {
-    std::vector<AString> metaDataNames;
-    std::vector<AString> requiredMetaDataNames;
-    getMetaData()->getMetaDataNamesForEditor(metaDataNames,
-                                             requiredMetaDataNames);
-
-    return getMetaData()->toFormattedHtml(metaDataNames);
+    DataFileContentInformation dfci;
+    addToDataFileContentInformation(dfci);
+    AString htmlOut(dfci.getInformationInHtml());
+    return htmlOut;
 }
 
 /**
- * Compute the volume and other measurements of the polyhedron
+ * Compute the volume and other measurements of the polyhedron VERSION 1
  * @param volumeOut
  *    Output containing the volume of the polyhedron
  * @param endOneAreaOut
@@ -1140,22 +1395,12 @@ AnnotationPolyhedron::computePolyhedronVolume(float& volumeOut,
     }
     
     /*
-     * Get matrix that rotates plane to align with the Z-axis
-     */
-    const Vector3D zAxis(0.0, 0.0, 1.0);
-    const Matrix4x4 matrix(Matrix4x4::rotationTo(m_planeOne.getNormalVector(),
-                                                 zAxis));
-    
-    /*
-     * Rotate coordinates to align with Z-axis
-     * and split coordinates into the two "end" polygons
+     * Split coordinates into the two "end" polygons
      */
     std::vector<Vector3D> polygonOne;
     std::vector<Vector3D> polygonTwo;
     for (int32_t i = 0; i < numCoords; i++) {
-        const Vector3D xyzOrig(getCoordinate(i)->getXYZ());
-        Vector3D xyz(xyzOrig);
-        matrix.multiplyPoint3(xyz);
+        const Vector3D xyz(getCoordinate(i)->getXYZ());
         
         if (i < numCoordPairs) {
             polygonOne.push_back(xyz);
@@ -1176,63 +1421,319 @@ AnnotationPolyhedron::computePolyhedronVolume(float& volumeOut,
     }
     
     /*
-     * Absolute distance between ends
+     * Normal vector for polyhedon end one to two
      */
-    const float absDeltaZ(std::fabs(polygonTwo[0][2] - polygonOne[0][2]));
-    
-    const int32_t numSteps(static_cast<int32_t>(absDeltaZ * 50.0));
-    const float stepPercentage(1.0 / static_cast<float>(numSteps));
-    
-    /*
-     * Z-coordinates should be same in each polygon
-     */
-    const float stepDelta(absDeltaZ / static_cast<float>(numSteps));
+    const Vector3D polyOneAvgXYZ(Vector3D::average(polygonOne));
+    const Vector3D polyTwoAvgXYZ(Vector3D::average(polygonTwo));
+    const Vector3D polyOneToTwoNormalVector((polyTwoAvgXYZ - polyOneAvgXYZ).normal());
     
     /*
-     * Compute the step, in XYZ, for each vertex
-     * between the two "end" polygons
+     * Area of each end of polyhedron
      */
-    std::vector<Vector3D> stepXYZ;
+    endOneAreaOut = GraphicsUtilitiesOpenGL::computePolygonArea3D(polygonOne,
+                                                                  polyOneToTwoNormalVector);
+    endTwoAreaOut = GraphicsUtilitiesOpenGL::computePolygonArea3D(polygonTwo,
+                                                                  polyOneToTwoNormalVector);
+
+    /*
+     * Step distance between each corresponding pair of coordiantes
+     */
+    const float numStepsFloat(250.0);
+    std::vector<Vector3D> polygonStep;
     for (int32_t i = 0; i < numCoordPairs; i++) {
         CaretAssertVectorIndex(polygonOne, i);
         CaretAssertVectorIndex(polygonTwo, i);
-        const Vector3D dxyz(polygonTwo[i] - polygonOne[i]);
-        const float stepDistance(dxyz.length() * stepPercentage);
-        stepXYZ.push_back(dxyz.normal() * stepDistance);
+        polygonStep.push_back((polygonTwo[i] - polygonOne[i]) / numStepsFloat);
+        if (i == 0) {
+            endToEndDistanceOut = (polygonTwo[i] - polygonOne[i]).length();
+        }
     }
+    CaretAssert(numCoordPairs == static_cast<int32_t>(polygonStep.size()));
     
-    endOneAreaOut = MathFunctions::polygonArea(polygonOne);
-    endTwoAreaOut = MathFunctions::polygonArea(polygonTwo);
-    endToEndDistanceOut = absDeltaZ;
     
     /*
      * Increment through the poyhedron from end to end
      * and compute volume of each sliver.
      */
-    float volume(0.0);
+    float polyhedronVolume(0.0);
+    const int32_t numSteps(static_cast<int32_t>(numStepsFloat));
     for (int32_t iStep = 0; iStep < numSteps; iStep++) {
+        /*
+         * Coordinates for a 'slice' of the polyhedon
+         */
         std::vector<Vector3D> p1;
         std::vector<Vector3D> p2;
         for (int32_t iCoord = 0; iCoord < numCoordPairs; iCoord++) {
             CaretAssertVectorIndex(polygonOne, iCoord);
-            CaretAssertVectorIndex(stepXYZ, iCoord);
+            CaretAssertVectorIndex(polygonStep, iCoord);
             const Vector3D v1(polygonOne[iCoord]
-                              + (iStep * stepXYZ[iCoord]));
-            const Vector3D v2(v1 + stepXYZ[iCoord]);
+                              + (iStep * polygonStep[iCoord]));
+            const Vector3D v2(v1 + polygonStep[iCoord]);
             p1.push_back(v1);
             p2.push_back(v2);
         }
         
-        const float areaOne(MathFunctions::polygonArea(p1));
-        const float areaTwo(MathFunctions::polygonArea(p2));
-        const float stepVolume(((areaOne + areaTwo) / 2.0)
-                               * stepDelta);
-        volume += stepVolume;
+        /*
+         * Thickness of the 'slice'
+         */
+        const Vector3D polygonOneAverageXYZ(Vector3D::average(p1));
+        const Vector3D polygonTwoAverageXYZ(Vector3D::average(p2));
+        const float thickness((polygonOneAverageXYZ - polygonTwoAverageXYZ).length());
+        
+        if (thickness > 0.0) {
+            /*
+             * Compute volume of 'slice' and add to polyhedron volume
+             */
+            const float areaOne(GraphicsUtilitiesOpenGL::computePolygonArea3D(p1,
+                                                                              polyOneToTwoNormalVector));
+            const float areaTwo(GraphicsUtilitiesOpenGL::computePolygonArea3D(p2,
+                                                                              polyOneToTwoNormalVector));
+            const float sliceVolume(((areaOne + areaTwo) / 2.0)
+                                    * thickness);
+            polyhedronVolume += sliceVolume;
+        }
     }
     
-    volumeOut = volume;
+    volumeOut = polyhedronVolume;
     
     return true;
+}
+
+/**
+ * @return Function result containing compution of polyhedron volume using curl theorem
+ * as described at https://mathworld.wolfram.com/PolyhedronVolume.html
+ */
+FunctionResultFloat
+AnnotationPolyhedron::computePolyhedronVolumeCurlTheorem() const
+{
+    float volume(0.0);
+    AString errorMessage;
+    
+    const int32_t numCoordinates(getNumberOfCoordinates());
+    if (numCoordinates >= 6) {
+        /*
+         * Find Center of Gravity of all coordinates
+         */
+        Vector3D cog(0.0, 0.0, 0.0);
+        for (int32_t i = 0; i < numCoordinates; i++) {
+            cog += getCoordinate(i)->getXYZ();
+        }
+        cog /= static_cast<float>(numCoordinates);
+            
+        /*
+         * Get the triangles (tessellators convert the
+         * polygon ends into triangles).  Also includes
+         * triangles formed by connecting the two
+         * polygon ends.
+         */
+        std::vector<Edge> edges;
+        std::vector<Triangle> triangles;
+        getEdgesAndTriangles(edges,
+                             triangles);
+        
+        /*
+         * Compute the volume as described at 
+         * https://mathworld.wolfram.com/PolyhedronVolume.html
+         *
+         * Formula => (1 / 6) * (Summation of each triangle 'a dot n')
+         *    where 'a' is first vertex in triangle and 'n' is the
+         *    normal vector defined as (b - a) X (c - a).
+         */
+        const int32_t numTriangles(triangles.size());
+        for (int32_t i = 0; i < numTriangles; i++) {
+            /*
+             * Vertices of triangle
+             */
+            CaretAssertVectorIndex(triangles, i);
+            Vector3D a(triangles[i].m_v1);
+            Vector3D b(triangles[i].m_v2);
+            Vector3D c(triangles[i].m_v3);
+            
+            /*
+             * Test to force backwards oriented triangles
+             */
+            const bool testFlag(false);
+            if (testFlag) {
+                if ((i == 0) || (i == 4)) {
+                    std::swap(a, c);
+                }
+            }
+            /*
+             * Test triangle has no area
+             * (all vertices coincident)
+             */
+            const float distAB((a - b).length());
+            const float distBC((b - c).length());
+            const float tolerance(0.001);
+            if ((distAB <= tolerance)
+                && (distBC <= tolerance)) {
+                continue;
+            }
+            
+            /*
+             * While the web page refers to it this as a 'normal' it
+             * is just the cross product.  If one were to normalize
+             * this value, the algorithm will fail.
+             */
+            const Vector3D bma(b - a);
+            const Vector3D cma(c - a);
+            Vector3D crossProduct(bma.cross(cma));
+            
+            /*
+             * Compute normal vector pointing from center of polyhedron
+             * through triangle's center-of-gravity (average of a, b, c)
+             * This normal vector should point in roughly the same
+             * direction as the triangle's normal vector.
+             */
+            const Vector3D triangleCOG((a + b + c) / 3.0);
+            const Vector3D triangleCogNormal((triangleCOG - cog).normal());
+            
+            /*
+             * The normal vector of the triangle should point OUT
+             * of the polyhedron.
+             *
+             * If dot product is less than zero the triangle is oriented
+             * incorrectly (pointing into the polyhedron) so
+             * swap 'a' and 'c' and invert the triangle normal vector.
+             */
+            const Vector3D normalVector(crossProduct.normal());
+            const float dotProd(normalVector.dot(triangleCogNormal));
+            if (dotProd < 0) {
+//                std::cout << "Need to swap " << getName() << std::endl;
+                std::swap(a, c);
+                crossProduct *= -1.0;
+            }
+            
+            /*
+             * Add to volume summation
+             */
+            volume += (a.dot(crossProduct));
+        }
+        
+        /*
+         * Finalize volume
+         */
+        volume /= 6.0;
+    }
+    else {
+        errorMessage = "Polyhedon contains less than 6 coordinates";
+    }
+    
+    FunctionResultFloat result(volume,
+                               errorMessage,
+                               errorMessage.isEmpty());
+    return result;
+}
+
+/**
+ * @return Function result containing compution of polyhedron volume using divergence theorem
+ * as described a thttps://en.wikipedia.org/wiki/Polyhedron#Volume
+ */
+FunctionResultFloat
+AnnotationPolyhedron::computePolyhedronVolumeDivergenceTheorem() const
+{
+    float volume(0.0);
+    AString errorMessage;
+    
+    const int32_t numCoordinates(getNumberOfCoordinates());
+    if (numCoordinates >= 6) {
+        /*
+         * Find Center of Gravity of all coordinates
+         */
+        Vector3D cog(0.0, 0.0, 0.0);
+        for (int32_t i = 0; i < numCoordinates; i++) {
+            cog += getCoordinate(i)->getXYZ();
+        }
+        cog /= static_cast<float>(numCoordinates);
+        
+        /*
+         * Get the triangles (tessellators convert the
+         * polygon ends into triangles).  Also includes
+         * triangles formed by connecting the two
+         * polygon ends.
+         */
+        std::vector<Edge> edges;
+        std::vector<Triangle> triangles;
+        getEdgesAndTriangles(edges,
+                             triangles);
+        
+        /*
+         * Compute the volume as described at
+         * https://mathworld.wolfram.com/PolyhedronVolume.html
+         *
+         * Formula => (1 / 6) * (Summation of each triangle 'a dot n')
+         *    where 'a' is first vertex in triangle and 'n' is the
+         *    normal vector defined as (b - a) X (c - a).
+         */
+        const int32_t numTriangles(triangles.size());
+        for (int32_t i = 0; i < numTriangles; i++) {
+            /*
+             * Vertices of triangle
+             */
+            CaretAssertVectorIndex(triangles, i);
+            Vector3D a(triangles[i].m_v1);
+            Vector3D b(triangles[i].m_v2);
+            Vector3D c(triangles[i].m_v3);
+                        
+            /*
+             * Normal vector of triangle
+             */
+            Vector3D NF;
+            MathFunctions::normalVector(a, b, c, NF);
+            
+            /*
+             * Compute normal vector pointing from center of polyhedron
+             * through triangle's center-of-gravity (average of a, b, c)
+             * This normal vector should point in roughly the same
+             * direction as the triangle's normal vector.
+             */
+            const Vector3D triangleCOG((a + b + c) / 3.0);
+            const Vector3D triangleCogNormal((triangleCOG - cog).normal());
+
+            /*
+             * The normal vector of the triangle should point OUT
+             * of the polyhedron.
+             *
+             * If dot product is less than zero the triangle is oriented
+             * incorrectly (pointing into the polyhedron) so
+             * swap 'a' and 'c' and invert the triangle normal vector.
+             */
+            const float dotProd(NF.dot(triangleCogNormal));
+            if (dotProd < 0) {
+                //std::cout << "Need to swap divergence" << getName() << std::endl;
+                std::swap(a, c);
+                MathFunctions::normalVector(a, b, c, NF);
+            }
+            
+            /*
+             * Point on face
+             */
+            const Vector3D QF(a);
+            
+            /*
+             * Area of triangle
+             */
+            const float area(MathFunctions::triangleAreaSigned3D(NF, a, b, c));
+            
+            /*
+             * Add to volume
+             */
+            volume += (QF.dot(NF) * area);
+        }
+        
+        /*
+         * Finalize volume
+         */
+        volume /= 3.0;
+    }
+    else {
+        errorMessage = "Polyhedon contains less than 6 coordinates";
+    }
+    
+    FunctionResultFloat result(volume,
+                               errorMessage,
+                               errorMessage.isEmpty());
+    return result;
 }
 
 /**

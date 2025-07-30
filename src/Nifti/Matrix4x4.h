@@ -64,7 +64,7 @@ public:
 
     void getTranslation(float translatationOut[3]) const;
 
-    void setTranslation(const float t[]);
+    void setTranslation(const float t[3]);
 
     void setTranslation(
             const double tx,
@@ -97,7 +97,7 @@ public:
 
     void rotate(
             const double angle,
-            const double vector[]);
+            const double vector[3]);
 
     void rotate(
             const double angle,
@@ -172,6 +172,8 @@ public:
                    const double column[4]);
     
     Vector3D getBasisVector(const int32_t columnIndex) const;
+    
+    Vector3D getBasisVectorNormalized(const int32_t columnIndex) const;
     
     double getMatrixElement(
             const int32_t i,

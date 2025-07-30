@@ -57,6 +57,8 @@ public:
         CONNECTIVITY_FIBER_ORIENTATIONS_TEMPORARY,
         /** Connectivity - Fiber Trajectory TEMPORARY */
         CONNECTIVITY_FIBER_TRAJECTORY_TEMPORARY,
+        /** Connectivity - Fiber Trajectory Maps */
+        CONNECTIVITY_FIBER_TRAJECTORY_MAPS,
         /** Connectivity - Parcel */
         CONNECTIVITY_PARCEL,
         /** Connectivity - Parcel Dense*/
@@ -85,6 +87,8 @@ public:
         METRIC,
         /** Metric Dynamic Connectivity */
         METRIC_DYNAMIC,
+        /** OME-ZARR Image File*/
+        OME_ZARR_IMAGE_FILE,
         /** Palette */
         PALETTE,
         /** RGBA */
@@ -124,9 +128,16 @@ public:
         OPTIONS_INCLUDE_UNKNOWN = 16
     };
     
+    enum DialogFilterShowType {
+        SHOW_DIRECTORY,
+        SHOW_FILES
+    };
+    
     ~DataFileTypeEnum();
 
     static void reinitializeDataFileTypeEnums();
+    
+    static DialogFilterShowType getDialogFilterShowType(const Enum enumValue);
     
     static AString toName(Enum enumValue);
     

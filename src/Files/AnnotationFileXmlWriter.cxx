@@ -33,7 +33,6 @@
 #include "AnnotationGroup.h"
 #include "AnnotationImage.h"
 #include "AnnotationLine.h"
-#include "AnnotationMetaData.h"
 #include "AnnotationOval.h"
 #include "AnnotationPolyhedron.h"
 #include "AnnotationPolygon.h"
@@ -477,6 +476,13 @@ AnnotationFileXmlWriter::writeText(const AnnotationText* text)
     textDataAttributes.append(ATTRIBUTE_TEXT_CUSTOM_RGBA,
                       realArrayToString(rgba, 4));
     
+    textDataAttributes.append(ATTRIBUTE_TEXT_BACKGROUND_CARET_COLOR,
+                              CaretColorEnum::toName(text->getTextBackgroundColor()));
+    
+    text->getCustomTextBackgroundColor(rgba);
+    textDataAttributes.append(ATTRIBUTE_TEXT_BACKGROUND_CUSTOM_RGBA,
+                              realArrayToString(rgba, 4));
+    
     textDataAttributes.append(ATTRIBUTE_TEXT_FONT_BOLD,
                               AString::fromBool(text->isBoldStyleEnabled()));
     textDataAttributes.append(ATTRIBUTE_TEXT_FONT_ITALIC,
@@ -556,6 +562,11 @@ AnnotationFileXmlWriter::writeFontAttributes(const AnnotationFontAttributesInter
     float rgba[4];
     fontAttributes->getCustomTextColor(rgba);
     attributes.append(ATTRIBUTE_TEXT_CUSTOM_RGBA,
+                      realArrayToString(rgba, 4));
+    attributes.append(ATTRIBUTE_TEXT_BACKGROUND_CARET_COLOR,
+                      CaretColorEnum::toName(fontAttributes->getTextBackgroundColor()));
+    fontAttributes->getCustomTextBackgroundColor(rgba);
+    attributes.append(ATTRIBUTE_TEXT_BACKGROUND_CUSTOM_RGBA,
                       realArrayToString(rgba, 4));
     attributes.append(ATTRIBUTE_TEXT_FONT_BOLD,
                       AString::fromBool(fontAttributes->isBoldStyleEnabled()));
@@ -775,6 +786,10 @@ AnnotationFileXmlWriter::writeMultiPairedCoordinateShapeAnnotation(const Annotat
                                  AString::fromNumbers(polyhedron->getPlaneOneNameStereotaxicXYZ()));
         m_stream->writeAttribute(ATTRIBUTE_PLANE_TWO_NAME_XYZ,
                                  AString::fromNumbers(polyhedron->getPlaneTwoNameStereotaxicXYZ()));
+        m_stream->writeAttribute(ATTRIBUTE_POLYHEDRON_TYPE,
+                                 AnnotationPolyhedronTypeEnum::toName(polyhedron->getPolyhedronType()));
+        m_stream->writeAttribute(ATTRIBUTE_POLYHEDRON_LINKED_IDENTIFIER,
+                                 polyhedron->getLinkedPolyhedronIdentifier());
 
         m_stream->writeEndElement();
 

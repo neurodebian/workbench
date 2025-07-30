@@ -32,22 +32,28 @@
 #include "AnnotationOval.h"
 #include "AnnotationPercentSizeText.h"
 #include "AnnotationPointSizeText.h"
+#include "AnnotationPolyhedron.h"
 #include "BrainConstants.h"
 #include "CaretAssert.h"
 #include "CaretColorEnum.h"
 #include "CaretLogger.h"
+#include "DataFileContentInformation.h"
 #include "DataFileContentCopyMoveParameters.h"
+#include "DataFileEditorItem.h"
+#include "DataFileEditorModel.h"
 #include "DataFileException.h"
 #include "DisplayGroupAndTabItemHelper.h"
 #include "EventAnnotationAddToRemoveFromFile.h"
 #include "EventAnnotationGroupGetWithKey.h"
 #include "EventAnnotationGrouping.h"
+#include "EventAnnotationPolyhedronGetByLinkedIdentifier.h"
 #include "EventAnnotationTextSubstitutionInvalidate.h"
 #include "EventBrowserTabClose.h"
 #include "EventBrowserTabDelete.h"
 #include "EventBrowserTabNewClone.h"
 #include "EventBrowserTabReopenClosed.h"
 #include "EventManager.h"
+#include "EventMapYokingSelectMap.h"
 #include "EventTileTabsGridConfigurationModification.h"
 #include "GiftiMetaData.h"
 #include "GiftiMetaDataXmlElements.h"
@@ -252,7 +258,11 @@ AnnotationFile::initializeAnnotationFile()
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_ANNOTATION_ADD_TO_REMOVE_FROM_FILE);
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_ANNOTATION_GROUP_GET_WITH_KEY);
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_ANNOTATION_GROUPING);
+    EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_ANNOTATION_POLYHEDRON_GET_BY_LINKED_IDENTIFIER);
     EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_ANNOTATION_TEXT_SUBSTITUTION_INVALIDATE);
+    
+    /* Map yoking may require update to substitutions */
+    EventManager::get()->addEventListener(this, EventTypeEnum::EVENT_MAP_YOKING_SELECT_MAP);
     
     /* NEED THIS AFTER Tile Tabs have been modified */
     EventManager::get()->addProcessedEventListener(this, EventTypeEnum::EVENT_TILE_TABS_MODIFICATION);
@@ -260,6 +270,158 @@ AnnotationFile::initializeAnnotationFile()
     EventManager::get()->addProcessedEventListener(this, EventTypeEnum::EVENT_BROWSER_TAB_DELETE);
     EventManager::get()->addProcessedEventListener(this, EventTypeEnum::EVENT_BROWSER_TAB_NEW_CLONE);
     EventManager::get()->addProcessedEventListener(this, EventTypeEnum::EVENT_BROWSER_TAB_REOPEN_CLOSED);
+}
+
+/**
+ * Get the samples retrospective or prospective annotation group.  If the group does not exist,
+ * it will be created
+ * @param annotation
+ *    The annotation SHOULD BE POLYHEDRON
+ * @return Group or NULL if annotation is neither retrospective nor prospective polyhedron
+ */
+AnnotationGroup*
+AnnotationFile::getSamplesAnnotationGroup(const Annotation* annotation)
+{
+    AnnotationGroup* group(NULL);
+    
+    const AnnotationPolyhedron* polyhedron(annotation->castToPolyhedron());
+    if (polyhedron != NULL) {
+        switch (polyhedron->getPolyhedronType()) {
+            case AnnotationPolyhedronTypeEnum::INVALID:
+                CaretLogSevere("Requesting samples annotation group for polyhedron that is neither retrospective nor prospective");
+                break;
+            case AnnotationPolyhedronTypeEnum::RETROSPECTIVE_SAMPLE:
+            {
+                for (auto ag : m_annotationGroups) {
+                    if (ag->getGroupType() == AnnotationGroupTypeEnum::SAMPLES_RETROSPECTIVE) {
+                        return ag.data();
+                    }
+                }
+                group = createSamplesAnnotationGroup(AnnotationGroupTypeEnum::SAMPLES_RETROSPECTIVE);
+                m_annotationGroups.emplace_back(group);
+            }
+                break;
+            case AnnotationPolyhedronTypeEnum::PROSPECTIVE_SAMPLE:
+            {
+                for (auto ag : m_annotationGroups) {
+                    if (ag->getGroupType() == AnnotationGroupTypeEnum::SAMPLES_PROSPECTIVE) {
+                        return ag.data();
+                    }
+                }
+                group = createSamplesAnnotationGroup(AnnotationGroupTypeEnum::SAMPLES_PROSPECTIVE);
+                m_annotationGroups.emplace_back(group);
+            }
+                break;
+        }
+    }
+    else {
+        CaretLogSevere("Requesting samples annotation group for annotation that is not a polyhedron");
+    }
+    
+    return group;
+}
+
+/**
+ * Get the linked sample annotation with the given polyhedron type and the given linked identifier
+ * @param polyhedronType
+ *    The type of poyhedron
+ * @param linkedIdentifier
+ *    The linked identiifer
+ * @param
+ *    Pointer to matching polyhedron or NULL if not found
+ */
+AnnotationPolyhedron*
+AnnotationFile::getLinkedSampleAnnotation(const AnnotationPolyhedronTypeEnum::Enum polyhedronType,
+                                          const AString& linkedIdentifier)
+{
+    AnnotationGroupTypeEnum::Enum groupType(AnnotationGroupTypeEnum::INVALID);
+    switch (polyhedronType) {
+        case AnnotationPolyhedronTypeEnum::INVALID:
+            CaretLogSevere("Requesting linked samples annotation group for polyhedron that is neither retrospective nor prospective");
+            return NULL;
+            break;
+        case AnnotationPolyhedronTypeEnum::RETROSPECTIVE_SAMPLE:
+            groupType = AnnotationGroupTypeEnum::SAMPLES_RETROSPECTIVE;
+            break;
+        case AnnotationPolyhedronTypeEnum::PROSPECTIVE_SAMPLE:
+            groupType = AnnotationGroupTypeEnum::SAMPLES_PROSPECTIVE;
+            break;
+    }
+    
+    AnnotationGroup* annotationGroup(NULL);
+    
+    switch (polyhedronType) {
+        case AnnotationPolyhedronTypeEnum::INVALID:
+            CaretAssert(0);
+            break;
+        case AnnotationPolyhedronTypeEnum::RETROSPECTIVE_SAMPLE:
+        case AnnotationPolyhedronTypeEnum::PROSPECTIVE_SAMPLE:
+        {
+            for (auto ag : m_annotationGroups) {
+                if (ag->getGroupType() == groupType) {
+                    annotationGroup = ag.data();
+                    break;
+                }
+            }
+        }
+            break;
+    }
+    
+    if (annotationGroup != NULL) {
+        std::vector<Annotation*> annotations;
+        annotationGroup->getAllAnnotations(annotations);
+        
+        for (Annotation* ann : annotations) {
+            AnnotationPolyhedron* polyhedron(ann->castToPolyhedron());
+            if (polyhedron != NULL) {
+                if (polyhedron->getLinkedPolyhedronIdentifier() == linkedIdentifier) {
+                    return polyhedron;
+                }
+            }
+        }
+    }
+    
+    return NULL;
+}
+
+/**
+ * @return A new Annotation Group for the given samples group type
+ * @param groupType
+ *    The type of the group (must be SAMPLES_PROSPECTIVE or SAMPLES_RETROSPECTIVE)
+ */
+AnnotationGroup*
+AnnotationFile::createSamplesAnnotationGroup(const AnnotationGroupTypeEnum::Enum groupType)
+{
+    switch (groupType) {
+        case AnnotationGroupTypeEnum::INVALID:
+            CaretAssert(0);
+            break;
+        case AnnotationGroupTypeEnum::SAMPLES_RETROSPECTIVE:
+            break;
+        case AnnotationGroupTypeEnum::SAMPLES_PROSPECTIVE:
+            break;
+        case AnnotationGroupTypeEnum::SPACE:
+            CaretAssert(0);
+            break;
+        case AnnotationGroupTypeEnum::USER:
+            CaretAssert(0);
+            break;
+    }
+
+    const AnnotationCoordinateSpaceEnum::Enum annotationSpace = AnnotationCoordinateSpaceEnum::STEREOTAXIC;
+    SpacerTabIndex annotationSpacerTabIndex;
+    const int32_t annotationTabOrWindowIndex = -1;
+    AString annotationMediaFileName;
+    HistologySpaceKey histologySpaceKey;
+    AnnotationGroup* group = new AnnotationGroup(this,
+                                                 groupType,
+                                                 generateUniqueKey(),
+                                                 annotationSpace,
+                                                 annotationTabOrWindowIndex,
+                                                 annotationSpacerTabIndex,
+                                                 annotationMediaFileName,
+                                                 histologySpaceKey);
+    return group;
 }
 
 /**
@@ -532,6 +694,49 @@ AnnotationFile::receiveEvent(Event* event)
             }
         }
     }
+    else if (event->getEventType() == EventTypeEnum::EVENT_ANNOTATION_POLYHEDRON_GET_BY_LINKED_IDENTIFIER) {
+        EventAnnotationPolyhedronGetByLinkedIdentifier* polyEvent(dynamic_cast<EventAnnotationPolyhedronGetByLinkedIdentifier*>(event));
+        CaretAssert(polyEvent);
+        if ((polyEvent->getAnnotationFile() == this)
+            || (polyEvent->getAnnotationFile() == NULL)) {
+            AnnotationGroup* polyGroup(NULL);
+            for (auto& group : m_annotationGroups) {
+                switch (group->getGroupType()) {
+                    case AnnotationGroupTypeEnum::INVALID:
+                        break;
+                    case AnnotationGroupTypeEnum::SAMPLES_RETROSPECTIVE:
+                        if (polyEvent->getPolyhedronType() == AnnotationPolyhedronTypeEnum::RETROSPECTIVE_SAMPLE) {
+                            polyGroup = group.data();
+                        }
+                        break;
+                    case AnnotationGroupTypeEnum::SAMPLES_PROSPECTIVE:
+                        if (polyEvent->getPolyhedronType() == AnnotationPolyhedronTypeEnum::PROSPECTIVE_SAMPLE) {
+                            polyGroup = group.data();
+                        }
+                        break;
+                    case AnnotationGroupTypeEnum::SPACE:
+                        break;
+                    case AnnotationGroupTypeEnum::USER:
+                        break;
+                }
+            }
+            
+            if (polyGroup != NULL) {
+                std::vector<Annotation*> annotations;
+                polyGroup->getAllAnnotations(annotations);
+                for (Annotation* a : annotations) {
+                    AnnotationPolyhedron* poly(a->castToPolyhedron());
+                    if (poly != NULL) {
+                        if (poly->getLinkedPolyhedronIdentifier() == polyEvent->getLinkedIdentifier()) {
+                            polyEvent->setPolyhedron(poly);
+                            polyEvent->setEventProcessed();
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
     else if (event->getEventType() == EventTypeEnum::EVENT_BROWSER_TAB_CLOSE) {
         EventBrowserTabClose* closeEvent = dynamic_cast<EventBrowserTabClose*>(event);
         CaretAssert(closeEvent);
@@ -566,10 +771,8 @@ AnnotationFile::receiveEvent(Event* event)
             restoreAnnotationsInReopendTab(reopenTabEvent->getTabIndex());
         }
     }
-    else if (event->getEventType() == EventTypeEnum::EVENT_ANNOTATION_TEXT_SUBSTITUTION_INVALIDATE) {
-        EventAnnotationTextSubstitutionInvalidate* textSubEvent = dynamic_cast<EventAnnotationTextSubstitutionInvalidate*>(event);
-        CaretAssert(textSubEvent);
-        
+    else if ((event->getEventType() == EventTypeEnum::EVENT_ANNOTATION_TEXT_SUBSTITUTION_INVALIDATE)
+             || (event->getEventType() == EventTypeEnum::EVENT_MAP_YOKING_SELECT_MAP)) {
         for (auto ag : m_annotationGroups) {
             std::vector<Annotation*> annotations;
             ag->getAllAnnotations(annotations);
@@ -579,7 +782,7 @@ AnnotationFile::receiveEvent(Event* event)
             }
         }
         
-        textSubEvent->setEventProcessed();
+        event->setEventProcessed();
     }
     else if (event->getEventType() == EventTypeEnum::EVENT_TILE_TABS_MODIFICATION) {
         EventTileTabsGridConfigurationModification* modEvent = dynamic_cast<EventTileTabsGridConfigurationModification*>(event);
@@ -653,6 +856,13 @@ void
 AnnotationFile::addToDataFileContentInformation(DataFileContentInformation& dataFileInformation)
 {
     CaretDataFile::addToDataFileContentInformation(dataFileInformation);
+    
+    std::vector<Annotation*> annotations;
+    getAllAnnotations(annotations);
+    for (Annotation* ann : annotations) {
+        dataFileInformation.addText(" ");
+        ann->addToDataFileContentInformation(dataFileInformation);
+    }
 }
 
 /**
@@ -685,13 +895,24 @@ AnnotationFile::addAnnotationPrivate(Annotation* annotation,
             return;
         }
     }
-
+    
     CaretAssert(uniqueKey > 0);
     if (uniqueKey <= 0) {
         CaretLogSevere("invalid key less than zero.");
     }
     
-    AnnotationGroup* group = getSpaceAnnotationGroup(annotation);
+    AnnotationGroup* group(NULL);
+    AnnotationPolyhedron* polyhedron(annotation->castToPolyhedron());
+    if ((polyhedron != NULL)
+        && (getDataFileType() == DataFileTypeEnum::SAMPLES)) {
+        group = getSamplesAnnotationGroup(annotation);
+        if (group == NULL) {
+            group = getSpaceAnnotationGroup(annotation);
+        }
+    }
+    else {
+        group = getSpaceAnnotationGroup(annotation);
+    }
     CaretAssert(group);
     
     annotation->setUniqueKey(uniqueKey);
@@ -719,9 +940,20 @@ AnnotationFile::addAnnotationPrivateSharedPointer(QSharedPointer<Annotation>& an
         CaretLogSevere("invalid key less than zero.");
     }
     
-    AnnotationGroup* group = getSpaceAnnotationGroup(annotation.data());
+    AnnotationGroup* group(NULL);
+    AnnotationPolyhedron* polyhedron(annotation->castToPolyhedron());
+    if ((polyhedron != NULL)
+        && (getDataFileType() == DataFileTypeEnum::SAMPLES)) {
+        group = getSamplesAnnotationGroup(annotation.data());
+        if (group == NULL) {
+            group = getSpaceAnnotationGroup(annotation.data());
+        }
+    }
+    else {
+        group = getSpaceAnnotationGroup(annotation.data());
+    }
     CaretAssert(group);
-    
+
     annotation->setUniqueKey(uniqueKey);
     
     group->addAnnotationPrivateSharedPointer(annotation);
@@ -749,7 +981,7 @@ AnnotationFile::addAnnotationDuringFileVersionOneReading(Annotation* annotation)
 /**
  * Add a group while reading an annotation file.
  *
- * @param groupType
+ * @param groupTypeIn
  *     Type of annotation group.
  * @param coordinateSpace
  *     Coordinate space of the group's annotaitons.
@@ -769,7 +1001,7 @@ AnnotationFile::addAnnotationDuringFileVersionOneReading(Annotation* annotation)
  *     If there is an error.
  */
 void
-AnnotationFile::addAnnotationGroupDuringFileReading(const AnnotationGroupTypeEnum::Enum groupType,
+AnnotationFile::addAnnotationGroupDuringFileReading(const AnnotationGroupTypeEnum::Enum groupTypeIn,
                                                     const AnnotationCoordinateSpaceEnum::Enum coordinateSpace,
                                                     const int32_t tabOrWindowIndex,
                                                     const SpacerTabIndex& spacerTabIndex,
@@ -778,9 +1010,52 @@ AnnotationFile::addAnnotationGroupDuringFileReading(const AnnotationGroupTypeEnu
                                                     const int32_t uniqueKey,
                                                     const std::vector<Annotation*>& annotations)
 {
+    AnnotationGroupTypeEnum::Enum groupType(groupTypeIn);
+    
+    if ((groupType == AnnotationGroupTypeEnum::SPACE)
+        && (coordinateSpace == AnnotationCoordinateSpaceEnum::STEREOTAXIC)) {
+        /*
+         * Before sample polyhedrons were split into two types
+         * (Prospective and Retrospective) the polyhedrons were in a stereotaxic
+         * space group.  Detect this and then move them to a prospective
+         * sample group.
+         */
+        if ( ! annotations.empty()) {
+            bool allProsepctiveSamplesFlag(true);
+            for (Annotation* ann : annotations) {
+                bool prospectiveSampleFlag(false);
+                const AnnotationPolyhedron* polyhedron(ann->castToPolyhedron());
+                if (polyhedron != NULL) {
+                    switch (polyhedron->getPolyhedronType()) {
+                        case AnnotationPolyhedronTypeEnum::INVALID:
+                            break;
+                        case AnnotationPolyhedronTypeEnum::RETROSPECTIVE_SAMPLE:
+                            break;
+                        case AnnotationPolyhedronTypeEnum::PROSPECTIVE_SAMPLE:
+                            prospectiveSampleFlag = true;
+                            break;
+                    }
+                }
+                
+                if ( ! prospectiveSampleFlag) {
+                    allProsepctiveSamplesFlag = false;
+                    break;
+                }
+            }
+            
+            if (allProsepctiveSamplesFlag) {
+                groupType = AnnotationGroupTypeEnum::SAMPLES_PROSPECTIVE;
+            }
+        }
+    }
+    
     switch (groupType) {
         case AnnotationGroupTypeEnum::INVALID:
             throw DataFileException("INVALID group type is not allowed while annotation file.");
+            break;
+        case AnnotationGroupTypeEnum::SAMPLES_RETROSPECTIVE:
+            break;
+        case AnnotationGroupTypeEnum::SAMPLES_PROSPECTIVE:
             break;
         case AnnotationGroupTypeEnum::SPACE:
             break;
@@ -1272,6 +1547,18 @@ AnnotationFile::getAllAnnotations(std::vector<Annotation*>& annotationsOut) cons
 }
 
 /**
+ * @return All annotations for drawing (may be override by subclass
+ * to change order of drawing)
+ */
+std::vector<Annotation*>
+AnnotationFile::getAllAnnotationsForDrawing() const
+{
+    std::vector<Annotation*> annotations;
+    getAllAnnotations(annotations);
+    return annotations;
+}
+
+/**
  * Get all annotation groups in this file.
  *
  * @param annotationGroupsOut
@@ -1513,6 +1800,10 @@ AnnotationFile::processRegroupingAnnotations(EventAnnotationGrouping* groupingEv
         switch (group->getGroupType()) {
             case  AnnotationGroupTypeEnum::INVALID:
                 break;
+            case AnnotationGroupTypeEnum::SAMPLES_RETROSPECTIVE:
+                break;
+            case AnnotationGroupTypeEnum::SAMPLES_PROSPECTIVE:
+                break;
             case AnnotationGroupTypeEnum::SPACE:
             {
                 std::vector<Annotation*> groupAnnotations;
@@ -1722,7 +2013,7 @@ AnnotationFile::reuseUniqueKeyOrGenerateNewUniqueKey(const int32_t reuseUniqueKe
     
     /*
      * Search the groups and the annotations within the groups to
-     * see if the desired unique key is already used.
+     * see if the prospective unique key is already used.
      */
     for (AnnotationGroupIterator groupIter = m_annotationGroups.begin();
          groupIter != m_annotationGroups.end();
@@ -2072,6 +2363,12 @@ AnnotationFile::appendContentFromDataFile(const DataFileContentCopyMoveParameter
             AnnotationGroup* group = NULL;
             switch (groupToCopy->getGroupType()) {
                 case AnnotationGroupTypeEnum::INVALID:
+                    break;
+                case AnnotationGroupTypeEnum::SAMPLES_RETROSPECTIVE:
+                    group = createSamplesAnnotationGroup(AnnotationGroupTypeEnum::SAMPLES_RETROSPECTIVE);
+                    break;
+                case AnnotationGroupTypeEnum::SAMPLES_PROSPECTIVE:
+                    group = createSamplesAnnotationGroup(AnnotationGroupTypeEnum::SAMPLES_PROSPECTIVE);
                     break;
                 case AnnotationGroupTypeEnum::SPACE:
                     /*
@@ -2589,6 +2886,188 @@ AnnotationFile::updateSpacerAnnotationsAfterTileTabsModification(const EventTile
         removeAnnotationPrivate(ann,
                                 keepAnnotationForUndoRedoFlag);
     }
+}
+
+/**
+ * Export the content of a border file to a DataFileEditorModel
+ * @return The DataFileEditorModel containing border data.
+ * Caller takes ownership of returned model.
+ * @param modelContent
+ *    Describes content of the model
+ */
+FunctionResultValue<DataFileEditorModel*>
+AnnotationFile::exportToDataFileEditorModel(const DataFileEditorColumnContent& modelContent) const
+{
+    if (isEmpty()) {
+        return FunctionResultValue<DataFileEditorModel*>(NULL,
+                                                         ("There are no annotations to export from "
+                                                          + getFileNameNoPath()),
+                                                         false);
+    }
+    const int32_t numColumns(modelContent.getNumberOfColumns());
+    if (numColumns <= 0) {
+        return FunctionResultValue<DataFileEditorModel*>(NULL,
+                                                         "Model content is empty",
+                                                         false);
+    }
+
+    std::vector<AnnotationGroup*> groups;
+    getAllAnnotationGroups(groups);
+    
+    DataFileEditorModel* dataFileEditorModel(new DataFileEditorModel());
+    
+    /*
+     * Setup column titles and default sorting
+     */
+    dataFileEditorModel->setNumberOfColumnsAndColumnTitles(modelContent);
+
+    
+    for (AnnotationGroup* ag : groups) {
+        std::vector<Annotation*> annotations;
+        ag->getAllAnnotations(annotations);
+        
+        if ( ! annotations.empty()) {
+            for (Annotation* ann : annotations) {
+                CaretAssert(ann);
+                
+                /*
+                 * All items in row represent the same annotation
+                 */
+                std::shared_ptr<Annotation> annShared(ann->clone());
+                
+                float nameRGBA[4];
+                if (ann->getType() == AnnotationTypeEnum::TEXT) {
+                    const AnnotationText* at(ann->castToTextAnnotation());
+                    CaretAssert(at);
+                    at->getTextColorRGBA(nameRGBA);
+                }
+                else {
+                    ann->getBackgroundColorRGBA(nameRGBA);
+                    if (ann->getLineColor() != CaretColorEnum::NONE) {
+                        ann->getLineColorRGBA(nameRGBA);
+                    }
+                }
+                
+                /*
+                 * Create a row and add it to model
+                 */
+                QList<QStandardItem*> rowItems;
+                
+                float emptyRGBA[4] { 0.0, 0.0, 0.0, 0.0 };
+                for (int32_t iCol = 0; iCol < numColumns; iCol++) {
+                    switch (modelContent.getColumnDataType(iCol)) {
+                        case DataFileEditorItemTypeEnum::CLASS_NAME:
+                            CaretAssert(0);
+                            break;
+                        case DataFileEditorItemTypeEnum::COORDINATES:
+                        {
+                            AString xyzText;
+                            if (ann->getNumberOfCoordinates() > 0) {
+                                xyzText = ann->getCoordinate(0)->toStringForCoordinateSpace(ann->getCoordinateSpace());
+                            }
+                            rowItems.push_back(new DataFileEditorItem(DataFileEditorItemTypeEnum::COORDINATES,
+                                                                      annShared,
+                                                                      xyzText,
+                                                                      xyzText,
+                                                                      emptyRGBA));
+                        }
+                            break;
+                        case DataFileEditorItemTypeEnum::GROUP_NAMED:
+                            rowItems.push_back(new DataFileEditorItem(DataFileEditorItemTypeEnum::GROUP_NAMED,
+                                                                      annShared,
+                                                                      ag->getName(),
+                                                                      (ag->getName() + ann->getName()),
+                                                                      emptyRGBA));
+                            break;
+                        case DataFileEditorItemTypeEnum::IDENTIFIER:
+                            CaretAssert(0);
+                            break;
+                        case DataFileEditorItemTypeEnum::NAME:
+                            rowItems.push_back(new DataFileEditorItem(DataFileEditorItemTypeEnum::NAME,
+                                                                      annShared,
+                                                                      ann->getName(),
+                                                                      (ann->getName() + ag->getName()),
+                                                                      nameRGBA));
+                            break;
+                    }
+                }
+                
+                dataFileEditorModel->appendRow(rowItems);
+            }
+        }
+    }
+    
+    return  FunctionResultValue<DataFileEditorModel*>(dataFileEditorModel,
+                                                      "",
+                                                      true);
+}
+
+/**
+ * Add an annotation from another annotation file.  Currently used by editor (Data Menu)
+ * @param annotation
+ *    Annotation that is copied and added to this file
+ */
+void
+AnnotationFile::addAnnotationCopiedFromAnotherFile(const Annotation* annotation)
+{
+    CaretAssert(annotation);
+    
+    Annotation* annCopy(annotation->clone());
+    addAnnotationPrivate(annCopy,
+                         generateUniqueKey());
+}
+
+
+/**
+ * Import border data from the given DataFileEditorModel
+ * Replaces content of this instance.
+ * @param dataFileEditorModel
+ *    Model that contains border data
+ * @return
+ *    Function result indicating success or failure
+ */
+FunctionResult
+AnnotationFile::importFromDataFileEditorModel(const DataFileEditorModel& dataFileEditorModel)
+{
+    AString errorMessage;
+    std::vector<const Annotation*> newAnnotations;
+    
+    const int32_t numRows(dataFileEditorModel.rowCount());
+    for (int32_t iRow = 0; iRow < numRows; iRow++) {
+        const int32_t column(0);
+        const DataFileEditorItem* item(dataFileEditorModel.getDataFileItemAtRowColumn(iRow, column));
+        if (item != NULL) {
+            const Annotation* ann(item->getAnnotation());
+            if (ann != NULL) {
+                newAnnotations.push_back(ann);
+            }
+            else {
+                errorMessage.appendWithNewLine("PROGRAM ERROR: Border missing at row=" + AString::number(iRow));
+            }
+        }
+        else {
+            errorMessage.appendWithNewLine("PROGRAM ERROR: Invalid item at row=" + AString::number(iRow));
+        }
+    }
+    
+    if ( ! errorMessage.isEmpty()) {
+        return FunctionResult::error(errorMessage);
+    }
+    
+    /*
+     * Remove all annotations
+     */
+    clearPrivate();
+    
+    /*
+     * Add border from data file editor model
+     */
+    for (const Annotation* ann : newAnnotations) {
+        addAnnotationPrivate(ann->clone(),
+                             generateUniqueKey());
+    }
+    
+    return FunctionResult::ok();
 }
 
 

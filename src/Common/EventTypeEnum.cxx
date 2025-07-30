@@ -114,6 +114,14 @@ EventTypeEnum::initialize()
                                      "EVENT_ANNOTATION_NEW_DRAWING_POLYHEDRON_SLICE_DEPTH",
                                      "Get slice depth while drawing a new polyhedron"));
     
+    enumData.push_back(EventTypeEnum(EVENT_ANNOTATION_POLYHEDRON_GET_BY_LINKED_IDENTIFIER,
+                                     "EVENT_ANNOTATION_POLYHEDRON_GET_BY_LINKED_IDENTIFIER",
+                                     "Get an annotation polyhedron using its linked identifer"));
+    
+    enumData.push_back(EventTypeEnum(EVENT_ANNOTATION_POLYHEDRON_NAME_COMPONENT_SETTINGS,
+                                     "EVENT_ANNOTATION_POLYHEDRON_NAME_COMPONENT_SETTINGS",
+                                     "Event for annotation polyhedron name component settings"));
+    
     enumData.push_back(EventTypeEnum(EVENT_ANNOTATION_TEXT_GET_BOUNDS,
                                      "EVENT_ANNOTATION_TEXT_GET_BOUNDS",
                                      "Get bounds for annotation text"));
@@ -121,6 +129,10 @@ EventTypeEnum::initialize()
     enumData.push_back(EventTypeEnum(EVENT_ANNOTATION_TEXT_SUBSTITUTION_GET,
                                      "EVENT_ANNOTATION_TEXT_SUBSTITUTION_GET",
                                      "Get an annotation text substitution"));
+    
+    enumData.push_back(EventTypeEnum(EVENT_ANNOTATION_TEXT_SUBSTITUTION_GET_ALL_GROUP_IDS,
+                                     "EVENT_ANNOTATION_TEXT_SUBSTITUTION_GET_ALL_GROUP_IDS",
+                                     "Get all annotation text substitution group identifiers"));
     
     enumData.push_back(EventTypeEnum(EVENT_ANNOTATION_TEXT_SUBSTITUTION_INVALIDATE,
                                      "EVENT_ANNOTATION_TEXT_SUBSTITUTION_INVALIDATE",
@@ -335,6 +347,10 @@ EventTypeEnum::initialize()
                                      "EVENT_DRAWING_VIEWPORT_CONTENT_GET",
                                      "Event get a drawing viewport after drawing"));
     
+    enumData.push_back(EventTypeEnum(EVENT_FOCUS_FILE_GET_COLOR,
+                                     "EVENT_FOCUS_FILE_GET_COLOR",
+                                     "Get a focus class or name color from a focus file"));
+    
     enumData.push_back(EventTypeEnum(EVENT_GET_DISPLAYED_DATA_FILES,
                                      "EVENT_GET_DISPLAYED_DATA_FILES",
                                      "Get data files displayed in windows/tabs"));
@@ -514,6 +530,10 @@ EventTypeEnum::initialize()
     enumData.push_back(EventTypeEnum(EVENT_SURFACES_GET, 
                                      "EVENT_SURFACES_GET", 
                                      "Get Surfaces"));
+    
+    enumData.push_back(EventTypeEnum(EVENT_SURFACE_FILE_GET,
+                                     "EVENT_SURFACE_FILE_GET",
+                                     "Get surface files with structure and number of nodes"));
     
     enumData.push_back(EventTypeEnum(EVENT_SURFACE_STRUCTURES_VALID_GET,
                                      "EVENT_SURFACE_STRUCTURES_VALID_GET",

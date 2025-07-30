@@ -18,6 +18,27 @@ if(Qt5_FOUND)
 endif()
 
 #
+# With AUTOMOC, do not need to specify files
+# that contain Q_OBJECT macro for Qt to process with 'moc'
+# (meta-object compiler).
+#
+IF(WORKBENCH_USE_CMAKE_AUTOMOC)
+    SET(CMAKE_AUTOMOC ON)
+ELSE()
+    SET(MOC_INPUT_HEADER_FILES
+        DataFileEditorModel.h
+        LabelSelectionItemModel.h
+    )
+
+    IF(Qt6_FOUND)
+        QT6_WRAP_CPP(MOC_SOURCE_FILES ${MOC_INPUT_HEADER_FILES})
+    ENDIF()
+    IF(Qt5_FOUND)
+        QT5_WRAP_CPP(MOC_SOURCE_FILES ${MOC_INPUT_HEADER_FILES})
+    ENDIF()
+ENDIF()
+
+#
 # Files Library
 #
 ADD_LIBRARY(Files
@@ -40,6 +61,8 @@ CaretDataFileHelper.h
 CaretDataFileSelectionModel.h
 CaretMappableDataFile.h
 CaretMappableDataFileAndMapSelectionModel.h
+CaretMappableDataFileClusterFinder.h
+CaretMappableDataFileLabelSelectionDelegate.h
 CaretSparseFile.h
 CaretVolumeExtension.h
 ChartableLineSeriesBrainordinateInterface.h
@@ -65,6 +88,7 @@ CiftiConnectivityMatrixParcelFile.h
 CiftiConnectivityMatrixParcelDenseFile.h
 CiftiFiberOrientationFile.h
 CiftiFiberTrajectoryFile.h
+CiftiFiberTrajectoryMapFile.h
 CiftiMappableDataFile.h
 CiftiMappableConnectivityMatrixDataFile.h
 CiftiParcelColoringModeEnum.h
@@ -89,17 +113,24 @@ CziImageResolutionChangeModeEnum.h
 CziNonLinearTransform.h
 CziPixelCoordSpaceEnum.h
 CziUtilities.h
+DataFileColorModulateSelector.h
+DataFileEditorColumnContent.h
+DataFileEditorItem.h
+DataFileEditorItemTypeEnum.h
+DataFileEditorModel.h
 DingOntologyTermsFile.h
 EventCaretDataFilesGet.h
 EventCaretMappableDataFileMapsViewedInOverlays.h
 EventCaretMappableDataFilesGet.h
 EventChartMatrixParcelYokingValidation.h
+EventFocusFileGetColor.h
 EventGetDisplayedDataFiles.h
 EventHistologySlicesFilesGet.h
 EventMapYokingSelectMap.h
 EventMapYokingValidation.h
 EventMediaFilesGet.h
 EventSurfaceColoringInvalidate.h
+EventSurfaceFileGet.h
 EventSurfaceStructuresValidGet.h
 EventVolumeColoringInvalidate.h
 Fiber.h
@@ -138,6 +169,8 @@ ImageSpatialUnitsEnum.h
 LabelDrawingProperties.h
 LabelDrawingTypeEnum.h
 LabelFile.h
+LabelSelectionItem.h
+LabelSelectionItemModel.h
 MapYokingGroupEnum.h
 MediaDisplayCoordinateModeEnum.h
 MediaFile.h
@@ -147,6 +180,7 @@ MetricDynamicConnectivityFile.h
 MetricFile.h
 MetricSmoothingObject.h
 NodeAndVoxelColoring.h
+OmeZarrImageFile.h
 OxfordSparseThreeFile.h
 PaletteFile.h
 PixelCoordinate.h
@@ -155,6 +189,7 @@ PixelLogicalIndex.h
 RectangleTransform.h
 RgbaFile.h
 RibbonMappingHelper.h
+SamplesColorModeEnum.h
 SamplesFile.h
 SceneDataFileInfo.h
 SceneFile.h
@@ -203,6 +238,8 @@ WarpfieldFile.h
 XmlStreamReaderHelper.h
 XmlStreamWriterHelper.h
 
+${MOC_SOURCE_FILES}
+
 AffineFile.cxx
 AffineSeriesFile.cxx
 AnnotationFile.cxx
@@ -221,6 +258,8 @@ CaretDataFileHelper.cxx
 CaretDataFileSelectionModel.cxx
 CaretMappableDataFile.cxx
 CaretMappableDataFileAndMapSelectionModel.cxx
+CaretMappableDataFileClusterFinder.cxx
+CaretMappableDataFileLabelSelectionDelegate.cxx
 CaretSparseFile.cxx
 CaretVolumeExtension.cxx
 ChartableLineSeriesInterface.cxx
@@ -242,6 +281,7 @@ CiftiConnectivityMatrixParcelDynamicFile.cxx
 CiftiConnectivityMatrixParcelDenseFile.cxx
 CiftiFiberOrientationFile.cxx
 CiftiFiberTrajectoryFile.cxx
+CiftiFiberTrajectoryMapFile.cxx
 CiftiMappableDataFile.cxx
 CiftiMappableConnectivityMatrixDataFile.cxx
 CiftiParcelColoringModeEnum.cxx
@@ -266,17 +306,24 @@ CziImageResolutionChangeModeEnum.cxx
 CziNonLinearTransform.cxx
 CziPixelCoordSpaceEnum.cxx
 CziUtilities.cxx
+DataFileColorModulateSelector.cxx
+DataFileEditorColumnContent.cxx
+DataFileEditorItem.cxx
+DataFileEditorItemTypeEnum.cxx
+DataFileEditorModel.cxx
 DingOntologyTermsFile.cxx
 EventCaretDataFilesGet.cxx
 EventCaretMappableDataFileMapsViewedInOverlays.cxx
 EventCaretMappableDataFilesGet.cxx
 EventChartMatrixParcelYokingValidation.cxx
+EventFocusFileGetColor.cxx
 EventGetDisplayedDataFiles.cxx
 EventHistologySlicesFilesGet.cxx
 EventMapYokingSelectMap.cxx
 EventMapYokingValidation.cxx
 EventMediaFilesGet.cxx
 EventSurfaceColoringInvalidate.cxx
+EventSurfaceFileGet.cxx
 EventSurfaceStructuresValidGet.cxx
 EventVolumeColoringInvalidate.cxx
 Fiber.cxx
@@ -314,6 +361,8 @@ ImageSpatialUnitsEnum.cxx
 LabelDrawingProperties.cxx
 LabelDrawingTypeEnum.cxx
 LabelFile.cxx
+LabelSelectionItem.cxx
+LabelSelectionItemModel.cxx
 MapYokingGroupEnum.cxx
 MediaDisplayCoordinateModeEnum.cxx
 MediaFile.cxx
@@ -323,6 +372,7 @@ MetricDynamicConnectivityFile.cxx
 MetricFile.cxx
 MetricSmoothingObject.cxx
 NodeAndVoxelColoring.cxx
+OmeZarrImageFile.cxx
 OxfordSparseThreeFile.cxx
 PaletteFile.cxx
 PixelCoordinate.cxx
@@ -331,6 +381,7 @@ PixelLogicalIndex.cxx
 RectangleTransform.cxx
 RgbaFile.cxx
 RibbonMappingHelper.cxx
+SamplesColorModeEnum.cxx
 SamplesFile.cxx
 SceneDataFileInfo.cxx
 SceneFile.cxx
@@ -401,3 +452,10 @@ ${CMAKE_SOURCE_DIR}/Scenes
 ${CMAKE_SOURCE_DIR}/Xml
 ${CMAKE_SOURCE_DIR}/Common
 )
+
+IF (${HAVE_OME_ZARR_Z5_FLAG})
+    INCLUDE_DIRECTORIES(
+        ${CMAKE_SOURCE_DIR}/OmeZarr
+    )
+ENDIF ()
+

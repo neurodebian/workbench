@@ -21,6 +21,8 @@
  */
 /*LICENSE_END*/
 
+#include <set>
+
 #include "AnnotationFontAttributesInterface.h"
 #include "AnnotationTextFontPointSizeEnum.h"
 #include "AnnotationTextAlignHorizontalEnum.h"
@@ -33,6 +35,8 @@
 
 namespace caret {
 
+    class AnnotationTextSubstitution;
+    
     class AnnotationText : public AnnotationOneCoordinateShape, public AnnotationFontAttributesInterface {
         
     public:
@@ -50,6 +54,10 @@ namespace caret {
 
         AnnotationText& operator=(const AnnotationText& obj);
         
+        virtual const AnnotationText* castToTextAnnotation() const override;
+        
+        std::set<AString> getTextSubstitutionGroupIDs() const;
+
         AString getFontRenderingEncodedName(const float drawingViewportWidth,
                                             const float drawingViewportHeight) const;
         
@@ -104,6 +112,22 @@ namespace caret {
         
         virtual void setCustomTextColor(const uint8_t rgba[4]);
         
+        virtual CaretColorEnum::Enum getTextBackgroundColor() const;
+        
+        virtual void setTextBackgroundColor(const CaretColorEnum::Enum color);
+        
+        virtual void getTextBackgroundColorRGBA(float rgbaOut[4]) const;
+        
+        virtual void getTextBackgroundColorRGBA(uint8_t rgbaOut[4]) const;
+        
+        virtual void getCustomTextBackgroundColor(float rgbaOut[4]) const;
+        
+        virtual void getCustomTextBackgroundColor(uint8_t rgbaOut[4]) const;
+        
+        virtual void setCustomTextBackgroundColor(const float rgba[4]);
+        
+        virtual void setCustomTextBackgroundColor(const uint8_t rgba[4]);
+        
         virtual bool isBoldStyleEnabled() const;
         
         virtual void setBoldStyleEnabled(const bool enabled);
@@ -147,6 +171,10 @@ namespace caret {
         
         static void setUserDefaultCustomTextColor(const float rgba[4]);
         
+        static void setUserDefaultTextBackgroundColor(const CaretColorEnum::Enum color);
+        
+        static void setUserDefaultCustomTextBackgroundColor(const float rgba[4]);
+        
         static void setUserDefaultBoldEnabled(const bool enabled);
         
         static void setUserDefaultItalicEnabled(const bool enabled);
@@ -159,12 +187,7 @@ namespace caret {
         
         // ADD_NEW_METHODS_HERE
 
-          
-          
-          
-          
-          
-    protected: 
+    protected:
         AnnotationText(const AnnotationAttributesDefaultTypeEnum::Enum attributeDefaultType,
                        const AnnotationTextFontSizeTypeEnum::Enum fontSizeType);
         
@@ -196,6 +219,8 @@ namespace caret {
 
         void initializeAnnotationTextMembers();
         
+        std::vector<std::unique_ptr<AnnotationTextSubstitution>> findSubstitutions() const;
+        
         /* Not saved to scene since it is set by sub-class constructor. */
         const AnnotationTextFontSizeTypeEnum::Enum m_fontSizeType;
         
@@ -205,6 +230,9 @@ namespace caret {
         
         /* Not saved to scenes */
         mutable AString m_textWithSubstitutions;
+        
+        /* Not saved to scenes */
+        mutable std::set<AString> m_textSubstitutionGroupIDs;
         
         AnnotationTextAlignHorizontalEnum::Enum  m_alignmentHorizontal;
         
@@ -223,6 +251,10 @@ namespace caret {
         CaretColorEnum::Enum m_colorText;
         
         float m_customColorText[4];
+        
+        CaretColorEnum::Enum m_colorTextBackground;
+        
+        float m_customColorTextBackground[4];
         
         bool m_boldEnabled;
         
@@ -246,6 +278,10 @@ namespace caret {
         static AnnotationTextConnectTypeEnum::Enum s_userDefaultConnectToBrainordinate;
         
         static CaretColorEnum::Enum s_userDefaultColorText;
+        
+        static float s_userDefaultCustomColorTextBackground[4];
+        
+        static CaretColorEnum::Enum s_userDefaultColorTextBackground;
         
         static float s_userDefaultCustomColorText[4];
         
@@ -280,6 +316,10 @@ namespace caret {
     CaretColorEnum::Enum AnnotationText::s_userDefaultColorText = CaretColorEnum::WHITE;
     
     float AnnotationText::s_userDefaultCustomColorText[4] = { 1.0, 1.0, 1.0, 1.0 };
+    
+    CaretColorEnum::Enum AnnotationText::s_userDefaultColorTextBackground = CaretColorEnum::NONE;
+    
+    float AnnotationText::s_userDefaultCustomColorTextBackground[4] = { 0.0, 0.0, 0.0, 1.0 };
     
     float AnnotationText::s_userDefaultFontPercentViewportSize = 5.0;
     

@@ -1,4 +1,4 @@
-Connectome Workbench requires QT5 to compile.  Recommended is version 5.6 or later (due to an issue with the toolbar size on earlier versions).
+Connectome Workbench requires QT5 or later to compile.  It is not recommended to use a version earlier than 5.6 (due to an issue with the toolbar size).
 
 It is highly recommended to compile with OSMesa, which allow the -show-scene command and the "render pixmap" image capture method to work.  Use it by setting the *cmake* variable WORKBENCH_MESA_DIR, such that ${WORKBENCH_MESA_DIR}/include/GL/osmesa.h exists.
 
@@ -27,7 +27,7 @@ make install
 
 It should be noted that wb_import, provided in the HCP binary releases of Connectome Workbench, is actually part of caret5 (http://brainvis.wustl.edu/wiki/index.php/Caret:Download).
 
-Connectome Workbench source code is licensed under GPLv2 or later, copyright 2014-2024 Washington University School of Medicine, see LICENSE file.
+Connectome Workbench source code is licensed under GPLv2 or later, copyright 2014-2025 Washington University School of Medicine, see LICENSE file.
 However, it uses a GPLv3 (or later) library, libCZI, and thus the executables are GPLv3.
 
 Some source files are licensed under an MIT license (Expat), for easier code reuse in non-GPL projects:

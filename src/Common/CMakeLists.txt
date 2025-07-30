@@ -73,6 +73,7 @@ CaretCompactLookup.h
 CaretException.h
 CaretFunctionName.h
 CaretHeap.h
+CaretHierarchy.h
 CaretHttpManager.h
 CaretLogger.h
 CaretMathExpression.h
@@ -92,6 +93,8 @@ CaretTemporaryFile.h
 CaretUndoCommand.h
 CaretUndoStack.h
 CaretUnitsTypeEnum.h
+Cluster.h
+ClusterContainer.h
 ColorFunctions.h
 CubicSpline.h
 DataCompressZLib.h
@@ -134,6 +137,7 @@ FileAdapter.h
 FileInformation.h
 FileOpenFromOpSysTypeEnum.h
 FloatMatrix.h
+FunctionResult.h
 HemisphereEnum.h
 Histogram.h
 HtmlStringBuilder.h
@@ -204,6 +208,7 @@ VolumeMontageCoordinateDisplayTypeEnum.h
 VolumeSliceViewAllPlanesLayoutEnum.h
 VoxelColorUpdate.h
 VoxelIJK.h
+WorkbenchInstallationAssistant.h
 WorkbenchQtMessageHandler.h
 WorkbenchSpecialVersionEnum.h
 WuQMacro.h
@@ -243,6 +248,7 @@ CaretColor.cxx
 CaretColorEnum.cxx
 CaretCommandLine.cxx
 CaretException.cxx
+CaretHierarchy.cxx
 CaretHttpManager.cxx
 CaretLogger.cxx
 CaretMathExpression.cxx
@@ -259,6 +265,8 @@ CaretTemporaryFile.cxx
 CaretUndoCommand.cxx
 CaretUndoStack.cxx
 CaretUnitsTypeEnum.cxx
+Cluster.cxx
+ClusterContainer.cxx
 ColorFunctions.cxx
 CubicSpline.cxx
 DataCompressZLib.cxx
@@ -361,6 +369,7 @@ VectorOperation.cxx
 VolumeMontageCoordinateDisplayTypeEnum.cxx
 VolumeSliceViewAllPlanesLayoutEnum.cxx
 VoxelColorUpdate.cxx
+WorkbenchInstallationAssistant.cxx
 WorkbenchQtMessageHandler.cxx
 WorkbenchSpecialVersionEnum.cxx
 WuQMacro.cxx

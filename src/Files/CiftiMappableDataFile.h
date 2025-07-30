@@ -259,6 +259,8 @@ namespace caret {
         
         virtual const GiftiLabelTable* getMapLabelTable(const int32_t mapIndex) const;
         
+        virtual const ClusterContainer* getMapLabelTableClusters(const int32_t mapIndex) const override;
+        
         virtual void updateScalarColoringForAllMaps() override;
         
         virtual void updateScalarColoringForMap(const int32_t mapIndex) override;
@@ -353,8 +355,7 @@ namespace caret {
         virtual int64_t getVoxelColorsForSliceInMap(const int32_t mapIndex,
                                                  const VolumeSliceViewPlaneEnum::Enum slicePlane,
                                                  const int64_t sliceIndex,
-                                                 const DisplayGroupEnum::Enum displayGroup,
-                                                 const int32_t tabIndex,
+                                                 const TabDrawingInfo& tabDrawingInfo,
                                                     uint8_t* rgbaOut) const override;
         
         int64_t getVoxelColorsForSliceInMap(const int32_t mapIndex,
@@ -363,8 +364,7 @@ namespace caret {
                                             const int64_t columnStepIJK[3],
                                             const int64_t numberOfRows,
                                             const int64_t numberOfColumns,
-                                            const DisplayGroupEnum::Enum displayGroup,
-                                            const int32_t tabIndex,
+                                            const TabDrawingInfo& tabDrawingInfo,
                                             uint8_t* rgbaOut) const override;
         
         virtual int64_t getVoxelColorsForSubSliceInMap(const int32_t mapIndex,
@@ -373,16 +373,14 @@ namespace caret {
                                                     const int64_t firstCornerVoxelIndex[3],
                                                     const int64_t lastCornerVoxelIndex[3],
                                                     const int64_t voxelCountIJK[3],
-                                                    const DisplayGroupEnum::Enum displayGroup,
-                                                    const int32_t tabIndex,
+                                                       const TabDrawingInfo& tabDrawingInfo,
                                                     uint8_t* rgbaOut) const override;
         
         virtual void getVoxelColorInMap(const int64_t indexIn1,
                                         const int64_t indexIn2,
                                         const int64_t indexIn3,
                                         const int64_t mapIndex,
-                                        const DisplayGroupEnum::Enum displayGroup,
-                                        const int32_t tabIndex,
+                                        const TabDrawingInfo& tabDrawingInfo,
                                         uint8_t rgbaOut[4]) const override;
         
         virtual void getVoxelColorInMap(const int64_t indexIn1,
@@ -396,33 +394,27 @@ namespace caret {
                                         const int64_t indexIn2,
                                         const int64_t indexIn3,
                                         const int64_t mapIndex,
-                                        const DisplayGroupEnum::Enum displayGroup,
-                                        const int32_t tabIndex,
+                                        const TabDrawingInfo& tabDrawingInfo,
                                         uint8_t rgbaOut[4]) const;
         
         virtual GraphicsPrimitiveV3fT3f* getVolumeDrawingTriangleStripPrimitive(const int32_t mapIndex,
-                                                                           const DisplayGroupEnum::Enum displayGroup,
-                                                                           const int32_t tabIndex) const override;
+                                                                                const TabDrawingInfo& tabDrawingInfo) const override;
         
         virtual GraphicsPrimitiveV3fT3f* getVolumeDrawingTriangleFanPrimitive(const int32_t mapIndex,
-                                                                      const DisplayGroupEnum::Enum displayGroup,
-                                                                      const int32_t tabIndex) const override;
+                                                                              const TabDrawingInfo& tabDrawingInfo) const override;
         
         virtual GraphicsPrimitiveV3fT3f* getVolumeDrawingTrianglesPrimitive(const int32_t mapIndex,
-                                                                            const DisplayGroupEnum::Enum displayGroup,
-                                                                            const int32_t tabIndex) const override;
+                                                                            const TabDrawingInfo& tabDrawingInfo) const override;
 
         virtual GraphicsPrimitive* getHistologyImageIntersectionPrimitive(const int32_t mapIndex,
-                                                                          const DisplayGroupEnum::Enum displayGroup,
-                                                                          const int32_t tabIndex,
+                                                                          const TabDrawingInfo& tabDrawingInfo,
                                                                           const MediaFile* mediaFile,
                                                                           const VolumeToImageMappingModeEnum::Enum volumeMappingMode,
                                                                           const float volumeSliceThickness,
                                                                           AString& errorMessageOut) const override;
         
         virtual std::vector<GraphicsPrimitive*> getHistologySliceIntersectionPrimitive(const int32_t mapIndex,
-                                                                                       const DisplayGroupEnum::Enum displayGroup,
-                                                                                       const int32_t tabIndex,
+                                                                                       const TabDrawingInfo& tabDrawingInfo,
                                                                                        const HistologySlice* histologySlice,
                                                                                        const VolumeToImageMappingModeEnum::Enum volumeMappingMode,
                                                                                        const float volumeSliceThickness,
@@ -576,7 +568,7 @@ namespace caret {
         virtual void getDataForSelector(const MapFileDataSelector& mapFileDataSelector,
                                         std::vector<float>& dataOut) const override;
         
-        virtual BrainordinateMappingMatch getBrainordinateMappingMatch(const CaretMappableDataFile* mapFile) const override;
+        virtual BrainordinateMappingMatch getBrainordinateMappingMatchImplementation(const CaretMappableDataFile* mapFile) const override;
         
         virtual void groupAndNameHierarchyItemStatusChanged() override;
 
@@ -704,7 +696,7 @@ namespace caret {
             
             bool getThresholdData(const CaretMappableDataFile* threshMapFile,
                                   const int32_t threshMapIndex,
-                                  std::vector<float>& thresholdData);
+                                  std::vector<float>& thresholdData) const;
             
             /** CIFTI file containing the map */
             CiftiMappableDataFile* m_ciftiMappableDataFile;
@@ -808,6 +800,8 @@ namespace caret {
         static AString mappingTypeToName(const CiftiMappingType::MappingType mappingType);
 
         const CiftiBrainModelsMap* getBrainordinateMapping() const;
+        
+        const CiftiParcelsMap* getParcelsMapping() const;
         
         GraphicsPrimitiveV3fT2f* createMatrixPrimitive(std::vector<uint8_t>& matrixRGBA,
                                                        const int64_t numberOfColumns,
@@ -940,10 +934,18 @@ namespace caret {
         /** Controls lazy initialization of m_brainordinateMapping */
         mutable bool m_brainordinateMappingCachedFlag = false;
         
+        /** Is lazily initialized and caches CiftiParcelsMap for comparison with other CIFTI files */
+        mutable std::unique_ptr<CiftiParcelsMap> m_parcelsMapping;
+        
+        /** Controls lazy initialization of m_parcelsMapping */
+        mutable bool m_parcelsMappingCachedFlag = false;
+        
         /** Prevents logging 'too large' message more than once for a file */
         mutable bool m_matrixDimensionsTooLargeLoggedFlag = false;
         
         bool m_blockInvalidateColorsInAllMapsFlag = false;
+        
+        mutable std::map<int32_t, std::unique_ptr<ClusterContainer>> m_mapLabelClusterContainers;
         
         // ADD_NEW_MEMBERS_HERE
         

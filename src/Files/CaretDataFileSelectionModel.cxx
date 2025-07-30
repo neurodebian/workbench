@@ -75,6 +75,9 @@ m_structure(structure)
         case FILE_MODE_MAPS_TO_SAME_BRAINORDINATES:
             CaretAssert(m_mappableDataFile);
             break;
+        case FILE_MODE_MAPS_TO_SAME_BRAINORDINATES_EXCLUDE_SELF:
+            CaretAssert(m_mappableDataFile);
+            break;
         case FILE_MODE_MULTI_STRUCTURE_BORDER_FILES:
             break;
     }
@@ -106,6 +109,22 @@ CaretDataFileSelectionModel::newInstanceMapsToSameBrainordinates(const CaretMapp
     CaretDataFileSelectionModel* model = new CaretDataFileSelectionModel(mappableDataFile,
                                                                          StructureEnum::ALL,
                                                                          FILE_MODE_MAPS_TO_SAME_BRAINORDINATES);
+    return model;
+}
+
+/**
+ * Create a new instance of a Caret Data File Selection Model that
+ * matches a mappable data file's brainordinate mapping.
+ *
+ * @param dataFileType
+ *    Type of the data file.
+ */
+CaretDataFileSelectionModel*
+CaretDataFileSelectionModel::newInstanceMapsToSameBrainordinatesExcludeSelf(const CaretMappableDataFile* mappableDataFile)
+{
+    CaretDataFileSelectionModel* model = new CaretDataFileSelectionModel(mappableDataFile,
+                                                                         StructureEnum::ALL,
+                                                                         FILE_MODE_MAPS_TO_SAME_BRAINORDINATES_EXCLUDE_SELF);
     return model;
 }
 
@@ -200,34 +219,6 @@ CaretDataFileSelectionModel::newInstanceForCaretDataFileTypesInStructure(const S
     return model;
     
 }
-
-///**
-// * Create a new instance of a Caret Data File Selection Model that
-// * selects files of the given Data File Types.
-// *
-// * @param dataFileTypes
-// *    Types of the data file.
-// * @param volumeTypes
-// *    Types of volumnes
-// */
-//CaretDataFileSelectionModel*
-//CaretDataFileSelectionModel::newInstanceForCaretDataFileTypes(const std::vector<DataFileTypeEnum::Enum>& dataFileTypes,
-//                                                              const std::vector<SubvolumeAttributes::VolumeType>& volumeTypes)
-//{
-//    CaretDataFileSelectionModel* model = new CaretDataFileSelectionModel(NULL,
-//                                                                         structure,
-//                                                                         FILE_MODE_DATA_FILE_TYPE_ENUM);
-//    model->m_dataFileTypes.insert(model->m_dataFileTypes.end(),
-//                                  dataFileTypes.begin(),
-//                                  dataFileTypes.end());
-//    model->m_volumeTypes.insert(model->m_volumeTypes.end(),
-//                                volumeTypes.begin(),
-//                                volumeTypes.end());
-//    
-//    return model;
-//    
-//}
-
 
 /**
  * Create a new instance of a Caret Data File Selection Model that
@@ -340,6 +331,47 @@ CaretDataFileSelectionModel::setSelectedFile(CaretDataFile* selectedFile)
 }
 
 /**
+ * Set the selected file best matching filename or first file if no match.
+ * The names of the files (without paths) must match
+ *
+ * @param filename
+ *     name of file
+ */
+void
+CaretDataFileSelectionModel::setSelectedFileByFilename(const AString& filename)
+{
+    std::vector<CaretDataFile*> allFiles(getAvailableFiles());
+    CaretDataFile* longestNameMatchFile = NULL;
+    int32_t longestNameMatchLength = -1;
+        
+    for (CaretDataFile* cdf : allFiles) {
+        if (cdf->getFileName() == filename) {
+            longestNameMatchFile = cdf;
+            break;
+        }
+        
+        if (filename.endsWith(cdf->getFileNameNoPath())) {
+            const int32_t matchLen(filename.countMatchingCharactersFromEnd(cdf->getFileName()));
+            if (matchLen > longestNameMatchLength) {
+                longestNameMatchFile = cdf;
+                longestNameMatchLength = matchLen;
+            }
+        }
+    }
+    
+    if (longestNameMatchFile != NULL) {
+        setSelectedFile(longestNameMatchFile);
+    }
+    else if ( ! allFiles.empty()) {
+        CaretAssertVectorIndex(allFiles, 0);
+        setSelectedFile(allFiles[0]);
+    }
+    else {
+        setSelectedFile(NULL);
+    }
+}
+
+/**
  * @return Files available for selection.
  */
 std::vector<CaretDataFile*>
@@ -395,7 +427,9 @@ CaretDataFileSelectionModel::getAvailableFiles() const
         }
             break;
         case FILE_MODE_MAPS_TO_SAME_BRAINORDINATES:
+        case FILE_MODE_MAPS_TO_SAME_BRAINORDINATES_EXCLUDE_SELF:
         {
+            const bool excludeSelfFlag(m_fileMode == FILE_MODE_MAPS_TO_SAME_BRAINORDINATES_EXCLUDE_SELF);
             CaretAssert(m_mappableDataFile);
             EventCaretMappableDataFilesGet mapFilesGetEvent;
             EventManager::get()->sendEvent(mapFilesGetEvent.getPointer());
@@ -408,15 +442,23 @@ CaretDataFileSelectionModel::getAvailableFiles() const
              * in the same file.
              */
             for (auto mf : mapFiles) {
-                switch (m_mappableDataFile->getBrainordinateMappingMatch(mf)) {
-                    case CaretMappableDataFile::BrainordinateMappingMatch::EQUAL:
-                        caretDataFiles.push_back(mf);
-                        break;
-                    case CaretMappableDataFile::BrainordinateMappingMatch::NO:
-                        break;
-                    case CaretMappableDataFile::BrainordinateMappingMatch::SUBSET:
-                        caretDataFiles.push_back(mf);
-                        break;
+                bool doFlag(true);
+                if (mf == m_mappableDataFile) {
+                    if (excludeSelfFlag) {
+                        doFlag = false;
+                    }
+                }
+                if (doFlag) {
+                    switch (m_mappableDataFile->getBrainordinateMappingMatch(mf)) {
+                        case CaretMappableDataFile::BrainordinateMappingMatch::EQUAL:
+                            caretDataFiles.push_back(mf);
+                            break;
+                        case CaretMappableDataFile::BrainordinateMappingMatch::NO:
+                            break;
+                        case CaretMappableDataFile::BrainordinateMappingMatch::SUBSET:
+                            caretDataFiles.push_back(mf);
+                            break;
+                    }
                 }
             }
         }

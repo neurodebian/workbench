@@ -339,9 +339,13 @@ BrainOpenGLFociDrawing::drawAllFoci(const DrawType drawType,
     const FeatureColoringTypeEnum::Enum fociColoringType = fociDisplayProperties->getColoringType(displayGroup,
                                                                                                   fixedPipelineDrawing->windowTabIndex);
     
-    bool drawAsSpheresFlag = false;
+    bool drawAsDisksFlag(false);
+    bool drawAsSpheresFlag(false);
     switch (fociDisplayProperties->getDrawingType(displayGroup,
                                                   fixedPipelineDrawing->windowTabIndex)) {
+        case FociDrawingTypeEnum::DRAW_AS_DISKS:
+            drawAsDisksFlag = true;
+            break;
         case FociDrawingTypeEnum::DRAW_AS_SPHERES:
             drawAsSpheresFlag = true;
             break;
@@ -462,7 +466,6 @@ BrainOpenGLFociDrawing::drawAllFoci(const DrawType drawType,
                                                                              distanceToSlice,
                                                                              planeOnSliceXYZ)) {
                                 float distanceToHistologySliceTolerance = halfSliceThickness;
-                                distanceToHistologySliceTolerance = 500.0;
                                 if (distanceToSlice < distanceToHistologySliceTolerance) {
                                     xyz[0] = planeOnSliceXYZ[0];
                                     xyz[1] = planeOnSliceXYZ[1];
@@ -508,11 +511,15 @@ BrainOpenGLFociDrawing::drawAllFoci(const DrawType drawType,
                          * contains a unique size (diameter)
                          */
                         std::unique_ptr<GraphicsPrimitiveV3fC4ub> idPrimitive;
-                        if (drawAsSpheresFlag) {
+                        if (drawAsDisksFlag) {
+                            idPrimitive.reset(GraphicsPrimitive::newPrimitiveV3fC4ub(GraphicsPrimitive::PrimitiveType::DISKS));
+                            idPrimitive->setSphereDiameter(GraphicsPrimitive::SphereSizeType::MILLIMETERS,
+                                                           focusDiameter);
+                        }
+                        else if (drawAsSpheresFlag) {
                             idPrimitive.reset(GraphicsPrimitive::newPrimitiveV3fC4ub(GraphicsPrimitive::PrimitiveType::SPHERES));
                             idPrimitive->setSphereDiameter(GraphicsPrimitive::SphereSizeType::MILLIMETERS,
                                                            focusDiameter);
-                            
                         }
                         else {
                             idPrimitive.reset(GraphicsPrimitive::newPrimitiveV3fC4ub(GraphicsPrimitive::PrimitiveType::OPENGL_POINTS));

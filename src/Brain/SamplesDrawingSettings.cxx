@@ -26,10 +26,7 @@
 #include "BrowserTabContent.h"
 #include "CaretAssert.h"
 #include "BrowserTabContent.h"
-#include "DrawingViewportContent.h"
 #include "EventBrowserTabGet.h"
-#include "EventBrowserTabIndexGetWindowIndex.h"
-#include "EventDrawingViewportContentGet.h"
 #include "EventManager.h"
 #include "SceneClass.h"
 #include "SceneClassAssistant.h"
@@ -46,28 +43,20 @@ using namespace caret;
 
 /**
  * Constructor.
- * @param parentBrowserTabContent
- *    Browser tab content that 'owns' this instance
- *    Note: We just need the index of the browser tab but the index may change from the original value
- *    in the BrowserTabContent's constructor to the tab index when restoring the scene.  Thus, we can
- *    just call BrowserTabContent::getTabNumber() and always get the correct tab index.
  */
-SamplesDrawingSettings::SamplesDrawingSettings(BrowserTabContent* parentBrowserTabContent)
-: CaretObject(),
-m_parentBrowserTabContent(parentBrowserTabContent)
+SamplesDrawingSettings::SamplesDrawingSettings()
+: CaretObject()
 {
-    CaretAssert(m_parentBrowserTabContent);
     m_sceneAssistant = std::unique_ptr<SceneClassAssistant>(new SceneClassAssistant());
     m_sceneAssistant->add<SamplesDrawingModeEnum, SamplesDrawingModeEnum::Enum>("m_drawingMode",
                                                                                 &m_drawingMode);
-    m_sceneAssistant->add("m_lowSliceIndex",
-                          &m_lowSliceIndex);
-    m_sceneAssistant->add("m_highSliceIndex",
-                          &m_highSliceIndex);
+    m_sceneAssistant->add<AnnotationPolyhedronTypeEnum, AnnotationPolyhedronTypeEnum::Enum>("m_polyhedronDrawingType",
+                                                                                            &m_polyhedronDrawingType);
     m_sceneAssistant->add("m_lowerSliceOffset",
                           &m_lowerSliceOffset);
     m_sceneAssistant->add("m_upperSliceOffset",
                           &m_upperSliceOffset);
+    /* linked identifier not saved to scene */
 }
 
 /**
@@ -102,11 +91,11 @@ SamplesDrawingSettings::operator=(const SamplesDrawingSettings& obj)
 void 
 SamplesDrawingSettings::copyHelperSamplesDrawingSettings(const SamplesDrawingSettings& obj)
 {
-    m_drawingMode      = obj.m_drawingMode;
-    m_lowSliceIndex    = obj.m_lowSliceIndex;
-    m_highSliceIndex   = obj.m_highSliceIndex;
-    m_lowerSliceOffset = obj.m_lowerSliceOffset;
-    m_upperSliceOffset = obj.m_upperSliceOffset;
+    m_drawingMode           = obj.m_drawingMode;
+    m_lowerSliceOffset      = obj.m_lowerSliceOffset;
+    m_upperSliceOffset      = obj.m_upperSliceOffset;
+    m_polyhedronDrawingType = obj.m_polyhedronDrawingType;
+    m_linkedPolyhedronIdentifier = obj.m_linkedPolyhedronIdentifier;
 }
 
 /**
@@ -130,59 +119,66 @@ SamplesDrawingSettings::setDrawingMode(const SamplesDrawingModeEnum::Enum drawin
 }
 
 /**
- * @return A pair containing the minimum and maximum slice indices for the tab
- * in this
+ * @return The polyhedron drawing type
  */
-std::pair<int32_t, int32_t>
-SamplesDrawingSettings::getSliceRange() const
+AnnotationPolyhedronTypeEnum::Enum
+SamplesDrawingSettings::getPolyhedronDrawingType() const
 {
-    std::pair<int32_t, int32_t> minMaxSliceIndices;
-    minMaxSliceIndices.first  = 0;
-    minMaxSliceIndices.second = 0;
+    return m_polyhedronDrawingType;
+}
 
-    EventBrowserTabGet tabEvent(m_parentBrowserTabContent->getTabNumber());
-    EventManager::get()->sendEvent(tabEvent.getPointer());
-    const BrowserTabContent* tabContent(tabEvent.getBrowserTab());
-    if (tabContent != NULL) {
-        int32_t numSlices(0);
-        switch (tabContent->getVolumeSliceDrawingType()) {
-            case VolumeSliceDrawingTypeEnum::VOLUME_SLICE_DRAW_MONTAGE:
-                numSlices = (tabContent->getVolumeMontageNumberOfRows()
-                             * tabContent->getVolumeMontageNumberOfColumns());
-                break;
-            case VolumeSliceDrawingTypeEnum::VOLUME_SLICE_DRAW_SINGLE:
-                numSlices = 1;
-                break;
-        }
-        
-        /*
-         * Range 1..N
-         */
-        if (numSlices > 0) {
-            minMaxSliceIndices.first = 1;
-        }
-        minMaxSliceIndices.second = numSlices;
-    }
+/**
+ * Set the polyhedron drawing type
+ * @param polyhedronDrawingType
+ *    The polyhedron drawing type
+ */
+void
+SamplesDrawingSettings::setPolyhedronDrawingType(const AnnotationPolyhedronTypeEnum::Enum polyhedronDrawingType)
+{
+    m_polyhedronDrawingType = polyhedronDrawingType;
+}
 
-    return minMaxSliceIndices;
+/**
+ * @return The linked polyhedron identifier
+ * A prospective sample is linked to an retrospective sample and vice versa
+ */
+AString
+SamplesDrawingSettings::getLinkedPolyhedronIdentifier() const
+{
+    return m_linkedPolyhedronIdentifier;
+}
+
+/**
+ * Set the linked polyhedron identifier
+ * A prospective sample is linked to an retrospective sample and vice versa
+ * @param linkedPolyhedonIdentifier
+ *    The identifier
+ */
+void
+SamplesDrawingSettings::setLinkedPolyhedronIdentifier(const AString& linkedPolyhedronIdentifier)
+{
+    m_linkedPolyhedronIdentifier = linkedPolyhedronIdentifier;
 }
 
 /**
  * @return True if slice montage is enabled for tab using these settings
  * and the slice at the given row and column is in range for sample drawing
  * when in CUSTOM mode.
+ * @param tabIndex
+ *    Index of the tab
  * @param sliceRow
  *    Row of the slice
  * @param sliceColumn
  *    Column of the slice
  */
 bool
-SamplesDrawingSettings::isSliceInLowerUpperOffsetRange(const int32_t sliceRow,
+SamplesDrawingSettings::isSliceInLowerUpperOffsetRange(const int32_t tabIndex,
+                                                       const int32_t sliceRow,
                                                        const int32_t sliceColumn) const
 {
     bool inRangeFlag(false);
     
-    EventBrowserTabGet tabEvent(m_parentBrowserTabContent->getTabNumber());
+    EventBrowserTabGet tabEvent(tabIndex);
     EventManager::get()->sendEvent(tabEvent.getPointer());
     const BrowserTabContent* tabContent(tabEvent.getBrowserTab());
     
@@ -215,91 +211,6 @@ SamplesDrawingSettings::isSliceInLowerUpperOffsetRange(const int32_t sliceRow,
     }
     
     return inRangeFlag;
-}
-
-
-/**
- * @return The samples drawing low slice index
- */
-int32_t
-SamplesDrawingSettings::getLowSliceIndex() const
-{
-    const auto minMax(getSliceRange());
-    const int32_t minValue(minMax.first);
-    const int32_t maxValue(minMax.second);
-    
-    if (m_lowSliceIndex > maxValue) {
-        m_lowSliceIndex = maxValue;
-    }
-    else if (m_lowSliceIndex < minValue) {
-        m_lowSliceIndex = minValue;
-    }
-    
-    switch (m_drawingMode) {
-        case SamplesDrawingModeEnum::ALL_SLICES:
-            m_lowSliceIndex = minValue;
-            break;
-        case SamplesDrawingModeEnum::EXCLUDE:
-            break;
-    }
-    
-    return m_lowSliceIndex;
-}
-
-/**
- * @return The samples drawing high slice index
- */
-int32_t
-SamplesDrawingSettings::getHighSliceIndex() const
-{
-    const auto minMax(getSliceRange());
-    const int32_t minValue(minMax.first);
-    const int32_t maxValue(minMax.second);
-    
-    if (m_highSliceIndex > maxValue) {
-        m_highSliceIndex = maxValue;
-    }
-    else if (m_highSliceIndex < minValue) {
-        m_highSliceIndex = minValue;
-    }
-    
-    switch (m_drawingMode) {
-        case SamplesDrawingModeEnum::ALL_SLICES:
-            m_highSliceIndex = maxValue;
-            break;
-        case SamplesDrawingModeEnum::EXCLUDE:
-            break;
-    }
-    
-    return m_highSliceIndex;
-}
-
-/**
- * Set the samples low slice index
- * @param lowSliceIndex
- *    The sliced index
- */
-void
-SamplesDrawingSettings::setLowSliceIndex(const int32_t lowSliceIndex)
-{
-    m_lowSliceIndex = lowSliceIndex;
-    if (m_lowSliceIndex >= m_highSliceIndex) {
-        m_highSliceIndex = m_lowSliceIndex;// + 1;
-    }
-}
-
-/**
- * Set the samples high slice index
- * @param highSliceIndex
- *    The sliced index
- */
-void
-SamplesDrawingSettings::setHighSliceIndex(const int32_t highSliceIndex)
-{
-    m_highSliceIndex = highSliceIndex;
-    if (m_highSliceIndex <= m_lowSliceIndex) {
-        m_lowSliceIndex = m_highSliceIndex;// - 1;
-    }
 }
 
 /**

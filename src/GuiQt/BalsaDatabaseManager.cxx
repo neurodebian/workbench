@@ -26,6 +26,7 @@
 #include "BalsaDatabaseManager.h"
 #undef __BALSA_DATABASE_MANAGER_DECLARE__
 
+#include <QDateTime>
 #include <QJsonDocument>
 
 #include "ApplicationInformation.h"
@@ -127,6 +128,7 @@ BalsaDatabaseManager::login(const AString& databaseURL,
         std::cout << "Response Code: " << loginResponse.m_responseCode << std::endl;
     }
     
+    AString setCookieErrorMessage = "Did not find 'set-cookie' in response headers.";
     for (std::map<AString, AString>::iterator mapIter = loginResponse.m_headers.begin();
          mapIter != loginResponse.m_headers.end();
          mapIter++) {
@@ -142,6 +144,11 @@ BalsaDatabaseManager::login(const AString& databaseURL,
                 m_jSessionIdCookie = value.mid(offset,
                                                length);
             }
+            else {
+                setCookieErrorMessage = ("set-cookie invalid.  Value='"
+                                         + value
+                                         + "'.");
+            }
         }
         if (m_debugFlag) {
             std::cout << "   Response Header: " << qPrintable(mapIter->first)
@@ -155,7 +162,8 @@ BalsaDatabaseManager::login(const AString& databaseURL,
     
     if (loginResponse.m_responseCode == 200) {
         if (m_jSessionIdCookie.isEmpty()) {
-            errorMessageOut = ("Login was successful but BALSA failed to provide a Session ID.");
+            errorMessageOut = ("Login was successful but BALSA failed to provide a Session ID.\n"
+                               + setCookieErrorMessage);
             logout();
             return false;
         }
@@ -186,6 +194,24 @@ BalsaDatabaseManager::login(const AString& databaseURL,
 
     return false;
 }
+
+/**
+ * Login to the BALSA Database to avoid database logging user out after a long
+ * operation such as uploading or processing uploaded data.
+ * @param errorMessageOut
+ *     Contains error information if login failed.
+ * @return
+ *     True if login is successful, else false.
+ */
+bool
+BalsaDatabaseManager::loginToAvoidTimeout(AString& errorMessageOut)
+{
+    return login(m_databaseURL,
+                 m_username,
+                 m_password,
+                 errorMessageOut);
+}
+
 
 /**
  * Logout of the database
@@ -1772,26 +1798,41 @@ BalsaDatabaseManager::uploadZippedSceneFile(SceneFile* sceneFile,
         PROGRESS_LOGIN,
         PROGRESS_CHECK_SCENE_IDS,
         PROGRESS_ZIPPING,
+        PROGRESS_LOGIN_IN_BEFORE_UPLOAD,
         PROGRESS_UPLOAD,
+        PROGRESS_LOGIN_IN_BEFORE_PROCESS_UPLOAD,
         PROGRESS_PROCESS_UPLOAD,
         PROGRESS_DONE
     };
+    
+    /*
+     * Uploading a data set may take a long time and BALSA might
+     * logout a user if a step takes a long time.
+     */
+    const bool loginToAvoidTimeoutFlag(true);
     
     EventProgressUpdate progressUpdate(PROGRESS_NONE,
                                        PROGRESS_DONE,
                                        PROGRESS_LOGIN,
                                        "Logging in...");
     EventManager::get()->sendEvent(progressUpdate.getPointer());
+
+    if (loginToAvoidTimeoutFlag) {
+        progressUpdate.setProgress(PROGRESS_LOGIN, addToUploadProgressMessage("Logging in..."));
+        EventManager::get()->sendEvent(progressUpdate.getPointer());
+        if ( ! loginToAvoidTimeout(errorMessageOut)) {
+            return false;
+        }
+    }
     
-    
-    progressUpdate.setProgress(PROGRESS_CHECK_SCENE_IDS, "Checking Scene IDs");
+    progressUpdate.setProgress(PROGRESS_CHECK_SCENE_IDS, addToUploadProgressMessage("Checking Scene IDs"));
     EventManager::get()->sendEvent(progressUpdate.getPointer());
     if ( ! checkSceneIDs(sceneFile,
                          errorMessageOut)) {
         return false;
     }
     
-    progressUpdate.setProgress(PROGRESS_ZIPPING, "Zipping Scene and Data Files");
+    progressUpdate.setProgress(PROGRESS_ZIPPING, addToUploadProgressMessage("Zipping Scene and Data Files"));
     EventManager::get()->sendEvent(progressUpdate.getPointer());
     
     /*
@@ -1806,7 +1847,15 @@ BalsaDatabaseManager::uploadZippedSceneFile(SceneFile* sceneFile,
     
     if (m_debugFlag) std::cout << "Zip file " << zipFileName << " has been created " << std::endl;
     
-    progressUpdate.setProgress(PROGRESS_UPLOAD, "Uploading zip file");
+    if (loginToAvoidTimeoutFlag) {
+        progressUpdate.setProgress(PROGRESS_LOGIN_IN_BEFORE_UPLOAD, addToUploadProgressMessage("Re-login in before upload..."));
+        EventManager::get()->sendEvent(progressUpdate.getPointer());
+        if ( ! loginToAvoidTimeout(errorMessageOut)) {
+            return false;
+        }
+    }
+
+    progressUpdate.setProgress(PROGRESS_UPLOAD, addToUploadProgressMessage("Uploading zip file"));
     EventManager::get()->sendEvent(progressUpdate.getPointer());
     
     /*
@@ -1830,10 +1879,20 @@ BalsaDatabaseManager::uploadZippedSceneFile(SceneFile* sceneFile,
     
     const bool doProcessUploadFlag = true;
     if (doProcessUploadFlag) {
+        if (loginToAvoidTimeoutFlag) {
+            progressUpdate.setProgress(PROGRESS_LOGIN_IN_BEFORE_PROCESS_UPLOAD,
+                                       addToUploadProgressMessage("Re-login in before process upload..."));
+            EventManager::get()->sendEvent(progressUpdate.getPointer());
+            if ( ! loginToAvoidTimeout(errorMessageOut)) {
+                return false;
+            }
+        }
+        
         /*
          * Process the uploaded file
          */
-        progressUpdate.setProgress(PROGRESS_PROCESS_UPLOAD, "Processing uploaded zip file (this step may take a long time)");
+        progressUpdate.setProgress(PROGRESS_PROCESS_UPLOAD, 
+                                   addToUploadProgressMessage("Processing uploaded zip file (this step may take a long time)"));
         EventManager::get()->sendEvent(progressUpdate.getPointer());
         
         const AString processUploadURL(m_databaseURL
@@ -1861,7 +1920,7 @@ BalsaDatabaseManager::uploadZippedSceneFile(SceneFile* sceneFile,
         }
     }
     
-    progressUpdate.setProgress(PROGRESS_DONE, "Finished.");
+    progressUpdate.setProgress(PROGRESS_DONE, addToUploadProgressMessage("Finished."));
     EventManager::get()->sendEvent(progressUpdate.getPointer());
     
     return true;
@@ -1976,6 +2035,38 @@ BalsaDatabaseManager::SceneFileIdentifiers::SceneFileIdentifiers(const bool debu
 }
 
 /**
+ * @return The upload progress message containing a summary of the upload progress
+ */
+AString
+BalsaDatabaseManager::getUploadSummaryMessage() const
+{
+    return m_uploadProgressMessage;
+}
+
+/**
+ * Add a message to the progress message which gets followed by the current time
+ * @param message
+ *    New message appended to progress message
+ * @return
+ *    Updated progress message
+ */
+AString
+BalsaDatabaseManager::addToUploadProgressMessage(const AString& message)
+{
+    if ( ! message.isEmpty()) {
+        /*
+         * Time followed by timezone
+         */
+        const AString timeString(QDateTime::currentDateTime().toString("HH:mm:ss t"));
+        m_uploadProgressMessage.appendWithNewLine(message
+                                                  + " "
+                                                  + timeString);
+    }
+    
+    return m_uploadProgressMessage;
+}
+
+/**
  * @return True if parsing was valid.
  */
 bool
@@ -2001,3 +2092,4 @@ BalsaDatabaseManager::getInfoMessages() const
 {
     return m_infoMessages;
 }
+

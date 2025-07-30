@@ -387,7 +387,7 @@ CiftiFiberTrajectoryFile::getFileMetaData() const
 bool
 CiftiFiberTrajectoryFile::isSurfaceMappable() const
 {
-    return false;
+    return true;
 }
 
 /**
@@ -1757,10 +1757,10 @@ CiftiFiberTrajectoryFile::finishRestorationOfScene()
 /**
  * @return a REFERENCE to the fiber fractions that were loaded.
  */
-const std::vector<FiberOrientationTrajectory*>&
+const std::vector<FiberOrientationTrajectory*>*
 CiftiFiberTrajectoryFile::getLoadedFiberOrientationTrajectories() const
 {
-    return m_fiberOrientationTrajectories;
+    return &m_fiberOrientationTrajectories;
 }
 
 /**
@@ -1939,7 +1939,7 @@ CiftiFiberTrajectoryFile::getDataForSelector(const MapFileDataSelector& /*mapFil
  *     True if brainordinates in this file are subset or equal to the given file, else false.
  */
 CaretMappableDataFile::BrainordinateMappingMatch
-CiftiFiberTrajectoryFile::getBrainordinateMappingMatch(const CaretMappableDataFile* /*mapFile*/) const
+CiftiFiberTrajectoryFile::getBrainordinateMappingMatchImplementation(const CaretMappableDataFile* /*mapFile*/) const
 {
     return BrainordinateMappingMatch::NO;
 }

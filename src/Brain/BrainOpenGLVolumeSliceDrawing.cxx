@@ -39,6 +39,7 @@
 #include "BrainOpenGLVolumeSurfaceOutlineDrawing.h"
 #include "BrainordinateRegionOfInterest.h"
 #include "BrowserTabContent.h"
+#include "BrowserWindowContent.h"
 #include "CaretAssert.h"
 #include "CaretLogger.h"
 #include "CaretOpenGLInclude.h"
@@ -48,6 +49,7 @@
 #include "DeveloperFlagsEnum.h"
 #include "DisplayPropertiesLabels.h"
 #include "ElapsedTimer.h"
+#include "EventBrowserWindowContent.h"
 #include "EventDrawingViewportContentAdd.h"
 #include "GapsAndMargins.h"
 #include "GraphicsEngineDataOpenGL.h"
@@ -72,6 +74,7 @@
 #include "SessionManager.h"
 #include "SpacerTabIndex.h"
 #include "Surface.h"
+#include "TabDrawingInfo.h"
 #include "VolumeFile.h"
 
 using namespace caret;
@@ -606,7 +609,10 @@ BrainOpenGLVolumeSliceDrawing::drawVolumeSliceViewTypeMontage(const AllSliceView
             break;
     }
     
-    const SamplesDrawingSettings* samplesSettings(m_browserTabContent->getSamplesDrawingSettings());
+    std::unique_ptr<EventBrowserWindowContent> windowContentEvent = EventBrowserWindowContent::getWindowContent(m_fixedPipelineDrawing->m_windowIndex);
+    EventManager::get()->sendEvent(windowContentEvent->getPointer());
+    const BrowserWindowContent* windowContent = windowContentEvent->getBrowserWindowContent();
+    const SamplesDrawingSettings* samplesSettings(windowContent->getSamplesDrawingSettings());
     
     /*
      * Determine a slice offset to selected slices is in
@@ -691,7 +697,8 @@ BrainOpenGLVolumeSliceDrawing::drawVolumeSliceViewTypeMontage(const AllSliceView
                 sliceIndex -= sliceStep;
 
                 if (m_fixedPipelineDrawing->m_windowUserInputMode == UserInputModeEnum::Enum::SAMPLES_EDITING) {
-                    if ( ! samplesSettings->isSliceInLowerUpperOffsetRange(i, j)) {
+                    if ( ! samplesSettings->isSliceInLowerUpperOffsetRange(m_tabIndex,
+                                                                           i, j)) {
                         const uint8_t rgba[4] { 255, 0, 0, 255 };
                         const float percentageThickness(3.0);
                         GraphicsShape::drawViewportCrossPercentageLineWidth(rgba,
@@ -1461,14 +1468,18 @@ BrainOpenGLVolumeSliceDrawing::drawOrthogonalSlice(const VolumeSliceViewPlaneEnu
         /*
          * Get colors for all voxels in the slice.
          */
+        TabDrawingInfo tabDrawingInfo(volInfo.mapFile,
+                                      volInfo.mapIndex,
+                                      displayGroup,
+                                      displayPropertiesLabels->getLabelViewModeForTab(browserTabIndex),
+                                      browserTabIndex);
         const int64_t validVoxelCount = volumeFile->getVoxelColorsForSliceInMap(volInfo.mapIndex,
                                                                         firstVoxelIJK,
                                                                         rowStepIJK,
                                                                         columnStepIJK,
                                                                         drawBottomToTopInfo.numberOfVoxels,
                                                                         drawLeftToRightInfo.numberOfVoxels,
-                                                                        displayGroup,
-                                                                        browserTabIndex,
+                                                                        tabDrawingInfo,
                                                                         sliceVoxelsRGBA);
 
         /*
@@ -1989,6 +2000,11 @@ BrainOpenGLVolumeSliceDrawing::drawOrthogonalSliceWithCulling(const VolumeSliceV
             numVoxelsZ
         };//only used to multiply them all together to get an element count for the presumed array size, so just provide them as XYZ
         
+        const TabDrawingInfo tabDrawingInfo(volInfo.mapFile,
+                                            volInfo.mapIndex,
+                                            displayGroup,
+                                            displayPropertiesLabels->getLabelViewModeForTab(browserTabIndex),
+                                            browserTabIndex);
         const int64_t validVoxelCount =
            volumeFile->getVoxelColorsForSubSliceInMap(mapIndex,
                                                    sliceViewPlane,
@@ -1996,8 +2012,7 @@ BrainOpenGLVolumeSliceDrawing::drawOrthogonalSliceWithCulling(const VolumeSliceV
                                                    culledFirstVoxelIJK,
                                                    culledLastVoxelIJK,
                                                    voxelCountXYZ,
-                                                   displayGroup,
-                                                   browserTabIndex,
+                                                   tabDrawingInfo,
                                                    sliceVoxelsRGBA);
         
         /*
@@ -4930,14 +4945,18 @@ BrainOpenGLVolumeSliceDrawing::drawOrthogonalSliceAllView(const VolumeSliceViewP
             << " rowstep IJK: " << AString::fromNumbers(rowStepIJK, 3, ",")
             << " colstep IJK: " << AString::fromNumbers(columnStepIJK, 3, ",") << std::endl;
         }
+        const TabDrawingInfo tabDrawingInfo(volInfo.mapFile,
+                                            volInfo.mapIndex,
+                                            displayGroup,
+                                            displayPropertiesLabels->getLabelViewModeForTab(browserTabIndex),
+                                            browserTabIndex);
         const int64_t validVoxelCount = volumeInterface->getVoxelColorsForSliceInMap(volInfo.mapIndex,
                                                                                 firstVoxelIJK,
                                                                                 rowStepIJK,
                                                                                 columnStepIJK,
                                                                                 drawBottomToTopInfo.numberOfVoxels,
                                                                                 drawLeftToRightInfo.numberOfVoxels,
-                                                                                displayGroup,
-                                                                                browserTabIndex,
+                                                                                tabDrawingInfo,
                                                                                 sliceVoxelsRGBA);
         
         /*

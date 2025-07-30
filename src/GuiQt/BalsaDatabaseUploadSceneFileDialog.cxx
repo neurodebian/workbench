@@ -63,6 +63,7 @@
 #include "SystemUtilities.h"
 #include "WuQDataEntryDialog.h"
 #include "WuQMessageBox.h"
+#include "WuQMessageBoxTwo.h"
 #include "WuQtUtilities.h"
 #include "WuQWidgetDisabler.h"
 
@@ -1008,7 +1009,8 @@ BalsaDatabaseUploadSceneFileDialog::okButtonClicked()
     if (successFlag) {
         AString msg("Upload was successful");
         msg.appendWithNewLine(m_balsaDatabaseManager->getInfoMessages());
-        WuQMessageBox::informationOk(this, msg);
+        msg.appendWithNewLine(m_balsaDatabaseManager->getUploadSummaryMessage());
+        WuQMessageBoxTwo::information(this, "Complete", msg);
     }
     else {
         WuQMessageBox::errorOk(this,

@@ -42,6 +42,7 @@
 #include "CiftiParcelSeriesFile.h"
 #include "CiftiFiberOrientationFile.h"
 #include "CiftiFiberTrajectoryFile.h"
+#include "CiftiFiberTrajectoryMapFile.h"
 #include "CiftiScalarDataSeriesFile.h"
 #include "CziImageFile.h"
 #include "FileInformation.h"
@@ -50,6 +51,7 @@
 #include "ImageFile.h"
 #include "LabelFile.h"
 #include "MetricFile.h"
+#include "OmeZarrImageFile.h"
 #include "PaletteFile.h"
 #include "RgbaFile.h"
 #include "SamplesFile.h"
@@ -341,6 +343,9 @@ CaretDataFileHelper::createCaretDataFileForFileType(const DataFileTypeEnum::Enum
         case DataFileTypeEnum::CONNECTIVITY_FIBER_TRAJECTORY_TEMPORARY:
             caretDataFile = new CiftiFiberTrajectoryFile();
             break;
+        case DataFileTypeEnum::CONNECTIVITY_FIBER_TRAJECTORY_MAPS:
+            caretDataFile = new CiftiFiberTrajectoryMapFile();
+            break;
         case DataFileTypeEnum::CONNECTIVITY_PARCEL:
             caretDataFile = new CiftiConnectivityMatrixParcelFile();
             break;
@@ -382,6 +387,9 @@ CaretDataFileHelper::createCaretDataFileForFileType(const DataFileTypeEnum::Enum
             break;
         case DataFileTypeEnum::METRIC_DYNAMIC:
             CaretAssertMessage(0, "Never create a metric dynamic file");
+            break;
+        case DataFileTypeEnum::OME_ZARR_IMAGE_FILE:
+            caretDataFile = new OmeZarrImageFile();
             break;
         case DataFileTypeEnum::PALETTE:
             caretDataFile = new PaletteFile();

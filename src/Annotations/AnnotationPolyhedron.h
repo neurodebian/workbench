@@ -23,17 +23,18 @@
 
 #include "AnnotationFontAttributesInterface.h"
 #include "AnnotationMultiPairedCoordinateShape.h"
-#include "GraphicsPolygonTessellator.h"
+#include "AnnotationPolyhedronTypeEnum.h"
+#include "FunctionResult.h"
 #include "Plane.h"
 #include "Vector3D.h"
 
 namespace caret {
 
     class AnnotationFontAttributes;
+    class AnnotationSampleMetaData;
     class Plane;
     
-    class AnnotationPolyhedron : public AnnotationMultiPairedCoordinateShape,
-           public AnnotationFontAttributesInterface {
+    class AnnotationPolyhedron : public AnnotationMultiPairedCoordinateShape, public AnnotationFontAttributesInterface {
         
     public:
         class Edge {
@@ -70,6 +71,22 @@ namespace caret {
         
         virtual const AnnotationPolyhedron* castToPolyhedron() const override;
         
+        virtual GiftiMetaData* getMetaData() override;
+        
+        virtual const GiftiMetaData* getMetaData() const override;
+        
+        AString getLinkedPolyhedronIdentifier() const;
+               
+        void setLinkedPolyhedronIdentifier(const AString& linkedPolyhedronIdentifier);
+               
+        AnnotationSampleMetaData* getSampleMetaData();
+               
+        const AnnotationSampleMetaData* getSampleMetaData() const;
+               
+        AnnotationPolyhedronTypeEnum::Enum getPolyhedronType() const;
+               
+        void setPolyhedronType(const AnnotationPolyhedronTypeEnum::Enum polyhedronType);
+
         void applyRedoUndoForResetRangeToPlane(const AnnotationPolyhedron* polyhedron);
 
         bool resetRangeToPlanes(const Plane& planeOne,
@@ -95,6 +112,9 @@ namespace caret {
         
         void getEdgesAndTriangles(std::vector<Edge>& edgesOut,
                                   std::vector<Triangle>& trianglesOut) const;
+        
+        void getCoordinatesAndTriangles(std::vector<Vector3D>& coordinatesOut,
+                                        std::vector<Triangle>& trianglesOut) const;
         
         static float slicesToMillimeters(const float sliceThickness,
                                          const float numberOfSlices);
@@ -126,6 +146,22 @@ namespace caret {
         
         virtual void setCustomTextColor(const uint8_t rgba[4]) override;
         
+        virtual CaretColorEnum::Enum getTextBackgroundColor() const override;
+        
+        virtual void setTextBackgroundColor(const CaretColorEnum::Enum color) override;
+        
+        virtual void getTextBackgroundColorRGBA(float rgbaOut[4]) const override;
+        
+        virtual void getTextBackgroundColorRGBA(uint8_t rgbaOut[4]) const override;
+        
+        virtual void getCustomTextBackgroundColor(float rgbaOut[4]) const override;
+        
+        virtual void getCustomTextBackgroundColor(uint8_t rgbaOut[4]) const override;
+        
+        virtual void setCustomTextBackgroundColor(const float rgba[4]) override;
+        
+        virtual void setCustomTextBackgroundColor(const uint8_t rgba[4]) override;
+        
         virtual bool isBoldStyleEnabled() const override;
         
         virtual void setBoldStyleEnabled(const bool enabled) override;
@@ -146,17 +182,21 @@ namespace caret {
        
         virtual void clearModified() override;
                
+        virtual void addToDataFileContentInformation(DataFileContentInformation& dataFileInformation) const;
+        
         AString getPolyhedronInformationHtml() const;
              
-        AString getMetadataInformationHtml() const;
-               
         bool computePolyhedronVolume(float& volumeOut,
                                      float& endOneAreaOut,
                                      float& endTwoAreaOut,
                                      float& endToEndDistanceOut,
                                      AString& warningMessageOut,
                                      AString& errorMessageOut) const;
-               
+        
+        FunctionResultFloat computePolyhedronVolumeCurlTheorem() const;
+        
+        FunctionResultFloat computePolyhedronVolumeDivergenceTheorem() const;
+        
        Vector3D getPlaneOneNameStereotaxicXYZ() const;
        
        Vector3D getPlaneTwoNameStereotaxicXYZ() const;
@@ -184,9 +224,6 @@ namespace caret {
         
         void initializeMembersAnnotationPolyhedron();
         
-        void tessellatePolygon(const std::vector<GraphicsPolygonTessellator::Vertex>& polygon,
-                               std::vector<Triangle>& trianglesOut) const;
-               
         std::unique_ptr<SceneClassAssistant> m_sceneAssistant;
 
         Plane m_planeOne;
@@ -202,6 +239,15 @@ namespace caret {
         mutable std::vector<Triangle> m_tessellatedTriangles;
                
         mutable std::vector<Vector3D> m_tessellationPreviousXYZ;
+        
+        std::unique_ptr<AnnotationSampleMetaData> m_sampleMetaData;
+               
+        AnnotationPolyhedronTypeEnum::Enum m_polyhedronType = AnnotationPolyhedronTypeEnum::INVALID;
+        
+        /**
+         * A prospective sample is linked to an retrospective sample and vice versa
+         */
+        AString m_linkedPolyhedronIdentifier;
                
         // ADD_NEW_MEMBERS_HERE
 

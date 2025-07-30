@@ -33,7 +33,7 @@ class QTabWidget;
 
 namespace caret {
     class AnnotationSelectionViewController;
-    class AnnotationTextSubstitutionViewController;
+    class AnnotationTextSubstitutionLayerSetViewController;
     class BorderSelectionViewController;
     class ChartTwoOverlaySetViewController;
     class ChartToolBoxViewController;
@@ -43,7 +43,7 @@ namespace caret {
     class HistologyOverlaySetViewController;
     class IdentificationDisplayWidget;
     class ImageSelectionViewController;
-    class LabelSelectionViewController;
+    class LabelSelectionViewWidget;
     class MediaOverlaySetViewController;
     class OverlaySetViewController;
     class SamplesSelectionViewController;
@@ -59,6 +59,8 @@ namespace caret {
             TOOL_BOX_OVERLAYS_HORIZONTAL,
             TOOL_BOX_OVERLAYS_VERTICAL,
         };
+        
+        static void setCombineFeaturesAndOverlayToolBox(const bool status);
         
         BrainBrowserWindowOrientedToolBox(const int32_t browserWindowIndex,
                                           const QString& title,
@@ -91,6 +93,9 @@ namespace caret {
         BrainBrowserWindowOrientedToolBox(const BrainBrowserWindowOrientedToolBox&);
         BrainBrowserWindowOrientedToolBox& operator=(const BrainBrowserWindowOrientedToolBox&);
         
+        int addToScrolledAreaInTabWidget(QWidget* page,
+                                         const QString& label);
+        
         int addToTabWidget(QWidget* page,
                            const QString& label);
         
@@ -100,7 +105,7 @@ namespace caret {
         
         AnnotationSelectionViewController* m_annotationViewController;
         
-        AnnotationTextSubstitutionViewController* m_annotationTextSubstitutionViewController;
+        AnnotationTextSubstitutionLayerSetViewController* m_annotationTextSubstitutionLayerSetViewController;
         
         BorderSelectionViewController* m_borderSelectionViewController;
 
@@ -118,7 +123,7 @@ namespace caret {
         
         ImageSelectionViewController* m_imageSelectionViewController;
         
-        LabelSelectionViewController* m_labelSelectionViewController;
+        LabelSelectionViewWidget* m_labelSelectionWidget;
         
         MediaOverlaySetViewController* m_mediaSelectionViewController;
         
@@ -173,8 +178,12 @@ namespace caret {
         QSize m_minimumSizeAfterSceneRestored;
         QSize m_maximumSizeAfterSceneRestored;
         
+        static bool s_combineFeaturesAndOverlayToolBoxFlag;
     };
-}
 
+#ifdef __BRAIN_BROWSER_WINDOW_ORIENTED_TOOLBOX_DEFINE__
+    bool BrainBrowserWindowOrientedToolBox::s_combineFeaturesAndOverlayToolBoxFlag = false;
+#endif  // __BRAIN_BROWSER_WINDOW_ORIENTED_TOOLBOX_DEFINE__
 #endif // __BRAIN_BROWSER_WINDOW_ORIENTED_TOOLBOX_H__
+}
 

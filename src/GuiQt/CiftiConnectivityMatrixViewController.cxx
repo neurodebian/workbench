@@ -41,8 +41,10 @@
 #include "CiftiConnectivityMatrixDenseDynamicFile.h"
 #include "CiftiFiberOrientationFile.h"
 #include "CiftiFiberTrajectoryFile.h"
+#include "CiftiFiberTrajectoryMapFile.h"
 #include "CiftiMappableConnectivityMatrixDataFile.h"
 #include "CiftiConnectivityMatrixParcelDynamicFile.h"
+#include "CiftiConnectivityMatrixParcelFile.h"
 #include "CiftiParcelScalarFile.h"
 #include "CiftiConnectivityMatrixParcelDynamicFile.h"
 #include "ConnectivityCorrelationSettingsMenu.h"
@@ -187,7 +189,13 @@ CiftiConnectivityMatrixViewController::updateViewController()
          trajIter++) {
         files.push_back(*trajIter);
     }
-    
+
+    std::vector<CiftiFiberTrajectoryMapFile*> trajMapFiles;
+    brain->getConnectivityFiberTrajectoryMapFiles(trajMapFiles);
+    for (CiftiFiberTrajectoryMapFile* cftmf : trajMapFiles) {
+        files.push_back(cftmf);
+    }
+
     std::vector<CiftiMappableConnectivityMatrixDataFile*> matrixFiles;
     brain->getAllCiftiConnectivityMatrixFiles(matrixFiles);
     for (std::vector<CiftiMappableConnectivityMatrixDataFile*>::iterator matrixIter = matrixFiles.begin();
@@ -322,6 +330,7 @@ CiftiConnectivityMatrixViewController::updateViewController()
         
         const CiftiMappableConnectivityMatrixDataFile* matrixFile = dynamic_cast<const CiftiMappableConnectivityMatrixDataFile*>(files[i]);
         const CiftiFiberTrajectoryFile* trajFile = dynamic_cast<const CiftiFiberTrajectoryFile*>(files[i]);
+        const CiftiFiberTrajectoryMapFile* trajMapFile = dynamic_cast<const CiftiFiberTrajectoryMapFile*>(files[i]);
         const VolumeDynamicConnectivityFile* volDynConnFile = dynamic_cast<VolumeDynamicConnectivityFile*>(files[i]);
         const MetricDynamicConnectivityFile* metricDynConnFile = dynamic_cast<MetricDynamicConnectivityFile*>(files[i]);
         const CiftiConnectivityMatrixDenseDynamicFile* dynConnFile = dynamic_cast<const CiftiConnectivityMatrixDenseDynamicFile*>(files[i]);
@@ -339,6 +348,9 @@ CiftiConnectivityMatrixViewController::updateViewController()
         }
         else if (trajFile != NULL) {
             checkStatus = trajFile->isDataLoadingEnabled();
+        }
+        else if (trajMapFile != NULL) {
+            /* nothing, does not use checkbox */
         }
         else if (volDynConnFile != NULL) {
             checkStatus = volDynConnFile->isDataLoadingEnabled();
@@ -371,6 +383,9 @@ CiftiConnectivityMatrixViewController::updateViewController()
             dynFileFlag = true;
             layerCheckBox->setChecked(parcelDynConnFile->isEnabledAsLayer());
         }
+        else if (matrixFile != NULL) {
+            layerCheckBox->setChecked(matrixFile->isEnabledAsLayer());
+        }
         else {
             layerCheckBox->setChecked(false);
         }
@@ -382,7 +397,10 @@ CiftiConnectivityMatrixViewController::updateViewController()
 
     const int32_t numItems = static_cast<int32_t>(m_fileEnableCheckBoxes.size());
     for (int32_t i = 0; i < numItems; i++) {
+        bool copyButtonEnabled(true);
         bool layerCheckBoxValid = false;
+        bool enableCheckBoxValid = true;
+        bool optionsButtonEnabled = true;
         bool showRow = false;
         bool showOrientationComboBox = false;
         if (i < numFiles) {
@@ -390,6 +408,14 @@ CiftiConnectivityMatrixViewController::updateViewController()
             if (dynamic_cast<CiftiFiberTrajectoryFile*>(files[i]) != NULL) {
                 showOrientationComboBox = true;
             }
+            else if (dynamic_cast<CiftiFiberTrajectoryMapFile*>(files[i]) != NULL) {
+                showOrientationComboBox = true;
+                copyButtonEnabled       = false;
+                enableCheckBoxValid     = false;
+                layerCheckBoxValid      = false;
+                optionsButtonEnabled    = false;
+            }
+            
             if (dynamic_cast<CiftiConnectivityMatrixDenseDynamicFile*>(files[i]) != NULL) {
                 layerCheckBoxValid = true;
             }
@@ -402,13 +428,16 @@ CiftiConnectivityMatrixViewController::updateViewController()
         }
         
         m_fileEnableCheckBoxes[i]->setVisible(showRow);
+        m_fileEnableCheckBoxes[i]->setEnabled(enableCheckBoxValid);
         m_layerCheckBoxes[i]->setVisible(showRow);
         m_layerCheckBoxes[i]->setEnabled(layerCheckBoxValid);
         m_fileCopyToolButtons[i]->setVisible(showRow);
+        m_fileCopyToolButtons[i]->setEnabled(copyButtonEnabled);
         m_fileNameLineEdits[i]->setVisible(showRow);
         m_fiberOrientationFileComboBoxes[i]->setVisible(showOrientationComboBox);
         m_fiberOrientationFileComboBoxes[i]->setEnabled(showOrientationComboBox);
         m_optionsToolButtons[i]->setVisible(showRow);
+        m_optionsToolButtons[i]->setEnabled(optionsButtonEnabled);
     }
     
     updateFiberOrientationComboBoxes();
@@ -431,6 +460,7 @@ CiftiConnectivityMatrixViewController::updateFiberOrientationComboBoxes()
         CiftiConnectivityMatrixDenseDynamicFile* ciftiDenseDynConnFile = NULL;
         CiftiConnectivityMatrixParcelDynamicFile* ciftiParcelDynConnFile(NULL);
         CiftiFiberTrajectoryFile* trajFile = NULL;
+        CiftiFiberTrajectoryMapFile* trajMapFile = NULL;
         MetricDynamicConnectivityFile* metricDynConnFile(NULL);
         VolumeDynamicConnectivityFile* volDynConnFile = NULL;
         
@@ -440,6 +470,7 @@ CiftiConnectivityMatrixViewController::updateFiberOrientationComboBoxes()
                            ciftiDenseDynConnFile,
                            ciftiParcelDynConnFile,
                            trajFile,
+                           trajMapFile,
                            metricDynConnFile,
                            volDynConnFile);
         }
@@ -453,6 +484,29 @@ CiftiConnectivityMatrixViewController::updateFiberOrientationComboBoxes()
             for (int32_t iOrient = 0; iOrient < numOrientationFiles; iOrient++) {
                 CiftiFiberOrientationFile* orientFile = orientationFiles[iOrient];
                 if (trajFile->isFiberOrientationFileCombatible(orientFile)) {
+                    if (orientFile == selectedOrientationFile) {
+                        selectedIndex = iOrient;
+                    }
+                    
+                    comboBox->addItem(orientFile->getFileNameNoPath(),
+                                      QVariant::fromValue((void*)orientFile));
+                }
+            }
+            
+            if ((selectedIndex >= 0)
+                && (selectedIndex < comboBox->count())) {
+                comboBox->setCurrentIndex(selectedIndex);
+            }
+        }
+        else if (trajMapFile != NULL) {
+            int32_t selectedIndex = 0;
+            CiftiFiberOrientationFile* selectedOrientationFile = trajMapFile->getMatchingFiberOrientationFile();
+            
+            comboBox->clear();
+            
+            for (int32_t iOrient = 0; iOrient < numOrientationFiles; iOrient++) {
+                CiftiFiberOrientationFile* orientFile = orientationFiles[iOrient];
+                if (trajMapFile->isFiberOrientationFileCombatible(orientFile)) {
                     if (orientFile == selectedOrientationFile) {
                         selectedIndex = iOrient;
                     }
@@ -489,6 +543,7 @@ CiftiConnectivityMatrixViewController::enabledCheckBoxClicked(int indx)
     CiftiConnectivityMatrixDenseDynamicFile* ciftiDenseDynConnFile = NULL;
     CiftiConnectivityMatrixParcelDynamicFile* ciftiParcelDynConnFile(NULL);
     CiftiFiberTrajectoryFile* trajFile = NULL;
+    CiftiFiberTrajectoryMapFile* trajMapFile = NULL;
     VolumeDynamicConnectivityFile* volDynConnFile(NULL);
     MetricDynamicConnectivityFile* metricDynConnFile(NULL);
 
@@ -497,6 +552,7 @@ CiftiConnectivityMatrixViewController::enabledCheckBoxClicked(int indx)
                    ciftiDenseDynConnFile,
                    ciftiParcelDynConnFile,
                    trajFile,
+                   trajMapFile,
                    metricDynConnFile,
                    volDynConnFile);
     
@@ -510,8 +566,14 @@ CiftiConnectivityMatrixViewController::enabledCheckBoxClicked(int indx)
     else if (trajFile != NULL) {
         trajFile->setDataLoadingEnabled(newStatus);
     }
+    else if (trajMapFile != NULL) {
+        /* nothing, does not do data loading */
+    }
     else if (volDynConnFile != NULL) {
         volDynConnFile->setDataLoadingEnabled(newStatus);
+    }
+    else if (trajMapFile != NULL) {
+        CaretAssertMessage(0, "Enable not supported for Traj Map File");
     }
     else {
         CaretAssertMessage(0, "Has a new file type been added?");
@@ -536,6 +598,7 @@ CiftiConnectivityMatrixViewController::layerCheckBoxClicked(int indx)
     CiftiConnectivityMatrixDenseDynamicFile* ciftiDenseDynConnFile = NULL;
     CiftiConnectivityMatrixParcelDynamicFile* ciftiParcelDynConnFile(NULL);
     CiftiFiberTrajectoryFile* trajFile = NULL;
+    CiftiFiberTrajectoryMapFile* trajMapFile = NULL;
     MetricDynamicConnectivityFile* metricDynConnFile(NULL);
     VolumeDynamicConnectivityFile* volDynConnFile(NULL);
 
@@ -544,6 +607,7 @@ CiftiConnectivityMatrixViewController::layerCheckBoxClicked(int indx)
                    ciftiDenseDynConnFile,
                    ciftiParcelDynConnFile,
                    trajFile,
+                   trajMapFile,
                    metricDynConnFile,
                    volDynConnFile);
     
@@ -600,6 +664,7 @@ CiftiConnectivityMatrixViewController::getFileAtIndex(const int32_t indx,
                                                       CiftiConnectivityMatrixDenseDynamicFile* &ciftiDenseDynConnFileOut,
                                                       CiftiConnectivityMatrixParcelDynamicFile* &ciftiParcelDynConnFileOut,
                                                       CiftiFiberTrajectoryFile* &ciftiTrajFileOut,
+                                                      CiftiFiberTrajectoryMapFile* &ciftiTrajMapFileOut,
                                                       MetricDynamicConnectivityFile* &metricDynConnFileOut,
                                                       VolumeDynamicConnectivityFile* &volDynConnFileOut)
 {
@@ -611,6 +676,7 @@ CiftiConnectivityMatrixViewController::getFileAtIndex(const int32_t indx,
     ciftiDenseDynConnFileOut = dynamic_cast<CiftiConnectivityMatrixDenseDynamicFile*>(mapFilePointer);
     ciftiParcelDynConnFileOut = dynamic_cast<CiftiConnectivityMatrixParcelDynamicFile*>(mapFilePointer);
     ciftiTrajFileOut    = dynamic_cast<CiftiFiberTrajectoryFile*>(mapFilePointer);
+    ciftiTrajMapFileOut = dynamic_cast<CiftiFiberTrajectoryMapFile*>(mapFilePointer);
     metricDynConnFileOut = dynamic_cast<MetricDynamicConnectivityFile*>(mapFilePointer);
     volDynConnFileOut   = dynamic_cast<VolumeDynamicConnectivityFile*>(mapFilePointer);
     
@@ -629,6 +695,9 @@ CiftiConnectivityMatrixViewController::getFileAtIndex(const int32_t indx,
         /* OK */
     }
     else if (ciftiTrajFileOut != NULL) {
+        /* OK */
+    }
+    else if (ciftiTrajMapFileOut != NULL) {
         /* OK */
     }
     else if (metricDynConnFileOut != NULL) {
@@ -658,6 +727,7 @@ CiftiConnectivityMatrixViewController::fiberOrientationFileComboBoxActivated(int
     CiftiConnectivityMatrixDenseDynamicFile* ciftiDenseDynConnFile = NULL;
     CiftiConnectivityMatrixParcelDynamicFile* ciftiParcelDynConnFile(NULL);
     CiftiFiberTrajectoryFile* trajFile = NULL;
+    CiftiFiberTrajectoryMapFile* trajMapFile = NULL;
     MetricDynamicConnectivityFile* metricDynConnFile(NULL);
     VolumeDynamicConnectivityFile* volDynConnFile(NULL);
     
@@ -666,10 +736,12 @@ CiftiConnectivityMatrixViewController::fiberOrientationFileComboBoxActivated(int
                    ciftiDenseDynConnFile,
                    ciftiParcelDynConnFile,
                    trajFile,
+                   trajMapFile,
                    metricDynConnFile,
                    volDynConnFile);
     
-    CaretAssertMessage(trajFile,
+    CaretAssertMessage(((trajFile != NULL)
+                       || (trajMapFile != NULL)),
                        "Selected orientation file but trajectory file is invalid.");
     
     QComboBox* cb = m_fiberOrientationFileComboBoxes[indx];
@@ -688,7 +760,15 @@ CiftiConnectivityMatrixViewController::fiberOrientationFileComboBoxActivated(int
         return;
     }
     
-    trajFile->setMatchingFiberOrientationFile(orientFile);
+    if (trajFile != NULL) {
+        trajFile->setMatchingFiberOrientationFile(orientFile);
+    }
+    else if (trajMapFile != NULL) {
+        trajMapFile->setMatchingFiberOrientationFile(orientFile);
+    }
+    else {
+        CaretAssert(0);
+    }
     
     updateOtherCiftiConnectivityMatrixViewControllers();
     EventManager::get()->sendEvent(EventGraphicsPaintSoonAllWindows().getPointer());
@@ -711,6 +791,7 @@ CiftiConnectivityMatrixViewController::copyToolButtonClicked(int indx)
     CiftiConnectivityMatrixDenseDynamicFile* ciftiDenseDynConnFile = NULL;
     CiftiConnectivityMatrixParcelDynamicFile* ciftiParcelDynConnFile(NULL);
     CiftiFiberTrajectoryFile* trajFile = NULL;
+    CiftiFiberTrajectoryMapFile* trajMapFile = NULL;
     MetricDynamicConnectivityFile* metricDynConnFile(NULL);
     VolumeDynamicConnectivityFile* volDynConnFile(NULL);
 
@@ -719,18 +800,21 @@ CiftiConnectivityMatrixViewController::copyToolButtonClicked(int indx)
                    ciftiDenseDynConnFile,
                    ciftiParcelDynConnFile,
                    trajFile,
+                   trajMapFile,
                    metricDynConnFile,
                    volDynConnFile);
     
+    CiftiConnectivityMatrixParcelFile* parcelMatrixFile = dynamic_cast<CiftiConnectivityMatrixParcelFile*>(matrixFile);
     
     bool errorFlag = false;
     AString errorMessage;
     
     const AString directoryName = GuiManager::get()->getBrain()->getCurrentDirectory();
-    if (ciftiParcelDynConnFile != NULL) {
-        CiftiParcelScalarFile* parcelScalarFile(CiftiParcelScalarFile::newInstanceFromRowInCiftiParcelDynamicFile(ciftiParcelDynConnFile,
-                                                                                                                  directoryName,
-                                                                                                                  errorMessage));
+    if ((ciftiParcelDynConnFile != NULL)
+        || (parcelMatrixFile != NULL)) {
+        CiftiParcelScalarFile* parcelScalarFile(CiftiParcelScalarFile::newInstanceFromRowInCiftiConnectivityMatrixFile(matrixFile,
+                                                                                                                       directoryName,
+                                                                                                                       errorMessage));
         if (parcelScalarFile != NULL) {
             EventDataFileAdd dataFileAdd(parcelScalarFile);
             EventManager::get()->sendEvent(dataFileAdd.getPointer());
@@ -811,6 +895,10 @@ CiftiConnectivityMatrixViewController::copyToolButtonClicked(int indx)
             errorFlag = true;
         }
     }
+    else if (trajMapFile != NULL) {
+        CaretAssertMessage(0,
+                           "Traj Map File not supported for copy operation");
+    }
     else {
         CaretAssertMessage(0,
                            "Has a new file type been added?");
@@ -841,6 +929,7 @@ CiftiConnectivityMatrixViewController::optionsButtonClicked(int indx)
     CiftiConnectivityMatrixDenseDynamicFile* ciftiDenseDynConnFile = NULL;
     CiftiConnectivityMatrixParcelDynamicFile* ciftiParcelDynConnFile(NULL);
     CiftiFiberTrajectoryFile* trajFile = NULL;
+    CiftiFiberTrajectoryMapFile* trajMapFile = NULL;
     MetricDynamicConnectivityFile* metricDynConnFile(NULL);
     VolumeDynamicConnectivityFile* volDynConnFile(NULL);
     
@@ -849,6 +938,7 @@ CiftiConnectivityMatrixViewController::optionsButtonClicked(int indx)
                    ciftiDenseDynConnFile,
                    ciftiParcelDynConnFile,
                    trajFile,
+                   trajMapFile,
                    metricDynConnFile,
                    volDynConnFile);
     ConnectivityCorrelationSettings* settings(NULL);
@@ -863,6 +953,10 @@ CiftiConnectivityMatrixViewController::optionsButtonClicked(int indx)
     }
     else if (volDynConnFile != NULL) {
         settings = volDynConnFile->getCorrelationSettings();
+    }
+    else if (trajMapFile != NULL) {
+        CaretAssertMessage(0,
+                           "Traj map file not supported for options");
     }
     
     if (settings != NULL) {

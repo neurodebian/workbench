@@ -1203,6 +1203,8 @@ SceneFile::getAllDataFileNamesFromAllScenes() const
                                         break;
                                     case DataFileTypeEnum::CONNECTIVITY_FIBER_TRAJECTORY_TEMPORARY:
                                         break;
+                                    case DataFileTypeEnum::CONNECTIVITY_FIBER_TRAJECTORY_MAPS:
+                                        break;
                                     case DataFileTypeEnum::CONNECTIVITY_PARCEL:
                                         break;
                                     case DataFileTypeEnum::CONNECTIVITY_PARCEL_DENSE:
@@ -1232,6 +1234,8 @@ SceneFile::getAllDataFileNamesFromAllScenes() const
                                         break;
                                     case DataFileTypeEnum::METRIC_DYNAMIC:
                                         validDiskFileFlag = false;
+                                        break;
+                                    case DataFileTypeEnum::OME_ZARR_IMAGE_FILE:
                                         break;
                                     case DataFileTypeEnum::PALETTE:
                                         break;

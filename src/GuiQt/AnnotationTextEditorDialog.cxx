@@ -24,7 +24,6 @@
 #undef __ANNOTATION_TEXT_EDITOR_DIALOG_DECLARE__
 
 #include <QDialogButtonBox>
-#include <QTextEdit>
 #include <QVBoxLayout>
 
 #include "AnnotationManager.h"
@@ -35,7 +34,9 @@
 #include "EventGraphicsPaintSoonAllWindows.h"
 #include "EventManager.h"
 #include "GuiManager.h"
+#include "UnicodeCharacterEntryDialog.h"
 #include "WuQMessageBox.h"
+#include "WuQTextEditWithToolBarWidget.h"
 #include "WuQtUtilities.h"
 
 using namespace caret;
@@ -66,20 +67,19 @@ m_textAnnotation(textAnnotation)
     CaretAssert(textAnnotation);
     
     Qt::WindowFlags flags = windowFlags();
-    flags |= (Qt::CustomizeWindowHint);  // disables min/max buttons
+    flags |= (Qt::CustomizeWindowHint);  /* disables min/max buttons */
     setWindowFlags(flags);
     
     setWindowTitle("Edit Annotation Text");
     
     m_uneditedText = textAnnotation->getText();
     
-    m_textEdit = new QTextEdit();
-    m_textEdit->setText(textAnnotation->getText());
-    m_textEdit->selectAll();
+    m_textEdit = new WuQTextEditWithToolBarWidget();
+    const QString text(textAnnotation->getText());
+    m_textEdit->setPlainText(text);
+    m_textEdit->moveCursor(QTextCursor::End);
     m_textEdit->setToolTip("Press OK to save text changes and close dialog\n"
                            "Press CANCEL to revert changes and close dialog");
-    QObject::connect(m_textEdit, SIGNAL(textChanged()),
-                     this, SLOT(textWasEdited()));
     
     QDialogButtonBox* buttonBox = new QDialogButtonBox(QDialogButtonBox::Ok
                                                        | QDialogButtonBox::Cancel);
@@ -90,8 +90,8 @@ m_textAnnotation(textAnnotation)
     
     QVBoxLayout* layout = new QVBoxLayout(this);
     WuQtUtilities::setLayoutSpacingAndMargins(layout, 0, 2);
-    layout->addWidget(m_textEdit);
-    layout->addWidget(buttonBox);
+    layout->addWidget(m_textEdit, 100);
+    layout->addWidget(buttonBox, 0);
 }
 
 /**
@@ -110,13 +110,25 @@ void
 AnnotationTextEditorDialog::done(int resultCode)
 {
     if (resultCode == QDialog::Accepted) {
+        const QString text = m_textEdit->toPlainText();
+        if (text != m_uneditedText) {
+            AnnotationManager* annMan = GuiManager::get()->getBrain()->getAnnotationManager(m_userInputMode);
+            AnnotationRedoUndoCommand* undoCommand = new AnnotationRedoUndoCommand();
+            std::vector<Annotation*> annotationVector;
+            annotationVector.push_back(m_textAnnotation);
+            undoCommand->setModeTextCharacters(text,
+                                               annotationVector);
+            AString errorMessage;
+            if ( ! annMan->applyCommand(undoCommand,
+                                        errorMessage)) {
+                WuQMessageBox::errorOk(this,
+                                       errorMessage);
+            }
+            EventManager::get()->sendSimpleEvent(EventTypeEnum::EVENT_ANNOTATION_TOOLBAR_UPDATE);
+            EventManager::get()->sendEvent(EventGraphicsPaintSoonAllWindows().getPointer());
+        }
     }
-    else {
-        m_textEdit->setText(m_uneditedText);
-    }
-  
-    textWasEdited();
-    
+
     QDialog::done(resultCode);
 }
 

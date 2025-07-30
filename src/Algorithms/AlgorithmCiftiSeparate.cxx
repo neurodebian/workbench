@@ -344,6 +344,7 @@ AlgorithmCiftiSeparate::AlgorithmCiftiSeparate(ProgressObject* myProgObj, const 
                 }
             }
         }
+        myTable.setHierarchy(myLabelsMap.getMapLabelTable(0)->getHierarchy()); //grab the first one for now, maybe figure out how to try to merge hierarchies later, if it matters
         *(labelOut->getLabelTable()) = myTable;
         int32_t unusedLabel = myTable.getUnassignedLabelKey();
         if (roiOut != NULL)
@@ -397,6 +398,7 @@ AlgorithmCiftiSeparate::AlgorithmCiftiSeparate(ProgressObject* myProgObj, const 
             map<int32_t, int32_t> thisRemap = myTable.append(*(myLabelsMap.getMapLabelTable(i)));
             cumulativeRemap.insert(thisRemap.begin(), thisRemap.end());
         }
+        myTable.setHierarchy(myLabelsMap.getMapLabelTable(0)->getHierarchy()); //ditto
         *(labelOut->getLabelTable()) = myTable;
         int32_t unusedLabel = myTable.getUnassignedLabelKey();
         for (int64_t i = 0; i < colSize; ++i)
@@ -654,7 +656,7 @@ void AlgorithmCiftiSeparate::getCroppedVolSpace(const CiftiFile* ciftiIn, const 
     int64_t numVoxels = (int64_t)myMap.size();
     if (numVoxels > 0)
     {//make a voxel bounding box to minimize memory usage
-        int extrema[6] = { myMap[0].m_ijk[0],
+        int64_t extrema[6] = { myMap[0].m_ijk[0],
             myMap[0].m_ijk[0],
             myMap[0].m_ijk[1],
             myMap[0].m_ijk[1],
@@ -699,7 +701,7 @@ void AlgorithmCiftiSeparate::getCroppedVolSpaceAll(const CiftiFile* ciftiIn, con
     int64_t numVoxels = (int64_t)myMap.size();
     if (numVoxels > 0)
     {//make a voxel bounding box to minimize memory usage
-        int extrema[6] = { myMap[0].m_ijk[0],
+        int64_t extrema[6] = { myMap[0].m_ijk[0],
             myMap[0].m_ijk[0],
             myMap[0].m_ijk[1],
             myMap[0].m_ijk[1],

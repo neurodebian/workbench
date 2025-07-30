@@ -38,9 +38,11 @@
 #include "AnnotationPolyLine.h"
 #include "AnnotationTwoCoordinateShape.h"
 #include "AnnotationRedoUndoCommand.h"
+#include "AnnotationSamplesMetaDataDialog.h"
 #include "AnnotationText.h"
 #include "AnnotationTextEditorDialog.h"
 #include "Brain.h"
+#include "BrainBrowserWindow.h"
 #include "BrainOpenGLWidget.h"
 #include "BrowserTabContent.h"
 #include "CaretAssert.h"
@@ -49,12 +51,12 @@
 #include "EventAnnotationGetBeingDrawnInWindow.h"
 #include "EventBrowserTabGetAll.h"
 #include "EventBrowserTabGetAtWindowXY.h"
+#include "EventBrowserWindowTileTabOperation.h"
 #include "EventGraphicsPaintSoonAllWindows.h"
 #include "EventManager.h"
 #include "EventUserInterfaceUpdate.h"
 #include "GuiManager.h"
 #include "MathFunctions.h"
-#include "MetaDataCustomEditorDialog.h"
 #include "MetaDataEditorDialog.h"
 #include "SelectionItemAnnotation.h"
 #include "SelectionManager.h"
@@ -125,6 +127,7 @@ m_newAnnotationCreatedByContextMenu(NULL)
     }
     
     const int32_t browserWindexIndex = m_mouseEvent.getBrowserWindowIndex();
+    BrainBrowserWindow* browserWindow(GuiManager::get()->getBrowserWindowByWindowIndex(browserWindexIndex));
     std::vector<AnnotationAndFile> selectedAnnotations;
     AnnotationManager* annotationManager = GuiManager::get()->getBrain()->getAnnotationManager(m_userInputModeAnnotations->getUserInputMode());
     annotationManager->getAnnotationsAndFilesSelectedForEditingIncludingLabels(browserWindexIndex,
@@ -331,6 +334,15 @@ m_newAnnotationCreatedByContextMenu(NULL)
                                                       undoMenuItemSuffix,
                                                       pasteText,
                                                       pasteSpecialText);
+
+    /*
+     * Select tab containing mouse
+     */
+    QAction* selectTabContainingMouseAction(addAction("Select This Tab",
+                                                      this,
+                                                      &UserInputModeAnnotationsContextMenu::selectTabContainingMouseSelected));
+    selectTabContainingMouseAction->setEnabled(browserWindow->isTileTabsSelected());
+    addSeparator();
     
     /*
      * Cut
@@ -583,19 +595,6 @@ m_newAnnotationCreatedByContextMenu(NULL)
     }
     
     if (samplesModeFlag) {
-//        EventAnnotationGetBeingDrawnInWindow annDrawEvent(m_userInputModeAnnotations->getUserInputMode(),
-//                                                          m_userInputModeAnnotations->getBrowserWindowIndex());
-//        EventManager::get()->sendEvent(annDrawEvent.getPointer());
-//        const bool drawingAnnotationFlag(annDrawEvent.isAnnotationDrawingInProgress());
-//
-//        if ( ! drawingAnnotationFlag) {
-//            if (polyhedron != NULL) {
-////                CaretAssertVectorIndex(annotations, 0);
-////                CaretAssert(annotations[0]);
-////                m_polyhedronSelected = annotations[0]->castToPolyhedron();
-//            }
-//        }
-        
         const Annotation* lockedAnnotation(Annotation::getSelectionLockedPolyhedronInWindow(m_userInputModeAnnotations->getBrowserWindowIndex()));
         addSeparator();
         
@@ -649,23 +648,7 @@ UserInputModeAnnotationsContextMenu::cutAnnnotation()
 void
 UserInputModeAnnotationsContextMenu::deleteAnnotations()
 {
-    /*
-     * Delete the annotation that is under the mouse
-     */
-    AnnotationManager* annotationManager = GuiManager::get()->getBrain()->getAnnotationManager(m_userInputModeAnnotations->getUserInputMode());
-    std::vector<Annotation*> selectedAnnotations = annotationManager->getAnnotationsSelectedForEditing(m_mouseEvent.getBrowserWindowIndex());
-    if ( ! selectedAnnotations.empty()) {
-        AnnotationRedoUndoCommand* undoCommand = new AnnotationRedoUndoCommand();
-        undoCommand->setModeDeleteAnnotations(selectedAnnotations);
-        AString errorMessage;
-        if ( ! annotationManager->applyCommand(undoCommand,
-                                               errorMessage)) {
-            WuQMessageBox::errorOk(this,
-                                   errorMessage);
-        }
-        EventManager::get()->sendSimpleEvent(EventTypeEnum::EVENT_ANNOTATION_TOOLBAR_UPDATE);
-        EventManager::get()->sendEvent(EventGraphicsPaintSoonAllWindows().getPointer());
-    }
+    m_userInputModeAnnotations->deleteSelectedAnnotations();
 }
 
 /**
@@ -734,9 +717,17 @@ UserInputModeAnnotationsContextMenu::editMetaDataDialog()
 {
     if (m_userInputModeAnnotations->getUserInputMode() == UserInputModeEnum::Enum::SAMPLES_EDITING) {
         CaretAssert(m_annotation);
-        MetaDataCustomEditorDialog dialog(m_annotation,
-                                          this);
-        dialog.exec();
+        AnnotationPolyhedron* polyhedron(m_annotation->castToPolyhedron());
+        if (polyhedron != NULL) {
+            AnnotationSamplesMetaDataDialog dialog(polyhedron,
+                                                   this);
+            dialog.exec();
+        }
+        else {
+            MetaDataEditorDialog dialog(m_annotation,
+                                        this);
+            dialog.exec();
+        }
     }
     else {
         CaretAssert(m_annotation);
@@ -1395,3 +1386,25 @@ UserInputModeAnnotationsContextMenu::insertPolylineCoordinateAtMouse(UserInputMo
     }
 }
 
+/**
+ * Called to select the tab containing the mouse
+ */
+void
+UserInputModeAnnotationsContextMenu::selectTabContainingMouseSelected()
+{
+    int windowViewport[4];
+    m_mouseEvent.getViewportContent()->getWindowViewport(windowViewport);
+    /*
+     * Select tab
+     */
+    std::vector<BrowserTabContent*> emptyBrowserTabs;
+    EventBrowserWindowTileTabOperation tileTabOperation(EventBrowserWindowTileTabOperation::OPERATION_SELECT_TAB,
+                                                        m_parentOpenGLWidget,
+                                                        m_mouseEvent.getBrowserWindowIndex(),
+                                                        m_browserTabContent->getTabNumber(),
+                                                        windowViewport,
+                                                        m_mouseEvent.getPressedX(),
+                                                        m_mouseEvent.getPressedY(),
+                                                        emptyBrowserTabs);
+    EventManager::get()->sendEvent(tileTabOperation.getPointer());
+}

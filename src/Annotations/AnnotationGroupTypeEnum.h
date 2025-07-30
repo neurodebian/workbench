@@ -37,6 +37,10 @@ public:
     enum Enum {
         /** Invalid*/
         INVALID,
+        /** Polyhedron Samples of retrospective regions */
+        SAMPLES_RETROSPECTIVE,
+        /** Polyhedron Samples of prospective regions */
+        SAMPLES_PROSPECTIVE,
         /** Annotations not in a user group are assigned to a file's space groups */
         SPACE,
         /** Annotation groups created by the user */

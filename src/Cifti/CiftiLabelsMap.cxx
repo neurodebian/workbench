@@ -21,6 +21,7 @@
 #include "CiftiLabelsMap.h"
 
 #include "CaretAssert.h"
+#include "CaretHierarchy.h"
 #include "DataFileException.h"
 #include "CaretLogger.h"
 
@@ -215,6 +216,19 @@ void CiftiLabelsMap::LabelMap::readXML1(QXmlStreamReader& xml)
     {
         throw DataFileException("NamedMap in labels mapping missing required child element LabelTable");
     }
+    AString hierMDtext = m_metaData.get("CaretHierarchy");
+    if (hierMDtext != "")
+    {
+        try {
+            CaretHierarchy tempHier;
+            tempHier.readXML(hierMDtext);
+            m_labelTable.setHierarchy(tempHier);
+        } catch (const CaretException& e) {
+            CaretLogWarning("error parsing hierarchy metadata: " + e.whatString());
+        } catch (...) {
+            CaretLogWarning("unknown error parsing hierarchy metadata");
+        }
+    }
 }
 
 void CiftiLabelsMap::LabelMap::readXML2(QXmlStreamReader& xml)
@@ -269,6 +283,19 @@ void CiftiLabelsMap::LabelMap::readXML2(QXmlStreamReader& xml)
     {
         throw DataFileException("NamedMap in labels mapping missing required child element LabelTable");
     }
+    AString hierMDtext = m_metaData.get("CaretHierarchy");
+    if (hierMDtext != "")
+    {
+        CaretHierarchy tempHier;
+        try {
+            tempHier.readXML(hierMDtext);
+        } catch (const CaretException& e) {
+            CaretLogWarning("error parsing hierarchy metadata: " + e.whatString());
+        } catch (...) {
+            CaretLogWarning("unknown error parsing hierarchy metadata");
+        }
+        m_labelTable.setHierarchy(tempHier);
+    }
 }
 
 void CiftiLabelsMap::writeXML1(QXmlStreamWriter& xml) const
@@ -280,8 +307,16 @@ void CiftiLabelsMap::writeXML1(QXmlStreamWriter& xml) const
     {
         xml.writeStartElement("NamedMap");
         xml.writeTextElement("MapName", m_maps[i].m_name);
-        m_maps[i].m_metaData.writeCiftiXML1(xml);
+        GiftiMetaData tempMD = m_maps[i].m_metaData;
+        const CaretHierarchy& myHier = m_maps[i].m_labelTable.getHierarchy();
+        if (myHier.isEmpty())
+        {
+            tempMD.remove("CaretHierarchy");
+        } else {
+            tempMD.set("CaretHierarchy", myHier.writeXMLToString());
+        }
         m_maps[i].m_labelTable.writeAsXML(xml);
+        tempMD.writeCiftiXML1(xml);
         xml.writeEndElement();
     }
 }
@@ -294,8 +329,16 @@ void CiftiLabelsMap::writeXML2(QXmlStreamWriter& xml) const
     {
         xml.writeStartElement("NamedMap");
         xml.writeTextElement("MapName", m_maps[i].m_name);
-        m_maps[i].m_metaData.writeCiftiXML2(xml);
+        GiftiMetaData tempMD = m_maps[i].m_metaData;
+        const CaretHierarchy& myHier = m_maps[i].m_labelTable.getHierarchy();
+        if (myHier.isEmpty())
+        {
+            tempMD.remove("CaretHierarchy");
+        } else {
+            tempMD.set("CaretHierarchy", myHier.writeXMLToString());
+        }
         m_maps[i].m_labelTable.writeAsXML(xml);
+        tempMD.writeCiftiXML2(xml);
         xml.writeEndElement();
     }
 }

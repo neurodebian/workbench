@@ -31,6 +31,7 @@
 #include "ChartableTwoFileHistogramChart.h"
 #include "CiftiMappableConnectivityMatrixDataFile.h"
 #include "CiftiXML.h"
+#include "DataFileColorModulateSelector.h"
 #include "DataFileContentInformation.h"
 #include "EventManager.h"
 #include "FastStatistics.h"
@@ -39,6 +40,8 @@
 #include "GiftiMetaDataXmlElements.h"
 #include "Histogram.h"
 #include "LabelDrawingProperties.h"
+#include "LabelSelectionItemModel.h"
+#include "CaretMappableDataFileLabelSelectionDelegate.h"
 #include "NodeAndVoxelColoring.h"
 #include "PaletteColorMapping.h"
 #include "SceneClass.h"
@@ -121,6 +124,7 @@ CaretMappableDataFile::copyCaretMappableDataFile(const CaretMappableDataFile& cm
 {
     *m_labelDrawingProperties = *cmdf.m_labelDrawingProperties;
     m_mapThresholdFileSelectionModels.clear();
+    m_mapColorModulateFileSelectors.clear();
 }
 
 // note: method is documented in header file
@@ -302,6 +306,7 @@ CaretMappableDataFile::applyPaletteColorMappingToAllMaps(const int32_t mapIndex)
 void
 CaretMappableDataFile::invalidateHistogramChartColoring()
 {
+    if (m_chartingDelegate == NULL) return; //TSC: this function is for invalidation of things that already exist, not for creation of something we haven't used yet
     getChartingDelegate()->getHistogramCharting()->invalidateAllColoring();
 }
 
@@ -466,19 +471,34 @@ CaretMappableDataFile::saveFileDataToScene(const SceneAttributes* sceneAttribute
                 sceneClass->addChild(pcmArray);
             }
         }
-        
+
         {
             /*
+             * Update thresholds so that variable, m_mapThresholdFileSelectionModels,
+             * containing models is valid for all maps.
+             */
+            updateMapThresholdFileSelectionModels();
+            
+            /*
              * Save thresholds for each map
+             * Uses map for saving to scene to can use OpenMP
+             * but SceneObjectMapIntegerKey::addClass() is
+             * not thread safe.
              */
             SceneObjectMapIntegerKey* sceneThreshMap = new SceneObjectMapIntegerKey("m_mapThresholdFileSelectionModels",
                                                                                     SceneObjectDataTypeEnum::SCENE_CLASS);
             const int32_t numMaps = getNumberOfMaps();
             for (int32_t iMap = 0; iMap < numMaps; iMap++) {
-                CaretMappableDataFileAndMapSelectionModel* threshSel = getMapThresholdFileSelectionModel(iMap);
-                if ((threshSel->getSelectedFile() != this)
-                    || (threshSel->getSelectedMapIndex() != iMap)) {
-                    sceneThreshMap->addClass(iMap, threshSel->saveToScene(sceneAttributes, "threshSelElement"));
+                if (getMapPaletteColorMapping(iMap)->getThresholdType() != PaletteThresholdTypeEnum::THRESHOLD_TYPE_OFF) {
+                    CaretAssertVectorIndex(m_mapThresholdFileSelectionModels, iMap);
+                    CaretAssert(m_mapThresholdFileSelectionModels[iMap]);
+                    CaretMappableDataFileAndMapSelectionModel* threshSel = m_mapThresholdFileSelectionModels[iMap].get();
+                    if ((threshSel->getSelectedFile() != this)
+                        || (threshSel->getSelectedMapIndex() != iMap)) {
+                        {
+                            sceneThreshMap->addClass(iMap, threshSel->saveToScene(sceneAttributes, "threshSelElement"));
+                        }
+                    }
                 }
             }
             
@@ -489,6 +509,37 @@ CaretMappableDataFile::saveFileDataToScene(const SceneAttributes* sceneAttribute
                 sceneClass->addChild(sceneThreshMap);
             }
         }
+    }
+    
+    if (isMappedWithLabelTable()) {
+        SceneObjectMapIntegerKey* lhMap = new SceneObjectMapIntegerKey("LabelHierarchyMap",
+                                                                       SceneObjectDataTypeEnum::SCENE_CLASS);
+        const int32_t numLH(m_labelHierarchySelectionDelegate.size());
+        for (int32_t i = 0; i < numLH; i++) {
+            if (m_labelHierarchySelectionDelegate[i]) {
+                const AString lhName("LabelHierarchy_" + AString::number(i));
+                lhMap->addClass(i, m_labelHierarchySelectionDelegate[i]->saveToScene(sceneAttributes,
+                                                                                     lhName));
+            }
+        }
+        
+        if (lhMap->isEmpty()) {
+            delete lhMap;
+            lhMap = NULL;
+        }
+        else {
+            sceneClass->addChild(lhMap);
+        }
+    }
+    
+    if ( ! m_mapColorModulateFileSelectors.empty()) {
+        SceneObjectMapIntegerKey* sceneModMap = new SceneObjectMapIntegerKey("m_mapColorModulateFileSelectors",
+                                                                             SceneObjectDataTypeEnum::SCENE_CLASS);
+        for (auto& iter : m_mapColorModulateFileSelectors) {
+            sceneModMap->addClass(iter.first,
+                                  iter.second->saveToScene(sceneAttributes, "modSelElement"));
+        }
+        sceneClass->addChild(sceneModMap);
     }
 }
 
@@ -818,6 +869,38 @@ CaretMappableDataFile::restoreFileDataFromScene(const SceneAttributes* sceneAttr
          * no longer being added to the scene.
          */
     }
+    
+    if (isMappedWithLabelTable()) {
+        const SceneObjectMapIntegerKey* lhMap(sceneClass->getMapIntegerKey("LabelHierarchyMap"));
+        if (lhMap != NULL) {
+            const std::vector<int32_t> mapIndices(lhMap->getKeys());
+            for (int32_t mapIndex : mapIndices) {
+                if (static_cast<int32_t>(m_labelHierarchySelectionDelegate.size()) < (mapIndex + 1)) {
+                    m_labelHierarchySelectionDelegate.resize(mapIndex + 1);
+                }
+                m_labelHierarchySelectionDelegate[mapIndex].reset(new CaretMappableDataFileLabelSelectionDelegate(this,
+                                                                                                     mapIndex));
+                m_labelHierarchySelectionDelegate[mapIndex]->restoreFromScene(sceneAttributes,
+                                                                              lhMap->classValue(mapIndex));
+            }
+        }
+    }
+    
+    {
+        m_mapColorModulateFileSelectors.clear();
+        
+        const SceneObjectMapIntegerKey* sceneModMap = sceneClass->getMapIntegerKey("m_mapColorModulateFileSelectors");
+        if (sceneModMap != NULL) {
+            const std::vector<int32_t> keys = sceneModMap->getKeys();
+            for (auto mapIndex : keys) {
+                CaretAssert(mapIndex < getNumberOfMaps());
+                const SceneClass* modSel = dynamic_cast<const SceneClass*>(sceneModMap->getObject(mapIndex));
+                CaretAssert(modSel);
+                getMapColorModulateFileSelector(mapIndex)->restoreFromScene(sceneAttributes,
+                                                                            modSel);
+            }
+        }
+    }
 }
 
 /**
@@ -1052,6 +1135,20 @@ CaretMappableDataFile::addToDataFileContentInformation(DataFileContentInformatio
                                             + getMapLabelTable(mapIndex)->toFormattedString("    ")
                                             + "\n");
                 
+                //TSC: disable cluster finding in -file-information due to large memory use on strange label files
+                /*const int32_t tabZero(0);
+                const LabelSelectionItemModel* labelModel(getLabelSelectionHierarchyForMapAndTab(mapIndex,
+                                                                                                 DisplayGroupEnum::DISPLAY_GROUP_TAB,
+                                                                                                 tabZero));
+                if (labelModel != NULL) {
+                    const AString labelModelText(labelModel->toFormattedString("    "));
+                    if ( ! labelModelText.isEmpty()) {
+                        dataFileInformation.addText(labelTableName
+                                                    + labelModelText
+                                                    + "\n");
+                    }
+                }//*/
+                
                 if ( ! haveLabelTableForEachMap) {
                     break;
                 }
@@ -1197,8 +1294,12 @@ CaretMappableDataFile::clear()
     CaretDataFile::clear();
     
     m_chartingDelegate.reset();
+    m_labelHierarchySelectionDelegate.clear();
     
     m_mapThresholdFileSelectionModels.clear();
+    m_mapColorModulateFileSelectors.clear();
+    
+    m_mappingMatchedFilesCache.clear();
 }
 
 /**
@@ -1425,11 +1526,12 @@ CaretMappableDataFile::updateMapThresholdFileSelectionModels()
     const int32_t numMaps = getNumberOfMaps();
     const int32_t numThresh = static_cast<int32_t>(m_mapThresholdFileSelectionModels.size());
     if (numMaps > numThresh) {
+        m_mapThresholdFileSelectionModels.resize(numMaps);
         for (int32_t i = numThresh; i < numMaps; i++) {
-            std::unique_ptr<CaretMappableDataFileAndMapSelectionModel> threshSel(new CaretMappableDataFileAndMapSelectionModel(this));
+            CaretMappableDataFileAndMapSelectionModel* threshSel(new CaretMappableDataFileAndMapSelectionModel(this));
             threshSel->setSelectedFile(this);
             threshSel->setSelectedMapIndex(i);
-            m_mapThresholdFileSelectionModels.push_back(std::move(threshSel));
+            m_mapThresholdFileSelectionModels[i].reset(threshSel);
         }
     }
     else if (numThresh > numMaps) {
@@ -1450,6 +1552,20 @@ CaretMappableDataFile::getMapThresholdFileSelectionModel(const int32_t mapIndex)
 }
 
 /**
+ * @return The modulate file selection model for the given map index.
+ */
+DataFileColorModulateSelector*
+CaretMappableDataFile::getMapColorModulateFileSelector(const int32_t mapIndex)
+{
+    if (m_mapColorModulateFileSelectors.find(mapIndex) == m_mapColorModulateFileSelectors.end()) {
+        std::unique_ptr<DataFileColorModulateSelector> ptr(new DataFileColorModulateSelector(this));
+        m_mapColorModulateFileSelectors.insert(std::make_pair(mapIndex, std::move(ptr)));
+    }
+    CaretAssert(m_mapColorModulateFileSelectors[mapIndex]);
+    return m_mapColorModulateFileSelectors[mapIndex].get();
+}
+
+/**
  * Update the charting delegate after changes (add a row/column, etc.)
  * are made to the data file.
  */
@@ -1461,6 +1577,153 @@ CaretMappableDataFile::updateAfterFileDataChanges()
     }
 
     m_applyToAllMapsSelected = isPaletteColorMappingEqualForAllMaps();
+}
+
+/**
+ * @return The clusters for the given map's label table (may be NULL)
+ * @param mapIndex
+ *    Index of the map
+ */
+const ClusterContainer* 
+CaretMappableDataFile::getMapLabelTableClusters(const int32_t /*mapIndex*/) const
+{
+    return NULL;
+}
+
+/**
+ * @return Label selection hierarchy for the map in the tab (may be NULL)
+ * @param mapIndex
+ *    Index of map
+ * @param displayGroup
+ *    The display group
+ * @param tabIndex
+ *    Index of the tab if displayGroup is TAB
+ */
+LabelSelectionItemModel* 
+CaretMappableDataFile::getLabelSelectionHierarchyForMapAndTab(const int32_t mapIndex,
+                                                              const DisplayGroupEnum::Enum displayGroup,
+                                                              const int32_t tabIndex)
+{
+    /*
+     * If new type added, must also modify
+     * LabelSelectionViewHierarchyController::LabelSelectionViewHierarchyController
+     */
+    bool supportsHierarchyFlag(false);
+    switch (getDataFileType()) {
+        case DataFileTypeEnum::ANNOTATION:
+            break;
+        case DataFileTypeEnum::ANNOTATION_TEXT_SUBSTITUTION:
+            break;
+        case DataFileTypeEnum::BORDER:
+            break;
+        case DataFileTypeEnum::CONNECTIVITY_DENSE:
+            break;
+        case DataFileTypeEnum::CONNECTIVITY_DENSE_DYNAMIC:
+            break;
+        case DataFileTypeEnum::CONNECTIVITY_DENSE_LABEL:
+            supportsHierarchyFlag = true;
+            break;
+        case DataFileTypeEnum::CONNECTIVITY_DENSE_PARCEL:
+            break;
+        case DataFileTypeEnum::CONNECTIVITY_PARCEL:
+            break;
+        case DataFileTypeEnum::CONNECTIVITY_PARCEL_DENSE:
+            break;
+        case DataFileTypeEnum::CONNECTIVITY_PARCEL_DYNAMIC:
+            break;
+        case DataFileTypeEnum::CONNECTIVITY_PARCEL_LABEL:
+            break;
+        case DataFileTypeEnum::CONNECTIVITY_PARCEL_SCALAR:
+            break;
+        case DataFileTypeEnum::CONNECTIVITY_PARCEL_SERIES:
+            break;
+        case DataFileTypeEnum::CONNECTIVITY_DENSE_SCALAR:
+            break;
+        case DataFileTypeEnum::CONNECTIVITY_DENSE_TIME_SERIES:
+            break;
+        case DataFileTypeEnum::CONNECTIVITY_FIBER_ORIENTATIONS_TEMPORARY:
+            break;
+        case DataFileTypeEnum::CONNECTIVITY_FIBER_TRAJECTORY_TEMPORARY:
+            break;
+        case DataFileTypeEnum::CONNECTIVITY_FIBER_TRAJECTORY_MAPS:
+            break;
+        case DataFileTypeEnum::CONNECTIVITY_SCALAR_DATA_SERIES:
+            break;
+        case DataFileTypeEnum::CZI_IMAGE_FILE:
+            break;
+        case DataFileTypeEnum::FOCI:
+            break;
+        case DataFileTypeEnum::HISTOLOGY_SLICES:
+            break;
+        case DataFileTypeEnum::IMAGE:
+            break;
+        case DataFileTypeEnum::LABEL:
+            supportsHierarchyFlag = true;
+            break;
+        case DataFileTypeEnum::METRIC:
+            break;
+        case DataFileTypeEnum::METRIC_DYNAMIC:
+            break;
+        case DataFileTypeEnum::OME_ZARR_IMAGE_FILE:
+            break;
+        case DataFileTypeEnum::PALETTE:
+            break;
+        case DataFileTypeEnum::RGBA:
+            break;
+        case DataFileTypeEnum::SAMPLES:
+            break;
+        case DataFileTypeEnum::SCENE:
+            break;
+        case DataFileTypeEnum::SPECIFICATION:
+            break;
+        case DataFileTypeEnum::SURFACE:
+            break;
+        case DataFileTypeEnum::UNKNOWN:
+            break;
+        case DataFileTypeEnum::VOLUME:
+            supportsHierarchyFlag = true;
+            break;
+        case DataFileTypeEnum::VOLUME_DYNAMIC:
+            break;
+    }
+
+    if (supportsHierarchyFlag) {
+        if (isMappedWithLabelTable()) {
+            if (static_cast<int32_t>(m_labelHierarchySelectionDelegate.size()) < getNumberOfMaps()) {
+                m_labelHierarchySelectionDelegate.resize(getNumberOfMaps());
+            }
+            if ( ! m_labelHierarchySelectionDelegate[mapIndex]) {
+                m_labelHierarchySelectionDelegate[mapIndex].reset(new CaretMappableDataFileLabelSelectionDelegate(this,
+                                                                                                     mapIndex));
+            }
+            
+            if (m_labelHierarchySelectionDelegate[mapIndex]) {
+                return m_labelHierarchySelectionDelegate[mapIndex]->getSelectionModelForMapAndTab(displayGroup,
+                                                                                                  tabIndex);
+            }
+        }
+    }
+    return NULL;
+}
+
+/**
+ * @return Label selection hierarchy for the map in the tab (may be NULL)
+ * @param mapIndex
+ *    Index of map
+ * @param displayGroup
+ *    The display group
+ * @param tabIndex
+ *    Index of the tab if displayGroup is TAB
+ */
+const LabelSelectionItemModel*
+CaretMappableDataFile::getLabelSelectionHierarchyForMapAndTab(const int32_t mapIndex,
+                                                              const DisplayGroupEnum::Enum displayGroup,
+                                                              const int32_t tabIndex) const
+{
+    CaretMappableDataFile* nonConstThis(const_cast<CaretMappableDataFile*>(this));
+    return nonConstThis->getLabelSelectionHierarchyForMapAndTab(mapIndex,
+                                                                displayGroup,
+                                                                tabIndex);
 }
 
 /**
@@ -1665,4 +1928,31 @@ const CaretMappableDataFile*
 CaretMappableDataFile::castToCaretMappableDataFile() const
 {
     return this;
+}
+
+/*
+ * Are all brainordinates in this file also in the given file?
+ * That is, the brainordinates are equal to or a subset of the brainordinates
+ * in the given file.
+ *
+ * @param mapFile
+ *     The given map file.
+ * @return
+ *     Match status.
+ */
+CaretMappableDataFile::BrainordinateMappingMatch
+CaretMappableDataFile::getBrainordinateMappingMatch(const CaretMappableDataFile* mapFile) const
+{
+    BrainordinateMappingMatch matchStatus = BrainordinateMappingMatch::NO;
+    
+    auto iter(m_mappingMatchedFilesCache.find(mapFile));
+    if (iter != m_mappingMatchedFilesCache.end()) {
+        matchStatus = iter->second;
+    }
+    else {
+        matchStatus = getBrainordinateMappingMatchImplementation(mapFile);
+        m_mappingMatchedFilesCache.insert(std::make_pair(mapFile, matchStatus));
+    }
+    
+    return matchStatus;
 }

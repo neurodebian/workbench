@@ -44,7 +44,32 @@ using namespace caret;
  */
 
 /**
- * Displays a critical message bot with the givent text and title.
+ * @return A button mask for use with the dialog methods
+ * @param button1
+ *    First standard button for dialog
+ * @param button2
+ *    Optional second standard button for dialog
+ * @param button3
+ *    Optional third standard button for dialog
+ * @param button4
+ *    Optional four standard button for dialog
+ */
+int32_t
+WuQMessageBoxTwo::createButtonMask(const StandardButton button1,
+                                   const StandardButton button2,
+                                   const StandardButton button3,
+                                   const StandardButton button4)
+{
+    const int32_t mask(static_cast<int32_t>(button1)
+                       | static_cast<int32_t>(button2)
+                       | static_cast<int32_t>(button3)
+                       | static_cast<int32_t>(button4));
+    return mask;
+}
+
+
+/**
+ * Displays a critical message box with the given text and title.
  * @param parent
  *    Parent widget of dialog
  * @param title
@@ -72,7 +97,28 @@ WuQMessageBoxTwo::critical(QWidget *parent,
 }
 
 /**
- * Displays a warning message bot with the givent text and title.
+ * Displays a critical message box with the given text and title.
+ * @param parent
+ *    Parent widget of dialog
+ * @param title
+ *    Title of dialog
+ * @param text
+ *    Text displayed in dialog
+ */
+void
+WuQMessageBoxTwo::criticalOk(QWidget *parent,
+                             const QString &title,
+                             const QString &text)
+{
+    WuQMessageBoxTwo::critical(parent,
+                               title,
+                               text,
+                               createButtonMask(StandardButton::Ok),
+                               StandardButton::Ok);
+}
+
+/**
+ * Displays a warning message box with the given text and title.
  * @param parent
  *    Parent widget of dialog
  * @param title
@@ -100,7 +146,28 @@ WuQMessageBoxTwo::warning(QWidget *parent,
 }
 
 /**
- * Displays a question message bot with the givent text and title.
+ * Displays a warning message box with the given text and title.
+ * @param parent
+ *    Parent widget of dialog
+ * @param title
+ *    Title of dialog
+ * @param text
+ *    Text displayed in dialog
+ */
+void
+WuQMessageBoxTwo::warningOk(QWidget *parent,
+                                const QString &title,
+                                const QString &text)
+{
+    WuQMessageBoxTwo::warning(parent,
+                              title,
+                              text,
+                              createButtonMask(StandardButton::Ok),
+                              StandardButton::Ok);
+}
+
+/**
+ * Displays a question message box with the given text and title.
  * @param parent
  *    Parent widget of dialog
  * @param title
@@ -128,7 +195,7 @@ WuQMessageBoxTwo::question(QWidget *parent,
 }
 
 /**
- * Displays an information message bot with the givent text and title.
+ * Displays an information message box with the given text and title.
  * @param parent
  *    Parent widget of dialog
  * @param title
@@ -153,6 +220,27 @@ WuQMessageBoxTwo::information(QWidget *parent,
                            text,
                            buttonMask,
                            defaultButton);
+}
+
+/**
+ * Displays a information message box with the given text and title.
+ * @param parent
+ *    Parent widget of dialog
+ * @param title
+ *    Title of dialog
+ * @param text
+ *    Text displayed in dialog
+ */
+void
+WuQMessageBoxTwo::informationOk(QWidget *parent,
+                             const QString &title,
+                             const QString &text)
+{
+    WuQMessageBoxTwo::information(parent,
+                                  title,
+                                  text,
+                                  createButtonMask(StandardButton::Ok),
+                                  StandardButton::Ok);
 }
 
 /**
