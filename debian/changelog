@@ -3,6 +3,7 @@ connectome-workbench (2.1.0-1) experimental; urgency=medium
   * Fresh upstream release, upload to experimental due to upcoming trixie
     release.
     - removing debian/patches/7ba3345d161d567a4b628ceb02ab4471fc96cb20.patch
+    - added debian/patches/0001-attempted-*.patch to address FTBFS for Qt5
 
  -- Yaroslav Halchenko <debian@onerussian.com>  Wed, 30 Jul 2025 08:47:04 -0400
 
